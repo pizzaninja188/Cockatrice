@@ -1010,9 +1010,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::PutCounters { .. } => {
                         pump_counters::put_counters(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::DestroyTarget { .. } => {
-                        misc::destroy_target(&mut cx, effect)?
-                    }
+                    effect @ SpellEffectKind::Destroy { .. } => misc::destroy(&mut cx, effect)?,
                     effect @ SpellEffectKind::DestroyAttached { .. } => {
                         mass::destroy_attached(&mut cx, effect)?
                     }
@@ -1772,6 +1770,7 @@ fn card_type_filter_desc(f: &CardTypeFilter) -> &'static str {
         CardTypeFilter::Artifact => "artifact",
         CardTypeFilter::Enchantment => "enchantment",
         CardTypeFilter::Planeswalker => "planeswalker",
+        CardTypeFilter::Nonland => "nonland",
         CardTypeFilter::Noncreature => "noncreature",
     }
 }

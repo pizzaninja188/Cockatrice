@@ -27,19 +27,26 @@ pub(super) fn change_source_face(
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn destroy_target(
+pub(super) fn destroy(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::DestroyTarget { .. } = effect else {
+    let SpellEffectKind::Destroy { subject } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let subjects: Vec<ObjectId> = match &subject {
+        EffectSubject::Chosen(_) => cx.targets.to_vec(),
+        EffectSubject::Source | EffectSubject::AttachedObject | EffectSubject::TriggerObject => {
+            resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
+                .into_iter()
+                .collect()
+        }
     };
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
     let spell_label = cx.spell_label;
 
-    for &tid in targets {
+    for tid in subjects {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let indestructible = engine.effective_has_keyword(tid, Keyword::Indestructible);
         if indestructible {

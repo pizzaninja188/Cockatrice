@@ -5,7 +5,7 @@
   mana_cost: "{2}{W}",
   types: ["Sorcery"],
   spell_effect: [
-    DestroyTarget(target: (kind: Creature, tapped: true)),
+    Destroy(subject: Chosen((kind: Creature, tapped: true))),
     GainLife(
       amount: Count(BattlefieldCreatures(
         filter: (controllers: Controller, required_keywords: [Flying]),

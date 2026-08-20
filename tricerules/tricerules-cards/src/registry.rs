@@ -541,6 +541,7 @@ impl CardRegistry {
                             })?;
                     }
                     if let StaticAbilityDef::AttachedModifier {
+                        condition,
                         add_types,
                         delta_power,
                         delta_toughness,
@@ -585,6 +586,46 @@ impl CardRegistry {
                                 id: card.id.clone(),
                                 reason: "AttachedModifier must set both power and toughness".into(),
                             });
+                        }
+                        if let Some(condition) = condition {
+                            condition
+                                .validate()
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
+                            if !triggered_abilities.is_empty()
+                                || !activated_abilities.is_empty()
+                                || *cant_attack
+                                || *cant_block
+                                || *doesnt_untap_during_untap_step
+                            {
+                                return Err(RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason: "conditioned AttachedModifier only supports characteristic modifiers"
+                                        .into(),
+                                });
+                            }
+                            if (*delta_power != 0
+                                || *delta_toughness != 0
+                                || set_power.is_some()
+                                || *remove_all_abilities
+                                || !keywords.is_empty())
+                                && matches!(
+                                    condition,
+                                    crate::primitives::GameCondition::BattlefieldAggregate {
+                                        aggregate: BattlefieldAggregate::TotalPower
+                                            | BattlefieldAggregate::MaximumPower,
+                                        ..
+                                    }
+                                )
+                            {
+                                return Err(RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason: "power-dependent conditional characteristics require CR 613.8 dependency ordering"
+                                        .into(),
+                                });
+                            }
                         }
                         if !add_types.is_empty() {
                             add_types
@@ -687,6 +728,8 @@ impl CardRegistry {
                     match &ability.trigger {
                         TriggerCondition::WheneverAttachedObjectAttacks
                         | TriggerCondition::WheneverAttachedObjectDies
+                        | TriggerCondition::WheneverAttachedObjectDealsCombatDamageToPlayer
+                        | TriggerCondition::WheneverAttachedObjectIsDealtDamage
                             if !can_reference_attached_object =>
                         {
                             return Err(RegistryError::InvalidCard {
@@ -1341,6 +1384,71 @@ mod tests {
     }
 
     #[test]
+    fn issue_115_rejects_invalid_attachment_observer_and_condition_shapes() {
+        let bad_trigger = r#"(
+            id: "bad_damage_observer",
+            name: "Bad Damage Observer",
+            mana_cost: "{2}",
+            types: ["Artifact"],
+            triggered_abilities: [(
+                trigger: WheneverAttachedObjectIsDealtDamage,
+                effect: [Draw(count: 1)],
+                text: "Bad.",
+            )],
+        )"#;
+        let error = CardRegistry::from_chunks(&[bad_trigger]).expect_err("nonattachment observer");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("object-attaching Aura or Equipment")
+        ));
+
+        let conditioned_ability = r#"(
+            id: "bad_conditioned_grant",
+            name: "Bad Conditioned Grant",
+            mana_cost: "{2}",
+            types: ["Artifact", "Equipment"],
+            static_abilities: [AttachedModifier(
+                condition: Some(ActivePlayer(players: Controller)),
+                activated_abilities: [(
+                    costs: [Tap],
+                    effect: [ProduceMana(options: [(g: 1)])],
+                    text: "{T}: Add {G}.",
+                )],
+            )],
+        )"#;
+        let error = CardRegistry::from_chunks(&[conditioned_ability])
+            .expect_err("conditioned ability grant");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("only supports characteristic modifiers")
+        ));
+
+        let power_dependency = r#"(
+            id: "bad_attached_dependency",
+            name: "Bad Attached Dependency",
+            mana_cost: "{2}",
+            types: ["Artifact", "Equipment"],
+            static_abilities: [AttachedModifier(
+                condition: Some(BattlefieldAggregate(
+                    filter: (controllers: Controller, card_type: Some(Creature)),
+                    aggregate: MaximumPower,
+                    min: Some(4),
+                )),
+                keywords: [FirstStrike],
+            )],
+        )"#;
+        let error = CardRegistry::from_chunks(&[power_dependency])
+            .expect_err("power-dependent attached characteristics");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("CR 613.8 dependency ordering")
+        ));
+    }
+
+    #[test]
     fn token_trigger_validation_rejects_empty_text_and_effects() {
         let empty_text = r#"(
             id: "bad_token",
@@ -1390,11 +1498,11 @@ mod tests {
             name: "Contradictory Filter",
             mana_cost: "{W}",
             types: ["Instant"],
-            spell_effect: [DestroyTarget(target: (
+            spell_effect: [Destroy(subject: Chosen((
                 kind: Creature,
                 required_keywords: [Flying],
                 excluded_keywords: [Flying],
-            ))],
+            )))],
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).expect_err("overlap must be rejected");
         assert!(matches!(

@@ -978,7 +978,9 @@ fn effect_target_legal_at_resolution_with_context(
         | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target } => {
             target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context)
         }
-        SpellEffectKind::DestroyTarget { target }
+        SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(target),
+        }
         | SpellEffectKind::DestroyAttached { target, .. }
         | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target, .. }
         | SpellEffectKind::Equip { target } => {
@@ -1112,7 +1114,9 @@ fn validate_effect_targets(
                 "creature damage targets require grouped target-role validation",
             ));
         }
-        SpellEffectKind::DestroyTarget { target: filter }
+        SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(filter),
+        }
         | SpellEffectKind::DestroyAttached { target: filter, .. }
         | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: filter, .. } => {
             if targets.len() != 1 {
@@ -1217,7 +1221,8 @@ fn validate_effect_targets(
         | SpellEffectKind::GrantTriggeredAbility { subject, .. }
         | SpellEffectKind::CreateDelayedTrigger { subject, .. }
         | SpellEffectKind::AddTypes { subject, .. }
-        | SpellEffectKind::Regenerate { subject } => match subject {
+        | SpellEffectKind::Regenerate { subject }
+        | SpellEffectKind::Destroy { subject } => match subject {
             EffectSubject::Source
             | EffectSubject::AttachedObject
             | EffectSubject::TriggerObject => {
@@ -1699,7 +1704,9 @@ fn spell_target_legality_error_with_context(
         }
         // Filter-based targeted effects share one legality path; the filter carries any
         // characteristic restriction (creature/player, `tapped`, `not_artifact`, hexproof/shroud).
-        SpellEffectKind::DestroyTarget { target: filter }
+        SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(filter),
+        }
         | SpellEffectKind::DestroyAttached { target: filter, .. }
         | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: filter, .. }
         | SpellEffectKind::DamageTarget { target: filter, .. }

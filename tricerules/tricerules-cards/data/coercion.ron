@@ -3,5 +3,10 @@
   name: "Coercion",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
-  spell_effect: [DiscardCards(count: 1, target: (kind: OpponentPlayer), chooser: Controller)],
+  spell_effect: [DiscardCards(
+    count: 1,
+    target: (kind: OpponentPlayer),
+    chooser: Controller,
+    card_filter: Some(Nonland),
+  )],
 )

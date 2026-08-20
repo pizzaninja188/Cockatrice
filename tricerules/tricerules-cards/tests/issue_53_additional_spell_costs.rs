@@ -45,7 +45,7 @@ fn issue_53_cards_have_exact_additional_costs_and_effects() {
         assert_eq!(
             face.spell_effect
                 .iter()
-                .any(|effect| matches!(effect, SpellEffectKind::DestroyTarget { .. })),
+                .any(|effect| matches!(effect, SpellEffectKind::Destroy { .. })),
             destroys
         );
     }

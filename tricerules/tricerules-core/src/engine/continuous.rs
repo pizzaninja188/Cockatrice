@@ -159,6 +159,7 @@ impl GameEngine {
                     });
                 }
                 StaticAbilityDef::AttachedModifier {
+                    condition,
                     add_types,
                     delta_power,
                     delta_toughness,
@@ -178,7 +179,7 @@ impl GameEngine {
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer4AddTypes(add_types),
-                            condition: None,
+                            condition: condition.clone(),
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
                         });
@@ -191,7 +192,7 @@ impl GameEngine {
                                 delta_power,
                                 delta_toughness,
                             },
-                            condition: None,
+                            condition: condition.clone(),
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
                         });
@@ -201,7 +202,7 @@ impl GameEngine {
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer7bSetPt { power, toughness },
-                            condition: None,
+                            condition: condition.clone(),
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
                         });
@@ -211,7 +212,7 @@ impl GameEngine {
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
-                            condition: None,
+                            condition: condition.clone(),
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
                         });
@@ -221,7 +222,7 @@ impl GameEngine {
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
-                            condition: None,
+                            condition: condition.clone(),
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
                         });

@@ -10,12 +10,12 @@
     (
       trigger: WhenSelfEntersBattlefield,
       effect: [
-        DestroyTarget(
-          target: (
+        Destroy(
+          subject: Chosen((
             kind: AnyPermanent,
             controller: Opponent,
             permanent_types: [Artifact, Enchantment],
-          ),
+          )),
         ),
       ],
       text: "When this creature enters, destroy target artifact or enchantment an opponent controls.",

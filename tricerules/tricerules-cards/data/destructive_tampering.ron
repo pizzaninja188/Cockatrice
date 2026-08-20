@@ -9,8 +9,8 @@
     modes: [
       (
         label: "Destroy target artifact",
-        effects: [DestroyTarget(
-          target: (kind: AnyPermanent, permanent_types: [Artifact]),
+        effects: [Destroy(
+          subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])),
         )],
       ),
       (

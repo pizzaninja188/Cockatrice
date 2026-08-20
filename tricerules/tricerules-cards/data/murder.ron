@@ -3,5 +3,5 @@
   name: "Murder",
   mana_cost: "{1}{B}{B}",
   types: ["Instant"],
-  spell_effect: [DestroyTarget()],
+  spell_effect: [Destroy()],
 )

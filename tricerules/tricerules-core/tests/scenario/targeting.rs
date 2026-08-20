@@ -1046,8 +1046,8 @@ fn shroud_controller_cannot_target_own_permanent() {
     );
 }
 
-/// Royal Assassin's `{T}: Destroy target tapped creature.` — now a `DestroyTarget` with a
-/// `tapped: true` filter (the old single-card `DestroyTargetTapped` primitive was removed).
+/// Royal Assassin's `{T}: Destroy target tapped creature.` — a chosen `Destroy` subject with a
+/// `tapped: true` filter.
 /// Happy path: a tapped enemy creature is a legal target and is destroyed on resolution.
 #[test]
 fn royal_assassin_destroys_tapped_creature() {

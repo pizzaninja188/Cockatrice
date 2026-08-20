@@ -69,12 +69,12 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
     assert_eq!(
         aerial.spell_effect,
         [
-            SpellEffectKind::DestroyTarget {
-                target: TargetFilter {
+            SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(TargetFilter {
                     kind: TargetKind::Creature,
                     tapped: Some(true),
                     ..TargetFilter::default()
-                },
+                }),
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Count(CountExpression::BattlefieldCreatures {

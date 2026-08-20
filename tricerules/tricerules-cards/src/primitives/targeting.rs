@@ -198,6 +198,9 @@ pub enum CardTypeFilter {
     /// capability; this vocabulary is also needed by mana restrictions such as Chandra's
     /// Embercat.
     Planeswalker,
+    /// Matches any card that does not have the land card type (Coercion, Thoughtseize, and
+    /// Cracked Skull).
+    Nonland,
     /// Matches any object that does not have the creature card type.
     Noncreature,
 }

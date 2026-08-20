@@ -238,6 +238,14 @@ pub enum TriggerCondition {
     /// creature identity are captured immediately before the zone change. Unholy Indenture and
     /// Fool's Demise use this shape.
     WheneverAttachedObjectDies,
+    /// CR 510.2 / 603.2: whenever the creature this Aura or Equipment is attached to deals
+    /// combat damage to a player. Goldvein Pick and Snake Umbra share the event-time attachment
+    /// identity; the damage source is available as `TriggerObject`.
+    WheneverAttachedObjectDealsCombatDamageToPlayer,
+    /// CR 120.4b / 603.2: whenever the creature this Aura or Equipment is attached to is dealt
+    /// damage. Cracked Skull and Guilty Conscience share the event-time attachment identity; the
+    /// damaged permanent is available as `TriggerObject`.
+    WheneverAttachedObjectIsDealtDamage,
     /// CR 508.3b: whenever the player this Aura is attached to is attacked. This fires once for
     /// the declaration event regardless of the number of creatures attacking that player.
     /// Curse of Opulence and Curse of Disturbance use this shape.
@@ -435,6 +443,8 @@ impl TriggerCondition {
                 | Self::WheneverSelfBecomesBlockedByCreature { .. }
                 | Self::WheneverAttachedObjectAttacks
                 | Self::WheneverAttachedObjectDies
+                | Self::WheneverAttachedObjectDealsCombatDamageToPlayer
+                | Self::WheneverAttachedObjectIsDealtDamage
                 | Self::WheneverSelfBecomesTarget { .. }
                 | Self::WheneverPermanentBecomesTarget { .. }
                 | Self::AtBeginningOfNextEndStep
@@ -940,6 +950,10 @@ pub enum StaticAbilityDef {
     /// modifier together when an Equipment is re-equipped. Dub, Holy Strength/Oakenform,
     /// Flight/Swiftfoot Boots, and Pacifism.
     AttachedModifier {
+        /// Optional public game-state predicate for the attached object's characteristic
+        /// modifiers. Quick-Draw Katana uses the Equipment controller's active turn.
+        #[serde(default)]
+        condition: Option<GameCondition>,
         #[serde(default)]
         add_types: TypeLineAddition,
         #[serde(default)]

@@ -903,11 +903,12 @@ pub enum SpellEffectKind {
         filter: CardTypeFilter,
         bottom_order: LibraryBottomOrder,
     },
-    /// Destroy target matching `target` filter (default: any creature on the battlefield).
-    /// Characteristic restrictions (e.g. `tapped: true` for Royal Assassin) live in the filter.
-    DestroyTarget {
-        #[serde(default = "TargetFilter::default_creature")]
-        target: TargetFilter,
+    /// CR 701.7: destroy `subject`. Chosen subjects are CR 115 targets; source, attachment, and
+    /// trigger-object subjects are untargeted rules references. Murder and Royal Assassin use
+    /// chosen subjects, while Cracked Skull uses the damage event's trigger object.
+    Destroy {
+        #[serde(default = "default_destroy_subject")]
+        subject: EffectSubject,
     },
     /// Destroy every current Aura and/or Equipment attached to one chosen permanent. The target
     /// is revalidated normally under CR 608.2b; the untargeted attachment cohort is determined
@@ -1156,6 +1157,13 @@ pub enum SpellEffectKind {
         target: TargetFilter,
         #[serde(default)]
         chooser: DiscardChooser,
+        /// Optional card-type restriction on the chosen cards. The complete hand remains visible
+        /// to the authorized chooser; legality is published separately.
+        #[serde(default)]
+        card_filter: Option<CardTypeFilter>,
+        /// Whether the chooser may decline after seeing the hand.
+        #[serde(default)]
+        optional: bool,
     },
     /// Destroy every battlefield permanent matching `kind` (CR 701.7). Untargeted, so it
     /// ignores hexproof/shroud and never fizzles. `kind` selects the affected set — `Creature`
@@ -1313,6 +1321,10 @@ pub enum SpellEffectKind {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_destroy_subject() -> EffectSubject {
+    EffectSubject::Chosen(TargetFilter::default_creature())
 }
 
 /// Where a searched-out card goes (for [`SpellEffectKind::SearchLibrary`]).
@@ -1498,6 +1510,8 @@ impl SpellEffectKind {
                 ..
             } | SpellEffectKind::ReturnToOwnersHand {
                 subject: EffectSubject::AttachedObject,
+            } | SpellEffectKind::Destroy {
+                subject: EffectSubject::AttachedObject,
             }
         )
     }
@@ -1536,6 +1550,8 @@ impl SpellEffectKind {
                 second: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::TriggerObject,
+            } | SpellEffectKind::Destroy {
                 subject: EffectSubject::TriggerObject,
             } | SpellEffectKind::LoseLife {
                 who: PlayerRecipient::TriggerObjectController,
@@ -1595,6 +1611,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Tap { subject }
             | SpellEffectKind::Untap { subject }
             | SpellEffectKind::Regenerate { subject }
+            | SpellEffectKind::Destroy { subject }
             | SpellEffectKind::ReturnToOwnersHand { subject } => {
                 matches!(subject, EffectSubject::Chosen(_))
             }
@@ -1609,7 +1626,6 @@ impl SpellEffectKind {
             | SpellEffectKind::ExileIfWouldDieThisTurn { .. }
             | SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
             | SpellEffectKind::DamageTargets { .. }
-            | SpellEffectKind::DestroyTarget { .. }
             | SpellEffectKind::DestroyAttached { .. }
             | SpellEffectKind::ExileTarget
             | SpellEffectKind::ExileTargetGainLifeEqualToPower
@@ -1650,10 +1666,12 @@ impl SpellEffectKind {
                     | EffectSubject::TriggerObject => None,
                 })
                 .collect(),
+            SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(target),
+            } => vec![target],
             SpellEffectKind::DamageTarget { target, .. }
             | SpellEffectKind::ExileIfWouldDieThisTurn { target }
             | SpellEffectKind::DamageTargets { target, .. }
-            | SpellEffectKind::DestroyTarget { target }
             | SpellEffectKind::DestroyAttached { target, .. }
             | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target, .. }
             | SpellEffectKind::SkipNextUntap { target }
@@ -2059,6 +2077,10 @@ impl SpellEffectKind {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
+            } | SpellEffectKind::Destroy {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
             } | SpellEffectKind::ChangeSourceFace { .. }
                 | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
                 | SpellEffectKind::ApplyCombatRestriction {
@@ -2114,6 +2136,9 @@ impl SpellEffectKind {
                 subject: EffectSubject::Chosen(target),
             }
             | SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::Chosen(target),
+            }
+            | SpellEffectKind::Destroy {
                 subject: EffectSubject::Chosen(target),
             } => {
                 if !target.is_permanent_only() {

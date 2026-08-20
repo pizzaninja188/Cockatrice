@@ -1,0 +1,17 @@
+(
+  id: "quick-draw_katana",
+  name: "Quick-Draw Katana",
+  mana_cost: "{2}",
+  // Oracle verified 2026-08-20. CR 301.5, 611.3, 613.1f-g, 702.6.
+  types: ["Artifact", "Equipment"],
+  static_abilities: [AttachedModifier(
+    condition: Some(ActivePlayer(players: Controller)),
+    delta_power: 2,
+    keywords: [FirstStrike],
+  )],
+  activated_abilities: [(
+    costs: [Mana("{2}")],
+    effect: [Equip(target: (kind: Creature, controller: You))],
+    text: "Equip {2}",
+  )],
+)

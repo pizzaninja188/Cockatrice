@@ -4,12 +4,12 @@
   mana_cost: "{2}{W}",
   types: ["Instant"],
   spell_effect: [
-    DestroyTarget(target: (
+    Destroy(subject: Chosen((
       any_of: Some([
         (kind: AnyPermanent, permanent_types: [Artifact]),
         (kind: AnyPermanent, permanent_types: [Enchantment]),
         (kind: Creature, power: AtLeast(4)),
       ]),
-    )),
+    ))),
   ],
 )

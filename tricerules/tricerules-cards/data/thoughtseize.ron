@@ -7,8 +7,12 @@
   // the life loss after it runs when the choice comes back, via the resume path in
   // `complete_parked_resolution` (`PendingResolution::resume_effect_index`).
   spell_effect: [
-    DiscardCards(count: 1, target: (kind: AnyPlayer), chooser: Controller),
+    DiscardCards(
+      count: 1,
+      target: (kind: AnyPlayer),
+      chooser: Controller,
+      card_filter: Some(Nonland),
+    ),
     LoseLife(amount: Fixed(2)),
   ],
-  partial: "nonland restriction not enforced",
 )

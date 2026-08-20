@@ -94,6 +94,7 @@ fn cartouche_requires_a_creature_its_aura_controller_controls() {
     assert_eq!(
         face.static_abilities,
         [StaticAbilityDef::AttachedModifier {
+            condition: None,
             add_types: Default::default(),
             set_power: None,
             set_toughness: None,

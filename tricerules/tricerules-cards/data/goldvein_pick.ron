@@ -1,0 +1,18 @@
+(
+  id: "goldvein_pick",
+  name: "Goldvein Pick",
+  mana_cost: "{2}",
+  // Oracle verified 2026-08-20. CR 111.10a, 301.5, 510.2, 603.2, 702.6.
+  types: ["Artifact", "Equipment"],
+  static_abilities: [AttachedModifier(delta_power: 1, delta_toughness: 1)],
+  activated_abilities: [(
+    costs: [Mana("{1}")],
+    effect: [Equip(target: (kind: Creature, controller: You))],
+    text: "Equip {1}",
+  )],
+  triggered_abilities: [(
+    trigger: WheneverAttachedObjectDealsCombatDamageToPlayer,
+    effect: [CreateTokens(token: "treasure", count: 1, who: SourceController)],
+    text: "Whenever equipped creature deals combat damage to a player, create a Treasure token.",
+  )],
+)

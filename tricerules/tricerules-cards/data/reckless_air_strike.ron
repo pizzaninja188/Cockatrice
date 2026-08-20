@@ -19,8 +19,8 @@
       (
         label: "Destroy target artifact",
         effects: [
-          DestroyTarget(
-            target: (kind: AnyPermanent, permanent_types: [Artifact]),
+          Destroy(
+            subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])),
           ),
         ],
       ),

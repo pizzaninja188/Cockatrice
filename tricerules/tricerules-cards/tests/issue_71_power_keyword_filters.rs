@@ -1,4 +1,4 @@
-use tricerules_cards::primitives::{PowerComparison, SpellEffectKind, TargetKind};
+use tricerules_cards::primitives::{EffectSubject, PowerComparison, SpellEffectKind, TargetKind};
 use tricerules_cards::{CardRegistry, Keyword};
 
 #[test]
@@ -12,7 +12,7 @@ fn issue_71_cards_use_shared_power_and_keyword_filters() {
     let judgment = judgment_definition.primary_face();
     assert!(matches!(
         judgment.spell_effect.as_slice(),
-        [SpellEffectKind::DestroyTarget { target }]
+        [SpellEffectKind::Destroy { subject: EffectSubject::Chosen(target) }]
             if target.kind == TargetKind::Creature
                 && target.power == Some(PowerComparison::AtLeast(4))
     ));
@@ -35,7 +35,7 @@ fn issue_71_cards_use_shared_power_and_keyword_filters() {
     ));
     assert!(matches!(
         modal.modes[1].effects.as_slice(),
-        [SpellEffectKind::DestroyTarget { target }]
+        [SpellEffectKind::Destroy { subject: EffectSubject::Chosen(target) }]
             if target.kind == TargetKind::AnyPermanent
                 && target.permanent_types.len() == 1
     ));

@@ -516,33 +516,105 @@ impl GameEngine {
                 out
             }
             GameEvent::DamageDealt { event } => {
-                let DamageRecipient::Player(defender_id) = event.recipient else {
-                    return vec![];
-                };
                 let source_id = event.source.object_id;
-                let Some(obj) = self.state.objects.get(&source_id) else {
-                    return vec![];
+                let source_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&source_id)
+                    .copied()
+                    .unwrap_or(0);
+                let source_ref = TriggerObjectRef {
+                    object_id: source_id,
+                    zone_change_generation: source_generation,
+                    controller_at_event: event.source.controller,
                 };
-                let (card_id, face_index) = self
-                    .effective_card_identity(source_id)
-                    .map(|(card_id, face_index)| (card_id.to_string(), face_index))
-                    .unwrap_or_else(|| (obj.card_id.clone(), obj.face_up_index));
-                let controller = event.source.controller;
-                self.matching_triggered_abilities(
-                    &card_id,
-                    source_id,
-                    controller,
-                    face_index,
-                    |tc| match tc {
-                        TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => {
-                            event.classification == DamageClassification::Combat
+                let mut out = Vec::new();
+
+                if let DamageRecipient::Player(defender_id) = event.recipient {
+                    if let Some(obj) = self.state.objects.get(&source_id) {
+                        let (card_id, face_index) = self
+                            .effective_card_identity(source_id)
+                            .map(|(card_id, face_index)| (card_id.to_string(), face_index))
+                            .unwrap_or_else(|| (obj.card_id.clone(), obj.face_up_index));
+                        let controller = event.source.controller;
+                        out.extend(self.matching_triggered_abilities(
+                            &card_id,
+                            source_id,
+                            controller,
+                            face_index,
+                            |tc| match tc {
+                                TriggerCondition::WheneverSelfDealsCombatDamageToPlayer => {
+                                    event.classification == DamageClassification::Combat
+                                }
+                                TriggerCondition::WheneverSelfDealsDamageToOpponent => {
+                                    self.state.are_opponents(defender_id, controller)
+                                }
+                                _ => false,
+                            },
+                        ));
+                    }
+
+                    if event.classification == DamageClassification::Combat {
+                        for source in sources {
+                            if source.attached_to
+                                != Some(AttachmentSnapshot::Object(source_id, source_generation))
+                            {
+                                continue;
+                            }
+                            let mut matching = self.matching_snapshot_abilities(source, |condition| {
+                                *condition
+                                    == TriggerCondition::WheneverAttachedObjectDealsCombatDamageToPlayer
+                            });
+                            for trigger in &mut matching {
+                                trigger.trigger_context.observed_object = Some(source_ref);
+                            }
+                            out.extend(matching);
                         }
-                        TriggerCondition::WheneverSelfDealsDamageToOpponent => {
-                            self.state.are_opponents(defender_id, controller)
+                    }
+                }
+
+                if let DamageRecipient::Permanent(recipient_id) = event.recipient {
+                    let recipient_generation = self
+                        .state
+                        .zone_change_generation
+                        .get(&recipient_id)
+                        .copied()
+                        .unwrap_or(0);
+                    let recipient_controller = self
+                        .characteristics(recipient_id)
+                        .map(|characteristics| characteristics.controller)
+                        .or_else(|| {
+                            self.state
+                                .objects
+                                .get(&recipient_id)
+                                .map(|object| object.controller)
+                        })
+                        .unwrap_or(0);
+                    let recipient_ref = TriggerObjectRef {
+                        object_id: recipient_id,
+                        zone_change_generation: recipient_generation,
+                        controller_at_event: recipient_controller,
+                    };
+                    for source in sources {
+                        if source.attached_to
+                            != Some(AttachmentSnapshot::Object(
+                                recipient_id,
+                                recipient_generation,
+                            ))
+                        {
+                            continue;
                         }
-                        _ => false,
-                    },
-                )
+                        let mut matching = self.matching_snapshot_abilities(source, |condition| {
+                            *condition == TriggerCondition::WheneverAttachedObjectIsDealtDamage
+                        });
+                        for trigger in &mut matching {
+                            trigger.trigger_context.observed_object = Some(recipient_ref);
+                        }
+                        out.extend(matching);
+                    }
+                }
+
+                out
             }
             GameEvent::UpkeepBegin { player: upkeep } => {
                 // CR 603.2: every player's permanents watch, not just the active player's — a

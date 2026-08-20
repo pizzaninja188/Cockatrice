@@ -8,7 +8,7 @@
   activated_abilities: [
     (
       costs: [Tap],
-      effect: [DestroyTarget(target: (kind: Creature, tapped: true))],
+      effect: [Destroy(subject: Chosen((kind: Creature, tapped: true)))],
       text: "{T}: Destroy target tapped creature.",
     ),
   ],

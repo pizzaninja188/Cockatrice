@@ -5,5 +5,5 @@
   // Oracle type line: "Kindred Instant — Elf". Kindred is a card type (CR 205.1a), not a
   // supertype — the supertype list is Basic/Legendary/Snow/World/Ongoing/Host.
   types: ["Kindred", "Instant", "Elf"],
-  spell_effect: [DestroyTarget(target: (kind: Creature, excluded_subtypes: ["Elf"]))],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, excluded_subtypes: ["Elf"])))],
 )

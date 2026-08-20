@@ -61,6 +61,8 @@ mod issue_102_activation_limits;
 mod issue_108_graveyard_aggregates;
 #[path = "scenario/issue_114_disjunctive_filters.rs"]
 mod issue_114_disjunctive_filters;
+#[path = "scenario/issue_115_attachment_observers.rs"]
+mod issue_115_attachment_observers;
 #[path = "scenario/issue_117_fight.rs"]
 mod issue_117_fight;
 #[path = "scenario/issue_119_self_combat_restrictions.rs"]

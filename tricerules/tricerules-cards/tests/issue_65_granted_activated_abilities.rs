@@ -14,6 +14,7 @@ fn granted_ability(card_id: &str) -> &tricerules_cards::ActivatedAbilityDef {
         .iter()
         .find_map(|ability| match ability {
             StaticAbilityDef::AttachedModifier {
+                condition: None,
                 activated_abilities,
                 ..
             } => Some(activated_abilities),

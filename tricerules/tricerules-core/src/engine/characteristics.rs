@@ -453,6 +453,7 @@ fn battlefield_card_type_matches(
         CardTypeFilter::Creature => characteristics.is_creature(),
         CardTypeFilter::Artifact => characteristics.is_artifact(),
         CardTypeFilter::Planeswalker => characteristics.has_type("Planeswalker"),
+        CardTypeFilter::Nonland => !characteristics.has_type("Land"),
         CardTypeFilter::Noncreature => !characteristics.is_creature(),
     })
 }

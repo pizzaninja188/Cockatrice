@@ -4,6 +4,6 @@
   mana_cost: "{2}{W}",
   types: ["Sorcery"],
   spell_effect: [
-    DestroyTarget(target: (kind: Creature, power: AtLeast(4))),
+    Destroy(subject: Chosen((kind: Creature, power: AtLeast(4)))),
   ],
 )

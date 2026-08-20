@@ -7,5 +7,5 @@
     SacrificePermanent(filter: (kind: Creature, controller: You)),
   ],
   types: ["Sorcery"],
-  spell_effect: [DestroyTarget(target: (kind: Creature))],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature)))],
 )

@@ -277,6 +277,8 @@ pub(super) fn discard_cards(
         count,
         target: _,
         chooser,
+        card_filter,
+        optional,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -284,7 +286,15 @@ pub(super) fn discard_cards(
     let Some(&target) = cx.targets.first() else {
         return Ok(EffectOutcome::Continue);
     };
-    discard_for_player(cx, target as PlayerId, count, chooser, false, 0)
+    discard_for_player(
+        cx,
+        target as PlayerId,
+        count,
+        chooser,
+        card_filter.as_ref(),
+        optional,
+        0,
+    )
 }
 
 pub(super) fn draw_discard(
@@ -321,6 +331,7 @@ pub(super) fn draw_discard(
                 player,
                 discard_count,
                 DiscardChooser::AffectedPlayer,
+                None,
                 false,
                 0,
             )
@@ -330,6 +341,7 @@ pub(super) fn draw_discard(
             player,
             discard_count,
             DiscardChooser::AffectedPlayer,
+            None,
             optional,
             draw_count,
         ),
@@ -341,6 +353,7 @@ fn discard_for_player(
     affected_player: PlayerId,
     count: u32,
     chooser: DiscardChooser,
+    card_filter: Option<&CardTypeFilter>,
     optional: bool,
     draw_after: u32,
 ) -> Result<EffectOutcome, EngineError> {
@@ -353,15 +366,22 @@ fn discard_for_player(
         return Ok(EffectOutcome::Continue);
     };
     let hand = engine.state.players[pi].hand.clone();
+    let eligible: Vec<ObjectId> = hand
+        .iter()
+        .copied()
+        .filter(|object_id| {
+            library_card_matches_filter(&engine.state, engine.registry, *object_id, card_filter)
+        })
+        .collect();
 
     if chooser == DiscardChooser::Random {
-        let discard_count = (count as usize).min(hand.len());
+        let discard_count = (count as usize).min(eligible.len());
         if discard_count == 0 {
             events.push(ev_log(format!(
                 "P{affected_player} has no cards to discard ({spell_label})."
             )));
         } else {
-            let mut shuffled = hand;
+            let mut shuffled = eligible;
             shuffle_object_ids_for_current_command(&engine.state, affected_player, &mut shuffled);
             for oid in shuffled.into_iter().take(discard_count) {
                 let card_name = object_display_name(&engine.state, engine.registry, oid);
@@ -396,7 +416,7 @@ fn discard_for_player(
         return Ok(EffectOutcome::Continue);
     }
 
-    let n = (hand.len() as u32).min(count);
+    let n = (eligible.len() as u32).min(count);
     let min = if optional { 0 } else { n };
     let deciding_player = match chooser {
         DiscardChooser::AffectedPlayer => affected_player,
@@ -409,6 +429,10 @@ fn discard_for_player(
         DiscardChooser::Random => unreachable!("handled above"),
     };
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &hand);
+    let candidate_selectable = hand
+        .iter()
+        .map(|object_id| eligible.contains(object_id))
+        .collect();
     let prompt = if optional {
         format!("P{deciding_player}: you may choose a card for P{affected_player} to discard.")
     } else {
@@ -429,7 +453,7 @@ fn discard_for_player(
                 ordered: false,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
-                candidate_selectable: Vec::new(),
+                candidate_selectable,
                 resolution_branches: Vec::new(),
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
@@ -442,7 +466,7 @@ fn discard_for_player(
         deciding_player,
         presentation: PendingResolutionPresentation {
             source_object_id: top.id,
-            candidates: hand,
+            candidates: eligible,
             min,
             max: n,
             ordered: false,

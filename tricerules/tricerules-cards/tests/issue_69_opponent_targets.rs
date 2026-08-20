@@ -41,6 +41,7 @@ fn glaring_aegis_has_complete_oracle_behavior() {
     assert_eq!(
         face.static_abilities,
         [StaticAbilityDef::AttachedModifier {
+            condition: None,
             add_types: Default::default(),
             set_power: None,
             set_toughness: None,
@@ -76,8 +77,8 @@ fn rambunctious_mutt_has_complete_oracle_behavior() {
     );
     assert_eq!(
         face.triggered_abilities[0].effect,
-        [SpellEffectKind::DestroyTarget {
-            target: TargetFilter {
+        [SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(TargetFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: TargetController::Opponent,
                 permanent_types: vec![
@@ -85,7 +86,7 @@ fn rambunctious_mutt_has_complete_oracle_behavior() {
                     PermanentTypeFilter::Enchantment,
                 ],
                 ..TargetFilter::default()
-            },
+            }),
         }]
     );
 }
