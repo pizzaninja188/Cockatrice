@@ -168,19 +168,19 @@ pub(super) fn exile_target_gain_life_equal_to_power(
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn return_target_to_hand(
+pub(super) fn return_to_owners_hand(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::ReturnTargetToHand { .. } = effect else {
+    let SpellEffectKind::ReturnToOwnersHand { subject } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let tid = resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
     let spell_label = cx.spell_label;
 
-    if let Some(&tid) = targets.first() {
+    if let Some(tid) = tid {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         // Transient battlefield state (damage, counters, tap) is reset centrally

@@ -190,9 +190,11 @@ impl ActivatedAbilityDef {
                 if !filter.all_terminal_filters_match(|leaf| {
                     matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
                         && leaf.controller == TargetController::You
-                        && !leaf.exclude_source
                 }) {
-                    return Err("sacrifice cost filter requires Creature or AnyPermanent, controller: You, and may include its source".into());
+                    return Err(
+                        "sacrifice cost filter requires Creature or AnyPermanent and controller: You"
+                            .into(),
+                    );
                 }
             }
         }

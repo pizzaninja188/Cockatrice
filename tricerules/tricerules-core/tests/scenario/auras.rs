@@ -46,6 +46,146 @@ fn cast_and_resolve_player_aura(
     (battlefield_object_for_card(e, 0, card_id), batch)
 }
 
+#[test]
+fn wingspan_stride_returns_itself_and_removes_its_modifier() {
+    let decks = Some(vec![
+        deck_with("island", &["wingspan_stride", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(4220, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    let aura = cast_and_resolve_aura(
+        &mut e,
+        "wingspan_stride",
+        bear,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    assert_eq!(e.effective_power(bear), Some(3));
+    assert_eq!(e.effective_toughness(bear), Some(3));
+    assert!(e.effective_has_keyword(bear, Keyword::Flying));
+
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    e.apply_command(0, &activate_ability(aura, 0, vec![]))
+        .expect("activate the untargeted source-return ability");
+    e.apply_command(0, &pass()).expect("controller pass");
+    let resolution = e.apply_command(1, &pass()).expect("opponent pass");
+
+    assert_eq!(e.state.objects[&aura].zone, tricerules_core::Zone::Hand);
+    assert!(e.state.players[0].hand.contains(&aura));
+    assert_eq!(e.state.objects[&aura].attached_to, None);
+    assert_eq!(e.effective_power(bear), Some(2));
+    assert_eq!(e.effective_toughness(bear), Some(2));
+    assert!(!e.effective_has_keyword(bear, Keyword::Flying));
+    let moves = permanents_moved_in(&resolution);
+    assert!(moves.iter().any(|m| {
+        m.object_id == aura
+            && m.destination
+                == tricerules_proto::ruled::v1::permanent_moved::Destination::Hand as i32
+    }));
+}
+
+#[test]
+fn wingspan_stride_does_not_return_a_new_source_generation() {
+    let decks = Some(vec![
+        deck_with("island", &["wingspan_stride", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(4221, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    let aura = cast_and_resolve_aura(
+        &mut e,
+        "wingspan_stride",
+        bear,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    e.apply_command(0, &activate_ability(aura, 0, vec![]))
+        .expect("activate source-return ability");
+
+    *e.state.zone_change_generation.entry(aura).or_default() += 1;
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.state.objects[&aura].zone,
+        tricerules_core::Zone::Battlefield,
+        "the old ability must not act on the new CR 400.7 object"
+    );
+}
+
+#[test]
+fn wingspan_stride_in_graveyard_is_not_returned_by_its_old_ability() {
+    let decks = Some(vec![
+        deck_with("island", &["wingspan_stride", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(4222, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    let aura = cast_and_resolve_aura(
+        &mut e,
+        "wingspan_stride",
+        bear,
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    e.apply_command(0, &activate_ability(aura, 0, vec![]))
+        .expect("activate source-return ability");
+
+    e.state.players[0].battlefield.retain(|&id| id != bear);
+    e.state.players[0].graveyard.push(bear);
+    e.state.objects.get_mut(&bear).expect("bear").zone = tricerules_core::Zone::Graveyard;
+    *e.state.zone_change_generation.entry(bear).or_default() += 1;
+    e.apply_command(0, &pass())
+        .expect("state-based actions move the orphaned Aura");
+    assert_eq!(
+        e.state.objects[&aura].zone,
+        tricerules_core::Zone::Graveyard
+    );
+
+    e.apply_command(1, &pass())
+        .expect("resolve the old source ability");
+    assert_eq!(
+        e.state.objects[&aura].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert!(!e.state.players[0].hand.contains(&aura));
+}
+
 fn dev_move(player_id: i32, zone: DevZone, card_name: &str) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::DevCommand(DevCommand {

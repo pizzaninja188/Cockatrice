@@ -331,7 +331,9 @@ fn issue_130_target_choice_and_condition_shapes_use_generic_vocabulary() {
 
     assert!(matches!(
         face("iceridge_serpent").triggered_abilities[0].effect.as_slice(),
-        [SpellEffectKind::ReturnTargetToHand { target }]
+        [SpellEffectKind::ReturnToOwnersHand {
+            subject: EffectSubject::Chosen(target),
+        }]
             if target.kind == TargetKind::Creature && target.controller == TargetController::Opponent
     ));
 

@@ -7,7 +7,7 @@
   toughness: 3,
   triggered_abilities: [(
     trigger: WhenSelfEntersBattlefield,
-    effect: [ReturnTargetToHand(target: (kind: Creature, controller: Opponent))],
+    effect: [ReturnToOwnersHand(subject: Chosen((kind: Creature, controller: Opponent)))],
     text: "When this creature enters, return target creature an opponent controls to its owner's hand.",
   )],
 )

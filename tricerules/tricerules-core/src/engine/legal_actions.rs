@@ -304,7 +304,9 @@ fn legal_ability_cost_choices(
                     .players
                     .iter()
                     .flat_map(|state| state.battlefield.iter().copied())
-                    .filter(|&oid| eng.ability_cost_permanent_matches(player, oid, filter))
+                    .filter(|&oid| {
+                        eng.ability_cost_permanent_matches(player, Some(source), oid, filter)
+                    })
                     .collect();
                 assignment_candidates.push(candidate_ids.clone());
                 choices.push(rv1::LegalCostChoice {
@@ -358,7 +360,7 @@ fn legal_spell_cost_choices(
                     .players
                     .iter()
                     .flat_map(|state| state.battlefield.iter().copied())
-                    .filter(|&oid| eng.ability_cost_permanent_matches(player, oid, filter))
+                    .filter(|&oid| eng.ability_cost_permanent_matches(player, None, oid, filter))
                     .collect();
                 assignment_candidates.push(candidate_ids.clone());
                 choices.push(rv1::LegalCostChoice {

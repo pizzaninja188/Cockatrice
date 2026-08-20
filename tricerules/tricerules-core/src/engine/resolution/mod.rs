@@ -1040,8 +1040,8 @@ impl GameEngine {
                     effect @ SpellEffectKind::ExileTargetGainLifeEqualToPower => {
                         zones::exile_target_gain_life_equal_to_power(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::ReturnTargetToHand { .. } => {
-                        zones::return_target_to_hand(&mut cx, effect)?
+                    effect @ SpellEffectKind::ReturnToOwnersHand { .. } => {
+                        zones::return_to_owners_hand(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::PutTargetPermanentInOwnersLibrary { .. } => {
                         zones::put_target_permanent_in_owners_library(&mut cx, effect)?

@@ -1,0 +1,18 @@
+(
+  id: "hungry_ghoul",
+  name: "Hungry Ghoul",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Zombie"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [
+    (
+      costs: [
+        Mana("{1}"),
+        SacrificePermanent(filter: (kind: Creature, controller: You, exclude_source: true)),
+      ],
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+      text: "{1}, Sacrifice another creature: Put a +1/+1 counter on this creature.",
+    ),
+  ],
+)

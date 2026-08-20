@@ -1,4 +1,5 @@
 use crate::helpers::*;
+use tricerules_cards::CounterKind;
 use tricerules_proto::ruled::v1::ruled_event::Ev;
 
 #[test]
@@ -86,6 +87,108 @@ fn invalid_filtered_sacrifice_rolls_back_mana_and_tap() {
     assert_eq!(
         e.state.objects[&forest].zone,
         tricerules_core::Zone::Battlefield
+    );
+}
+
+#[test]
+fn hungry_ghoul_publishes_only_other_controlled_creatures_as_cost_choices() {
+    let decks = Some(vec![
+        deck_with("swamp", &["hungry_ghoul", "grizzly_bears"]),
+        deck_with("forest", &["grizzly_bears"]),
+    ]);
+    let mut e = GameEngine::new(5205, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let ghoul = relocate_to_battlefield(&mut e, 0, "hungry_ghoul", false);
+    let friendly = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    let opposing = relocate_to_battlefield(&mut e, 1, "grizzly_bears", false);
+
+    let batch = e.apply_command(0, &pass()).expect("publish legal costs");
+    let key = u64::from(ghoul) << 32;
+    let choices = &batch.legal_by_player[&0].cost_choices_by_ability[&key];
+    let sacrifice = choices
+        .choices
+        .iter()
+        .find(|choice| choice.cost_index == 1)
+        .expect("sacrifice cost choice");
+
+    assert_eq!(sacrifice.candidate_ids, [friendly]);
+    assert!(!sacrifice.candidate_ids.contains(&ghoul));
+    assert!(!sacrifice.candidate_ids.contains(&opposing));
+    assert!(choices.non_mana_costs_payable);
+}
+
+#[test]
+fn hungry_ghoul_is_not_payable_without_another_creature() {
+    let decks = Some(vec![
+        deck_with("swamp", &["hungry_ghoul"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(5207, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let ghoul = relocate_to_battlefield(&mut e, 0, "hungry_ghoul", false);
+
+    let batch = e.apply_command(0, &pass()).expect("publish legal costs");
+    let key = u64::from(ghoul) << 32;
+    let choices = &batch.legal_by_player[&0].cost_choices_by_ability[&key];
+    let sacrifice = choices
+        .choices
+        .iter()
+        .find(|choice| choice.cost_index == 1)
+        .expect("sacrifice cost choice");
+
+    assert!(sacrifice.candidate_ids.is_empty());
+    assert!(!choices.non_mana_costs_payable);
+}
+
+#[test]
+fn hungry_ghoul_rejects_its_source_atomically_then_accepts_another_creature() {
+    let decks = Some(vec![
+        deck_with("swamp", &["hungry_ghoul", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(5206, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let ghoul = relocate_to_battlefield(&mut e, 0, "hungry_ghoul", false);
+    let other = relocate_to_battlefield(&mut e, 0, "grizzly_bears", false);
+    e.state.players[0].mana_pool.colorless = 2;
+
+    e.apply_command(
+        0,
+        &activate_ability_with_costs(ghoul, 0, vec![], vec![permanent_cost_selection(1, ghoul)]),
+    )
+    .expect_err("another creature cannot be the source itself");
+    assert_eq!(e.state.players[0].mana_pool.colorless, 2);
+    assert_eq!(
+        e.state.objects[&ghoul].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert_eq!(
+        e.state.objects[&other].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert!(!e.state.objects[&ghoul].tapped);
+    assert!(e.state.stack.is_empty());
+
+    e.apply_command(
+        0,
+        &activate_ability_with_costs(ghoul, 0, vec![], vec![permanent_cost_selection(1, other)]),
+    )
+    .expect("another controlled creature pays the sacrifice cost");
+    assert_eq!(e.state.players[0].mana_pool.colorless, 1);
+    assert_eq!(
+        e.state.objects[&ghoul].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert_eq!(
+        e.state.objects[&other].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(e.state.stack.len(), 1);
+
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.objects[&ghoul].counter_count(CounterKind::PlusOnePlusOne),
+        1
     );
 }
 

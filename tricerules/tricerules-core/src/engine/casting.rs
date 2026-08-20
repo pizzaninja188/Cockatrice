@@ -1453,7 +1453,7 @@ impl GameEngine {
                             "sacrifice cost requires a battlefield permanent",
                         ));
                     };
-                    if !self.ability_cost_permanent_matches(player, oid, filter) {
+                    if !self.ability_cost_permanent_matches(player, None, oid, filter) {
                         return Err(EngineError::Illegal("illegal sacrifice cost selection"));
                     }
                     if !consumed.insert(oid) {
@@ -1878,7 +1878,8 @@ impl GameEngine {
                             "sacrifice cost requires a battlefield permanent",
                         ));
                     };
-                    if !self.ability_cost_permanent_matches(player, oid, filter) {
+                    if !self.ability_cost_permanent_matches(player, Some(permanent_id), oid, filter)
+                    {
                         return Err(EngineError::Illegal("illegal sacrifice cost selection"));
                     }
                     if !consumed.insert(oid) {
@@ -1984,13 +1985,17 @@ impl GameEngine {
     pub(super) fn ability_cost_permanent_matches(
         &self,
         player: PlayerId,
+        source: Option<ObjectId>,
         oid: ObjectId,
         filter: &TargetFilter,
     ) -> bool {
         if let Some(branches) = &filter.any_of {
             return branches
                 .iter()
-                .any(|branch| self.ability_cost_permanent_matches(player, oid, branch));
+                .any(|branch| self.ability_cost_permanent_matches(player, source, oid, branch));
+        }
+        if filter.exclude_source && source == Some(oid) {
+            return false;
         }
         let Some(object) = self.state.objects.get(&oid) else {
             return false;
@@ -2626,6 +2631,34 @@ mod mana_payment_tests {
             .expect("one object cannot be sacrificed twice");
         assert!(format!("{err:?}").contains("one object cannot pay two costs"));
         assert_eq!(e.state.objects[&oid].zone, Zone::Battlefield);
+    }
+
+    #[test]
+    fn source_exclusion_is_preserved_through_disjunctive_cost_filters() {
+        let mut e = engine_with_priority();
+        let source = e.state.players[0].library.pop_front().expect("source card");
+        let other = e.state.players[0].library.pop_front().expect("other card");
+        for oid in [source, other] {
+            e.state.players[0].battlefield.push(oid);
+            let object = e.state.objects.get_mut(&oid).expect("object");
+            object.zone = Zone::Battlefield;
+            object.base_controller = 0;
+            object.controller = 0;
+        }
+        let leaf = TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            exclude_source: true,
+            ..TargetFilter::default()
+        };
+        let filter = TargetFilter {
+            any_of: Some(vec![leaf.clone(), leaf]),
+            ..TargetFilter::default()
+        };
+
+        assert!(!e.ability_cost_permanent_matches(0, Some(source), source, &filter));
+        assert!(e.ability_cost_permanent_matches(0, Some(source), other, &filter));
+        assert!(e.ability_cost_permanent_matches(0, None, source, &filter));
     }
 
     #[test]

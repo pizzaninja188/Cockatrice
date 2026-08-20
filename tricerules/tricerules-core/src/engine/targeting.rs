@@ -1025,9 +1025,9 @@ fn effect_target_legal_at_resolution_with_context(
             scope: CombatRestrictionScope::Chosen(target),
             ..
         }
-        | SpellEffectKind::ReturnTargetToHand { target } => {
-            target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context)
-        }
+        | SpellEffectKind::ReturnToOwnersHand {
+            subject: EffectSubject::Chosen(target),
+        } => target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context),
         SpellEffectKind::PumpTarget {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
@@ -1280,7 +1280,9 @@ fn validate_effect_targets(
                 return Err(EngineError::Illegal("target cannot be targeted by this source"));
             }
         }
-        SpellEffectKind::ReturnTargetToHand { target } => {
+        SpellEffectKind::ReturnToOwnersHand {
+            subject: EffectSubject::Chosen(target),
+        } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal(
                     "requires exactly one permanent target",
@@ -1406,6 +1408,11 @@ fn validate_effect_targets(
                 | EffectSubject::TriggerObject,
         }
         | SpellEffectKind::Tap {
+            subject: EffectSubject::Source
+                | EffectSubject::AttachedObject
+                | EffectSubject::TriggerObject,
+        }
+        | SpellEffectKind::ReturnToOwnersHand {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject,
@@ -1738,7 +1745,9 @@ fn spell_target_legality_error_with_context(
             subject: EffectSubject::Chosen(filter),
             ..
         }
-        | SpellEffectKind::ReturnTargetToHand { target: filter }
+        | SpellEffectKind::ReturnToOwnersHand {
+            subject: EffectSubject::Chosen(filter),
+        }
         | SpellEffectKind::PreventNextDamage { target: filter, .. }
         | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target: filter } => {
             if !target_filter_legal_with_context(
@@ -2536,7 +2545,7 @@ mod tests {
             "a permanent satisfying both leaves is selected once"
         );
         for oid in [drake, sword, ornithopter] {
-            assert!(engine.ability_cost_permanent_matches(0, oid, &filter));
+            assert!(engine.ability_cost_permanent_matches(0, None, oid, &filter));
             assert!(attachment_filter_legal(
                 &engine,
                 &filter,
@@ -2545,7 +2554,7 @@ mod tests {
                 0,
             ));
         }
-        assert!(!engine.ability_cost_permanent_matches(0, bear, &filter));
+        assert!(!engine.ability_cost_permanent_matches(0, None, bear, &filter));
         assert!(!attachment_filter_legal(
             &engine,
             &filter,

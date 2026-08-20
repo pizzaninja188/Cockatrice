@@ -1114,11 +1114,11 @@ pub enum SpellEffectKind {
     },
     ExileTarget,
     ExileTargetGainLifeEqualToPower,
-    /// Return a chosen battlefield permanent to its owner's hand. The filter carries the
-    /// complete target contract so Unsummon, Boomerang, and opponent-only creature bounce such
-    /// as Iceridge Serpent share candidate publication and resolution revalidation.
-    ReturnTargetToHand {
-        target: TargetFilter,
+    /// Return a battlefield permanent to its owner's hand. A chosen subject uses the normal
+    /// targeting contract (Unsummon, Boomerang); a source-bound subject is untargeted and keeps
+    /// CR 400.7 generation identity (Wingspan Stride).
+    ReturnToOwnersHand {
+        subject: EffectSubject,
     },
     /// Move a chosen battlefield permanent to its owner's library (CR 400.3). The target filter
     /// carries card-specific restrictions; placement controls library ordering or shuffling.
@@ -1496,6 +1496,8 @@ impl SpellEffectKind {
             } | SpellEffectKind::Fight {
                 second: EffectSubject::AttachedObject,
                 ..
+            } | SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::AttachedObject,
             }
         )
     }
@@ -1533,6 +1535,8 @@ impl SpellEffectKind {
             } | SpellEffectKind::Fight {
                 second: EffectSubject::TriggerObject,
                 ..
+            } | SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::TriggerObject,
             } | SpellEffectKind::LoseLife {
                 who: PlayerRecipient::TriggerObjectController,
                 ..
@@ -1590,7 +1594,8 @@ impl SpellEffectKind {
             | SpellEffectKind::AddTypes { subject, .. }
             | SpellEffectKind::Tap { subject }
             | SpellEffectKind::Untap { subject }
-            | SpellEffectKind::Regenerate { subject } => {
+            | SpellEffectKind::Regenerate { subject }
+            | SpellEffectKind::ReturnToOwnersHand { subject } => {
                 matches!(subject, EffectSubject::Chosen(_))
             }
             SpellEffectKind::Fight { first, second } => {
@@ -1608,7 +1613,6 @@ impl SpellEffectKind {
             | SpellEffectKind::DestroyAttached { .. }
             | SpellEffectKind::ExileTarget
             | SpellEffectKind::ExileTargetGainLifeEqualToPower
-            | SpellEffectKind::ReturnTargetToHand { .. }
             | SpellEffectKind::PutTargetPermanentInOwnersLibrary { .. }
             | SpellEffectKind::ReturnFromGraveyard { .. }
             | SpellEffectKind::TargetPlayerGainsLife { .. }
@@ -1651,7 +1655,6 @@ impl SpellEffectKind {
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
             | SpellEffectKind::DestroyAttached { target, .. }
-            | SpellEffectKind::ReturnTargetToHand { target }
             | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target, .. }
             | SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
@@ -1680,6 +1683,9 @@ impl SpellEffectKind {
                 subject: EffectSubject::Chosen(target),
             }
             | SpellEffectKind::Regenerate {
+                subject: EffectSubject::Chosen(target),
+            }
+            | SpellEffectKind::ReturnToOwnersHand {
                 subject: EffectSubject::Chosen(target),
             }
             | SpellEffectKind::GrantKeywords {
@@ -2049,6 +2055,10 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
                 ..
+            } | SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
             } | SpellEffectKind::ChangeSourceFace { .. }
                 | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
                 | SpellEffectKind::ApplyCombatRestriction {
@@ -2097,11 +2107,13 @@ impl SpellEffectKind {
             // players. A source subject is already constrained to a permanent ability above.
             SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
-            | SpellEffectKind::ReturnTargetToHand { target }
             | SpellEffectKind::Tap {
                 subject: EffectSubject::Chosen(target),
             }
             | SpellEffectKind::Untap {
+                subject: EffectSubject::Chosen(target),
+            }
+            | SpellEffectKind::ReturnToOwnersHand {
                 subject: EffectSubject::Chosen(target),
             } => {
                 if !target.is_permanent_only() {
