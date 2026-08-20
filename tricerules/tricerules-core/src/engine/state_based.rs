@@ -143,7 +143,7 @@ impl GameEngine {
         }
         for id in to_destroy_t0 {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
-            if destroy_permanent(&mut self.state, self.registry, id).is_ok() {
+            if let Ok(died) = destroy_permanent(&mut self.state, self.registry, id) {
                 changed = true;
                 if let Some(owner_id) = owner {
                     out.push(permanent_moved_event(
@@ -153,8 +153,10 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let Some(snapshot) = death_snapshots.get(&id).cloned() {
-                    dies.push(snapshot);
+                if died {
+                    if let Some(snapshot) = death_snapshots.get(&id).cloned() {
+                        dies.push(snapshot);
+                    }
                 }
             }
         }
@@ -169,7 +171,7 @@ impl GameEngine {
                     .map(|(source, _)| source.card_id.as_str())
                     .unwrap_or("creature");
                 out.push(super::events::ev_log(format!("{name} regenerates.")));
-            } else if destroy_permanent(&mut self.state, self.registry, id).is_ok() {
+            } else if let Ok(died) = destroy_permanent(&mut self.state, self.registry, id) {
                 changed = true;
                 if let Some(owner_id) = owner {
                     out.push(permanent_moved_event(
@@ -179,8 +181,10 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let Some(snapshot) = snapshot {
-                    dies.push(snapshot);
+                if died {
+                    if let Some(snapshot) = snapshot {
+                        dies.push(snapshot);
+                    }
                 }
             }
         }
@@ -296,7 +300,7 @@ impl GameEngine {
             let was_creature = self
                 .characteristics(id)
                 .is_some_and(|value| value.is_creature());
-            if destroy_permanent(&mut self.state, self.registry, id).is_ok() {
+            if let Ok(died) = destroy_permanent(&mut self.state, self.registry, id) {
                 changed = true;
                 if let Some(owner_id) = owner {
                     out.push(permanent_moved_event(
@@ -306,11 +310,13 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let Some(source) = snapshot {
-                    self.fire_triggers(&[GameEvent::Dies {
-                        source,
-                        was_creature,
-                    }]);
+                if died {
+                    if let Some(source) = snapshot {
+                        self.fire_triggers(&[GameEvent::Dies {
+                            source,
+                            was_creature,
+                        }]);
+                    }
                 }
             }
         }

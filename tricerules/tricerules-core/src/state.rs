@@ -209,6 +209,14 @@ pub struct ActiveDamagePrevention {
     pub additional_effect: Option<DamagePreventionAdditionalEffect>,
 }
 
+/// A turn-scoped CR 614 replacement bound to one exact permanent generation. ObjectIds remain
+/// stable across zone changes for relay identity, so the generation is part of the rules object.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ActiveDeathReplacement {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+}
+
 /// A prohibition is not a prevention effect (CR 615.12). Keeping it in a separate collection
 /// ensures prevention applications can still run without consuming finite effects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -976,6 +984,8 @@ pub struct GameState {
     /// Active CR 615.12 prohibitions, deliberately separate from prevention effects.
     pub damage_prevention_prohibitions: Vec<DamagePreventionProhibition>,
     pub next_damage_prevention_effect_id: u32,
+    /// Active "if this permanent would die this turn, exile it instead" replacements.
+    pub death_replacement_effects: Vec<ActiveDeathReplacement>,
     /// Opaque ids exposed by replacement-order prompts. Separate from effect identities so stale
     /// submissions cannot name a newly-applicable effect after recomputation.
     pub next_replacement_application_id: u32,

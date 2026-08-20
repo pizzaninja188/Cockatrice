@@ -23,7 +23,7 @@ impl GameEngine {
             .characteristics(oid)
             .is_some_and(|value| value.is_creature());
 
-        sacrifice_permanent(&mut self.state, self.registry, oid)?;
+        let died = sacrifice_permanent(&mut self.state, self.registry, oid)?;
 
         let mut ev = vec![
             permanent_moved_event(
@@ -38,10 +38,12 @@ impl GameEngine {
             )),
         ];
 
-        self.fire_triggers(&[GameEvent::Dies {
-            source,
-            was_creature,
-        }]);
+        if died {
+            self.fire_triggers(&[GameEvent::Dies {
+                source,
+                was_creature,
+            }]);
+        }
         let _ = self.apply_sbas(&mut ev);
 
         self.complete_parked_resolution(pending.item, pending.resume_effect_index, ev)
@@ -66,7 +68,7 @@ impl GameEngine {
             let was_creature = self
                 .characteristics(oid)
                 .is_some_and(|value| value.is_creature());
-            if sacrifice_permanent(&mut self.state, self.registry, oid).is_ok() {
+            if let Ok(died) = sacrifice_permanent(&mut self.state, self.registry, oid) {
                 if let Some(owner_id) = owner {
                     ev.push(permanent_moved_event(
                         &self.state,
@@ -75,11 +77,13 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if let Some(source) = source {
-                    trigger_events.push(GameEvent::Dies {
-                        source,
-                        was_creature,
-                    });
+                if died {
+                    if let Some(source) = source {
+                        trigger_events.push(GameEvent::Dies {
+                            source,
+                            was_creature,
+                        });
+                    }
                 }
             }
         }

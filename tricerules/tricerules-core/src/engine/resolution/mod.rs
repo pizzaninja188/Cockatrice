@@ -958,6 +958,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::DamageTarget { .. } => {
                         damage::damage_target(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::ExileIfWouldDieThisTurn { .. } => {
+                        zones::exile_if_would_die_this_turn(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::CreatureDealsDamageEqualToPower { .. } => {
                         damage::creature_deals_damage_equal_to_power(&mut cx, effect)?
                     }
@@ -1339,8 +1342,16 @@ pub(crate) fn permanent_moved_event(
     state: &GameState,
     oid: ObjectId,
     owner_player_id: PlayerId,
-    destination: rv1::permanent_moved::Destination,
+    mut destination: rv1::permanent_moved::Destination,
 ) -> rv1::RuledEvent {
+    if destination == rv1::permanent_moved::Destination::Graveyard
+        && state
+            .objects
+            .get(&oid)
+            .is_some_and(|object| object.zone == Zone::Exile)
+    {
+        destination = rv1::permanent_moved::Destination::Exile;
+    }
     let card_id = state
         .objects
         .get(&oid)
@@ -1430,7 +1441,7 @@ pub(crate) fn move_object_to_zone(
     state: &mut GameState,
     registry: &'static CardRegistry,
     oid: ObjectId,
-    z: Zone,
+    mut z: Zone,
     controller: Option<PlayerId>,
 ) -> Result<(), EngineError> {
     let owner = state
@@ -1441,6 +1452,19 @@ pub(crate) fn move_object_to_zone(
     let old_zone = state.objects.get(&oid).map(|o| o.zone);
     let leaving_battlefield = old_zone == Some(Zone::Battlefield) && z != Zone::Battlefield;
     let prior_generation = state.zone_change_generation.get(&oid).copied().unwrap_or(0);
+    if old_zone == Some(Zone::Battlefield)
+        && z == Zone::Graveyard
+        && state.death_replacement_effects.iter().any(|effect| {
+            effect.object_id == oid && effect.zone_change_generation == prior_generation
+        })
+    {
+        z = Zone::Exile;
+    }
+    if leaving_battlefield {
+        state.death_replacement_effects.retain(|effect| {
+            effect.object_id != oid || effect.zone_change_generation != prior_generation
+        });
+    }
     let last_known_characteristics = leaving_battlefield
         .then(|| super::characteristics::characteristics_from(state, registry, oid))
         .flatten();
@@ -1640,8 +1664,12 @@ pub(super) fn destroy_permanent(
     state: &mut GameState,
     registry: &'static CardRegistry,
     oid: ObjectId,
-) -> Result<(), EngineError> {
-    move_object_to_zone(state, registry, oid, Zone::Graveyard, None)
+) -> Result<bool, EngineError> {
+    move_object_to_zone(state, registry, oid, Zone::Graveyard, None)?;
+    Ok(state
+        .objects
+        .get(&oid)
+        .is_some_and(|object| object.zone == Zone::Graveyard))
 }
 
 /// Sacrifice a permanent (CR 701.17). Unlike destroy, sacrifice bypasses indestructible and
@@ -1651,8 +1679,12 @@ pub(super) fn sacrifice_permanent(
     state: &mut GameState,
     registry: &'static CardRegistry,
     oid: ObjectId,
-) -> Result<(), EngineError> {
-    move_object_to_zone(state, registry, oid, Zone::Graveyard, None)
+) -> Result<bool, EngineError> {
+    move_object_to_zone(state, registry, oid, Zone::Graveyard, None)?;
+    Ok(state
+        .objects
+        .get(&oid)
+        .is_some_and(|object| object.zone == Zone::Graveyard))
 }
 
 /// CR 608.2m: "As the final part of an instant or sorcery spell's resolution, the spell is put

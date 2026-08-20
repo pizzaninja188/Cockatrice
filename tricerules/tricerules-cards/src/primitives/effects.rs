@@ -788,6 +788,13 @@ pub enum SpellEffectKind {
         amount: Amount,
         target: TargetFilter,
     },
+    /// Create a turn-scoped CR 614 replacement for the exact targeted permanent generation:
+    /// if it would be put into a graveyard from the battlefield, exile it instead. This is a
+    /// separate instruction from damage because the replacement still exists when all damage is
+    /// prevented. Cards: Lava Coil and Scorching Dragonfire.
+    ExileIfWouldDieThisTurn {
+        target: TargetFilter,
+    },
     /// A chosen creature deals noncombat damage equal to its current power to another chosen
     /// creature. Both roles are targets, but the selected creature rather than the resolving
     /// spell is the damage source. Cards: Rabid Bite and Hunter's Edge.
@@ -1594,6 +1601,7 @@ impl SpellEffectKind {
                 matches!(scope, CombatRestrictionScope::Chosen(_))
             }
             SpellEffectKind::DamageTarget { .. }
+            | SpellEffectKind::ExileIfWouldDieThisTurn { .. }
             | SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
             | SpellEffectKind::DamageTargets { .. }
             | SpellEffectKind::DestroyTarget { .. }
@@ -1639,6 +1647,7 @@ impl SpellEffectKind {
                 })
                 .collect(),
             SpellEffectKind::DamageTarget { target, .. }
+            | SpellEffectKind::ExileIfWouldDieThisTurn { target }
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
             | SpellEffectKind::DestroyAttached { target, .. }

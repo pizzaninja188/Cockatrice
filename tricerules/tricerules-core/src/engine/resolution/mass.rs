@@ -80,7 +80,7 @@ pub(super) fn destroy_attached(
             events.push(ev_log(format!("{name} regenerates.")));
             continue;
         }
-        destroy_permanent(&mut engine.state, engine.registry, oid)?;
+        let died = destroy_permanent(&mut engine.state, engine.registry, oid)?;
         events.push(ev_log(format!("{spell_label} destroys {name}")));
         if let Some(owner_id) = owner {
             events.push(permanent_moved_event(
@@ -90,8 +90,10 @@ pub(super) fn destroy_attached(
                 rv1::permanent_moved::Destination::Graveyard,
             ));
         }
-        if let Some(source) = source {
-            destroyed.push((source, was_creature));
+        if died {
+            if let Some(source) = source {
+                destroyed.push((source, was_creature));
+            }
         }
     }
 
@@ -152,7 +154,7 @@ pub(super) fn destroy_all(
             continue;
         }
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
-        destroy_permanent(&mut engine.state, engine.registry, tid)?;
+        let died = destroy_permanent(&mut engine.state, engine.registry, tid)?;
         events.push(ev_log(format!("{spell_label} destroys {tgt}")));
         if let Some(owner_id) = owner {
             events.push(permanent_moved_event(
@@ -162,8 +164,10 @@ pub(super) fn destroy_all(
                 rv1::permanent_moved::Destination::Graveyard,
             ));
         }
-        if let Some(source) = source {
-            destroyed.push((source, was_creature));
+        if died {
+            if let Some(source) = source {
+                destroyed.push((source, was_creature));
+            }
         }
     }
     let trigger_events: Vec<GameEvent> = destroyed

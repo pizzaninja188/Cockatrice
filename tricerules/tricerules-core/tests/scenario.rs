@@ -65,6 +65,8 @@ mod issue_114_disjunctive_filters;
 mod issue_117_fight;
 #[path = "scenario/issue_119_self_combat_restrictions.rs"]
 mod issue_119_self_combat_restrictions;
+#[path = "scenario/issue_125_death_replacement.rs"]
+mod issue_125_death_replacement;
 #[path = "scenario/issue_127_trigger_event_filters.rs"]
 mod issue_127_trigger_event_filters;
 #[path = "scenario/issue_130_calibration_creatures.rs"]

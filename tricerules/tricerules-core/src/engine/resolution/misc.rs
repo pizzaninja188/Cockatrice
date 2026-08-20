@@ -55,7 +55,7 @@ pub(super) fn destroy_target(
             let was_creature = engine
                 .characteristics(tid)
                 .is_some_and(|value| value.is_creature());
-            destroy_permanent(&mut engine.state, engine.registry, tid)?;
+            let died = destroy_permanent(&mut engine.state, engine.registry, tid)?;
             if let Some(owner_id) = owner {
                 events.push(permanent_moved_event(
                     &engine.state,
@@ -64,11 +64,13 @@ pub(super) fn destroy_target(
                     rv1::permanent_moved::Destination::Graveyard,
                 ));
             }
-            if let Some(source) = source {
-                engine.fire_triggers(&[GameEvent::Dies {
-                    source,
-                    was_creature,
-                }]);
+            if died {
+                if let Some(source) = source {
+                    engine.fire_triggers(&[GameEvent::Dies {
+                        source,
+                        was_creature,
+                    }]);
+                }
             }
         }
     }

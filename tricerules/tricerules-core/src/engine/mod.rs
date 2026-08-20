@@ -2,10 +2,10 @@
 
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
-    ActivationUseKey, ActiveDamagePrevention, ActiveDelayedTrigger, AdventureCastPermission,
-    AffectedScope, AttachmentRecipient, BattlefieldEntryCompletion, BattlefieldEntryEvent,
-    BlockingChoice, ChosenMode, CombatState, ContinuousEffect, CopiableValues,
-    DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
+    ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement, ActiveDelayedTrigger,
+    AdventureCastPermission, AffectedScope, AttachmentRecipient, BattlefieldEntryCompletion,
+    BattlefieldEntryEvent, BlockingChoice, ChosenMode, CombatState, ContinuousEffect,
+    CopiableValues, DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
     EntryReplacementApplication, EntryReplacementEffectId, GameObject, GameState, ObjectId,
     OpeningSequence, PendingBattlefieldEntry, PendingDiscard, PendingManaPayment,
     PendingResolution, PendingTrigger, PendingTriggerOrder, PlayerId, PlayerState,
@@ -710,6 +710,7 @@ impl GameEngine {
             damage_prevention_effects: Vec::new(),
             damage_prevention_prohibitions: Vec::new(),
             next_damage_prevention_effect_id: 1,
+            death_replacement_effects: Vec::new(),
             next_replacement_application_id: 1,
             mana_restrictions: Vec::new(),
             undoable_mana_abilities: Vec::new(),

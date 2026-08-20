@@ -516,5 +516,6 @@ impl GameEngine {
             .damage_prevention_effects
             .retain(|effect| effect.duration != EffectDuration::UntilEndOfTurn);
         self.state.damage_prevention_prohibitions.clear();
+        self.state.death_replacement_effects.clear();
     }
 }

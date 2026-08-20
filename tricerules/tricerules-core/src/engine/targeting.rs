@@ -964,6 +964,7 @@ fn effect_target_legal_at_resolution_with_context(
             target_filter_legal_with_context(engine, filter, tid, caster, source, trigger_context)
         }),
         SpellEffectKind::DamageTarget { target, .. }
+        | SpellEffectKind::ExileIfWouldDieThisTurn { target }
         | SpellEffectKind::DamageTargets { target, .. }
         | SpellEffectKind::TargetPlayerGainsLife { target, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target, .. }
@@ -1167,6 +1168,21 @@ fn validate_effect_targets(
                 trigger_context,
             ) {
                 return Err(EngineError::Illegal("illegal target for damage effect"));
+            }
+        }
+        SpellEffectKind::ExileIfWouldDieThisTurn { target: filter } => {
+            if targets.len() != 1 {
+                return Err(EngineError::Illegal("requires exactly one target"));
+            }
+            if !target_filter_legal_with_context(
+                engine,
+                filter,
+                targets[0].object_id,
+                caster,
+                source,
+                trigger_context,
+            ) {
+                return Err(EngineError::Illegal("illegal death-replacement target"));
             }
         }
         SpellEffectKind::DamageTargets {
@@ -1680,6 +1696,7 @@ fn spell_target_legality_error_with_context(
         | SpellEffectKind::DestroyAttached { target: filter, .. }
         | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: filter, .. }
         | SpellEffectKind::DamageTarget { target: filter, .. }
+        | SpellEffectKind::ExileIfWouldDieThisTurn { target: filter }
         | SpellEffectKind::DamageTargets { target: filter, .. }
         | SpellEffectKind::SkipNextUntap { target: filter }
         | SpellEffectKind::GainControlUntilEndOfTurn { target: filter }

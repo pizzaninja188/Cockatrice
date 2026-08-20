@@ -1515,8 +1515,9 @@ impl GameEngine {
                 .map(|object| object.owner)
                 .unwrap_or(player);
             if let Some(snapshot) = sacrificed {
-                sacrifice_permanent(&mut self.state, self.registry, oid)?;
-                payment.sacrificed.push(snapshot);
+                if sacrifice_permanent(&mut self.state, self.registry, oid)? {
+                    payment.sacrificed.push(snapshot);
+                }
                 payment
                     .paid_card_costs
                     .push(PaidCardCost::Sacrifice(card_name));
@@ -1959,11 +1960,12 @@ impl GameEngine {
                         .get(&oid)
                         .map(|object| object.owner)
                         .unwrap_or(player);
-                    payment.sacrificed.push(
-                        self.sacrifice_snapshot(oid)
-                            .ok_or(EngineError::Illegal("sacrifice permanent missing"))?,
-                    );
-                    sacrifice_permanent(&mut self.state, self.registry, oid)?;
+                    let snapshot = self
+                        .sacrifice_snapshot(oid)
+                        .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
+                    if sacrifice_permanent(&mut self.state, self.registry, oid)? {
+                        payment.sacrificed.push(snapshot);
+                    }
                     payment.move_events.push(permanent_moved_event(
                         &self.state,
                         oid,

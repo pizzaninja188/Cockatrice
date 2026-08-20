@@ -94,6 +94,47 @@ pub(super) fn exile_target(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn exile_if_would_die_this_turn(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ExileIfWouldDieThisTurn { .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(&object_id) = cx.targets.first() else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if !cx
+        .engine
+        .state
+        .objects
+        .get(&object_id)
+        .is_some_and(|object| object.zone == Zone::Battlefield)
+    {
+        return Ok(EffectOutcome::Continue);
+    }
+    let zone_change_generation = cx
+        .engine
+        .state
+        .zone_change_generation
+        .get(&object_id)
+        .copied()
+        .unwrap_or(0);
+    let replacement = ActiveDeathReplacement {
+        object_id,
+        zone_change_generation,
+    };
+    if !cx
+        .engine
+        .state
+        .death_replacement_effects
+        .contains(&replacement)
+    {
+        cx.engine.state.death_replacement_effects.push(replacement);
+    }
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn exile_target_gain_life_equal_to_power(
     cx: &mut EffectCx<'_>,
     _effect: SpellEffectKind,

@@ -419,7 +419,7 @@ impl GameEngine {
                 let was_creature = self
                     .characteristics(oid)
                     .is_some_and(|characteristics| characteristics.is_creature());
-                sacrifice_permanent(&mut self.state, self.registry, oid)?;
+                let died = sacrifice_permanent(&mut self.state, self.registry, oid)?;
                 ev.push(permanent_moved_event(
                     &self.state,
                     oid,
@@ -430,11 +430,13 @@ impl GameEngine {
                     "P{} sacrifices {name}.",
                     pending.deciding_player
                 )));
-                if let Some(source) = source {
-                    self.fire_triggers(&[GameEvent::Dies {
-                        source,
-                        was_creature,
-                    }]);
+                if died {
+                    if let Some(source) = source {
+                        self.fire_triggers(&[GameEvent::Dies {
+                            source,
+                            was_creature,
+                        }]);
+                    }
                 }
             }
             ResolutionCost::Mana(_) => {
