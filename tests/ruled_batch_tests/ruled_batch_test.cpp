@@ -1400,6 +1400,45 @@ TEST_F(RuledBatchTest, PlayerAttachmentStaysInNormalRowAndTransitionsWithoutLosi
     EXPECT_EQ(curse->getY(), 1);
 }
 
+TEST_F(RuledBatchTest, GenericCounterAnnotationsReplacePriorEngineLinesAndPreserveUserNotes)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    bear->setAnnotation(QStringLiteral("User note"));
+
+    ruled::v1::IpcResponse first;
+    first.set_ok(true);
+    auto *firstZoneView = first.mutable_batch()->add_events()->mutable_zone_view();
+    auto firstView = buildPerPlayerView(p1, {924u}, {false});
+    firstView.mutable_battlefield_objects(0)->set_counters_annotation(
+        "2 flying counter(s)\n1 stun counter(s)");
+    *firstZoneView->add_per_player() = firstView;
+    *firstZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(first);
+
+    EXPECT_EQ(bear->getAnnotation(),
+              QStringLiteral("User note\n2 flying counter(s)\n1 stun counter(s)"));
+
+    ruled::v1::IpcResponse second;
+    second.set_ok(true);
+    auto *secondZoneView = second.mutable_batch()->add_events()->mutable_zone_view();
+    auto secondView = buildPerPlayerView(p1, {924u}, {false});
+    secondView.mutable_battlefield_objects(0)->set_counters_annotation("1 stun counter(s)");
+    *secondZoneView->add_per_player() = secondView;
+    *secondZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(second);
+
+    EXPECT_EQ(bear->getAnnotation(), QStringLiteral("User note\n1 stun counter(s)"));
+
+    ruled::v1::IpcResponse cleared;
+    cleared.set_ok(true);
+    auto *clearedZoneView = cleared.mutable_batch()->add_events()->mutable_zone_view();
+    *clearedZoneView->add_per_player() = buildPerPlayerView(p1, {924u}, {false});
+    *clearedZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(cleared);
+
+    EXPECT_EQ(bear->getAnnotation(), QStringLiteral("User note"));
+}
+
 TEST_F(RuledBatchTest, PlayerAttachmentUsesIdFallbackAndIsPublicToBothSeats)
 {
     seedCardCatalog({"Curse of Opulence"});

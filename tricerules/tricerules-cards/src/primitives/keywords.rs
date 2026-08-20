@@ -111,7 +111,7 @@ impl ProtectionQuality {
 /// Static keyword abilities that affect game rules (blocking restrictions, attack rules, damage
 /// modifiers, etc.). Parameterless only; parameterized values live in dedicated data-tier types
 /// such as [`Evasion`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Keyword {
     /// CR 702.9: this creature can only be blocked by creatures with flying or reach.
     Flying,
@@ -156,6 +156,28 @@ pub enum Keyword {
 }
 
 impl Keyword {
+    /// Whether this keyword may be represented by a keyword counter under CR 122.1b.
+    ///
+    /// Keep this list narrower than the engine's general keyword vocabulary: defender, flash,
+    /// intimidate, and shroud are rules keywords, but they are not keyword-counter kinds.
+    pub fn can_be_keyword_counter(self) -> bool {
+        matches!(
+            self,
+            Keyword::Flying
+                | Keyword::Reach
+                | Keyword::Vigilance
+                | Keyword::Lifelink
+                | Keyword::Haste
+                | Keyword::Deathtouch
+                | Keyword::Menace
+                | Keyword::Trample
+                | Keyword::FirstStrike
+                | Keyword::DoubleStrike
+                | Keyword::Indestructible
+                | Keyword::Hexproof
+        )
+    }
+
     /// Canonical MTG keyword text (e.g. `Keyword::FirstStrike` → `"First strike"`). Used for the
     /// token identity feed and any place a keyword must render as printed Oracle text.
     pub fn as_str(self) -> &'static str {

@@ -1,5 +1,5 @@
 use super::*;
-use crate::engine::set_tapped;
+use crate::engine::{attempt_untap, UntapOutcome};
 
 fn attachment_kind_matches(
     characteristics: &super::super::characteristics::Characteristics,
@@ -208,7 +208,7 @@ pub(super) fn untap_all(
         .collect();
     let mut untapped = 0;
     for oid in affected {
-        if set_tapped(&mut engine.state, oid, false) {
+        if attempt_untap(&mut engine.state, oid) == UntapOutcome::Untapped {
             untapped += 1;
         }
     }

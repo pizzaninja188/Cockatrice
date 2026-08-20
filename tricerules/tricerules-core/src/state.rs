@@ -128,6 +128,10 @@ pub struct GameObject {
     /// in pairs as a state-based action (CR 122.3). Unlike continuous effects, counters persist
     /// across cleanup — they are not until-end-of-turn effects.
     pub counters: BTreeMap<CounterKind, u32>,
+    /// CR 613.7c timestamp shared by all present counters of each kind. New counters of an
+    /// existing kind receive the timestamp of the first; removing counters preserves it until the
+    /// last one leaves.
+    pub counter_timestamps: BTreeMap<CounterKind, u64>,
     /// CR 303.4 / CR 301.5 / 702.6: the object or player this Aura or Equipment is attached to.
     /// Equipment uses only [`AttachmentRecipient::Object`]. `None` means no attachment. Cleared
     /// on every battlefield exit under the CR 400.7 zone-change funnel.
@@ -214,13 +218,36 @@ impl GameObject {
         self.counters.get(&kind).copied().unwrap_or(0)
     }
 
+    pub fn counter_timestamp(&self, kind: CounterKind) -> Option<u64> {
+        (self.counter_count(kind) > 0)
+            .then(|| self.counter_timestamps.get(&kind).copied())
+            .flatten()
+    }
+
+    pub fn has_any_counter(&self) -> bool {
+        self.counters.values().any(|count| *count > 0)
+    }
+
+    /// Add counters and retain the timestamp of the first counter of this kind as required by
+    /// CR 613.7c. Saturation matches the engine's existing bounded counter arithmetic.
+    pub fn add_counters(&mut self, kind: CounterKind, amount: u32, timestamp: u64) {
+        if amount == 0 {
+            return;
+        }
+        let count = self.counters.entry(kind).or_insert(0);
+        *count = count.saturating_add(amount);
+        self.counter_timestamps.entry(kind).or_insert(timestamp);
+    }
+
     /// Set the number of `kind` counters, dropping the map entry when `n` is 0 so an emptied
     /// counter kind never lingers (keeps the map minimal and iteration deterministic).
     pub fn set_counter(&mut self, kind: CounterKind, n: u32) {
         if n == 0 {
             self.counters.remove(&kind);
+            self.counter_timestamps.remove(&kind);
         } else {
             self.counters.insert(kind, n);
+            self.counter_timestamps.entry(kind).or_insert(0);
         }
     }
 

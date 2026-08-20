@@ -597,10 +597,15 @@ impl GameEngine {
             Zone::Battlefield,
             Some(event.destination_controller),
         )?;
+        let timestamp = self.state.command_index;
         if let Some(object) = self.state.objects.get_mut(&event.object_id) {
             object.face_up_index = event.face_index;
             object.tapped = event.tapped;
-            object.counters = event.entry_counters;
+            object.counters.clear();
+            object.counter_timestamps.clear();
+            for (counter, count) in event.entry_counters {
+                object.add_counters(counter, count, timestamp);
+            }
             object.attached_to = attached_to;
         }
         Ok(())

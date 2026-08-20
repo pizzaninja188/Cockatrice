@@ -489,9 +489,17 @@ impl CardRegistry {
                         }
                     }
                     if let StaticAbilityDef::EntersWithCounters {
-                        affected, amount, ..
+                        affected,
+                        counter,
+                        amount,
                     } = ability
                     {
+                        counter
+                            .validate()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
                         if let crate::primitives::EntersWithCountersAffected::Creatures(filter) =
                             affected
                         {
@@ -510,6 +518,22 @@ impl CardRegistry {
                             });
                         }
                         amount
+                            .validate()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
+                    }
+                    if let StaticAbilityDef::PreventDamage {
+                        additional_effect:
+                            Some(crate::primitives::DamagePreventionAdditionalEffect::PutCounters {
+                                counter,
+                                ..
+                            }),
+                        ..
+                    } = ability
+                    {
+                        counter
                             .validate()
                             .map_err(|reason| RegistryError::InvalidCard {
                                 id: card.id.clone(),
@@ -1157,6 +1181,40 @@ mod tests {
                     if reason.contains("entry counter")
             ));
         }
+    }
+
+    #[test]
+    fn counter_kinds_accept_supported_keyword_and_stun_but_reject_illegal_keyword_counters() {
+        for counter in ["Keyword(Flying)", "Stun"] {
+            let card = format!(
+                r#"(
+                    id: "valid_counter_kind",
+                    name: "Valid Counter Kind",
+                    mana_cost: "{{G}}",
+                    types: ["Instant"],
+                    spell_effect: [PutCounters(counter: {counter}, count: 1)],
+                )"#
+            );
+            CardRegistry::from_chunks(&[&card]).expect("supported counter kind must load");
+        }
+
+        let invalid = r#"(
+            id: "invalid_keyword_counter",
+            name: "Invalid Keyword Counter",
+            mana_cost: "{G}",
+            types: ["Instant"],
+            spell_effect: [PutCounters(counter: Keyword(Defender), count: 1)],
+        )"#;
+        let error = CardRegistry::from_chunks(&[invalid])
+            .expect_err("unsupported keyword counter must fail registry load");
+        assert!(
+            matches!(
+                &error,
+                RegistryError::InvalidCard { reason, .. }
+                    if reason.contains("not a legal keyword-counter kind")
+            ),
+            "unexpected registry error: {error:?}"
+        );
     }
 
     #[test]
@@ -2315,6 +2373,7 @@ mod tests {
                 controllers: RelativePlayerSet::Controller,
                 subtype: None,
                 required_keywords: vec![],
+                requires_any_counter: false,
                 exclude_source: false,
             },
         });
@@ -2342,6 +2401,7 @@ mod tests {
                     controllers: RelativePlayerSet::Controller,
                     subtype: None,
                     required_keywords: vec![],
+                    requires_any_counter: false,
                     exclude_source: true,
                 },
             })

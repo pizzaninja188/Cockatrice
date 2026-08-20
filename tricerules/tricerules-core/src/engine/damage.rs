@@ -527,8 +527,9 @@ impl GameEngine {
                 if let DamageRecipient::Permanent(recipient) = event.recipient {
                     let recipient_label =
                         object_display_name(&self.state, self.registry, recipient);
+                    let timestamp = self.state.command_index;
                     if let Some(object) = self.state.objects.get_mut(&recipient) {
-                        *object.counters.entry(counter).or_insert(0) += amount;
+                        object.add_counters(counter, amount, timestamp);
                     }
                     events.push(ev_log(format!(
                         "{source_label} puts {amount} {} counter(s) on {recipient_label}.",

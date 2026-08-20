@@ -1234,6 +1234,7 @@ impl GameEngine {
                         damage: 0,
                         deathtouch_damage: false,
                         counters: BTreeMap::new(),
+                        counter_timestamps: BTreeMap::new(),
                         attached_to: None,
                         regeneration_shields: 0,
                         must_attack_if_able: false,
@@ -1528,6 +1529,7 @@ pub(crate) fn move_object_to_zone(
             let was_tapped = o.tapped;
             o.tapped = false;
             o.counters.clear();
+            o.counter_timestamps.clear();
             o.attached_to = None;
             o.regeneration_shields = 0;
             o.face_up_index = 0;
@@ -1671,11 +1673,8 @@ pub(super) fn seat_resolved_spell_last_in_graveyard(state: &mut GameState, oid: 
     graveyard.push(oid);
 }
 
-fn counter_label(kind: CounterKind) -> &'static str {
-    match kind {
-        CounterKind::PlusOnePlusOne => "+1/+1",
-        CounterKind::MinusOneMinusOne => "-1/-1",
-    }
+fn counter_label(kind: CounterKind) -> String {
+    kind.label()
 }
 
 /// Return true if the library card `oid` satisfies `filter` (None = any card). The definition
@@ -1788,6 +1787,7 @@ mod anthem_scope_tests {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: BTreeMap::new(),
+                counter_timestamps: BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
                 must_attack_if_able: false,
@@ -1854,6 +1854,7 @@ mod attached_subject_tests {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: BTreeMap::new(),
+                counter_timestamps: BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
                 must_attack_if_able: false,
@@ -2318,6 +2319,7 @@ mod source_keyword_tests {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: BTreeMap::new(),
+                counter_timestamps: BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
                 must_attack_if_able: false,
@@ -2354,6 +2356,7 @@ mod source_keyword_tests {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: BTreeMap::new(),
+                counter_timestamps: BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
                 must_attack_if_able: false,

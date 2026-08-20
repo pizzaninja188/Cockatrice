@@ -190,9 +190,8 @@ fn clone_copies_printed_values_but_not_source_status_counters_damage_or_pump() {
         let source_object = engine.state.objects.get_mut(&source).expect("source");
         source_object.tapped = true;
         source_object.damage = 3;
-        source_object
-            .counters
-            .insert(CounterKind::PlusOnePlusOne, 2);
+        source_object.add_counters(CounterKind::PlusOnePlusOne, 2, 1);
+        source_object.add_counters(CounterKind::Keyword(Keyword::Menace), 1, 2);
     }
     engine.state.continuous_effects.push(ContinuousEffect {
         source_id: None,
@@ -219,6 +218,7 @@ fn clone_copies_printed_values_but_not_source_status_counters_damage_or_pump() {
     assert!(!object.tapped);
     assert_eq!(object.damage, 0);
     assert!(object.counters.is_empty());
+    assert!(object.counter_timestamps.is_empty());
 
     let characteristics = engine
         .characteristics(clone)
@@ -229,6 +229,10 @@ fn clone_copies_printed_values_but_not_source_status_counters_damage_or_pump() {
     assert_eq!(characteristics.colors, vec![Color::White]);
     assert!(characteristics.has_keyword(Keyword::Flying));
     assert!(characteristics.has_keyword(Keyword::Vigilance));
+    assert!(
+        !characteristics.has_keyword(Keyword::Menace),
+        "keyword counters are status, not copiable values"
+    );
 
     engine
         .state

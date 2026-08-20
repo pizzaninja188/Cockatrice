@@ -85,7 +85,7 @@ impl CharacteristicsEvaluator<'_> {
         let mut result = self.characteristics_through_layer_5(oid)?;
 
         let ordered_effects = self.ordered_effects(oid, &result);
-        self.apply_layer_6_abilities(&mut result, &ordered_effects);
+        self.apply_layer_6_abilities(object, &mut result, &ordered_effects);
         self.apply_layer_7_power_toughness(object, &mut result, &ordered_effects);
         Some(result)
     }
@@ -676,7 +676,26 @@ pub(super) fn creature_matches_scope(
 }
 
 impl CharacteristicsEvaluator<'_> {
-    fn apply_layer_6_abilities(&self, result: &mut Characteristics, effects: &[&ContinuousEffect]) {
+    fn apply_layer_6_abilities(
+        &self,
+        object: &GameObject,
+        result: &mut Characteristics,
+        effects: &[&ContinuousEffect],
+    ) {
+        // CR 613.1f, 122.1b: keyword counters grant their named ability in layer 6.
+        // Counter state belongs to the physical object and is deliberately not part of its
+        // copiable values (CR 707.2).
+        for (counter, count) in &object.counters {
+            if *count > 0 {
+                let CounterKind::Keyword(keyword) = counter else {
+                    continue;
+                };
+                if !result.keywords.contains(keyword) {
+                    result.keywords.push(*keyword);
+                }
+            }
+        }
+
         for effect in effects {
             if let ContinuousEffectKind::Layer6AddKeyword(keyword) = effect.kind {
                 if !result.keywords.contains(&keyword) {
@@ -807,6 +826,7 @@ mod tests {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: BTreeMap::new(),
+                counter_timestamps: BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
                 must_attack_if_able: false,
@@ -910,6 +930,7 @@ mod tests {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: BTreeMap::from([(CounterKind::PlusOnePlusOne, 1)]),
+                counter_timestamps: BTreeMap::from([(CounterKind::PlusOnePlusOne, 0)]),
                 attached_to: None,
                 regeneration_shields: 0,
                 must_attack_if_able: false,
@@ -973,6 +994,7 @@ mod tests {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: BTreeMap::new(),
+                counter_timestamps: BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
                 must_attack_if_able: false,
@@ -1020,6 +1042,7 @@ mod tests {
             damage: 0,
             deathtouch_damage: false,
             counters: BTreeMap::new(),
+            counter_timestamps: BTreeMap::new(),
             attached_to,
             regeneration_shields: 0,
             must_attack_if_able: false,
@@ -1097,6 +1120,7 @@ mod tests {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: BTreeMap::new(),
+                counter_timestamps: BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
                 must_attack_if_able: false,
@@ -1146,6 +1170,7 @@ mod tests {
             damage: 0,
             deathtouch_damage: false,
             counters: BTreeMap::new(),
+            counter_timestamps: BTreeMap::new(),
             attached_to: None,
             regeneration_shields: 0,
             must_attack_if_able: false,

@@ -1,5 +1,5 @@
 use super::*;
-use crate::engine::set_tapped;
+use crate::engine::{attempt_untap, set_tapped, UntapOutcome};
 
 pub(super) fn change_source_face(
     cx: &mut EffectCx<'_>,
@@ -182,7 +182,7 @@ pub(super) fn untap(
             .objects
             .get(&tid)
             .is_some_and(|object| object.zone == Zone::Battlefield);
-        if on_battlefield && set_tapped(&mut cx.engine.state, tid, false) {
+        if on_battlefield && attempt_untap(&mut cx.engine.state, tid) == UntapOutcome::Untapped {
             let subject_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
             cx.events
                 .push(ev_log(format!("{} untaps {subject_name}", cx.spell_label)));

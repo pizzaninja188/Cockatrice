@@ -841,6 +841,7 @@ fn mind_sculpt_rejects_self_target() {
                 damage: 0,
                 deathtouch_damage: false,
                 counters: std::collections::BTreeMap::new(),
+                counter_timestamps: std::collections::BTreeMap::new(),
                 attached_to: None,
                 regeneration_shields: 0,
                 must_attack_if_able: false,

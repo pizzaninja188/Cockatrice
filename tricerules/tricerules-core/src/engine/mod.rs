@@ -451,14 +451,11 @@ struct BattlefieldObjectSnapshot {
     copy_revision: u64,
 }
 
-/// CR 701.19 / 701.20: set `oid`'s tap status, returning whether it actually changed.
+/// CR 701.19 / 701.20: set `oid`'s tap status directly, returning whether it actually changed.
 ///
-/// The single funnel for every *becomes tapped* / *becomes untapped* edge — cost payment,
-/// attacking (CR 508.1f), the untap step (CR 502.2), tap/untap effects, and the regeneration
-/// shield's tap (CR 701.19a). "Becomes" is an edge, not a state: a permanent that is already
-/// tapped does not become tapped again, which is exactly the returned bool. A later
-/// `WheneverPermanentBecomesTapped` trigger hangs off that bool here instead of auditing every
-/// mutation site.
+/// Rules-driven untaps use [`attempt_untap`] first so replacement effects are applied. The direct
+/// path remains necessary for undoing an uncommitted mana-payment tap: undo restores transaction
+/// state and is not a new game event to replace.
 ///
 /// Deliberately **not** used by the zone-change reset in `move_object_to_zone`: CR 400.7 makes
 /// that a new object with no tap state, not a permanent becoming untapped.
@@ -480,6 +477,45 @@ fn set_tapped(state: &mut GameState, oid: ObjectId, tapped: bool) -> bool {
             true
         }
         _ => false,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum UntapOutcome {
+    NoChange,
+    Untapped,
+    ReplacedByStun,
+}
+
+/// CR 122.1d / 614.1a: apply replacements to one rules-driven untap attempt.
+///
+/// Stun counters create an applicable replacement only while the permanent is tapped. Removing
+/// one counter replaces the entire event, so the permanent stays tapped and no
+/// `PermanentsUntapped` edge is published. The application list currently contains only the
+/// intrinsic stun-counter rule; when another untap replacement is modeled, this is the shared
+/// collection boundary that will feed the existing CR 616 ordering prompt.
+pub(super) fn attempt_untap(state: &mut GameState, oid: ObjectId) -> UntapOutcome {
+    let Some(object) = state.objects.get(&oid) else {
+        return UntapOutcome::NoChange;
+    };
+    if object.zone != Zone::Battlefield || !object.tapped {
+        return UntapOutcome::NoChange;
+    }
+
+    let stun_count = object.counter_count(CounterKind::Stun);
+    if stun_count > 0 {
+        state
+            .objects
+            .get_mut(&oid)
+            .expect("untap object remained present")
+            .set_counter(CounterKind::Stun, stun_count - 1);
+        return UntapOutcome::ReplacedByStun;
+    }
+
+    if set_tapped(state, oid, false) {
+        UntapOutcome::Untapped
+    } else {
+        UntapOutcome::NoChange
     }
 }
 
@@ -517,6 +553,7 @@ fn new_object_from_card(
         damage: 0,
         deathtouch_damage: false,
         counters: BTreeMap::new(),
+        counter_timestamps: BTreeMap::new(),
         attached_to: None,
         regeneration_shields: 0,
         must_attack_if_able: face.must_attack_if_able,

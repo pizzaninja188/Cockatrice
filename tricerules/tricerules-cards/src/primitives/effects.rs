@@ -242,6 +242,11 @@ pub struct BattlefieldCreatureCountFilter {
     /// Every listed keyword must be present in the creature's derived characteristics.
     #[serde(default)]
     pub required_keywords: Vec<Keyword>,
+    /// If true, the creature must currently have at least one counter of any kind. This is a
+    /// live physical-object predicate used by mechanics such as Delta Bloodflies, rather than a
+    /// derived-characteristic inference from a specific counter vocabulary.
+    #[serde(default)]
+    pub requires_any_counter: bool,
     /// Exclude the resolving spell or ability's physical source object.
     #[serde(default)]
     pub exclude_source: bool,
@@ -529,27 +534,39 @@ pub enum LifeAmount {
     TargetManaValue,
 }
 
-/// A kind of counter that can sit on a permanent (CR 122.1). Only the two counter kinds
-/// with engine rules interactions exist so far: the +1/+1 / -1/-1 pair, which modify P/T in
-/// CR 613.4 layer 7d and annihilate as a state-based action (CR 122.3). Loyalty, charge, and
-/// keyword counters are added by their dependent plans (planeswalkers, Chalice-style chargers)
-/// when the first card needs them. `Ord` is required so [`crate`] consumers can store counters
-/// in a `BTreeMap` for deterministic iteration/serialization.
+/// A kind of counter that can sit on a permanent (CR 122.1). `Ord` is required so [`crate`]
+/// consumers can store counters in a `BTreeMap` for deterministic iteration/serialization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum CounterKind {
     /// CR 122 +1/+1 counter — adds 1 to power and toughness each (layer 7d).
     PlusOnePlusOne,
     /// CR 122 -1/-1 counter — subtracts 1 from power and toughness each (layer 7d).
     MinusOneMinusOne,
+    /// CR 122.1b / 613.1f: grants the carried keyword while at least one remains.
+    Keyword(Keyword),
+    /// CR 122.1d: replaces an untap event by removing one stun counter.
+    Stun,
 }
 
 impl CounterKind {
     /// Short human-readable label for client display (e.g. in card annotations).
     /// Matches the conventional MTG counter naming ("+1/+1", "-1/-1").
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            CounterKind::PlusOnePlusOne => "+1/+1",
-            CounterKind::MinusOneMinusOne => "-1/-1",
+            CounterKind::PlusOnePlusOne => "+1/+1".into(),
+            CounterKind::MinusOneMinusOne => "-1/-1".into(),
+            CounterKind::Keyword(keyword) => keyword.as_str().to_ascii_lowercase(),
+            CounterKind::Stun => "stun".into(),
+        }
+    }
+
+    pub fn validate(self) -> Result<(), String> {
+        match self {
+            CounterKind::Keyword(keyword) if !keyword.can_be_keyword_counter() => Err(format!(
+                "{} is not a legal keyword-counter kind under CR 122.1b",
+                keyword.as_str()
+            )),
+            _ => Ok(()),
         }
     }
 }
@@ -1749,6 +1766,9 @@ impl SpellEffectKind {
         if let SpellEffectKind::ReturnFromGraveyard { filter, .. } = self {
             filter.validate()?;
         }
+        if let SpellEffectKind::PutCounters { counter, .. } = self {
+            counter.validate()?;
+        }
 
         match self {
             SpellEffectKind::DamageTarget { amount, .. }
@@ -1808,6 +1828,7 @@ impl SpellEffectKind {
             SpellEffectKind::ReturnTriggeredCardFromGraveyard { entry_counters, .. } => {
                 let mut kinds = std::collections::HashSet::new();
                 for placement in entry_counters {
+                    placement.counter.validate()?;
                     if placement.count == 0 {
                         return Err("entry counter placement count must be positive".into());
                     }

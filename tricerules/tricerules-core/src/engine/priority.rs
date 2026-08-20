@@ -588,7 +588,7 @@ impl GameEngine {
                 let skip_untap = self.state.skip_next_untap.remove(&(oid, generation));
                 let doesnt_untap = self.doesnt_untap_during_untap_step(oid);
                 if !skip_untap && !doesnt_untap {
-                    super::set_tapped(&mut self.state, oid, false);
+                    super::attempt_untap(&mut self.state, oid);
                 }
                 if let Some(c) = self.state.objects.get_mut(&oid) {
                     c.summoning_sick = false;

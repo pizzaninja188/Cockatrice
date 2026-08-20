@@ -473,8 +473,9 @@ pub(super) fn put_counters(
     if let Some(tid) = tid {
         if can_put_counters(engine, top, targets, &subject) {
             let tgt = object_display_name(&engine.state, engine.registry, tid);
+            let timestamp = engine.state.command_index;
             if let Some(t) = engine.state.objects.get_mut(&tid) {
-                *t.counters.entry(counter).or_insert(0) += count;
+                t.add_counters(counter, count, timestamp);
             }
             events.push(ev_log(format!(
                 "{spell_label} puts {count} {} counter{} on {tgt}",

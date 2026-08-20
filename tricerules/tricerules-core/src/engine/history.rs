@@ -244,14 +244,23 @@ impl GameEngine {
             .iter()
             .flat_map(|player| player.battlefield.iter().copied())
             .filter(|oid| !filter.exclude_source || *oid != source_object_id)
-            .filter_map(|oid| self.characteristics(oid))
-            .filter(|characteristics| {
+            .filter_map(|oid| {
+                self.characteristics(oid)
+                    .map(|characteristics| (oid, characteristics))
+            })
+            .filter(|(oid, characteristics)| {
                 relative_player_set_contains(
                     &self.state,
                     filter.controllers,
                     controller,
                     characteristics.controller,
                 ) && characteristics.is_creature()
+                    && (!filter.requires_any_counter
+                        || self
+                            .state
+                            .objects
+                            .get(oid)
+                            .is_some_and(GameObject::has_any_counter))
                     && filter
                         .subtype
                         .as_ref()
@@ -398,6 +407,75 @@ mod tests {
         if usize::BITS > u32::BITS {
             assert_eq!(clamp_public_count(usize::MAX), u32::MAX);
         }
+    }
+
+    #[test]
+    fn battlefield_creature_count_requires_any_live_counter_kind() {
+        let decks = Some(vec![
+            deck_with_cards(&["grizzly_bears", "serra_angel"], "forest"),
+            deck_with_cards(&["grizzly_bears"], "island"),
+        ]);
+        let mut engine = GameEngine::new(124_001, &[0, 1], 20, decks, true).expect("engine");
+        let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        let _angel = move_to_battlefield(&mut engine, 0, "serra_angel");
+        let opposing_bear = move_to_battlefield(&mut engine, 1, "grizzly_bears");
+        let filter = tricerules_cards::BattlefieldCreatureCountFilter {
+            controllers: RelativePlayerSet::Controller,
+            subtype: None,
+            required_keywords: vec![],
+            requires_any_counter: true,
+            exclude_source: false,
+        };
+        let condition = GameCondition::BattlefieldCreatureCount {
+            filter: filter.clone(),
+            min: Some(1),
+            max: None,
+        };
+        let context = ConditionContext {
+            controller: 0,
+            source_object_id: 0,
+            source_zone_change: 0,
+            resolving_spell_id: None,
+        };
+
+        assert_eq!(engine.battlefield_creature_count(&filter, 0, 0), 0);
+        assert!(!engine.condition_holds(&condition, context));
+
+        for counter in [
+            CounterKind::PlusOnePlusOne,
+            CounterKind::MinusOneMinusOne,
+            CounterKind::Keyword(Keyword::Flying),
+            CounterKind::Stun,
+        ] {
+            engine
+                .state
+                .objects
+                .get_mut(&bear)
+                .expect("bear")
+                .set_counter(counter, 1);
+            assert_eq!(engine.battlefield_creature_count(&filter, 0, 0), 1);
+            assert!(engine.condition_holds(&condition, context));
+            engine
+                .state
+                .objects
+                .get_mut(&bear)
+                .expect("bear")
+                .set_counter(counter, 0);
+            assert_eq!(engine.battlefield_creature_count(&filter, 0, 0), 0);
+            assert!(!engine.condition_holds(&condition, context));
+        }
+
+        engine
+            .state
+            .objects
+            .get_mut(&opposing_bear)
+            .expect("opposing bear")
+            .set_counter(CounterKind::Stun, 1);
+        assert_eq!(
+            engine.battlefield_creature_count(&filter, 0, 0),
+            0,
+            "controller-relative counts must not include an opponent's countered creature"
+        );
     }
 
     #[test]

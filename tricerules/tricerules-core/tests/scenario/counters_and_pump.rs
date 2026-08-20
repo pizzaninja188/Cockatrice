@@ -1,6 +1,94 @@
 use crate::helpers::*;
 
 #[test]
+fn keyword_counter_grants_layer_6_keyword_and_tracks_first_timestamp() {
+    use tricerules_cards::{CounterKind, Keyword};
+
+    let decks = Some(vec![
+        std::iter::repeat_n("forest".to_string(), 20).collect(),
+        std::iter::repeat_n("mountain".to_string(), 20).collect(),
+    ]);
+    let mut e = GameEngine::new(124, &[0, 1], 20, decks, true).expect("new engine");
+    let bear = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let first_timestamp = e.state.command_index;
+
+    e.state.objects.get_mut(&bear).expect("bear").add_counters(
+        CounterKind::Keyword(Keyword::Flying),
+        1,
+        first_timestamp,
+    );
+
+    assert!(e.effective_has_keyword(bear, Keyword::Flying));
+    assert_eq!(
+        e.state
+            .objects
+            .get(&bear)
+            .expect("bear")
+            .counter_timestamp(CounterKind::Keyword(Keyword::Flying)),
+        Some(first_timestamp)
+    );
+
+    let later_timestamp = first_timestamp + 7;
+    e.state.objects.get_mut(&bear).expect("bear").add_counters(
+        CounterKind::Keyword(Keyword::Flying),
+        1,
+        later_timestamp,
+    );
+    e.state.objects.get_mut(&bear).expect("bear").add_counters(
+        CounterKind::Stun,
+        1,
+        later_timestamp + 1,
+    );
+    assert_eq!(
+        e.state
+            .objects
+            .get(&bear)
+            .expect("bear")
+            .counter_timestamp(CounterKind::Keyword(Keyword::Flying)),
+        Some(first_timestamp),
+        "later counters of the same kind share the first counter's timestamp"
+    );
+    assert_eq!(
+        e.state
+            .objects
+            .get(&bear)
+            .expect("bear")
+            .counter_annotation(),
+        "2 flying counter(s)\n1 stun counter(s)"
+    );
+
+    e.state
+        .objects
+        .get_mut(&bear)
+        .expect("bear")
+        .set_counter(CounterKind::Keyword(Keyword::Flying), 0);
+    assert!(!e.effective_has_keyword(bear, Keyword::Flying));
+    assert_eq!(
+        e.state
+            .objects
+            .get(&bear)
+            .expect("bear")
+            .counter_timestamp(CounterKind::Keyword(Keyword::Flying)),
+        None
+    );
+
+    e.state.objects.get_mut(&bear).expect("bear").add_counters(
+        CounterKind::Keyword(Keyword::Flying),
+        1,
+        later_timestamp,
+    );
+    assert_eq!(
+        e.state
+            .objects
+            .get(&bear)
+            .expect("bear")
+            .counter_timestamp(CounterKind::Keyword(Keyword::Flying)),
+        Some(later_timestamp),
+        "a new run of the counter kind receives a new timestamp"
+    );
+}
+
+#[test]
 fn non_active_player_with_priority_pays_mana_for_counterspell() {
     let decks = Some(vec![
         vec![
@@ -763,7 +851,7 @@ fn marked_damage_clears_at_cleanup() {
 /// card must carry neither, so a recast is a fresh 2/2 rather than a damaged 3/3.
 #[test]
 fn bounce_clears_counters_and_marked_damage() {
-    use tricerules_cards::CounterKind;
+    use tricerules_cards::{CounterKind, Keyword};
     let decks = Some(vec![
         vec![
             "island".into(),
@@ -781,7 +869,9 @@ fn bounce_clears_counters_and_marked_damage() {
     let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
     {
         let o = e.state.objects.get_mut(&bear).expect("bear");
-        o.set_counter(CounterKind::PlusOnePlusOne, 1);
+        o.add_counters(CounterKind::PlusOnePlusOne, 1, 4);
+        o.add_counters(CounterKind::Keyword(Keyword::Flying), 1, 5);
+        o.add_counters(CounterKind::Stun, 1, 6);
         o.damage = 1;
     }
     give_mana(
@@ -815,6 +905,8 @@ fn bounce_clears_counters_and_marked_damage() {
         0,
         "counters must not survive the bounce"
     );
+    assert!(returned.counters.is_empty());
+    assert!(returned.counter_timestamps.is_empty());
     assert_eq!(
         returned.damage, 0,
         "marked damage must not survive the bounce"

@@ -22,6 +22,29 @@ fn is_tapped(e: &GameEngine, oid: u32) -> bool {
     e.state.objects.get(&oid).expect("object").tapped
 }
 
+fn advance_to_active_player_upkeep(e: &mut GameEngine, player: i32) {
+    for _ in 0..50 {
+        let (actor, command) = match e.state.cleanup_discard_player {
+            Some(cleanup_player) => {
+                let player_index = e.state.player_idx(cleanup_player).expect("cleanup player");
+                let excess = e.state.players[player_index].hand.len() - 7;
+                (
+                    cleanup_player,
+                    discard_cleanup_batch((0..excess as u32).collect()),
+                )
+            }
+            None => (e.state.priority_player_id(), pass()),
+        };
+        e.apply_command(actor, &command).expect("pass through turn");
+        if e.state.active_player_id() == player
+            && e.state.turn_step == tricerules_core::TurnStep::Upkeep
+        {
+            return;
+        }
+    }
+    panic!("game did not reach player {player}'s upkeep");
+}
+
 /// P0 at main 1 with an untapped Seeker of Skybreak and one Grizzly Bears, `bear_tapped` as asked.
 fn seeker_engine(seed: u64, bear_tapped: bool) -> (GameEngine, u32, u32) {
     let decks = Some(vec![
@@ -137,6 +160,90 @@ fn a_no_op_untap_reports_no_edge() {
 }
 
 #[test]
+fn stun_counter_replaces_untap_without_emitting_an_untap_edge() {
+    use tricerules_cards::CounterKind;
+
+    let (mut e, seeker, bear) = seeker_engine(9124, true);
+    e.state
+        .objects
+        .get_mut(&bear)
+        .expect("bear")
+        .set_counter(CounterKind::Stun, 1);
+
+    e.apply_command(0, &activate_ability(seeker, 0, target(bear)))
+        .expect("activate");
+    let resolution = resolve_stack_collecting_batches(&mut e);
+
+    assert!(
+        is_tapped(&e, bear),
+        "the replaced untap leaves the bear tapped"
+    );
+    assert_eq!(
+        e.state
+            .objects
+            .get(&bear)
+            .expect("bear")
+            .counter_count(CounterKind::Stun),
+        0,
+        "the replacement removes exactly one stun counter"
+    );
+    assert!(
+        resolution
+            .iter()
+            .all(|batch| !untapped_oids(batch).contains(&bear)),
+        "a replaced untap is not a becomes-untapped event"
+    );
+}
+
+#[test]
+fn stun_counters_are_removed_one_per_attempt_and_not_from_an_untapped_permanent() {
+    use tricerules_cards::CounterKind;
+
+    let (mut e, seeker, bear) = seeker_engine(9125, true);
+    e.state
+        .objects
+        .get_mut(&bear)
+        .expect("bear")
+        .set_counter(CounterKind::Stun, 2);
+
+    for expected in [1, 0] {
+        set_tapped(&mut e, seeker, false);
+        e.apply_command(0, &activate_ability(seeker, 0, target(bear)))
+            .expect("activate");
+        resolve_entire_stack_two_player(&mut e);
+        assert!(is_tapped(&e, bear));
+        assert_eq!(
+            e.state
+                .objects
+                .get(&bear)
+                .expect("bear")
+                .counter_count(CounterKind::Stun),
+            expected
+        );
+    }
+
+    set_tapped(&mut e, bear, false);
+    e.state
+        .objects
+        .get_mut(&bear)
+        .expect("bear")
+        .set_counter(CounterKind::Stun, 1);
+    set_tapped(&mut e, seeker, false);
+    e.apply_command(0, &activate_ability(seeker, 0, target(bear)))
+        .expect("activate an already-untapped target");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state
+            .objects
+            .get(&bear)
+            .expect("bear")
+            .counter_count(CounterKind::Stun),
+        1,
+        "no untap attempt occurs when the permanent is already untapped"
+    );
+}
+
+#[test]
 fn untap_target_rejects_a_target_outside_its_filter() {
     // The ability reads "untap target creature", so a land is not a legal target.
     let (mut e, seeker, _bear) = seeker_engine(9103, true);
@@ -190,5 +297,79 @@ fn vitalize_untaps_only_the_casters_creatures() {
     assert!(
         is_tapped(&e, their_bear),
         "`players: Controller` leaves the opponent's creature tapped"
+    );
+}
+
+#[test]
+fn vitalize_applies_stun_independently_to_each_untap_event() {
+    use tricerules_cards::CounterKind;
+
+    let decks = Some(vec![
+        deck_with("forest", &["vitalize", "grizzly_bears"]),
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(9126, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let stunned = relocate_to_battlefield(&mut e, 0, "grizzly_bears", true);
+    let ordinary = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
+    set_tapped(&mut e, ordinary, true);
+    e.state
+        .objects
+        .get_mut(&stunned)
+        .expect("stunned creature")
+        .set_counter(CounterKind::Stun, 1);
+
+    cast_instant_and_resolve(
+        &mut e,
+        0,
+        "vitalize",
+        ManaGift {
+            g: 1,
+            ..Default::default()
+        },
+    );
+
+    assert!(is_tapped(&e, stunned));
+    assert_eq!(
+        e.state.objects[&stunned].counter_count(CounterKind::Stun),
+        0
+    );
+    assert!(!is_tapped(&e, ordinary));
+}
+
+#[test]
+fn skipped_untap_preserves_stun_for_the_next_actual_attempt() {
+    use tricerules_cards::CounterKind;
+
+    let decks = Some(vec![forest_only_deck(), forest_only_deck()]);
+    let mut e = GameEngine::new(9127, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let bear = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    set_tapped(&mut e, bear, true);
+    e.state
+        .objects
+        .get_mut(&bear)
+        .expect("bear")
+        .set_counter(CounterKind::Stun, 2);
+    let generation = e
+        .state
+        .zone_change_generation
+        .get(&bear)
+        .copied()
+        .unwrap_or(0);
+    e.state.skip_next_untap.insert((bear, generation));
+
+    advance_to_active_player_upkeep(&mut e, 1);
+    assert!(is_tapped(&e, bear));
+    assert_eq!(e.state.objects[&bear].counter_count(CounterKind::Stun), 2);
+    assert!(!e.state.skip_next_untap.contains(&(bear, generation)));
+
+    advance_to_active_player_upkeep(&mut e, 0);
+    advance_to_active_player_upkeep(&mut e, 1);
+    assert!(is_tapped(&e, bear));
+    assert_eq!(
+        e.state.objects[&bear].counter_count(CounterKind::Stun),
+        1,
+        "only the next actual untap attempt removes a stun counter"
     );
 }
