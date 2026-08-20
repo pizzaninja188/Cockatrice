@@ -120,6 +120,7 @@ mod events;
 mod history;
 mod legal_actions;
 mod opening;
+mod payment;
 mod priority;
 pub(crate) mod replacement;
 mod resolution;

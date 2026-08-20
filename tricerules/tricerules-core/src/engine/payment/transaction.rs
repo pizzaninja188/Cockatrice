@@ -1,0 +1,532 @@
+//! Atomic non-mana and mana debit plans shared by spell casting and ability activation.
+
+use super::super::events::object_display_name;
+use super::super::resolution::{permanent_moved_event, sacrifice_permanent};
+use super::super::*;
+use super::mana::{
+    commit_mana_payment, mana_payment_still_valid, plan_mana_payment_with_restricted_reduction,
+    ManaPaymentPlan,
+};
+#[derive(Debug, Clone)]
+pub(in crate::engine) struct SacrificeSnapshot {
+    pub(in crate::engine) source: TriggerSourceSnapshot,
+    pub(in crate::engine) was_creature: bool,
+}
+
+enum CostDebit {
+    Tap {
+        object_id: ObjectId,
+        generation: u64,
+    },
+    Mana(ManaPaymentPlan),
+    Discard {
+        object_id: ObjectId,
+        generation: u64,
+        owner: PlayerId,
+    },
+    Sacrifice {
+        snapshot: SacrificeSnapshot,
+        owner: PlayerId,
+    },
+}
+
+pub(in crate::engine) struct CostPaymentReceipt {
+    pub(in crate::engine) move_events: Vec<rv1::RuledEvent>,
+    pub(in crate::engine) sacrificed: Vec<SacrificeSnapshot>,
+    pub(in crate::engine) paid_card_costs: Vec<PaidCardCost>,
+    pub(in crate::engine) life_paid: u32,
+    pub(in crate::engine) restricted_mana_spent: Vec<(u32, ManaAmount)>,
+}
+
+pub(in crate::engine) enum PaidCardCost {
+    Discard {
+        object_id: ObjectId,
+        card_name: String,
+    },
+    Sacrifice {
+        object_id: ObjectId,
+        card_name: String,
+    },
+}
+
+impl PaidCardCost {
+    fn object_id(&self) -> ObjectId {
+        match self {
+            Self::Discard { object_id, .. } | Self::Sacrifice { object_id, .. } => *object_id,
+        }
+    }
+
+    pub(in crate::engine) fn log_phrase(&self) -> String {
+        match self {
+            Self::Discard { card_name, .. } => format!("discarding {card_name}"),
+            Self::Sacrifice { card_name, .. } => format!("sacrificing {card_name}"),
+        }
+    }
+}
+
+pub(in crate::engine) struct CostTransactionPlan {
+    player: PlayerId,
+    player_idx: usize,
+    debits: Vec<CostDebit>,
+}
+
+impl GameEngine {
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::engine) fn plan_spell_costs(
+        &self,
+        player: PlayerId,
+        player_idx: usize,
+        source_oid: ObjectId,
+        mana_cost: &ManaCost,
+        x_value: u32,
+        extra_generic: u32,
+        generic_reduction: u32,
+        flex_payments: &[rv1::FlexPipPayment],
+        costs: &[AdditionalCost],
+        selections: &[rv1::CostSelection],
+        restricted_mana: &[rv1::ManaSpendSelection],
+        eligible_restricted_mana: &[u32],
+    ) -> Result<CostTransactionPlan, EngineError> {
+        use rv1::cost_selection::Selection;
+
+        let mut by_index = HashMap::new();
+        for selection in selections {
+            let cost_index = selection.cost_index as usize;
+            if cost_index >= costs.len() || by_index.insert(cost_index, selection).is_some() {
+                return Err(EngineError::Illegal("invalid or duplicate cost selection"));
+            }
+        }
+
+        let mut debits = Vec::with_capacity(costs.len() + 1);
+        let mut consumed = HashSet::new();
+        for (cost_index, cost) in costs.iter().enumerate() {
+            let Some(selection) = by_index.get(&cost_index) else {
+                return Err(EngineError::Illegal("missing additional cost selection"));
+            };
+            match cost {
+                AdditionalCost::DiscardCard => {
+                    let Some(Selection::HandIndex(hand_index)) = selection.selection else {
+                        return Err(EngineError::Illegal("discard cost requires a hand card"));
+                    };
+                    let oid = self.state.players[player_idx]
+                        .hand
+                        .get(hand_index as usize)
+                        .copied()
+                        .ok_or(EngineError::Illegal("invalid discard hand slot"))?;
+                    if oid == source_oid {
+                        return Err(EngineError::Illegal(
+                            "a spell cannot discard itself as a cost",
+                        ));
+                    }
+                    if !consumed.insert(oid) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    let object = &self.state.objects[&oid];
+                    debits.push(CostDebit::Discard {
+                        object_id: oid,
+                        generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0),
+                        owner: object.owner,
+                    });
+                }
+                AdditionalCost::SacrificePermanent { filter } => {
+                    let Some(Selection::PermanentId(oid)) = selection.selection else {
+                        return Err(EngineError::Illegal(
+                            "sacrifice cost requires a battlefield permanent",
+                        ));
+                    };
+                    if !self.ability_cost_permanent_matches(player, None, oid, filter) {
+                        return Err(EngineError::Illegal("illegal sacrifice cost selection"));
+                    }
+                    if !consumed.insert(oid) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    let snapshot = self
+                        .sacrifice_snapshot(oid)
+                        .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
+                    let owner = self.state.objects[&oid].owner;
+                    debits.push(CostDebit::Sacrifice { snapshot, owner });
+                }
+            }
+        }
+        if selections.len() != costs.len() {
+            return Err(EngineError::Illegal("unexpected cost selection"));
+        }
+
+        debits.insert(
+            0,
+            CostDebit::Mana(plan_mana_payment_with_restricted_reduction(
+                &self.state,
+                player_idx,
+                mana_cost,
+                x_value,
+                extra_generic,
+                generic_reduction,
+                flex_payments,
+                restricted_mana,
+                eligible_restricted_mana,
+            )?),
+        );
+        Ok(CostTransactionPlan {
+            player,
+            player_idx,
+            debits,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::engine) fn plan_ability_costs(
+        &self,
+        player: PlayerId,
+        idx: usize,
+        permanent_id: ObjectId,
+        costs: &[AbilityCost],
+        flex_payments: &[rv1::FlexPipPayment],
+        selections: &[rv1::CostSelection],
+        restricted_mana: &[rv1::ManaSpendSelection],
+        extra_generic: u32,
+    ) -> Result<CostTransactionPlan, EngineError> {
+        use rv1::cost_selection::Selection;
+
+        let source_card_id = self
+            .state
+            .objects
+            .get(&permanent_id)
+            .map(|object| object.card_id.as_str())
+            .ok_or(EngineError::Illegal("permanent missing"))?;
+        let mut by_index = HashMap::new();
+        for selection in selections {
+            let cost_index = selection.cost_index as usize;
+            if cost_index >= costs.len() || by_index.insert(cost_index, selection).is_some() {
+                return Err(EngineError::Illegal("invalid or duplicate cost selection"));
+            }
+        }
+
+        let mut debits = Vec::with_capacity(costs.len());
+        let mut consumed = HashSet::new();
+        let mut expected_selections = 0usize;
+        let mut saw_mana = false;
+        let mut saw_tap = false;
+        let eligible_restricted_mana = self.eligible_restricted_mana_for_ability(idx, permanent_id);
+        for (cost_index, cost) in costs.iter().enumerate() {
+            match cost {
+                AbilityCost::Tap => {
+                    if saw_tap {
+                        return Err(EngineError::Illegal("duplicate tap cost"));
+                    }
+                    self.check_tappable(permanent_id, source_card_id)?;
+                    saw_tap = true;
+                    debits.push(CostDebit::Tap {
+                        object_id: permanent_id,
+                        generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&permanent_id)
+                            .copied()
+                            .unwrap_or(0),
+                    });
+                }
+                AbilityCost::Mana(cost) => {
+                    if saw_mana {
+                        return Err(EngineError::Illegal("multiple mana cost components"));
+                    }
+                    saw_mana = true;
+                    debits.push(CostDebit::Mana(
+                        plan_mana_payment_with_restricted_reduction(
+                            &self.state,
+                            idx,
+                            cost,
+                            0,
+                            extra_generic,
+                            0,
+                            flex_payments,
+                            restricted_mana,
+                            &eligible_restricted_mana,
+                        )?,
+                    ));
+                }
+                AbilityCost::Discard => {
+                    expected_selections += 1;
+                    let Some(selection) = by_index.get(&cost_index) else {
+                        return Err(EngineError::Illegal("missing discard cost selection"));
+                    };
+                    let Some(Selection::HandIndex(hand_index)) = selection.selection else {
+                        return Err(EngineError::Illegal("discard cost requires a hand card"));
+                    };
+                    let oid = self.state.players[idx]
+                        .hand
+                        .get(hand_index as usize)
+                        .copied()
+                        .ok_or(EngineError::Illegal("invalid discard hand slot"))?;
+                    if !consumed.insert(oid) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    let object = &self.state.objects[&oid];
+                    debits.push(CostDebit::Discard {
+                        object_id: oid,
+                        generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0),
+                        owner: object.owner,
+                    });
+                }
+                AbilityCost::SacrificeSelf => {
+                    if !consumed.insert(permanent_id) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    let snapshot = self
+                        .sacrifice_snapshot(permanent_id)
+                        .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
+                    let owner = self.state.objects[&permanent_id].owner;
+                    debits.push(CostDebit::Sacrifice { snapshot, owner });
+                }
+                AbilityCost::SacrificePermanent { filter } => {
+                    expected_selections += 1;
+                    let Some(selection) = by_index.get(&cost_index) else {
+                        return Err(EngineError::Illegal("missing sacrifice cost selection"));
+                    };
+                    let Some(Selection::PermanentId(oid)) = selection.selection else {
+                        return Err(EngineError::Illegal(
+                            "sacrifice cost requires a battlefield permanent",
+                        ));
+                    };
+                    if !self.ability_cost_permanent_matches(player, Some(permanent_id), oid, filter)
+                    {
+                        return Err(EngineError::Illegal("illegal sacrifice cost selection"));
+                    }
+                    if !consumed.insert(oid) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    let snapshot = self
+                        .sacrifice_snapshot(oid)
+                        .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
+                    let owner = self.state.objects[&oid].owner;
+                    debits.push(CostDebit::Sacrifice { snapshot, owner });
+                }
+            }
+        }
+        if !saw_mana && extra_generic > 0 {
+            debits.push(CostDebit::Mana(
+                plan_mana_payment_with_restricted_reduction(
+                    &self.state,
+                    idx,
+                    &ManaCost::default(),
+                    0,
+                    extra_generic,
+                    0,
+                    flex_payments,
+                    restricted_mana,
+                    &eligible_restricted_mana,
+                )?,
+            ));
+        }
+        if selections.len() != expected_selections {
+            return Err(EngineError::Illegal("unexpected cost selection"));
+        }
+        if !restricted_mana.is_empty() && !saw_mana && extra_generic == 0 {
+            return Err(EngineError::Illegal(
+                "restricted mana supplied for an ability with no mana cost",
+            ));
+        }
+
+        Ok(CostTransactionPlan {
+            player,
+            player_idx: idx,
+            debits,
+        })
+    }
+
+    pub(in crate::engine) fn commit_cost_transaction(
+        &mut self,
+        plan: CostTransactionPlan,
+    ) -> Result<CostPaymentReceipt, EngineError> {
+        self.revalidate_cost_transaction(&plan)?;
+
+        let mut payment = CostPaymentReceipt {
+            move_events: vec![],
+            sacrificed: vec![],
+            paid_card_costs: vec![],
+            life_paid: 0,
+            restricted_mana_spent: vec![],
+        };
+        for debit in plan.debits {
+            match debit {
+                CostDebit::Tap { object_id, .. } => {
+                    crate::engine::set_tapped(&mut self.state, object_id, true);
+                }
+                CostDebit::Mana(mana) => {
+                    payment.life_paid += mana.life_cost;
+                    payment
+                        .restricted_mana_spent
+                        .extend(mana.restricted_spent.iter().copied());
+                    commit_mana_payment(&mut self.state, plan.player_idx, mana);
+                }
+                CostDebit::Discard {
+                    object_id: oid,
+                    owner,
+                    ..
+                } => {
+                    let card_name = object_display_name(&self.state, self.registry, oid);
+                    crate::engine::resolution::move_object_to_zone(
+                        &mut self.state,
+                        self.registry,
+                        oid,
+                        Zone::Graveyard,
+                        None,
+                    )
+                    .expect("prevalidated discard cost must commit");
+                    payment.move_events.push(permanent_moved_event(
+                        &self.state,
+                        oid,
+                        owner,
+                        rv1::permanent_moved::Destination::Graveyard,
+                    ));
+                    let paid_cost = PaidCardCost::Discard {
+                        object_id: oid,
+                        card_name,
+                    };
+                    debug_assert_eq!(paid_cost.object_id(), oid);
+                    payment.paid_card_costs.push(paid_cost);
+                }
+                CostDebit::Sacrifice { snapshot, owner } => {
+                    let oid = snapshot.source.object_id;
+                    let card_name = object_display_name(&self.state, self.registry, oid);
+                    if sacrifice_permanent(&mut self.state, self.registry, oid)
+                        .expect("prevalidated sacrifice cost must commit")
+                    {
+                        payment.sacrificed.push(snapshot);
+                    }
+                    payment.move_events.push(permanent_moved_event(
+                        &self.state,
+                        oid,
+                        owner,
+                        rv1::permanent_moved::Destination::Graveyard,
+                    ));
+                    let paid_cost = PaidCardCost::Sacrifice {
+                        object_id: oid,
+                        card_name,
+                    };
+                    debug_assert_eq!(paid_cost.object_id(), oid);
+                    payment.paid_card_costs.push(paid_cost);
+                }
+            }
+        }
+        Ok(payment)
+    }
+
+    fn revalidate_cost_transaction(&self, plan: &CostTransactionPlan) -> Result<(), EngineError> {
+        if self.state.player_idx(plan.player) != Some(plan.player_idx) {
+            return Err(EngineError::Illegal("cost transaction player changed"));
+        }
+        for debit in &plan.debits {
+            let valid =
+                match debit {
+                    CostDebit::Mana(mana) => {
+                        mana_payment_still_valid(&self.state, plan.player_idx, mana)
+                    }
+                    CostDebit::Tap {
+                        object_id,
+                        generation,
+                    } => {
+                        self.state.objects.get(object_id).is_some_and(|object| {
+                            object.zone == Zone::Battlefield && !object.tapped
+                        }) && self
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == *generation
+                    }
+                    CostDebit::Discard {
+                        object_id,
+                        generation,
+                        owner,
+                    } => {
+                        self.state.objects.get(object_id).is_some_and(|object| {
+                            object.zone == Zone::Hand
+                                && object.owner == *owner
+                                && self.state.player_idx(*owner).is_some()
+                                && self.state.players[plan.player_idx].hand.contains(object_id)
+                        }) && self
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == *generation
+                    }
+                    CostDebit::Sacrifice { snapshot, owner } => {
+                        let object_id = snapshot.source.object_id;
+                        self.state.objects.get(&object_id).is_some_and(|object| {
+                            object.zone == Zone::Battlefield
+                                && object.owner == *owner
+                                && self.state.player_idx(*owner).is_some()
+                        }) && self
+                            .state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == snapshot.source.zone_change_generation
+                    }
+                };
+            if !valid {
+                return Err(EngineError::Illegal("cost transaction became stale"));
+            }
+        }
+        Ok(())
+    }
+
+    pub(in crate::engine) fn ability_cost_permanent_matches(
+        &self,
+        player: PlayerId,
+        source: Option<ObjectId>,
+        oid: ObjectId,
+        filter: &TargetFilter,
+    ) -> bool {
+        if let Some(branches) = &filter.any_of {
+            return branches
+                .iter()
+                .any(|branch| self.ability_cost_permanent_matches(player, source, oid, branch));
+        }
+        if filter.exclude_source && source == Some(oid) {
+            return false;
+        }
+        let Some(object) = self.state.objects.get(&oid) else {
+            return false;
+        };
+        if object.zone != Zone::Battlefield || object.controller != player {
+            return false;
+        }
+        let Some(characteristics) = self.characteristics(oid) else {
+            return false;
+        };
+        let kind_matches = match filter.kind {
+            TargetKind::Creature => characteristics.is_creature(),
+            TargetKind::AnyPermanent => true,
+            _ => false,
+        };
+        kind_matches && crate::engine::targeting::filter_characteristics_match(self, filter, oid)
+    }
+
+    /// Snapshot a permanent about to be sacrificed as an activation cost. Taken *before* the cost
+    /// is paid, because CR 603.6 reads the dying object's last-known information and the object is
+    /// already in the graveyard (controller reset, characteristics gone) by the time it fires.
+    fn sacrifice_snapshot(&self, permanent_id: ObjectId) -> Option<SacrificeSnapshot> {
+        let source = self.trigger_source_snapshot(permanent_id)?;
+        Some(SacrificeSnapshot {
+            source,
+            was_creature: self
+                .characteristics(permanent_id)
+                .is_some_and(|value| value.is_creature()),
+        })
+    }
+}

@@ -1,45 +1,13 @@
 use super::combat::priority_locked_for_combat_declaration;
-use super::events::{ev_log, ev_priority_changed, format_spell_targets_log, object_display_name};
+use super::events::{ev_log, ev_priority_changed, format_spell_targets_log};
 use super::legal_actions::fill_legal;
-use super::resolution::{permanent_moved_event, sacrifice_permanent};
+#[cfg(test)]
+use super::payment::{commit_mana_payment, pay_mana, plan_mana_payment_with_reduction};
+use super::payment::{PaidCardCost, SacrificeSnapshot};
 use super::targeting::{
     capture_stack_target, validate_ability_targets, validate_spell_targets, TargetSourceIdentity,
 };
 use super::*;
-
-#[derive(Debug, Clone)]
-struct SacrificeSnapshot {
-    source: TriggerSourceSnapshot,
-    was_creature: bool,
-}
-
-enum ValidatedAbilityCost {
-    Tap,
-    Mana(ManaPaymentPlan),
-    Discard(ObjectId),
-    Sacrifice(ObjectId),
-}
-
-struct AbilityCostPayment {
-    move_events: Vec<rv1::RuledEvent>,
-    sacrificed: Vec<SacrificeSnapshot>,
-    paid_card_costs: Vec<PaidCardCost>,
-    life_paid: u32,
-}
-
-enum PaidCardCost {
-    Discard(String),
-    Sacrifice(String),
-}
-
-impl PaidCardCost {
-    fn log_phrase(&self) -> String {
-        match self {
-            Self::Discard(card_name) => format!("discarding {card_name}"),
-            Self::Sacrifice(card_name) => format!("sacrificing {card_name}"),
-        }
-    }
-}
 
 fn format_paid_card_costs_log(costs: &[PaidCardCost]) -> String {
     let phrases: Vec<_> = costs.iter().map(PaidCardCost::log_phrase).collect();
@@ -55,887 +23,12 @@ fn format_paid_card_costs_log(costs: &[PaidCardCost]) -> String {
     }
 }
 
-enum ValidatedSpellCost {
-    Discard(ObjectId),
-    Sacrifice(SacrificeSnapshot),
-}
-
-struct SpellCostPaymentPlan {
-    mana: ManaPaymentPlan,
-    components: Vec<ValidatedSpellCost>,
-}
-
 /// CR 702.8b: true if the card face is castable at instant speed (is an instant, or has flash).
 pub(super) fn castable_at_instant_speed(face: &tricerules_cards::FaceRef<'_>) -> bool {
     face.is_instant || face.keywords.contains(&tricerules_cards::Keyword::Flash)
 }
 
-/// Pool counts indexed `[W, U, B, R, G, C]`. `C` is the colorless slot.
-pub(super) type PoolVec = [u32; 6];
-pub(super) const POOL_C: usize = 5;
-
-/// Index into a [`PoolVec`] for a colored pip.
-pub(super) fn color_index(c: ColorPip) -> usize {
-    match c {
-        ColorPip::W => 0,
-        ColorPip::U => 1,
-        ColorPip::B => 2,
-        ColorPip::R => 3,
-        ColorPip::G => 4,
-    }
-}
-
-/// A flexible pip resolved against the pool after fixed colored/colorless demands are met.
-pub(super) enum FlexPip {
-    /// Pay one mana of either color (hybrid `{G/U}`).
-    Hybrid(ColorPip, ColorPip),
-    /// Pay one mana of the color, or `n` generic (mono-hybrid `{2/W}`).
-    Mono(u32, ColorPip),
-    /// Pay one mana of the color (Phyrexian `{B/P}` paid with mana, not life).
-    Color(ColorPip),
-}
-
-/// Backtracking solve: can `flex` plus `generic` generic mana be paid from `pool`?
-pub(super) fn solve_flex(
-    pool: PoolVec,
-    flex: &[FlexPip],
-    idx: usize,
-    generic: u32,
-) -> Option<PoolVec> {
-    if idx == flex.len() {
-        let mut p = pool;
-        let mut g = generic;
-        for &i in &[POOL_C, 0, 1, 2, 3, 4] {
-            let t = g.min(p[i]);
-            p[i] -= t;
-            g -= t;
-        }
-        return (g == 0).then_some(p);
-    }
-    match &flex[idx] {
-        FlexPip::Hybrid(a, b) => {
-            for &c in &[*a, *b] {
-                let i = color_index(c);
-                if pool[i] > 0 {
-                    let mut p = pool;
-                    p[i] -= 1;
-                    if let Some(r) = solve_flex(p, flex, idx + 1, generic) {
-                        return Some(r);
-                    }
-                }
-            }
-            None
-        }
-        FlexPip::Color(c) => {
-            let i = color_index(*c);
-            if pool[i] == 0 {
-                return None;
-            }
-            let mut p = pool;
-            p[i] -= 1;
-            solve_flex(p, flex, idx + 1, generic)
-        }
-        FlexPip::Mono(n, c) => {
-            let i = color_index(*c);
-            if pool[i] > 0 {
-                let mut p = pool;
-                p[i] -= 1;
-                if let Some(r) = solve_flex(p, flex, idx + 1, generic) {
-                    return Some(r);
-                }
-            }
-            solve_flex(pool, flex, idx + 1, generic + n)
-        }
-    }
-}
-
-fn solve_flex_with_required_spend(
-    pool: PoolVec,
-    flex: &[FlexPip],
-    idx: usize,
-    generic: u32,
-    max_remaining: PoolVec,
-) -> Option<PoolVec> {
-    if idx == flex.len() {
-        let mut p = pool;
-        let mut g = generic;
-        // Any amount above `max_remaining` came from an explicitly selected restricted group and
-        // must be consumed. Generic mana pays those pips first so the command cannot silently
-        // leave selected restricted mana behind while spending unrestricted mana instead.
-        for i in 0..6 {
-            let required = p[i].saturating_sub(max_remaining[i]);
-            if required > g {
-                return None;
-            }
-            p[i] -= required;
-            g -= required;
-        }
-        for &i in &[POOL_C, 0, 1, 2, 3, 4] {
-            let t = g.min(p[i]);
-            p[i] -= t;
-            g -= t;
-        }
-        return (g == 0 && (0..6).all(|i| p[i] <= max_remaining[i])).then_some(p);
-    }
-    match &flex[idx] {
-        FlexPip::Hybrid(a, b) => {
-            for &color in &[*a, *b] {
-                let i = color_index(color);
-                if pool[i] > 0 {
-                    let mut next = pool;
-                    next[i] -= 1;
-                    if let Some(result) =
-                        solve_flex_with_required_spend(next, flex, idx + 1, generic, max_remaining)
-                    {
-                        return Some(result);
-                    }
-                }
-            }
-            None
-        }
-        FlexPip::Color(color) => {
-            let i = color_index(*color);
-            if pool[i] == 0 {
-                return None;
-            }
-            let mut next = pool;
-            next[i] -= 1;
-            solve_flex_with_required_spend(next, flex, idx + 1, generic, max_remaining)
-        }
-        FlexPip::Mono(amount, color) => {
-            let i = color_index(*color);
-            if pool[i] > 0 {
-                let mut next = pool;
-                next[i] -= 1;
-                if let Some(result) =
-                    solve_flex_with_required_spend(next, flex, idx + 1, generic, max_remaining)
-                {
-                    return Some(result);
-                }
-            }
-            solve_flex_with_required_spend(
-                pool,
-                flex,
-                idx + 1,
-                generic.saturating_add(*amount),
-                max_remaining,
-            )
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct ManaPaymentPlan {
-    remaining: PoolVec,
-    life_cost: u32,
-    restricted_spent: Vec<(u32, ManaAmount)>,
-}
-
-/// Validate a mana payment without mutating the pool or life total. Activated costs use this
-/// plan as one component of their all-or-nothing CR 601.2h transaction.
-fn plan_mana_payment(
-    state: &GameState,
-    player_idx: usize,
-    cost: &ManaCost,
-    x_value: u32,
-    extra_generic: u32,
-    flex_payments: &[rv1::FlexPipPayment],
-) -> Result<ManaPaymentPlan, EngineError> {
-    plan_mana_payment_with_reduction(
-        state,
-        player_idx,
-        cost,
-        x_value,
-        extra_generic,
-        0,
-        flex_payments,
-    )
-}
-
-/// Determine a mana payment after applying CR 601.2f's generic increases-then-reductions order.
-/// The reduction is applied only after the printed generic pips, X, and dynamic increases have
-/// been combined, and `saturating_sub` implements CR 118.7's {0} floor.
-#[allow(clippy::too_many_arguments)]
-fn plan_mana_payment_with_reduction(
-    state: &GameState,
-    player_idx: usize,
-    cost: &ManaCost,
-    x_value: u32,
-    extra_generic: u32,
-    generic_reduction: u32,
-    flex_payments: &[rv1::FlexPipPayment],
-) -> Result<ManaPaymentPlan, EngineError> {
-    plan_mana_payment_with_restricted_reduction(
-        state,
-        player_idx,
-        cost,
-        x_value,
-        extra_generic,
-        generic_reduction,
-        flex_payments,
-        &[],
-        &[],
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn plan_mana_payment_with_restricted_reduction(
-    state: &GameState,
-    player_idx: usize,
-    cost: &ManaCost,
-    x_value: u32,
-    extra_generic: u32,
-    generic_reduction: u32,
-    flex_payments: &[rv1::FlexPipPayment],
-    restricted_selections: &[rv1::ManaSpendSelection],
-    eligible_group_ids: &[u32],
-) -> Result<ManaPaymentPlan, EngineError> {
-    let life_pips: HashSet<usize> = flex_payments
-        .iter()
-        .filter(|fp| fp.pay_life)
-        .map(|fp| fp.pip_index as usize)
-        .collect();
-
-    let mut need_color: PoolVec = [0; 6];
-    let mut need_generic = extra_generic;
-    let mut life_cost = 0u32;
-    let mut flex: Vec<FlexPip> = Vec::new();
-    for (i, pip) in cost.pips.iter().enumerate() {
-        match pip {
-            ManaSymbol::W => need_color[color_index(ColorPip::W)] += 1,
-            ManaSymbol::U => need_color[color_index(ColorPip::U)] += 1,
-            ManaSymbol::B => need_color[color_index(ColorPip::B)] += 1,
-            ManaSymbol::R => need_color[color_index(ColorPip::R)] += 1,
-            ManaSymbol::G => need_color[color_index(ColorPip::G)] += 1,
-            ManaSymbol::C => need_color[POOL_C] += 1,
-            ManaSymbol::Generic(n) => need_generic = need_generic.saturating_add(*n),
-            ManaSymbol::X => need_generic = need_generic.saturating_add(x_value),
-            ManaSymbol::Hybrid(a, b) => flex.push(FlexPip::Hybrid(*a, *b)),
-            ManaSymbol::MonoHybrid(n, c) => flex.push(FlexPip::Mono(*n, *c)),
-            ManaSymbol::Phyrexian(c) => {
-                if life_pips.contains(&i) {
-                    life_cost += 2;
-                } else {
-                    flex.push(FlexPip::Color(*c));
-                }
-            }
-        }
-    }
-    need_generic = need_generic.saturating_sub(generic_reduction);
-
-    // CR 119.4: a player can pay life only if they have at least that much.
-    if life_cost > 0 && state.players[player_idx].life < life_cost as i32 {
-        return Err(EngineError::Illegal(
-            "not enough life to pay Phyrexian cost",
-        ));
-    }
-
-    let player = &state.players[player_idx];
-    let pool = &player.mana_pool;
-    let unrestricted: PoolVec = [
-        pool.white,
-        pool.blue,
-        pool.black,
-        pool.red,
-        pool.green,
-        pool.colorless,
-    ];
-    let mut working = unrestricted;
-    let mut restricted_spent = Vec::with_capacity(restricted_selections.len());
-    let mut seen_groups = HashSet::new();
-    for selection in restricted_selections {
-        let group_id = selection.restriction_group_id;
-        if group_id == 0 || !seen_groups.insert(group_id) || !eligible_group_ids.contains(&group_id)
-        {
-            return Err(EngineError::Illegal(
-                "invalid or ineligible restricted mana selection",
-            ));
-        }
-        let amount = ManaAmount {
-            w: selection.w,
-            u: selection.u,
-            b: selection.b,
-            r: selection.r,
-            g: selection.g,
-            c: selection.c,
-        };
-        if [amount.w, amount.u, amount.b, amount.r, amount.g, amount.c]
-            .iter()
-            .all(|count| *count == 0)
-        {
-            return Err(EngineError::Illegal("restricted mana selection is empty"));
-        }
-        let available = player
-            .restricted_mana
-            .iter()
-            .filter(|entry| entry.restriction_group_id == group_id)
-            .fold(ManaAmount::default(), |mut total, entry| {
-                total.w += entry.amount.w;
-                total.u += entry.amount.u;
-                total.b += entry.amount.b;
-                total.r += entry.amount.r;
-                total.g += entry.amount.g;
-                total.c += entry.amount.c;
-                total
-            });
-        if amount.w > available.w
-            || amount.u > available.u
-            || amount.b > available.b
-            || amount.r > available.r
-            || amount.g > available.g
-            || amount.c > available.c
-        {
-            return Err(EngineError::Illegal(
-                "restricted mana selection exceeds pool",
-            ));
-        }
-        for (slot, count) in [amount.w, amount.u, amount.b, amount.r, amount.g, amount.c]
-            .into_iter()
-            .enumerate()
-        {
-            working[slot] = working[slot].saturating_add(count);
-        }
-        restricted_spent.push((group_id, amount));
-    }
-    for i in 0..6 {
-        if working[i] < need_color[i] {
-            return Err(EngineError::Illegal(
-                "not enough mana in pool; tap your lands first",
-            ));
-        }
-        working[i] -= need_color[i];
-    }
-    let remaining = if restricted_spent.is_empty() {
-        solve_flex(working, &flex, 0, need_generic)
-    } else {
-        solve_flex_with_required_spend(working, &flex, 0, need_generic, unrestricted)
-    };
-    let Some(remaining) = remaining else {
-        return Err(EngineError::Illegal(
-            "not enough mana in pool; tap your lands first",
-        ));
-    };
-
-    Ok(ManaPaymentPlan {
-        remaining,
-        life_cost,
-        restricted_spent,
-    })
-}
-
-fn commit_mana_payment(state: &mut GameState, player_idx: usize, plan: ManaPaymentPlan) {
-    let pool = &mut state.players[player_idx].mana_pool;
-    pool.white = plan.remaining[0];
-    pool.blue = plan.remaining[1];
-    pool.black = plan.remaining[2];
-    pool.red = plan.remaining[3];
-    pool.green = plan.remaining[4];
-    pool.colorless = plan.remaining[POOL_C];
-    for (group_id, spent) in plan.restricted_spent {
-        let entries = &mut state.players[player_idx].restricted_mana;
-        for (slot, mut remaining) in [spent.w, spent.u, spent.b, spent.r, spent.g, spent.c]
-            .into_iter()
-            .enumerate()
-        {
-            for entry in entries
-                .iter_mut()
-                .filter(|entry| entry.restriction_group_id == group_id)
-            {
-                if remaining == 0 {
-                    break;
-                }
-                let field = match slot {
-                    0 => &mut entry.amount.w,
-                    1 => &mut entry.amount.u,
-                    2 => &mut entry.amount.b,
-                    3 => &mut entry.amount.r,
-                    4 => &mut entry.amount.g,
-                    _ => &mut entry.amount.c,
-                };
-                let take = remaining.min(*field);
-                *field -= take;
-                remaining -= take;
-            }
-            debug_assert_eq!(remaining, 0);
-        }
-        entries.retain(|entry| {
-            let amount = entry.amount;
-            amount.w + amount.u + amount.b + amount.r + amount.g + amount.c > 0
-        });
-    }
-    state.players[player_idx].life -= plan.life_cost as i32;
-}
-
-fn mana_filter_matches_face(filter: &ManaSpendFilter, face: &CardFace) -> bool {
-    filter
-        .card_type
-        .is_none_or(|card_type| face.matches_card_type(card_type))
-        && filter
-            .subtype
-            .as_ref()
-            .is_none_or(|subtype| face.types.iter().any(|value| value == subtype))
-}
-
-fn mana_filter_matches_characteristics(
-    filter: &ManaSpendFilter,
-    characteristics: &Characteristics,
-) -> bool {
-    filter.card_type.is_none_or(|card_type| match card_type {
-        CardTypeFilter::BasicLand => {
-            characteristics.has_type("Land")
-                && characteristics
-                    .supertypes
-                    .iter()
-                    .any(|value| value == "Basic")
-        }
-        CardTypeFilter::Land => characteristics.has_type("Land"),
-        CardTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
-        CardTypeFilter::Instant => characteristics.has_type("Instant"),
-        CardTypeFilter::Sorcery => characteristics.has_type("Sorcery"),
-        CardTypeFilter::InstantOrSorcery => {
-            characteristics.has_type("Instant") || characteristics.has_type("Sorcery")
-        }
-        CardTypeFilter::Creature => characteristics.is_creature(),
-        CardTypeFilter::Artifact => characteristics.is_artifact(),
-        CardTypeFilter::Planeswalker => characteristics.has_type("Planeswalker"),
-        CardTypeFilter::Noncreature => !characteristics.is_creature(),
-    }) && filter
-        .subtype
-        .as_ref()
-        .is_none_or(|subtype| characteristics.has_type(subtype))
-}
-
-#[cfg(test)]
-mod restricted_mana_filter_tests {
-    use super::*;
-
-    #[test]
-    fn planeswalker_subtype_filter_requires_both_characteristics() {
-        let filter = ManaSpendFilter {
-            card_type: Some(CardTypeFilter::Planeswalker),
-            subtype: Some("Chandra".into()),
-        };
-        let chandra = CardFace {
-            types: vec!["Planeswalker".into(), "Chandra".into()],
-            ..Default::default()
-        };
-        let jaya = CardFace {
-            types: vec!["Planeswalker".into(), "Jaya".into()],
-            ..Default::default()
-        };
-        let elemental_named_chandra = CardFace {
-            types: vec!["Creature".into(), "Elemental".into(), "Chandra".into()],
-            ..Default::default()
-        };
-
-        assert!(mana_filter_matches_face(&filter, &chandra));
-        assert!(!mana_filter_matches_face(&filter, &jaya));
-        assert!(!mana_filter_matches_face(&filter, &elemental_named_chandra));
-    }
-}
-
-/// Pays `cost` after first proving the whole mana component is affordable.
-#[cfg(test)]
-pub(super) fn pay_mana(
-    state: &mut GameState,
-    player_idx: usize,
-    cost: &ManaCost,
-    x_value: u32,
-    extra_generic: u32,
-    flex_payments: &[rv1::FlexPipPayment],
-) -> Result<u32, EngineError> {
-    let plan = plan_mana_payment(
-        state,
-        player_idx,
-        cost,
-        x_value,
-        extra_generic,
-        flex_payments,
-    )?;
-    let life_cost = plan.life_cost;
-    commit_mana_payment(state, player_idx, plan);
-    Ok(life_cost)
-}
-
 impl GameEngine {
-    pub(super) fn pay_turn_face_up_mana(
-        &mut self,
-        player_idx: usize,
-        cost: &ManaCost,
-        flex_payments: &[rv1::FlexPipPayment],
-        restricted_mana: &[rv1::ManaSpendSelection],
-    ) -> Result<(), EngineError> {
-        if !restricted_mana.is_empty() {
-            return Err(EngineError::Illegal(
-                "restricted mana cannot pay a turn-face-up action",
-            ));
-        }
-        let plan = plan_mana_payment(&self.state, player_idx, cost, 0, 0, flex_payments)?;
-        commit_mana_payment(&mut self.state, player_idx, plan);
-        Ok(())
-    }
-
-    fn targeting_cost_increase(
-        &self,
-        actor: PlayerId,
-        action: TargetingCostAction,
-        targets: &[rv1::TargetRef],
-    ) -> u32 {
-        let mut sources = self
-            .state
-            .players
-            .iter()
-            .flat_map(|player| player.battlefield.iter().copied())
-            .collect::<Vec<_>>();
-        sources.sort_unstable();
-
-        sources.into_iter().fold(0u32, |total, source_id| {
-            let Some(source_controller) = self.controller_of(source_id) else {
-                return total;
-            };
-            let actor_matches = |set: RelativePlayerSet| match set {
-                RelativePlayerSet::Controller => actor == source_controller,
-                RelativePlayerSet::Opponents => self.state.are_opponents(actor, source_controller),
-                RelativePlayerSet::All => true,
-            };
-            let Some(face) = self.effective_face(source_id) else {
-                return total;
-            };
-            face.static_abilities
-                .iter()
-                .filter_map(|ability| {
-                    let StaticAbilityDef::TargetingCostIncrease {
-                        protected,
-                        actors,
-                        actions,
-                        amount,
-                    } = ability
-                    else {
-                        return None;
-                    };
-                    let action_matches =
-                        matches!(actions, TargetingCostAction::SpellsAndActivatedAbilities)
-                            || actions == &action;
-                    if !action_matches || !actor_matches(*actors) {
-                        return None;
-                    }
-                    targets
-                        .iter()
-                        .any(|target| {
-                            self.target_is_protected(
-                                source_id,
-                                source_controller,
-                                protected,
-                                target,
-                            )
-                        })
-                        .then_some(*amount)
-                })
-                .fold(total, u32::saturating_add)
-        })
-    }
-
-    fn target_is_protected(
-        &self,
-        source_id: ObjectId,
-        source_controller: PlayerId,
-        protected: &TargetingCostProtected,
-        target: &rv1::TargetRef,
-    ) -> bool {
-        let kind =
-            rv1::TargetRefKind::try_from(target.kind).unwrap_or(rv1::TargetRefKind::Unspecified);
-        let is_object = match kind {
-            rv1::TargetRefKind::Player => false,
-            rv1::TargetRefKind::Permanent
-            | rv1::TargetRefKind::Stack
-            | rv1::TargetRefKind::Graveyard => true,
-            rv1::TargetRefKind::Unspecified => self.state.objects.contains_key(&target.object_id),
-        };
-        match protected {
-            TargetingCostProtected::Source => is_object && target.object_id == source_id,
-            TargetingCostProtected::Creatures(filter) => {
-                if !is_object {
-                    return false;
-                }
-                let Some(object) = self.state.objects.get(&target.object_id) else {
-                    return false;
-                };
-                if object.zone != Zone::Battlefield {
-                    return false;
-                }
-                let Some(characteristics) = self.characteristics(target.object_id) else {
-                    return false;
-                };
-                super::characteristics::creature_matches_scope(
-                    &self.state,
-                    self.registry,
-                    filter,
-                    source_controller,
-                    filter.exclude_self.then_some(source_id),
-                    target.object_id,
-                    &characteristics,
-                )
-            }
-            TargetingCostProtected::Players(set) => {
-                if is_object {
-                    return false;
-                }
-                let target_player = target.object_id as PlayerId;
-                self.state.player_idx(target_player).is_some()
-                    && match set {
-                        RelativePlayerSet::Controller => target_player == source_controller,
-                        RelativePlayerSet::Opponents => {
-                            self.state.are_opponents(target_player, source_controller)
-                        }
-                        RelativePlayerSet::All => true,
-                    }
-            }
-        }
-    }
-
-    pub(super) fn targeting_cost_applications(
-        &self,
-        actor: PlayerId,
-        action: TargetingCostAction,
-        groups: &[rv1::LegalTargetGroup],
-    ) -> Vec<rv1::TargetingCostApplication> {
-        let mut candidates = Vec::new();
-        for group in groups {
-            candidates.extend(group.valid_permanent_ids.iter().map(|&object_id| {
-                rv1::TargetCandidateRef {
-                    kind: rv1::TargetRefKind::Permanent as i32,
-                    object_id,
-                }
-            }));
-            candidates.extend(group.valid_stack_ids.iter().map(|&object_id| {
-                rv1::TargetCandidateRef {
-                    kind: rv1::TargetRefKind::Stack as i32,
-                    object_id,
-                }
-            }));
-            candidates.extend(group.valid_graveyard_ids.iter().map(|&object_id| {
-                rv1::TargetCandidateRef {
-                    kind: rv1::TargetRefKind::Graveyard as i32,
-                    object_id,
-                }
-            }));
-            for player in &self.state.players {
-                if (group.can_target_self && player.id == actor)
-                    || (group.can_target_opponent && self.state.are_opponents(player.id, actor))
-                {
-                    candidates.push(rv1::TargetCandidateRef {
-                        kind: rv1::TargetRefKind::Player as i32,
-                        object_id: player.id as ObjectId,
-                    });
-                }
-            }
-        }
-        candidates.sort_by_key(|candidate| (candidate.kind, candidate.object_id));
-        candidates.dedup_by_key(|candidate| (candidate.kind, candidate.object_id));
-
-        let mut sources = self
-            .state
-            .players
-            .iter()
-            .flat_map(|player| player.battlefield.iter().copied())
-            .collect::<Vec<_>>();
-        sources.sort_unstable();
-        let mut applications = Vec::new();
-        for source_id in sources {
-            let Some(source_controller) = self.controller_of(source_id) else {
-                continue;
-            };
-            let Some(face) = self.effective_face(source_id) else {
-                continue;
-            };
-            for (ability_index, ability) in face.static_abilities.iter().enumerate() {
-                let StaticAbilityDef::TargetingCostIncrease {
-                    protected,
-                    actors,
-                    actions,
-                    amount,
-                } = ability
-                else {
-                    continue;
-                };
-                let actor_matches = match actors {
-                    RelativePlayerSet::Controller => actor == source_controller,
-                    RelativePlayerSet::Opponents => {
-                        self.state.are_opponents(actor, source_controller)
-                    }
-                    RelativePlayerSet::All => true,
-                };
-                let action_matches =
-                    matches!(actions, TargetingCostAction::SpellsAndActivatedAbilities)
-                        || actions == &action;
-                if !actor_matches || !action_matches {
-                    continue;
-                }
-                let affected_targets = candidates
-                    .iter()
-                    .filter(|candidate| {
-                        self.target_is_protected(
-                            source_id,
-                            source_controller,
-                            protected,
-                            &rv1::TargetRef {
-                                object_id: candidate.object_id,
-                                kind: candidate.kind,
-                                ..Default::default()
-                            },
-                        )
-                    })
-                    .cloned()
-                    .collect::<Vec<_>>();
-                if !affected_targets.is_empty() {
-                    applications.push(rv1::TargetingCostApplication {
-                        application_id: (u64::from(source_id) << 32) | ability_index as u64,
-                        generic_mana: *amount,
-                        affected_targets,
-                    });
-                }
-            }
-        }
-        applications
-    }
-
-    pub(super) fn eligible_restricted_mana_for_spell(
-        &self,
-        player_idx: usize,
-        face: &CardFace,
-    ) -> Vec<u32> {
-        let mut ids: Vec<u32> = self.state.players[player_idx]
-            .restricted_mana
-            .iter()
-            .filter_map(|entry| {
-                let restriction = self
-                    .state
-                    .mana_restrictions
-                    .get(entry.restriction_group_id.checked_sub(1)? as usize)?;
-                restriction
-                    .cast_spell
-                    .iter()
-                    .any(|filter| mana_filter_matches_face(filter, face))
-                    .then_some(entry.restriction_group_id)
-            })
-            .collect();
-        ids.sort_unstable();
-        ids.dedup();
-        ids
-    }
-
-    pub(super) fn eligible_restricted_mana_for_ability(
-        &self,
-        player_idx: usize,
-        source_oid: ObjectId,
-    ) -> Vec<u32> {
-        let Some(characteristics) = self.characteristics(source_oid) else {
-            return Vec::new();
-        };
-        let mut ids: Vec<u32> = self.state.players[player_idx]
-            .restricted_mana
-            .iter()
-            .filter_map(|entry| {
-                let restriction = self
-                    .state
-                    .mana_restrictions
-                    .get(entry.restriction_group_id.checked_sub(1)? as usize)?;
-                restriction
-                    .activate_ability
-                    .iter()
-                    .any(|filter| mana_filter_matches_characteristics(filter, &characteristics))
-                    .then_some(entry.restriction_group_id)
-            })
-            .collect();
-        ids.sort_unstable();
-        ids.dedup();
-        ids
-    }
-
-    pub(super) fn spell_generic_reduction(
-        &self,
-        player: PlayerId,
-        source_oid: ObjectId,
-        modifiers: &[SpellCostModifier],
-    ) -> u32 {
-        let context = ConditionContext {
-            controller: player,
-            source_object_id: source_oid,
-            source_zone_change: self
-                .state
-                .zone_change_generation
-                .get(&source_oid)
-                .copied()
-                .unwrap_or(0),
-            resolving_spell_id: None,
-        };
-        modifiers
-            .iter()
-            .fold(0u32, |total, modifier| match modifier {
-                SpellCostModifier::ConditionalGenericReduction { amount, condition }
-                    if self.condition_holds(condition, context) =>
-                {
-                    total.saturating_add(*amount)
-                }
-                SpellCostModifier::ConditionalGenericReduction { .. } => total,
-            })
-    }
-
-    pub(super) fn can_pay_generic_mana(&self, player: PlayerId, amount: u32) -> bool {
-        self.state.player_idx(player).is_some_and(|player_idx| {
-            plan_mana_payment(
-                &self.state,
-                player_idx,
-                &ManaCost::default(),
-                0,
-                amount,
-                &[],
-            )
-            .is_ok()
-        })
-    }
-
-    pub(super) fn pay_generic_mana(
-        &mut self,
-        player: PlayerId,
-        amount: u32,
-    ) -> Result<(), EngineError> {
-        let player_idx = self
-            .state
-            .player_idx(player)
-            .ok_or(EngineError::UnknownPlayer(player))?;
-        let plan = plan_mana_payment(
-            &self.state,
-            player_idx,
-            &ManaCost::default(),
-            0,
-            amount,
-            &[],
-        )?;
-        commit_mana_payment(&mut self.state, player_idx, plan);
-        Ok(())
-    }
-
-    pub(super) fn can_pay_resolution_mana(&self, player: PlayerId, cost: &ManaCost) -> bool {
-        self.state.player_idx(player).is_some_and(|player_idx| {
-            plan_mana_payment(&self.state, player_idx, cost, 0, 0, &[]).is_ok()
-        })
-    }
-
-    pub(super) fn pay_resolution_mana(
-        &mut self,
-        player: PlayerId,
-        cost: &ManaCost,
-    ) -> Result<(), EngineError> {
-        let player_idx = self
-            .state
-            .player_idx(player)
-            .ok_or(EngineError::UnknownPlayer(player))?;
-        let plan = plan_mana_payment(&self.state, player_idx, cost, 0, 0, &[])?;
-        commit_mana_payment(&mut self.state, player_idx, plan);
-        Ok(())
-    }
-
     pub(super) fn cast_spell(
         &mut self,
         player: PlayerId,
@@ -1240,7 +333,7 @@ impl GameEngine {
             source: TargetingSourceKind::SpellCast,
             targets: trefs.clone(),
         }]);
-        let payment = self.commit_spell_costs(player, idx, payment_plan)?;
+        let payment = self.commit_cost_transaction(payment_plan)?;
         let life_paid = payment.life_paid;
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
 
@@ -1395,154 +488,6 @@ impl GameEngine {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn plan_spell_costs(
-        &self,
-        player: PlayerId,
-        player_idx: usize,
-        source_oid: ObjectId,
-        mana_cost: &ManaCost,
-        x_value: u32,
-        extra_generic: u32,
-        generic_reduction: u32,
-        flex_payments: &[rv1::FlexPipPayment],
-        costs: &[AdditionalCost],
-        selections: &[rv1::CostSelection],
-        restricted_mana: &[rv1::ManaSpendSelection],
-        eligible_restricted_mana: &[u32],
-    ) -> Result<SpellCostPaymentPlan, EngineError> {
-        use rv1::cost_selection::Selection;
-
-        let mut by_index = HashMap::new();
-        for selection in selections {
-            let cost_index = selection.cost_index as usize;
-            if cost_index >= costs.len() || by_index.insert(cost_index, selection).is_some() {
-                return Err(EngineError::Illegal("invalid or duplicate cost selection"));
-            }
-        }
-
-        let mut components = Vec::with_capacity(costs.len());
-        let mut consumed = HashSet::new();
-        for (cost_index, cost) in costs.iter().enumerate() {
-            let Some(selection) = by_index.get(&cost_index) else {
-                return Err(EngineError::Illegal("missing additional cost selection"));
-            };
-            match cost {
-                AdditionalCost::DiscardCard => {
-                    let Some(Selection::HandIndex(hand_index)) = selection.selection else {
-                        return Err(EngineError::Illegal("discard cost requires a hand card"));
-                    };
-                    let oid = self.state.players[player_idx]
-                        .hand
-                        .get(hand_index as usize)
-                        .copied()
-                        .ok_or(EngineError::Illegal("invalid discard hand slot"))?;
-                    if oid == source_oid {
-                        return Err(EngineError::Illegal(
-                            "a spell cannot discard itself as a cost",
-                        ));
-                    }
-                    if !consumed.insert(oid) {
-                        return Err(EngineError::Illegal("one object cannot pay two costs"));
-                    }
-                    components.push(ValidatedSpellCost::Discard(oid));
-                }
-                AdditionalCost::SacrificePermanent { filter } => {
-                    let Some(Selection::PermanentId(oid)) = selection.selection else {
-                        return Err(EngineError::Illegal(
-                            "sacrifice cost requires a battlefield permanent",
-                        ));
-                    };
-                    if !self.ability_cost_permanent_matches(player, None, oid, filter) {
-                        return Err(EngineError::Illegal("illegal sacrifice cost selection"));
-                    }
-                    if !consumed.insert(oid) {
-                        return Err(EngineError::Illegal("one object cannot pay two costs"));
-                    }
-                    let snapshot = self
-                        .sacrifice_snapshot(oid)
-                        .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
-                    components.push(ValidatedSpellCost::Sacrifice(snapshot));
-                }
-            }
-        }
-        if selections.len() != costs.len() {
-            return Err(EngineError::Illegal("unexpected cost selection"));
-        }
-
-        Ok(SpellCostPaymentPlan {
-            mana: plan_mana_payment_with_restricted_reduction(
-                &self.state,
-                player_idx,
-                mana_cost,
-                x_value,
-                extra_generic,
-                generic_reduction,
-                flex_payments,
-                restricted_mana,
-                eligible_restricted_mana,
-            )?,
-            components,
-        })
-    }
-
-    fn commit_spell_costs(
-        &mut self,
-        player: PlayerId,
-        player_idx: usize,
-        plan: SpellCostPaymentPlan,
-    ) -> Result<AbilityCostPayment, EngineError> {
-        let life_paid = plan.mana.life_cost;
-        commit_mana_payment(&mut self.state, player_idx, plan.mana);
-        let mut payment = AbilityCostPayment {
-            move_events: vec![],
-            sacrificed: vec![],
-            paid_card_costs: vec![],
-            life_paid,
-        };
-        for component in plan.components {
-            let (oid, sacrificed) = match component {
-                ValidatedSpellCost::Discard(oid) => (oid, None),
-                ValidatedSpellCost::Sacrifice(snapshot) => {
-                    (snapshot.source.object_id, Some(snapshot))
-                }
-            };
-            let card_name = object_display_name(&self.state, self.registry, oid);
-            let owner = self
-                .state
-                .objects
-                .get(&oid)
-                .map(|object| object.owner)
-                .unwrap_or(player);
-            if let Some(snapshot) = sacrificed {
-                if sacrifice_permanent(&mut self.state, self.registry, oid)? {
-                    payment.sacrificed.push(snapshot);
-                }
-                payment
-                    .paid_card_costs
-                    .push(PaidCardCost::Sacrifice(card_name));
-            } else {
-                super::resolution::move_object_to_zone(
-                    &mut self.state,
-                    self.registry,
-                    oid,
-                    Zone::Graveyard,
-                    None,
-                )?;
-                payment
-                    .paid_card_costs
-                    .push(PaidCardCost::Discard(card_name));
-            }
-            payment.move_events.push(permanent_moved_event(
-                &self.state,
-                oid,
-                owner,
-                rv1::permanent_moved::Destination::Graveyard,
-            ));
-        }
-        Ok(payment)
-    }
-
     pub(super) fn activate_ability(
         &mut self,
         player: PlayerId,
@@ -1684,7 +629,7 @@ impl GameEngine {
         let activation_use_key = ability
             .activation_limit
             .map(|_| self.activation_use_key(permanent_id, ability_index));
-        let payment = self.pay_ability_costs(
+        let cost_plan = self.plan_ability_costs(
             player,
             idx,
             permanent_id,
@@ -1694,6 +639,7 @@ impl GameEngine {
             restricted_mana,
             targeting_cost,
         )?;
+        let payment = self.commit_cost_transaction(cost_plan)?;
         self.record_limited_activation(activation_use_key);
 
         let ability_text = ability.text.clone();
@@ -1779,252 +725,6 @@ impl GameEngine {
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
         Ok(batch)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn pay_ability_costs(
-        &mut self,
-        player: PlayerId,
-        idx: usize,
-        permanent_id: ObjectId,
-        costs: &[AbilityCost],
-        flex_payments: &[rv1::FlexPipPayment],
-        selections: &[rv1::CostSelection],
-        restricted_mana: &[rv1::ManaSpendSelection],
-        extra_generic: u32,
-    ) -> Result<AbilityCostPayment, EngineError> {
-        use rv1::cost_selection::Selection;
-
-        let source_card_id = self
-            .state
-            .objects
-            .get(&permanent_id)
-            .map(|object| object.card_id.as_str())
-            .ok_or(EngineError::Illegal("permanent missing"))?;
-        let mut by_index = HashMap::new();
-        for selection in selections {
-            let cost_index = selection.cost_index as usize;
-            if cost_index >= costs.len() || by_index.insert(cost_index, selection).is_some() {
-                return Err(EngineError::Illegal("invalid or duplicate cost selection"));
-            }
-        }
-
-        let mut validated = Vec::with_capacity(costs.len());
-        let mut consumed = HashSet::new();
-        let mut expected_selections = 0usize;
-        let mut saw_mana = false;
-        let mut saw_tap = false;
-        let eligible_restricted_mana = self.eligible_restricted_mana_for_ability(idx, permanent_id);
-        for (cost_index, cost) in costs.iter().enumerate() {
-            match cost {
-                AbilityCost::Tap => {
-                    if saw_tap {
-                        return Err(EngineError::Illegal("duplicate tap cost"));
-                    }
-                    self.check_tappable(permanent_id, source_card_id)?;
-                    saw_tap = true;
-                    validated.push(ValidatedAbilityCost::Tap);
-                }
-                AbilityCost::Mana(cost) => {
-                    if saw_mana {
-                        return Err(EngineError::Illegal("multiple mana cost components"));
-                    }
-                    saw_mana = true;
-                    validated.push(ValidatedAbilityCost::Mana(
-                        plan_mana_payment_with_restricted_reduction(
-                            &self.state,
-                            idx,
-                            cost,
-                            0,
-                            extra_generic,
-                            0,
-                            flex_payments,
-                            restricted_mana,
-                            &eligible_restricted_mana,
-                        )?,
-                    ));
-                }
-                AbilityCost::Discard => {
-                    expected_selections += 1;
-                    let Some(selection) = by_index.get(&cost_index) else {
-                        return Err(EngineError::Illegal("missing discard cost selection"));
-                    };
-                    let Some(Selection::HandIndex(hand_index)) = selection.selection else {
-                        return Err(EngineError::Illegal("discard cost requires a hand card"));
-                    };
-                    let oid = self.state.players[idx]
-                        .hand
-                        .get(hand_index as usize)
-                        .copied()
-                        .ok_or(EngineError::Illegal("invalid discard hand slot"))?;
-                    if !consumed.insert(oid) {
-                        return Err(EngineError::Illegal("one object cannot pay two costs"));
-                    }
-                    validated.push(ValidatedAbilityCost::Discard(oid));
-                }
-                AbilityCost::SacrificeSelf => {
-                    if !consumed.insert(permanent_id) {
-                        return Err(EngineError::Illegal("one object cannot pay two costs"));
-                    }
-                    validated.push(ValidatedAbilityCost::Sacrifice(permanent_id));
-                }
-                AbilityCost::SacrificePermanent { filter } => {
-                    expected_selections += 1;
-                    let Some(selection) = by_index.get(&cost_index) else {
-                        return Err(EngineError::Illegal("missing sacrifice cost selection"));
-                    };
-                    let Some(Selection::PermanentId(oid)) = selection.selection else {
-                        return Err(EngineError::Illegal(
-                            "sacrifice cost requires a battlefield permanent",
-                        ));
-                    };
-                    if !self.ability_cost_permanent_matches(player, Some(permanent_id), oid, filter)
-                    {
-                        return Err(EngineError::Illegal("illegal sacrifice cost selection"));
-                    }
-                    if !consumed.insert(oid) {
-                        return Err(EngineError::Illegal("one object cannot pay two costs"));
-                    }
-                    validated.push(ValidatedAbilityCost::Sacrifice(oid));
-                }
-            }
-        }
-        if !saw_mana && extra_generic > 0 {
-            validated.push(ValidatedAbilityCost::Mana(
-                plan_mana_payment_with_restricted_reduction(
-                    &self.state,
-                    idx,
-                    &ManaCost::default(),
-                    0,
-                    extra_generic,
-                    0,
-                    flex_payments,
-                    restricted_mana,
-                    &eligible_restricted_mana,
-                )?,
-            ));
-        }
-        if selections.len() != expected_selections {
-            return Err(EngineError::Illegal("unexpected cost selection"));
-        }
-        if !restricted_mana.is_empty() && !saw_mana && extra_generic == 0 {
-            return Err(EngineError::Illegal(
-                "restricted mana supplied for an ability with no mana cost",
-            ));
-        }
-
-        let mut payment = AbilityCostPayment {
-            move_events: vec![],
-            sacrificed: vec![],
-            paid_card_costs: vec![],
-            life_paid: 0,
-        };
-        for component in validated {
-            match component {
-                ValidatedAbilityCost::Tap => {
-                    super::set_tapped(&mut self.state, permanent_id, true);
-                }
-                ValidatedAbilityCost::Mana(plan) => {
-                    payment.life_paid += plan.life_cost;
-                    commit_mana_payment(&mut self.state, idx, plan);
-                }
-                ValidatedAbilityCost::Discard(oid) => {
-                    let card_name = object_display_name(&self.state, self.registry, oid);
-                    let owner = self
-                        .state
-                        .objects
-                        .get(&oid)
-                        .map(|object| object.owner)
-                        .unwrap_or(player);
-                    super::resolution::move_object_to_zone(
-                        &mut self.state,
-                        self.registry,
-                        oid,
-                        Zone::Graveyard,
-                        None,
-                    )?;
-                    payment.move_events.push(permanent_moved_event(
-                        &self.state,
-                        oid,
-                        owner,
-                        rv1::permanent_moved::Destination::Graveyard,
-                    ));
-                    payment
-                        .paid_card_costs
-                        .push(PaidCardCost::Discard(card_name));
-                }
-                ValidatedAbilityCost::Sacrifice(oid) => {
-                    let card_name = object_display_name(&self.state, self.registry, oid);
-                    let owner = self
-                        .state
-                        .objects
-                        .get(&oid)
-                        .map(|object| object.owner)
-                        .unwrap_or(player);
-                    let snapshot = self
-                        .sacrifice_snapshot(oid)
-                        .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
-                    if sacrifice_permanent(&mut self.state, self.registry, oid)? {
-                        payment.sacrificed.push(snapshot);
-                    }
-                    payment.move_events.push(permanent_moved_event(
-                        &self.state,
-                        oid,
-                        owner,
-                        rv1::permanent_moved::Destination::Graveyard,
-                    ));
-                    payment
-                        .paid_card_costs
-                        .push(PaidCardCost::Sacrifice(card_name));
-                }
-            }
-        }
-        Ok(payment)
-    }
-
-    pub(super) fn ability_cost_permanent_matches(
-        &self,
-        player: PlayerId,
-        source: Option<ObjectId>,
-        oid: ObjectId,
-        filter: &TargetFilter,
-    ) -> bool {
-        if let Some(branches) = &filter.any_of {
-            return branches
-                .iter()
-                .any(|branch| self.ability_cost_permanent_matches(player, source, oid, branch));
-        }
-        if filter.exclude_source && source == Some(oid) {
-            return false;
-        }
-        let Some(object) = self.state.objects.get(&oid) else {
-            return false;
-        };
-        if object.zone != Zone::Battlefield || object.controller != player {
-            return false;
-        }
-        let Some(characteristics) = self.characteristics(oid) else {
-            return false;
-        };
-        let kind_matches = match filter.kind {
-            TargetKind::Creature => characteristics.is_creature(),
-            TargetKind::AnyPermanent => true,
-            _ => false,
-        };
-        kind_matches && super::targeting::filter_characteristics_match(self, filter, oid)
-    }
-
-    /// Snapshot a permanent about to be sacrificed as an activation cost. Taken *before* the cost
-    /// is paid, because CR 603.6 reads the dying object's last-known information and the object is
-    /// already in the graveyard (controller reset, characteristics gone) by the time it fires.
-    fn sacrifice_snapshot(&self, permanent_id: ObjectId) -> Option<SacrificeSnapshot> {
-        let source = self.trigger_source_snapshot(permanent_id)?;
-        Some(SacrificeSnapshot {
-            source,
-            was_creature: self
-                .characteristics(permanent_id)
-                .is_some_and(|value| value.is_creature()),
-        })
     }
 
     /// CR 603.6a: a permanent sacrificed to pay an activation cost still dies, so leaves-the-
@@ -2233,7 +933,7 @@ impl GameEngine {
             .activation_limit
             .map(|_| self.activation_use_key(permanent_id, ability_index));
 
-        let payment = self.pay_ability_costs(
+        let cost_plan = self.plan_ability_costs(
             player,
             idx,
             permanent_id,
@@ -2243,6 +943,7 @@ impl GameEngine {
             restricted_mana,
             0,
         )?;
+        let payment = self.commit_cost_transaction(cost_plan)?;
         self.record_limited_activation(activation_use_key);
 
         let restriction_group_id = ability.mana_restriction().map(|restriction| {
@@ -2533,21 +1234,39 @@ mod mana_payment_tests {
     fn paid_card_cost_log_formats_any_number_of_components() {
         assert_eq!(format_paid_card_costs_log(&[]), "");
         assert_eq!(
-            format_paid_card_costs_log(&[PaidCardCost::Discard("Mountain".into())]),
+            format_paid_card_costs_log(&[PaidCardCost::Discard {
+                object_id: 1,
+                card_name: "Mountain".into(),
+            }]),
             " discarding Mountain"
         );
         assert_eq!(
             format_paid_card_costs_log(&[
-                PaidCardCost::Discard("Mountain".into()),
-                PaidCardCost::Sacrifice("Grizzly Bears".into()),
+                PaidCardCost::Discard {
+                    object_id: 1,
+                    card_name: "Mountain".into(),
+                },
+                PaidCardCost::Sacrifice {
+                    object_id: 2,
+                    card_name: "Grizzly Bears".into(),
+                },
             ]),
             " discarding Mountain and sacrificing Grizzly Bears"
         );
         assert_eq!(
             format_paid_card_costs_log(&[
-                PaidCardCost::Discard("Mountain".into()),
-                PaidCardCost::Sacrifice("Grizzly Bears".into()),
-                PaidCardCost::Sacrifice("Hill Giant".into()),
+                PaidCardCost::Discard {
+                    object_id: 1,
+                    card_name: "Mountain".into(),
+                },
+                PaidCardCost::Sacrifice {
+                    object_id: 2,
+                    card_name: "Grizzly Bears".into(),
+                },
+                PaidCardCost::Sacrifice {
+                    object_id: 3,
+                    card_name: "Hill Giant".into(),
+                },
             ]),
             " discarding Mountain, sacrificing Grizzly Bears, and sacrificing Hill Giant"
         );
@@ -2626,7 +1345,7 @@ mod mana_payment_tests {
         ];
 
         let err = e
-            .pay_ability_costs(0, 0, oid, &costs, &[], &selections, &[], 0)
+            .plan_ability_costs(0, 0, oid, &costs, &[], &selections, &[], 0)
             .err()
             .expect("one object cannot be sacrificed twice");
         assert!(format!("{err:?}").contains("one object cannot pay two costs"));
@@ -2740,13 +1459,60 @@ mod mana_payment_tests {
             )
             .expect("reduced mana and discard cost should validate together");
         let payment = e
-            .commit_spell_costs(0, 0, plan)
+            .commit_cost_transaction(plan)
             .expect("validated costs should commit");
 
         assert_eq!(e.state.players[0].mana_pool.blue, 0);
         assert_eq!(e.state.objects[&source_oid].zone, Zone::Hand);
         assert_eq!(e.state.objects[&discarded_oid].zone, Zone::Graveyard);
         assert_eq!(payment.paid_card_costs.len(), 1);
+    }
+
+    #[test]
+    fn stale_card_debit_rejects_before_mana_or_life_is_committed() {
+        use rv1::cost_selection::Selection;
+
+        let mut e = engine_with_priority();
+        let source_oid = e.state.players[0].hand[0];
+        let discarded_oid = e.state.players[0].hand[1];
+        e.state.players[0].mana_pool.blue = 1;
+        e.state.players[0].mana_pool.colorless = 1;
+        let costs = [AdditionalCost::DiscardCard];
+        let selections = [rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(Selection::HandIndex(1)),
+        }];
+
+        let plan = e
+            .plan_spell_costs(
+                0,
+                0,
+                source_oid,
+                &ManaCost::parse("{1}{U}").expect("cost"),
+                0,
+                0,
+                0,
+                &[],
+                &costs,
+                &selections,
+                &[],
+                &[],
+            )
+            .expect("costs initially validate");
+        *e.state
+            .zone_change_generation
+            .entry(discarded_oid)
+            .or_insert(0) += 1;
+
+        let err = e
+            .commit_cost_transaction(plan)
+            .err()
+            .expect("stale physical-card identity must reject the whole payment");
+        assert!(format!("{err:?}").contains("cost transaction became stale"));
+        assert_eq!(e.state.players[0].mana_pool.blue, 1);
+        assert_eq!(e.state.players[0].mana_pool.colorless, 1);
+        assert_eq!(e.state.players[0].life, 20);
+        assert_eq!(e.state.objects[&discarded_oid].zone, Zone::Hand);
     }
 
     #[test]
