@@ -1,0 +1,21 @@
+(
+  id: "underfoot_underdogs",
+  name: "Underfoot Underdogs",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Goblin", "Warrior"],
+  power: 1,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "goblin_r_1_1", count: 1, who: SourceController)],
+    text: "When this creature enters, create a 1/1 red Goblin creature token.",
+  )],
+  activated_abilities: [(
+    costs: [Mana("{1}"), Tap],
+    effect: [ApplyCombatRestriction(
+      scope: Chosen((kind: Creature, controller: You, power: AtMost(2))),
+      restriction: (cant_be_blocked: true),
+    )],
+    text: "{1}, {T}: Target creature you control with power 2 or less can't be blocked this turn.",
+  )],
+)

@@ -1,0 +1,9 @@
+// 1/1 white Cat creature token (Prideful Parent).
+(
+  id: "cat_w_1_1",
+  name: "Cat",
+  types: ["Creature", "Cat"],
+  colors: [White],
+  power: 1,
+  toughness: 1,
+)

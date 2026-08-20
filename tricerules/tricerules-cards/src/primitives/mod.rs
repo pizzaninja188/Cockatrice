@@ -495,6 +495,27 @@ mod tests {
     }
 
     #[test]
+    fn return_target_to_hand_uses_a_validated_permanent_filter() {
+        let opponent_creature = SpellEffectKind::ReturnTargetToHand {
+            target: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::Opponent,
+                ..Default::default()
+            },
+        };
+        assert_eq!(opponent_creature.target_filters().len(), 1);
+        assert!(opponent_creature.validate(EffectContext::Ability).is_ok());
+
+        let player = SpellEffectKind::ReturnTargetToHand {
+            target: TargetFilter {
+                kind: TargetKind::OpponentPlayer,
+                ..Default::default()
+            },
+        };
+        assert!(player.validate(EffectContext::Ability).is_err());
+    }
+
+    #[test]
     fn chosen_subject_defaults_to_creature_target() {
         assert_eq!(
             EffectSubject::default(),

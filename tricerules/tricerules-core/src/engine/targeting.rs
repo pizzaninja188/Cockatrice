@@ -1022,7 +1022,10 @@ fn effect_target_legal_at_resolution_with_context(
         | SpellEffectKind::ApplyCombatRestriction {
             scope: CombatRestrictionScope::Chosen(target),
             ..
-        } => target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context),
+        }
+        | SpellEffectKind::ReturnTargetToHand { target } => {
+            target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context)
+        }
         SpellEffectKind::PumpTarget {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
@@ -1065,14 +1068,8 @@ fn effect_target_legal_at_resolution_with_context(
             ..
         }
         | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. } => false,
-        SpellEffectKind::ExileTarget
-        | SpellEffectKind::ExileTargetGainLifeEqualToPower
-        | SpellEffectKind::ReturnTargetCreatureToHand => {
+        SpellEffectKind::ExileTarget | SpellEffectKind::ExileTargetGainLifeEqualToPower => {
             destroy_spell_target_legal(engine, tid)
-                && object_targetable_by(engine, tid, caster, source)
-        }
-        SpellEffectKind::ReturnTargetPermanentToHand => {
-            any_battlefield_permanent_target_legal(&engine.state, tid)
                 && object_targetable_by(engine, tid, caster, source)
         }
         // CR 115.2 / 707.10b: counter and copy effects target *spells* on the stack, not
@@ -1253,9 +1250,7 @@ fn validate_effect_targets(
                 }
             }
         },
-        SpellEffectKind::ExileTarget
-        | SpellEffectKind::ExileTargetGainLifeEqualToPower
-        | SpellEffectKind::ReturnTargetCreatureToHand => {
+        SpellEffectKind::ExileTarget | SpellEffectKind::ExileTargetGainLifeEqualToPower => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one creature target"));
             }
@@ -1268,19 +1263,23 @@ fn validate_effect_targets(
                 return Err(EngineError::Illegal("target cannot be targeted by this source"));
             }
         }
-        SpellEffectKind::ReturnTargetPermanentToHand => {
+        SpellEffectKind::ReturnTargetToHand { target } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal(
                     "requires exactly one permanent target",
                 ));
             }
-            if !any_battlefield_permanent_target_legal(&engine.state, targets[0].object_id) {
+            if !target_filter_legal_with_context(
+                engine,
+                target,
+                targets[0].object_id,
+                caster,
+                source,
+                trigger_context,
+            ) {
                 return Err(EngineError::Illegal(
                     "target must be a permanent on the battlefield",
                 ));
-            }
-            if !object_targetable_by(engine, targets[0].object_id, caster, source) {
-                return Err(EngineError::Illegal("target cannot be targeted by this source"));
             }
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
@@ -1720,6 +1719,7 @@ fn spell_target_legality_error_with_context(
             subject: EffectSubject::Chosen(filter),
             ..
         }
+        | SpellEffectKind::ReturnTargetToHand { target: filter }
         | SpellEffectKind::PreventNextDamage { target: filter, .. } => {
             if !target_filter_legal_with_context(
                 engine,
@@ -1764,24 +1764,10 @@ fn spell_target_legality_error_with_context(
                 "source-bound effects are only valid on activated or triggered abilities",
             ));
         }
-        SpellEffectKind::ExileTarget
-        | SpellEffectKind::ExileTargetGainLifeEqualToPower
-        | SpellEffectKind::ReturnTargetCreatureToHand => {
+        SpellEffectKind::ExileTarget | SpellEffectKind::ExileTargetGainLifeEqualToPower => {
             if !destroy_spell_target_legal(engine, tid) {
                 return Err(EngineError::Illegal(
                     "target must be a creature on the battlefield",
-                ));
-            }
-            if !object_targetable_by(engine, tid, caster, source) {
-                return Err(EngineError::Illegal(
-                    "target cannot be targeted by this source",
-                ));
-            }
-        }
-        SpellEffectKind::ReturnTargetPermanentToHand => {
-            if !any_battlefield_permanent_target_legal(&engine.state, tid) {
-                return Err(EngineError::Illegal(
-                    "target must be a permanent on the battlefield",
                 ));
             }
             if !object_targetable_by(engine, tid, caster, source) {

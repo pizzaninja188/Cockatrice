@@ -1,0 +1,28 @@
+(
+  id: "reputable_merchant",
+  name: "Reputable Merchant",
+  mana_cost: "{2/W}{2/B}{2/G}",
+  types: ["Creature", "Human", "Citizen"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [PutCounters(
+        counter: PlusOnePlusOne,
+        count: 1,
+        subject: Chosen((kind: Creature, controller: You)),
+      )],
+      text: "When this creature enters, put a +1/+1 counter on target creature you control.",
+    ),
+    (
+      trigger: WhenSelfDies,
+      effect: [PutCounters(
+        counter: PlusOnePlusOne,
+        count: 1,
+        subject: Chosen((kind: Creature, controller: You)),
+      )],
+      text: "When this creature dies, put a +1/+1 counter on target creature you control.",
+    ),
+  ],
+)

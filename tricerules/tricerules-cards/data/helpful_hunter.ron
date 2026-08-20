@@ -1,0 +1,13 @@
+(
+  id: "helpful_hunter",
+  name: "Helpful Hunter",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Cat"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Draw(count: 1)],
+    text: "When this creature enters, draw a card.",
+  )],
+)

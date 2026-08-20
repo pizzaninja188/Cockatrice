@@ -1,0 +1,14 @@
+(
+  id: "prideful_parent",
+  name: "Prideful Parent",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Cat"],
+  power: 2,
+  toughness: 2,
+  keywords: [Vigilance],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "cat_w_1_1", count: 1, who: SourceController)],
+    text: "When this creature enters, create a 1/1 white Cat creature token.",
+  )],
+)

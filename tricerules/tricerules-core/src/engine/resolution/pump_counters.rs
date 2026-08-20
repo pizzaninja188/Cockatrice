@@ -469,22 +469,34 @@ pub(super) fn put_counters(
     let top = cx.top;
     let spell_label = cx.spell_label;
 
-    let tid = resolve_effect_subject(engine, top, targets, &subject);
-    if let Some(tid) = tid {
-        if can_put_counters(engine, top, targets, &subject) {
-            let tgt = object_display_name(&engine.state, engine.registry, tid);
-            let timestamp = engine.state.command_index;
-            if let Some(t) = engine.state.objects.get_mut(&tid) {
-                t.add_counters(counter, count, timestamp);
-            }
-            events.push(ev_log(format!(
-                "{spell_label} puts {count} {} counter{} on {tgt}",
-                counter_label(counter),
-                if count == 1 { "" } else { "s" },
-            )));
-            // Annihilation / toughness-0 death are checked by the SBA pass that
-            // runs after this resolution (CR 122.3, CR 704.5f).
+    let subjects = match subject {
+        EffectSubject::Chosen(_) => targets.to_vec(),
+        _ => resolve_effect_subject(engine, top, targets, &subject)
+            .into_iter()
+            .collect(),
+    };
+    for tid in subjects {
+        let is_on_battlefield = engine
+            .state
+            .objects
+            .get(&tid)
+            .is_some_and(|object| object.zone == Zone::Battlefield);
+        if !is_on_battlefield {
+            continue;
         }
+
+        let tgt = object_display_name(&engine.state, engine.registry, tid);
+        let timestamp = engine.state.command_index;
+        if let Some(t) = engine.state.objects.get_mut(&tid) {
+            t.add_counters(counter, count, timestamp);
+        }
+        events.push(ev_log(format!(
+            "{spell_label} puts {count} {} counter{} on {tgt}",
+            counter_label(counter),
+            if count == 1 { "" } else { "s" },
+        )));
+        // Annihilation / toughness-0 death are checked by the SBA pass that
+        // runs after this resolution (CR 122.3, CR 704.5f).
     }
 
     Ok(EffectOutcome::Continue)

@@ -131,9 +131,7 @@ pub(super) fn return_target_to_hand(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let (SpellEffectKind::ReturnTargetCreatureToHand
-    | SpellEffectKind::ReturnTargetPermanentToHand) = effect
-    else {
+    let SpellEffectKind::ReturnTargetToHand { .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let engine = &mut *cx.engine;

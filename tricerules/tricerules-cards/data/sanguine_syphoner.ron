@@ -1,0 +1,16 @@
+(
+  id: "sanguine_syphoner",
+  name: "Sanguine Syphoner",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Vampire", "Warlock"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [(
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [
+      LoseLife(amount: Fixed(1), who: EachOpponent),
+      GainLife(amount: 1),
+    ],
+    text: "Whenever this creature attacks, each opponent loses 1 life and you gain 1 life.",
+  )],
+)

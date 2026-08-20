@@ -67,6 +67,8 @@ mod issue_117_fight;
 mod issue_119_self_combat_restrictions;
 #[path = "scenario/issue_127_trigger_event_filters.rs"]
 mod issue_127_trigger_event_filters;
+#[path = "scenario/issue_130_calibration_creatures.rs"]
+mod issue_130_calibration_creatures;
 #[path = "scenario/issue_139_pending_trigger_publication.rs"]
 mod issue_139_pending_trigger_publication;
 #[path = "scenario/issue_142_endure.rs"]

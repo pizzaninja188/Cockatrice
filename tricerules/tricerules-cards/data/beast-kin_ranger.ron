@@ -1,0 +1,18 @@
+(
+  id: "beast-kin_ranger",
+  name: "Beast-Kin Ranger",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Elf", "Ranger"],
+  power: 3,
+  toughness: 3,
+  keywords: [Trample],
+  triggered_abilities: [(
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      permanent_type: Some(Creature),
+      exclude_self: true,
+    ),
+    effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    text: "Whenever another creature you control enters, this creature gets +1/+0 until end of turn.",
+  )],
+)

@@ -1,0 +1,31 @@
+(
+  id: "apothecary_stomper",
+  name: "Apothecary Stomper",
+  mana_cost: "{4}{G}{G}",
+  types: ["Creature", "Elephant"],
+  power: 4,
+  toughness: 4,
+  keywords: [Vigilance],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    modal: Some((
+      min_modes: 1,
+      max_modes: 1,
+      modes: [
+        (
+          label: "Put two +1/+1 counters on target creature you control",
+          effects: [PutCounters(
+            counter: PlusOnePlusOne,
+            count: 2,
+            subject: Chosen((kind: Creature, controller: You)),
+          )],
+        ),
+        (
+          label: "Gain 4 life",
+          effects: [GainLife(amount: 4)],
+        ),
+      ],
+    )),
+    text: "When this creature enters, choose one — Put two +1/+1 counters on target creature you control; or you gain 4 life.",
+  )],
+)

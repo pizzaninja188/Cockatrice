@@ -1,0 +1,13 @@
+(
+  id: "infestation_sage",
+  name: "Infestation Sage",
+  mana_cost: "{B}",
+  types: ["Creature", "Elf", "Warlock"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    trigger: WhenSelfDies,
+    effect: [CreateTokens(token: "insect_bg_1_1_flying", count: 1, who: SourceController)],
+    text: "When this creature dies, create a 1/1 black and green Insect creature token with flying.",
+  )],
+)

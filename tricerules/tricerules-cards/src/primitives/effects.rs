@@ -1107,8 +1107,12 @@ pub enum SpellEffectKind {
     },
     ExileTarget,
     ExileTargetGainLifeEqualToPower,
-    ReturnTargetCreatureToHand,
-    ReturnTargetPermanentToHand,
+    /// Return a chosen battlefield permanent to its owner's hand. The filter carries the
+    /// complete target contract so Unsummon, Boomerang, and opponent-only creature bounce such
+    /// as Iceridge Serpent share candidate publication and resolution revalidation.
+    ReturnTargetToHand {
+        target: TargetFilter,
+    },
     /// Move a chosen battlefield permanent to its owner's library (CR 400.3). The target filter
     /// carries card-specific restrictions; placement controls library ordering or shuffling.
     PutTargetPermanentInOwnersLibrary {
@@ -1589,8 +1593,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DestroyAttached { .. }
             | SpellEffectKind::ExileTarget
             | SpellEffectKind::ExileTargetGainLifeEqualToPower
-            | SpellEffectKind::ReturnTargetCreatureToHand
-            | SpellEffectKind::ReturnTargetPermanentToHand
+            | SpellEffectKind::ReturnTargetToHand { .. }
             | SpellEffectKind::PutTargetPermanentInOwnersLibrary { .. }
             | SpellEffectKind::ReturnFromGraveyard { .. }
             | SpellEffectKind::TargetPlayerGainsLife { .. }
@@ -1631,6 +1634,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyTarget { target }
             | SpellEffectKind::DestroyAttached { target, .. }
+            | SpellEffectKind::ReturnTargetToHand { target }
             | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target, .. }
             | SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
@@ -2068,6 +2072,7 @@ impl SpellEffectKind {
             // players. A source subject is already constrained to a permanent ability above.
             SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
+            | SpellEffectKind::ReturnTargetToHand { target }
             | SpellEffectKind::Tap {
                 subject: EffectSubject::Chosen(target),
             }
@@ -2076,7 +2081,7 @@ impl SpellEffectKind {
             } => {
                 if !target.is_permanent_only() {
                     Err(format!(
-                        "tap/untap cannot target players, got {:?}",
+                        "permanent effect cannot target players, got {:?}",
                         target.kind
                     ))
                 } else {

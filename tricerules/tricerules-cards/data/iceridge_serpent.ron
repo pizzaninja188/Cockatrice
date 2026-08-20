@@ -1,0 +1,13 @@
+(
+  id: "iceridge_serpent",
+  name: "Iceridge Serpent",
+  mana_cost: "{4}{U}",
+  types: ["Creature", "Serpent"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ReturnTargetToHand(target: (kind: Creature, controller: Opponent))],
+    text: "When this creature enters, return target creature an opponent controls to its owner's hand.",
+  )],
+)

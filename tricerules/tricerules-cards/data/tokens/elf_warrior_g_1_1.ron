@@ -1,0 +1,9 @@
+// 1/1 green Elf Warrior creature token (Dwynen's Elite, Elfsworn Giant).
+(
+  id: "elf_warrior_g_1_1",
+  name: "Elf Warrior",
+  types: ["Creature", "Elf", "Warrior"],
+  colors: [Green],
+  power: 1,
+  toughness: 1,
+)

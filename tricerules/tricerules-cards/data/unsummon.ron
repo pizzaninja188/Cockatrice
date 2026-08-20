@@ -3,5 +3,5 @@
   name: "Unsummon",
   mana_cost: "{U}",
   types: ["Instant"],
-  spell_effect: [ReturnTargetCreatureToHand],
+  spell_effect: [ReturnTargetToHand(target: (kind: Creature))],
 )

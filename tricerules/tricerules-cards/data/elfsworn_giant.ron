@@ -1,0 +1,18 @@
+(
+  id: "elfsworn_giant",
+  name: "Elfsworn Giant",
+  mana_cost: "{3}{G}{G}",
+  types: ["Creature", "Giant"],
+  power: 5,
+  toughness: 3,
+  keywords: [Reach],
+  triggered_abilities: [(
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      permanent_type: Some(Land),
+      exclude_self: false,
+    ),
+    effect: [CreateTokens(token: "elf_warrior_g_1_1", count: 1, who: SourceController)],
+    text: "Landfall — Whenever a land you control enters, create a 1/1 green Elf Warrior creature token.",
+  )],
+)

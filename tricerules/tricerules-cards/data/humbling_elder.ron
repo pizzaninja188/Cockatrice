@@ -1,0 +1,18 @@
+(
+  id: "humbling_elder",
+  name: "Humbling Elder",
+  mana_cost: "{U}",
+  types: ["Creature", "Human", "Monk"],
+  power: 1,
+  toughness: 2,
+  keywords: [Flash],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PumpTarget(
+      power: -2,
+      toughness: 0,
+      subject: Chosen((kind: Creature, controller: Opponent)),
+    )],
+    text: "When this creature enters, target creature an opponent controls gets -2/-0 until end of turn.",
+  )],
+)
