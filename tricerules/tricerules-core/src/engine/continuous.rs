@@ -214,6 +214,23 @@ impl GameEngine {
                         });
                     }
                 }
+                StaticAbilityDef::SelfCombatRestriction {
+                    cant_attack,
+                    cant_block,
+                } => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(object_id),
+                        affected: AffectedScope::Single(object_id),
+                        kind: ContinuousEffectKind::CombatRestriction(CombatRestriction {
+                            cant_attack,
+                            cant_block,
+                            cant_be_blocked: false,
+                        }),
+                        condition: None,
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
                 StaticAbilityDef::ControlsAttached => {
                     self.state.continuous_effects.push(ContinuousEffect {
                         source_id: Some(object_id),

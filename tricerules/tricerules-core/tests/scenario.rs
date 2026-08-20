@@ -63,6 +63,8 @@ mod issue_108_graveyard_aggregates;
 mod issue_114_disjunctive_filters;
 #[path = "scenario/issue_117_fight.rs"]
 mod issue_117_fight;
+#[path = "scenario/issue_119_self_combat_restrictions.rs"]
+mod issue_119_self_combat_restrictions;
 #[path = "scenario/issue_127_trigger_event_filters.rs"]
 mod issue_127_trigger_event_filters;
 #[path = "scenario/issue_139_pending_trigger_publication.rs"]

@@ -582,6 +582,19 @@ impl CardRegistry {
                             })?;
                         }
                     }
+                    if let StaticAbilityDef::SelfCombatRestriction {
+                        cant_attack,
+                        cant_block,
+                    } = ability
+                    {
+                        if !cant_attack && !cant_block {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "SelfCombatRestriction must prohibit attacking or blocking"
+                                    .into(),
+                            });
+                        }
+                    }
                     if matches!(ability, StaticAbilityDef::ControlsAttached) && !face.is_aura {
                         return Err(RegistryError::InvalidCard {
                             id: card.id.clone(),
@@ -1878,6 +1891,40 @@ mod tests {
             }
             other => panic!("expected InvalidCard, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn self_combat_restriction_requires_at_least_one_prohibition() {
+        let bad = r#"(
+            id: "empty_self_combat_restriction",
+            name: "Empty Self Combat Restriction",
+            types: ["Creature"],
+            power: 1,
+            toughness: 1,
+            static_abilities: [SelfCombatRestriction()],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { ref reason, .. }
+                if reason.contains("must prohibit attacking or blocking")
+        ));
+    }
+
+    #[test]
+    fn vampire_soulcaller_uses_self_combat_restriction() {
+        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        let face = registry
+            .get("vampire_soulcaller")
+            .expect("Vampire Soulcaller")
+            .primary_face();
+        assert!(matches!(
+            face.static_abilities.as_slice(),
+            [StaticAbilityDef::SelfCombatRestriction {
+                cant_attack: false,
+                cant_block: true,
+            }]
+        ));
     }
 
     #[test]

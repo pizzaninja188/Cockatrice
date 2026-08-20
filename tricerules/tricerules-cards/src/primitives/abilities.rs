@@ -933,6 +933,16 @@ pub enum StaticAbilityDef {
         #[serde(default)]
         doesnt_untap_during_untap_step: bool,
     },
+    /// CR 508.1c / 509.1b: this permanent is continuously prohibited from attacking and/or
+    /// blocking while it has this static ability. Vampire Soulcaller and Goblin Raider exercise
+    /// the block-only form; Vigean Hydropon exercises both restrictions. This stays typed card
+    /// vocabulary instead of adding one face-level boolean for every future rule restriction.
+    SelfCombatRestriction {
+        #[serde(default)]
+        cant_attack: bool,
+        #[serde(default)]
+        cant_block: bool,
+    },
     /// CR 613.1b: the controller of this Aura controls the permanent it is attached to.
     /// Mind Control and Confiscate share this source-relative layer-2 ability.
     ControlsAttached,
