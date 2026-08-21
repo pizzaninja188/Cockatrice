@@ -1020,6 +1020,10 @@ pub enum StaticAbilityDef {
     AnthemPt {
         #[serde(default)]
         filter: CreatureScopeFilter,
+        /// Optional public condition, reevaluated with the modifier in layer 7c. Supports
+        /// turn-sensitive anthems such as Glory of Warfare and Street Riot.
+        #[serde(default)]
+        condition: Option<GameCondition>,
         delta_power: i32,
         delta_toughness: i32,
     },
@@ -1084,6 +1088,10 @@ pub enum StaticAbilityDef {
     AnthemKeyword {
         #[serde(default)]
         filter: CreatureScopeFilter,
+        /// Optional public condition, reevaluated with the modifier in layer 6. Supports
+        /// turn-sensitive grants such as Inspiring Paladin and Bayek of Siwa.
+        #[serde(default)]
+        condition: Option<GameCondition>,
         keyword: Keyword,
     },
     /// A self-scoped static effect whose condition is continuously reevaluated. Characteristic

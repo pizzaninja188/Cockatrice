@@ -114,6 +114,7 @@ impl GameEngine {
                 }
                 StaticAbilityDef::AnthemPt {
                     filter,
+                    condition,
                     delta_power,
                     delta_toughness,
                 } => {
@@ -124,7 +125,7 @@ impl GameEngine {
                             delta_power,
                             delta_toughness,
                         },
-                        condition: None,
+                        condition,
                         duration: EffectDuration::WhileSourceOnBattlefield,
                         timestamp,
                     });
@@ -301,12 +302,16 @@ impl GameEngine {
                         timestamp,
                     });
                 }
-                StaticAbilityDef::AnthemKeyword { filter, keyword } => {
+                StaticAbilityDef::AnthemKeyword {
+                    filter,
+                    condition,
+                    keyword,
+                } => {
                     self.state.continuous_effects.push(ContinuousEffect {
                         source_id: Some(object_id),
                         affected: resolve_creature_scope(&filter, controller, object_id),
                         kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
-                        condition: None,
+                        condition,
                         duration: EffectDuration::WhileSourceOnBattlefield,
                         timestamp,
                     });

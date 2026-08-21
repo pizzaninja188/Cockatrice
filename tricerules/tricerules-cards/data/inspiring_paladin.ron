@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-08-21. CR 611.3 and 613.1f: both first-strike
+// grants are continuously reevaluated; CR 510.4 snapshots combat-damage participation.
+(
+  id: "inspiring_paladin",
+  name: "Inspiring Paladin",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Knight"],
+  power: 3,
+  toughness: 3,
+  static_abilities: [
+    ConditionalSelfModifier(
+      condition: ActivePlayer(players: Controller),
+      keywords: [FirstStrike],
+    ),
+    AnthemKeyword(
+      filter: (controller: YouControl, required_counter: PlusOnePlusOne),
+      condition: ActivePlayer(players: Controller),
+      keyword: FirstStrike,
+    ),
+  ],
+)

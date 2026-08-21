@@ -192,6 +192,74 @@ mod tests {
     }
 
     #[test]
+    fn first_applicable_resolution_branches_require_a_costless_final_fallback() {
+        let conditional = ResolutionBranchDef {
+            label: "Conditional".into(),
+            cost: ResolutionCost::None,
+            requirement: ResolutionBranchRequirement::GameCondition(
+                GameCondition::CreatureDeathsThisTurn {
+                    min: Some(1),
+                    max: None,
+                },
+            ),
+            effects: vec![SpellEffectKind::Draw {
+                count: Amount::Fixed(1),
+            }],
+        };
+        let fallback = ResolutionBranchDef {
+            label: "Fallback".into(),
+            cost: ResolutionCost::None,
+            requirement: ResolutionBranchRequirement::Always,
+            effects: vec![SpellEffectKind::GainLife {
+                amount: Amount::Fixed(1),
+            }],
+        };
+        let automatic = |optional, chooser, branches| SpellEffectKind::ChooseResolutionBranch {
+            chooser,
+            optional,
+            selection: ResolutionBranchSelection::FirstApplicable,
+            branches,
+        };
+
+        assert!(automatic(
+            false,
+            PlayerRecipient::Controller,
+            vec![conditional.clone(), fallback.clone()],
+        )
+        .validate(EffectContext::Ability)
+        .is_ok());
+        assert!(automatic(
+            true,
+            PlayerRecipient::Controller,
+            vec![conditional.clone(), fallback.clone()],
+        )
+        .validate(EffectContext::Ability)
+        .is_err());
+        assert!(automatic(
+            false,
+            PlayerRecipient::SourceController,
+            vec![conditional.clone(), fallback.clone()],
+        )
+        .validate(EffectContext::Ability)
+        .is_err());
+        assert!(automatic(
+            false,
+            PlayerRecipient::Controller,
+            vec![conditional.clone()],
+        )
+        .validate(EffectContext::Ability)
+        .is_err());
+
+        let mut costed = conditional;
+        costed.cost = ResolutionCost::DiscardCard { filter: None };
+        assert!(
+            automatic(false, PlayerRecipient::Controller, vec![costed, fallback],)
+                .validate(EffectContext::Ability)
+                .is_err()
+        );
+    }
+
+    #[test]
     fn turn_history_trigger_ordinals_must_be_positive() {
         assert!(TriggerCondition::WheneverPlayerCastsSpell {
             caster: CastTriggerPlayer::Controller,

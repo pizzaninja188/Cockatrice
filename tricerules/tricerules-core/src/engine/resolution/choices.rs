@@ -7,8 +7,8 @@ use crate::state::{
     StagedTrigger, StagedTriggerGroup, TriggerContext,
 };
 use tricerules_cards::primitives::{
-    PlayerRecipient, ResolutionBranchDef, ResolutionBranchRequirement, ResolutionCost,
-    SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    PlayerRecipient, ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection,
+    ResolutionCost, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 pub(super) fn choose_resolution_branch(
@@ -18,6 +18,7 @@ pub(super) fn choose_resolution_branch(
     let SpellEffectKind::ChooseResolutionBranch {
         chooser,
         optional,
+        selection,
         branches,
     } = effect
     else {
@@ -36,6 +37,18 @@ pub(super) fn choose_resolution_branch(
             resolution_branch_is_live(cx.engine, cx.top, *deciding_player, branch)
         })
         .collect::<Vec<_>>();
+    if selection == ResolutionBranchSelection::FirstApplicable {
+        let Some((branch_index, branch)) = legal.first() else {
+            return Err(EngineError::Illegal(
+                "automatic resolution branch has no applicable fallback",
+            ));
+        };
+        cx.events.push(ev_log(format!(
+            "P{} resolves: {}.",
+            deciding_player, branch.label
+        )));
+        return Ok(EffectOutcome::RestartResolutionBranch(Some(*branch_index)));
+    }
     match (optional, legal.as_slice()) {
         (false, []) => {
             cx.events.push(ev_log(format!(
@@ -68,7 +81,7 @@ pub(in crate::engine) fn resolution_branch_is_live(
     deciding_player: i32,
     branch: &ResolutionBranchDef,
 ) -> bool {
-    let requirement_met = match branch.requirement {
+    let requirement_met = match &branch.requirement {
         ResolutionBranchRequirement::Always => true,
         ResolutionBranchRequirement::EffectsApplicable => {
             branch.effects.iter().all(|effect| match effect {
@@ -78,6 +91,10 @@ pub(in crate::engine) fn resolution_branch_is_live(
                 _ => true,
             })
         }
+        ResolutionBranchRequirement::GameCondition(condition) => engine.condition_holds(
+            condition,
+            crate::engine::ConditionContext::for_stack_item(top),
+        ),
     };
     requirement_met
         && (matches!(branch.cost, ResolutionCost::None | ResolutionCost::Mana(_))

@@ -1,0 +1,34 @@
+// Oracle checked 2026-08-21. CR 608.2c: the condition is checked as this instruction
+// resolves, then exactly one authored result is applied without presenting a player choice.
+(
+  id: "trade_route_envoy",
+  name: "Trade Route Envoy",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Dog", "Soldier"],
+  power: 4,
+  toughness: 3,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ChooseResolutionBranch(
+      selection: FirstApplicable,
+      branches: [
+        (
+          label: "Draw a card",
+          cost: None,
+          requirement: GameCondition(BattlefieldCreatureCount(
+            filter: (controllers: Controller, requires_any_counter: true),
+            min: Some(1),
+          )),
+          effects: [Draw(count: 1)],
+        ),
+        (
+          label: "Put a +1/+1 counter on Trade Route Envoy",
+          cost: None,
+          requirement: Always,
+          effects: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+        ),
+      ],
+    )],
+    text: "When this creature enters, draw a card if you control a creature with a counter on it. If you don't draw a card this way, put a +1/+1 counter on this creature.",
+  )],
+)

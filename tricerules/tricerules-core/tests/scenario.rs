@@ -67,6 +67,8 @@ mod issue_111_turn_history;
 mod issue_114_disjunctive_filters;
 #[path = "scenario/issue_115_attachment_observers.rs"]
 mod issue_115_attachment_observers;
+#[path = "scenario/issue_116_condition_branches.rs"]
+mod issue_116_condition_branches;
 #[path = "scenario/issue_117_fight.rs"]
 mod issue_117_fight;
 #[path = "scenario/issue_119_self_combat_restrictions.rs"]

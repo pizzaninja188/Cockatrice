@@ -111,6 +111,17 @@ struct ConditionContext {
     resolving_spell_id: Option<ObjectId>,
 }
 
+impl ConditionContext {
+    fn for_stack_item(item: &StackItem) -> Self {
+        Self {
+            controller: item.controller,
+            source_object_id: item.source_permanent_id.unwrap_or(item.id),
+            source_zone_change: item.source_zone_change,
+            resolving_spell_id: item.ability_text.is_none().then_some(item.id),
+        }
+    }
+}
+
 mod casting;
 mod characteristics;
 mod combat;

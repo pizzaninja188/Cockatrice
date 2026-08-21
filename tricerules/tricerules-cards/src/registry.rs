@@ -412,8 +412,12 @@ impl CardRegistry {
                                 })?;
                         }
                     }
-                    if let StaticAbilityDef::AnthemPt { filter, .. }
-                    | StaticAbilityDef::AnthemKeyword { filter, .. } = ability
+                    if let StaticAbilityDef::AnthemPt {
+                        filter, condition, ..
+                    }
+                    | StaticAbilityDef::AnthemKeyword {
+                        filter, condition, ..
+                    } = ability
                     {
                         filter
                             .validate()
@@ -421,6 +425,33 @@ impl CardRegistry {
                                 id: card.id.clone(),
                                 reason,
                             })?;
+                        if let Some(condition) = condition {
+                            condition
+                                .validate()
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
+                            if matches!(
+                                condition,
+                                GameCondition::BattlefieldAggregate {
+                                    aggregate: BattlefieldAggregate::TotalPower
+                                        | BattlefieldAggregate::MaximumPower,
+                                    ..
+                                }
+                            ) {
+                                return Err(RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason: "conditional layer-6/7 anthems cannot depend on battlefield power until CR 613.8 dependency ordering is implemented".into(),
+                                });
+                            }
+                            if matches!(condition, GameCondition::BattlefieldCreatureCount { .. }) {
+                                return Err(RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason: "conditional layer-6/7 anthems cannot depend on derived creature counts until CR 613.8 dependency ordering is implemented".into(),
+                                });
+                            }
+                        }
                     }
                     if let StaticAbilityDef::ConditionalSelfModifier {
                         condition,
@@ -1441,6 +1472,34 @@ mod tests {
         )"#;
         let error = CardRegistry::from_chunks(&[power_dependency])
             .expect_err("power-dependent attached characteristics");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("CR 613.8 dependency ordering")
+        ));
+    }
+
+    #[test]
+    fn issue_116_rejects_power_dependent_conditioned_anthems() {
+        let power_dependency = r#"(
+            id: "bad_conditioned_anthem",
+            name: "Bad Conditioned Anthem",
+            mana_cost: "{2}{W}",
+            types: ["Creature", "Test"],
+            power: 2,
+            toughness: 2,
+            static_abilities: [AnthemKeyword(
+                filter: (controller: YouControl),
+                condition: BattlefieldAggregate(
+                    filter: (controllers: Controller, card_type: Some(Creature)),
+                    aggregate: MaximumPower,
+                    min: Some(4),
+                ),
+                keyword: FirstStrike,
+            )],
+        )"#;
+        let error = CardRegistry::from_chunks(&[power_dependency])
+            .expect_err("power-dependent conditioned anthem");
         assert!(matches!(
             error,
             RegistryError::InvalidCard { reason, .. }

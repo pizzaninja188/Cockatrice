@@ -64,6 +64,7 @@ fn issue_79_cards_use_shared_name_and_counter_scope_predicates() {
                 required_counter: Some(CounterKind::PlusOnePlusOne),
                 ..CreatureScopeFilter::default()
             },
+            condition: None,
             keyword: Keyword::Trample,
         }]
     );

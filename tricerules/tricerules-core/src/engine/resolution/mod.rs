@@ -2190,6 +2190,8 @@ mod attached_subject_tests {
                 SpellEffectKind::ChooseResolutionBranch {
                     chooser: PlayerRecipient::Controller,
                     optional: false,
+                    selection:
+                        tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice,
                     branches: vec![ResolutionBranchDef {
                         label: "Gain one life".into(),
                         cost: ResolutionCost::None,
@@ -2229,6 +2231,77 @@ mod attached_subject_tests {
     }
 
     #[test]
+    fn first_applicable_resolution_branch_uses_authored_order_and_runs_its_tail_once() {
+        let mut engine = GameEngine::new_with_default_decks(116_102, &[0, 1], 20).expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut item = triggered_item(source, generation);
+        item.triggered_ability = Some(TriggeredAbilityDef {
+            trigger: TriggerCondition::WhenSelfEntersBattlefield,
+            effect: vec![
+                SpellEffectKind::ChooseResolutionBranch {
+                    chooser: PlayerRecipient::Controller,
+                    optional: false,
+                    selection:
+                        tricerules_cards::primitives::ResolutionBranchSelection::FirstApplicable,
+                    branches: vec![
+                        ResolutionBranchDef {
+                            label: "Gain one life".into(),
+                            cost: ResolutionCost::None,
+                            requirement: tricerules_cards::primitives::ResolutionBranchRequirement::GameCondition(
+                                GameCondition::ActivePlayer {
+                                    players: RelativePlayerSet::Controller,
+                                },
+                            ),
+                            effects: vec![SpellEffectKind::GainLife {
+                                amount: Amount::Fixed(1),
+                            }],
+                        },
+                        ResolutionBranchDef {
+                            label: "Gain five life".into(),
+                            cost: ResolutionCost::None,
+                            requirement:
+                                tricerules_cards::primitives::ResolutionBranchRequirement::Always,
+                            effects: vec![SpellEffectKind::GainLife {
+                                amount: Amount::Fixed(5),
+                            }],
+                        },
+                    ],
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                },
+            ],
+            modal: None,
+            targeting: None,
+            text: "Use the first live branch, then gain more life.".into(),
+            may: false,
+            intervening_if: None,
+        });
+        let (effects, label) = engine.build_resolution_effects(&item);
+        let mut events = Vec::new();
+
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut events)
+            .expect("resolve first applicable branch and tail");
+
+        assert_eq!(engine.state.players[0].life, 23);
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::LifeChanged(_))))
+                .count(),
+            2,
+        );
+    }
+
+    #[test]
     fn optional_resolution_branch_with_no_legal_option_skips_to_the_tail() {
         let mut engine = GameEngine::new_with_default_decks(142_103, &[0, 1], 20).expect("engine");
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
@@ -2245,6 +2318,8 @@ mod attached_subject_tests {
                 SpellEffectKind::ChooseResolutionBranch {
                     chooser: PlayerRecipient::Controller,
                     optional: true,
+                    selection:
+                        tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice,
                     branches: vec![ResolutionBranchDef {
                         label: "Put a counter on the stale source".into(),
                         cost: ResolutionCost::None,

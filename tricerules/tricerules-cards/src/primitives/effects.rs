@@ -828,11 +828,23 @@ pub struct ResolutionBranchDef {
     pub effects: Vec<SpellEffectKind>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ResolutionBranchRequirement {
     #[default]
     Always,
     EffectsApplicable,
+    /// The branch is live only when this public game-state predicate holds as the instruction
+    /// resolves. Trade Route Envoy and Embermouth Sentinel use condition/fallback branches.
+    GameCondition(GameCondition),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ResolutionBranchSelection {
+    /// Present every live branch to the deciding player through the existing choice contract.
+    #[default]
+    PlayerChoice,
+    /// Resolve the first live branch in authored order without publishing a player choice.
+    FirstApplicable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -923,6 +935,8 @@ pub enum SpellEffectKind {
         chooser: PlayerRecipient,
         #[serde(default)]
         optional: bool,
+        #[serde(default)]
+        selection: ResolutionBranchSelection,
         branches: Vec<ResolutionBranchDef>,
     },
     /// Stage a reflexive triggered ability created by the immediately preceding paid branch.
@@ -1953,6 +1967,7 @@ impl SpellEffectKind {
             SpellEffectKind::ChooseResolutionBranch {
                 chooser,
                 optional,
+                selection,
                 branches,
             } => {
                 if branches.is_empty() {
@@ -2000,6 +2015,11 @@ impl SpellEffectKind {
                             }
                         }
                     }
+                    if let ResolutionBranchRequirement::GameCondition(condition) =
+                        &branch.requirement
+                    {
+                        condition.validate()?;
+                    }
                     for effect in &branch.effects {
                         if effect.needs_target() {
                             return Err(
@@ -2012,11 +2032,13 @@ impl SpellEffectKind {
                         }
                         effect.validate(context)?;
                     }
-                    if branch.requirement == ResolutionBranchRequirement::EffectsApplicable
-                        && !branch
-                            .effects
-                            .iter()
-                            .any(|effect| matches!(effect, SpellEffectKind::PutCounters { .. }))
+                    if matches!(
+                        branch.requirement,
+                        ResolutionBranchRequirement::EffectsApplicable
+                    ) && !branch
+                        .effects
+                        .iter()
+                        .any(|effect| matches!(effect, SpellEffectKind::PutCounters { .. }))
                     {
                         return Err(
                             "EffectsApplicable requires a supported applicability-sensitive effect"
@@ -2027,10 +2049,10 @@ impl SpellEffectKind {
                 }
                 if !optional
                     && branches.iter().any(|branch| {
-                        branch.requirement == ResolutionBranchRequirement::EffectsApplicable
+                        !matches!(branch.requirement, ResolutionBranchRequirement::Always)
                     })
                     && !branches.iter().any(|branch| {
-                        branch.requirement == ResolutionBranchRequirement::Always
+                        matches!(branch.requirement, ResolutionBranchRequirement::Always)
                             && branch.cost == ResolutionCost::None
                     })
                 {
@@ -2038,6 +2060,30 @@ impl SpellEffectKind {
                         "mandatory condition-gated resolution choice requires an unconditional costless fallback"
                             .into(),
                     );
+                }
+                if *selection == ResolutionBranchSelection::FirstApplicable {
+                    if *optional || *chooser != PlayerRecipient::Controller {
+                        return Err(
+                            "FirstApplicable resolution branches must be mandatory and controller-relative"
+                                .into(),
+                        );
+                    }
+                    if branches
+                        .iter()
+                        .any(|branch| branch.cost != ResolutionCost::None)
+                    {
+                        return Err("FirstApplicable resolution branches must be costless".into());
+                    }
+                    if !branches.last().is_some_and(|branch| {
+                        matches!(branch.requirement, ResolutionBranchRequirement::Always)
+                    }) || branches[..branches.len() - 1].iter().any(|branch| {
+                        matches!(branch.requirement, ResolutionBranchRequirement::Always)
+                    }) {
+                        return Err(
+                            "FirstApplicable resolution branches require exactly one final unconditional fallback"
+                                .into(),
+                        );
+                    }
                 }
             }
             SpellEffectKind::CreateReflexiveTrigger { ability } => {
