@@ -3,7 +3,7 @@
 use super::{
     ActivatedAbilityDef, CardTypeFilter, Color, CreatureScopeFilter, GraveyardDestination,
     GraveyardFilter, Keyword, ProtectionQuality, ReflexiveTriggeredAbilityDef, SpecialActionKind,
-    TargetController, TargetFilter, TargetKind, TriggeredAbilityDef, TypeLineAddition,
+    TargetController, TargetFilter, TargetKind, TargetRole, TriggeredAbilityDef, TypeLineAddition,
 };
 use crate::ManaCost;
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
@@ -1649,75 +1649,47 @@ impl SpellEffectKind {
     }
 
     pub fn needs_target(&self) -> bool {
-        match self {
-            SpellEffectKind::PumpTarget { subject, .. }
-            | SpellEffectKind::PutCounters { subject, .. }
-            | SpellEffectKind::GrantKeywords { subject, .. }
-            | SpellEffectKind::GrantProtection { subject, .. }
-            | SpellEffectKind::GrantTriggeredAbility { subject, .. }
-            | SpellEffectKind::CreateDelayedTrigger { subject, .. }
-            | SpellEffectKind::AddTypes { subject, .. }
-            | SpellEffectKind::Tap { subject }
-            | SpellEffectKind::Untap { subject }
-            | SpellEffectKind::Regenerate { subject }
-            | SpellEffectKind::Destroy { subject }
-            | SpellEffectKind::ReturnToOwnersHand { subject } => {
-                matches!(subject, EffectSubject::Chosen(_))
-            }
-            SpellEffectKind::Fight { first, second } => {
-                matches!(first, EffectSubject::Chosen(_))
-                    || matches!(second, EffectSubject::Chosen(_))
-            }
-            SpellEffectKind::ApplyCombatRestriction { scope, .. } => {
-                matches!(scope, CombatRestrictionScope::Chosen(_))
-            }
-            SpellEffectKind::DamageTarget { .. }
-            | SpellEffectKind::ExileIfWouldDieThisTurn { .. }
-            | SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
-            | SpellEffectKind::DamageTargets { .. }
-            | SpellEffectKind::DestroyAttached { .. }
-            | SpellEffectKind::ExileTarget
-            | SpellEffectKind::ExileTargetGainLifeEqualToPower
-            | SpellEffectKind::PutTargetPermanentInOwnersLibrary { .. }
-            | SpellEffectKind::ReturnFromGraveyard { .. }
-            | SpellEffectKind::TargetPlayerGainsLife { .. }
-            | SpellEffectKind::TargetPlayerLosesLife { .. }
-            | SpellEffectKind::DrainTarget { .. }
-            | SpellEffectKind::MillTargetPlayer { .. }
-            | SpellEffectKind::DiscardCards { .. }
-            | SpellEffectKind::SkipNextUntap { .. }
-            | SpellEffectKind::GainControlUntilEndOfTurn { .. }
-            | SpellEffectKind::CounterTargetSpell { .. }
-            | SpellEffectKind::CopyTargetSpell { .. }
-            | SpellEffectKind::AuraAttach { .. }
-            | SpellEffectKind::Equip { .. }
-            | SpellEffectKind::TargetPlayerSacrifices { .. }
-            | SpellEffectKind::PreventNextDamage { .. }
-            | SpellEffectKind::PreventAllCombatDamageToTargetTurn { .. } => true,
-            _ => false,
-        }
+        !self.target_roles().is_empty()
     }
 
-    /// The target filter(s) this effect selects against, if any. Used by validation and by
-    /// the engine's generic legality/targeting paths (one place to enumerate target-bearing
-    /// variants instead of repeating the list).
-    pub fn target_filters(&self) -> Vec<&TargetFilter> {
+    /// Exhaustive semantic target contract for this effect. Every enum variant is named here so a
+    /// new primitive cannot compile until it explicitly declares its target roles (or lack of
+    /// them). Group cardinality and role binding are compiled by [`super::TargetSchema`].
+    pub fn target_roles(&self) -> Vec<TargetRole<'_>> {
         match self {
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target } => {
-                vec![source, target]
+                vec![TargetRole::Filtered(source), TargetRole::Filtered(target)]
             }
             SpellEffectKind::Fight { first, second } => [first, second]
                 .into_iter()
                 .filter_map(|subject| match subject {
-                    EffectSubject::Chosen(filter) => Some(filter),
+                    EffectSubject::Chosen(filter) => Some(TargetRole::Filtered(filter)),
                     EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject => None,
                 })
                 .collect(),
-            SpellEffectKind::Destroy {
-                subject: EffectSubject::Chosen(target),
-            } => vec![target],
+            SpellEffectKind::Destroy { subject }
+            | SpellEffectKind::PumpTarget { subject, .. }
+            | SpellEffectKind::Tap { subject }
+            | SpellEffectKind::Untap { subject }
+            | SpellEffectKind::GrantKeywords { subject, .. }
+            | SpellEffectKind::GrantProtection { subject, .. }
+            | SpellEffectKind::GrantTriggeredAbility { subject, .. }
+            | SpellEffectKind::CreateDelayedTrigger { subject, .. }
+            | SpellEffectKind::AddTypes { subject, .. }
+            | SpellEffectKind::ReturnToOwnersHand { subject }
+            | SpellEffectKind::Regenerate { subject }
+            | SpellEffectKind::PutCounters { subject, .. } => match subject {
+                EffectSubject::Chosen(target) => vec![TargetRole::Filtered(target)],
+                EffectSubject::Source
+                | EffectSubject::AttachedObject
+                | EffectSubject::TriggerObject => Vec::new(),
+            },
+            SpellEffectKind::ApplyCombatRestriction { scope, .. } => match scope {
+                CombatRestrictionScope::Chosen(target) => vec![TargetRole::Filtered(target)],
+                CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_) => Vec::new(),
+            },
             SpellEffectKind::DamageTarget { target, .. }
             | SpellEffectKind::ExileIfWouldDieThisTurn { target }
             | SpellEffectKind::DamageTargets { target, .. }
@@ -1734,62 +1706,67 @@ impl SpellEffectKind {
             | SpellEffectKind::Equip { target }
             | SpellEffectKind::TargetPlayerSacrifices { target, .. }
             | SpellEffectKind::PreventNextDamage { target, .. }
-            | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target } => vec![target],
-            SpellEffectKind::PumpTarget {
-                subject: EffectSubject::Chosen(target),
-                ..
+            | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target } => {
+                vec![TargetRole::Filtered(target)]
             }
-            | SpellEffectKind::PutCounters {
-                subject: EffectSubject::Chosen(target),
-                ..
+            SpellEffectKind::ExileTarget | SpellEffectKind::ExileTargetGainLifeEqualToPower => {
+                vec![TargetRole::CreaturePermanent]
             }
-            | SpellEffectKind::Tap {
-                subject: EffectSubject::Chosen(target),
+            SpellEffectKind::CounterTargetSpell { spell_filter, .. }
+            | SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
+                vec![TargetRole::StackSpell(*spell_filter)]
             }
-            | SpellEffectKind::Untap {
-                subject: EffectSubject::Chosen(target),
+            SpellEffectKind::ReturnFromGraveyard { filter, .. } => {
+                vec![TargetRole::GraveyardCard(filter)]
             }
-            | SpellEffectKind::Regenerate {
-                subject: EffectSubject::Chosen(target),
-            }
-            | SpellEffectKind::ReturnToOwnersHand {
-                subject: EffectSubject::Chosen(target),
-            }
-            | SpellEffectKind::GrantKeywords {
-                subject: EffectSubject::Chosen(target),
-                ..
-            }
-            | SpellEffectKind::GrantProtection {
-                subject: EffectSubject::Chosen(target),
-                ..
-            }
-            | SpellEffectKind::GrantTriggeredAbility {
-                subject: EffectSubject::Chosen(target),
-                ..
-            }
-            | SpellEffectKind::CreateDelayedTrigger {
-                subject: EffectSubject::Chosen(target),
-                ..
-            }
-            | SpellEffectKind::AddTypes {
-                subject: EffectSubject::Chosen(target),
-                ..
-            }
-            | SpellEffectKind::ApplyCombatRestriction {
-                scope: CombatRestrictionScope::Chosen(target),
-                ..
-            } => vec![target],
-            _ => vec![],
+            SpellEffectKind::DamagePlayer { .. }
+            | SpellEffectKind::Draw { .. }
+            | SpellEffectKind::DrawDiscard { .. }
+            | SpellEffectKind::ChooseResolutionBranch { .. }
+            | SpellEffectKind::CreateReflexiveTrigger { .. }
+            | SpellEffectKind::Scry { .. }
+            | SpellEffectKind::ManifestDread
+            | SpellEffectKind::LookChooseToHand { .. }
+            | SpellEffectKind::TapAllCreatures { .. }
+            | SpellEffectKind::UntapAll { .. }
+            | SpellEffectKind::PumpAll { .. }
+            | SpellEffectKind::GrantKeywordsAll { .. }
+            | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
+            | SpellEffectKind::GrantKeywordsAllPermanents { .. }
+            | SpellEffectKind::GainLife { .. }
+            | SpellEffectKind::LoseLife { .. }
+            | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. }
+            | SpellEffectKind::Mill { .. }
+            | SpellEffectKind::DestroyAll { .. }
+            | SpellEffectKind::DamageAll { .. }
+            | SpellEffectKind::CreateTokens { .. }
+            | SpellEffectKind::ProduceMana { .. }
+            | SpellEffectKind::SearchLibrary { .. }
+            | SpellEffectKind::PreventAllCombatDamageTurn
+            | SpellEffectKind::DamageCantBePreventedThisTurn
+            | SpellEffectKind::ChangeSourceFace { .. }
+            | SpellEffectKind::None => Vec::new(),
         }
+    }
+
+    pub fn target_filters(&self) -> Vec<&TargetFilter> {
+        self.target_roles()
+            .into_iter()
+            .filter_map(|role| match role {
+                TargetRole::Filtered(filter) => Some(filter),
+                TargetRole::CreaturePermanent
+                | TargetRole::StackSpell(_)
+                | TargetRole::GraveyardCard(_) => None,
+            })
+            .collect()
     }
 
     /// True if this effect selects an *object* target (not a player). Used by the effect-list
     /// validation below to decide whether a `LifeAmount::TargetManaValue` has something to read.
     fn targets_an_object(&self) -> bool {
-        // `ReturnFromGraveyard` carries a `GraveyardFilter`, not a `TargetFilter`, so it is
-        // invisible to `target_filters()` — it still targets an object (a graveyard card).
-        matches!(self, SpellEffectKind::ReturnFromGraveyard { .. })
-            || self.target_filters().iter().any(|f| !f.is_player())
+        self.target_roles()
+            .into_iter()
+            .any(TargetRole::targets_an_object)
     }
 
     /// Startup validation for a whole effect list (one face's `spell_effect`, or one mode's

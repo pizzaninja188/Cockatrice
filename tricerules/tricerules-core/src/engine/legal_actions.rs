@@ -4,7 +4,7 @@ use super::events::object_display_name;
 use super::priority::{instant_timing_step_allowed, sorcery_speed_available};
 use super::targeting::{
     compute_ability_targets, compute_ability_targets_with_context, compute_spell_targets,
-    spell_effect_kind_needs_target, TargetSourceIdentity,
+    target_schema, TargetSourceIdentity,
 };
 use super::*;
 
@@ -36,7 +36,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 for (face_index, face) in def.faces_iter().enumerate() {
                     if !def.face_available_from_hand(face_index)
                         || face.is_land
-                        || !face.spell_effect.iter().any(spell_effect_kind_needs_target)
+                        || !target_schema(&face.spell_effect, face.targeting.as_ref()).has_targets()
                     {
                         continue;
                     }
@@ -68,7 +68,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         key,
                         legal_ability_cost_choices(eng, p.id, poid, ai, &ability),
                     );
-                    if ability.effect.iter().any(spell_effect_kind_needs_target) {
+                    if target_schema(&ability.effect, ability.targeting.as_ref()).has_targets() {
                         let targets = compute_ability_targets(
                             eng,
                             p.id,
@@ -111,7 +111,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         &ability,
                     ),
                 );
-                if ability.effect.iter().any(spell_effect_kind_needs_target) {
+                if target_schema(&ability.effect, ability.targeting.as_ref()).has_targets() {
                     valid_targets_by_ability.insert(
                         key,
                         compute_ability_targets(
@@ -734,7 +734,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     hand_index,
                     &face.name,
                     face_index,
-                    face.spell_effect.iter().any(spell_effect_kind_needs_target),
+                    target_schema(&face.spell_effect, face.targeting.as_ref()).has_targets(),
                 );
                 action.eligible_restricted_mana_group_ids =
                     eng.eligible_restricted_mana_for_spell(player_index, face);
@@ -755,7 +755,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                         .enumerate()
                         .map(|(mode_index, mode)| {
                             let needs_target =
-                                mode.effects.iter().any(spell_effect_kind_needs_target);
+                                target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
                             let targets = compute_spell_targets(
                                 eng,
                                 pid,
@@ -831,7 +831,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 object_id: oid,
                 card_name: face.name.clone(),
                 face_index: face_index as u32,
-                needs_target: face.spell_effect.iter().any(spell_effect_kind_needs_target),
+                needs_target: target_schema(&face.spell_effect, face.targeting.as_ref())
+                    .has_targets(),
                 min_modes: 0,
                 max_modes: 0,
                 modes: vec![],
@@ -858,7 +859,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     .iter()
                     .enumerate()
                     .map(|(mode_index, mode)| {
-                        let needs_target = mode.effects.iter().any(spell_effect_kind_needs_target);
+                        let needs_target =
+                            target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
                         let targets = compute_spell_targets(
                             eng,
                             pid,
@@ -927,7 +929,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             object_id: object.id,
             card_name: face.name.clone(),
             face_index: permission.face_index as u32,
-            needs_target: face.spell_effect.iter().any(spell_effect_kind_needs_target),
+            needs_target: target_schema(&face.spell_effect, face.targeting.as_ref()).has_targets(),
             min_modes: 0,
             max_modes: 0,
             modes: vec![],
@@ -954,7 +956,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 .iter()
                 .enumerate()
                 .map(|(mode_index, mode)| {
-                    let needs_target = mode.effects.iter().any(spell_effect_kind_needs_target);
+                    let needs_target =
+                        target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
                     let targets = compute_spell_targets(
                         eng,
                         pid,
@@ -1132,7 +1135,8 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
                     };
                     if cast_ok {
                         let needs_target =
-                            face.spell_effect.iter().any(spell_effect_kind_needs_target);
+                            target_schema(&face.spell_effect, face.targeting.as_ref())
+                                .has_targets();
                         if needs_target {
                             v.push(format!("Cast {name} (hand idx {i}, target)"));
                         } else {

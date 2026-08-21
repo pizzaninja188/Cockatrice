@@ -61,7 +61,7 @@ pub(super) fn creature_deals_damage_equal_to_power(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let Some(source) = cx
-        .targets_by_filter
+        .targets_by_role
         .first()
         .and_then(|targets| targets.first())
         .copied()
@@ -69,7 +69,7 @@ pub(super) fn creature_deals_damage_equal_to_power(
         return Ok(EffectOutcome::Continue);
     };
     let Some(recipient) = cx
-        .targets_by_filter
+        .targets_by_role
         .get(1)
         .and_then(|targets| targets.first())
         .copied()
@@ -120,11 +120,11 @@ pub(super) fn fight(
     let second_filter_index = matches!(second, EffectSubject::Chosen(_))
         .then_some(usize::from(first_filter_index.is_some()));
     let first_targets = first_filter_index
-        .and_then(|index| cx.targets_by_filter.get(index))
+        .and_then(|index| cx.targets_by_role.get(index))
         .map(Vec::as_slice)
         .unwrap_or(&[]);
     let second_targets = second_filter_index
-        .and_then(|index| cx.targets_by_filter.get(index))
+        .and_then(|index| cx.targets_by_role.get(index))
         .map(Vec::as_slice)
         .unwrap_or(&[]);
     let Some(first_id) = resolve_effect_subject(cx.engine, cx.top, first_targets, &first) else {
@@ -430,7 +430,7 @@ mod damage_source_tests {
     ) -> Result<EffectOutcome, EngineError> {
         let top = item(900, Some(source));
         let targets = vec![chosen];
-        let targets_by_filter = vec![vec![chosen]];
+        let targets_by_role = vec![vec![chosen]];
         let target_damage = Vec::new();
         let target_group_indices = vec![0];
         let previous_effect_result = EffectResult::None;
@@ -440,7 +440,7 @@ mod damage_source_tests {
             engine,
             events: &mut events,
             targets: &targets,
-            targets_by_filter: &targets_by_filter,
+            targets_by_role: &targets_by_role,
             target_damage: &target_damage,
             target_group_indices: &target_group_indices,
             top: &top,

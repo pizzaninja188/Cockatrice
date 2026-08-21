@@ -2,6 +2,7 @@
 
 use super::{Color, Keyword, SpellEffectKind};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 
 /// Authored target declaration for one spell, mode, activated ability, or triggered ability.
 /// Omit it to retain the legacy single required group containing every targeted effect.
@@ -24,11 +25,183 @@ pub struct TargetGroupDef {
     pub distinct_from: Vec<u32>,
 }
 
-impl TargetingDef {
-    fn validate_player_recipient_target_groups(
-        targeting: Option<&Self>,
-        effects: &[SpellEffectKind],
-    ) -> Result<(), String> {
+/// One semantic target role declared by an effect. Runtime legality consumes this vocabulary for
+/// candidate publication, command validation, and CR 608.2b resolution revalidation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetRole<'a> {
+    /// A battlefield permanent, player, or either, constrained by a composable target filter.
+    Filtered(&'a TargetFilter),
+    /// The legacy creature-only target used by the two simple exile primitives.
+    CreaturePermanent,
+    /// A spell, never an ability, currently on the stack.
+    StackSpell(Option<CardTypeFilter>),
+    /// A card in a graveyard constrained by its owner and card characteristics.
+    GraveyardCard(&'a GraveyardFilter),
+}
+
+impl TargetRole<'_> {
+    pub fn targets_an_object(self) -> bool {
+        match self {
+            Self::Filtered(filter) => !filter.is_player(),
+            Self::CreaturePermanent | Self::StackSpell(_) | Self::GraveyardCard(_) => true,
+        }
+    }
+
+    fn is_permanent_only(self) -> bool {
+        match self {
+            Self::Filtered(filter) => filter.all_terminal_filters_match(|leaf| {
+                matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+            }),
+            Self::CreaturePermanent => true,
+            Self::StackSpell(_) | Self::GraveyardCard(_) => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TargetBinding<'a> {
+    pub effect_index: usize,
+    pub role_index: usize,
+    pub role: TargetRole<'a>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TargetGroupSchema<'effects, 'targeting> {
+    pub min: u32,
+    pub max: u32,
+    pub prompt: Cow<'targeting, str>,
+    pub distinct_from: Cow<'targeting, [u32]>,
+    pub bindings: Vec<TargetBinding<'effects>>,
+}
+
+/// Validated, authoritative target contract for one effect list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TargetSchema<'effects, 'targeting> {
+    pub groups: Vec<TargetGroupSchema<'effects, 'targeting>>,
+    effect_role_counts: Vec<usize>,
+}
+
+impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
+    pub fn compile(
+        effects: &'effects [SpellEffectKind],
+        targeting: Option<&'targeting TargetingDef>,
+    ) -> Result<Self, String> {
+        let roles = effects
+            .iter()
+            .map(SpellEffectKind::target_roles)
+            .collect::<Vec<_>>();
+        let effect_role_counts = roles.iter().map(Vec::len).collect::<Vec<_>>();
+
+        let mut groups = Vec::new();
+        if let Some(targeting) = targeting {
+            if targeting.groups.is_empty() {
+                return Err("targeting requires at least one group".into());
+            }
+            let mut occurrences = vec![0usize; effects.len()];
+            for (group_index, group) in targeting.groups.iter().enumerate() {
+                if group.min > group.max || group.max == 0 {
+                    return Err("target group requires min <= max and max > 0".into());
+                }
+                if group.prompt.trim().is_empty() {
+                    return Err("target group prompt must not be empty".into());
+                }
+                if group.effect_indices.is_empty() {
+                    return Err("target group must reference at least one effect".into());
+                }
+                let mut within_group = std::collections::HashSet::new();
+                let mut bindings = Vec::new();
+                for &raw_effect_index in &group.effect_indices {
+                    let effect_index = raw_effect_index as usize;
+                    if !within_group.insert(effect_index) {
+                        return Err("target group references an effect more than once".into());
+                    }
+                    let effect_roles = roles
+                        .get(effect_index)
+                        .ok_or_else(|| "target group references an unknown effect".to_string())?;
+                    let role_index = occurrences[effect_index];
+                    let role = *effect_roles
+                        .get(role_index)
+                        .ok_or_else(|| "target group references an untargeted effect or repeats all of its target roles".to_string())?;
+                    occurrences[effect_index] += 1;
+                    bindings.push(TargetBinding {
+                        effect_index,
+                        role_index,
+                        role,
+                    });
+                }
+                let mut distinct = std::collections::HashSet::new();
+                for &other in &group.distinct_from {
+                    if other as usize >= targeting.groups.len() || other as usize == group_index {
+                        return Err("target group has an invalid distinctness reference".into());
+                    }
+                    if !distinct.insert(other) {
+                        return Err("target group repeats a distinctness reference".into());
+                    }
+                }
+                groups.push(TargetGroupSchema {
+                    min: group.min,
+                    max: group.max,
+                    prompt: Cow::Borrowed(group.prompt.as_str()),
+                    distinct_from: Cow::Borrowed(group.distinct_from.as_slice()),
+                    bindings,
+                });
+            }
+            for (effect_index, (&actual, &expected)) in
+                occurrences.iter().zip(&effect_role_counts).enumerate()
+            {
+                if actual != expected {
+                    return Err(format!(
+                        "targeted effect {effect_index} must belong to exactly {expected} target group(s)"
+                    ));
+                }
+            }
+        } else {
+            if effect_role_counts.iter().any(|&count| count > 1) {
+                return Err(
+                    "an effect with multiple target roles requires grouped targeting".into(),
+                );
+            }
+            let bindings = roles
+                .iter()
+                .enumerate()
+                .filter_map(|(effect_index, roles)| {
+                    roles.first().copied().map(|role| TargetBinding {
+                        effect_index,
+                        role_index: 0,
+                        role,
+                    })
+                })
+                .collect::<Vec<_>>();
+            if !bindings.is_empty() {
+                groups.push(TargetGroupSchema {
+                    min: 1,
+                    max: 1,
+                    prompt: Cow::Borrowed("Choose a target"),
+                    distinct_from: Cow::Borrowed(&[]),
+                    bindings,
+                });
+            }
+        }
+
+        let schema = Self {
+            groups,
+            effect_role_counts,
+        };
+        schema.validate_player_recipient_groups(effects)?;
+        Ok(schema)
+    }
+
+    pub fn has_targets(&self) -> bool {
+        !self.groups.is_empty()
+    }
+
+    pub fn effect_is_targeted(&self, effect_index: usize) -> bool {
+        self.effect_role_counts
+            .get(effect_index)
+            .is_some_and(|&count| count > 0)
+    }
+
+    fn validate_player_recipient_groups(&self, effects: &[SpellEffectKind]) -> Result<(), String> {
         let referenced_groups = effects.iter().filter_map(|effect| match effect {
             SpellEffectKind::CreateTokens {
                 who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
@@ -50,38 +223,20 @@ impl TargetingDef {
         });
 
         for group_index in referenced_groups {
-            let permanent_filters = if let Some(targeting) = targeting {
-                let group = targeting.groups.get(group_index as usize).ok_or_else(|| {
-                    "player recipient references an unknown target group".to_string()
-                })?;
-                if group.min != 1 || group.max != 1 {
-                    return Err(
-                        "controller-of-target-group recipient requires exactly one target".into(),
-                    );
-                }
-                group
-                    .effect_indices
+            let group = self
+                .groups
+                .get(group_index as usize)
+                .ok_or_else(|| "player recipient references an unknown target group".to_string())?;
+            if group.min != 1 || group.max != 1 {
+                return Err(
+                    "controller-of-target-group recipient requires exactly one target".into(),
+                );
+            }
+            if group.bindings.is_empty()
+                || group
+                    .bindings
                     .iter()
-                    .filter_map(|effect_index| effects.get(*effect_index as usize))
-                    .flat_map(SpellEffectKind::target_filters)
-                    .collect::<Vec<_>>()
-            } else {
-                if group_index != 0 {
-                    return Err(
-                        "player recipient references an unknown implicit target group".into(),
-                    );
-                }
-                effects
-                    .iter()
-                    .flat_map(SpellEffectKind::target_filters)
-                    .collect::<Vec<_>>()
-            };
-            if permanent_filters.is_empty()
-                || permanent_filters.iter().any(|filter| {
-                    !filter.all_terminal_filters_match(|leaf| {
-                        matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
-                    })
-                })
+                    .any(|binding| !binding.role.is_permanent_only())
             {
                 return Err(
                     "controller-of-target-group recipient requires a permanent-only target group"
@@ -91,75 +246,14 @@ impl TargetingDef {
         }
         Ok(())
     }
+}
 
-    pub(crate) fn validate(&self, effects: &[SpellEffectKind]) -> Result<(), String> {
-        if self.groups.is_empty() {
-            return Err("targeting requires at least one group".into());
-        }
-        let mut referenced = vec![0u32; effects.len()];
-        for (group_index, group) in self.groups.iter().enumerate() {
-            if group.min > group.max || group.max == 0 {
-                return Err("target group requires min <= max and max > 0".into());
-            }
-            if group.prompt.trim().is_empty() {
-                return Err("target group prompt must not be empty".into());
-            }
-            if group.effect_indices.is_empty() {
-                return Err("target group must reference at least one effect".into());
-            }
-            let mut within_group = std::collections::HashSet::new();
-            for &effect_index in &group.effect_indices {
-                let effect = effects
-                    .get(effect_index as usize)
-                    .ok_or_else(|| "target group references an unknown effect".to_string())?;
-                if !within_group.insert(effect_index) {
-                    return Err("target group references an effect more than once".into());
-                }
-                if !effect.needs_target() {
-                    return Err("target group references an untargeted effect".into());
-                }
-                referenced[effect_index as usize] += 1;
-            }
-            let mut distinct = std::collections::HashSet::new();
-            for &other in &group.distinct_from {
-                if other as usize >= self.groups.len() || other as usize == group_index {
-                    return Err("target group has an invalid distinctness reference".into());
-                }
-                if !distinct.insert(other) {
-                    return Err("target group repeats a distinctness reference".into());
-                }
-            }
-        }
-        for (index, effect) in effects.iter().enumerate() {
-            let expected = if effect.needs_target() {
-                effect.target_filters().len().max(1) as u32
-            } else {
-                0
-            };
-            if referenced[index] != expected {
-                return Err(format!(
-                    "targeted effect {index} must belong to exactly {expected} target group(s)"
-                ));
-            }
-        }
-        Ok(())
-    }
-
+impl TargetingDef {
     pub(crate) fn validate_optional(
         targeting: Option<&Self>,
         effects: &[SpellEffectKind],
     ) -> Result<(), String> {
-        if let Some(targeting) = targeting {
-            targeting.validate(effects)?;
-            return Self::validate_player_recipient_target_groups(Some(targeting), effects);
-        }
-        if effects
-            .iter()
-            .any(|effect| effect.target_filters().len() > 1)
-        {
-            return Err("an effect with multiple target roles requires grouped targeting".into());
-        }
-        Self::validate_player_recipient_target_groups(None, effects)
+        TargetSchema::compile(effects, targeting).map(|_| ())
     }
 }
 
@@ -824,5 +918,85 @@ mod tests {
                 .expect_err("malformed graveyard filter should fail");
             assert!(error.contains(expected), "{error:?} did not contain {expected:?}");
         }
+    }
+
+    #[test]
+    fn issue_141_target_schema_binds_every_role_exactly_once() {
+        let effects = vec![SpellEffectKind::CreatureDealsDamageEqualToPower {
+            source: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            },
+            target: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::Opponent,
+                ..TargetFilter::default()
+            },
+        }];
+        let targeting = TargetingDef {
+            groups: vec![
+                TargetGroupDef {
+                    min: 1,
+                    max: 1,
+                    prompt: "Choose a creature you control".into(),
+                    effect_indices: vec![0],
+                    distinct_from: vec![1],
+                },
+                TargetGroupDef {
+                    min: 1,
+                    max: 1,
+                    prompt: "Choose a creature an opponent controls".into(),
+                    effect_indices: vec![0],
+                    distinct_from: vec![0],
+                },
+            ],
+        };
+
+        let schema = TargetSchema::compile(&effects, Some(&targeting)).expect("valid schema");
+        assert_eq!(schema.groups.len(), 2);
+        assert_eq!(schema.groups[0].bindings[0].effect_index, 0);
+        assert_eq!(schema.groups[0].bindings[0].role_index, 0);
+        assert_eq!(schema.groups[1].bindings[0].effect_index, 0);
+        assert_eq!(schema.groups[1].bindings[0].role_index, 1);
+        assert_eq!(schema.groups[0].distinct_from.as_ref(), [1]);
+        assert_eq!(schema.groups[1].distinct_from.as_ref(), [0]);
+    }
+
+    #[test]
+    fn issue_141_target_roles_cover_each_target_domain() {
+        let permanent = SpellEffectKind::DamageTarget {
+            amount: crate::primitives::Amount::Fixed(1),
+            target: TargetFilter::default_creature(),
+        };
+        let creature = SpellEffectKind::ExileTarget;
+        let stack = SpellEffectKind::CounterTargetSpell {
+            spell_filter: Some(CardTypeFilter::Creature),
+            unless_controller_pays: None,
+        };
+        let graveyard = SpellEffectKind::ReturnFromGraveyard {
+            filter: GraveyardFilter::default(),
+            destination: GraveyardDestination::Hand,
+        };
+        assert!(matches!(
+            permanent.target_roles().as_slice(),
+            [TargetRole::Filtered(_)]
+        ));
+        assert_eq!(creature.target_roles(), [TargetRole::CreaturePermanent]);
+        assert_eq!(
+            stack.target_roles(),
+            [TargetRole::StackSpell(Some(CardTypeFilter::Creature))]
+        );
+        assert!(matches!(
+            graveyard.target_roles().as_slice(),
+            [TargetRole::GraveyardCard(_)]
+        ));
+
+        let effects = vec![permanent];
+        let implicit = TargetSchema::compile(&effects, None).expect("implicit schema");
+        assert_eq!(implicit.groups.len(), 1);
+        assert_eq!(implicit.groups[0].min, 1);
+        assert_eq!(implicit.groups[0].max, 1);
+        assert_eq!(implicit.groups[0].prompt, "Choose a target");
     }
 }

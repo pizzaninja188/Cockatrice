@@ -1,8 +1,6 @@
 use super::damage::{DamageClassification, DamageRecipient};
 use super::events::{ev_log, ev_trigger_order_required};
-use super::targeting::{
-    compute_ability_targets_with_context, spell_effect_kind_needs_target, TargetSourceIdentity,
-};
+use super::targeting::{compute_ability_targets_with_context, target_schema, TargetSourceIdentity};
 use super::*;
 
 /// One triggered ability that matched an event and is about to go on the stack (or be parked for
@@ -1326,14 +1324,15 @@ impl GameEngine {
             trigger_context,
             may,
         } = trigger;
-        let needs_target = ability.effect.iter().any(spell_effect_kind_needs_target);
+        let needs_target = target_schema(&ability.effect, ability.targeting.as_ref()).has_targets();
         let modal_modes = ability.modal.as_ref().map(|modal| {
             modal
                 .modes
                 .iter()
                 .enumerate()
                 .map(|(mode_index, mode)| {
-                    let mode_needs_target = mode.effects.iter().any(spell_effect_kind_needs_target);
+                    let mode_needs_target =
+                        target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
                     let targets = compute_ability_targets_with_context(
                         self,
                         controller,

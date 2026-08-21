@@ -7,13 +7,13 @@
 use super::events::{color_string, ev_log, object_display_name};
 use super::targeting::{
     attachment_recipient_for_target, battlefield_objects_matching, compute_spell_targets,
-    effect_has_legal_target_at_resolution, effect_target_legal_for_binding, graveyard_target_legal,
-    object_matches_mass_filter, object_matches_scoped_mass_filter, spell_effect_kind_needs_target,
-    stack_target_identity_is_current, target_filter_legal_at_resolution, target_group_bindings,
+    effect_has_legal_target_at_resolution, graveyard_target_legal, object_matches_mass_filter,
+    object_matches_scoped_mass_filter, stack_target_identity_is_current,
+    target_filter_legal_at_resolution, target_role_legal_at_resolution, target_schema,
     TargetSourceIdentity,
 };
 use super::*;
-use tricerules_cards::primitives::TargetingDef;
+use tricerules_cards::primitives::{TargetRole, TargetingDef};
 
 mod choices;
 pub(super) use choices::resolution_branch_is_live;
@@ -35,7 +35,7 @@ struct EffectCx<'a> {
     engine: &'a mut GameEngine,
     events: &'a mut Vec<rv1::RuledEvent>,
     targets: &'a [ObjectId],
-    targets_by_filter: &'a [Vec<ObjectId>],
+    targets_by_role: &'a [Vec<ObjectId>],
     target_damage: &'a [u32],
     target_group_indices: &'a [u32],
     top: &'a StackItem,
@@ -51,6 +51,23 @@ struct EffectCx<'a> {
     previous_effect_result: &'a EffectResult,
     effect_result: &'a mut EffectResult,
     effect_index: u32,
+}
+
+fn target_roles_by_group<'a>(
+    effects: &'a [SpellEffectKind],
+    targeting: Option<&TargetingDef>,
+) -> Vec<Vec<TargetRole<'a>>> {
+    target_schema(effects, targeting)
+        .groups
+        .into_iter()
+        .map(|group| {
+            group
+                .bindings
+                .into_iter()
+                .map(|binding| binding.role)
+                .collect()
+        })
+        .collect()
 }
 
 struct TokenCreationRequest<'a> {
@@ -280,7 +297,7 @@ pub(super) struct ResolutionEffect {
     target_damage: Vec<u32>,
     target_group_indices: Vec<u32>,
     /// Absolute authored group index for each target-filter role, ordered by filter index.
-    filter_group_indices: Vec<u32>,
+    role_group_indices: Vec<u32>,
 }
 
 fn resolving_damage_source_id(item: &StackItem) -> ObjectId {
@@ -329,29 +346,12 @@ impl GameEngine {
     fn snapshot_resolution_targets(&self, top: &mut StackItem) {
         let source = TargetSourceIdentity::for_stack_item(self, top);
         let controller = top.controller;
-        let requirements_for = |effects: &[SpellEffectKind], targeting: Option<&TargetingDef>| {
-            target_group_bindings(effects, targeting)
-                .into_iter()
-                .map(|bindings| {
-                    bindings
-                        .into_iter()
-                        .filter_map(|(effect_index, filter_index)| {
-                            effects
-                                .get(effect_index)
-                                .cloned()
-                                .map(|effect| (effect, filter_index))
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .collect::<Vec<_>>()
-        };
-        let legal = |requirements: &[(SpellEffectKind, usize)], target: &StackTarget| {
+        let legal = |requirements: &[TargetRole<'_>], target: &StackTarget| {
             stack_target_identity_is_current(self, target)
-                && requirements.iter().all(|(effect, filter_index)| {
-                    effect_target_legal_for_binding(
+                && requirements.iter().all(|&role| {
+                    target_role_legal_at_resolution(
                         self,
-                        effect,
-                        *filter_index,
+                        role,
                         target.object_id,
                         controller,
                         source,
@@ -375,7 +375,7 @@ impl GameEngine {
                 let Some(mode) = modal.modes.get(chosen.mode_index) else {
                     continue;
                 };
-                let requirements = requirements_for(&mode.effects, mode.targeting.as_ref());
+                let requirements = target_roles_by_group(&mode.effects, mode.targeting.as_ref());
                 chosen.targets.retain(|target| {
                     requirements
                         .get(target.group_index as usize)
@@ -408,7 +408,7 @@ impl GameEngine {
         } else {
             (&face.spell_effect[..], face.targeting.as_ref())
         };
-        let requirements = requirements_for(effects, targeting);
+        let requirements = target_roles_by_group(effects, targeting);
         top.targets.retain(|target| {
             requirements
                 .get(target.group_index as usize)
@@ -482,7 +482,7 @@ impl GameEngine {
                 let (effects, _) = self.build_resolution_effects(&top);
                 let targeted: Vec<_> = effects
                     .iter()
-                    .filter(|entry| spell_effect_kind_needs_target(&entry.effect))
+                    .filter(|entry| !entry.role_group_indices.is_empty())
                     .collect();
                 !targeted.is_empty() && targeted.iter().all(|entry| entry.targets.is_empty())
             } else {
@@ -661,7 +661,7 @@ impl GameEngine {
         // CR 608.2b: targets are checked once, at the start of resolution — not again on resume.
         let targeted_effects: Vec<_> = resolution_effects
             .iter()
-            .filter(|entry| spell_effect_kind_needs_target(&entry.effect))
+            .filter(|entry| !entry.role_group_indices.is_empty())
             .collect();
         let fizzle = !targeted_effects.is_empty()
             && targeted_effects
@@ -779,34 +779,33 @@ impl GameEngine {
         let build_entries = |effects: &[SpellEffectKind],
                              targeting: Option<&TargetingDef>,
                              chosen_targets: &[StackTarget]| {
-            let bindings = target_group_bindings(effects, targeting);
+            let schema = target_schema(effects, targeting);
             effects
                 .iter()
                 .cloned()
                 .enumerate()
                 .map(|(effect_index, effect)| {
-                    let mut role_groups = bindings
+                    let mut role_groups = schema
+                        .groups
                         .iter()
                         .enumerate()
                         .flat_map(|(group_index, group)| {
-                            group
-                                .iter()
-                                .filter_map(move |&(bound_effect, filter_index)| {
-                                    (bound_effect == effect_index)
-                                        .then_some((filter_index, group_index as u32))
-                                })
+                            group.bindings.iter().filter_map(move |binding| {
+                                (binding.effect_index == effect_index)
+                                    .then_some((binding.role_index, group_index as u32))
+                            })
                         })
                         .collect::<Vec<_>>();
                     role_groups.sort_by_key(|(filter_index, _)| *filter_index);
-                    let filter_group_indices = role_groups
+                    let role_group_indices = role_groups
                         .into_iter()
                         .map(|(_, group_index)| group_index)
                         .collect::<Vec<_>>();
                     let selected = chosen_targets
                         .iter()
                         .filter(|target| {
-                            filter_group_indices.is_empty()
-                                || filter_group_indices.contains(&target.group_index)
+                            role_group_indices.is_empty()
+                                || role_group_indices.contains(&target.group_index)
                         })
                         .collect::<Vec<_>>();
                     ResolutionEffect {
@@ -817,7 +816,7 @@ impl GameEngine {
                             .iter()
                             .map(|target| target.group_index)
                             .collect(),
-                        filter_group_indices,
+                        role_group_indices,
                     }
                 })
                 .collect::<Vec<_>>()
@@ -920,13 +919,13 @@ impl GameEngine {
                 targets: effect_targets,
                 target_damage: effect_target_damage,
                 target_group_indices,
-                filter_group_indices,
+                role_group_indices,
             } = entry;
-            if spell_effect_kind_needs_target(&effect) && effect_targets.is_empty() {
+            if !role_group_indices.is_empty() && effect_targets.is_empty() {
                 previous_effect_result = EffectResult::None;
                 continue;
             }
-            let targets_by_filter = filter_group_indices
+            let targets_by_role = role_group_indices
                 .iter()
                 .map(|group_index| {
                     effect_targets
@@ -944,7 +943,7 @@ impl GameEngine {
                     engine: self,
                     events,
                     targets: &effect_targets,
-                    targets_by_filter: &targets_by_filter,
+                    targets_by_role: &targets_by_role,
                     target_damage: &effect_target_damage,
                     target_group_indices: &target_group_indices,
                     top,
@@ -2319,7 +2318,7 @@ mod attached_subject_tests {
             engine: &mut engine,
             events: &mut events,
             targets: &[],
-            targets_by_filter: &[],
+            targets_by_role: &[],
             target_damage: &[],
             target_group_indices: &[],
             top: &item,
@@ -2526,7 +2525,7 @@ mod source_keyword_tests {
             engine: &mut engine,
             events: &mut events,
             targets: &targets,
-            targets_by_filter: &[],
+            targets_by_role: &[],
             target_damage: &[],
             target_group_indices: &[],
             top: &top,
@@ -2567,7 +2566,7 @@ mod source_keyword_tests {
             engine: &mut engine,
             events: &mut events,
             targets: &[],
-            targets_by_filter: &[],
+            targets_by_role: &[],
             target_damage: &[],
             target_group_indices: &[],
             top: &top,

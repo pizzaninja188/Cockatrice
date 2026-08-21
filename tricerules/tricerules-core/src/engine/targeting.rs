@@ -1,56 +1,13 @@
 use super::*;
-use tricerules_cards::primitives::{GraveyardFilter, GraveyardOwner, TargetGroupDef, TargetingDef};
+use tricerules_cards::primitives::{
+    GraveyardFilter, GraveyardOwner, TargetRole, TargetSchema, TargetingDef,
+};
 
-pub(super) fn effective_target_groups(
-    effects: &[SpellEffectKind],
-    targeting: Option<&TargetingDef>,
-) -> Vec<TargetGroupDef> {
-    if let Some(targeting) = targeting {
-        return targeting.groups.clone();
-    }
-    let effect_indices = effects
-        .iter()
-        .enumerate()
-        .filter_map(|(index, effect)| {
-            spell_effect_kind_needs_target(effect).then_some(index as u32)
-        })
-        .collect::<Vec<_>>();
-    if effect_indices.is_empty() {
-        Vec::new()
-    } else {
-        vec![TargetGroupDef {
-            min: 1,
-            max: 1,
-            prompt: "Choose a target".into(),
-            effect_indices,
-            distinct_from: Vec::new(),
-        }]
-    }
-}
-
-/// Resolve each authored group reference to the target-filter role it binds. Repeating one effect
-/// index in successive groups binds successive filters returned by `target_filters()`.
-pub(super) fn target_group_bindings(
-    effects: &[SpellEffectKind],
-    targeting: Option<&TargetingDef>,
-) -> Vec<Vec<(usize, usize)>> {
-    let groups = effective_target_groups(effects, targeting);
-    let mut occurrences = vec![0usize; effects.len()];
-    groups
-        .iter()
-        .map(|group| {
-            group
-                .effect_indices
-                .iter()
-                .filter_map(|&effect_index| {
-                    let effect_index = effect_index as usize;
-                    let filter_index = *occurrences.get(effect_index)?;
-                    occurrences[effect_index] += 1;
-                    Some((effect_index, filter_index))
-                })
-                .collect()
-        })
-        .collect()
+pub(super) fn target_schema<'effects, 'targeting>(
+    effects: &'effects [SpellEffectKind],
+    targeting: Option<&'targeting TargetingDef>,
+) -> TargetSchema<'effects, 'targeting> {
+    TargetSchema::compile(effects, targeting).expect("card registry validated target schema")
 }
 
 pub(super) fn capture_stack_target(engine: &GameEngine, target: &rv1::TargetRef) -> StackTarget {
@@ -488,122 +445,70 @@ fn target_controller_matches(
     }
 }
 
-pub(super) fn effect_target_legal_for_binding(
+fn target_role_legality_error(
     engine: &GameEngine,
-    effect: &SpellEffectKind,
-    filter_index: usize,
-    tid: ObjectId,
-    caster: PlayerId,
-    source: TargetSourceIdentity,
-    trigger_context: TriggerContext,
-) -> bool {
-    match effect {
-        SpellEffectKind::CreatureDealsDamageEqualToPower {
-            source: source_filter,
-            target,
-        } => [source_filter, target]
-            .get(filter_index)
-            .is_some_and(|filter| {
-                target_filter_legal_with_context(
-                    engine,
-                    filter,
-                    tid,
-                    caster,
-                    source,
-                    trigger_context,
-                )
-            }),
-        SpellEffectKind::Fight { .. } => {
-            effect
-                .target_filters()
-                .get(filter_index)
-                .is_some_and(|filter| {
-                    target_filter_legal_with_context(
-                        engine,
-                        filter,
-                        tid,
-                        caster,
-                        source,
-                        trigger_context,
-                    )
-                })
-        }
-        _ if filter_index == 0 => effect_target_legal_at_resolution_with_context(
-            engine,
-            effect,
-            tid,
-            caster,
-            source,
-            trigger_context,
-        ),
-        _ => false,
-    }
-}
-
-fn spell_target_legality_error_for_binding(
-    engine: &GameEngine,
-    effect: &SpellEffectKind,
-    filter_index: usize,
+    role: TargetRole<'_>,
     tid: ObjectId,
     caster: PlayerId,
     source: TargetSourceIdentity,
     trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
-    match effect {
-        SpellEffectKind::CreatureDealsDamageEqualToPower {
-            source: source_filter,
-            target,
-        } => {
-            let filter = match filter_index {
-                0 => source_filter,
-                1 => target,
-                _ => {
-                    return Err(EngineError::Illegal(
-                        "unknown target role for damage effect",
-                    ))
-                }
-            };
-            if target_filter_legal_with_context(
-                engine,
-                filter,
-                tid,
-                caster,
-                source,
-                trigger_context,
-            ) {
-                Ok(())
-            } else {
-                Err(EngineError::Illegal("illegal creature damage target"))
-            }
+    let (legal, message) = match role {
+        TargetRole::Filtered(filter) => {
+            target_filter_legal_with_context(engine, filter, tid, caster, source, trigger_context)
+                .then_some(())
+                .map_or_else(
+                    || {
+                        let message = match filter.kind {
+                            TargetKind::AnyTarget => "target must be a creature or player",
+                            TargetKind::Creature => "target must be a creature on the battlefield",
+                            TargetKind::AnyPlayer => "target must be a player in the game",
+                            TargetKind::OpponentPlayer => {
+                                if player_target_legal(&engine.state, tid) {
+                                    "target must be an opponent"
+                                } else {
+                                    "target must be a player in the game"
+                                }
+                            }
+                            TargetKind::AnyPermanent => {
+                                "target must be a permanent on the battlefield"
+                            }
+                        };
+                        (false, message)
+                    },
+                    |_| (true, ""),
+                )
         }
-        SpellEffectKind::Fight { .. } => {
-            let filters = effect.target_filters();
-            let Some(filter) = filters.get(filter_index) else {
-                return Err(EngineError::Illegal("unknown target role for fight effect"));
-            };
-            if target_filter_legal_with_context(
-                engine,
-                filter,
-                tid,
-                caster,
-                source,
-                trigger_context,
-            ) {
-                Ok(())
-            } else {
-                Err(EngineError::Illegal("illegal fight target"))
-            }
-        }
-        _ if filter_index == 0 => spell_target_legality_error_with_context(
-            engine,
-            effect,
-            tid,
-            caster,
-            source,
-            trigger_context,
+        TargetRole::CreaturePermanent => (
+            destroy_spell_target_legal(engine, tid)
+                && object_targetable_by(engine, tid, caster, source),
+            "target must be a creature on the battlefield",
         ),
-        _ => Err(EngineError::Illegal("unknown target role for effect")),
+        TargetRole::StackSpell(spell_filter) => (
+            stack_spell_target_legal(&engine.state, engine.registry, tid, spell_filter),
+            "target must be a spell of the required type on the stack",
+        ),
+        TargetRole::GraveyardCard(filter) => (
+            graveyard_target_legal(engine, filter, tid, caster),
+            "target must be a matching card in the correct graveyard",
+        ),
+    };
+    if legal {
+        Ok(())
+    } else {
+        Err(EngineError::Illegal(message))
     }
+}
+
+pub(super) fn target_role_legal_at_resolution(
+    engine: &GameEngine,
+    role: TargetRole<'_>,
+    tid: ObjectId,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
+) -> bool {
+    target_role_legality_error(engine, role, tid, caster, source, trigger_context).is_ok()
 }
 
 /// Whether a battlefield permanent still satisfies an Aura's printed enchant restriction.
@@ -905,201 +810,26 @@ pub(super) fn effect_has_legal_target_at_resolution(
     caster: PlayerId,
     source: TargetSourceIdentity,
 ) -> bool {
-    if !spell_effect_kind_needs_target(effect) {
+    let roles = effect.target_roles();
+    if roles.is_empty() {
         return true;
     }
-    targets
-        .iter()
-        .any(|&target| effect_target_legal_at_resolution(engine, effect, target, caster, source))
-}
-
-/// Returns true if `tid` is a legal target for `effect` at resolution time.
-pub(super) fn effect_target_legal_at_resolution(
-    engine: &GameEngine,
-    effect: &SpellEffectKind,
-    tid: ObjectId,
-    caster: PlayerId,
-    source: TargetSourceIdentity,
-) -> bool {
-    effect_target_legal_at_resolution_with_context(
-        engine,
-        effect,
-        tid,
-        caster,
-        source,
-        TriggerContext::default(),
-    )
-}
-
-fn effect_target_legal_at_resolution_with_context(
-    engine: &GameEngine,
-    effect: &SpellEffectKind,
-    tid: ObjectId,
-    caster: PlayerId,
-    source: TargetSourceIdentity,
-    trigger_context: TriggerContext,
-) -> bool {
-    match effect {
-        SpellEffectKind::CreatureDealsDamageEqualToPower {
-            source: damage_source,
-            target,
-        } => {
-            target_filter_legal_with_context(
+    targets.iter().any(|&target| {
+        roles.iter().any(|&role| {
+            target_role_legal_at_resolution(
                 engine,
-                damage_source,
-                tid,
-                caster,
-                source,
-                trigger_context,
-            ) || target_filter_legal_with_context(
-                engine,
+                role,
                 target,
-                tid,
                 caster,
                 source,
-                trigger_context,
+                TriggerContext::default(),
             )
-        }
-        SpellEffectKind::Fight { .. } => effect.target_filters().into_iter().any(|filter| {
-            target_filter_legal_with_context(engine, filter, tid, caster, source, trigger_context)
-        }),
-        SpellEffectKind::DamageTarget { target, .. }
-        | SpellEffectKind::ExileIfWouldDieThisTurn { target }
-        | SpellEffectKind::DamageTargets { target, .. }
-        | SpellEffectKind::TargetPlayerGainsLife { target, .. }
-        | SpellEffectKind::TargetPlayerLosesLife { target, .. }
-        | SpellEffectKind::DrainTarget { target, .. }
-        | SpellEffectKind::MillTargetPlayer { target, .. }
-        | SpellEffectKind::DiscardCards { target, .. }
-        | SpellEffectKind::TargetPlayerSacrifices { target, .. }
-        | SpellEffectKind::SkipNextUntap { target }
-        | SpellEffectKind::GainControlUntilEndOfTurn { target }
-        | SpellEffectKind::PreventNextDamage { target, .. }
-        | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target } => {
-            target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context)
-        }
-        SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(target),
-        }
-        | SpellEffectKind::DestroyAttached { target, .. }
-        | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target, .. }
-        | SpellEffectKind::Equip { target } => {
-            target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context)
-        }
-        SpellEffectKind::PumpTarget {
-            subject: EffectSubject::Chosen(target),
-            ..
-        }
-        | SpellEffectKind::PutCounters {
-            subject: EffectSubject::Chosen(target),
-            ..
-        }
-        | SpellEffectKind::Tap {
-            subject: EffectSubject::Chosen(target),
-        }
-        | SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(target),
-            ..
-        }
-        | SpellEffectKind::GrantProtection {
-            subject: EffectSubject::Chosen(target),
-            ..
-        }
-        | SpellEffectKind::GrantTriggeredAbility {
-            subject: EffectSubject::Chosen(target),
-            ..
-        }
-        | SpellEffectKind::CreateDelayedTrigger {
-            subject: EffectSubject::Chosen(target),
-            ..
-        }
-        | SpellEffectKind::AddTypes {
-            subject: EffectSubject::Chosen(target),
-            ..
-        }
-        | SpellEffectKind::Untap {
-            subject: EffectSubject::Chosen(target),
-        }
-        | SpellEffectKind::Regenerate {
-            subject: EffectSubject::Chosen(target),
-        }
-        | SpellEffectKind::ApplyCombatRestriction {
-            scope: CombatRestrictionScope::Chosen(target),
-            ..
-        }
-        | SpellEffectKind::ReturnToOwnersHand {
-            subject: EffectSubject::Chosen(target),
-        } => target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context),
-        SpellEffectKind::PumpTarget {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
-            ..
-        }
-        | SpellEffectKind::PutCounters {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
-            ..
-        }
-        | SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
-            ..
-        }
-        | SpellEffectKind::GrantProtection {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
-            ..
-        }
-        | SpellEffectKind::GrantTriggeredAbility {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
-            ..
-        }
-        | SpellEffectKind::CreateDelayedTrigger {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
-            ..
-        }
-        | SpellEffectKind::AddTypes {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
-            ..
-        }
-        | SpellEffectKind::Untap {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
-        }
-        | SpellEffectKind::Tap {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
-        }
-        | SpellEffectKind::Regenerate {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
-        }
-        | SpellEffectKind::ApplyCombatRestriction {
-            scope: CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_),
-            ..
-        }
-        | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. } => false,
-        SpellEffectKind::ExileTarget | SpellEffectKind::ExileTargetGainLifeEqualToPower => {
-            destroy_spell_target_legal(engine, tid)
-                && object_targetable_by(engine, tid, caster, source)
-        }
-        // CR 115.2 / 707.10b: counter and copy effects target *spells* on the stack, not
-        // activated/triggered abilities. The optional `spell_filter` further restricts which
-        // spell types are legal (Essence Scatter, Negate, Twincast).
-        SpellEffectKind::CounterTargetSpell { spell_filter, .. } => {
-            stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter)
-        }
-        SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
-            stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter)
-        }
-        SpellEffectKind::AuraAttach { target } => {
-            target_filter_legal_with_context(engine, target, tid, caster, source, trigger_context)
-        }
-        SpellEffectKind::ReturnFromGraveyard { filter, .. } => {
-            graveyard_target_legal(engine, filter, tid, caster)
-        }
-        _ => true,
-    }
-}
-
-pub(super) fn spell_effect_kind_needs_target(kind: &SpellEffectKind) -> bool {
-    kind.needs_target()
+        })
+    })
 }
 
 /// Validate one effect's targets with the event context carried by a triggered ability.
+#[allow(dead_code)]
 fn validate_effect_targets(
     engine: &GameEngine,
     caster: PlayerId,
@@ -1452,13 +1182,8 @@ fn validate_effect_targets(
     Ok(())
 }
 
-/// Target validation for an activated or triggered ability's effect list (CR 608.2).
-///
-/// Deliberately **not** `validate_spell_targets`: that one delegates to
-/// [`spell_target_legality_error`], which covers only the effects a *spell* can carry — it has no
-/// arm for `Equip` or `AuraAttach`, so routing abilities through it silently drops equip's
-/// "target creature you control" check. This walks [`validate_effect_targets`], the exhaustive
-/// per-effect validator, so a one-effect ability behaves exactly as it did before effect lists.
+/// Target validation for an activated or triggered ability's compiled target schema (CR 608.2).
+/// The same role checker publishes candidates and validates spells, abilities, and triggers.
 pub(super) fn validate_ability_targets(
     engine: &GameEngine,
     caster: PlayerId,
@@ -1494,10 +1219,7 @@ pub(super) fn validate_ability_targets_with_context(
         effects,
         targeting,
         targets,
-        GroupedTargetContext {
-            ability: true,
-            trigger: trigger_context,
-        },
+        trigger_context,
     )
 }
 
@@ -1516,54 +1238,26 @@ pub(super) fn validate_spell_targets(
         effects,
         targeting,
         targets,
-        GroupedTargetContext {
-            ability: false,
-            trigger: TriggerContext::default(),
-        },
+        TriggerContext::default(),
     )
-}
-
-#[derive(Clone, Copy)]
-struct GroupedTargetContext {
-    ability: bool,
-    trigger: TriggerContext,
 }
 
 fn target_legality_error_for_binding(
     engine: &GameEngine,
-    effect: &SpellEffectKind,
-    filter_index: usize,
+    role: TargetRole<'_>,
     target: &rv1::TargetRef,
     caster: PlayerId,
     source: TargetSourceIdentity,
-    context: GroupedTargetContext,
+    trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
-    if context.ability
-        && !matches!(
-            effect,
-            SpellEffectKind::CreatureDealsDamageEqualToPower { .. } | SpellEffectKind::Fight { .. }
-        )
-    {
-        debug_assert_eq!(filter_index, 0);
-        validate_effect_targets(
-            engine,
-            caster,
-            source,
-            effect,
-            std::slice::from_ref(target),
-            context.trigger,
-        )
-    } else {
-        spell_target_legality_error_for_binding(
-            engine,
-            effect,
-            filter_index,
-            target.object_id,
-            caster,
-            source,
-            context.trigger,
-        )
-    }
+    target_role_legality_error(
+        engine,
+        role,
+        target.object_id,
+        caster,
+        source,
+        trigger_context,
+    )
 }
 
 fn validate_grouped_targets(
@@ -1573,11 +1267,10 @@ fn validate_grouped_targets(
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
     targets: &[rv1::TargetRef],
-    context: GroupedTargetContext,
+    trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
-    let groups = effective_target_groups(effects, targeting);
-    let bindings = target_group_bindings(effects, targeting);
-    if groups.is_empty() {
+    let schema = target_schema(effects, targeting);
+    if schema.groups.is_empty() {
         return if targets.is_empty() {
             Ok(())
         } else {
@@ -1586,11 +1279,12 @@ fn validate_grouped_targets(
     }
     if targets
         .iter()
-        .any(|target| target.group_index as usize >= groups.len())
+        .any(|target| target.group_index as usize >= schema.groups.len())
     {
         return Err(EngineError::Illegal("target references an unknown group"));
     }
-    let grouped = groups
+    let grouped = schema
+        .groups
         .iter()
         .enumerate()
         .map(|(group_index, _)| {
@@ -1600,7 +1294,7 @@ fn validate_grouped_targets(
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    for (group_index, group) in groups.iter().enumerate() {
+    for (group_index, group) in schema.groups.iter().enumerate() {
         let selected = &grouped[group_index];
         if selected.len() < group.min as usize || selected.len() > group.max as usize {
             if targeting.is_none() && group.min == 1 && group.max == 1 {
@@ -1618,22 +1312,18 @@ fn validate_grouped_targets(
             if !seen.insert(target.object_id) {
                 return Err(EngineError::Illegal("duplicate target in target group"));
             }
-            for &(effect_index, filter_index) in &bindings[group_index] {
-                let effect = effects.get(effect_index).ok_or(EngineError::Illegal(
-                    "target group references an unknown effect",
-                ))?;
+            for binding in &group.bindings {
                 target_legality_error_for_binding(
                     engine,
-                    effect,
-                    filter_index,
+                    binding.role,
                     target,
                     caster,
                     source,
-                    context,
+                    trigger_context,
                 )?;
             }
         }
-        for &other_index in &group.distinct_from {
+        for &other_index in group.distinct_from.iter() {
             let other = grouped
                 .get(other_index as usize)
                 .ok_or(EngineError::Illegal(
@@ -1688,6 +1378,7 @@ fn target_ref_domain_exists(engine: &GameEngine, target: &rv1::TargetRef) -> boo
 /// target is fine". A targeted primitive added without an arm here is rejected (and trips a
 /// `debug_assert` in tests) instead of silently accepting graveyard cards, players and stack
 /// objects — the CR 115.1 defect that issue #42 recorded for targeted keyword grants.
+#[allow(dead_code)]
 fn spell_target_legality_error_with_context(
     engine: &GameEngine,
     effect: &SpellEffectKind,
@@ -1877,7 +1568,7 @@ fn spell_target_legality_error_with_context(
         // copy-with-new-targets path do not pre-filter as strictly as `validate_spell_targets`),
         // but an effect that declares it needs a target and has no arm above is a wiring bug.
         other => {
-            if spell_effect_kind_needs_target(other) {
+            if other.needs_target() {
                 debug_assert!(
                     false,
                     "targeted effect {other:?} has no arm in spell_target_legality_error"
@@ -1907,10 +1598,7 @@ pub(super) fn compute_spell_targets(
         source,
         effects,
         targeting,
-        GroupedTargetContext {
-            ability: false,
-            trigger: TriggerContext::default(),
-        },
+        TriggerContext::default(),
         Some(TargetingCostAction::Spells),
     )
 }
@@ -1928,10 +1616,7 @@ pub(super) fn compute_ability_targets(
         source,
         effects,
         targeting,
-        GroupedTargetContext {
-            ability: true,
-            trigger: TriggerContext::default(),
-        },
+        TriggerContext::default(),
         Some(TargetingCostAction::ActivatedAbilities),
     )
 }
@@ -1950,10 +1635,7 @@ pub(super) fn compute_ability_targets_with_context(
         source,
         effects,
         targeting,
-        GroupedTargetContext {
-            ability: true,
-            trigger: trigger_context,
-        },
+        trigger_context,
         None,
     )
 }
@@ -1964,7 +1646,7 @@ fn compute_targets_with_context(
     source: TargetSourceIdentity,
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
-    context: GroupedTargetContext,
+    trigger_context: TriggerContext,
     targeting_cost_action: Option<TargetingCostAction>,
 ) -> rv1::SpellTargets {
     // DamageTargets metadata controls the allocation UI. Cardinality lives exclusively on groups.
@@ -1994,33 +1676,21 @@ fn compute_targets_with_context(
         }
     }
 
-    let bindings = target_group_bindings(effects, targeting);
-    let groups = effective_target_groups(effects, targeting)
-        .into_iter()
+    let schema = target_schema(effects, targeting);
+    let groups = schema
+        .groups
+        .iter()
         .enumerate()
         .map(|(group_index, group)| {
-            let referenced = bindings[group_index]
-                .iter()
-                .filter_map(|&(effect_index, filter_index)| {
-                    effects
-                        .get(effect_index)
-                        .map(|effect| (effect, filter_index))
-                })
-                .collect::<Vec<_>>();
             let legal = |object_id| {
-                let target = rv1::TargetRef {
-                    object_id,
-                    ..Default::default()
-                };
-                referenced.iter().all(|(effect, filter_index)| {
-                    target_legality_error_for_binding(
+                group.bindings.iter().all(|binding| {
+                    target_role_legality_error(
                         engine,
-                        effect,
-                        *filter_index,
-                        &target,
+                        binding.role,
+                        object_id,
                         caster,
                         source,
-                        context,
+                        trigger_context,
                     )
                     .is_ok()
                 })
@@ -2066,7 +1736,7 @@ fn compute_targets_with_context(
             }
             rv1::LegalTargetGroup {
                 group_index: group_index as u32,
-                prompt_text: group.prompt,
+                prompt_text: group.prompt.to_string(),
                 min: group.min,
                 max: group.max,
                 valid_permanent_ids: permanent_ids,
@@ -2074,7 +1744,7 @@ fn compute_targets_with_context(
                 can_target_self: self_legal,
                 can_target_opponent: opponent_legal,
                 valid_graveyard_ids: graveyard_ids,
-                distinct_from_group_indices: group.distinct_from,
+                distinct_from_group_indices: group.distinct_from.to_vec(),
             }
         })
         .collect::<Vec<_>>();
@@ -2095,7 +1765,7 @@ fn compute_targets_with_context(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tricerules_cards::CounterKind;
+    use tricerules_cards::{primitives::TargetGroupDef, CounterKind};
 
     #[test]
     fn grouped_targets_publish_independent_candidates_and_validate_distinctness_atomically() {
