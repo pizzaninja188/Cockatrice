@@ -11,6 +11,9 @@ use serde::{Deserialize, Serialize};
 /// One activated ability on a permanent (RON data tier). Cost + effect compose freely.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActivatedAbilityDef {
+    /// Zone in which this printed activated ability functions.
+    #[serde(default)]
+    pub source_zone: AbilitySourceZone,
     /// Costs in authored order. Every component is validated before any component is paid.
     pub costs: Vec<AbilityCost>,
     /// CR 608.2: the ability's effects, resolved in the order written — the same shape and the
@@ -197,6 +200,24 @@ impl ActivatedAbilityDef {
                     );
                 }
             }
+        }
+        if self
+            .costs
+            .iter()
+            .any(|cost| matches!(cost, AbilityCost::Tap | AbilityCost::SacrificeSelf))
+            && self.source_zone != AbilitySourceZone::Battlefield
+        {
+            return Err("tap and sacrifice-self costs require a battlefield source".into());
+        }
+        if self.costs.contains(&AbilityCost::DiscardSelf)
+            && self.source_zone != AbilitySourceZone::Hand
+        {
+            return Err("discard-self cost requires a hand source".into());
+        }
+        if self.costs.contains(&AbilityCost::ExileSelf)
+            && self.source_zone != AbilitySourceZone::Graveyard
+        {
+            return Err("exile-self cost requires a graveyard source".into());
         }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;
@@ -861,6 +882,15 @@ pub enum TargetingCostAction {
     Spells,
     ActivatedAbilities,
     SpellsAndActivatedAbilities,
+}
+
+/// Zone containing the object whose printed activated ability is being activated (CR 113.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum AbilitySourceZone {
+    #[default]
+    Battlefield,
+    Hand,
+    Graveyard,
 }
 
 /// Engine special actions that a static ability may prohibit. This is deliberately distinct

@@ -770,9 +770,9 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             AbstractCardItem::mouseReleaseEvent(event);
             return;
         }
-        // Activated ability menu on right-click (battlefield permanents with abilities), and the
-        // split/MDFC side-picker menu ("Cast Fire" / "Cast Ice") for multi-face cards in hand.
-        // Right-click always shows the full ability menu (leftClick = false).
+        // Engine-authored card-action menu on right-click: battlefield/graveyard abilities and,
+        // for cyclers in hand, Cast plus Cycle in the same menu. Multi-face cast-only cards keep
+        // the dedicated face picker below.
         if (owner != nullptr) {
             auto *game = owner->getGame();
             auto *playerManager = game ? game->getPlayerManager() : nullptr;
@@ -875,11 +875,10 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;
             }
-            // Left-click on a permanent with activated abilities. A permanent whose sole ability is
-            // a mana ability (CR 605) activates directly (floats mana, no menu); anything else opens
-            // the activation menu (leftClick = true selects that fast path).
+            // Left-click uses the same engine-authored action menu for hand/graveyard abilities;
+            // battlefield mana abilities retain their direct CR 605 fast path.
             if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
-                zone->getName() == ZoneNames::TABLE && actions->tryRuledActivateAbilityMenu(this, true)) {
+                actions->tryRuledActivateAbilityMenu(this, true)) {
                 setCursor(Qt::OpenHandCursor);
                 AbstractCardItem::mouseReleaseEvent(event);
                 return;

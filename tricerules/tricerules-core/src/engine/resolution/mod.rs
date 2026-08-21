@@ -1740,7 +1740,7 @@ pub(crate) fn permanent_moved_event_with_library_position(
 
 /// Return true if the library card `oid` satisfies `filter` (None = any card). The definition
 /// chooses the rules-correct characteristics for its physical layout in this non-stack zone.
-pub(super) fn library_card_matches_filter(
+pub(super) fn card_matches_type_filter(
     state: &GameState,
     registry: &'static CardRegistry,
     oid: ObjectId,
@@ -1758,6 +1758,31 @@ pub(super) fn library_card_matches_filter(
     def.matches_card_type_outside_stack(*filter)
 }
 
+pub(super) fn library_card_matches_filter(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+    filter: Option<&LibraryCardFilter>,
+) -> bool {
+    let Some(filter) = filter else {
+        return true;
+    };
+    let Some(def) = state
+        .objects
+        .get(&oid)
+        .and_then(|object| registry.get(&object.card_id))
+    else {
+        return false;
+    };
+    filter
+        .card_type
+        .is_none_or(|card_type| def.matches_card_type_outside_stack(card_type))
+        && filter
+            .subtype
+            .as_deref()
+            .is_none_or(|subtype| def.has_subtype_outside_stack(subtype))
+}
+
 /// Human-readable description of a [`CardTypeFilter`] for prompt text.
 fn card_type_filter_desc(f: &CardTypeFilter) -> &'static str {
     match f {
@@ -1772,6 +1797,17 @@ fn card_type_filter_desc(f: &CardTypeFilter) -> &'static str {
         CardTypeFilter::Planeswalker => "planeswalker",
         CardTypeFilter::Nonland => "nonland",
         CardTypeFilter::Noncreature => "noncreature",
+    }
+}
+
+fn library_card_filter_desc(filter: &LibraryCardFilter) -> String {
+    match (filter.card_type.as_ref(), filter.subtype.as_deref()) {
+        (Some(card_type), Some(subtype)) => {
+            format!("{subtype} {}", card_type_filter_desc(card_type))
+        }
+        (Some(card_type), None) => card_type_filter_desc(card_type).to_string(),
+        (None, Some(subtype)) => subtype.to_string(),
+        (None, None) => "matching".to_string(),
     }
 }
 

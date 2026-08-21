@@ -527,6 +527,20 @@ impl CardDefinition {
         }
     }
 
+    /// Whether this physical card has `subtype` outside the battlefield and stack. Split cards
+    /// combine both halves; other multiface layouts use only their normal/front face.
+    pub fn has_subtype_outside_stack(&self, subtype: &str) -> bool {
+        if self.layout == Layout::Split {
+            self.faces_iter()
+                .any(|face| face.types.iter().any(|value| value == subtype))
+        } else {
+            self.primary_face()
+                .types
+                .iter()
+                .any(|value| value == subtype)
+        }
+    }
+
     /// Whether `face_index` is a face the player may choose while playing this card from hand.
     /// Split cards, modal DFCs, and Adventures expose both authored spell/land choices there;
     /// transforming DFCs and flip cards expose only their front/top face. This is a layout rule,

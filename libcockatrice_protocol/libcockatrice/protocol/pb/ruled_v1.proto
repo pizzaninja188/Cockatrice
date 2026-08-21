@@ -559,6 +559,25 @@ message LegalPermanentAction {
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
+// The zone containing the physical source whose printed activated ability is being used.
+enum AbilitySourceZone {
+  ABILITY_SOURCE_ZONE_BATTLEFIELD = 0;
+  ABILITY_SOURCE_ZONE_HAND = 1;
+  ABILITY_SOURCE_ZONE_GRAVEYARD = 2;
+}
+
+// Stable per-player action metadata for an activated ability printed on a card outside the
+// battlefield. Hand sources carry the concealed engine hand index used to bind a CardItem.
+message LegalZoneAbilityAction {
+  AbilitySourceZone source_zone = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 zone_change_generation = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  optional uint32 hand_index = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 ability_index = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string card_name = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  AbilityInfo ability = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
 message LegalActions {
   // Display-only prompt feed. Gameplay consumes hand_actions, never these strings.
   repeated string labels = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -608,6 +627,8 @@ message LegalActions {
   // Key = (permanent_id << 32 | ability_index), matching the other activated-ability maps.
   map<uint64, ManaPaymentEligibility> mana_payment_by_ability = 17 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated LegalPermanentAction permanent_actions = 18 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated LegalZoneAbilityAction zone_ability_actions = 19
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,
@@ -1054,7 +1075,7 @@ message StackPushed {
 }
 
 message ActivateAbility {
-  uint32 permanent_id = 1;     // ObjectId of the source permanent on the battlefield
+  uint32 source_object_id = 1; // ObjectId of the physical source object
   uint32 ability_index = 2;    // Index into card's activated_abilities list
   repeated TargetRef targets = 3;
   // CR 107.4: per-pip payment choices for flexible mana in the ability cost (see CastSpell).
@@ -1068,6 +1089,8 @@ message ActivateAbility {
   // cost list; each component that requires a choice appears exactly once.
   repeated CostSelection cost_selections = 6;
   repeated ManaSpendSelection restricted_mana = 7;
+  AbilitySourceZone source_zone = 8;
+  uint64 expected_zone_change_generation = 9;
 }
 
 message TurnFaceUp {

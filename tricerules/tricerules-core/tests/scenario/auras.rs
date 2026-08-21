@@ -77,7 +77,7 @@ fn wingspan_stride_returns_itself_and_removes_its_modifier() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &activate_ability(aura, 0, vec![]))
+    apply_ability(&mut e, 0, aura, 0, vec![])
         .expect("activate the untargeted source-return ability");
     e.apply_command(0, &pass()).expect("controller pass");
     let resolution = e.apply_command(1, &pass()).expect("opponent pass");
@@ -123,8 +123,7 @@ fn wingspan_stride_does_not_return_a_new_source_generation() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &activate_ability(aura, 0, vec![]))
-        .expect("activate source-return ability");
+    apply_ability(&mut e, 0, aura, 0, vec![]).expect("activate source-return ability");
 
     *e.state.zone_change_generation.entry(aura).or_default() += 1;
     resolve_entire_stack_two_player(&mut e);
@@ -163,8 +162,7 @@ fn wingspan_stride_in_graveyard_is_not_returned_by_its_old_ability() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &activate_ability(aura, 0, vec![]))
-        .expect("activate source-return ability");
+    apply_ability(&mut e, 0, aura, 0, vec![]).expect("activate source-return ability");
 
     e.state.players[0].battlefield.retain(|&id| id != bear);
     e.state.players[0].graveyard.push(bear);

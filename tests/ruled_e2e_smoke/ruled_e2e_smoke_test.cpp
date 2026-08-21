@@ -208,6 +208,7 @@ public:
         bool creature = false;
         bool sick = false;
         bool haste = false;
+        bool reach = false;
         int power = 0;
         int toughness = 0;
         int faceIndex = 0;
@@ -279,6 +280,32 @@ public:
     bool flashbackCast = false;
     bool sawFlashbackGraveToStack = false;
     bool sawFlashbackStackToExile = false;
+    bool devTypecyclingConjureSent = false;
+    bool devTypecyclingManaSent = false;
+    bool typecyclingActivated = false;
+    bool submittedTypecyclingChoice = false;
+    bool sawTypecyclingHandToGrave = false;
+    bool sawTypecyclingDeckToHand = false;
+    bool typecyclingPhysicalIdentityContinuous = true;
+    int typecyclingSourcePhysicalId = -1;
+    int typecyclingChosenPhysicalId = -1;
+    bool sawOwnTypecyclingAction = false;
+    bool sawOpponentTypecyclingActionRedacted = false;
+    bool devEmptyTypecyclingConjureSent = false;
+    bool devEmptyTypecyclingManaSent = false;
+    bool emptyTypecyclingActivated = false;
+    bool sawEmptyTypecyclingChoice = false;
+    bool submittedEmptyTypecyclingChoice = false;
+    bool devRenewConjureSent = false;
+    bool devRenewMoveSent = false;
+    bool devRenewManaSent = false;
+    bool renewActivated = false;
+    bool sawOwnRenewAction = false;
+    bool sawOpponentRenewActionRedacted = false;
+    bool sawRenewGraveToExile = false;
+    bool sawRenewCounters = false;
+    bool renewPhysicalIdentityContinuous = true;
+    int renewSourcePhysicalId = -1;
     bool devAdventureConjureSent = false;
     bool devAdventureManaSent = false;
     bool stompCast = false;
@@ -342,6 +369,7 @@ public:
     bool sawCursePlayerAttachment = false;
     quint32 curseOid = 0;
     std::map<quint32, int> serverCardByEngineOid;
+    std::map<int, int> handServerCardBySlot;
     std::map<int, QString> annotationByServerCardId;
 
     // Milestone observations (asserted by the fixture)
@@ -585,6 +613,21 @@ public:
                     }
                     evolvingWildsPhysicalCardId = mc.new_card_id();
                 }
+                if (typecyclingActivated && !sawTypecyclingHandToGrave && from == hand && to == grave) {
+                    sawTypecyclingHandToGrave = true;
+                    typecyclingPhysicalIdentityContinuous =
+                        typecyclingSourcePhysicalId >= 0 && mc.card_id() == typecyclingSourcePhysicalId;
+                }
+                if (submittedTypecyclingChoice && !sawTypecyclingDeckToHand && from == deck && to == hand) {
+                    sawTypecyclingDeckToHand = true;
+                    typecyclingPhysicalIdentityContinuous =
+                        typecyclingPhysicalIdentityContinuous && typecyclingChosenPhysicalId >= 0 &&
+                        mc.card_id() == typecyclingChosenPhysicalId;
+                }
+                if (renewActivated && !sawRenewGraveToExile && from == grave && to == exile) {
+                    sawRenewGraveToExile = true;
+                    renewPhysicalIdentityContinuous = renewSourcePhysicalId >= 0 && mc.card_id() == renewSourcePhysicalId;
+                }
                 if (name == QLatin1String("Apostle's Blessing") &&
                     (mc.start_player_id() == myId || mc.target_player_id() == myId)) {
                     if (from == hand && to == stack) {
@@ -637,7 +680,7 @@ public:
                         sawFlashbackStackToExile = true;
                         log(QStringLiteral("flashback: '%1' stack -> exile (mine)").arg(name));
                     }
-                } else if (from == grave || to == exile) {
+                } else if ((from == grave || to == exile) && name != QLatin1String("Sagu Pummeler")) {
                     // Any *other* card taking the flashback path is the wrong-card bug.
                     ADD_FAILURE() << "unexpected card on the flashback path: "
                                   << name.toStdString() << " " << from.toStdString() << " -> "
@@ -774,6 +817,10 @@ public:
                 for (const auto &entry : ev.battlefield_object_map().entries()) {
                     serverCardByEngineOid[entry.engine_object_id()] = entry.server_card_id();
                 }
+            } else if (ev.has_graveyard_object_map()) {
+                for (const auto &entry : ev.graveyard_object_map().entries()) {
+                    serverCardByEngineOid[entry.engine_object_id()] = entry.server_card_id();
+                }
             } else if (ev.has_face_down_object_map()) {
                 for (const auto &entry : ev.face_down_object_map().entries()) {
                     if (entry.controller_player_id() == myId && entry.card_name() == "Hill Giant") {
@@ -797,11 +844,19 @@ public:
                 const auto &rcr = ev.resolution_choice_required();
                 if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH) {
                     if (rcr.deciding_player_id() == myId) {
-                        sawOwnLibrarySearchCandidates =
-                            rcr.candidate_object_ids_size() > 0 &&
-                            rcr.candidate_object_ids_size() == rcr.candidate_card_ids_size() &&
-                            rcr.candidate_object_ids_size() == rcr.candidate_names_size() &&
-                            rcr.candidate_object_ids_size() == rcr.candidate_server_card_ids_size();
+                        if (emptyTypecyclingActivated && rcr.candidate_object_ids_size() == 0) {
+                            sawEmptyTypecyclingChoice = rcr.min() == 0 && rcr.max() == 1 &&
+                                                       rcr.candidate_card_ids_size() == 0 &&
+                                                       rcr.candidate_names_size() == 0 &&
+                                                       rcr.candidate_server_card_ids_size() == 0;
+                        } else {
+                            sawOwnLibrarySearchCandidates =
+                                sawOwnLibrarySearchCandidates ||
+                                (rcr.candidate_object_ids_size() > 0 &&
+                                 rcr.candidate_object_ids_size() == rcr.candidate_card_ids_size() &&
+                                 rcr.candidate_object_ids_size() == rcr.candidate_names_size() &&
+                                 rcr.candidate_object_ids_size() == rcr.candidate_server_card_ids_size());
+                        }
                     } else {
                         sawOpponentLibrarySearchRedacted =
                             rcr.candidate_object_ids_size() == 0 && rcr.candidate_card_ids_size() == 0 &&
@@ -822,6 +877,7 @@ public:
                 }
                 if (rcr.deciding_player_id() == myId &&
                     (rcr.candidate_object_ids_size() > 0 ||
+                     (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH && rcr.min() == 0) ||
                      rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT ||
                      rcr.choice_kind() == ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH)) {
                     pendingChoice = rcr;
@@ -885,6 +941,9 @@ public:
                             perm.haste = std::find(battlefieldObject.keywords().begin(),
                                                    battlefieldObject.keywords().end(),
                                                    "Haste") != battlefieldObject.keywords().end();
+                            perm.reach = std::find(battlefieldObject.keywords().begin(),
+                                                  battlefieldObject.keywords().end(),
+                                                  "Reach") != battlefieldObject.keywords().end();
                             bf.push_back(perm);
                             if (perm.faceDown && perm.creature && perm.power == 2 && perm.toughness == 2) {
                                 if (manifestOid == 0 || manifestOid == perm.oid) {
@@ -921,9 +980,13 @@ public:
                     }
                 }
             } else if (ev.has_hand_slot_map()) {
+                handServerCardBySlot.clear();
                 std::map<int, int> counts;
                 for (const auto &entry : ev.hand_slot_map().entries()) {
                     ++counts[entry.player_id()];
+                    if (entry.player_id() == myId) {
+                        handServerCardBySlot[static_cast<int>(entry.hand_index())] = entry.server_card_id();
+                    }
                 }
                 for (const auto &kv : counts) {
                     handSizeByPlayer[kv.first] = kv.second;
@@ -985,6 +1048,44 @@ public:
                 labels.append(QString::fromStdString(l));
             }
             latestLegal = it->second;
+            if (submittedTypecyclingChoice) {
+                const auto plains = std::find_if(latestLegal.hand_actions().begin(),
+                                                 latestLegal.hand_actions().end(), [](const auto &action) {
+                                                     return QString::fromStdString(action.card_name()) ==
+                                                            QLatin1String("Plains");
+                                                 });
+                if (plains != latestLegal.hand_actions().end()) {
+                    sawTypecyclingDeckToHand =
+                        handServerCardBySlot.count(static_cast<int>(plains->hand_index())) > 0;
+                    typecyclingPhysicalIdentityContinuous =
+                        typecyclingPhysicalIdentityContinuous && sawTypecyclingDeckToHand;
+                }
+            }
+            const auto hasZoneAbility = [this](const QString &cardName, ruled::v1::AbilitySourceZone sourceZone) {
+                return std::any_of(latestLegal.zone_ability_actions().begin(),
+                                   latestLegal.zone_ability_actions().end(),
+                                   [&](const auto &action) {
+                                       return QString::fromStdString(action.card_name()) == cardName &&
+                                              action.source_zone() == sourceZone;
+                                   });
+            };
+            if (role == Role::Aggressor) {
+                sawOwnTypecyclingAction = sawOwnTypecyclingAction ||
+                                           hasZoneAbility(QStringLiteral("Shepherding Spirits"),
+                                                          ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+                sawOwnRenewAction = sawOwnRenewAction ||
+                                    hasZoneAbility(QStringLiteral("Sagu Pummeler"),
+                                                   ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+            } else {
+                sawOpponentTypecyclingActionRedacted =
+                    sawOpponentTypecyclingActionRedacted ||
+                    !hasZoneAbility(QStringLiteral("Shepherding Spirits"),
+                                    ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+                sawOpponentRenewActionRedacted =
+                    sawOpponentRenewActionRedacted ||
+                    !hasZoneAbility(QStringLiteral("Sagu Pummeler"),
+                                    ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+            }
             if (role == Role::Hoarder && sawLibraryPermanentMoved &&
                 std::any_of(latestLegal.hand_actions().begin(), latestLegal.hand_actions().end(), [](const auto &action) {
                     return QString::fromStdString(action.card_name()) == QLatin1String("Grizzly Bears");
@@ -1165,6 +1266,17 @@ public:
         return nullptr;
     }
 
+    const ruled::v1::LegalZoneAbilityAction *
+    zoneAbilityAction(const QString &cardName, ruled::v1::AbilitySourceZone sourceZone) const
+    {
+        for (const auto &action : latestLegal.zone_ability_actions()) {
+            if (QString::fromStdString(action.card_name()) == cardName && action.source_zone() == sourceZone) {
+                return &action;
+            }
+        }
+        return nullptr;
+    }
+
     QList<const ruled::v1::LegalHandAction *> handActions(ruled::v1::HandActionKind kind) const
     {
         QList<const ruled::v1::LegalHandAction *> result;
@@ -1214,6 +1326,21 @@ public:
             }
         }
         return std::nullopt;
+    }
+
+    void setBattlefieldAbilitySource(ruled::v1::ActivateAbility *ability, quint32 oid) const
+    {
+        ability->set_source_object_id(oid);
+        ability->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+        const auto it = battlefieldByPlayer.find(myId);
+        if (it == battlefieldByPlayer.end()) {
+            return;
+        }
+        const auto permanent = std::find_if(it->second.begin(), it->second.end(),
+                                            [oid](const Permanent &candidate) { return candidate.oid == oid; });
+        if (permanent != it->second.end()) {
+            ability->set_expected_zone_change_generation(permanent->generation);
+        }
     }
 
     /// Runs the role policy against the current view; sends at most one command per state version.
@@ -1426,7 +1553,7 @@ public:
                     }
                     ruled::v1::RuledCommand cmd;
                     auto *ability = cmd.mutable_activate_ability();
-                    ability->set_permanent_id(*island);
+                    setBattlefieldAbilitySource(ability, *island);
                     ability->set_ability_index(0);
                     activatedManaDuringSoftCounterPayment = true;
                     sendRuled(cmd, QStringLiteral("tap Island oid %1 during Convolute resolution").arg(*island));
@@ -1441,6 +1568,9 @@ public:
             }
             const bool isReplacement = rcr.choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT;
             const bool isLibrarySearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH;
+            const bool isTypecycling = isLibrarySearch && typecyclingActivated && !submittedTypecyclingChoice;
+            const bool isEmptyTypecycling =
+                isLibrarySearch && emptyTypecyclingActivated && !submittedEmptyTypecyclingChoice;
             const bool isManifestDread = rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD;
             const QString prompt = QString::fromStdString(rcr.prompt_text());
             const bool isEntryReplacement = isReplacement && prompt.contains(QStringLiteral("entering the battlefield"));
@@ -1480,7 +1610,12 @@ public:
                     choice->add_chosen_object_ids(rcr.candidate_object_ids(i));
                 }
             }
-            if (isLibrarySearch && need == 1) {
+            if (isTypecycling && need == 1) {
+                typecyclingChosenPhysicalId = rcr.candidate_server_card_ids(0);
+                submittedTypecyclingChoice = true;
+            } else if (isEmptyTypecycling && need == 0) {
+                submittedEmptyTypecyclingChoice = true;
+            } else if (isLibrarySearch && need == 1) {
                 evolvingWildsChosenOid = rcr.candidate_object_ids(0);
                 submittedEvolvingWildsChoice = true;
             }
@@ -1489,7 +1624,7 @@ public:
                 submittedDamagePreventionChoice = true;
             } else if (isEntryReplacement) {
                 submittedEntryReplacementChoice = true;
-            } else if (!isManifestDread) {
+            } else if (!isManifestDread && !isTypecycling && !isEmptyTypecycling) {
                 submittedBrainstormChoice = true;
             }
             sendRuled(cmd, QStringLiteral("submit resolution choice (%1 cards)").arg(need));
@@ -1641,6 +1776,164 @@ public:
             }
             if (turnManifestFaceUpSent && !sawManifestFaceChanged) {
                 return;
+            }
+            // Issue #101: activate a subtypecycling ability from the hand, then a Renew
+            // ability from the graveyard. Both commands use the exact engine ObjectId and
+            // zone-change generation published only to the owning client.
+            if (!devTypecyclingConjureSent) {
+                devTypecyclingConjureSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Shepherding Spirits");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure Shepherding Spirits into hand"));
+                return;
+            }
+            if (!devTypecyclingManaSent) {
+                devTypecyclingManaSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                dev->mutable_add_mana()->set_c(2);
+                sendRuled(cmd, QStringLiteral("dev: add {2} for Plainscycling"));
+                return;
+            }
+            if (!typecyclingActivated) {
+                if (const auto *action = zoneAbilityAction(QStringLiteral("Shepherding Spirits"),
+                                                           ruled::v1::ABILITY_SOURCE_ZONE_HAND)) {
+                    ruled::v1::RuledCommand cmd;
+                    auto *ability = cmd.mutable_activate_ability();
+                    ability->set_source_object_id(action->object_id());
+                    ability->set_source_zone(action->source_zone());
+                    ability->set_expected_zone_change_generation(action->zone_change_generation());
+                    ability->set_ability_index(action->ability_index());
+                    if (action->has_hand_index()) {
+                        const auto physical = handServerCardBySlot.find(static_cast<int>(action->hand_index()));
+                        if (physical != handServerCardBySlot.end()) {
+                            typecyclingSourcePhysicalId = physical->second;
+                        }
+                    }
+                    typecyclingActivated = true;
+                    sendRuled(cmd, QStringLiteral("Plainscycle Shepherding Spirits oid %1").arg(action->object_id()));
+                    return;
+                }
+                return;
+            }
+            if (typecyclingActivated && !submittedTypecyclingChoice) {
+                return;
+            }
+            // The scripted deck contains exactly one Plains. Cycle a second copy after the first
+            // search moved that Plains to hand so the relay/client path must preserve the explicit
+            // zero-candidate, min-zero fail-to-find choice instead of deadlocking.
+            if (!devEmptyTypecyclingConjureSent) {
+                devEmptyTypecyclingConjureSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Shepherding Spirits");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure second Shepherding Spirits into hand"));
+                return;
+            }
+            if (!devEmptyTypecyclingManaSent) {
+                devEmptyTypecyclingManaSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                dev->mutable_add_mana()->set_c(2);
+                sendRuled(cmd, QStringLiteral("dev: add {2} for empty Plainscycling search"));
+                return;
+            }
+            if (!emptyTypecyclingActivated) {
+                if (const auto *action = zoneAbilityAction(QStringLiteral("Shepherding Spirits"),
+                                                           ruled::v1::ABILITY_SOURCE_ZONE_HAND)) {
+                    ruled::v1::RuledCommand cmd;
+                    auto *ability = cmd.mutable_activate_ability();
+                    ability->set_source_object_id(action->object_id());
+                    ability->set_source_zone(action->source_zone());
+                    ability->set_expected_zone_change_generation(action->zone_change_generation());
+                    ability->set_ability_index(action->ability_index());
+                    emptyTypecyclingActivated = true;
+                    sendRuled(cmd,
+                              QStringLiteral("Plainscycle second Shepherding Spirits oid %1").arg(action->object_id()));
+                    return;
+                }
+                return;
+            }
+            if (!submittedEmptyTypecyclingChoice) {
+                return;
+            }
+            if (!devRenewConjureSent) {
+                devRenewConjureSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Sagu Pummeler");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure Sagu Pummeler into hand"));
+                return;
+            }
+            if (!devRenewMoveSent) {
+                devRenewMoveSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *move = dev->mutable_move_card();
+                move->set_card_name("Sagu Pummeler");
+                move->set_zone(ruled::v1::DEV_ZONE_GRAVEYARD);
+                sendRuled(cmd, QStringLiteral("dev: move Sagu Pummeler to the graveyard"));
+                return;
+            }
+            if (!devRenewManaSent) {
+                devRenewManaSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                dev->mutable_add_mana()->set_g(1);
+                dev->mutable_add_mana()->set_c(4);
+                sendRuled(cmd, QStringLiteral("dev: add {4}{G} for Renew"));
+                return;
+            }
+            if (!renewActivated) {
+                if (const auto *action = zoneAbilityAction(QStringLiteral("Sagu Pummeler"),
+                                                           ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD)) {
+                    ruled::v1::RuledCommand cmd;
+                    auto *ability = cmd.mutable_activate_ability();
+                    ability->set_source_object_id(action->object_id());
+                    ability->set_source_zone(action->source_zone());
+                    ability->set_expected_zone_change_generation(action->zone_change_generation());
+                    ability->set_ability_index(action->ability_index());
+                    ability->add_targets()->set_object_id(manifestOid);
+                    const auto physical = serverCardByEngineOid.find(action->object_id());
+                    if (physical != serverCardByEngineOid.end()) {
+                        renewSourcePhysicalId = physical->second;
+                    }
+                    renewActivated = true;
+                    sendRuled(cmd, QStringLiteral("Renew Sagu Pummeler oid %1 onto Hill Giant oid %2")
+                                       .arg(action->object_id())
+                                       .arg(manifestOid));
+                    return;
+                }
+                return;
+            }
+            if (renewActivated) {
+                const auto battlefield = battlefieldByPlayer.find(myId);
+                if (battlefield != battlefieldByPlayer.end()) {
+                    const auto renewed = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                                      [this](const Permanent &permanent) {
+                                                          return permanent.oid == manifestOid &&
+                                                                 permanent.power == 5 && permanent.toughness == 5 &&
+                                                                 permanent.reach;
+                                                      });
+                    sawRenewCounters = renewed != battlefield->second.end();
+                }
+                if (!sawRenewCounters) {
+                    return;
+                }
             }
             if (!devCurseConjureSent) {
                 devCurseConjureSent = true;
@@ -1974,7 +2267,7 @@ public:
                         if (const auto mountain = firstOwnUntapped(QStringLiteral("mountain"))) {
                             ruled::v1::RuledCommand cmd;
                             auto *ability = cmd.mutable_activate_ability();
-                            ability->set_permanent_id(*mountain);
+                            setBattlefieldAbilitySource(ability, *mountain);
                             ability->set_ability_index(0);
                             sendRuled(cmd, QStringLiteral("tap Mountain for soft-counter Bolt"));
                             return;
@@ -2011,7 +2304,7 @@ public:
                     if (wilds) {
                         ruled::v1::RuledCommand cmd;
                         auto *ability = cmd.mutable_activate_ability();
-                        ability->set_permanent_id(*wilds);
+                        setBattlefieldAbilitySource(ability, *wilds);
                         ability->set_ability_index(0);
                         evolvingWildsActivated = true;
                         sendRuled(cmd, QStringLiteral("activate Evolving Wilds oid %1").arg(*wilds));
@@ -2122,7 +2415,7 @@ public:
                 if (const auto oid = firstOwnUntapped(QStringLiteral("mountain"))) {
                     ruled::v1::RuledCommand cmd;
                     auto *ability = cmd.mutable_activate_ability();
-                    ability->set_permanent_id(*oid);
+                    setBattlefieldAbilitySource(ability, *oid);
                     ability->set_ability_index(0);
                     sendRuled(cmd, QStringLiteral("tap Mountain oid %1 (for Bolt)").arg(*oid));
                     return;
@@ -2158,7 +2451,7 @@ public:
                     const auto oid = firstOwnUntapped(QStringLiteral("mountain"));
                     ruled::v1::RuledCommand cmd;
                     auto *ability = cmd.mutable_activate_ability();
-                    ability->set_permanent_id(*oid);
+                    setBattlefieldAbilitySource(ability, *oid);
                     ability->set_ability_index(0);
                     sendRuled(cmd, QStringLiteral("tap Mountain oid %1 (for Giant)").arg(*oid));
                     return;
@@ -2191,7 +2484,7 @@ public:
                 if (const auto oid = firstOwnUntapped(QStringLiteral("island"))) {
                     ruled::v1::RuledCommand cmd;
                     auto *ability = cmd.mutable_activate_ability();
-                    ability->set_permanent_id(*oid);
+                    setBattlefieldAbilitySource(ability, *oid);
                     ability->set_ability_index(0);
                     sendRuled(cmd, QStringLiteral("tap Island oid %1 (for Brainstorm)").arg(*oid));
                     return;
@@ -2390,7 +2683,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     ASSERT_TRUE(p1.createRuledGame());
     ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
 
-    const QString deckA = deckXml({{24, QStringLiteral("Mountain")},
+    const QString deckA = deckXml({{23, QStringLiteral("Mountain")},
+                                   {1, QStringLiteral("Plains")},
                                    {8, QStringLiteral("Hill Giant")},
                                    {8, QStringLiteral("Lightning Bolt")}});
     const QString deckB = deckXml({{20, QStringLiteral("Island")},
@@ -2427,6 +2721,11 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p2.sawOpponentManifestIdentityEmpty && p1.sawManifestPhysicalFaceDown &&
                p2.sawManifestPhysicalFaceDown && p1.sawManifestFaceChanged && p2.sawManifestFaceChanged &&
                p1.sawManifestPhysicalFaceUp && p2.sawManifestPhysicalFaceUp &&
+               p1.sawOwnTypecyclingAction && p2.sawOpponentTypecyclingActionRedacted &&
+               p1.submittedTypecyclingChoice && p1.sawEmptyTypecyclingChoice &&
+               p1.submittedEmptyTypecyclingChoice &&
+               p1.sawOwnRenewAction && p2.sawOpponentRenewActionRedacted && p1.sawRenewGraveToExile &&
+               p1.renewPhysicalIdentityContinuous && p1.sawRenewCounters &&
                p1.sawCursePlayerAttachment && p2.sawCursePlayerAttachment && p1.hasCursePhysicalAnnotation() &&
                p2.hasCursePhysicalAnnotation() &&
                p1.sawBoltLifeLoss && p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss &&
@@ -2625,6 +2924,22 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "the same physical card was not shown face down and then face up on both clients";
     EXPECT_TRUE(p1.sawManifestPhysicalFaceUpIdentity && p2.sawManifestPhysicalFaceUpIdentity)
         << "the face-up physical event did not immediately publish Hill Giant's display identity";
+    EXPECT_TRUE(p1.sawOwnTypecyclingAction && p2.sawOpponentTypecyclingActionRedacted)
+        << "the hand ability was not published exclusively to its owner";
+    EXPECT_TRUE(p1.submittedTypecyclingChoice && p1.sawTypecyclingHandToGrave && p1.sawTypecyclingDeckToHand &&
+                p1.typecyclingPhysicalIdentityContinuous)
+        << "Plainscycling physical flags: choice=" << p1.submittedTypecyclingChoice
+        << " hand_to_grave=" << p1.sawTypecyclingHandToGrave
+        << " deck_to_hand=" << p1.sawTypecyclingDeckToHand
+        << " identity=" << p1.typecyclingPhysicalIdentityContinuous
+        << " source_id=" << p1.typecyclingSourcePhysicalId
+        << " chosen_id=" << p1.typecyclingChosenPhysicalId;
+    EXPECT_TRUE(p1.sawEmptyTypecyclingChoice && p1.submittedEmptyTypecyclingChoice)
+        << "the second Plainscycle did not publish and submit the explicit empty fail-to-find choice";
+    EXPECT_TRUE(p1.sawOwnRenewAction && p2.sawOpponentRenewActionRedacted)
+        << "the graveyard ability was not published exclusively to its owner";
+    EXPECT_TRUE(p1.sawRenewGraveToExile && p1.renewPhysicalIdentityContinuous && p1.sawRenewCounters)
+        << "Renew did not exile the same physical source and add two +1/+1 counters plus reach";
     EXPECT_EQ(p1.manifestServerCardId, p2.manifestServerCardId)
         << "clients disagreed on manifested Server_Card identity";
     EXPECT_TRUE(p1.sawWaifOnBattlefield && p2.sawWaifOnBattlefield)

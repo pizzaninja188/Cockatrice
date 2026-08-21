@@ -456,6 +456,11 @@ public:
     QHash<quint64, QString> privateFaceDownNameByOwnedCard;
     QHash<quint32, quint64> privateFaceDownGenerationByOid;
     QHash<quint32, RuledPermanentAction> permanentActionsByOid;
+    QHash<int, quint32> handAbilityOidBySlot;
+    QHash<quint32, ruled::v1::AbilitySourceZone> zoneAbilitySourceByOid;
+    QHash<quint32, quint64> abilitySourceGenerationByOid;
+    QHash<quint32, QSet<int>> zoneAbilityIndicesByOid;
+    QHash<quint32, quint64> battlefieldGenerationByOid;
     // Servatrice HandSlotMap: (owner player id, Server_Card.id) -> engine hand index for ruled commands.
     QHash<quint64, int> ownedCardToEngineHandSlot;
     // Servatrice GraveyardObjectMap: (owner player id, Server_Card.id) -> engine OID for graveyard
@@ -675,6 +680,18 @@ public:
     [[nodiscard]] quint32 engineOidForCardId(int ownerPlayerId, int cardId) const
     {
         return ownerCardIdToEngineOid.value(makeOwnedCardKey(ownerPlayerId, cardId), 0);
+    }
+    [[nodiscard]] quint32 zoneAbilityOidForHandSlot(int handSlot) const
+    {
+        return handAbilityOidBySlot.value(handSlot, 0);
+    }
+    [[nodiscard]] ruled::v1::AbilitySourceZone abilitySourceZone(quint32 oid) const
+    {
+        return zoneAbilitySourceByOid.value(oid, ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+    }
+    [[nodiscard]] quint64 abilitySourceGeneration(quint32 oid) const
+    {
+        return abilitySourceGenerationByOid.value(oid, battlefieldGenerationByOid.value(oid, 0));
     }
     /// Record the graveyard OIDs the in-progress cast may target (empty = no pending cast, or it
     /// targets nothing in a graveyard), then re-emit `graveyardTargetsNeeded`. Called from the
@@ -915,6 +932,20 @@ public:
     [[nodiscard]] QStringList activatedAbilitiesForOid(quint32 oid) const
     {
         return engineOidToActivatedAbilityTexts.value(oid);
+    }
+    [[nodiscard]] QList<int> activatedAbilityIndicesForOid(quint32 oid) const
+    {
+        if (zoneAbilityIndicesByOid.contains(oid)) {
+            QList<int> indices = zoneAbilityIndicesByOid.value(oid).values();
+            std::sort(indices.begin(), indices.end());
+            return indices;
+        }
+        QList<int> indices;
+        const int count = engineOidToActivatedAbilityTexts.value(oid).size();
+        for (int index = 0; index < count; ++index) {
+            indices.append(index);
+        }
+        return indices;
     }
     /// Mana cost strings per activated ability, in ability-index order. Each entry is a raw cost
     /// string like "4", "R", or "" (for Tap/Sacrifice costs).

@@ -1256,6 +1256,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     pendingCastGraveyardOids.clear();
     restrictedManaByPlayer.clear();
     eligibleRestrictedManaByAbility.clear();
+    battlefieldGenerationByOid.clear();
 
     // Legal actions + opening sequence. Skipped on the game-start transition: the incoming
     // session's first batch has already populated these (see SessionResetScope), and clearing
@@ -1266,6 +1267,10 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
         privateFaceDownNameByOwnedCard.clear();
         privateFaceDownGenerationByOid.clear();
         permanentActionsByOid.clear();
+        handAbilityOidBySlot.clear();
+        zoneAbilitySourceByOid.clear();
+        abilitySourceGenerationByOid.clear();
+        zoneAbilityIndicesByOid.clear();
         clearHandActions();
         zoneCastActions = {};
         zoneCastSourceByOid.clear();

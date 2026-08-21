@@ -5,7 +5,7 @@
     types: ["Instant"],
     spell_effect: [
         SearchLibrary(
-            filter: Some(InstantOrSorcery),
+          filter: Some((card_type: Some(InstantOrSorcery))),
             destination: TopOfLibrary,
             shuffle: true,
             reveal: true,

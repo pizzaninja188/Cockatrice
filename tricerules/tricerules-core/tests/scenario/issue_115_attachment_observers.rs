@@ -76,7 +76,13 @@ fn issue_115_goldvein_pick_observes_equipped_creature_combat_damage() {
             0,
             &RuledCommand {
                 cmd: Some(Cmd::ActivateAbility(ActivateAbility {
-                    permanent_id: treasures[0],
+                    source_object_id: treasures[0],
+                    expected_zone_change_generation: engine
+                        .state
+                        .zone_change_generation
+                        .get(&treasures[0])
+                        .copied()
+                        .unwrap_or(0),
                     ability_index: 0,
                     mana_option_index: 2,
                     ..Default::default()

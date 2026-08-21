@@ -24,6 +24,11 @@ enum CostDebit {
         generation: u64,
         owner: PlayerId,
     },
+    Exile {
+        object_id: ObjectId,
+        generation: u64,
+        owner: PlayerId,
+    },
     Sacrifice {
         snapshot: SacrificeSnapshot,
         owner: PlayerId,
@@ -43,6 +48,10 @@ pub(in crate::engine) enum PaidCardCost {
         object_id: ObjectId,
         card_name: String,
     },
+    Exile {
+        object_id: ObjectId,
+        card_name: String,
+    },
     Sacrifice {
         object_id: ObjectId,
         card_name: String,
@@ -52,13 +61,16 @@ pub(in crate::engine) enum PaidCardCost {
 impl PaidCardCost {
     fn object_id(&self) -> ObjectId {
         match self {
-            Self::Discard { object_id, .. } | Self::Sacrifice { object_id, .. } => *object_id,
+            Self::Discard { object_id, .. }
+            | Self::Exile { object_id, .. }
+            | Self::Sacrifice { object_id, .. } => *object_id,
         }
     }
 
     pub(in crate::engine) fn log_phrase(&self) -> String {
         match self {
             Self::Discard { card_name, .. } => format!("discarding {card_name}"),
+            Self::Exile { card_name, .. } => format!("exiling {card_name}"),
             Self::Sacrifice { card_name, .. } => format!("sacrificing {card_name}"),
         }
     }
@@ -277,6 +289,38 @@ impl GameEngine {
                         owner: object.owner,
                     });
                 }
+                AbilityCost::DiscardSelf => {
+                    if !consumed.insert(permanent_id) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    let object = &self.state.objects[&permanent_id];
+                    debits.push(CostDebit::Discard {
+                        object_id: permanent_id,
+                        generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&permanent_id)
+                            .copied()
+                            .unwrap_or(0),
+                        owner: object.owner,
+                    });
+                }
+                AbilityCost::ExileSelf => {
+                    if !consumed.insert(permanent_id) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    let object = &self.state.objects[&permanent_id];
+                    debits.push(CostDebit::Exile {
+                        object_id: permanent_id,
+                        generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&permanent_id)
+                            .copied()
+                            .unwrap_or(0),
+                        owner: object.owner,
+                    });
+                }
                 AbilityCost::SacrificeSelf => {
                     if !consumed.insert(permanent_id) {
                         return Err(EngineError::Illegal("one object cannot pay two costs"));
@@ -395,6 +439,33 @@ impl GameEngine {
                     debug_assert_eq!(paid_cost.object_id(), oid);
                     payment.paid_card_costs.push(paid_cost);
                 }
+                CostDebit::Exile {
+                    object_id: oid,
+                    owner,
+                    ..
+                } => {
+                    let card_name = object_display_name(&self.state, self.registry, oid);
+                    crate::engine::resolution::move_object_to_zone(
+                        &mut self.state,
+                        self.registry,
+                        oid,
+                        Zone::Exile,
+                        None,
+                    )
+                    .expect("prevalidated exile cost must commit");
+                    payment.move_events.push(permanent_moved_event(
+                        &self.state,
+                        oid,
+                        owner,
+                        rv1::permanent_moved::Destination::Exile,
+                    ));
+                    let paid_cost = PaidCardCost::Exile {
+                        object_id: oid,
+                        card_name,
+                    };
+                    debug_assert_eq!(paid_cost.object_id(), oid);
+                    payment.paid_card_costs.push(paid_cost);
+                }
                 CostDebit::Sacrifice { snapshot, owner } => {
                     let oid = snapshot.source.object_id;
                     let card_name = object_display_name(&self.state, self.registry, oid);
@@ -455,6 +526,26 @@ impl GameEngine {
                                 && object.owner == *owner
                                 && self.state.player_idx(*owner).is_some()
                                 && self.state.players[plan.player_idx].hand.contains(object_id)
+                        }) && self
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == *generation
+                    }
+                    CostDebit::Exile {
+                        object_id,
+                        generation,
+                        owner,
+                    } => {
+                        self.state.objects.get(object_id).is_some_and(|object| {
+                            object.zone == Zone::Graveyard
+                                && object.owner == *owner
+                                && self.state.player_idx(*owner).is_some()
+                                && self.state.players[plan.player_idx]
+                                    .graveyard
+                                    .contains(object_id)
                         }) && self
                             .state
                             .zone_change_generation

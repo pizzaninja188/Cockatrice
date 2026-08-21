@@ -1251,9 +1251,9 @@ pub enum SpellEffectKind {
     /// Mystical Tutor (instant or sorcery → top of library), and Evolving Wilds (basic land →
     /// battlefield tapped).
     SearchLibrary {
-        /// `None` = any card is valid; `Some(f)` = only cards of this type qualify.
+        /// `None` = any card is valid; `Some(f)` = every authored predicate must match.
         #[serde(default)]
-        filter: Option<CardTypeFilter>,
+        filter: Option<LibraryCardFilter>,
         /// Where the found card goes. Default: Hand.
         #[serde(default)]
         destination: SearchDestination,
@@ -1325,6 +1325,32 @@ fn default_true() -> bool {
 
 fn default_destroy_subject() -> EffectSubject {
     EffectSubject::Chosen(TargetFilter::default_creature())
+}
+
+/// Printed characteristics required of a card found in a library. Card type and subtype compose
+/// with AND semantics; Evolving Wilds uses the former and typecycling uses the latter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LibraryCardFilter {
+    #[serde(default)]
+    pub card_type: Option<CardTypeFilter>,
+    #[serde(default)]
+    pub subtype: Option<String>,
+}
+
+impl LibraryCardFilter {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.card_type.is_none() && self.subtype.is_none() {
+            return Err("library card filter requires a card type or subtype".into());
+        }
+        if self
+            .subtype
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            return Err("library card filter subtype cannot be empty".into());
+        }
+        Ok(())
+    }
 }
 
 /// Where a searched-out card goes (for [`SpellEffectKind::SearchLibrary`]).
@@ -2414,7 +2440,12 @@ impl SpellEffectKind {
             } => Err("CounterTargetSpell unless_controller_pays must be at least 1".into()),
             // Library searches use the resolution-interrupt machinery and are legal on spells
             // and nonmana abilities alike (Demonic Tutor, Evolving Wilds).
-            SpellEffectKind::SearchLibrary { .. } => Ok(()),
+            SpellEffectKind::SearchLibrary { filter, .. } => {
+                if let Some(filter) = filter {
+                    filter.validate()?;
+                }
+                Ok(())
+            }
             // CR 701.18: scry is legal on spells and on abilities alike (scry lands, Sensei's
             // Divining Top-style activations), so the only malformed case is scrying zero cards.
             SpellEffectKind::Scry { count } => {

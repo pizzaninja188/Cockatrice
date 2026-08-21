@@ -67,7 +67,7 @@ fn activate_ability(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::ActivateAbility(ActivateAbility {
-            permanent_id,
+            source_object_id: permanent_id,
             ability_index,
             targets,
             ..Default::default()

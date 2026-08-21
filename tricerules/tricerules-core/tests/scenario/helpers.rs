@@ -197,12 +197,42 @@ pub(crate) fn activate_ability(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::ActivateAbility(ActivateAbility {
-            permanent_id,
+            source_object_id: permanent_id,
             ability_index,
             targets,
             ..Default::default()
         })),
     }
+}
+
+pub(crate) fn activate_ability_for(
+    engine: &GameEngine,
+    permanent_id: u32,
+    ability_index: u32,
+    targets: Vec<TargetRef>,
+) -> RuledCommand {
+    let mut command = activate_ability(permanent_id, ability_index, targets);
+    let Some(Cmd::ActivateAbility(ability)) = command.cmd.as_mut() else {
+        unreachable!()
+    };
+    ability.expected_zone_change_generation = engine
+        .state
+        .zone_change_generation
+        .get(&permanent_id)
+        .copied()
+        .unwrap_or(0);
+    command
+}
+
+pub(crate) fn apply_ability(
+    engine: &mut GameEngine,
+    player: i32,
+    permanent_id: u32,
+    ability_index: u32,
+    targets: Vec<TargetRef>,
+) -> Result<RuledEventBatch, tricerules_core::EngineError> {
+    let command = activate_ability_for(engine, permanent_id, ability_index, targets);
+    engine.apply_command(player, &command)
 }
 
 pub(crate) fn activate_ability_with_costs(
@@ -213,7 +243,7 @@ pub(crate) fn activate_ability_with_costs(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::ActivateAbility(ActivateAbility {
-            permanent_id,
+            source_object_id: permanent_id,
             ability_index,
             targets,
             cost_selections,

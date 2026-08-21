@@ -154,8 +154,7 @@ fn control_changes_preserve_the_limit_but_new_generations_reset_identity() {
         },
     );
     assert_eq!(zone_view_ability_flags(&mut engine, 1, devotee), [true]);
-    engine
-        .apply_command(1, &activate_ability(devotee, 0, vec![]))
+    apply_ability(&mut engine, 1, devotee, 0, vec![])
         .expect("leave-and-return creates a new object identity");
 
     *engine
@@ -172,8 +171,7 @@ fn control_changes_preserve_the_limit_but_new_generations_reset_identity() {
         },
     );
     assert_eq!(zone_view_ability_flags(&mut engine, 1, devotee), [true]);
-    engine
-        .apply_command(1, &activate_ability(devotee, 0, vec![]))
+    apply_ability(&mut engine, 1, devotee, 0, vec![])
         .expect("a face-generation change creates a new ability identity");
 }
 
@@ -270,8 +268,7 @@ fn mardu_devotee_scry_resolves_before_its_limited_mana_ability_is_used() {
             ..Default::default()
         },
     );
-    engine
-        .apply_command(0, &activate_ability(devotee, 0, vec![]))
+    apply_ability(&mut engine, 0, devotee, 0, vec![])
         .expect("activate after the scry continuation finishes");
     assert_eq!(zone_view_ability_flags(&mut engine, 0, devotee), [false]);
 }

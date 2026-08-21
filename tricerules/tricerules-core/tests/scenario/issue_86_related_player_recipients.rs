@@ -197,7 +197,13 @@ fn curse_of_opulence_triggers_once_for_multiple_attackers_and_gives_both_rewards
 
     let make_black = RuledCommand {
         cmd: Some(Cmd::ActivateAbility(ActivateAbility {
-            permanent_id: gold[0],
+            source_object_id: gold[0],
+            expected_zone_change_generation: engine
+                .state
+                .zone_change_generation
+                .get(&gold[0])
+                .copied()
+                .unwrap_or(0),
             ability_index: 0,
             mana_option_index: 2,
             ..Default::default()

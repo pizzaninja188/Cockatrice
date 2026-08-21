@@ -440,6 +440,8 @@ impl GameEngine {
                                         AbilityCost::Tap => "{T}".to_string(),
                                         AbilityCost::Mana(cost) => cost.to_string(),
                                         AbilityCost::Discard => "Discard a card".to_string(),
+                                        AbilityCost::DiscardSelf => "Discard this card".to_string(),
+                                        AbilityCost::ExileSelf => "Exile this card".to_string(),
                                         AbilityCost::SacrificeSelf => "Sacrifice this".to_string(),
                                         AbilityCost::SacrificePermanent { .. } => {
                                             "Sacrifice a permanent".to_string()
@@ -736,7 +738,7 @@ pub(super) fn finish_with_events(eng: &GameEngine, events: Vec<RuledEvent>) -> R
 
 /// Render one [`ManaAmount`] as a brace-less symbol run for the zone view's mana-produced field
 /// (e.g. `{g:1}` → `"G"`, `{c:2}` → `"CC"`, `{w:1,u:1}` → `"WU"`). Order W U B R G C is canonical.
-fn mana_amount_symbols(a: &tricerules_cards::ManaAmount) -> String {
+pub(super) fn mana_amount_symbols(a: &tricerules_cards::ManaAmount) -> String {
     let mut s = String::new();
     for (sym, n) in [
         ('W', a.w),

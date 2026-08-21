@@ -387,9 +387,9 @@ impl GameEngine {
         .map(|face| {
             face.activated_abilities
                 .iter()
-                .cloned()
                 .enumerate()
-                .map(|(index, ability)| (index, ability, false))
+                .filter(|(_, ability)| ability.source_zone == AbilitySourceZone::Battlefield)
+                .map(|(index, ability)| (index, ability.clone(), false))
                 .collect()
         })
         .unwrap_or_default();

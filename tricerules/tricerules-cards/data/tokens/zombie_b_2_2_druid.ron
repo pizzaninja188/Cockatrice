@@ -1,0 +1,8 @@
+(
+  id: "zombie_b_2_2_druid",
+  name: "Zombie",
+  types: ["Creature", "Zombie", "Druid"],
+  colors: [Black],
+  power: 2,
+  toughness: 2,
+)

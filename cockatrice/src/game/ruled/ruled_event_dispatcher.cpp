@@ -201,6 +201,17 @@ bool RuledEventDispatcher::processPayload(const std::string &payload)
 
 void RuledEventDispatcher::resetPerBatchLegalActions()
 {
+    for (const quint32 oid : state->zoneAbilitySourceByOid.keys()) {
+        state->engineOidToActivatedAbilityTexts.remove(oid);
+        state->engineOidToActivatedAbilityManaCosts.remove(oid);
+        state->engineOidToActivatedAbilityManaProduced.remove(oid);
+        state->engineOidToActivatedAbilityCostLabels.remove(oid);
+        state->engineOidToActivatedAbilityActivatable.remove(oid);
+    }
+    state->handAbilityOidBySlot.clear();
+    state->zoneAbilitySourceByOid.clear();
+    state->abilitySourceGenerationByOid.clear();
+    state->zoneAbilityIndicesByOid.clear();
     state->clearHandActions();
     state->zoneCastActions = {};
     state->zoneCastSourceByOid.clear();
@@ -638,7 +649,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if (rcr.candidate_object_ids_size() <= 0) {
+    const bool isEmptyLibrarySearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH &&
+                                      rcr.candidate_object_ids_size() == 0 && rcr.min() == 0;
+    if (rcr.candidate_object_ids_size() <= 0 && !isEmptyLibrarySearch) {
         return;
     }
 
@@ -696,6 +709,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
+    const bool isLibrarySearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH;
     const bool isLibraryLook = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK;
     const bool isManifestDread = rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD;
     if (isLibraryLook &&
@@ -706,9 +720,10 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if ((rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH ||
-         rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP || isLibraryLook || isManifestDread) &&
-        rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() && rcr.candidate_names_size() > 0) {
+    if ((isLibrarySearch || rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP || isLibraryLook ||
+         isManifestDread) &&
+        rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
+        (rcr.candidate_names_size() > 0 || isEmptyLibrarySearch)) {
         // LibrarySearch, LibraryTop, LibraryLook, or ManifestDread with server card ids: deck
         // zone-view pick. All
         // show card images from the local library, so they share the popup — only the title and
@@ -956,6 +971,7 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
         state->engineOidToActivatedAbilityManaProduced.clear();
         state->engineOidToActivatedAbilityCostLabels.clear();
         state->engineOidToActivatedAbilityActivatable.clear();
+        state->battlefieldGenerationByOid.clear();
     }
     bool anyFirstStrikePending = false;
     for (const auto &p : view.per_player()) {
@@ -974,6 +990,7 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
             if (oid == 0) {
                 continue;
             }
+            state->battlefieldGenerationByOid.insert(oid, battlefieldObject.zone_change_generation());
             QStringList texts;
             QStringList manaCosts;
             QStringList manaProduced;
@@ -1214,6 +1231,37 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
             parsed.eligibleRestrictedManaGroupIds.insert(groupId);
         }
         state->permanentActionsByOid.insert(parsed.objectId, parsed);
+    }
+    for (const auto &action : actions.zone_ability_actions()) {
+        const quint32 oid = action.object_id();
+        const int abilityIndex = static_cast<int>(action.ability_index());
+        if (oid == 0 || abilityIndex < 0 || !action.has_ability()) {
+            continue;
+        }
+        state->zoneAbilitySourceByOid.insert(oid, action.source_zone());
+        state->abilitySourceGenerationByOid.insert(oid, action.zone_change_generation());
+        state->zoneAbilityIndicesByOid[oid].insert(abilityIndex);
+        if (action.source_zone() == ruled::v1::ABILITY_SOURCE_ZONE_HAND && action.has_hand_index()) {
+            state->handAbilityOidBySlot.insert(static_cast<int>(action.hand_index()), oid);
+        }
+        const auto &ability = action.ability();
+        auto &texts = state->engineOidToActivatedAbilityTexts[oid];
+        auto &manaCosts = state->engineOidToActivatedAbilityManaCosts[oid];
+        auto &manaProduced = state->engineOidToActivatedAbilityManaProduced[oid];
+        auto &costLabels = state->engineOidToActivatedAbilityCostLabels[oid];
+        auto &activatable = state->engineOidToActivatedAbilityActivatable[oid];
+        while (texts.size() <= abilityIndex) {
+            texts.append(QString{});
+            manaCosts.append(QString{});
+            manaProduced.append(QString{});
+            costLabels.append(QString{});
+            activatable.append(false);
+        }
+        texts[abilityIndex] = QString::fromStdString(ability.text());
+        manaCosts[abilityIndex] = QString::fromStdString(ability.mana_cost());
+        manaProduced[abilityIndex] = QString::fromStdString(ability.mana_produced());
+        costLabels[abilityIndex] = QString::fromStdString(ability.cost_label());
+        activatable[abilityIndex] = ability.activatable();
     }
 
     state->openingUiKind = RuledOpeningUiKind::None;

@@ -23,9 +23,7 @@ fn mana_ability_taps_land_and_fills_pool() {
     assert!(!e.state.objects[&land].tapped, "land starts untapped");
 
     let priority_before = e.state.priority_player_id();
-    let batch = e
-        .apply_command(0, &activate_ability(land, 0, vec![]))
-        .expect("activate mountain mana ability");
+    let batch = apply_ability(&mut e, 0, land, 0, vec![]).expect("activate mountain mana ability");
 
     // Mana produced into the pool; source tapped.
     assert_eq!(e.state.players[0].mana_pool.red, 1, "produced {{R}}");
@@ -194,8 +192,7 @@ fn undo_mana_ability_cleared_once_float_is_spent() {
     e.apply_command(0, &play_land(mountain_idx))
         .expect("play mountain");
     let land = *e.state.players[0].battlefield.last().expect("land on bf");
-    e.apply_command(0, &activate_ability(land, 0, vec![]))
-        .expect("tap mountain for {R}");
+    apply_ability(&mut e, 0, land, 0, vec![]).expect("tap mountain for {R}");
 
     let bolt_idx = hand_index_for_card(&e, 0, "lightning_bolt");
     e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
@@ -397,7 +394,7 @@ fn dual_land_produces_chosen_color_option() {
     let land = inject_permanent_on_battlefield(&mut e, 0, "tropical_island");
     let cmd = RuledCommand {
         cmd: Some(Cmd::ActivateAbility(ActivateAbility {
-            permanent_id: land,
+            source_object_id: land,
             ability_index: 0,
             mana_option_index: 1,
             ..Default::default()
@@ -411,7 +408,7 @@ fn dual_land_produces_chosen_color_option() {
     let land2 = inject_permanent_on_battlefield(&mut e, 0, "tropical_island");
     let bad = RuledCommand {
         cmd: Some(Cmd::ActivateAbility(ActivateAbility {
-            permanent_id: land2,
+            source_object_id: land2,
             ability_index: 0,
             mana_option_index: 5,
             ..Default::default()

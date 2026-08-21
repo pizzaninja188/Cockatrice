@@ -1,0 +1,25 @@
+(
+  id: "sagu_pummeler",
+  name: "Sagu Pummeler",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Beast"],
+  power: 4,
+  toughness: 4,
+  keywords: [Reach],
+  activated_abilities: [(
+    source_zone: Graveyard,
+    costs: [Mana("{4}{G}"), ExileSelf],
+    effect: [
+      PutCounters(counter: PlusOnePlusOne, count: 2, subject: Chosen((kind: Creature))),
+      PutCounters(counter: Keyword(Reach), count: 1, subject: Chosen((kind: Creature))),
+    ],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature",
+      effect_indices: [0, 1],
+    )])),
+    timing: SorcerySpeed,
+    text: "Renew {4}{G} — {4}{G}, Exile this card from your graveyard: Put two +1/+1 counters and a reach counter on target creature. Activate only as a sorcery.",
+  )],
+)

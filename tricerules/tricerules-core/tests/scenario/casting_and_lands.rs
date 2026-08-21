@@ -705,7 +705,7 @@ fn noncreature_artifact_can_tap_the_turn_it_resolves() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &activate_ability(tome, 0, vec![]))
+    apply_ability(&mut e, 0, tome, 0, vec![])
         .expect("a noncreature artifact may tap the turn it enters");
     assert!(
         e.state.objects.get(&tome).expect("tome").tapped,

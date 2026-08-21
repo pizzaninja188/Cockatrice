@@ -245,6 +245,7 @@ mod tests {
     #[test]
     fn explicit_and_intrinsic_sorcery_speed_share_one_query() {
         let explicit = ActivatedAbilityDef {
+            source_zone: AbilitySourceZone::Battlefield,
             costs: vec![],
             effect: vec![],
             targeting: None,
@@ -256,6 +257,7 @@ mod tests {
         assert!(explicit.requires_sorcery_speed());
 
         let equip = ActivatedAbilityDef {
+            source_zone: AbilitySourceZone::Battlefield,
             costs: vec![],
             effect: vec![SpellEffectKind::Equip {
                 target: TargetFilter::default(),
@@ -272,6 +274,7 @@ mod tests {
     #[test]
     fn activation_limit_rejects_zero_maximum() {
         let ability = ActivatedAbilityDef {
+            source_zone: AbilitySourceZone::Battlefield,
             costs: vec![],
             effect: vec![SpellEffectKind::ProduceMana {
                 options: vec![ManaAmount {

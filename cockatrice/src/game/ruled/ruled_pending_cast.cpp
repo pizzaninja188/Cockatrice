@@ -48,6 +48,25 @@ RuledPendingCast::InteractionKind RuledPendingCast::activeInteraction() const
     return InteractionKind::None;
 }
 
+QVector<RuledCardActionMenuOption>
+RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
+                                        const QList<int> &abilityIndices,
+                                        const QStringList &abilityLabels,
+                                        const QHash<int, bool> &abilityEnabled)
+{
+    QVector<RuledCardActionMenuOption> options;
+    options.reserve(castFaces.size() + abilityIndices.size());
+    for (const auto &face : castFaces) {
+        options.append({RuledCardActionMenuOption::Kind::CastFace, face.faceIndex,
+                        QObject::tr("Cast %1").arg(face.faceName), true});
+    }
+    for (const int abilityIndex : abilityIndices) {
+        options.append({RuledCardActionMenuOption::Kind::ActivateAbility, abilityIndex,
+                        abilityLabels.value(abilityIndex), abilityEnabled.value(abilityIndex, false)});
+    }
+    return options;
+}
+
 std::optional<RuledFaceOption> RuledPendingCast::chooseFace(QWidget *parent,
                                                             const QString &cardName,
                                                             const QVector<RuledFaceOption> &faces)

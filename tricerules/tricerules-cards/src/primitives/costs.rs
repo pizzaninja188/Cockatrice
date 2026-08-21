@@ -16,6 +16,10 @@ pub enum AbilityCost {
     Mana(ManaCost),
     /// Discard one card chosen from the activating player's hand.
     Discard,
+    /// Discard the source object itself from its owner's hand (cycling and typecycling).
+    DiscardSelf,
+    /// Exile the source object itself from its owner's graveyard (renew).
+    ExileSelf,
     /// Sacrifice the source permanent as cost (e.g. Bottle Gnomes).
     SacrificeSelf,
     /// Sacrifice another or the source permanent when it matches the filter (e.g. Portcullis

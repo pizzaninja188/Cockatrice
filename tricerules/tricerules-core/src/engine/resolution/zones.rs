@@ -370,7 +370,7 @@ fn discard_for_player(
         .iter()
         .copied()
         .filter(|object_id| {
-            library_card_matches_filter(&engine.state, engine.registry, *object_id, card_filter)
+            card_matches_type_filter(&engine.state, engine.registry, *object_id, card_filter)
         })
         .collect();
 
@@ -1113,7 +1113,7 @@ pub(super) fn look_choose_to_hand(
 
     let selectable: Vec<bool> = looked
         .iter()
-        .map(|&oid| library_card_matches_filter(&engine.state, engine.registry, oid, Some(&filter)))
+        .map(|&oid| card_matches_type_filter(&engine.state, engine.registry, oid, Some(&filter)))
         .collect();
     let legal: Vec<ObjectId> = looked
         .iter()
@@ -1225,7 +1225,7 @@ pub(super) fn search_library(
         None => format!("P{controller}: search your library for a card."),
         Some(f) => format!(
             "P{controller}: search your library for a {} card.",
-            card_type_filter_desc(f)
+            library_card_filter_desc(f)
         ),
     };
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);

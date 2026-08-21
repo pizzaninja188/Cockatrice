@@ -15,8 +15,10 @@
 
 #include <QChar>
 #include <QHash>
+#include <QList>
 #include <QMap>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 #include <QtGlobal>
 #include <algorithm>
@@ -26,6 +28,20 @@ class QWidget;
 class CardItem;
 class Player;
 class PlayerActions;
+
+struct RuledCardActionMenuOption
+{
+    enum class Kind
+    {
+        CastFace,
+        ActivateAbility,
+    };
+
+    Kind kind = Kind::CastFace;
+    int index = -1;
+    QString label;
+    bool enabled = true;
+};
 
 struct RuledFlexPip
 {
@@ -49,6 +65,7 @@ struct PendingActivatedAbility
 {
     bool valid = false;
     bool turnFaceUp = false;
+    ruled::v1::AbilitySourceZone sourceZone = ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD;
     quint64 expectedZoneChangeGeneration = 0;
     quint32 permanentOid = 0;
     int abilityIndex = -1;
@@ -485,6 +502,14 @@ public:
     /// front display name (Adventure), so menu entries come exclusively from `faces`.
     static std::optional<RuledFaceOption>
     chooseFace(QWidget *parent, const QString &cardName, const QVector<RuledFaceOption> &faces);
+
+    /// Build one engine-authoritative menu model for alternate actions on a physical card.
+    /// Castable faces precede zone abilities so a cycler in hand exposes both Cast and Cycle.
+    static QVector<RuledCardActionMenuOption>
+    cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
+                          const QList<int> &abilityIndices,
+                          const QStringList &abilityLabels,
+                          const QHash<int, bool> &abilityEnabled);
 
     /// Spell casts and activated abilities are mutually exclusive local UI transactions.
     PendingRuledSpellCast &beginSpell();

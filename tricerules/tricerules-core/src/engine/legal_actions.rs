@@ -18,6 +18,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         let hand_actions = legal_hand_actions(eng, p.id);
         let zone_cast_actions = legal_zone_cast_actions(eng, p.id);
         let permanent_actions = legal_permanent_actions(eng, p.id);
+        let zone_ability_actions = legal_zone_ability_actions(eng, p.id);
         let mut valid_targets_by_hand_slot = BTreeMap::new();
         let mut valid_targets_by_zone_object = BTreeMap::new();
         let mut valid_targets_by_ability = BTreeMap::new();
@@ -77,6 +78,53 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         );
                         valid_targets_by_ability.insert(key, targets);
                     }
+                }
+            }
+            for action in &zone_ability_actions {
+                let source_zone = match action.source_zone() {
+                    rv1::AbilitySourceZone::Hand => AbilitySourceZone::Hand,
+                    rv1::AbilitySourceZone::Graveyard => AbilitySourceZone::Graveyard,
+                    rv1::AbilitySourceZone::Battlefield => continue,
+                };
+                let Some((_, ability, _)) = eng
+                    .authored_zone_activated_abilities(action.object_id, source_zone)
+                    .into_iter()
+                    .find(|(index, _, _)| *index == action.ability_index as usize)
+                else {
+                    continue;
+                };
+                let key = (u64::from(action.object_id) << 32) | u64::from(action.ability_index);
+                mana_payment_by_ability.insert(
+                    key,
+                    rv1::ManaPaymentEligibility {
+                        eligible_restricted_mana_group_ids: eng
+                            .eligible_restricted_mana_for_ability(idx, action.object_id),
+                    },
+                );
+                cost_choices_by_ability.insert(
+                    key,
+                    legal_ability_cost_choices(
+                        eng,
+                        p.id,
+                        action.object_id,
+                        action.ability_index as usize,
+                        &ability,
+                    ),
+                );
+                if ability.effect.iter().any(spell_effect_kind_needs_target) {
+                    valid_targets_by_ability.insert(
+                        key,
+                        compute_ability_targets(
+                            eng,
+                            p.id,
+                            TargetSourceIdentity::captured(
+                                action.object_id,
+                                action.zone_change_generation,
+                            ),
+                            &ability.effect,
+                            ability.targeting.as_ref(),
+                        ),
+                    );
                 }
             }
         }
@@ -199,9 +247,118 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 legal_block_pairs,
                 mana_payment_by_ability,
                 permanent_actions,
+                zone_ability_actions,
             },
         );
     }
+}
+
+fn activated_ability_info(
+    eng: &GameEngine,
+    source_id: ObjectId,
+    ability_index: usize,
+    ability: &ActivatedAbilityDef,
+) -> rv1::AbilityInfo {
+    let mana_cost = ability
+        .costs
+        .iter()
+        .find_map(|cost| match cost {
+            AbilityCost::Mana(cost) => Some(cost.to_string()),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let mana_produced = eng
+        .active_mana_options(source_id, ability)
+        .map(|options| {
+            options
+                .iter()
+                .map(super::events::mana_amount_symbols)
+                .collect::<Vec<_>>()
+                .join("/")
+        })
+        .unwrap_or_default();
+    let cost_label = ability
+        .costs
+        .iter()
+        .map(|cost| match cost {
+            AbilityCost::Tap => "{T}".to_string(),
+            AbilityCost::Mana(cost) => cost.to_string(),
+            AbilityCost::Discard => "Discard a card".to_string(),
+            AbilityCost::DiscardSelf => "Discard this card".to_string(),
+            AbilityCost::ExileSelf => "Exile this card".to_string(),
+            AbilityCost::SacrificeSelf => "Sacrifice this".to_string(),
+            AbilityCost::SacrificePermanent { .. } => "Sacrifice a permanent".to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    rv1::AbilityInfo {
+        text: ability.text.clone(),
+        mana_cost,
+        mana_produced,
+        cost_label,
+        activatable: eng.ability_activatable(source_id, ability_index, ability),
+    }
+}
+
+fn legal_zone_ability_actions(
+    eng: &GameEngine,
+    player: PlayerId,
+) -> Vec<rv1::LegalZoneAbilityAction> {
+    let Some(player_index) = eng.state.player_idx(player) else {
+        return Vec::new();
+    };
+    let mut actions = Vec::new();
+    for (source_zone, objects) in [
+        (
+            AbilitySourceZone::Hand,
+            &eng.state.players[player_index].hand,
+        ),
+        (
+            AbilitySourceZone::Graveyard,
+            &eng.state.players[player_index].graveyard,
+        ),
+    ] {
+        for (zone_index, &object_id) in objects.iter().enumerate() {
+            let Some(object) = eng.state.objects.get(&object_id) else {
+                continue;
+            };
+            let Some(definition) = eng.registry.get(&object.card_id) else {
+                continue;
+            };
+            let generation = eng
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0);
+            for (ability_index, ability, _) in
+                eng.authored_zone_activated_abilities(object_id, source_zone)
+            {
+                actions.push(rv1::LegalZoneAbilityAction {
+                    source_zone: match source_zone {
+                        AbilitySourceZone::Hand => rv1::AbilitySourceZone::Hand as i32,
+                        AbilitySourceZone::Graveyard => rv1::AbilitySourceZone::Graveyard as i32,
+                        AbilitySourceZone::Battlefield => {
+                            rv1::AbilitySourceZone::Battlefield as i32
+                        }
+                    },
+                    object_id,
+                    zone_change_generation: generation,
+                    hand_index: (source_zone == AbilitySourceZone::Hand)
+                        .then_some(zone_index as u32),
+                    ability_index: ability_index as u32,
+                    card_name: definition.name.clone(),
+                    ability: Some(activated_ability_info(
+                        eng,
+                        object_id,
+                        ability_index,
+                        &ability,
+                    )),
+                });
+            }
+        }
+    }
+    actions
 }
 
 fn legal_permanent_actions(eng: &GameEngine, player: PlayerId) -> Vec<rv1::LegalPermanentAction> {
@@ -295,7 +452,7 @@ fn legal_ability_cost_choices(
                     candidate_ids,
                 });
             }
-            AbilityCost::SacrificeSelf => {
+            AbilityCost::SacrificeSelf | AbilityCost::DiscardSelf | AbilityCost::ExileSelf => {
                 structurally_payable &= consumed.insert(source);
             }
             AbilityCost::SacrificePermanent { filter } => {

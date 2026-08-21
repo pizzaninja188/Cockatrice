@@ -6,7 +6,6 @@
 
 use crate::helpers::*;
 use tricerules_cards::Keyword;
-use tricerules_proto::ruled::v1::TargetRef;
 
 fn equipment_deck(equipment: &str) -> Vec<String> {
     (0..20)
@@ -68,20 +67,7 @@ fn bonesplitter_equip_adds_bonus() {
             ..Default::default()
         },
     );
-    e.apply_command(
-        0,
-        &activate_ability(
-            splitter,
-            0,
-            vec![TargetRef {
-                object_id: creature,
-                damage_amount: 0,
-                group_index: 0,
-                kind: 0,
-            }],
-        ),
-    )
-    .expect("equip Bonesplitter");
+    apply_ability(&mut e, 0, splitter, 0, target_object(creature)).expect("equip Bonesplitter");
 
     // Both players pass → ability resolves.
     pass_both_players(&mut e);
@@ -151,7 +137,7 @@ fn bonesplitter_publishes_controlled_merfolk_as_equip_target() {
             ..Default::default()
         },
     );
-    e.apply_command(0, &activate_ability(splitter, 0, target_object(merfolk)))
+    apply_ability(&mut e, 0, splitter, 0, target_object(merfolk))
         .expect("activate equip using the published target");
     pass_both_players(&mut e);
 
@@ -195,20 +181,7 @@ fn bonesplitter_reequip_shifts_bonus() {
             ..Default::default()
         },
     );
-    e.apply_command(
-        0,
-        &activate_ability(
-            splitter,
-            0,
-            vec![TargetRef {
-                object_id: bear1,
-                damage_amount: 0,
-                group_index: 0,
-                kind: 0,
-            }],
-        ),
-    )
-    .expect("first equip");
+    apply_ability(&mut e, 0, splitter, 0, target_object(bear1)).expect("first equip");
     pass_both_players(&mut e);
 
     assert_eq!(e.effective_power(bear1), Some(4), "bear1 has +2");
@@ -223,20 +196,7 @@ fn bonesplitter_reequip_shifts_bonus() {
             ..Default::default()
         },
     );
-    e.apply_command(
-        0,
-        &activate_ability(
-            splitter,
-            0,
-            vec![TargetRef {
-                object_id: bear2,
-                damage_amount: 0,
-                group_index: 0,
-                kind: 0,
-            }],
-        ),
-    )
-    .expect("re-equip");
+    apply_ability(&mut e, 0, splitter, 0, target_object(bear2)).expect("re-equip");
     pass_both_players(&mut e);
 
     assert_eq!(
@@ -283,20 +243,7 @@ fn equipment_falls_off_when_creature_dies() {
             ..Default::default()
         },
     );
-    e.apply_command(
-        0,
-        &activate_ability(
-            splitter,
-            0,
-            vec![TargetRef {
-                object_id: bear,
-                damage_amount: 0,
-                group_index: 0,
-                kind: 0,
-            }],
-        ),
-    )
-    .expect("equip");
+    apply_ability(&mut e, 0, splitter, 0, target_object(bear)).expect("equip");
     pass_both_players(&mut e);
     assert_eq!(
         e.state.objects.get(&splitter).unwrap().attached_to,
@@ -364,19 +311,7 @@ fn equip_cannot_target_opponent_creature() {
         },
     );
 
-    let err = e.apply_command(
-        0,
-        &activate_ability(
-            splitter,
-            0,
-            vec![TargetRef {
-                object_id: opp_bear,
-                damage_amount: 0,
-                group_index: 0,
-                kind: 0,
-            }],
-        ),
-    );
+    let err = apply_ability(&mut e, 0, splitter, 0, target_object(opp_bear));
     assert!(err.is_err(), "equip cannot target opponent's creature");
     assert!(e.state.stack.is_empty(), "nothing on the stack");
     assert_eq!(
@@ -416,20 +351,7 @@ fn vulshok_morningstar_adds_power_and_toughness() {
             ..Default::default()
         },
     );
-    e.apply_command(
-        0,
-        &activate_ability(
-            star,
-            0,
-            vec![TargetRef {
-                object_id: bear,
-                damage_amount: 0,
-                group_index: 0,
-                kind: 0,
-            }],
-        ),
-    )
-    .expect("equip Vulshok Morningstar");
+    apply_ability(&mut e, 0, star, 0, target_object(bear)).expect("equip Vulshok Morningstar");
     pass_both_players(&mut e);
 
     assert_eq!(
@@ -480,19 +402,7 @@ fn equip_is_rejected_at_instant_speed() {
 
     // Hand priority to P1 and advance into P1's turn, where P0 has no sorcery-speed window.
     end_active_turn(&mut e, 0);
-    let err = e.apply_command(
-        0,
-        &activate_ability(
-            splitter,
-            0,
-            vec![TargetRef {
-                object_id: bears,
-                damage_amount: 0,
-                group_index: 0,
-                kind: 0,
-            }],
-        ),
-    );
+    let err = apply_ability(&mut e, 0, splitter, 0, target_object(bears));
     assert!(
         err.is_err(),
         "equip must be rejected outside a sorcery-speed window"
@@ -586,20 +496,7 @@ fn swiftfoot_boots_moves_both_keywords_on_reequip() {
                 ..Default::default()
             },
         );
-        e.apply_command(
-            0,
-            &activate_ability(
-                boots,
-                0,
-                vec![TargetRef {
-                    object_id: target,
-                    damage_amount: 0,
-                    group_index: 0,
-                    kind: 0,
-                }],
-            ),
-        )
-        .expect("equip Swiftfoot Boots");
+        apply_ability(&mut e, 0, boots, 0, target_object(target)).expect("equip Swiftfoot Boots");
         pass_both_players(&mut e);
     }
 
@@ -655,20 +552,7 @@ fn equipment_unattaches_when_host_stops_being_a_creature() {
             ..Default::default()
         },
     );
-    e.apply_command(
-        0,
-        &activate_ability(
-            splitter,
-            0,
-            vec![TargetRef {
-                object_id: bear,
-                damage_amount: 0,
-                group_index: 0,
-                kind: 0,
-            }],
-        ),
-    )
-    .expect("equip Bonesplitter");
+    apply_ability(&mut e, 0, splitter, 0, target_object(bear)).expect("equip Bonesplitter");
     pass_both_players(&mut e);
 
     e.state.objects.get_mut(&bear).expect("bear").card_id = "plains".into();
@@ -713,20 +597,7 @@ fn short_sword_grants_its_printed_pt_bonus() {
             ..Default::default()
         },
     );
-    e.apply_command(
-        0,
-        &activate_ability(
-            sword,
-            0,
-            vec![TargetRef {
-                object_id: bear,
-                damage_amount: 0,
-                group_index: 0,
-                kind: 0,
-            }],
-        ),
-    )
-    .expect("equip Short Sword");
+    apply_ability(&mut e, 0, sword, 0, target_object(bear)).expect("equip Short Sword");
     pass_both_players(&mut e);
     assert_eq!(e.effective_power(bear), Some(3));
     assert_eq!(e.effective_toughness(bear), Some(3));

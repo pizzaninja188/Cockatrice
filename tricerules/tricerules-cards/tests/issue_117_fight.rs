@@ -54,7 +54,10 @@ fn issue_117_bushwhack_has_search_and_two_target_fight_modes() {
     assert!(matches!(
         modal.modes[0].effects.as_slice(),
         [SpellEffectKind::SearchLibrary {
-            filter: Some(CardTypeFilter::BasicLand),
+            filter: Some(tricerules_cards::primitives::LibraryCardFilter {
+                card_type: Some(CardTypeFilter::BasicLand),
+                subtype: None,
+            }),
             destination: SearchDestination::Hand,
             shuffle: true,
             reveal: true,

@@ -55,6 +55,8 @@ mod enters_with_counters;
 mod equipment;
 #[path = "scenario/helpers.rs"]
 mod helpers;
+#[path = "scenario/issue_101_zone_abilities.rs"]
+mod issue_101_zone_abilities;
 #[path = "scenario/issue_102_activation_limits.rs"]
 mod issue_102_activation_limits;
 #[path = "scenario/issue_108_graveyard_aggregates.rs"]

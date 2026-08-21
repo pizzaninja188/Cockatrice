@@ -277,9 +277,7 @@ fn protection_from_artifacts_detaches_equipment() {
             ..Default::default()
         },
     );
-    engine
-        .apply_command(0, &activate_ability(equipment, 0, target_object(creature)))
-        .expect("equip creature");
+    apply_ability(&mut engine, 0, equipment, 0, target_object(creature)).expect("equip creature");
     pass_both_players(&mut engine);
     assert_eq!(
         engine.state.objects[&equipment].attached_to,

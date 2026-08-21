@@ -452,9 +452,7 @@ fn copied_activated_ability_uses_the_effective_face() {
         .expect("Clone")
         .summoning_sick = false;
 
-    engine
-        .apply_command(0, &activate_ability(clone, 0, target_player(1)))
-        .expect("activate copied ability");
+    apply_ability(&mut engine, 0, clone, 0, target_player(1)).expect("activate copied ability");
     let ability = engine.state.stack.last().expect("ability on stack");
     assert_eq!(ability.card_id, "prodigal_sorcerer");
     pass_both_players(&mut engine);

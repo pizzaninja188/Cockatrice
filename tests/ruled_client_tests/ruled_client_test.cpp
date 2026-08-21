@@ -2281,6 +2281,68 @@ TEST_F(RuledClientTest, PermanentActionIsEngineAuthoredAndClearsWhenNoLongerPubl
     EXPECT_FALSE(state->permanentActionForOid(9802u).has_value());
 }
 
+TEST_F(RuledClientTest, ZoneAbilityActionsBindHandSlotsAndGraveyardObjectsWithoutLeakingAcrossBatches)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *hand = actions.add_zone_ability_actions();
+    hand->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    hand->set_object_id(7101u);
+    hand->set_zone_change_generation(4u);
+    hand->set_hand_index(3u);
+    hand->set_ability_index(0u);
+    hand->set_card_name("Shepherding Spirits");
+    hand->mutable_ability()->set_text("Plainscycling {2}");
+    hand->mutable_ability()->set_mana_cost("{2}");
+    hand->mutable_ability()->set_cost_label("{2}, Discard this card");
+    hand->mutable_ability()->set_activatable(true);
+
+    auto *graveyard = actions.add_zone_ability_actions();
+    graveyard->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+    graveyard->set_object_id(7201u);
+    graveyard->set_zone_change_generation(8u);
+    graveyard->set_ability_index(2u);
+    graveyard->set_card_name("Sagu Pummeler");
+    graveyard->mutable_ability()->set_text("Renew {4}{G}");
+    graveyard->mutable_ability()->set_mana_cost("{4}{G}");
+    graveyard->mutable_ability()->set_activatable(false);
+    apply(batch);
+
+    EXPECT_EQ(state->zoneAbilityOidForHandSlot(3), 7101u);
+    EXPECT_EQ(state->abilitySourceZone(7101u), ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    EXPECT_EQ(state->abilitySourceGeneration(7101u), 4u);
+    EXPECT_EQ(state->activatedAbilitiesForOid(7101u).value(0), QString("Plainscycling {2}"));
+    EXPECT_EQ(state->activatedAbilityManaCostsForOid(7101u).value(0), QString("{2}"));
+    EXPECT_TRUE(state->abilityActivatable(7101u, 0));
+    EXPECT_EQ(state->abilitySourceZone(7201u), ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+    EXPECT_EQ(state->activatedAbilityIndicesForOid(7201u), QList<int>({2}));
+    EXPECT_FALSE(state->abilityActivatable(7201u, 2));
+
+    apply(ruled::v1::RuledEventBatch{});
+    EXPECT_EQ(state->zoneAbilityOidForHandSlot(3), 0u);
+    EXPECT_TRUE(state->activatedAbilitiesForOid(7101u).isEmpty());
+    EXPECT_TRUE(state->activatedAbilityIndicesForOid(7201u).isEmpty());
+}
+
+TEST_F(RuledClientTest, CastAndCycleAreCombinedIntoOneCardActionMenuModel)
+{
+    RuledFaceOption face;
+    face.faceIndex = 0;
+    face.faceName = QStringLiteral("Shepherding Spirits");
+    const auto options = RuledPendingCast::cardActionMenuOptions(
+        {face}, {0}, {QStringLiteral("{2}, Discard this card: Plainscycling {2}")}, {{0, true}});
+
+    ASSERT_EQ(options.size(), 2);
+    EXPECT_EQ(options.at(0).kind, RuledCardActionMenuOption::Kind::CastFace);
+    EXPECT_EQ(options.at(0).index, 0);
+    EXPECT_EQ(options.at(0).label, QStringLiteral("Cast Shepherding Spirits"));
+    EXPECT_TRUE(options.at(0).enabled);
+    EXPECT_EQ(options.at(1).kind, RuledCardActionMenuOption::Kind::ActivateAbility);
+    EXPECT_EQ(options.at(1).index, 0);
+    EXPECT_EQ(options.at(1).label, QStringLiteral("{2}, Discard this card: Plainscycling {2}"));
+    EXPECT_TRUE(options.at(1).enabled);
+}
+
 TEST_F(RuledClientTest, TriggerModesBecomePromptOptionsAndSubmitTheChosenMode)
 {
     ruled::v1::RuledEventBatch batch;
@@ -2586,6 +2648,32 @@ TEST_F(RuledClientTest, LibraryTopChoiceAllowsSubmittingAnEmptyBottomPile)
     state->submitResolutionHandPick();
     ASSERT_EQ(host.sentCommands.size(), 1);
     EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 0);
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+}
+
+TEST_F(RuledClientTest, EmptyLibrarySearchOpensABlankDeckViewAndSubmitsFailToFind)
+{
+    QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
+    rcr->set_prompt_text("Search your library for a Plains card.");
+    rcr->set_min(0);
+    rcr->set_max(1);
+    apply(batch);
+
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Deck);
+    EXPECT_TRUE(state->resolutionHandPickCandidateNames().isEmpty());
+    ASSERT_EQ(started.count(), 1);
+    EXPECT_TRUE(started.at(0).at(0).toStringList().isEmpty());
+    EXPECT_TRUE(started.at(0).at(1).value<QVector<int>>().isEmpty());
+
+    host.sentCommands.clear();
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands.first().submit_resolution_choice().chosen_object_ids_size(), 0);
     EXPECT_FALSE(state->isResolutionHandPickActive());
 }
 

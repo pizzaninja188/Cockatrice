@@ -488,12 +488,53 @@ impl GameEngine {
         )
     }
 
+    /// Printed activated abilities available from a nonbattlefield zone. Ability indices flatten
+    /// printed faces in order while preserving slots for abilities authored for other zones.
+    pub(super) fn authored_zone_activated_abilities(
+        &self,
+        source_id: ObjectId,
+        source_zone: AbilitySourceZone,
+    ) -> Vec<(usize, ActivatedAbilityDef, usize)> {
+        let Some(definition) = self
+            .state
+            .objects
+            .get(&source_id)
+            .and_then(|object| self.registry.get(&object.card_id))
+        else {
+            return Vec::new();
+        };
+        let faces: Vec<_> = if definition.layout == Layout::Split {
+            definition.faces_iter().enumerate().collect()
+        } else {
+            vec![(0, definition.primary_face())]
+        };
+        let mut next_index = 0usize;
+        let mut result = Vec::new();
+        for (face_index, face) in faces {
+            for ability in &face.activated_abilities {
+                let ability_index = next_index;
+                next_index += 1;
+                if ability.source_zone == source_zone {
+                    result.push((ability_index, ability.clone(), face_index));
+                }
+            }
+        }
+        result
+    }
+
     pub(super) fn activate_ability(
         &mut self,
         player: PlayerId,
         command: &rv1::ActivateAbility,
     ) -> Result<RuledEventBatch, EngineError> {
-        let permanent_id = command.permanent_id;
+        let permanent_id = command.source_object_id;
+        let source_zone = match rv1::AbilitySourceZone::try_from(command.source_zone)
+            .map_err(|_| EngineError::Illegal("unknown ability source zone"))?
+        {
+            rv1::AbilitySourceZone::Battlefield => AbilitySourceZone::Battlefield,
+            rv1::AbilitySourceZone::Hand => AbilitySourceZone::Hand,
+            rv1::AbilitySourceZone::Graveyard => AbilitySourceZone::Graveyard,
+        };
         let ability_index = command.ability_index as usize;
         let targets = command.targets.as_slice();
         let flex_payments = command.flex_payments.as_slice();
@@ -516,25 +557,68 @@ impl GameEngine {
             .player_idx(player)
             .ok_or(EngineError::UnknownPlayer(player))?;
 
-        self.state
+        let object = self
+            .state
             .objects
             .get(&permanent_id)
-            .filter(|o| o.zone == Zone::Battlefield)
-            .ok_or(EngineError::Illegal("permanent not on battlefield"))?;
-        if !self.state.players[idx].battlefield.contains(&permanent_id) {
-            return Err(EngineError::Illegal("not your permanent"));
+            .ok_or(EngineError::Illegal("ability source missing"))?;
+        let expected_zone = match source_zone {
+            AbilitySourceZone::Battlefield => Zone::Battlefield,
+            AbilitySourceZone::Hand => Zone::Hand,
+            AbilitySourceZone::Graveyard => Zone::Graveyard,
+        };
+        let in_player_zone = match source_zone {
+            AbilitySourceZone::Battlefield => {
+                object.controller == player
+                    && self.state.players[idx].battlefield.contains(&permanent_id)
+            }
+            AbilitySourceZone::Hand => {
+                object.owner == player && self.state.players[idx].hand.contains(&permanent_id)
+            }
+            AbilitySourceZone::Graveyard => {
+                object.owner == player && self.state.players[idx].graveyard.contains(&permanent_id)
+            }
+        };
+        if object.zone != expected_zone || !in_player_zone {
+            return Err(EngineError::Illegal(
+                "ability source is not in its authored zone",
+            ));
+        }
+        let source_zone_change = self
+            .state
+            .zone_change_generation
+            .get(&permanent_id)
+            .copied()
+            .unwrap_or(0);
+        if source_zone_change != command.expected_zone_change_generation {
+            return Err(EngineError::Illegal("stale ability source generation"));
         }
 
-        let (card_id, face_up_index) = self
-            .effective_card_identity(permanent_id)
-            .map(|(card_id, face_index)| (card_id.to_string(), face_index))
-            .ok_or(EngineError::Illegal("bad face index on permanent"))?;
-        let ability = self
-            .effective_activated_abilities(permanent_id)
-            .into_iter()
-            .find(|(index, _, _)| *index == ability_index)
-            .map(|(_, ability, _)| ability)
-            .ok_or(EngineError::Illegal("no such activated ability"))?;
+        let (card_id, face_up_index, ability) = match source_zone {
+            AbilitySourceZone::Battlefield => {
+                let (card_id, face_index) = self
+                    .effective_card_identity(permanent_id)
+                    .map(|(card_id, face_index)| (card_id.to_string(), face_index))
+                    .ok_or(EngineError::Illegal("bad face index on permanent"))?;
+                let ability = self
+                    .effective_activated_abilities(permanent_id)
+                    .into_iter()
+                    .find(|(index, _, _)| *index == ability_index)
+                    .map(|(_, ability, _)| ability)
+                    .ok_or(EngineError::Illegal("no such activated ability"))?;
+                (card_id, face_index, ability)
+            }
+            AbilitySourceZone::Hand | AbilitySourceZone::Graveyard => {
+                let card_id = object.card_id.clone();
+                let (ability, face_index) = self
+                    .authored_zone_activated_abilities(permanent_id, source_zone)
+                    .into_iter()
+                    .find(|(index, _, _)| *index == ability_index)
+                    .map(|(_, ability, face_index)| (ability, face_index))
+                    .ok_or(EngineError::Illegal("no such activated ability"))?;
+                (card_id, face_index, ability)
+            }
+        };
         let resolving_mana_payment =
             self.state
                 .pending_resolution
@@ -551,6 +635,11 @@ impl GameEngine {
             }
         } else if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
+        }
+        if source_zone != AbilitySourceZone::Battlefield && ability.mana_options().is_some() {
+            return Err(EngineError::Illegal(
+                "nonbattlefield mana abilities are not supported",
+            ));
         }
 
         // CR 602.5d / 702.6a: explicit activation instructions and equip both use the shared
@@ -594,7 +683,7 @@ impl GameEngine {
 
         // CR 608.2: an ability's effect list validates exactly like a spell's — same shape,
         // same multi-target handling — so it goes through the list-level entry point.
-        let target_source = TargetSourceIdentity::current(self, permanent_id);
+        let target_source = TargetSourceIdentity::captured(permanent_id, source_zone_change);
         validate_ability_targets(
             self,
             player,
@@ -613,12 +702,6 @@ impl GameEngine {
             targets: trefs.clone(),
         }]);
 
-        let source_zone_change = self
-            .state
-            .zone_change_generation
-            .get(&permanent_id)
-            .copied()
-            .unwrap_or(0);
         let source_face_change = self
             .state
             .face_change_generation
@@ -770,8 +853,21 @@ impl GameEngine {
         let Some(object) = self.state.objects.get(&permanent_id) else {
             return false;
         };
+        let expected_zone = match ability.source_zone {
+            AbilitySourceZone::Battlefield => Zone::Battlefield,
+            AbilitySourceZone::Hand => Zone::Hand,
+            AbilitySourceZone::Graveyard => Zone::Graveyard,
+        };
+        if object.zone != expected_zone {
+            return false;
+        }
+        let activating_player = if ability.source_zone == AbilitySourceZone::Battlefield {
+            object.controller
+        } else {
+            object.owner
+        };
         if ability.requires_sorcery_speed()
-            && !super::priority::sorcery_speed_available(&self.state, object.controller)
+            && !super::priority::sorcery_speed_available(&self.state, activating_player)
         {
             return false;
         }
@@ -842,12 +938,13 @@ impl GameEngine {
         permanent_id: ObjectId,
         ability: &tricerules_cards::ActivatedAbilityDef,
     ) -> bool {
-        let Some(controller) = self
-            .state
-            .objects
-            .get(&permanent_id)
-            .map(|object| object.controller)
-        else {
+        let Some(controller) = self.state.objects.get(&permanent_id).map(|object| {
+            if ability.source_zone == AbilitySourceZone::Battlefield {
+                object.controller
+            } else {
+                object.owner
+            }
+        }) else {
             return false;
         };
         ability.conditions.iter().all(|condition| match condition {

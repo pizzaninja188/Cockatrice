@@ -167,8 +167,7 @@ fn mdfc_pathway_enter_as_face_0_taps_for_red() {
         "enters as face 0"
     );
 
-    e.apply_command(0, &activate_ability(land_oid, 0, vec![]))
-        .expect("tap for R");
+    apply_ability(&mut e, 0, land_oid, 0, vec![]).expect("tap for R");
     assert_eq!(e.state.players[0].mana_pool.red, 1, "produced {{R}}");
     assert_eq!(
         e.state.players[0].mana_pool.green, 0,
@@ -207,8 +206,7 @@ fn mdfc_pathway_enter_as_face_1_taps_for_green() {
         "enters as face 1"
     );
 
-    e.apply_command(0, &activate_ability(land_oid, 0, vec![]))
-        .expect("tap for G");
+    apply_ability(&mut e, 0, land_oid, 0, vec![]).expect("tap for G");
     assert_eq!(e.state.players[0].mana_pool.green, 1, "produced {{G}}");
     assert_eq!(e.state.players[0].mana_pool.red, 0, "no {{R}} from face 1");
     assert!(e.state.objects[&land_oid].tapped, "land tapped as cost");

@@ -126,9 +126,15 @@ void PlayerActions::reconcilePendingRuledTargetSelections()
         }
     }
     if (pendingActivatedAbility.valid) {
+        const bool sourceStillCurrent =
+            state->abilitySourceGeneration(pendingActivatedAbility.permanentOid) ==
+                pendingActivatedAbility.expectedZoneChangeGeneration &&
+            state->activatedAbilityIndicesForOid(pendingActivatedAbility.permanentOid)
+                .contains(pendingActivatedAbility.abilityIndex);
         const auto latest =
             state->abilityCostChoices(pendingActivatedAbility.permanentOid, pendingActivatedAbility.abilityIndex);
-        if (std::any_of(pendingActivatedAbility.costSelections.cbegin(), pendingActivatedAbility.costSelections.cend(),
+        if (!sourceStillCurrent ||
+            std::any_of(pendingActivatedAbility.costSelections.cbegin(), pendingActivatedAbility.costSelections.cend(),
                         [&selectionStillLegal, &latest](const auto &selection) {
                             return !selectionStillLegal(selection, latest);
                         })) {
@@ -814,7 +820,9 @@ bool PlayerActions::completeActivateAbility()
         turnFaceUp->set_expected_zone_change_generation(pendingActivatedAbility.expectedZoneChangeGeneration);
     } else {
         aa = cmd.mutable_activate_ability();
-        aa->set_permanent_id(pendingActivatedAbility.permanentOid);
+        aa->set_source_object_id(pendingActivatedAbility.permanentOid);
+        aa->set_source_zone(pendingActivatedAbility.sourceZone);
+        aa->set_expected_zone_change_generation(pendingActivatedAbility.expectedZoneChangeGeneration);
         aa->set_ability_index(static_cast<uint32_t>(pendingActivatedAbility.abilityIndex));
     }
     if (aa && pendingActivatedAbility.needsTarget) {
@@ -1175,7 +1183,9 @@ Command_RuledPayload *PlayerActions::newRuledPayloadActivateManaAbilityForLand(C
 
     ruled::v1::RuledCommand rc;
     auto *aa = rc.mutable_activate_ability();
-    aa->set_permanent_id(oid);
+    aa->set_source_object_id(oid);
+    aa->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+    aa->set_expected_zone_change_generation(handler->abilitySourceGeneration(oid));
     aa->set_ability_index(static_cast<uint32_t>(abilityIndex));
     aa->set_mana_option_index(static_cast<uint32_t>(optionIndex));
     std::string payload;
@@ -4617,7 +4627,11 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     if (!card || !card->getZone()) {
         return false;
     }
-    if (card->getZone()->getName() != ZoneNames::TABLE) {
+    const QString zoneName = card->getZone()->getName();
+    const bool battlefieldSource = zoneName == ZoneNames::TABLE;
+    const bool handSource = zoneName == ZoneNames::HAND;
+    const bool graveyardSource = zoneName == ZoneNames::GRAVE;
+    if (!battlefieldSource && !handSource && !graveyardSource) {
         return false;
     }
     if (!RuledActions::isRuledGame(player->getGame())) {
@@ -4667,13 +4681,24 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 
     // Determine engine ObjectId for this card.
     const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-    const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+    quint32 oid = 0;
+    if (battlefieldSource) {
+        oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+    } else if (handSource) {
+        const int handSlot = handler->engineHandSlotForServerCard(ownerPlayerId, card->getId());
+        oid = handler->zoneAbilityOidForHandSlot(handSlot);
+    } else {
+        oid = handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId());
+        if (handler->abilitySourceZone(oid) != ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD) {
+            oid = 0;
+        }
+    }
     if (oid == 0) {
         return false;
     }
 
     const QStringList abilityTexts = handler->activatedAbilitiesForOid(oid);
-    const auto permanentAction = handler->permanentActionForOid(oid);
+    const auto permanentAction = battlefieldSource ? handler->permanentActionForOid(oid) : std::nullopt;
     if (abilityTexts.isEmpty() && !permanentAction.has_value()) {
         return false;
     }
@@ -4688,7 +4713,8 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     const QStringList costLabels = handler->activatedAbilityCostLabelsForOid(oid);
     // A tapped (or summoning-sick) mana source has nothing to offer: skip the fast path rather
     // than firing an activation the engine will reject.
-    if (abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty() && handler->abilityActivatable(oid, 0) &&
+    if (battlefieldSource && abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty() &&
+        handler->abilityActivatable(oid, 0) &&
         handler->abilityCostChoices(oid, 0).isEmpty()) {
         const QStringList colorOptions = manaProduced.value(0).split(QChar('/'));
         if (colorOptions.size() > 1) {
@@ -4736,28 +4762,49 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return false;
     }
 
-    // Build and show the context menu with full "cost: text" labels (Oracle format).
+    // Build one card-action menu. A card with a hand-zone ability (cycling/typecycling) keeps its
+    // ordinary engine-authored cast options alongside that ability on both mouse buttons.
     QMenu menu;
     menu.setTitle(card->getName());
     QAction *permanentMenuAction = nullptr;
     if (permanentAction.has_value()) {
         permanentMenuAction = menu.addAction(permanentAction->label);
     }
-    QVector<QString> menuLabels;
-    QVector<int> menuAbilityIndices;
-    menuLabels.reserve(abilityTexts.size());
-    menuAbilityIndices.reserve(abilityTexts.size());
-    for (int i = 0; i < abilityTexts.size(); ++i) {
+    QList<int> menuAbilityIndices;
+    QStringList menuAbilityLabels = abilityTexts;
+    QHash<int, bool> menuAbilityEnabled;
+    for (const int i : handler->activatedAbilityIndicesForOid(oid)) {
         if (handler->isResolutionPaymentActive() && manaProduced.value(i).isEmpty()) {
             continue;
         }
         const QString label = handler->activatedAbilityMenuLabel(oid, i);
-        menuLabels.append(label);
+        while (menuAbilityLabels.size() <= i) {
+            menuAbilityLabels.append(QString{});
+        }
+        menuAbilityLabels[i] = label;
         menuAbilityIndices.append(i);
-        QAction *action = menu.addAction(label);
-        // Disable rather than omit: the indices below are ability indices, and the player still
-        // wants to see that the ability exists and why it is unavailable right now.
-        action->setEnabled(handler->abilityActivatable(oid, i));
+        menuAbilityEnabled.insert(i, handler->abilityActivatable(oid, i));
+    }
+
+    int castHandIndex = -1;
+    QVector<RuledFaceOption> castFaces;
+    if (handSource && !handler->isResolutionPaymentActive()) {
+        castHandIndex = RuledActions::resolveHandActionIndex(handler, ruled::v1::HAND_ACTION_CAST_SPELL, card);
+        if (castHandIndex >= 0) {
+            castFaces = handler->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, castHandIndex);
+        }
+    }
+
+    const auto cardOptions =
+        RuledPendingCast::cardActionMenuOptions(castFaces, menuAbilityIndices, menuAbilityLabels, menuAbilityEnabled);
+    QVector<QAction *> cardMenuActions;
+    cardMenuActions.reserve(cardOptions.size());
+    for (const auto &option : cardOptions) {
+        QAction *action = menu.addAction(option.label);
+        // Disable rather than omit so the player can still see an engine-published but currently
+        // unavailable zone ability.
+        action->setEnabled(option.enabled);
+        cardMenuActions.append(action);
     }
     if (menu.actions().isEmpty()) {
         return false;
@@ -4790,11 +4837,22 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return true;
     }
 
-    const int menuIndex = menuLabels.indexOf(chosen->text());
-    if (menuIndex < 0 || menuIndex >= menuAbilityIndices.size()) {
+    const int menuIndex = cardMenuActions.indexOf(chosen);
+    if (menuIndex < 0 || menuIndex >= cardOptions.size()) {
         return true;
     }
-    const int abilityIndex = menuAbilityIndices.at(menuIndex);
+    const auto &selectedOption = cardOptions.at(menuIndex);
+    if (selectedOption.kind == RuledCardActionMenuOption::Kind::CastFace) {
+        for (const auto &face : castFaces) {
+            if (face.faceIndex == selectedOption.index) {
+                beginRuledSpellCast(card, castHandIndex, face.faceIndex, face.faceName, face.manaCost,
+                                    face.genericCostReduction);
+                return true;
+            }
+        }
+        return true;
+    }
+    const int abilityIndex = selectedOption.index;
 
     // Engine-authoritative: ability slot key present in valid_targets_by_ability means it needs a target.
     const bool needsTarget = handler->abilityNeedsTarget(oid, abilityIndex);
@@ -4818,6 +4876,8 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     ruledPendingCast->beginAbility();
     RuledTargetUi::ensureRefreshConnection(this);
     pendingActivatedAbility.permanentOid = oid;
+    pendingActivatedAbility.sourceZone = handler->abilitySourceZone(oid);
+    pendingActivatedAbility.expectedZoneChangeGeneration = handler->abilitySourceGeneration(oid);
     pendingActivatedAbility.abilityIndex = abilityIndex;
     pendingActivatedAbility.abilityText = chosen->text();
     pendingActivatedAbility.cardName = card->getName();

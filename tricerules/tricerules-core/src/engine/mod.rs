@@ -22,21 +22,21 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
-    AbilityCost, ActivatedAbilityDef, AdditionalCost, Amount, AttachmentFilter, AttachmentKind,
-    BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, CastTriggerPlayer, Color,
-    CombatRestriction, CombatRestrictionScope, ContinuousEffectKind, ControllerReference,
-    CountExpression, CounterKind, CreatureEventFilter, CreatureScopeController,
-    CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect, DamagePreventionSubject,
-    DiscardChooser, DrawDiscardOrder, EffectDuration, EffectSubject, EntersTappedAffected,
-    EntersWithCountersAffected, Evasion, FaceChangeAction, GameCondition, GraveyardAggregate,
-    InterveningIf, Keyword, LibraryBottomOrder, LibraryPlacement, LifeAmount, ManaAmount,
-    ManaSpendFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
-    PreventionAmountBasis, ProtectionCardType, ProtectionGrant, ProtectionQuality,
-    RelativePlayerSet, ResolutionBranchDef, ResolutionCost, ReturnController, SearchDestination,
-    SpecialActionAffected, SpecialActionKind, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
-    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind, TargetingCostAction,
-    TargetingCostProtected, TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef,
-    TriggeredCardReference,
+    AbilityCost, AbilitySourceZone, ActivatedAbilityDef, AdditionalCost, Amount, AttachmentFilter,
+    AttachmentKind, BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter,
+    CastTriggerPlayer, Color, CombatRestriction, CombatRestrictionScope, ContinuousEffectKind,
+    ControllerReference, CountExpression, CounterKind, CreatureEventFilter,
+    CreatureScopeController, CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect,
+    DamagePreventionSubject, DiscardChooser, DrawDiscardOrder, EffectDuration, EffectSubject,
+    EntersTappedAffected, EntersWithCountersAffected, Evasion, FaceChangeAction, GameCondition,
+    GraveyardAggregate, InterveningIf, Keyword, LibraryBottomOrder, LibraryCardFilter,
+    LibraryPlacement, LifeAmount, ManaAmount, ManaSpendFilter, PermanentTypeFilter,
+    PlayerLifeAggregate, PlayerRecipient, PowerComparison, PreventionAmountBasis,
+    ProtectionCardType, ProtectionGrant, ProtectionQuality, RelativePlayerSet, ResolutionBranchDef,
+    ResolutionCost, ReturnController, SearchDestination, SpecialActionAffected, SpecialActionKind,
+    SpellCostModifier, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
+    TargetController, TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected,
+    TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
 };
 use tricerules_cards::{CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;

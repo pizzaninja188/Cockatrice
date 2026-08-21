@@ -10,7 +10,7 @@
       (
         label: "Search for a basic land",
         effects: [SearchLibrary(
-          filter: Some(BasicLand),
+          filter: Some((card_type: Some(BasicLand))),
           destination: Hand,
           shuffle: true,
           reveal: true,

@@ -1,0 +1,20 @@
+(
+  id: "slavering_branchsnapper",
+  name: "Slavering Branchsnapper",
+  mana_cost: "{4}{G}{G}",
+  types: ["Creature", "Lizard"],
+  power: 7,
+  toughness: 6,
+  keywords: [Trample],
+  activated_abilities: [(
+    source_zone: Hand,
+    costs: [Mana("{2}"), DiscardSelf],
+    effect: [SearchLibrary(
+      filter: Some((subtype: Some("Forest"))),
+      destination: Hand,
+      shuffle: true,
+      reveal: true,
+    )],
+    text: "Forestcycling {2} ({2}, Discard this card: Search your library for a Forest card, reveal it, put it into your hand, then shuffle.)",
+  )],
+)

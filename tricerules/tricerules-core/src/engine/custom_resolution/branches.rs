@@ -174,7 +174,7 @@ impl GameEngine {
                 .iter()
                 .copied()
                 .filter(|oid| {
-                    resolution::library_card_matches_filter(
+                    resolution::card_matches_type_filter(
                         &self.state,
                         self.registry,
                         *oid,

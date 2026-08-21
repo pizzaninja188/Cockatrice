@@ -802,18 +802,17 @@ fn equipment_stays_attached_when_equipped_creature_is_stolen() {
             ..Default::default()
         },
     );
-    e.apply_command(
+    apply_ability(
+        &mut e,
         0,
-        &activate_ability(
-            equipment,
-            0,
-            vec![tricerules_proto::ruled::v1::TargetRef {
-                object_id: bear,
-                damage_amount: 0,
-                group_index: 0,
-                kind: 0,
-            }],
-        ),
+        equipment,
+        0,
+        vec![tricerules_proto::ruled::v1::TargetRef {
+            object_id: bear,
+            damage_amount: 0,
+            group_index: 0,
+            kind: 0,
+        }],
     )
     .expect("equip Bonesplitter");
     pass_both_players(&mut e);
