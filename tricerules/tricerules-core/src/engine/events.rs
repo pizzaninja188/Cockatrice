@@ -180,7 +180,7 @@ impl GameEngine {
                         Layout::Transform | Layout::Flip | Layout::ModalDfc => {
                             def.faces.iter().map(|f| f.name.clone()).collect()
                         }
-                        Layout::Split | Layout::Adventure => {
+                        Layout::Split | Layout::Room | Layout::Adventure => {
                             vec![def.name.clone(); def.faces.len()]
                         }
                         Layout::Normal => Vec::new(),
@@ -409,7 +409,7 @@ impl GameEngine {
                             oid,
                             object,
                             characteristics.as_ref(),
-                            face,
+                            face.as_deref(),
                         );
                         let activated_abilities = self
                             .effective_activated_abilities(oid)
@@ -518,6 +518,24 @@ impl GameEngine {
                                 .map(|definition| format!("Copy: {}", definition.name))
                                 .unwrap_or_default()
                         };
+                        let room_doors = self
+                            .state
+                            .room_states
+                            .get(&oid)
+                            .copied()
+                            .zip(self.room_faces(oid))
+                            .map(|(room, faces)| {
+                                faces
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(face_index, face)| rv1::RoomDoorState {
+                                        face_index: face_index as u32,
+                                        name: face.name.clone(),
+                                        unlocked: room.unlocked[face_index],
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
                         rv1::BattlefieldObject {
                             object_id: oid,
                             card_id: object.card_id.clone(),
@@ -563,6 +581,7 @@ impl GameEngine {
                                 .get(&oid)
                                 .copied()
                                 .unwrap_or(0),
+                            room_doors,
                         }
                     })
                     .collect()
@@ -606,6 +625,7 @@ impl GameEngine {
                         attached_to: object.attached_to,
                         face_up_index: object.face_up_index,
                         face_down: object.face_down,
+                        room_state: self.state.room_states.get(&object.id).copied(),
                         zone_change_generation: self
                             .state
                             .zone_change_generation

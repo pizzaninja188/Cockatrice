@@ -62,6 +62,8 @@
 #include <QTemporaryDir>
 #include <gtest/gtest.h>
 
+#include <array>
+
 #include <libcockatrice/protocol/pb/command_deck_select.pb.h>
 #include <libcockatrice/protocol/pb/command_ready_start.pb.h>
 #include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
@@ -215,6 +217,8 @@ public:
         bool faceDown = false;
         quint64 generation = 0;
         int attachmentPlayerId = -1;
+        std::array<bool, 2> roomDoors{false, false};
+        int roomDoorCount = 0;
     };
     std::map<int, std::vector<Permanent>> battlefieldByPlayer;
     struct Pool
@@ -270,6 +274,17 @@ public:
     quint32 manifestOid = 0;
     quint64 manifestGeneration = 0;
     int manifestServerCardId = -1;
+    bool devRoomConjureSent = false;
+    bool devRoomManaSent = false;
+    bool roomCast = false;
+    bool roomUnlockSent = false;
+    bool sawRoomCastDoorState = false;
+    bool sawRoomFullyUnlocked = false;
+    bool sawRoomUnlockTrigger = false;
+    bool roomPhysicalIdentityContinuous = true;
+    quint32 roomOid = 0;
+    quint64 roomGeneration = 0;
+    int roomServerCardId = -1;
     // Flashback (CR 702.34) exercises the one relay path nothing else covers: the physical
     // card is sourced from the GRAVE pile rather than the hand. Tracked through the freeform
     // Event_MoveCard stream, because the ruled batch looks identical whether or not the relay
@@ -772,6 +787,11 @@ public:
                 if (cardId == QLatin1String("convolute")) {
                     softCounterConvoluteOid = sp.object_id();
                 }
+                if (sp.is_triggered() &&
+                    QString::fromStdString(sp.ability_annotation()).contains(
+                        QStringLiteral("draw two cards"), Qt::CaseInsensitive)) {
+                    sawRoomUnlockTrigger = true;
+                }
             } else if (ev.has_stack_resolved()) {
                 stackDepth = std::max(0, stackDepth - 1);
                 if (brainstormOid != 0 && ev.stack_resolved().object_id() == brainstormOid) {
@@ -933,6 +953,29 @@ public:
                             perm.faceIndex = static_cast<int>(battlefieldObject.face_up_index());
                             perm.faceDown = battlefieldObject.face_down();
                             perm.generation = battlefieldObject.zone_change_generation();
+                            perm.roomDoorCount = std::min(2, battlefieldObject.room_doors_size());
+                            for (int door = 0; door < perm.roomDoorCount; ++door) {
+                                const auto &publishedDoor = battlefieldObject.room_doors(door);
+                                if (publishedDoor.face_index() < perm.roomDoors.size()) {
+                                    perm.roomDoors[publishedDoor.face_index()] = publishedDoor.unlocked();
+                                }
+                            }
+                            if (perm.roomDoorCount == 2) {
+                                roomOid = perm.oid;
+                                roomGeneration = perm.generation;
+                                sawRoomCastDoorState =
+                                    sawRoomCastDoorState || (!perm.roomDoors[0] && perm.roomDoors[1]);
+                                sawRoomFullyUnlocked =
+                                    sawRoomFullyUnlocked || (perm.roomDoors[0] && perm.roomDoors[1]);
+                                const auto physical = serverCardByEngineOid.find(perm.oid);
+                                if (physical != serverCardByEngineOid.end()) {
+                                    if (roomServerCardId < 0) {
+                                        roomServerCardId = physical->second;
+                                    } else if (roomServerCardId != physical->second) {
+                                        roomPhysicalIdentityContinuous = false;
+                                    }
+                                }
+                            }
                             if (battlefieldObject.has_attachment_recipient() &&
                                 battlefieldObject.attachment_recipient().recipient_case() ==
                                     ruled::v1::AttachmentRecipient::kPlayerId) {
@@ -1312,6 +1355,16 @@ public:
         const auto annotation = annotationByServerCardId.find(card->second);
         return annotation != annotationByServerCardId.end() &&
                annotation->second.contains(QStringLiteral("Enchanting: smokep2"));
+    }
+
+    bool hasRoomPhysicalAnnotation() const
+    {
+        if (roomServerCardId < 0) {
+            return false;
+        }
+        const auto annotation = annotationByServerCardId.find(roomServerCardId);
+        return annotation != annotationByServerCardId.end() &&
+               annotation->second.contains(QStringLiteral("Doors: Derelict Attic (unlocked), Widow's Walk (unlocked)"));
     }
 
     std::optional<quint32> firstOwnUntapped(const QString &cardId) const
@@ -1764,7 +1817,8 @@ public:
                         EXPECT_EQ(action.zone_change_generation(), manifestGeneration);
                         EXPECT_EQ(action.mana_cost(), "{3}{R}");
                         ruled::v1::RuledCommand cmd;
-                        auto *turn = cmd.mutable_turn_face_up();
+                        auto *turn = cmd.mutable_execute_permanent_action();
+                        turn->set_kind(ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP);
                         turn->set_object_id(action.object_id());
                         turn->set_expected_zone_change_generation(action.zone_change_generation());
                         turnManifestFaceUpSent = true;
@@ -1775,6 +1829,65 @@ public:
                 return;
             }
             if (turnManifestFaceUpSent && !sawManifestFaceChanged) {
+                return;
+            }
+            // Issue #99: cast one door of a physical Room, then unlock the other through the
+            // generic permanent-action contract. The unlock itself never becomes a stack object;
+            // Derelict Attic's resulting triggered ability does.
+            if (!devRoomConjureSent) {
+                devRoomConjureSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Derelict Attic // Widow's Walk");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure a Room into hand"));
+                return;
+            }
+            if (!devRoomManaSent) {
+                devRoomManaSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                dev->mutable_add_mana()->set_b(2);
+                dev->mutable_add_mana()->set_c(5);
+                sendRuled(cmd, QStringLiteral("dev: add mana for both Room doors"));
+                return;
+            }
+            if (!roomCast) {
+                if (const auto *spell = handAction(ruled::v1::HAND_ACTION_CAST_SPELL,
+                                                   QStringLiteral("Widow's Walk"))) {
+                    ruled::v1::RuledCommand cmd;
+                    auto *cast = cmd.mutable_cast_spell();
+                    cast->mutable_source()->set_hand_index(spell->hand_index());
+                    cast->set_face_index(1u);
+                    roomCast = true;
+                    sendRuled(cmd, QStringLiteral("cast Widow's Walk door"));
+                    return;
+                }
+            }
+            if (roomCast && (!sawRoomCastDoorState || stackDepth != 0)) {
+                return;
+            }
+            if (!roomUnlockSent) {
+                for (const auto &action : latestLegal.permanent_actions()) {
+                    if (action.kind() == ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR &&
+                        action.object_id() == roomOid && action.has_face_index() && action.face_index() == 0u) {
+                        ruled::v1::RuledCommand cmd;
+                        auto *unlock = cmd.mutable_execute_permanent_action();
+                        unlock->set_kind(action.kind());
+                        unlock->set_object_id(action.object_id());
+                        unlock->set_expected_zone_change_generation(action.zone_change_generation());
+                        unlock->set_face_index(action.face_index());
+                        roomUnlockSent = true;
+                        sendRuled(cmd, QStringLiteral("unlock Derelict Attic door"));
+                        return;
+                    }
+                }
+                return;
+            }
+            if (!sawRoomFullyUnlocked || !sawRoomUnlockTrigger || stackDepth != 0) {
                 return;
             }
             // Issue #101: activate a subtypecycling ability from the hand, then a Renew
@@ -2721,6 +2834,10 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p2.sawOpponentManifestIdentityEmpty && p1.sawManifestPhysicalFaceDown &&
                p2.sawManifestPhysicalFaceDown && p1.sawManifestFaceChanged && p2.sawManifestFaceChanged &&
                p1.sawManifestPhysicalFaceUp && p2.sawManifestPhysicalFaceUp &&
+               p1.sawRoomCastDoorState && p2.sawRoomCastDoorState && p1.sawRoomFullyUnlocked &&
+               p2.sawRoomFullyUnlocked && p1.sawRoomUnlockTrigger && p2.sawRoomUnlockTrigger &&
+               p1.roomPhysicalIdentityContinuous && p2.roomPhysicalIdentityContinuous &&
+               p1.hasRoomPhysicalAnnotation() && p2.hasRoomPhysicalAnnotation() &&
                p1.sawOwnTypecyclingAction && p2.sawOpponentTypecyclingActionRedacted &&
                p1.submittedTypecyclingChoice && p1.sawEmptyTypecyclingChoice &&
                p1.submittedEmptyTypecyclingChoice &&
@@ -2924,6 +3041,16 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "the same physical card was not shown face down and then face up on both clients";
     EXPECT_TRUE(p1.sawManifestPhysicalFaceUpIdentity && p2.sawManifestPhysicalFaceUpIdentity)
         << "the face-up physical event did not immediately publish Hill Giant's display identity";
+    EXPECT_TRUE(p1.sawRoomCastDoorState && p2.sawRoomCastDoorState &&
+                p1.sawRoomFullyUnlocked && p2.sawRoomFullyUnlocked)
+        << "both clients did not receive identical cast-door and fully-unlocked Room state";
+    EXPECT_TRUE(p1.sawRoomUnlockTrigger && p2.sawRoomUnlockTrigger)
+        << "the unlock action produced no physical stack object, but its resulting door trigger was not published";
+    EXPECT_TRUE(p1.roomPhysicalIdentityContinuous && p2.roomPhysicalIdentityContinuous &&
+                p1.roomServerCardId >= 0 && p1.roomServerCardId == p2.roomServerCardId)
+        << "Room casting and unlocking did not preserve one physical Server_Card identity";
+    EXPECT_TRUE(p1.hasRoomPhysicalAnnotation() && p2.hasRoomPhysicalAnnotation())
+        << "both clients did not receive the fully unlocked Doors annotation";
     EXPECT_TRUE(p1.sawOwnTypecyclingAction && p2.sawOpponentTypecyclingActionRedacted)
         << "the hand ability was not published exclusively to its owner";
     EXPECT_TRUE(p1.submittedTypecyclingChoice && p1.sawTypecyclingHandToGrave && p1.sawTypecyclingDeckToHand &&

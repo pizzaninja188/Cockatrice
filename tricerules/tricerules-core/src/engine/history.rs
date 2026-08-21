@@ -142,6 +142,8 @@ impl GameEngine {
                 filter, aggregate, ..
             } => condition
                 .matches_value(self.battlefield_aggregate_value(filter, *aggregate, context)),
+            GameCondition::UnlockedRoomDoorCount { controllers, .. } => condition
+                .matches_value(self.unlocked_room_door_count(*controllers, context.controller)),
             GameCondition::GraveyardAggregate {
                 owners, aggregate, ..
             } => condition.matches_value(graveyard_aggregate_value(
@@ -153,6 +155,35 @@ impl GameEngine {
                 context.resolving_spell_id,
             )),
         }
+    }
+
+    pub(super) fn unlocked_room_door_count(
+        &self,
+        controllers: RelativePlayerSet,
+        condition_controller: PlayerId,
+    ) -> u32 {
+        self.state
+            .room_states
+            .iter()
+            .filter_map(|(object_id, room)| {
+                let object = self.state.objects.get(object_id)?;
+                (object.zone == Zone::Battlefield
+                    && relative_player_set_contains(
+                        &self.state,
+                        controllers,
+                        condition_controller,
+                        object.controller,
+                    ))
+                .then_some(
+                    room.unlocked
+                        .into_iter()
+                        .filter(|unlocked| *unlocked)
+                        .count(),
+                )
+            })
+            .sum::<usize>()
+            .try_into()
+            .unwrap_or(u32::MAX)
     }
 
     fn battlefield_aggregate_value(

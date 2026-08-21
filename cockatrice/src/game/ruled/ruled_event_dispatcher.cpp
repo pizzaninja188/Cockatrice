@@ -1227,10 +1227,13 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         parsed.zoneChangeGeneration = action.zone_change_generation();
         parsed.label = QString::fromStdString(action.label());
         parsed.manaCost = QString::fromStdString(action.mana_cost());
+        if (action.has_face_index()) {
+            parsed.faceIndex = action.face_index();
+        }
         for (const quint32 groupId : action.eligible_restricted_mana_group_ids()) {
             parsed.eligibleRestrictedManaGroupIds.insert(groupId);
         }
-        state->permanentActionsByOid.insert(parsed.objectId, parsed);
+        state->permanentActionsByOid[parsed.objectId].append(parsed);
     }
     for (const auto &action : actions.zone_ability_actions()) {
         const quint32 oid = action.object_id();

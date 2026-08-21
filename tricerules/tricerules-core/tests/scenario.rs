@@ -113,6 +113,8 @@ mod issue_92_library_choice;
 mod issue_97_entry_replacements;
 #[path = "scenario/issue_98_face_down.rs"]
 mod issue_98_face_down;
+#[path = "scenario/issue_99_rooms.rs"]
+mod issue_99_rooms;
 #[path = "scenario/legend_rule.rs"]
 mod legend_rule;
 #[path = "scenario/mana.rs"]

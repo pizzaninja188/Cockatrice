@@ -1623,6 +1623,45 @@ TEST_F(RuledBatchTest, RulesEffectsAnnotateOnlyTheBoundBattlefieldCardAndClearCl
     EXPECT_TRUE(enhanced->getAnnotation().isEmpty());
 }
 
+TEST_F(RuledBatchTest, RoomDoorsReplaceAnnotationWithoutChangingPhysicalIdentity)
+{
+    seedCardCatalog({"Ticket Booth // Tunnel of Hate"});
+    Server_Card *room = addCardToTable(p1, "Ticket Booth // Tunnel of Hate");
+    const int physicalId = room->getId();
+    room->setAnnotation(QStringLiteral("Keep me"));
+
+    const auto applyDoors = [this](bool ticketUnlocked, bool tunnelUnlocked) {
+        ruled::v1::IpcResponse response;
+        response.set_ok(true);
+        auto *zoneView = response.mutable_batch()->add_events()->mutable_zone_view();
+        auto view = buildPerPlayerView(p1, {990u}, {false});
+        auto *object = view.mutable_battlefield_objects(0);
+        auto *ticket = object->add_room_doors();
+        ticket->set_face_index(0u);
+        ticket->set_name("Ticket Booth");
+        ticket->set_unlocked(ticketUnlocked);
+        auto *tunnel = object->add_room_doors();
+        tunnel->set_face_index(1u);
+        tunnel->set_name("Tunnel of Hate");
+        tunnel->set_unlocked(tunnelUnlocked);
+        *zoneView->add_per_player() = view;
+        *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+        callBatchApply(response);
+    };
+
+    applyDoors(true, false);
+    ASSERT_EQ(findCardByEngineOid(p1, 990u), room);
+    EXPECT_EQ(room->getId(), physicalId);
+    EXPECT_EQ(room->getAnnotation(),
+              QStringLiteral("Keep me\nDoors: Ticket Booth (unlocked), Tunnel of Hate (locked)"));
+
+    applyDoors(true, true);
+    ASSERT_EQ(findCardByEngineOid(p1, 990u), room);
+    EXPECT_EQ(room->getId(), physicalId);
+    EXPECT_EQ(room->getAnnotation(),
+              QStringLiteral("Keep me\nDoors: Ticket Booth (unlocked), Tunnel of Hate (unlocked)"));
+}
+
 // ruledAllowsCrossPlayerMove decides which engine-driven moves may cross seats. It lives in
 // ruled_utils, but is exercised here because it needs a real Server_Game and zone pair.
 TEST_F(RuledBatchTest, CrossPlayerMovePredicateAllowsOnlyEngineDrivenRuledMoves)

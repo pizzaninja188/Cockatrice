@@ -1,0 +1,30 @@
+(
+  id: "ticket_booth_tunnel_of_hate",
+  name: "Ticket Booth // Tunnel of Hate",
+  layout: Room,
+  faces: [
+    (
+      name: "Ticket Booth",
+      mana_cost: "{2}{R}",
+      types: ["Enchantment", "Room"],
+      triggered_abilities: [(
+        trigger: WhenThisDoorUnlocked,
+        effect: [ManifestDread],
+        text: "When you unlock this door, manifest dread.",
+      )],
+    ),
+    (
+      name: "Tunnel of Hate",
+      mana_cost: "{4}{R}{R}",
+      types: ["Enchantment", "Room"],
+      triggered_abilities: [(
+        trigger: WheneverControllerAttacks(min_attackers: Some(1), max_attackers: None),
+        effect: [GrantKeywords(
+          subject: Chosen((kind: Creature, attacking_or_blocking: true)),
+          keywords: [DoubleStrike],
+        )],
+        text: "Whenever you attack, target attacking creature gains double strike until end of turn.",
+      )],
+    ),
+  ],
+)

@@ -371,39 +371,70 @@ fn legal_permanent_actions(eng: &GameEngine, player: PlayerId) -> Vec<rv1::Legal
     let Some(player_index) = eng.state.player_idx(player) else {
         return Vec::new();
     };
-    eng.state.players[player_index]
-        .battlefield
-        .iter()
-        .filter_map(|&object_id| {
-            let object = eng.state.objects.get(&object_id)?;
-            if !object.face_down || object.controller != player {
-                return None;
+    let mut actions = Vec::new();
+    for &object_id in &eng.state.players[player_index].battlefield {
+        let Some(object) = eng.state.objects.get(&object_id) else {
+            continue;
+        };
+        if object.controller != player {
+            continue;
+        }
+        let generation = eng
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        if object.face_down
+            && !eng.special_action_prohibited(object_id, SpecialActionKind::TurnFaceUp)
+        {
+            if let Some(face) = eng
+                .registry
+                .get(&object.card_id)
+                .map(|card| card.primary_face())
+            {
+                if face.is_creature && !face.mana_cost.pips.is_empty() {
+                    let mana_cost = face.mana_cost.to_string();
+                    actions.push(rv1::LegalPermanentAction {
+                        kind: rv1::PermanentActionKind::TurnFaceUp as i32,
+                        object_id,
+                        zone_change_generation: generation,
+                        label: format!("Turn face up — {mana_cost}"),
+                        mana_cost,
+                        eligible_restricted_mana_group_ids: Vec::new(),
+                        face_index: None,
+                    });
+                }
             }
-            if eng.special_action_prohibited(object_id, SpecialActionKind::TurnFaceUp) {
-                return None;
+        }
+
+        let room_timing = eng.state.active_player_id() == player
+            && matches!(eng.state.turn_step, TurnStep::Main1 | TurnStep::Main2)
+            && eng.state.stack.is_empty();
+        if room_timing {
+            if let (Some(room), Some(faces)) = (
+                eng.state.room_states.get(&object_id),
+                eng.room_faces(object_id),
+            ) {
+                for (face_index, face) in faces.iter().enumerate() {
+                    if room.unlocked.get(face_index).copied() != Some(false) {
+                        continue;
+                    }
+                    let mana_cost = face.mana_cost.to_string();
+                    actions.push(rv1::LegalPermanentAction {
+                        kind: rv1::PermanentActionKind::UnlockRoomDoor as i32,
+                        object_id,
+                        zone_change_generation: generation,
+                        label: format!("Unlock {} — {mana_cost}", face.name),
+                        mana_cost,
+                        eligible_restricted_mana_group_ids: Vec::new(),
+                        face_index: Some(face_index as u32),
+                    });
+                }
             }
-            let face = eng.registry.get(&object.card_id)?.primary_face();
-            if !face.is_creature || face.mana_cost.pips.is_empty() {
-                return None;
-            }
-            let mana_cost = face.mana_cost.to_string();
-            Some(rv1::LegalPermanentAction {
-                kind: rv1::PermanentActionKind::TurnFaceUp as i32,
-                object_id,
-                zone_change_generation: eng
-                    .state
-                    .zone_change_generation
-                    .get(&object_id)
-                    .copied()
-                    .unwrap_or(0),
-                label: format!("Turn face up — {mana_cost}"),
-                mana_cost,
-                // #129 owns special-action-scoped restricted mana. Until then, only the
-                // unrestricted pool can legally pay this action.
-                eligible_restricted_mana_group_ids: Vec::new(),
-            })
-        })
-        .collect()
+        }
+    }
+    actions
 }
 
 fn distinct_assignment_exists(

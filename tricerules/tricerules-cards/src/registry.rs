@@ -1953,6 +1953,34 @@ mod tests {
     }
 
     #[test]
+    fn load_rejects_invalid_room_shape() {
+        let one_door = r#"(
+            id: "one_door",
+            name: "One Door",
+            layout: Room,
+            faces: [(name: "Only Door", mana_cost: "{2}", types: ["Enchantment", "Room"])],
+        )"#;
+        let err = CardRegistry::from_chunks(&[one_door]).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::InvalidCard { reason, .. } if reason.contains("exactly two doors"))
+        );
+
+        let mismatched_types = r#"(
+            id: "mismatched_room",
+            name: "Mismatched Room",
+            layout: Room,
+            faces: [
+                (name: "Left", mana_cost: "{2}", types: ["Enchantment", "Room"]),
+                (name: "Right", mana_cost: "{3}", types: ["Artifact"]),
+            ],
+        )"#;
+        let err = CardRegistry::from_chunks(&[mismatched_types]).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::InvalidCard { reason, .. } if reason.contains("shared type line"))
+        );
+    }
+
+    #[test]
     fn id_for_name_normalizes_trim_and_case() {
         let reg = CardRegistry::from_embedded().unwrap();
         assert_eq!(reg.id_for_name("Lightning Bolt"), Some("lightning_bolt"));

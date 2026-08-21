@@ -363,12 +363,14 @@ impl GameEngine {
                 ability_index,
             } => {
                 debug_assert_eq!(*object_id, event.object_id);
-                let ability = self
+                let effective_face = self
                     .state
                     .objects
                     .get(object_id)
                     .filter(|object| object.copy_revision == *copy_revision)
-                    .and_then(|_| self.effective_face(*object_id))
+                    .and_then(|_| self.effective_face(*object_id));
+                let ability = effective_face
+                    .as_deref()
                     .and_then(|face| face.static_abilities.get(*ability_index));
                 match ability {
                     Some(StaticAbilityDef::EntersAsCopy { .. }) => {
@@ -409,7 +411,7 @@ impl GameEngine {
                 source_generation,
                 ability_index,
             } => {
-                let ability = self
+                let effective_face = self
                     .state
                     .objects
                     .get(source_id)
@@ -422,7 +424,9 @@ impl GameEngine {
                             .unwrap_or(0)
                             == *source_generation
                     })
-                    .and_then(|_| self.effective_face(*source_id))
+                    .and_then(|_| self.effective_face(*source_id));
+                let ability = effective_face
+                    .as_deref()
                     .and_then(|face| face.static_abilities.get(*ability_index));
                 match ability {
                     Some(StaticAbilityDef::EntersTapped {
@@ -583,8 +587,10 @@ impl GameEngine {
         attached_to: Option<AttachmentRecipient>,
     ) -> Result<(), EngineError> {
         let object_id = event.object_id;
-        self.commit_battlefield_entry_state(event, attached_to)?;
-        self.fire_triggers(&[GameEvent::EntersBattlefield { object_id }]);
+        let door_event = self.commit_battlefield_entry_state(event, attached_to)?;
+        let mut trigger_events = vec![GameEvent::EntersBattlefield { object_id }];
+        trigger_events.extend(door_event);
+        self.fire_triggers(&trigger_events);
         Ok(())
     }
 
@@ -592,7 +598,26 @@ impl GameEngine {
         &mut self,
         event: BattlefieldEntryEvent,
         attached_to: Option<AttachmentRecipient>,
-    ) -> Result<(), EngineError> {
+    ) -> Result<Option<GameEvent>, EngineError> {
+        let (is_room, enters_as_copy) = self
+            .state
+            .objects
+            .get(&event.object_id)
+            .map(|object| {
+                let copied_room = object
+                    .copiable_values
+                    .as_ref()
+                    .is_some_and(|values| values.room_faces.is_some());
+                let printed_room = self
+                    .registry
+                    .get(&object.card_id)
+                    .is_some_and(|definition| definition.layout == Layout::Room);
+                (
+                    copied_room || printed_room,
+                    object.copiable_values.is_some(),
+                )
+            })
+            .ok_or(EngineError::Illegal("no object"))?;
         move_object_to_zone(
             &mut self.state,
             self.registry,
@@ -611,7 +636,18 @@ impl GameEngine {
             }
             object.attached_to = attached_to;
         }
-        Ok(())
+        if !is_room {
+            return Ok(None);
+        }
+        self.state
+            .room_states
+            .insert(event.object_id, RoomState::default());
+        if let Some(face_index) = event.unlock_room_door.filter(|_| !enters_as_copy) {
+            return self
+                .transition_room_door(event.object_id, face_index)
+                .map(Some);
+        }
+        Ok(None)
     }
 
     pub(super) fn begin_token_entry_batch(
@@ -691,14 +727,16 @@ impl GameEngine {
         logs: Vec<String>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
-        let trigger_events: Vec<_> = entries
-            .iter()
-            .map(|entry| GameEvent::EntersBattlefield {
-                object_id: entry.event.object_id,
-            })
-            .collect();
+        let mut trigger_events = Vec::new();
         for entry in &entries {
-            self.commit_battlefield_entry_state(entry.event.clone(), None)?;
+            trigger_events.push(GameEvent::EntersBattlefield {
+                object_id: entry.event.object_id,
+            });
+            if let Some(door_event) =
+                self.commit_battlefield_entry_state(entry.event.clone(), None)?
+            {
+                trigger_events.push(door_event);
+            }
         }
         for entry in entries {
             events.push(rv1::RuledEvent {
@@ -1041,6 +1079,7 @@ mod tests {
             deciding_player: 0,
             destination_controller: 0,
             face_index: 0,
+            unlock_room_door: None,
             chosen_x: 0,
             player_life_snapshot: snapshot,
             tapped: false,
@@ -1102,6 +1141,7 @@ mod tests {
             deciding_player: 0,
             destination_controller: 0,
             face_index: 0,
+            unlock_room_door: None,
             chosen_x: 0,
             player_life_snapshot: engine.player_life_snapshot(),
             tapped: false,

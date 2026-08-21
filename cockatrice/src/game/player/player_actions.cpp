@@ -126,13 +126,11 @@ void PlayerActions::reconcilePendingRuledTargetSelections()
         }
     }
     if (pendingActivatedAbility.valid) {
-        const bool sourceStillCurrent =
-            state->abilitySourceGeneration(pendingActivatedAbility.permanentOid) ==
-                pendingActivatedAbility.expectedZoneChangeGeneration &&
-            state->activatedAbilityIndicesForOid(pendingActivatedAbility.permanentOid)
-                .contains(pendingActivatedAbility.abilityIndex);
-        const auto latest =
-            state->abilityCostChoices(pendingActivatedAbility.permanentOid, pendingActivatedAbility.abilityIndex);
+        const bool sourceStillCurrent = ruledPendingAbilitySourceStillCurrent(*state, pendingActivatedAbility);
+        const auto latest = pendingActivatedAbility.permanentAction
+                                ? QVector<RuledCostChoice>{}
+                                : state->abilityCostChoices(pendingActivatedAbility.permanentOid,
+                                                            pendingActivatedAbility.abilityIndex);
         if (!sourceStillCurrent ||
             std::any_of(pendingActivatedAbility.costSelections.cbegin(), pendingActivatedAbility.costSelections.cend(),
                         [&selectionStillLegal, &latest](const auto &selection) {
@@ -813,11 +811,16 @@ bool PlayerActions::completeActivateAbility()
 
     ruled::v1::RuledCommand cmd;
     ruled::v1::ActivateAbility *aa = nullptr;
-    ruled::v1::TurnFaceUp *turnFaceUp = nullptr;
-    if (pendingActivatedAbility.turnFaceUp) {
-        turnFaceUp = cmd.mutable_turn_face_up();
-        turnFaceUp->set_object_id(pendingActivatedAbility.permanentOid);
-        turnFaceUp->set_expected_zone_change_generation(pendingActivatedAbility.expectedZoneChangeGeneration);
+    ruled::v1::ExecutePermanentAction *permanentAction = nullptr;
+    if (pendingActivatedAbility.permanentAction) {
+        permanentAction = cmd.mutable_execute_permanent_action();
+        permanentAction->set_kind(pendingActivatedAbility.permanentActionKind);
+        permanentAction->set_object_id(pendingActivatedAbility.permanentOid);
+        permanentAction->set_expected_zone_change_generation(
+            pendingActivatedAbility.expectedZoneChangeGeneration);
+        if (pendingActivatedAbility.permanentActionFaceIndex.has_value()) {
+            permanentAction->set_face_index(*pendingActivatedAbility.permanentActionFaceIndex);
+        }
     } else {
         aa = cmd.mutable_activate_ability();
         aa->set_source_object_id(pendingActivatedAbility.permanentOid);
@@ -838,7 +841,7 @@ bool PlayerActions::completeActivateAbility()
     }
     // CR 107.4f: Phyrexian pips the player chose to pay with life (via self-portrait click).
     for (const quint32 pipIndex : pendingActivatedAbility.lifePipIndices) {
-        auto *flex = turnFaceUp ? turnFaceUp->add_flex_payments() : aa->add_flex_payments();
+        auto *flex = permanentAction ? permanentAction->add_flex_payments() : aa->add_flex_payments();
         flex->set_pip_index(pipIndex);
         flex->set_pay_life(true);
     }
@@ -864,7 +867,7 @@ bool PlayerActions::completeActivateAbility()
     }
     for (auto groupIt = restrictedManaPaymentSelections.constBegin();
          groupIt != restrictedManaPaymentSelections.constEnd(); ++groupIt) {
-        auto *selection = turnFaceUp ? turnFaceUp->add_restricted_mana() : aa->add_restricted_mana();
+        auto *selection = permanentAction ? permanentAction->add_restricted_mana() : aa->add_restricted_mana();
         selection->set_restriction_group_id(groupIt.key());
         const auto &counts = groupIt.value();
         selection->set_w(static_cast<quint32>(counts.value(QLatin1Char('W'))));
@@ -1070,10 +1073,7 @@ bool PlayerActions::tryPayRuledRestrictedMana(quint32 groupId, QChar symbol)
 
     bool reduced = false;
     if (pendingActivatedAbility.valid && pendingActivatedAbility.waitingForMana &&
-        state
-            ->eligibleRestrictedManaForAbility(pendingActivatedAbility.permanentOid,
-                                               pendingActivatedAbility.abilityIndex)
-            .contains(groupId)) {
+        eligibleRestrictedManaForPendingAbility().contains(groupId)) {
         reduced = tryReducePendingAbilityRemainingCostOnePip(normalized == QLatin1Char('C'), normalized);
         if (reduced) {
             restrictedManaPaymentSelections[groupId][normalized] += 1;
@@ -1337,10 +1337,7 @@ bool PlayerActions::ruledRestrictedManaGroupEligible(quint32 groupId) const
         return false;
     }
     if (pendingActivatedAbility.valid && pendingActivatedAbility.waitingForMana) {
-        return state
-            ->eligibleRestrictedManaForAbility(pendingActivatedAbility.permanentOid,
-                                               pendingActivatedAbility.abilityIndex)
-            .contains(groupId);
+        return eligibleRestrictedManaForPendingAbility().contains(groupId);
     }
     if (pendingRuledSpellCast.valid && !pendingRuledSpellCast.waitingForTarget &&
         !pendingRuledSpellCast.waitingForCost) {
@@ -1359,6 +1356,22 @@ void PlayerActions::clearRestrictedManaPaymentSelections()
     }
     restrictedManaPaymentSelections.clear();
     emit ruledRestrictedManaStagingChanged();
+}
+
+QSet<quint32> PlayerActions::eligibleRestrictedManaForPendingAbility() const
+{
+    const auto *state = player->getGame()->getGameEventHandler()->ruled();
+    if (!state || !pendingActivatedAbility.valid) {
+        return {};
+    }
+    if (pendingActivatedAbility.permanentAction) {
+        const auto action = state->permanentActionFor(
+            pendingActivatedAbility.permanentOid, pendingActivatedAbility.expectedZoneChangeGeneration,
+            pendingActivatedAbility.permanentActionKind, pendingActivatedAbility.permanentActionFaceIndex);
+        return action.has_value() ? action->eligibleRestrictedManaGroupIds : QSet<quint32>{};
+    }
+    return state->eligibleRestrictedManaForAbility(pendingActivatedAbility.permanentOid,
+                                                   pendingActivatedAbility.abilityIndex);
 }
 
 void PlayerActions::declineRuledResolutionPayment()
@@ -2463,10 +2476,7 @@ void PlayerActions::autoApplyRestrictedManaToPendingCost(quint32 groupId, QChar 
             reduced = tryReducePendingSpellRemainingCostOnePip(normalized == QLatin1Char('C'), normalized);
             appliedToSpell = appliedToSpell || reduced;
         } else if (pendingActivatedAbility.valid && pendingActivatedAbility.waitingForMana &&
-                   state
-                       ->eligibleRestrictedManaForAbility(pendingActivatedAbility.permanentOid,
-                                                          pendingActivatedAbility.abilityIndex)
-                       .contains(groupId)) {
+                   eligibleRestrictedManaForPendingAbility().contains(groupId)) {
             reduced = tryReducePendingAbilityRemainingCostOnePip(normalized == QLatin1Char('C'), normalized);
             appliedToAbility = appliedToAbility || reduced;
         }
@@ -4698,8 +4708,9 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     }
 
     const QStringList abilityTexts = handler->activatedAbilitiesForOid(oid);
-    const auto permanentAction = battlefieldSource ? handler->permanentActionForOid(oid) : std::nullopt;
-    if (abilityTexts.isEmpty() && !permanentAction.has_value()) {
+    const auto permanentActions = battlefieldSource ? handler->permanentActionsForOid(oid)
+                                                    : QVector<RuledPermanentAction>{};
+    if (abilityTexts.isEmpty() && permanentActions.isEmpty()) {
         return false;
     }
 
@@ -4766,9 +4777,10 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     // ordinary engine-authored cast options alongside that ability on both mouse buttons.
     QMenu menu;
     menu.setTitle(card->getName());
-    QAction *permanentMenuAction = nullptr;
-    if (permanentAction.has_value()) {
-        permanentMenuAction = menu.addAction(permanentAction->label);
+    QHash<QAction *, RuledPermanentAction> permanentMenuActions;
+    for (const auto &permanentAction : permanentActions) {
+        QAction *action = menu.addAction(permanentAction.label);
+        permanentMenuActions.insert(action, permanentAction);
     }
     QList<int> menuAbilityIndices;
     QStringList menuAbilityLabels = abilityTexts;
@@ -4814,7 +4826,8 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return true; // menu was shown, player cancelled
     }
 
-    if (chosen == permanentMenuAction) {
+    if (permanentMenuActions.contains(chosen)) {
+        const RuledPermanentAction permanentAction = permanentMenuActions.value(chosen);
         manaPaymentCounterIds.clear();
         clearRestrictedManaPaymentSelections();
         midCastLandTapStack.clear();
@@ -4822,17 +4835,24 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
             cancelPendingRuledSpellCast();
         }
         ruledPendingCast->beginAbility();
-        pendingActivatedAbility.turnFaceUp = true;
-        pendingActivatedAbility.expectedZoneChangeGeneration = permanentAction->zoneChangeGeneration;
+        pendingActivatedAbility.permanentAction = true;
+        pendingActivatedAbility.permanentActionKind = permanentAction.kind;
+        pendingActivatedAbility.permanentActionFaceIndex = permanentAction.faceIndex;
+        pendingActivatedAbility.expectedZoneChangeGeneration = permanentAction.zoneChangeGeneration;
         pendingActivatedAbility.permanentOid = oid;
         pendingActivatedAbility.abilityIndex = -1;
-        pendingActivatedAbility.abilityText = permanentAction->label;
-        pendingActivatedAbility.cardName = handler->privateFaceDownNameForCard(ownerPlayerId, card->getId());
-        if (pendingActivatedAbility.cardName.isEmpty()) {
-            pendingActivatedAbility.cardName = tr("face-down permanent");
+        pendingActivatedAbility.abilityText = permanentAction.label;
+        if (permanentAction.kind == ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP) {
+            pendingActivatedAbility.cardName =
+                handler->privateFaceDownNameForCard(ownerPlayerId, card->getId());
+            if (pendingActivatedAbility.cardName.isEmpty()) {
+                pendingActivatedAbility.cardName = tr("face-down permanent");
+            }
+        } else {
+            pendingActivatedAbility.cardName = card->getName();
         }
-        pendingActivatedAbility.remainingCost = parseSimpleManaCost(permanentAction->manaCost);
-        pendingActivatedAbility.flexPips = parseFlexPips(permanentAction->manaCost);
+        pendingActivatedAbility.remainingCost = parseSimpleManaCost(permanentAction.manaCost);
+        pendingActivatedAbility.flexPips = parseFlexPips(permanentAction.manaCost);
         continuePendingActivatedAbilityAfterChoice();
         return true;
     }

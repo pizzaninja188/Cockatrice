@@ -39,7 +39,9 @@ impl GameEngine {
         // static ability first so characteristics and trigger conditions see the completed event.
         for event in events {
             if let GameEvent::EntersBattlefield { object_id } = event {
-                self.emit_static_abilities_on_enter(*object_id);
+                if !self.state.room_states.contains_key(object_id) {
+                    self.emit_static_abilities_on_enter(*object_id);
+                }
             }
         }
 
@@ -135,8 +137,8 @@ impl GameEngine {
                 self.state.next_object_id += 1;
                 let def = self.registry.get(&trigger.card_id);
                 let card_name = def
-                    .and_then(|d| d.face(trigger.face_index))
-                    .map(|face| face.name.clone())
+                    .and_then(|definition| definition.face_display_name(trigger.face_index))
+                    .map(str::to_owned)
                     .unwrap_or_default();
                 let may = trigger.ability.may;
                 StagedTrigger {
@@ -346,6 +348,68 @@ impl GameEngine {
                 }
                 out
             }
+            GameEvent::RoomDoorUnlocked {
+                object_id,
+                face_index,
+                player,
+                fully_unlocked,
+            } => {
+                let mut out = Vec::new();
+                if let Some(source) = sources.iter().find(|source| source.object_id == *object_id) {
+                    if let Some(face) = self
+                        .room_faces(*object_id)
+                        .and_then(|faces| faces.get(*face_index))
+                    {
+                        let prior_abilities = self
+                            .room_faces(*object_id)
+                            .into_iter()
+                            .flatten()
+                            .take(*face_index)
+                            .map(|door| door.triggered_abilities.len())
+                            .sum::<usize>();
+                        out.extend(
+                            face.triggered_abilities
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, ability)| {
+                                    ability.trigger == TriggerCondition::WhenThisDoorUnlocked
+                                })
+                                .filter(|(_, ability)| {
+                                    self.intervening_if_holds(
+                                        source.object_id,
+                                        source.controller,
+                                        ability.intervening_if.as_ref(),
+                                    )
+                                })
+                                .map(|(ability_index, ability)| CollectedTrigger {
+                                    source_id: source.object_id,
+                                    card_id: source.card_id.clone(),
+                                    face_index: *face_index,
+                                    source_zone_change: source.zone_change_generation,
+                                    source_face_change: source.face_change_generation,
+                                    controller: source.controller,
+                                    ability_index: prior_abilities + ability_index,
+                                    ability: ability.clone(),
+                                    ability_text: ability.text.clone(),
+                                    trigger_context: TriggerContext::default(),
+                                }),
+                        );
+                    }
+                }
+                if *fully_unlocked {
+                    for source in sources {
+                        out.extend(self.matching_snapshot_abilities(source, |condition| {
+                            let TriggerCondition::WheneverPlayerFullyUnlocksRoom { player: who } =
+                                condition
+                            else {
+                                return false;
+                            };
+                            self.relative_player_matches(*who, *player, source.controller)
+                        }));
+                    }
+                }
+                out
+            }
             GameEvent::Dies {
                 source: dying,
                 was_creature,
@@ -455,6 +519,30 @@ impl GameEngine {
                         }
                         out.extend(matching);
                     }
+                }
+
+                let attacker_count = u32::try_from(attacks.len()).unwrap_or(u32::MAX);
+                for source in sources {
+                    if source.controller != *attacking_player {
+                        continue;
+                    }
+                    let mut matching = self.matching_snapshot_abilities(source, |condition| {
+                        let TriggerCondition::WheneverControllerAttacks {
+                            min_attackers,
+                            max_attackers,
+                        } = condition
+                        else {
+                            return false;
+                        };
+                        min_attackers.is_none_or(|minimum| attacker_count >= minimum)
+                            && max_attackers.is_none_or(|maximum| attacker_count <= maximum)
+                    });
+                    if let [attack] = attacks.as_slice() {
+                        for trigger in &mut matching {
+                            trigger.trigger_context.observed_object = Some(attack.attacker);
+                        }
+                    }
+                    out.extend(matching);
                 }
 
                 for source in sources {
@@ -994,8 +1082,8 @@ impl GameEngine {
     fn effective_triggered_abilities(
         &self,
         source_id: ObjectId,
-        card_id: &str,
-        face_index: usize,
+        _card_id: &str,
+        _face_index: usize,
     ) -> Vec<(usize, TriggeredAbilityDef)> {
         let face_down = self
             .state
@@ -1005,9 +1093,8 @@ impl GameEngine {
         let removed_at =
             super::characteristics::latest_remove_all_abilities_timestamp(&self.state, source_id);
         let mut abilities: Vec<(usize, TriggeredAbilityDef)> = (!face_down && removed_at.is_none())
-            .then(|| self.registry.get(card_id))
+            .then(|| self.effective_face(source_id))
             .flatten()
-            .and_then(|definition| definition.face(face_index))
             .map(|face| {
                 face.triggered_abilities
                     .iter()

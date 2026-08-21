@@ -135,6 +135,7 @@ struct RuledPermanentAction
     quint64 zoneChangeGeneration = 0;
     QString label;
     QString manaCost;
+    std::optional<quint32> faceIndex;
     QSet<quint32> eligibleRestrictedManaGroupIds;
 };
 
@@ -455,7 +456,7 @@ public:
     // face down and retains its shared Server_Card identity; hover/menu consumers consult this map.
     QHash<quint64, QString> privateFaceDownNameByOwnedCard;
     QHash<quint32, quint64> privateFaceDownGenerationByOid;
-    QHash<quint32, RuledPermanentAction> permanentActionsByOid;
+    QHash<quint32, QVector<RuledPermanentAction>> permanentActionsByOid;
     QHash<int, quint32> handAbilityOidBySlot;
     QHash<quint32, ruled::v1::AbilitySourceZone> zoneAbilitySourceByOid;
     QHash<quint32, quint64> abilitySourceGenerationByOid;
@@ -1196,10 +1197,26 @@ public:
         return hasPendingChoiceOfKind(ChoiceKind::TriggerMode) ||
                hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
     }
-    [[nodiscard]] std::optional<RuledPermanentAction> permanentActionForOid(quint32 oid) const
+    [[nodiscard]] QVector<RuledPermanentAction> permanentActionsForOid(quint32 oid) const
     {
-        const auto it = permanentActionsByOid.constFind(oid);
-        return it == permanentActionsByOid.constEnd() ? std::nullopt : std::optional<RuledPermanentAction>(*it);
+        return permanentActionsByOid.value(oid);
+    }
+
+    /// Resolve one engine-authored permanent action by its complete optimistic-concurrency key.
+    /// Permanent actions are not activated abilities and therefore have no ability index; payment
+    /// revalidation must use this typed identity instead of consulting activatedAbilityIndices.
+    [[nodiscard]] std::optional<RuledPermanentAction>
+    permanentActionFor(quint32 oid,
+                       quint64 zoneChangeGeneration,
+                       ruled::v1::PermanentActionKind kind,
+                       std::optional<quint32> faceIndex) const
+    {
+        const auto actions = permanentActionsByOid.value(oid);
+        const auto it = std::find_if(actions.cbegin(), actions.cend(), [&](const RuledPermanentAction &action) {
+            return action.zoneChangeGeneration == zoneChangeGeneration && action.kind == kind &&
+                   action.faceIndex == faceIndex;
+        });
+        return it == actions.cend() ? std::nullopt : std::optional<RuledPermanentAction>{*it};
     }
     [[nodiscard]] QString privateFaceDownNameForCard(int playerId, int serverCardId) const
     {

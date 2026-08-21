@@ -11,13 +11,14 @@ use crate::state::{
     PendingLibraryLookStage, PendingManaPayment, PendingResolution, PendingResolutionBranch,
     PendingResolutionBranchStage, PendingResolutionPresentation, PendingScryStage, PendingTrigger,
     PendingTriggerOrder, PlayerId, PlayerState, ReplacementPriority, ResolutionContinuation,
-    StackItem, StackTarget, StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry,
+    RoomState, StackItem, StackTarget, StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry,
     TriggerContext, TriggerObjectRef, TurnHistory, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
@@ -38,7 +39,7 @@ use tricerules_cards::primitives::{
     TargetController, TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected,
     TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
 };
-use tricerules_cards::{CardFace, CardRegistry, FaceRef, Layout};
+use tricerules_cards::{CardDefinition, CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::{
     IpcResponse, LegalActions, RuledCommand, RuledEvent, RuledEventBatch,
@@ -302,6 +303,14 @@ enum GameEvent {
     EntersBattlefield {
         object_id: ObjectId,
     },
+    /// CR 709.5c: one locked-to-unlocked designation edge. `fully_unlocked` is computed from the
+    /// same mutation so the door's own trigger and eerie observers share one APNAP group.
+    RoomDoorUnlocked {
+        object_id: ObjectId,
+        face_index: usize,
+        player: PlayerId,
+        fully_unlocked: bool,
+    },
     /// `card_id` and `controller` must be captured before the zone move (object may be gone).
     Dies {
         source: TriggerSourceSnapshot,
@@ -452,6 +461,7 @@ struct BattlefieldObjectSnapshot {
     attached_to: Option<AttachmentRecipient>,
     face_up_index: usize,
     face_down: bool,
+    room_state: Option<RoomState>,
     zone_change_generation: u64,
     copy_revision: u64,
 }
@@ -676,6 +686,7 @@ impl GameEngine {
             last_known_attached_object_by_generation: HashMap::new(),
             zone_change_generation: HashMap::new(),
             face_change_generation: HashMap::new(),
+            room_states: HashMap::new(),
             stack: Vec::new(),
             priority_idx: if skip_opening_sequence {
                 0
@@ -751,14 +762,8 @@ impl GameEngine {
 
     /// The face whose printed characteristics and abilities this permanent currently has after
     /// CR 613 layer 1. The physical `card_id` deliberately remains unchanged.
-    pub(super) fn effective_face(&self, oid: ObjectId) -> Option<&CardFace> {
-        let object = self.state.objects.get(&oid)?;
-        if let Some(values) = &object.copiable_values {
-            return Some(&values.face);
-        }
-        self.registry
-            .get(&object.card_id)?
-            .face(object.face_up_index)
+    pub(super) fn effective_face(&self, oid: ObjectId) -> Option<Cow<'_, CardFace>> {
+        effective_face_from(&self.state, self.registry, oid)
     }
 
     /// Registry identity corresponding to [`Self::effective_face`]. Stack items use this to
@@ -787,6 +792,7 @@ impl GameEngine {
             source_card_id: object.card_id.clone(),
             source_face_index: object.face_up_index,
             face,
+            room_faces: (definition.layout == Layout::Room).then(|| definition.faces.clone()),
             display_name: definition
                 .face_display_name(object.face_up_index)?
                 .to_string(),
@@ -916,10 +922,26 @@ impl GameEngine {
         self.apply_gameplay_command(player, cmd, None)
     }
 
-    fn turn_face_up(
+    fn execute_permanent_action(
         &mut self,
         player: PlayerId,
-        command: &rv1::TurnFaceUp,
+        command: &rv1::ExecutePermanentAction,
+    ) -> Result<RuledEventBatch, EngineError> {
+        match rv1::PermanentActionKind::try_from(command.kind).ok() {
+            Some(rv1::PermanentActionKind::TurnFaceUp) => {
+                self.execute_turn_face_up(player, command)
+            }
+            Some(rv1::PermanentActionKind::UnlockRoomDoor) => {
+                self.execute_unlock_room_door(player, command)
+            }
+            _ => Err(EngineError::Illegal("unknown permanent action")),
+        }
+    }
+
+    fn execute_turn_face_up(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::ExecutePermanentAction,
     ) -> Result<RuledEventBatch, EngineError> {
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("you do not have priority"));
@@ -959,7 +981,7 @@ impl GameEngine {
             .state
             .player_idx(player)
             .ok_or(EngineError::Illegal("no such player"))?;
-        self.pay_turn_face_up_mana(
+        self.pay_permanent_action_mana(
             player_idx,
             &cost,
             &command.flex_payments,
@@ -985,6 +1007,138 @@ impl GameEngine {
             })),
         }];
         Ok(events::finish_with_events(self, events))
+    }
+
+    fn execute_unlock_room_door(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::ExecutePermanentAction,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if self.state.priority_player_id() != player {
+            return Err(EngineError::Illegal("you do not have priority"));
+        }
+        if self.state.active_player_id() != player
+            || !matches!(self.state.turn_step, TurnStep::Main1 | TurnStep::Main2)
+            || !self.state.stack.is_empty()
+        {
+            return Err(EngineError::Illegal(
+                "a Room door may be unlocked only during your main phase with an empty stack",
+            ));
+        }
+        let face_index = command
+            .face_index
+            .map(|index| index as usize)
+            .ok_or(EngineError::Illegal("Room door action has no face index"))?;
+        let object = self
+            .state
+            .objects
+            .get(&command.object_id)
+            .ok_or(EngineError::Illegal("no such permanent"))?;
+        let generation = self
+            .state
+            .zone_change_generation
+            .get(&command.object_id)
+            .copied()
+            .unwrap_or(0);
+        if generation != command.expected_zone_change_generation {
+            return Err(EngineError::Illegal("stale Room unlock action"));
+        }
+        if object.zone != Zone::Battlefield || object.controller != player {
+            return Err(EngineError::Illegal("you do not control that Room"));
+        }
+        let room = self
+            .state
+            .room_states
+            .get(&command.object_id)
+            .copied()
+            .ok_or(EngineError::Illegal("permanent is not a Room"))?;
+        if room.unlocked.get(face_index).copied() != Some(false) {
+            return Err(EngineError::Illegal("that Room door is already unlocked"));
+        }
+        let door = self
+            .room_faces(command.object_id)
+            .and_then(|faces| faces.get(face_index))
+            .ok_or(EngineError::Illegal("invalid Room door face"))?;
+        let cost = door.mana_cost.clone();
+        let player_idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::Illegal("no such player"))?;
+        self.pay_permanent_action_mana(
+            player_idx,
+            &cost,
+            &command.flex_payments,
+            &command.restricted_mana,
+        )?;
+
+        let unlock_event = self.transition_room_door(command.object_id, face_index)?;
+        self.fire_triggers(&[unlock_event]);
+        Ok(events::finish_with_events(self, Vec::new()))
+    }
+
+    fn transition_room_door(
+        &mut self,
+        object_id: ObjectId,
+        face_index: usize,
+    ) -> Result<GameEvent, EngineError> {
+        let controller = self
+            .state
+            .objects
+            .get(&object_id)
+            .filter(|object| object.zone == Zone::Battlefield)
+            .map(|object| object.controller)
+            .ok_or(EngineError::Illegal("Room is not on the battlefield"))?;
+        let room = self
+            .state
+            .room_states
+            .get_mut(&object_id)
+            .ok_or(EngineError::Illegal("permanent is not a Room"))?;
+        let was_fully_unlocked = room.fully_unlocked();
+        let door = room
+            .unlocked
+            .get_mut(face_index)
+            .ok_or(EngineError::Illegal("invalid Room door face"))?;
+        if *door {
+            return Err(EngineError::Illegal("that Room door is already unlocked"));
+        }
+        *door = true;
+        let fully_unlocked = !was_fully_unlocked && room.fully_unlocked();
+        self.refresh_source_static_abilities(object_id);
+        *self
+            .state
+            .face_change_generation
+            .entry(object_id)
+            .or_insert(0) += 1;
+        Ok(GameEvent::RoomDoorUnlocked {
+            object_id,
+            face_index,
+            player: controller,
+            fully_unlocked,
+        })
+    }
+
+    fn room_faces(&self, object_id: ObjectId) -> Option<&[CardFace]> {
+        let object = self.state.objects.get(&object_id)?;
+        object
+            .copiable_values
+            .as_ref()
+            .and_then(|values| values.room_faces.as_deref())
+            .or_else(|| {
+                let definition = self.registry.get(&object.card_id)?;
+                (definition.layout == Layout::Room).then_some(definition.faces.as_slice())
+            })
+    }
+
+    fn refresh_source_static_abilities(&mut self, object_id: ObjectId) {
+        self.state.continuous_effects.retain(|effect| {
+            !(effect.source_id == Some(object_id)
+                && effect.duration == EffectDuration::WhileSourceOnBattlefield)
+        });
+        self.state.damage_prevention_effects.retain(|effect| {
+            !(effect.source_id == Some(object_id)
+                && effect.duration == EffectDuration::WhileSourceOnBattlefield)
+        });
+        self.emit_static_abilities_on_enter(object_id);
     }
 
     fn apply_gameplay_command(
@@ -1424,7 +1578,9 @@ impl GameEngine {
             Some(Cmd::PrimitiveYieldStructured(_)) => self.primitive_yield_structured(player),
             Some(Cmd::CastSpell(cs)) => self.cast_spell(player, cs),
             Some(Cmd::ActivateAbility(aa)) => self.activate_ability(player, aa),
-            Some(Cmd::TurnFaceUp(command)) => self.turn_face_up(player, command),
+            Some(Cmd::ExecutePermanentAction(command)) => {
+                self.execute_permanent_action(player, command)
+            }
             Some(Cmd::UndoManaAbility(_)) => self.undo_mana_ability(player),
             Some(Cmd::ChooseTriggerTarget(ctt)) => {
                 self.choose_trigger_target(player, &ctt.targets, &ctt.selected_modes, ctt.decline)
@@ -1510,4 +1666,40 @@ impl GameEngine {
             },
         }
     }
+}
+
+fn effective_face_from<'a>(
+    state: &'a GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+) -> Option<Cow<'a, CardFace>> {
+    let object = state.objects.get(&oid)?;
+    if object.zone == Zone::Battlefield {
+        let room_faces = object
+            .copiable_values
+            .as_ref()
+            .and_then(|values| values.room_faces.as_deref())
+            .or_else(|| {
+                let definition = registry.get(&object.card_id)?;
+                (definition.layout == Layout::Room).then_some(definition.faces.as_slice())
+            });
+        if let Some(faces) = room_faces {
+            let unlocked: Vec<_> = state
+                .room_states
+                .get(&oid)
+                .copied()
+                .unwrap_or_default()
+                .unlocked_indices()
+                .collect();
+            return CardDefinition::synthesize_room_permanent_face(faces, &unlocked)
+                .map(Cow::Owned);
+        }
+    }
+    if let Some(values) = &object.copiable_values {
+        return Some(Cow::Borrowed(&values.face));
+    }
+    registry
+        .get(&object.card_id)?
+        .face(object.face_up_index)
+        .map(Cow::Borrowed)
 }

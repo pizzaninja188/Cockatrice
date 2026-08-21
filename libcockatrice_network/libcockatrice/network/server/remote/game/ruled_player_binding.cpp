@@ -177,6 +177,26 @@ QString mergeRuledEnchantingIntoAnnotation(const QString &baseAnn, const QString
     }
     return without + QLatin1Char('\n') + enchantingLine;
 }
+
+QString mergeRuledDoorsIntoAnnotation(const QString &baseAnn, const QStringList &doorLabels)
+{
+    const QString marker = QStringLiteral("Doors:");
+    QStringList kept;
+    for (const QString &line : baseAnn.split(QLatin1Char('\n'))) {
+        if (!line.trimmed().startsWith(marker)) {
+            kept.append(line);
+        }
+    }
+    const QString without = kept.join(QLatin1Char('\n')).trimmed();
+    if (doorLabels.isEmpty()) {
+        return without;
+    }
+    const QString doorsLine = marker + QLatin1Char(' ') + doorLabels.join(QStringLiteral(", "));
+    if (without.isEmpty()) {
+        return doorsLine;
+    }
+    return without + QLatin1Char('\n') + doorsLine;
+}
 } // namespace
 
 void RuledPlayerBinding::unattachRuledCard(Server_Player *player, Server_Card *card, GameEventStorage &ges)
@@ -570,6 +590,15 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                         }
                     }
                     mergedAnn = mergeRuledEnchantingIntoAnnotation(mergedAnn, enchantedPlayerName);
+                    QStringList doorLabels;
+                    doorLabels.reserve(battlefieldObject.room_doors_size());
+                    for (const auto &door : battlefieldObject.room_doors()) {
+                        doorLabels.append(QStringLiteral("%1 (%2)")
+                                              .arg(QString::fromStdString(door.name()),
+                                                   door.unlocked() ? QStringLiteral("unlocked")
+                                                                   : QStringLiteral("locked")));
+                    }
+                    mergedAnn = mergeRuledDoorsIntoAnnotation(mergedAnn, doorLabels);
                     QStringList rulesAnnotationLabels;
                     rulesAnnotationLabels.reserve(battlefieldObject.rules_annotation_labels_size());
                     for (const std::string &label : battlefieldObject.rules_annotation_labels()) {

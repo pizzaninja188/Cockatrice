@@ -172,6 +172,7 @@ impl GameEngine {
                     deciding_player: target,
                     destination_controller: target,
                     face_index: 0,
+                    unlock_room_door: None,
                     chosen_x: 0,
                     player_life_snapshot: self.player_life_snapshot(),
                     tapped: false,
@@ -273,7 +274,8 @@ impl GameEngine {
             .ok_or_else(|| EngineError::MissingCard(card_id.to_string()))?;
         let face = def.primary_face();
         let is_creature = face.is_creature;
-        let display_name = if matches!(def.layout, Layout::Split | Layout::Adventure) {
+        let display_name = if matches!(def.layout, Layout::Split | Layout::Room | Layout::Adventure)
+        {
             def.name.clone()
         } else {
             face.name.to_string()

@@ -51,6 +51,7 @@ impl GameEngine {
             deciding_player: controller,
             destination_controller: controller,
             face_index: 0,
+            unlock_room_door: None,
             chosen_x: 0,
             player_life_snapshot: self.player_life_snapshot(),
             tapped: false,

@@ -86,6 +86,9 @@ pub enum Layout {
     Normal,
     /// CR 709: two halves printed side by side, each independently castable (Fire // Ice).
     Split,
+    /// CR 709.5: two doors printed side by side. Either door may be cast; on the battlefield
+    /// only unlocked doors contribute their characteristics and abilities.
+    Room,
     /// CR 712 modal DFC: either face castable from hand; the back is a real card.
     ModalDfc,
     /// CR 712 transforming DFC: front cast, transforms in place to the back (werewolves, Delver).
@@ -367,6 +370,16 @@ impl RawCardDefinition {
         if !multiface_layout && !self.faces.is_empty() {
             return Err("`faces` authored on a Normal-layout card (set an explicit layout)".into());
         }
+        if self.layout == Layout::Room {
+            if self.faces.len() != 2 {
+                return Err("Room layout requires exactly two doors".into());
+            }
+            if self.faces[0].types != self.faces[1].types
+                || self.faces[0].supertypes != self.faces[1].supertypes
+            {
+                return Err("Room doors must have a shared type line".into());
+            }
+        }
         let faces = if self.faces.is_empty() {
             vec![CardFace {
                 name: self.name.clone(),
@@ -432,7 +445,7 @@ impl CardDefinition {
         let face = self.face(face_index)?;
         Some(match self.layout {
             Layout::Transform | Layout::Flip | Layout::ModalDfc => face.name.as_str(),
-            Layout::Normal | Layout::Split | Layout::Adventure => self.name.as_str(),
+            Layout::Normal | Layout::Split | Layout::Room | Layout::Adventure => self.name.as_str(),
         })
     }
 
@@ -465,6 +478,70 @@ impl CardDefinition {
         self.faces.iter()
     }
 
+    /// CR 709.5: synthesize the battlefield characteristics of a Room from its unlocked
+    /// designations. The shared type line remains even with no unlocked doors; every other
+    /// characteristic and ability is contributed only by an unlocked door. This is deliberately
+    /// an owned, on-demand view so runtime state never caches derived Oracle characteristics.
+    pub fn room_permanent_face(&self, unlocked: &[usize]) -> Option<CardFace> {
+        if self.layout != Layout::Room {
+            return None;
+        }
+        Self::synthesize_room_permanent_face(&self.faces, unlocked)
+    }
+
+    /// The copy-layer form of [`Self::room_permanent_face`]. A copied Room retains its two
+    /// copiable door definitions even though its physical registry card has another layout.
+    pub fn synthesize_room_permanent_face(
+        faces: &[CardFace],
+        unlocked: &[usize],
+    ) -> Option<CardFace> {
+        if faces.len() != 2 {
+            return None;
+        }
+
+        let mut result = CardFace {
+            types: faces[0].types.clone(),
+            supertypes: faces[0].supertypes.clone(),
+            ..CardFace::default()
+        };
+        let mut names = Vec::new();
+        for index in unlocked.iter().copied() {
+            let door = faces.get(index)?;
+            names.push(door.name.clone());
+            result.mana_cost.pips.extend(door.mana_cost.pips.clone());
+            result
+                .additional_costs
+                .extend(door.additional_costs.clone());
+            result.cost_modifiers.extend(door.cost_modifiers.clone());
+            result.spell_effect.extend(door.spell_effect.clone());
+            result.keywords.extend(door.keywords.clone());
+            result.protections.extend(door.protections.clone());
+            result.evasions.extend(door.evasions.clone());
+            result
+                .activated_abilities
+                .extend(door.activated_abilities.clone());
+            result
+                .triggered_abilities
+                .extend(door.triggered_abilities.clone());
+            result
+                .static_abilities
+                .extend(door.static_abilities.clone());
+            result.must_attack_if_able |= door.must_attack_if_able;
+            result.must_block_if_able |= door.must_block_if_able;
+            if let Some(indicator) = &door.color_indicator {
+                let combined = result.color_indicator.get_or_insert_with(Vec::new);
+                for color in indicator {
+                    if !combined.contains(color) {
+                        combined.push(*color);
+                    }
+                }
+            }
+        }
+        result.name = names.join(" // ");
+        result.derive_type_flags();
+        Some(result)
+    }
+
     /// True if this card has more than one face (any non-`Normal` layout).
     pub fn is_multiface(&self) -> bool {
         self.faces.len() > 1
@@ -474,7 +551,7 @@ impl CardDefinition {
     /// Split cards combine both halves (CR 709.4). Flip, double-faced, and adventurer cards use
     /// only their normal/front characteristics there (CR 710.2, 712.8a, 715.4).
     pub fn matches_card_type_outside_stack(&self, filter: CardTypeFilter) -> bool {
-        if self.layout != Layout::Split {
+        if !matches!(self.layout, Layout::Split | Layout::Room) {
             return self.primary_face().matches_card_type(filter);
         }
 
@@ -503,7 +580,7 @@ impl CardDefinition {
         CARD_TYPES
             .into_iter()
             .filter(|card_type| {
-                if self.layout == Layout::Split {
+                if matches!(self.layout, Layout::Split | Layout::Room) {
                     self.faces_iter()
                         .any(|face| face.types.iter().any(|value| value == card_type))
                 } else {
@@ -516,11 +593,23 @@ impl CardDefinition {
             .collect()
     }
 
+    /// The physical card's mana value outside the stack. Split cards and Rooms use the sum of
+    /// both halves/doors (CR 202.3d); other multiface layouts use only their front face.
+    pub fn mana_value_outside_stack(&self) -> u32 {
+        if matches!(self.layout, Layout::Split | Layout::Room) {
+            self.faces_iter()
+                .map(|face| face.mana_cost.mana_value())
+                .sum()
+        } else {
+            self.primary_face().mana_cost.mana_value()
+        }
+    }
+
     /// Whether this physical card has `name` in a zone other than the battlefield or stack.
     /// Split cards have both half names there (CR 709.4); flip, double-faced, and adventurer cards
     /// use only their normal/front face (CR 710.2, 712.8a, 715.4).
     pub fn has_name_outside_stack(&self, name: &str) -> bool {
-        if self.layout == Layout::Split {
+        if matches!(self.layout, Layout::Split | Layout::Room) {
             self.faces_iter().any(|face| face.name == name)
         } else {
             self.primary_face().name == name
@@ -530,7 +619,7 @@ impl CardDefinition {
     /// Whether this physical card has `subtype` outside the battlefield and stack. Split cards
     /// combine both halves; other multiface layouts use only their normal/front face.
     pub fn has_subtype_outside_stack(&self, subtype: &str) -> bool {
-        if self.layout == Layout::Split {
+        if matches!(self.layout, Layout::Split | Layout::Room) {
             self.faces_iter()
                 .any(|face| face.types.iter().any(|value| value == subtype))
         } else {
@@ -548,7 +637,9 @@ impl CardDefinition {
     pub fn face_available_from_hand(&self, face_index: usize) -> bool {
         match self.layout {
             Layout::Normal | Layout::Transform | Layout::Flip => face_index == 0,
-            Layout::Split | Layout::ModalDfc | Layout::Adventure => face_index < self.face_count(),
+            Layout::Split | Layout::Room | Layout::ModalDfc | Layout::Adventure => {
+                face_index < self.face_count()
+            }
         }
     }
 }
@@ -618,5 +709,43 @@ mod tests {
         let adventure = definition(Layout::Adventure, vec![front, back]);
         assert!(adventure.has_name_outside_stack("Bonecrusher Giant"));
         assert!(!adventure.has_name_outside_stack("Stomp"));
+    }
+
+    #[test]
+    fn room_has_combined_characteristics_outside_battlefield_and_stack() {
+        let mut left = face(&["Enchantment", "Room"]);
+        left.name = "Ticket Booth".into();
+        left.mana_cost = ManaCost::parse("{2}{R}").unwrap();
+        let mut right = face(&["Enchantment", "Room"]);
+        right.name = "Tunnel of Hate".into();
+        right.mana_cost = ManaCost::parse("{4}{R}{R}").unwrap();
+        let room = definition(Layout::Room, vec![left, right]);
+
+        assert!(room.matches_card_type_outside_stack(CardTypeFilter::Enchantment));
+        assert_eq!(room.card_types_outside_stack(), vec!["Enchantment"]);
+        assert!(room.has_name_outside_stack("Ticket Booth"));
+        assert!(room.has_name_outside_stack("Tunnel of Hate"));
+        assert!(room.has_subtype_outside_stack("Room"));
+        assert_eq!(room.mana_value_outside_stack(), 9);
+    }
+
+    #[test]
+    fn room_permanent_face_contains_only_unlocked_door_abilities() {
+        let mut left = face(&["Enchantment", "Room"]);
+        left.name = "Left".into();
+        left.keywords = vec![Keyword::Flying];
+        let mut right = face(&["Enchantment", "Room"]);
+        right.name = "Right".into();
+        right.keywords = vec![Keyword::Vigilance];
+        let room = definition(Layout::Room, vec![left, right]);
+
+        let locked = room.room_permanent_face(&[]).unwrap();
+        assert_eq!(locked.types, vec!["Enchantment", "Room"]);
+        assert!(locked.name.is_empty());
+        assert!(locked.keywords.is_empty());
+
+        let both = room.room_permanent_face(&[0, 1]).unwrap();
+        assert_eq!(both.name, "Left // Right");
+        assert_eq!(both.keywords, vec![Keyword::Flying, Keyword::Vigilance]);
     }
 }

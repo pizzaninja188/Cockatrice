@@ -277,14 +277,14 @@ impl GameEngine {
                     && o.attached_to.is_none_or(|recipient| {
                         let enchant_filter = self.effective_face(o.id).and_then(|face| {
                             face.spell_effect.iter().find_map(|effect| match effect {
-                                SpellEffectKind::AuraAttach { target } => Some(target),
+                                SpellEffectKind::AuraAttach { target } => Some(target.clone()),
                                 _ => None,
                             })
                         });
                         enchant_filter.is_none_or(|filter| {
                             !super::targeting::attachment_filter_legal(
                                 self,
-                                filter,
+                                &filter,
                                 recipient,
                                 o.id,
                                 o.controller,

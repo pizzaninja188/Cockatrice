@@ -11,10 +11,10 @@ pub(crate) use tricerules_proto::ruled::v1::ruled_event::Ev;
 pub(crate) use tricerules_proto::ruled::v1::{
     ActivateAbility, AssignCombatDamage, BlockPair, CastSource, CastSpell, ChoiceKind,
     ChooseTriggerTarget, CostSelection, DamagePair, DeclareAttackers, DeclareBlockers,
-    DiscardToHandSize, FlexPipPayment, ManaSpendSelection, PassPriority, PlayLand,
-    PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
-    ResolutionChoiceRequired, RuledCommand, RuledEventBatch, SelectedSpellMode,
-    SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TargetRefKind, TurnFaceUp,
+    DiscardToHandSize, ExecutePermanentAction, FlexPipPayment, ManaSpendSelection, PassPriority,
+    PermanentActionKind, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers,
+    PrimitiveYieldStructured, ResolutionChoiceRequired, RuledCommand, RuledEventBatch,
+    SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TargetRefKind,
     UndoManaAbility,
 };
 

@@ -1,0 +1,18 @@
+(
+  id: "rampaging_soulrager",
+  name: "Rampaging Soulrager",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Spirit"],
+  power: 1,
+  toughness: 4,
+  static_abilities: [
+    ConditionalSelfModifier(
+      condition: UnlockedRoomDoorCount(
+        controllers: Controller,
+        min: Some(2),
+        max: None,
+      ),
+      delta_power: 3,
+    ),
+  ],
+)

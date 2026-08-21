@@ -104,9 +104,11 @@ fn controller_gets_generation_bound_turn_face_up_action_and_keeps_priority() {
         .apply_command(
             0,
             &RuledCommand {
-                cmd: Some(Cmd::TurnFaceUp(TurnFaceUp {
+                cmd: Some(Cmd::ExecutePermanentAction(ExecutePermanentAction {
+                    kind: PermanentActionKind::TurnFaceUp as i32,
                     object_id: angel,
                     expected_zone_change_generation: generation,
+                    face_index: None,
                     flex_payments: vec![],
                     restricted_mana: vec![ManaSpendSelection {
                         restriction_group_id: 999,
@@ -142,9 +144,11 @@ fn controller_gets_generation_bound_turn_face_up_action_and_keeps_priority() {
         .apply_command(
             0,
             &RuledCommand {
-                cmd: Some(Cmd::TurnFaceUp(TurnFaceUp {
+                cmd: Some(Cmd::ExecutePermanentAction(ExecutePermanentAction {
+                    kind: PermanentActionKind::TurnFaceUp as i32,
                     object_id: angel,
                     expected_zone_change_generation: generation,
+                    face_index: None,
                     flex_payments: vec![],
                     restricted_mana: vec![],
                 })),
@@ -310,9 +314,11 @@ fn stale_or_noncreature_turn_face_up_action_is_not_legal() {
         .apply_command(
             0,
             &RuledCommand {
-                cmd: Some(Cmd::TurnFaceUp(TurnFaceUp {
+                cmd: Some(Cmd::ExecutePermanentAction(ExecutePermanentAction {
+                    kind: PermanentActionKind::TurnFaceUp as i32,
                     object_id: bolt,
                     expected_zone_change_generation: 999,
+                    face_index: None,
                     flex_payments: vec![],
                     restricted_mana: vec![],
                 })),

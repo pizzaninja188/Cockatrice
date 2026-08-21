@@ -64,7 +64,9 @@ struct RuledPendingCostSelection
 struct PendingActivatedAbility
 {
     bool valid = false;
-    bool turnFaceUp = false;
+    bool permanentAction = false;
+    ruled::v1::PermanentActionKind permanentActionKind = ruled::v1::PERMANENT_ACTION_KIND_UNSPECIFIED;
+    std::optional<quint32> permanentActionFaceIndex;
     ruled::v1::AbilitySourceZone sourceZone = ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD;
     quint64 expectedZoneChangeGeneration = 0;
     quint32 permanentOid = 0;
@@ -84,6 +86,22 @@ struct PendingActivatedAbility
     QVector<quint32> lifePipIndices;
     bool targetingCostApplied = false;
 };
+
+/// Revalidate the source identity of a pending activated-ability-shaped UI transaction. Generic
+/// permanent actions deliberately carry no activated-ability index, so they must be matched
+/// against the engine's typed action list instead.
+[[nodiscard]] inline bool ruledPendingAbilitySourceStillCurrent(const RuledClientState &state,
+                                                                 const PendingActivatedAbility &pending)
+{
+    if (pending.permanentAction) {
+        return state
+            .permanentActionFor(pending.permanentOid, pending.expectedZoneChangeGeneration,
+                                pending.permanentActionKind, pending.permanentActionFaceIndex)
+            .has_value();
+    }
+    return state.abilitySourceGeneration(pending.permanentOid) == pending.expectedZoneChangeGeneration &&
+           state.activatedAbilityIndicesForOid(pending.permanentOid).contains(pending.abilityIndex);
+}
 
 struct PendingRuledSpellCast
 {

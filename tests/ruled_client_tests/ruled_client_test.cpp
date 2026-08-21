@@ -2259,7 +2259,7 @@ TEST_F(RuledClientTest, FaceDownObjectMapProvidesPrivateIdentityAndPrunesOnRepla
     EXPECT_FALSE(state->privateFaceDownGenerationByOid.contains(9801u));
 }
 
-TEST_F(RuledClientTest, PermanentActionIsEngineAuthoredAndClearsWhenNoLongerPublished)
+TEST_F(RuledClientTest, MultiplePermanentActionsAreEngineAuthoredAndClearWhenNoLongerPublished)
 {
     ruled::v1::RuledEventBatch batch;
     auto *action = (*batch.mutable_legal_by_player())[kLocalPlayer].add_permanent_actions();
@@ -2268,17 +2268,45 @@ TEST_F(RuledClientTest, PermanentActionIsEngineAuthoredAndClearsWhenNoLongerPubl
     action->set_zone_change_generation(9u);
     action->set_label("Turn face up — {1}{G}");
     action->set_mana_cost("{1}{G}");
+    auto *unlock = (*batch.mutable_legal_by_player())[kLocalPlayer].add_permanent_actions();
+    unlock->set_kind(ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR);
+    unlock->set_object_id(9802u);
+    unlock->set_zone_change_generation(9u);
+    unlock->set_label("Unlock Tunnel of Hate — {4}{R}{R}");
+    unlock->set_mana_cost("{4}{R}{R}");
+    unlock->set_face_index(1u);
     apply(batch);
 
-    const auto parsed = state->permanentActionForOid(9802u);
-    ASSERT_TRUE(parsed.has_value());
-    EXPECT_EQ(parsed->kind, ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP);
-    EXPECT_EQ(parsed->zoneChangeGeneration, 9u);
-    EXPECT_EQ(parsed->label, QString("Turn face up — {1}{G}"));
-    EXPECT_EQ(parsed->manaCost, QString("{1}{G}"));
+    const auto parsed = state->permanentActionsForOid(9802u);
+    ASSERT_EQ(parsed.size(), 2);
+    EXPECT_EQ(parsed[0].kind, ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP);
+    EXPECT_EQ(parsed[0].zoneChangeGeneration, 9u);
+    EXPECT_EQ(parsed[0].label, QString("Turn face up — {1}{G}"));
+    EXPECT_EQ(parsed[0].manaCost, QString("{1}{G}"));
+    EXPECT_FALSE(parsed[0].faceIndex.has_value());
+    EXPECT_EQ(parsed[1].kind, ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR);
+    ASSERT_TRUE(parsed[1].faceIndex.has_value());
+    EXPECT_EQ(*parsed[1].faceIndex, 1u);
+    const auto current = state->permanentActionFor(
+        9802u, 9u, ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR, std::optional<quint32>{1u});
+    ASSERT_TRUE(current.has_value());
+    EXPECT_EQ(current->label, QString("Unlock Tunnel of Hate — {4}{R}{R}"));
+    EXPECT_FALSE(state->permanentActionFor(
+        9802u, 10u, ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR, std::optional<quint32>{1u}));
+    PendingActivatedAbility pending;
+    pending.valid = true;
+    pending.permanentAction = true;
+    pending.permanentActionKind = ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR;
+    pending.permanentActionFaceIndex = 1u;
+    pending.permanentOid = 9802u;
+    pending.expectedZoneChangeGeneration = 9u;
+    pending.abilityIndex = -1;
+    EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, pending));
+    pending.expectedZoneChangeGeneration = 10u;
+    EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(*state, pending));
 
     apply(ruled::v1::RuledEventBatch{});
-    EXPECT_FALSE(state->permanentActionForOid(9802u).has_value());
+    EXPECT_TRUE(state->permanentActionsForOid(9802u).isEmpty());
 }
 
 TEST_F(RuledClientTest, ZoneAbilityActionsBindHandSlotsAndGraveyardObjectsWithoutLeakingAcrossBatches)

@@ -167,7 +167,30 @@ pub struct CopiableValues {
     pub source_card_id: String,
     pub source_face_index: usize,
     pub face: CardFace,
+    /// CR 707.2 / 709.5: copied Rooms retain both printed door definitions. Unlock
+    /// designations are status, not copiable values, so they live in [`GameState::room_states`].
+    pub room_faces: Option<Vec<CardFace>>,
     pub display_name: String,
+}
+
+/// CR 709.5 battlefield designation state for one Room permanent. Door indexes are its stable
+/// copiable placement; the designations themselves are reset by every zone change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RoomState {
+    pub unlocked: [bool; 2],
+}
+
+impl RoomState {
+    pub fn unlocked_indices(self) -> impl Iterator<Item = usize> {
+        self.unlocked
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, unlocked)| unlocked.then_some(index))
+    }
+
+    pub fn fully_unlocked(self) -> bool {
+        self.unlocked.into_iter().all(|unlocked| unlocked)
+    }
 }
 
 /// Runtime scope of one damage-prevention effect. Player ids use the engine's existing widened
@@ -689,6 +712,9 @@ pub(crate) struct BattlefieldEntryEvent {
     pub deciding_player: PlayerId,
     pub destination_controller: PlayerId,
     pub face_index: usize,
+    /// The door selected while casting a Room permanent spell. Other battlefield-entry paths
+    /// carry `None`; entering as a copy suppresses the designation at commitment.
+    pub unlock_room_door: Option<usize>,
     /// X chosen for the entering permanent spell. Non-spell entry paths carry zero.
     pub chosen_x: u32,
     /// Public life totals captured when this event is proposed. Simultaneous entries receive the
@@ -1044,6 +1070,9 @@ pub struct GameState {
     pub zone_change_generation: HashMap<ObjectId, u64>,
     /// Incremented whenever a battlefield permanent changes face/status in place.
     pub face_change_generation: HashMap<ObjectId, u64>,
+    /// Public CR 709.5 designations for battlefield Rooms. Absence means the object is not a
+    /// Room permanent; the zone-change funnel removes entries on departure under CR 400.7.
+    pub room_states: HashMap<ObjectId, RoomState>,
     pub stack: Vec<StackItem>,
     /// Index into players for who holds priority
     pub priority_idx: usize,

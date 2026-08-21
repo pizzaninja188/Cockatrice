@@ -549,6 +549,7 @@ impl GameEngine {
                         deciding_player: top.controller,
                         destination_controller: top.controller,
                         face_index: top.face_index,
+                        unlock_room_door: Some(top.face_index),
                         chosen_x: top.chosen_x,
                         player_life_snapshot: self.player_life_snapshot(),
                         tapped: false,
@@ -1270,6 +1271,7 @@ impl GameEngine {
                         deciding_player: pid,
                         destination_controller: pid,
                         face_index: 0,
+                        unlock_room_door: None,
                         chosen_x: 0,
                         player_life_snapshot: player_life_snapshot.clone(),
                         tapped: false,
@@ -1512,6 +1514,7 @@ pub(crate) fn move_object_to_zone(
         })
         .flatten();
     if leaving_battlefield {
+        state.room_states.remove(&oid);
         if let Some(old_controller) = state.objects.get(&oid).map(|object| object.controller) {
             state.stage_delayed_control_loss(&[(oid, old_controller, None)]);
         }

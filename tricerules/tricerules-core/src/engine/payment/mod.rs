@@ -78,7 +78,7 @@ pub(super) fn pay_mana(
 }
 
 impl GameEngine {
-    pub(super) fn pay_turn_face_up_mana(
+    pub(super) fn pay_permanent_action_mana(
         &mut self,
         player_idx: usize,
         cost: &ManaCost,
@@ -87,7 +87,7 @@ impl GameEngine {
     ) -> Result<(), EngineError> {
         if !restricted_mana.is_empty() {
             return Err(EngineError::Illegal(
-                "restricted mana cannot pay a turn-face-up action",
+                "restricted mana cannot pay this permanent action",
             ));
         }
         let plan = plan_mana_payment(&self.state, player_idx, cost, 0, 0, flex_payments)?;

@@ -392,6 +392,7 @@ private:
     void continuePendingActivatedAbilityAfterChoice();
     bool tryReducePendingAbilityRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
     void finishPendingAbilityManaPaymentStep();
+    [[nodiscard]] QSet<quint32> eligibleRestrictedManaForPendingAbility() const;
 
     void reconcilePendingRuledTargetSelections();
 

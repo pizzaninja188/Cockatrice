@@ -62,6 +62,15 @@ pub enum GameCondition {
         #[serde(default)]
         max: Option<u32>,
     },
+    /// Count public unlocked door designations among Rooms controlled by the selected players.
+    /// This is a door count, not a Room count: a fully unlocked Room contributes two.
+    UnlockedRoomDoorCount {
+        controllers: RelativePlayerSet,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
     /// Compare an aggregate of nontoken cards in the selected players' public graveyards against
     /// inclusive bounds. Threshold uses `CardCount`; delirium uses `DistinctCardTypes`.
     GraveyardAggregate {
@@ -136,6 +145,19 @@ impl GameCondition {
                 }
                 Ok(())
             }
+            GameCondition::UnlockedRoomDoorCount { min, max, .. } => {
+                if min.is_none() && max.is_none() {
+                    return Err("UnlockedRoomDoorCount requires at least one of min or max".into());
+                }
+                if min
+                    .as_ref()
+                    .zip(max.as_ref())
+                    .is_some_and(|(minimum, maximum)| minimum > maximum)
+                {
+                    return Err("UnlockedRoomDoorCount min cannot exceed max".into());
+                }
+                Ok(())
+            }
             GameCondition::GraveyardAggregate { min, max, .. } => {
                 if min.is_none() && max.is_none() {
                     return Err("GraveyardAggregate requires at least one of min or max".into());
@@ -158,6 +180,7 @@ impl GameCondition {
             GameCondition::CreatureDeathsThisTurn { min, max }
             | GameCondition::BattlefieldCreatureCount { min, max, .. }
             | GameCondition::BattlefieldAggregate { min, max, .. }
+            | GameCondition::UnlockedRoomDoorCount { min, max, .. }
             | GameCondition::GraveyardAggregate { min, max, .. } => {
                 min.is_none_or(|minimum| value >= minimum)
                     && max.is_none_or(|maximum| value <= maximum)

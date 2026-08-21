@@ -21,9 +21,9 @@ extend google.protobuf.FieldOptions {
 
 // Intent from a client; carried inside GameCommand Command_RuledPayload.payload
 message RuledCommand {
-  reserved 15;
+  reserved 15, 26;
   reserved 21;
-  reserved "assign_damage_order";
+  reserved "assign_damage_order", "turn_face_up";
   // Tag 9 was AddManaToPool, the client-trusted "mint mana into my pool" command. Removed:
   // mana is now engine-owned and produced only by activating a mana ability (CR 605), so a
   // tampered client can no longer add mana it did not legally produce.
@@ -80,8 +80,8 @@ message RuledCommand {
     // Servatrice-only envelope for an authenticated gameplay command plus the complete policy
     // snapshot. Clients may not send this variant; replay records and re-applies it verbatim.
     CanonicalGameplayCommand canonical_gameplay = 25;
-    // CR 116.2b / 701.40: turn a manifested permanent face up as a special action.
-    TurnFaceUp turn_face_up = 26;
+    // Execute one engine-published special action on a battlefield permanent.
+    ExecutePermanentAction execute_permanent_action = 27;
   }
 }
 
@@ -547,6 +547,7 @@ message LegalCostChoices {
 enum PermanentActionKind {
   PERMANENT_ACTION_KIND_UNSPECIFIED = 0;
   PERMANENT_ACTION_KIND_TURN_FACE_UP = 1;
+  PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR = 2;
 }
 
 message LegalPermanentAction {
@@ -557,6 +558,7 @@ message LegalPermanentAction {
   string mana_cost = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 eligible_restricted_mana_group_ids = 6
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  optional uint32 face_index = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // The zone containing the physical source whose printed activated ability is being used.
@@ -1093,11 +1095,13 @@ message ActivateAbility {
   uint64 expected_zone_change_generation = 9;
 }
 
-message TurnFaceUp {
-  uint32 object_id = 1;
-  uint64 expected_zone_change_generation = 2;
-  repeated FlexPipPayment flex_payments = 3;
-  repeated ManaSpendSelection restricted_mana = 4;
+message ExecutePermanentAction {
+  PermanentActionKind kind = 1;
+  uint32 object_id = 2;
+  uint64 expected_zone_change_generation = 3;
+  optional uint32 face_index = 4;
+  repeated FlexPipPayment flex_payments = 5;
+  repeated ManaSpendSelection restricted_mana = 6;
 }
 
 message CostSelection {
@@ -1196,6 +1200,13 @@ message BattlefieldObject {
   AttachmentRecipient attachment_recipient = 18 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   bool face_down = 19 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint64 zone_change_generation = 20 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated RoomDoorState room_doors = 21 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+message RoomDoorState {
+  uint32 face_index = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string name = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  bool unlocked = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message HandCard {

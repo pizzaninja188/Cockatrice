@@ -96,9 +96,7 @@ impl CharacteristicsEvaluator<'_> {
         let object = self.state.objects.get(&oid)?;
         let definition = self.registry.get(&object.card_id)?;
         let copied = object.copiable_values.as_ref();
-        let face = copied
-            .map(|values| &values.face)
-            .or_else(|| definition.face(object.face_up_index))?;
+        let face = effective_face_from(self.state, self.registry, oid)?;
 
         let mut result = Characteristics {
             // CR 110.2 base value set by the instruction that put the object onto the battlefield.
@@ -390,6 +388,30 @@ impl CharacteristicsEvaluator<'_> {
                 condition.matches_value(u32::try_from(count).unwrap_or(u32::MAX))
             }
             GameCondition::BattlefieldAggregate { .. } => false,
+            GameCondition::UnlockedRoomDoorCount { controllers, .. } => {
+                let count = self
+                    .state
+                    .room_states
+                    .iter()
+                    .filter_map(|(object_id, room)| {
+                        let object = self.state.objects.get(object_id)?;
+                        (object.zone == Zone::Battlefield
+                            && relative_player_set_contains(
+                                self.state,
+                                *controllers,
+                                controller,
+                                object.controller,
+                            ))
+                        .then_some(
+                            room.unlocked
+                                .into_iter()
+                                .filter(|unlocked| *unlocked)
+                                .count(),
+                        )
+                    })
+                    .sum::<usize>();
+                condition.matches_value(u32::try_from(count).unwrap_or(u32::MAX))
+            }
             GameCondition::GraveyardAggregate {
                 owners, aggregate, ..
             } => condition.matches_value(graveyard_aggregate_value(
@@ -403,17 +425,8 @@ impl CharacteristicsEvaluator<'_> {
         }
     }
 
-    fn effective_face(&self, oid: ObjectId) -> Option<&CardFace> {
-        let object = self.state.objects.get(&oid)?;
-        object
-            .copiable_values
-            .as_ref()
-            .map(|values| &values.face)
-            .or_else(|| {
-                self.registry
-                    .get(&object.card_id)?
-                    .face(object.face_up_index)
-            })
+    fn effective_face(&self, oid: ObjectId) -> Option<Cow<'_, CardFace>> {
+        effective_face_from(self.state, self.registry, oid)
     }
 }
 

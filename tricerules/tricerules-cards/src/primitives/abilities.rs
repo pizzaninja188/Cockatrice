@@ -238,6 +238,15 @@ pub enum TriggerCondition {
     WhenSelfEntersBattlefield,
     /// When this permanent is put into a graveyard from the battlefield.
     WhenSelfDies,
+    /// CR 709.5c: this ability belongs to one Room door and triggers only when that exact door's
+    /// designation changes from locked to unlocked.
+    WhenThisDoorUnlocked,
+    /// Eerie's Room event. Fires on the transition where a player controls a Room with both doors
+    /// unlocked; `player` is relative to this ability's controller.
+    WheneverPlayerFullyUnlocksRoom {
+        #[serde(default)]
+        player: CastTriggerPlayer,
+    },
     /// Delayed-trigger-only condition: the next end step that begins after creation.
     AtBeginningOfNextEndStep,
     /// Delayed-trigger-only condition: the controller that created the delayed trigger stops
@@ -251,6 +260,15 @@ pub enum TriggerCondition {
     /// of *other* creatures in the same declaration group. Zero is an ordinary self-attack
     /// trigger; two is Battalion (Makeshift Battalion, Firefist Striker, Haazda Marshal).
     WheneverSelfAttacks { minimum_other_attackers: u32 },
+    /// One trigger for the controller's complete declared-attacker cohort. If exactly one
+    /// creature attacked, it is exposed as `TriggerObject` (Widow's Walk); broader cohorts support
+    /// Tunnel of Hate and future attack-count templates.
+    WheneverControllerAttacks {
+        #[serde(default)]
+        min_attackers: Option<u32>,
+        #[serde(default)]
+        max_attackers: Option<u32>,
+    },
     /// CR 508.1m / 508.3a: whenever the object this Aura or Equipment is attached to attacks.
     /// Heart-Piercer Bow and Battle Mastery establish Equipment/Aura reuse of the event-time
     /// attachment relation; the observed attacker is available as `TriggerObject`.
@@ -451,6 +469,16 @@ impl TriggerCondition {
                 }
                 filter.validate()
             }
+            Self::WheneverControllerAttacks {
+                min_attackers,
+                max_attackers,
+            } if min_attackers
+                .as_ref()
+                .zip(max_attackers.as_ref())
+                .is_some_and(|(minimum, maximum)| minimum > maximum) =>
+            {
+                Err("WheneverControllerAttacks min_attackers cannot exceed max_attackers".into())
+            }
             _ => Ok(()),
         }
     }
@@ -466,6 +494,10 @@ impl TriggerCondition {
                 | Self::WheneverAttachedObjectDies
                 | Self::WheneverAttachedObjectDealsCombatDamageToPlayer
                 | Self::WheneverAttachedObjectIsDealtDamage
+                | Self::WheneverControllerAttacks {
+                    min_attackers: Some(1),
+                    max_attackers: Some(1),
+                }
                 | Self::WheneverSelfBecomesTarget { .. }
                 | Self::WheneverPermanentBecomesTarget { .. }
                 | Self::AtBeginningOfNextEndStep
