@@ -213,6 +213,7 @@ impl GameEngine {
                         return Ok(finish_with_events(self, std::mem::take(ev)));
                     }
                     draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
+                    self.fire_card_drawn(ap);
                 }
                 self.state.passes_since_stack_change = 0;
                 // CR 504.2: draw-step triggers go on the stack only after the turn-based draw

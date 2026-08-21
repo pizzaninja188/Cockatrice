@@ -39,7 +39,7 @@ impl GameEngine {
         let effect = custom::lookup(&custom_key)
             .ok_or_else(|| EngineError::MissingCard(custom_key.clone()))?;
         let controller = item.controller;
-        let (step, scratch) = {
+        let (step, scratch, drawn_players) = {
             let mut ctx = ResolutionCtx::new(
                 &mut self.state,
                 self.registry,
@@ -49,8 +49,12 @@ impl GameEngine {
                 Vec::new(),
             );
             let r = effect.begin(&mut ctx);
-            (r, ctx.scratch)
+            let drawn_players = ctx.take_drawn_players();
+            (r, ctx.scratch, drawn_players)
         };
+        for drawer in drawn_players {
+            self.fire_card_drawn(drawer);
+        }
         self.park_or_finish(item, custom_key, 0, scratch, step, events);
         Ok(())
     }
@@ -200,7 +204,7 @@ impl GameEngine {
         };
 
         let mut ev = vec![];
-        let (step, scratch) = {
+        let (step, scratch, drawn_players) = {
             let mut ctx = ResolutionCtx::new(
                 &mut self.state,
                 self.registry,
@@ -210,8 +214,12 @@ impl GameEngine {
                 scratch,
             );
             let r = effect.resume(&mut ctx, &choice);
-            (r, ctx.scratch)
+            let drawn_players = ctx.take_drawn_players();
+            (r, ctx.scratch, drawn_players)
         };
+        for drawer in drawn_players {
+            self.fire_card_drawn(drawer);
+        }
         self.park_or_finish(item, key, step_no, scratch, step, &mut ev);
 
         if self.state.pending_resolution.is_none() {

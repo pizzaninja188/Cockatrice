@@ -40,6 +40,19 @@ pub enum GameCondition {
         #[serde(default)]
         max: Option<u32>,
     },
+    /// Compare the number of spells cast this turn by the selected players. The count is
+    /// committed only after CR 601.2 is complete, so rejected casts and spell copies do not
+    /// contribute. Focus the Mind and flurry cards share this per-player history.
+    SpellsCastThisTurn {
+        players: RelativePlayerSet,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
+    /// Whether any selected player committed a nonempty attacker declaration this turn.
+    /// Raid cards and "if you attacked this turn" abilities share this fact.
+    AttackedThisTurn { players: RelativePlayerSet },
     /// Compare the number of battlefield creatures matching derived characteristics against
     /// inclusive bounds. Winged Words uses `min: 1` plus Flying; subtype-based cost reductions
     /// and public activation/trigger conditions reuse the same filter.
@@ -113,6 +126,20 @@ impl GameCondition {
                 }
                 Ok(())
             }
+            GameCondition::SpellsCastThisTurn { min, max, .. } => {
+                if min.is_none() && max.is_none() {
+                    return Err("SpellsCastThisTurn requires at least one of min or max".into());
+                }
+                if min
+                    .as_ref()
+                    .zip(max.as_ref())
+                    .is_some_and(|(minimum, maximum)| minimum > maximum)
+                {
+                    return Err("SpellsCastThisTurn min cannot exceed max".into());
+                }
+                Ok(())
+            }
+            GameCondition::AttackedThisTurn { .. } => Ok(()),
             GameCondition::BattlefieldCreatureCount { filter, min, max } => {
                 filter.validate()?;
                 if min.is_none() && max.is_none() {
@@ -176,8 +203,11 @@ impl GameCondition {
 
     pub fn matches_value(&self, value: u32) -> bool {
         match self {
-            GameCondition::ActivePlayer { .. } | GameCondition::PlayerLifeAggregate { .. } => false,
+            GameCondition::ActivePlayer { .. }
+            | GameCondition::PlayerLifeAggregate { .. }
+            | GameCondition::AttackedThisTurn { .. } => false,
             GameCondition::CreatureDeathsThisTurn { min, max }
+            | GameCondition::SpellsCastThisTurn { min, max, .. }
             | GameCondition::BattlefieldCreatureCount { min, max, .. }
             | GameCondition::BattlefieldAggregate { min, max, .. }
             | GameCondition::UnlockedRoomDoorCount { min, max, .. }

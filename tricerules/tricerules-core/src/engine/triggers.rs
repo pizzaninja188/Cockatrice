@@ -745,6 +745,26 @@ impl GameEngine {
                     })
                     .collect()
             }
+            GameEvent::CardDrawn { drawer, ordinal } => sources
+                .iter()
+                .flat_map(|source| {
+                    self.matching_snapshot_abilities(source, |condition| {
+                        let TriggerCondition::WheneverPlayerDrawsNthCard {
+                            drawer: drawer_filter,
+                            ordinal: trigger_ordinal,
+                        } = condition
+                        else {
+                            return false;
+                        };
+                        *trigger_ordinal == *ordinal
+                            && self.relative_player_matches(
+                                *drawer_filter,
+                                *drawer,
+                                source.controller,
+                            )
+                    })
+                })
+                .collect(),
             GameEvent::EndStepBegin { player: active } => sources
                 .iter()
                 .flat_map(|source| {
@@ -851,6 +871,7 @@ impl GameEngine {
             GameEvent::SpellCast {
                 caster,
                 card_id: cast_card_id,
+                ordinal,
                 face_index,
             } => {
                 // CR 709.4/712.4: a spell on the stack has the characteristics of the cast face.
@@ -866,6 +887,7 @@ impl GameEngine {
                             let TriggerCondition::WheneverPlayerCastsSpell {
                                 caster: caster_filter,
                                 spell_type,
+                                ordinal: trigger_ordinal,
                             } = tc
                             else {
                                 return false;
@@ -876,6 +898,9 @@ impl GameEngine {
                                 source.controller,
                             );
                             if !caster_ok {
+                                return false;
+                            }
+                            if trigger_ordinal.is_some_and(|expected| expected != *ordinal) {
                                 return false;
                             }
                             match spell_type {
@@ -1290,6 +1315,7 @@ impl GameEngine {
             GameEvent::UpkeepBegin { player }
             | GameEvent::DrawStepBegin { player }
             | GameEvent::EndStepBegin { player } => Some(*player),
+            GameEvent::CardDrawn { drawer, .. } => Some(*drawer),
             GameEvent::TargetsChosen { controller, .. } => Some(*controller),
             _ => None,
         }

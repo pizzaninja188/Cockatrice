@@ -54,6 +54,8 @@ fn life_goes_on_gains_eight_after_a_creature_dies() {
     assert_eq!(e.state.players[0].life, 28);
     assert_eq!(e.state.turn_history.current.creatures_died, 1);
     assert_eq!(e.state.turn_history.current.spells_cast, 2);
+    assert_eq!(e.state.turn_history.current.player(0).spells_cast, 2);
+    assert_eq!(e.state.turn_history.current.player(1).spells_cast, 0);
 }
 
 #[test]
@@ -278,6 +280,8 @@ fn cleanup_rolls_current_history_to_previous_and_resets_current() {
     assert_eq!(e.state.turn_history.current.spells_cast, 0);
     assert_eq!(e.state.turn_history.previous.creatures_died, 1);
     assert_eq!(e.state.turn_history.previous.spells_cast, 1);
+    assert_eq!(e.state.turn_history.previous.player(0).spells_cast, 1);
+    assert_eq!(e.state.turn_history.current.player(0).spells_cast, 0);
 }
 
 #[test]
@@ -294,5 +298,6 @@ fn rejected_casts_do_not_enter_turn_history() {
         .expect_err("casting without green mana is rejected");
 
     assert_eq!(e.state.turn_history.current.spells_cast, 0);
+    assert_eq!(e.state.turn_history.current.player(0).spells_cast, 0);
     assert_eq!(hand_index_for_card(&e, 0, "life_goes_on"), life_goes_on);
 }

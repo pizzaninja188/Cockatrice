@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-08-21. CR 601.2i and 603.2 govern flurry; the mana ability's
+// per-turn activation limit is engine-owned and resets at cleanup.
+(
+  id: "jeskai_devotee",
+  name: "Jeskai Devotee",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Orc", "Monk"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [(
+    costs: [Mana("{1}")],
+    effect: [ProduceMana(options: [(u: 1), (r: 1), (w: 1)])],
+    activation_limit: Some(PerTurn(max_activations: 1)),
+    text: "{1}: Add {U}, {R}, or {W}. Activate only once each turn.",
+  )],
+  triggered_abilities: [(
+    trigger: WheneverPlayerCastsSpell(caster: Controller, ordinal: Some(2)),
+    effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    text: "Flurry — Whenever you cast your second spell each turn, this creature gets +1/+1 until end of turn.",
+  )],
+)

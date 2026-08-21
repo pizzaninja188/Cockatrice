@@ -1013,14 +1013,32 @@ pub struct UndoableManaAbility {
 /// Public, identity-free facts accumulated during one turn. Counts are retained rather than
 /// booleans because some cards ask whether anything happened while others use the exact total.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PlayerTurnRecord {
+    pub spells_cast: u32,
+    pub cards_drawn: u32,
+    pub attacked: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TurnRecord {
     pub spells_cast: u32,
     pub creatures_died: u32,
+    pub by_player: BTreeMap<PlayerId, PlayerTurnRecord>,
+}
+
+impl TurnRecord {
+    pub fn player(&self, player: PlayerId) -> PlayerTurnRecord {
+        self.by_player.get(&player).copied().unwrap_or_default()
+    }
+
+    pub fn player_mut(&mut self, player: PlayerId) -> &mut PlayerTurnRecord {
+        self.by_player.entry(player).or_default()
+    }
 }
 
 /// Engine-owned event memory. Cleanup rolls the completed turn into `previous` and opens a fresh
 /// `current` record, so turn-bound conditions share one lifecycle instead of adding ad hoc fields.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TurnHistory {
     pub current: TurnRecord,
     pub previous: TurnRecord,
@@ -1028,8 +1046,7 @@ pub struct TurnHistory {
 
 impl TurnHistory {
     pub fn finish_turn(&mut self) {
-        self.previous = self.current;
-        self.current = TurnRecord::default();
+        self.previous = std::mem::take(&mut self.current);
     }
 }
 

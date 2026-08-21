@@ -21,6 +21,8 @@ fn opening_choose_first_london_mulligan_then_start() {
     .expect("choose first");
     assert_eq!(e.state.players[0].hand.len(), 7);
     assert_eq!(e.state.players[1].hand.len(), 7);
+    assert_eq!(e.state.turn_history.current.player(5).cards_drawn, 0);
+    assert_eq!(e.state.turn_history.current.player(6).cards_drawn, 0);
     e.apply_command(
         5,
         &RuledCommand {
@@ -28,6 +30,7 @@ fn opening_choose_first_london_mulligan_then_start() {
         },
     )
     .expect("mulligan");
+    assert_eq!(e.state.turn_history.current.player(5).cards_drawn, 0);
     assert_eq!(e.state.opening.as_ref().unwrap().mulligans_taken[0], 1);
     assert_eq!(
         e.state.opening.as_ref().unwrap().mulligan_actor,
@@ -66,6 +69,8 @@ fn opening_choose_first_london_mulligan_then_start() {
     .expect("bottom one");
     assert!(e.state.opening.is_none());
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
+    assert_eq!(e.state.turn_history.current.player(5).cards_drawn, 0);
+    assert_eq!(e.state.turn_history.current.player(6).cards_drawn, 0);
 }
 
 #[test]

@@ -51,6 +51,7 @@ pub(in crate::engine) fn draw_cards_for_player(
             break;
         }
         draw_card(&mut engine.state.players[idx], &mut engine.state.objects)?;
+        engine.fire_card_drawn(drawer);
         drawn += 1;
     }
     let noun = if drawn == 1 { "card" } else { "cards" };

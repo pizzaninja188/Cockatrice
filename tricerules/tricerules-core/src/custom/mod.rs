@@ -109,6 +109,9 @@ pub struct ResolutionCtx<'a> {
     pub step: u32,
     /// Object ids carried between steps (effect-private; e.g. Gifts' revealed cards).
     pub scratch: Vec<ObjectId>,
+    /// Successful library-to-hand draw edges, kept in occurrence order for the engine to turn
+    /// into ordinary draw events after the custom-effect borrow ends.
+    drawn_players: Vec<PlayerId>,
 }
 
 impl<'a> ResolutionCtx<'a> {
@@ -127,7 +130,12 @@ impl<'a> ResolutionCtx<'a> {
             controller,
             step,
             scratch,
+            drawn_players: Vec::new(),
         }
+    }
+
+    pub(crate) fn take_drawn_players(&mut self) -> Vec<PlayerId> {
+        std::mem::take(&mut self.drawn_players)
     }
 
     /// Draw `n` cards for `player` (CR 120). Returns the drawn object ids (fewer than `n` if the
@@ -152,6 +160,7 @@ impl<'a> ResolutionCtx<'a> {
                 o.zone = Zone::Hand;
             }
             drawn.push(oid);
+            self.drawn_players.push(player);
         }
         if decked_out {
             self.state.players[idx].has_lost = true;

@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-08-21. CR 601.2i and 603.2: flurry observes the controller's
+// second completed cast even when the first spell was cast before this permanent entered.
+(
+  id: "poised_practitioner",
+  name: "Poised Practitioner",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Monk"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [(
+    trigger: WheneverPlayerCastsSpell(caster: Controller, ordinal: Some(2)),
+    effect: [
+      PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source),
+      Scry(count: 1),
+    ],
+    text: "Flurry — Whenever you cast your second spell each turn, put a +1/+1 counter on this creature, then scry 1.",
+  )],
+)

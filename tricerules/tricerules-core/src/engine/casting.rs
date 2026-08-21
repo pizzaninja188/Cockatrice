@@ -442,11 +442,12 @@ impl GameEngine {
                 chosen_mode_labels,
             })),
         });
-        self.record_spell_cast();
+        let ordinal = self.record_spell_cast(player);
         target_triggers.extend(self.collect_committed_sacrifice_cost_dies(payment.sacrificed));
         target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
             caster: player,
             card_id: cast_card_id,
+            ordinal,
             face_index,
         }]));
         // Both kinds of triggers are waiting when the cast completes, so they form one CR 603.3b

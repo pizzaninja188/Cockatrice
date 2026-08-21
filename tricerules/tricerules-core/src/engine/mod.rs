@@ -349,6 +349,12 @@ enum GameEvent {
     DrawStepBegin {
         player: PlayerId,
     },
+    /// One card successfully moved from a library to a hand. `ordinal` is that player's
+    /// one-based draw number in the current turn after this committed draw.
+    CardDrawn {
+        drawer: PlayerId,
+        ordinal: u32,
+    },
     /// CR 513.1-2: an end step began. Fired exactly once while entering `EndStep`, before the
     /// active player receives priority. Permanents that enter later cannot observe this past event.
     EndStepBegin {
@@ -366,6 +372,8 @@ enum GameEvent {
     SpellCast {
         caster: PlayerId,
         card_id: String,
+        /// That player's one-based committed cast number in the current turn.
+        ordinal: u32,
         /// CR 709/712: the half/face that was cast. On the stack a multi-face spell has only that
         /// face's characteristics, so cast triggers filter on it rather than on the whole card.
         face_index: usize,

@@ -287,6 +287,7 @@ fn issue_49_cast_trigger_cards_use_existing_filters_and_source_effects() {
         TriggerCondition::WheneverPlayerCastsSpell {
             caster: CastTriggerPlayer::Controller,
             spell_type: Some(CardTypeFilter::Noncreature),
+            ordinal: None,
         }
     );
     assert_eq!(
@@ -310,6 +311,7 @@ fn issue_49_cast_trigger_cards_use_existing_filters_and_source_effects() {
             TriggerCondition::WheneverPlayerCastsSpell {
                 caster: CastTriggerPlayer::Controller,
                 spell_type: Some(spell_type),
+                ordinal: None,
             },
             "{id}"
         );

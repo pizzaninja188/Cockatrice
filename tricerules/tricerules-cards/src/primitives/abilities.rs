@@ -360,6 +360,17 @@ pub enum TriggerCondition {
         /// If `Some`, only spells of this type fire the trigger. `None` matches any spell.
         #[serde(default)]
         spell_type: Option<CardTypeFilter>,
+        /// If present, only that player's Nth committed cast of the turn triggers. This is the
+        /// shared flurry vocabulary used by Poised Practitioner and Jeskai Devotee.
+        #[serde(default)]
+        ordinal: Option<u32>,
+    },
+    /// Whenever a selected player draws their Nth card in a turn. Each successfully drawn card
+    /// is a distinct CR 121.2 event; opening hands and mulligans are not draws.
+    WheneverPlayerDrawsNthCard {
+        #[serde(default)]
+        drawer: CastTriggerPlayer,
+        ordinal: u32,
     },
     /// Whenever this permanent becomes the target of the selected kind of stack object. The
     /// targeting object has already been legally cast, activated, copied, or put on the stack;
@@ -478,6 +489,12 @@ impl TriggerCondition {
                 .is_some_and(|(minimum, maximum)| minimum > maximum) =>
             {
                 Err("WheneverControllerAttacks min_attackers cannot exceed max_attackers".into())
+            }
+            Self::WheneverPlayerCastsSpell {
+                ordinal: Some(0), ..
+            }
+            | Self::WheneverPlayerDrawsNthCard { ordinal: 0, .. } => {
+                Err("turn-history trigger ordinal must be at least one".into())
             }
             _ => Ok(()),
         }

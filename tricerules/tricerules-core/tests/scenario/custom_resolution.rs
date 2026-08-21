@@ -44,6 +44,11 @@ fn brainstorm_draws_three_then_returns_two_in_chosen_order() {
     // Cast removed brainstorm from hand; begin drew three.
     assert_eq!(e.state.players[0].hand.len(), hand_before - 1 + 3);
     assert_eq!(e.state.players[0].library.len(), lib_before - 3);
+    assert_eq!(
+        e.state.turn_history.current.player(0).cards_drawn,
+        3,
+        "custom draws report the same committed draw history as primitive draws"
+    );
 
     // Put two specific hand cards on top: last chosen = top (intuitive "place A, then B on top").
     let chosen: Vec<u32> = e.state.players[0].hand.iter().take(2).copied().collect();

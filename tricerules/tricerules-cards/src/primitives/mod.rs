@@ -175,6 +175,43 @@ mod tests {
         }
         .validate()
         .is_ok());
+        assert!(GameCondition::SpellsCastThisTurn {
+            players: RelativePlayerSet::Controller,
+            min: None,
+            max: None,
+        }
+        .validate()
+        .is_err());
+        assert!(GameCondition::SpellsCastThisTurn {
+            players: RelativePlayerSet::Controller,
+            min: Some(1),
+            max: None,
+        }
+        .validate()
+        .is_ok());
+    }
+
+    #[test]
+    fn turn_history_trigger_ordinals_must_be_positive() {
+        assert!(TriggerCondition::WheneverPlayerCastsSpell {
+            caster: CastTriggerPlayer::Controller,
+            spell_type: None,
+            ordinal: Some(0),
+        }
+        .validate()
+        .is_err());
+        assert!(TriggerCondition::WheneverPlayerDrawsNthCard {
+            drawer: CastTriggerPlayer::Controller,
+            ordinal: 0,
+        }
+        .validate()
+        .is_err());
+        assert!(TriggerCondition::WheneverPlayerDrawsNthCard {
+            drawer: CastTriggerPlayer::Controller,
+            ordinal: 2,
+        }
+        .validate()
+        .is_ok());
     }
 
     #[test]

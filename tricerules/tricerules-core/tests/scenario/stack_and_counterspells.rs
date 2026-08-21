@@ -1201,6 +1201,8 @@ fn twincast_copies_bolt_both_deal_damage() {
         e.state.turn_history.current.spells_cast, 2,
         "Bolt and Twincast were cast"
     );
+    assert_eq!(e.state.turn_history.current.player(0).spells_cast, 1);
+    assert_eq!(e.state.turn_history.current.player(1).spells_cast, 1);
 
     // Both pass: Twincast resolves and emits ResolutionChoiceRequired (CR 707.10c: copy
     // controller must choose new targets before the copy lands on the stack).

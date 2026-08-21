@@ -328,6 +328,33 @@ impl CharacteristicsEvaluator<'_> {
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }
+            GameCondition::SpellsCastThisTurn { players, .. } => {
+                let count = self
+                    .state
+                    .players
+                    .iter()
+                    .filter(|player| {
+                        relative_player_set_contains(self.state, *players, controller, player.id)
+                    })
+                    .fold(0u32, |total, player| {
+                        total.saturating_add(
+                            self.state
+                                .turn_history
+                                .current
+                                .player(player.id)
+                                .spells_cast,
+                        )
+                    });
+                condition.matches_value(count)
+            }
+            GameCondition::AttackedThisTurn { players } => self
+                .state
+                .players
+                .iter()
+                .filter(|player| {
+                    relative_player_set_contains(self.state, *players, controller, player.id)
+                })
+                .any(|player| self.state.turn_history.current.player(player.id).attacked),
             // Registry validation rejects this dependency-sensitive condition for the only
             // current producer of conditional characteristic effects. Normal condition users
             // evaluate it through `GameEngine::condition_holds` instead.

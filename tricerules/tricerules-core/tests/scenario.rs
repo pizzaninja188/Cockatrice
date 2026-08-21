@@ -61,6 +61,8 @@ mod issue_101_zone_abilities;
 mod issue_102_activation_limits;
 #[path = "scenario/issue_108_graveyard_aggregates.rs"]
 mod issue_108_graveyard_aggregates;
+#[path = "scenario/issue_111_turn_history.rs"]
+mod issue_111_turn_history;
 #[path = "scenario/issue_114_disjunctive_filters.rs"]
 mod issue_114_disjunctive_filters;
 #[path = "scenario/issue_115_attachment_observers.rs"]

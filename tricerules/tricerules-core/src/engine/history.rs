@@ -89,15 +89,49 @@ impl GameEngine {
             .current
             .creatures_died
             .saturating_add(deaths);
+
+        for event in events {
+            match event {
+                GameEvent::CardDrawn { drawer, .. } => {
+                    let record = self.state.turn_history.current.player_mut(*drawer);
+                    record.cards_drawn = record.cards_drawn.saturating_add(1);
+                }
+                GameEvent::AttackersDeclared {
+                    attacking_player,
+                    attacks,
+                } if !attacks.is_empty() => {
+                    self.state
+                        .turn_history
+                        .current
+                        .player_mut(*attacking_player)
+                        .attacked = true;
+                }
+                _ => {}
+            }
+        }
     }
 
-    pub(super) fn record_spell_cast(&mut self) {
+    pub(super) fn record_spell_cast(&mut self, caster: PlayerId) -> u32 {
         self.state.turn_history.current.spells_cast = self
             .state
             .turn_history
             .current
             .spells_cast
             .saturating_add(1);
+        let record = self.state.turn_history.current.player_mut(caster);
+        record.spells_cast = record.spells_cast.saturating_add(1);
+        record.spells_cast
+    }
+
+    pub(super) fn fire_card_drawn(&mut self, drawer: PlayerId) {
+        let ordinal = self
+            .state
+            .turn_history
+            .current
+            .player(drawer)
+            .cards_drawn
+            .saturating_add(1);
+        self.fire_triggers(&[GameEvent::CardDrawn { drawer, ordinal }]);
     }
 
     pub(super) fn condition_holds(
@@ -131,6 +165,43 @@ impl GameEngine {
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }
+            GameCondition::SpellsCastThisTurn { players, .. } => {
+                let count = self
+                    .state
+                    .players
+                    .iter()
+                    .filter(|player| {
+                        relative_player_set_contains(
+                            &self.state,
+                            *players,
+                            context.controller,
+                            player.id,
+                        )
+                    })
+                    .fold(0u32, |total, player| {
+                        total.saturating_add(
+                            self.state
+                                .turn_history
+                                .current
+                                .player(player.id)
+                                .spells_cast,
+                        )
+                    });
+                condition.matches_value(count)
+            }
+            GameCondition::AttackedThisTurn { players } => self
+                .state
+                .players
+                .iter()
+                .filter(|player| {
+                    relative_player_set_contains(
+                        &self.state,
+                        *players,
+                        context.controller,
+                        player.id,
+                    )
+                })
+                .any(|player| self.state.turn_history.current.player(player.id).attacked),
             GameCondition::BattlefieldCreatureCount { filter, .. } => {
                 condition.matches_value(self.battlefield_creature_count(
                     filter,
