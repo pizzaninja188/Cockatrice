@@ -53,6 +53,8 @@ pub(super) fn counter_target_spell(
                         unique_names: false,
                         generic_mana_cost,
                         payment_currently_legal,
+                        reveal_audience: 0,
+                        revealed_zone_owner_player_id: None,
                     },
                 )),
             });
@@ -323,6 +325,8 @@ pub(super) fn copy_target_spell(
                                 mana_cost: String::new(),
                                 generic_mana_cost: 0,
                                 payment_currently_legal: false,
+                                reveal_audience: 0,
+                                revealed_zone_owner_player_id: None,
                             },
                         )),
                     });

@@ -447,18 +447,11 @@ bool isResolutionPickZoneCard(const RuledClientState *state, const CardItem *car
     const auto *viewZone = qobject_cast<const ZoneViewZoneLogic *>(zone);
     const Player *zonePlayer = zone->getPlayer();
     const bool zoneIsLocal = zonePlayer && zonePlayer->getPlayerInfo()->getLocal();
-    switch (state->resolutionHandPickZone()) {
-        case RuledClientState::PickZone::Hand:
-            // Brainstorm: real cards in the local hand, carrying genuine Server_Card ids.
-            return zone->getName() == ZoneNames::HAND && zoneIsLocal;
-        case RuledClientState::PickZone::Deck:
-            // Tutor / Gifts Ungiven search: the deck zone-*view* popup, never the face-down pile.
-            return viewZone != nullptr && zone->getName() == ZoneNames::DECK && zoneIsLocal;
-        case RuledClientState::PickZone::Revealed:
-            // Revealed set / a looked-at hand: a popup built on the deck zone as a scaffold.
-            return viewZone != nullptr && zone->getName() == ZoneNames::DECK;
-    }
-    return false;
+    const RuledPickScaffoldZone scaffoldZone = zone->getName() == ZoneNames::HAND
+                                                   ? RuledPickScaffoldZone::Hand
+                                               : zone->getName() == ZoneNames::DECK ? RuledPickScaffoldZone::Deck
+                                                                                   : RuledPickScaffoldZone::Other;
+    return isRuledPickSurfaceCard(state->resolutionHandPickZone(), scaffoldZone, viewZone != nullptr, zoneIsLocal);
 }
 
 // ---------------------------------------------------------------------------------------

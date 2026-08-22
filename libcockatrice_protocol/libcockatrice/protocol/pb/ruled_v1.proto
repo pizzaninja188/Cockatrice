@@ -880,6 +880,15 @@ enum ChoiceKind {
   CHOICE_KIND_MANIFEST_DREAD = 12;
 }
 
+// Whether a concealed-zone cohort attached to a resolution choice is merely looked at by the
+// deciding player or is publicly revealed for the lifetime of that choice. This is deliberately
+// independent of ChoiceKind: OPPONENT_HAND covers both Cracked Skull's private "look" and
+// Coercion's public "reveal" semantics.
+enum ResolutionRevealAudience {
+  RESOLUTION_REVEAL_AUDIENCE_NONE = 0;
+  RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS = 1;
+}
+
 enum ResolutionBranchCostKind {
   RESOLUTION_BRANCH_COST_KIND_UNSPECIFIED = 0;
   RESOLUTION_BRANCH_COST_KIND_MANA = 1;
@@ -924,9 +933,9 @@ message ResolutionChoiceRequired {
   // these are private; Servatrice redacts candidate_* for everyone but the deciding player.
   repeated string candidate_names = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Parallel to candidate_object_ids: Servatrice's physical card id (Server_Card::getId()) for
-  // each candidate, injected by the relay so the client can map engine OIDs to physical hand
-  // CardItems without a separate OID→serverCardId table. Only populated for private
-  // CHOICE_KIND_HAND_CARDS on the deciding player's copy; empty for other players and other kinds.
+  // each candidate, injected by the relay. HAND_CARDS uses real physical ids only for the owning
+  // recipient. Concealed-zone popup cohorts use transient sequential ids scoped to this snapshot;
+  // these are never another player's persistent hand-card ids.
   repeated int32 candidate_server_card_ids = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // When true, all chosen candidates must have distinct card names (Gifts Ungiven: "four cards
   // with different names"). The client enforces this before submission; the engine re-validates.
@@ -943,6 +952,13 @@ message ResolutionChoiceRequired {
   // contract); otherwise the vector must have exactly the same length. This lets an engine show
   // every card in a looked-at library window while keeping matching-card legality authoritative.
   repeated bool candidate_selectable = 17 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Engine-authored visibility for the concealed-zone cohort. NONE is fail-closed and preserves
+  // chooser-private look/search behavior. ALL_PARTICIPANTS authorizes the relay to route the
+  // transient candidate identities to every player and spectator for this pending choice only.
+  ResolutionRevealAudience reveal_audience = 18 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Owner of the hidden zone being publicly revealed. Present only when reveal_audience is
+  // ALL_PARTICIPANTS; absence must never be inferred from targets or Oracle display data.
+  optional int32 revealed_zone_owner_player_id = 19 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no

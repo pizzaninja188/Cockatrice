@@ -60,10 +60,9 @@
 #include <QStringList>
 #include <QTcpSocket>
 #include <QTemporaryDir>
-#include <gtest/gtest.h>
-
+#include <algorithm>
 #include <array>
-
+#include <gtest/gtest.h>
 #include <libcockatrice/protocol/pb/command_deck_select.pb.h>
 #include <libcockatrice/protocol/pb/command_ready_start.pb.h>
 #include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
@@ -79,7 +78,6 @@
 #include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/game_commands.pb.h>
 #include <libcockatrice/protocol/pb/game_event.pb.h>
-#include <libcockatrice/utility/zone_names.h>
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
 #include <libcockatrice/protocol/pb/response.pb.h>
 #include <libcockatrice/protocol/pb/room_commands.pb.h>
@@ -88,8 +86,7 @@
 #include <libcockatrice/protocol/pb/server_message.pb.h>
 #include <libcockatrice/protocol/pb/session_commands.pb.h>
 #include <libcockatrice/protocol/pb/session_event.pb.h>
-
-#include <algorithm>
+#include <libcockatrice/utility/zone_names.h>
 #include <map>
 #include <optional>
 #include <set>
@@ -257,11 +254,16 @@ public:
     bool devCurseConjureSent = false;
     bool devCurseManaSent = false;
     bool devAggressiveVictimSent = false;
+    bool devAggressiveLandVictimSent = false;
     bool devAggressiveConjureSent = false;
     bool devAggressiveManaSent = false;
     bool aggressiveCast = false;
-    bool sawAggressiveChoicePrivate = false;
-    bool sawOpponentAggressiveChoiceRedacted = false;
+    bool sawAggressivePublicReveal = false;
+    bool sawAggressiveChooserMask = false;
+    bool sawAggressiveObserverReadOnly = false;
+    bool aggressivePublicRevealActive = false;
+    bool sawAggressivePublicRevealClosed = false;
+    QStringList aggressiveRevealNames;
     bool submittedAggressiveChoice = false;
     bool sawAggressiveExile = false;
     bool sawAggressiveCounter = false;
@@ -533,7 +535,7 @@ public:
     }
 
     /// Pumps until pred() is true or timeout; fails the test on timeout.
-    template <typename Pred> ::testing::AssertionResult pumpUntil(Pred pred, int timeoutMs, const char *what)
+    template <typename Pred>::testing::AssertionResult pumpUntil(Pred pred, int timeoutMs, const char *what)
     {
         QElapsedTimer t;
         t.start();
@@ -646,8 +648,7 @@ public:
                 }
                 if (name == QLatin1String("Mountain") && from == deck && to == table) {
                     sawEvolvingWildsPhysicalDeckToTable = true;
-                    if (evolvingWildsPhysicalCardId >= 0 &&
-                        mc.new_card_id() != evolvingWildsPhysicalCardId) {
+                    if (evolvingWildsPhysicalCardId >= 0 && mc.new_card_id() != evolvingWildsPhysicalCardId) {
                         evolvingWildsPhysicalIdentityContinuous = false;
                     }
                     evolvingWildsPhysicalCardId = mc.new_card_id();
@@ -659,19 +660,20 @@ public:
                 }
                 if (submittedTypecyclingChoice && !sawTypecyclingDeckToHand && from == deck && to == hand) {
                     sawTypecyclingDeckToHand = true;
-                    typecyclingPhysicalIdentityContinuous =
-                        typecyclingPhysicalIdentityContinuous && typecyclingChosenPhysicalId >= 0 &&
-                        mc.card_id() == typecyclingChosenPhysicalId;
+                    typecyclingPhysicalIdentityContinuous = typecyclingPhysicalIdentityContinuous &&
+                                                            typecyclingChosenPhysicalId >= 0 &&
+                                                            mc.card_id() == typecyclingChosenPhysicalId;
                 }
                 if (submittedSurveilDestination && !sawSurveilPhysicalDeckToGrave && from == deck && to == grave) {
                     sawSurveilPhysicalDeckToGrave = !surveilChosenName.isEmpty() && name == surveilChosenName;
                 }
                 if (renewActivated && !sawRenewGraveToExile && from == grave && to == exile) {
                     sawRenewGraveToExile = true;
-                    renewPhysicalIdentityContinuous = renewSourcePhysicalId >= 0 && mc.card_id() == renewSourcePhysicalId;
+                    renewPhysicalIdentityContinuous =
+                        renewSourcePhysicalId >= 0 && mc.card_id() == renewSourcePhysicalId;
                 }
                 if (name == QLatin1String("Grizzly Bears") && from == hand && to == exile &&
-                    (submittedAggressiveChoice || sawOpponentAggressiveChoiceRedacted)) {
+                    (submittedAggressiveChoice || sawAggressivePublicReveal)) {
                     sawAggressiveExile = true;
                     sawAggressivePhysicalHandToExile = true;
                     aggressivePhysicalIdentityContinuous = mc.card_id() == mc.new_card_id();
@@ -730,11 +732,10 @@ public:
                     }
                 } else if ((from == grave || to == exile) && name != QLatin1String("Sagu Pummeler") &&
                            !(name == QLatin1String("Grizzly Bears") &&
-                             (submittedAggressiveChoice || sawOpponentAggressiveChoiceRedacted))) {
+                             (submittedAggressiveChoice || sawAggressivePublicReveal))) {
                     // Any *other* card taking the flashback path is the wrong-card bug.
-                    ADD_FAILURE() << "unexpected card on the flashback path: "
-                                  << name.toStdString() << " " << from.toStdString() << " -> "
-                                  << to.toStdString();
+                    ADD_FAILURE() << "unexpected card on the flashback path: " << name.toStdString() << " "
+                                  << from.toStdString() << " -> " << to.toStdString();
                 }
             }
             if (ev.HasExtension(Event_SetCardAttr::ext)) {
@@ -750,8 +751,7 @@ public:
                             .contains(QStringLiteral("Doors: Derelict Attic (unlocked), Widow's Walk (unlocked)"));
                     sawProtectionPhysicalAnnotation =
                         sawProtectionPhysicalAnnotation ||
-                        QString::fromStdString(attr.attr_value()).contains(
-                        QStringLiteral("Protection from artifacts"));
+                        QString::fromStdString(attr.attr_value()).contains(QStringLiteral("Protection from artifacts"));
                 } else if (attr.attribute() == AttrFaceDown && manifestServerCardId >= 0 &&
                            attr.card_id() == manifestServerCardId) {
                     sawManifestPhysicalFaceDown = sawManifestPhysicalFaceDown || attr.attr_value() == "1";
@@ -782,7 +782,10 @@ public:
         int phaseEvents = 0;
         bool batchDeclaredAttackers = false;
         bool batchCombatDamage = false;
+        bool batchHasPublicReveal = false;
+        bool batchIsPreview = false;
         for (const ruled::v1::RuledEvent &ev : batch.events()) {
+            batchIsPreview = batchIsPreview || ev.has_attackers_preview() || ev.has_blockers_preview();
             if (ev.has_phase_changed()) {
                 ++phaseEvents;
                 const ruled::v1::PhaseId newPhase = ev.phase_changed().phase_id();
@@ -797,8 +800,8 @@ public:
                     attackersSentThisCombat = false;
                     blockersSentThisCombat = false;
                 }
-                inCombatDamageWindow = phase == ruled::v1::PHASE_ID_COMBAT_DAMAGE ||
-                                       phase == ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE;
+                inCombatDamageWindow =
+                    phase == ruled::v1::PHASE_ID_COMBAT_DAMAGE || phase == ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE;
             } else if (ev.has_priority_changed()) {
                 priorityPlayer = ev.priority_changed().player_id();
             } else if (ev.has_stack_pushed()) {
@@ -829,9 +832,8 @@ public:
                 if (cardId == QLatin1String("cruel_truths")) {
                     cruelTruthsOid = sp.object_id();
                 }
-                if (sp.is_triggered() &&
-                    QString::fromStdString(sp.ability_annotation()).contains(
-                        QStringLiteral("draw two cards"), Qt::CaseInsensitive)) {
+                if (sp.is_triggered() && QString::fromStdString(sp.ability_annotation())
+                                             .contains(QStringLiteral("draw two cards"), Qt::CaseInsensitive)) {
                     sawRoomUnlockTrigger = true;
                 }
             } else if (ev.has_stack_resolved()) {
@@ -839,8 +841,7 @@ public:
                 if (brainstormOid != 0 && ev.stack_resolved().object_id() == brainstormOid) {
                     sawBrainstormResolved = true;
                 }
-                if (softCounterConvoluteOid != 0 &&
-                    ev.stack_resolved().object_id() == softCounterConvoluteOid) {
+                if (softCounterConvoluteOid != 0 && ev.stack_resolved().object_id() == softCounterConvoluteOid) {
                     softCounterLeftStackBeforeChoice = !sawSoftCounterPaymentChoice;
                     sawSoftCounterResolveAfterChoice = sawSoftCounterPaymentChoice;
                 }
@@ -913,10 +914,9 @@ public:
                 if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH) {
                     if (rcr.deciding_player_id() == myId) {
                         if (emptyTypecyclingActivated && rcr.candidate_object_ids_size() == 0) {
-                            sawEmptyTypecyclingChoice = rcr.min() == 0 && rcr.max() == 1 &&
-                                                       rcr.candidate_card_ids_size() == 0 &&
-                                                       rcr.candidate_names_size() == 0 &&
-                                                       rcr.candidate_server_card_ids_size() == 0;
+                            sawEmptyTypecyclingChoice =
+                                rcr.min() == 0 && rcr.max() == 1 && rcr.candidate_card_ids_size() == 0 &&
+                                rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0;
                         } else {
                             sawOwnLibrarySearchCandidates =
                                 sawOwnLibrarySearchCandidates ||
@@ -937,10 +937,9 @@ public:
                                                    rcr.candidate_names_size() == 2 &&
                                                    rcr.candidate_server_card_ids_size() == 2;
                     } else {
-                        sawManifestChoiceRedacted = rcr.candidate_object_ids_size() == 0 &&
-                                                    rcr.candidate_card_ids_size() == 0 &&
-                                                    rcr.candidate_names_size() == 0 &&
-                                                    rcr.candidate_server_card_ids_size() == 0;
+                        sawManifestChoiceRedacted =
+                            rcr.candidate_object_ids_size() == 0 && rcr.candidate_card_ids_size() == 0 &&
+                            rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0;
                     }
                 }
                 if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK) {
@@ -956,23 +955,49 @@ public:
                     }
                 }
                 if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND) {
+                    const bool publicReveal =
+                        rcr.reveal_audience() == ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS;
+                    batchHasPublicReveal = batchHasPublicReveal || publicReveal;
                     if (rcr.deciding_player_id() == myId) {
                         bool hasEligibleBear = false;
+                        bool hasLand = false;
                         for (int i = 0; i < rcr.candidate_names_size(); ++i) {
-                            if (rcr.candidate_names(i) == "Grizzly Bears" &&
-                                i < rcr.candidate_selectable_size() && rcr.candidate_selectable(i)) {
+                            if (rcr.candidate_names(i) == "Grizzly Bears" && i < rcr.candidate_selectable_size() &&
+                                rcr.candidate_selectable(i)) {
                                 hasEligibleBear = true;
                             }
+                            hasLand = hasLand || rcr.candidate_names(i) == "Island";
                         }
-                        sawAggressiveChoicePrivate =
-                            rcr.candidate_object_ids_size() == rcr.candidate_names_size() &&
-                            rcr.candidate_names_size() == rcr.candidate_server_card_ids_size() &&
-                            rcr.candidate_names_size() == rcr.candidate_selectable_size() && hasEligibleBear;
+                        sawAggressiveChooserMask = publicReveal && rcr.has_revealed_zone_owner_player_id() &&
+                                                   rcr.revealed_zone_owner_player_id() == oppId &&
+                                                   rcr.candidate_object_ids_size() == rcr.candidate_names_size() &&
+                                                   rcr.candidate_card_ids_size() == rcr.candidate_names_size() &&
+                                                   rcr.candidate_names_size() == rcr.candidate_server_card_ids_size() &&
+                                                   rcr.candidate_names_size() == rcr.candidate_selectable_size() &&
+                                                   hasEligibleBear && hasLand;
                     } else {
-                        sawOpponentAggressiveChoiceRedacted =
-                            rcr.candidate_object_ids_size() == 0 && rcr.candidate_card_ids_size() == 0 &&
-                            rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0 &&
-                            rcr.candidate_selectable_size() == 0;
+                        bool hasBear = false;
+                        bool hasLand = false;
+                        for (const auto &name : rcr.candidate_names()) {
+                            hasBear = hasBear || name == "Grizzly Bears";
+                            hasLand = hasLand || name == "Island";
+                        }
+                        sawAggressiveObserverReadOnly =
+                            publicReveal && rcr.has_revealed_zone_owner_player_id() &&
+                            rcr.revealed_zone_owner_player_id() == myId &&
+                            rcr.candidate_object_ids_size() == rcr.candidate_names_size() &&
+                            rcr.candidate_card_ids_size() == rcr.candidate_names_size() &&
+                            rcr.candidate_names_size() == rcr.candidate_server_card_ids_size() &&
+                            rcr.candidate_selectable_size() == 0 && hasBear && hasLand &&
+                            rcr.prompt_text() == "Opponent is making a resolution choice.";
+                    }
+                    if (publicReveal) {
+                        sawAggressivePublicReveal = true;
+                        aggressivePublicRevealActive = true;
+                        aggressiveRevealNames.clear();
+                        for (const auto &name : rcr.candidate_names()) {
+                            aggressiveRevealNames.append(QString::fromStdString(name));
+                        }
                     }
                 }
                 if (rcr.deciding_player_id() == myId &&
@@ -991,8 +1016,7 @@ public:
             } else if (ev.has_permanent_moved()) {
                 const auto &moved = ev.permanent_moved();
                 if (moved.destination() == ruled::v1::PermanentMoved::DESTINATION_EXILE &&
-                    moved.card_id() == "grizzly_bears" &&
-                    (submittedAggressiveChoice || sawOpponentAggressiveChoiceRedacted)) {
+                    moved.card_id() == "grizzly_bears" && (submittedAggressiveChoice || sawAggressivePublicReveal)) {
                     aggressiveChosenOid = moved.object_id();
                     sawAggressiveExile = true;
                 }
@@ -1051,8 +1075,7 @@ public:
                                 roomGeneration = perm.generation;
                                 sawRoomCastDoorState =
                                     sawRoomCastDoorState || (!perm.roomDoors[0] && perm.roomDoors[1]);
-                                sawRoomFullyUnlocked =
-                                    sawRoomFullyUnlocked || (perm.roomDoors[0] && perm.roomDoors[1]);
+                                sawRoomFullyUnlocked = sawRoomFullyUnlocked || (perm.roomDoors[0] && perm.roomDoors[1]);
                                 const auto physical = serverCardByEngineOid.find(perm.oid);
                                 if (physical != serverCardByEngineOid.end()) {
                                     if (roomServerCardId < 0) {
@@ -1067,12 +1090,12 @@ public:
                                     ruled::v1::AttachmentRecipient::kPlayerId) {
                                 perm.attachmentPlayerId = battlefieldObject.attachment_recipient().player_id();
                             }
-                            perm.haste = std::find(battlefieldObject.keywords().begin(),
-                                                   battlefieldObject.keywords().end(),
-                                                   "Haste") != battlefieldObject.keywords().end();
-                            perm.reach = std::find(battlefieldObject.keywords().begin(),
-                                                  battlefieldObject.keywords().end(),
-                                                  "Reach") != battlefieldObject.keywords().end();
+                            perm.haste =
+                                std::find(battlefieldObject.keywords().begin(), battlefieldObject.keywords().end(),
+                                          "Haste") != battlefieldObject.keywords().end();
+                            perm.reach =
+                                std::find(battlefieldObject.keywords().begin(), battlefieldObject.keywords().end(),
+                                          "Reach") != battlefieldObject.keywords().end();
                             bf.push_back(perm);
                             if (perm.faceDown && perm.creature && perm.power == 2 && perm.toughness == 2) {
                                 if (manifestOid == 0 || manifestOid == perm.oid) {
@@ -1096,8 +1119,7 @@ public:
                             if (perm.cardId == QLatin1String("anti-venom,_horrifying_healer")) {
                                 protectionTargetOid = perm.oid;
                             }
-                            if (perm.oid == manifestOid &&
-                                (submittedAggressiveChoice || sawOpponentAggressiveChoiceRedacted) &&
+                            if (perm.oid == manifestOid && (submittedAggressiveChoice || sawAggressivePublicReveal) &&
                                 perm.power >= 6 && perm.toughness >= 6) {
                                 sawAggressiveCounter = true;
                             }
@@ -1153,6 +1175,10 @@ public:
                 log(QStringLiteral("gamelog: %1").arg(text.left(160)));
             }
         }
+        if (!batchIsPreview && aggressivePublicRevealActive && !batchHasPublicReveal) {
+            aggressivePublicRevealActive = false;
+            sawAggressivePublicRevealClosed = true;
+        }
         if ((previousPhase == ruled::v1::PHASE_ID_OPENING_CHOOSE_FIRST ||
              previousPhase == ruled::v1::PHASE_ID_OPENING_MULLIGAN) &&
             phase == ruled::v1::PHASE_ID_MAIN1 && phaseEvents == 1) {
@@ -1183,47 +1209,42 @@ public:
             }
             latestLegal = it->second;
             if (submittedTypecyclingChoice) {
-                const auto plains = std::find_if(latestLegal.hand_actions().begin(),
-                                                 latestLegal.hand_actions().end(), [](const auto &action) {
-                                                     return QString::fromStdString(action.card_name()) ==
-                                                            QLatin1String("Plains");
-                                                 });
+                const auto plains = std::find_if(
+                    latestLegal.hand_actions().begin(), latestLegal.hand_actions().end(), [](const auto &action) {
+                        return QString::fromStdString(action.card_name()) == QLatin1String("Plains");
+                    });
                 if (plains != latestLegal.hand_actions().end()) {
-                    sawTypecyclingDeckToHand =
-                        handServerCardBySlot.count(static_cast<int>(plains->hand_index())) > 0;
+                    sawTypecyclingDeckToHand = handServerCardBySlot.count(static_cast<int>(plains->hand_index())) > 0;
                     typecyclingPhysicalIdentityContinuous =
                         typecyclingPhysicalIdentityContinuous && sawTypecyclingDeckToHand;
                 }
             }
             const auto hasZoneAbility = [this](const QString &cardName, ruled::v1::AbilitySourceZone sourceZone) {
-                return std::any_of(latestLegal.zone_ability_actions().begin(),
-                                   latestLegal.zone_ability_actions().end(),
+                return std::any_of(latestLegal.zone_ability_actions().begin(), latestLegal.zone_ability_actions().end(),
                                    [&](const auto &action) {
                                        return QString::fromStdString(action.card_name()) == cardName &&
                                               action.source_zone() == sourceZone;
                                    });
             };
             if (role == Role::Aggressor) {
-                sawOwnTypecyclingAction = sawOwnTypecyclingAction ||
-                                           hasZoneAbility(QStringLiteral("Shepherding Spirits"),
-                                                          ruled::v1::ABILITY_SOURCE_ZONE_HAND);
-                sawOwnRenewAction = sawOwnRenewAction ||
-                                    hasZoneAbility(QStringLiteral("Sagu Pummeler"),
-                                                   ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+                sawOwnTypecyclingAction =
+                    sawOwnTypecyclingAction ||
+                    hasZoneAbility(QStringLiteral("Shepherding Spirits"), ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+                sawOwnRenewAction = sawOwnRenewAction || hasZoneAbility(QStringLiteral("Sagu Pummeler"),
+                                                                        ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
             } else {
                 sawOpponentTypecyclingActionRedacted =
                     sawOpponentTypecyclingActionRedacted ||
-                    !hasZoneAbility(QStringLiteral("Shepherding Spirits"),
-                                    ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+                    !hasZoneAbility(QStringLiteral("Shepherding Spirits"), ruled::v1::ABILITY_SOURCE_ZONE_HAND);
                 sawOpponentRenewActionRedacted =
                     sawOpponentRenewActionRedacted ||
-                    !hasZoneAbility(QStringLiteral("Sagu Pummeler"),
-                                    ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+                    !hasZoneAbility(QStringLiteral("Sagu Pummeler"), ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
             }
             if (role == Role::Hoarder && sawLibraryPermanentMoved &&
-                std::any_of(latestLegal.hand_actions().begin(), latestLegal.hand_actions().end(), [](const auto &action) {
-                    return QString::fromStdString(action.card_name()) == QLatin1String("Grizzly Bears");
-                })) {
+                std::any_of(latestLegal.hand_actions().begin(), latestLegal.hand_actions().end(),
+                            [](const auto &action) {
+                                return QString::fromStdString(action.card_name()) == QLatin1String("Grizzly Bears");
+                            })) {
                 sawTopPermanentDrawn = true;
             }
         }
@@ -1250,8 +1271,7 @@ public:
             return r;
         }
         if (responses[loginId].response_code() != Response::RespOk) {
-            return ::testing::AssertionFailure()
-                   << "login failed with code " << responses[loginId].response_code();
+            return ::testing::AssertionFailure() << "login failed with code " << responses[loginId].response_code();
         }
         CommandContainer listCont;
         listCont.add_session_command()->MutableExtension(Command_ListRooms::ext);
@@ -1270,8 +1290,7 @@ public:
             return r;
         }
         if (responses[joinId].response_code() != Response::RespOk) {
-            return ::testing::AssertionFailure()
-                   << "join room failed with code " << responses[joinId].response_code();
+            return ::testing::AssertionFailure() << "join room failed with code " << responses[joinId].response_code();
         }
         return ::testing::AssertionSuccess();
     }
@@ -1314,8 +1333,7 @@ public:
             return r;
         }
         if (responses[id].response_code() != Response::RespOk) {
-            return ::testing::AssertionFailure()
-                   << "deck select failed with code " << responses[id].response_code();
+            return ::testing::AssertionFailure() << "deck select failed with code " << responses[id].response_code();
         }
         return ::testing::AssertionSuccess();
     }
@@ -1388,8 +1406,8 @@ public:
         return false;
     }
 
-    const ruled::v1::LegalHandAction *
-    handAction(ruled::v1::HandActionKind kind, const QString &cardName = QString()) const
+    const ruled::v1::LegalHandAction *handAction(ruled::v1::HandActionKind kind,
+                                                 const QString &cardName = QString()) const
     {
         for (const auto &action : latestLegal.hand_actions()) {
             if (action.kind() == kind &&
@@ -1400,8 +1418,8 @@ public:
         return nullptr;
     }
 
-    const ruled::v1::LegalZoneAbilityAction *
-    zoneAbilityAction(const QString &cardName, ruled::v1::AbilitySourceZone sourceZone) const
+    const ruled::v1::LegalZoneAbilityAction *zoneAbilityAction(const QString &cardName,
+                                                               ruled::v1::AbilitySourceZone sourceZone) const
     {
         for (const auto &action : latestLegal.zone_ability_actions()) {
             if (QString::fromStdString(action.card_name()) == cardName && action.source_zone() == sourceZone) {
@@ -1547,9 +1565,9 @@ public:
                 cast->mutable_source()->set_graveyard_object_id(ga.object_id());
                 cast->add_targets()->set_object_id(static_cast<quint32>(oppId));
                 flashbackCast = true;
-                sendRuled(cmd, QStringLiteral("flashback Bump in the Night (oid %1) at player %2")
-                                   .arg(ga.object_id())
-                                   .arg(oppId));
+                sendRuled(
+                    cmd,
+                    QStringLiteral("flashback Bump in the Night (oid %1) at player %2").arg(ga.object_id()).arg(oppId));
                 return true;
             }
         }
@@ -1661,8 +1679,8 @@ public:
         if (pendingChoice) {
             const auto &rcr = *pendingChoice;
             if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH) {
-                const bool isProtection = rcr.resolution_branches_size() == 6 &&
-                                          rcr.resolution_branches(0).label() == "artifacts";
+                const bool isProtection =
+                    rcr.resolution_branches_size() == 6 && rcr.resolution_branches(0).label() == "artifacts";
                 if (!isProtection) {
                     ADD_FAILURE() << "unexpected authored resolution-branch choice";
                     pendingChoice.reset();
@@ -1699,8 +1717,7 @@ public:
                     return;
                 }
                 ruled::v1::RuledCommand cmd;
-                cmd.mutable_submit_resolution_choice()->set_decision(
-                    ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+                cmd.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
                 paidSoftCounter = true;
                 sendRuled(cmd, QStringLiteral("pay Convolute's resolution cost"));
                 return;
@@ -1714,7 +1731,8 @@ public:
             const bool isSurveil = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK;
             const bool isOpponentHand = rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND;
             const QString prompt = QString::fromStdString(rcr.prompt_text());
-            const bool isEntryReplacement = isReplacement && prompt.contains(QStringLiteral("entering the battlefield"));
+            const bool isEntryReplacement =
+                isReplacement && prompt.contains(QStringLiteral("entering the battlefield"));
             const bool isDamagePrevention = isReplacement && !isEntryReplacement;
             if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS && rcr.ordered()) {
                 sawBrainstormChoice = true;
@@ -1727,9 +1745,8 @@ public:
             }
             ruled::v1::RuledCommand cmd;
             auto *choice = cmd.mutable_submit_resolution_choice();
-            const int need = (isLibrarySearch && rcr.candidate_object_ids_size() > 0) || isSurveil
-                                 ? 1
-                                 : static_cast<int>(rcr.min());
+            const int need =
+                (isLibrarySearch && rcr.candidate_object_ids_size() > 0) || isSurveil ? 1 : static_cast<int>(rcr.min());
             if (isManifestDread) {
                 int chosen = -1;
                 for (int i = 0; i < rcr.candidate_names_size(); ++i) {
@@ -1749,8 +1766,8 @@ public:
             } else if (isOpponentHand) {
                 int chosen = -1;
                 for (int i = 0; i < rcr.candidate_names_size(); ++i) {
-                    if (rcr.candidate_names(i) == "Grizzly Bears" &&
-                        i < rcr.candidate_selectable_size() && rcr.candidate_selectable(i)) {
+                    if (rcr.candidate_names(i) == "Grizzly Bears" && i < rcr.candidate_selectable_size() &&
+                        rcr.candidate_selectable(i)) {
                         chosen = i;
                         break;
                     }
@@ -1805,8 +1822,7 @@ public:
             if (it != battlefieldByPlayer.end() && !sawCombatLifeLoss) {
                 for (const Permanent &perm : it->second) {
                     if (perm.cardId != QStringLiteral("anti-venom,_horrifying_healer") && perm.creature &&
-                        !perm.tapped &&
-                        (!perm.sick || perm.haste)) {
+                        !perm.tapped && (!perm.sick || perm.haste)) {
                         att->add_creature_ids(perm.oid);
                     }
                 }
@@ -1826,8 +1842,7 @@ public:
         // Issue #88: the nonactive player responds to the specially conjured Bolt with Convolute.
         // The Bolt controller will then activate Islands from the parked payment prompt above.
         if (role == Role::Hoarder && stackDepth == 1 && latestBoltOid != 0 && !softCounterConvoluteCast) {
-            if (const auto *convolute = handAction(ruled::v1::HAND_ACTION_CAST_SPELL,
-                                                   QStringLiteral("Convolute"))) {
+            if (const auto *convolute = handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Convolute"))) {
                 ruled::v1::RuledCommand cmd;
                 auto *cast = cmd.mutable_cast_spell();
                 cast->mutable_source()->set_hand_index(convolute->hand_index());
@@ -1869,9 +1884,10 @@ public:
         if (ownBattlefield != battlefieldByPlayer.end()) {
             sawDiregrafEnterTapped =
                 sawDiregrafEnterTapped ||
-                std::any_of(ownBattlefield->second.begin(), ownBattlefield->second.end(), [](const Permanent &permanent) {
-                    return permanent.cardId == QStringLiteral("diregraf_ghoul") && permanent.tapped;
-                });
+                std::any_of(ownBattlefield->second.begin(), ownBattlefield->second.end(),
+                            [](const Permanent &permanent) {
+                                return permanent.cardId == QStringLiteral("diregraf_ghoul") && permanent.tapped;
+                            });
         }
 
         // --- Priority-gated actions ---
@@ -1967,8 +1983,7 @@ public:
                 return;
             }
             if (!roomCast) {
-                if (const auto *spell = handAction(ruled::v1::HAND_ACTION_CAST_SPELL,
-                                                   QStringLiteral("Widow's Walk"))) {
+                if (const auto *spell = handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Widow's Walk"))) {
                     ruled::v1::RuledCommand cmd;
                     auto *cast = cmd.mutable_cast_spell();
                     cast->mutable_source()->set_hand_index(spell->hand_index());
@@ -2025,8 +2040,8 @@ public:
                 return;
             }
             if (!typecyclingActivated) {
-                if (const auto *action = zoneAbilityAction(QStringLiteral("Shepherding Spirits"),
-                                                           ruled::v1::ABILITY_SOURCE_ZONE_HAND)) {
+                if (const auto *action =
+                        zoneAbilityAction(QStringLiteral("Shepherding Spirits"), ruled::v1::ABILITY_SOURCE_ZONE_HAND)) {
                     ruled::v1::RuledCommand cmd;
                     auto *ability = cmd.mutable_activate_ability();
                     ability->set_source_object_id(action->object_id());
@@ -2072,8 +2087,8 @@ public:
                 return;
             }
             if (!emptyTypecyclingActivated) {
-                if (const auto *action = zoneAbilityAction(QStringLiteral("Shepherding Spirits"),
-                                                           ruled::v1::ABILITY_SOURCE_ZONE_HAND)) {
+                if (const auto *action =
+                        zoneAbilityAction(QStringLiteral("Shepherding Spirits"), ruled::v1::ABILITY_SOURCE_ZONE_HAND)) {
                     ruled::v1::RuledCommand cmd;
                     auto *ability = cmd.mutable_activate_ability();
                     ability->set_source_object_id(action->object_id());
@@ -2123,8 +2138,8 @@ public:
                 return;
             }
             if (!renewActivated) {
-                if (const auto *action = zoneAbilityAction(QStringLiteral("Sagu Pummeler"),
-                                                           ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD)) {
+                if (const auto *action =
+                        zoneAbilityAction(QStringLiteral("Sagu Pummeler"), ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD)) {
                     ruled::v1::RuledCommand cmd;
                     auto *ability = cmd.mutable_activate_ability();
                     ability->set_source_object_id(action->object_id());
@@ -2149,15 +2164,25 @@ public:
                 if (battlefield != battlefieldByPlayer.end()) {
                     const auto renewed = std::find_if(battlefield->second.begin(), battlefield->second.end(),
                                                       [this](const Permanent &permanent) {
-                                                          return permanent.oid == manifestOid &&
-                                                                 permanent.power == 5 && permanent.toughness == 5 &&
-                                                                 permanent.reach;
+                                                          return permanent.oid == manifestOid && permanent.power == 5 &&
+                                                                 permanent.toughness == 5 && permanent.reach;
                                                       });
                     sawRenewCounters = sawRenewCounters || renewed != battlefield->second.end();
                 }
                 if (!sawRenewCounters) {
                     return;
                 }
+            }
+            if (!devAggressiveLandVictimSent) {
+                devAggressiveLandVictimSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(oppId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Island");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure public-reveal land into opponent hand"));
+                return;
             }
             if (!devAggressiveVictimSent) {
                 devAggressiveVictimSent = true;
@@ -2206,8 +2231,9 @@ public:
                     creature->set_group_index(1);
                     creature->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
                     aggressiveCast = true;
-                    sendRuled(cmd, QStringLiteral("cast Aggressive Negotiations targeting opponent and oid %1")
-                                       .arg(manifestOid));
+                    sendRuled(
+                        cmd,
+                        QStringLiteral("cast Aggressive Negotiations targeting opponent and oid %1").arg(manifestOid));
                     return;
                 }
             }
@@ -2350,7 +2376,8 @@ public:
                 }
             }
             if (!preventionSalveCast && antiVenomOid) {
-                if (const auto *salve = handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Healing Salve"))) {
+                if (const auto *salve =
+                        handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Healing Salve"))) {
                     ruled::v1::RuledCommand cmd;
                     auto *cast = cmd.mutable_cast_spell();
                     cast->mutable_source()->set_hand_index(salve->hand_index());
@@ -2552,8 +2579,8 @@ public:
                             return;
                         }
                     }
-                    if (const auto *bolt = handAction(ruled::v1::HAND_ACTION_CAST_SPELL,
-                                                      QStringLiteral("Lightning Bolt"))) {
+                    if (const auto *bolt =
+                            handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Lightning Bolt"))) {
                         ruled::v1::RuledCommand cmd;
                         auto *cast = cmd.mutable_cast_spell();
                         cast->mutable_source()->set_hand_index(bolt->hand_index());
@@ -2712,9 +2739,9 @@ public:
                 sendRuled(cmd, QStringLiteral("dev: add {R}{W} for post-combat Boros Charm"));
                 return;
             }
-            if (const auto *bolt =
-                    !boltCast ? handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Lightning Bolt"))
-                              : nullptr) {
+            if (const auto *bolt = !boltCast
+                                       ? handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Lightning Bolt"))
+                                       : nullptr) {
                 if (myPool.r >= 1) {
                     ruled::v1::RuledCommand cmd;
                     auto *cast = cmd.mutable_cast_spell();
@@ -2733,10 +2760,9 @@ public:
                     return;
                 }
             }
-            if (const auto *charm =
-                    boltCast && !borosCharmCast
-                        ? handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Boros Charm"))
-                        : nullptr) {
+            if (const auto *charm = boltCast && !borosCharmCast
+                                        ? handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Boros Charm"))
+                                        : nullptr) {
                 if (myPool.r >= 1 && myPool.w >= 1) {
                     ruled::v1::RuledCommand cmd;
                     auto *cast = cmd.mutable_cast_spell();
@@ -2859,56 +2885,55 @@ protected:
         const QString path = tempDir.filePath(QStringLiteral("servatrice-e2e.ini"));
         QFile f(path);
         EXPECT_TRUE(f.open(QIODevice::WriteOnly | QIODevice::Text));
-        const QByteArray ini =
-            "[server]\n"
-            "name=\"ruled e2e smoke\"\n"
-            "id=1\n"
-            "host=127.0.0.1\n"
-            "port=" +
-            QByteArray::number(kServatricePort) +
-            "\n"
-            "number_pools=1\n"
-            "websocket_number_pools=0\n"
-            "statusupdate=15000\n"
-            "writelog=0\n"
-            "clientkeepalive=1\n"
-            "max_player_inactivity_time=9999\n"
-            "idleclienttimeout=0\n"
-            "requireclientid=false\n"
-            "requiredfeatures=\"\"\n"
-            "[authentication]\n"
-            "method=none\n"
-            "regonly=false\n"
-            "[users]\n"
-            "minnamelength=2\n"
-            "maxnamelength=12\n"
-            "allowlowercase=true\n"
-            "allowuppercase=true\n"
-            "allownumerics=true\n"
-            "[database]\n"
-            "type=none\n"
-            "[rooms]\n"
-            "method=config\n"
-            "roomlist\\size=1\n"
-            "roomlist\\1\\name=\"Smoke room\"\n"
-            "roomlist\\1\\description=\"e2e\"\n"
-            "roomlist\\1\\autojoin=false\n"
-            "roomlist\\1\\joinmessage=\"\"\n"
-            "roomlist\\1\\game_types\\size=0\n"
-            "[game]\n"
-            "max_game_inactivity_time=9999\n"
-            "store_replays=false\n"
-            "[security]\n"
-            "enable_max_user_limit=false\n"
-            "max_users_per_address=10\n"
-            "message_counting_interval=10\n"
-            "max_message_size_per_interval=100000\n"
-            "max_message_count_per_interval=10000\n"
-            "max_games_per_user=5\n"
-            "command_counting_interval=10\n"
-            "max_command_count_per_interval=10000\n"
-            "[logging]\n"
-            "enablelogquery=false\n";
+        const QByteArray ini = "[server]\n"
+                               "name=\"ruled e2e smoke\"\n"
+                               "id=1\n"
+                               "host=127.0.0.1\n"
+                               "port=" +
+                               QByteArray::number(kServatricePort) +
+                               "\n"
+                               "number_pools=1\n"
+                               "websocket_number_pools=0\n"
+                               "statusupdate=15000\n"
+                               "writelog=0\n"
+                               "clientkeepalive=1\n"
+                               "max_player_inactivity_time=9999\n"
+                               "idleclienttimeout=0\n"
+                               "requireclientid=false\n"
+                               "requiredfeatures=\"\"\n"
+                               "[authentication]\n"
+                               "method=none\n"
+                               "regonly=false\n"
+                               "[users]\n"
+                               "minnamelength=2\n"
+                               "maxnamelength=12\n"
+                               "allowlowercase=true\n"
+                               "allowuppercase=true\n"
+                               "allownumerics=true\n"
+                               "[database]\n"
+                               "type=none\n"
+                               "[rooms]\n"
+                               "method=config\n"
+                               "roomlist\\size=1\n"
+                               "roomlist\\1\\name=\"Smoke room\"\n"
+                               "roomlist\\1\\description=\"e2e\"\n"
+                               "roomlist\\1\\autojoin=false\n"
+                               "roomlist\\1\\joinmessage=\"\"\n"
+                               "roomlist\\1\\game_types\\size=0\n"
+                               "[game]\n"
+                               "max_game_inactivity_time=9999\n"
+                               "store_replays=false\n"
+                               "[security]\n"
+                               "enable_max_user_limit=false\n"
+                               "max_users_per_address=10\n"
+                               "message_counting_interval=10\n"
+                               "max_message_size_per_interval=100000\n"
+                               "max_message_count_per_interval=10000\n"
+                               "max_games_per_user=5\n"
+                               "command_counting_interval=10\n"
+                               "max_command_count_per_interval=10000\n"
+                               "[logging]\n"
+                               "enablelogquery=false\n";
         f.write(ini);
         f.close();
         return path;
@@ -2923,8 +2948,8 @@ protected:
         const bool require = qgetenv("RULED_E2E_REQUIRE") == "1";
         if (sidecarExe.isEmpty() || !QFile::exists(sidecarExe)) {
             if (require) {
-                return ::testing::AssertionFailure() << "tricerules-server binary not found: "
-                                                     << sidecarExe.toStdString();
+                return ::testing::AssertionFailure()
+                       << "tricerules-server binary not found: " << sidecarExe.toStdString();
             }
             return ::testing::AssertionSuccess() << "SKIP:tricerules-server binary not found (build with "
                                                     "WITH_RULES_ENGINE or run cargo build --release): "
@@ -2932,11 +2957,10 @@ protected:
         }
         if (servatriceExe.isEmpty() || !QFile::exists(servatriceExe)) {
             if (require) {
-                return ::testing::AssertionFailure() << "servatrice binary not found: "
-                                                     << servatriceExe.toStdString();
+                return ::testing::AssertionFailure() << "servatrice binary not found: " << servatriceExe.toStdString();
             }
-            return ::testing::AssertionSuccess() << "SKIP:servatrice binary not found (build with WITH_SERVER): "
-                                                 << servatriceExe.toStdString();
+            return ::testing::AssertionSuccess()
+                   << "SKIP:servatrice binary not found (build with WITH_SERVER): " << servatriceExe.toStdString();
         }
 
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
@@ -3032,52 +3056,43 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawManifestPublicFaceDown && p2.sawManifestPublicFaceDown && p1.sawManifestPrivateIdentity &&
                p2.sawOpponentManifestIdentityEmpty && p1.sawManifestPhysicalFaceDown &&
                p2.sawManifestPhysicalFaceDown && p1.sawManifestFaceChanged && p2.sawManifestFaceChanged &&
-               p1.sawManifestPhysicalFaceUp && p2.sawManifestPhysicalFaceUp &&
-               p1.sawRoomCastDoorState && p2.sawRoomCastDoorState && p1.sawRoomFullyUnlocked &&
-               p2.sawRoomFullyUnlocked && p1.sawRoomUnlockTrigger && p2.sawRoomUnlockTrigger &&
-               p1.roomPhysicalIdentityContinuous && p2.roomPhysicalIdentityContinuous &&
-               p1.hasRoomPhysicalAnnotation() && p2.hasRoomPhysicalAnnotation() &&
-               p1.sawOwnTypecyclingAction && p2.sawOpponentTypecyclingActionRedacted &&
-               p1.submittedTypecyclingChoice && p1.sawEmptyTypecyclingChoice &&
-               p1.submittedEmptyTypecyclingChoice &&
-               p1.sawOwnRenewAction && p2.sawOpponentRenewActionRedacted && p1.sawRenewGraveToExile &&
-               p1.renewPhysicalIdentityContinuous && p1.sawRenewCounters &&
-               p1.sawAggressiveChoicePrivate && p2.sawOpponentAggressiveChoiceRedacted &&
+               p1.sawManifestPhysicalFaceUp && p2.sawManifestPhysicalFaceUp && p1.sawRoomCastDoorState &&
+               p2.sawRoomCastDoorState && p1.sawRoomFullyUnlocked && p2.sawRoomFullyUnlocked &&
+               p1.sawRoomUnlockTrigger && p2.sawRoomUnlockTrigger && p1.roomPhysicalIdentityContinuous &&
+               p2.roomPhysicalIdentityContinuous && p1.hasRoomPhysicalAnnotation() && p2.hasRoomPhysicalAnnotation() &&
+               p1.sawOwnTypecyclingAction && p2.sawOpponentTypecyclingActionRedacted && p1.submittedTypecyclingChoice &&
+               p1.sawEmptyTypecyclingChoice && p1.submittedEmptyTypecyclingChoice && p1.sawOwnRenewAction &&
+               p2.sawOpponentRenewActionRedacted && p1.sawRenewGraveToExile && p1.renewPhysicalIdentityContinuous &&
+               p1.sawRenewCounters && p1.sawAggressiveChooserMask && p2.sawAggressiveObserverReadOnly &&
+               p1.sawAggressivePublicRevealClosed && p2.sawAggressivePublicRevealClosed &&
                p1.submittedAggressiveChoice && p1.sawAggressiveExile && p2.sawAggressiveExile &&
-               p1.sawAggressiveCounter && p2.sawAggressiveCounter &&
-               p1.sawAggressivePhysicalHandToExile && p2.sawAggressivePhysicalHandToExile &&
-               p1.aggressivePhysicalIdentityContinuous && p2.aggressivePhysicalIdentityContinuous &&
-               p1.sawCursePlayerAttachment && p2.sawCursePlayerAttachment && p1.hasCursePhysicalAnnotation() &&
-               p2.hasCursePhysicalAnnotation() &&
-               p1.sawBoltLifeLoss && p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss &&
-               p1.sawAttackersDeclared && p1.sawCombatLifeLoss && p2.sawBrainstormChoice &&
-               p2.submittedBrainstormChoice && p2.sawBrainstormResolved && p2.sentCleanupDiscard &&
-               p1.sawDevConjuredPermanent && p1.sawDevMana && p1.sawWaifFaceChanged && p2.sawWaifFaceChanged &&
-               p1.sawWaifBackPt && p2.sawWaifBackPt && p1.sawFlashbackGraveToStack && p1.sawFlashbackStackToExile &&
-               p1.sawAdventureStackToExile && p1.sawAdventureExileToStack && p1.sawAdventureStackToBattlefield &&
-               p1.sawEntryReplacementChoice && p1.submittedEntryReplacementChoice && p1.sawDiregrafEnterTapped &&
-               p1.sawDamagePreventionChoice && p1.submittedDamagePreventionChoice && p1.sawControlTransfer &&
-               p1.sawProtectionBranchChoice && p1.submittedProtectionBranchChoice &&
-               p1.sawProtectionHandToStack && !p1.protectionLeftStackBeforeChoice &&
-               p1.sawProtectionStackToGraveAfterChoice &&
-               p1.sawProtectionPhysicalAnnotation && p2.sawProtectionPhysicalAnnotation &&
-               p1.sawControlReturn && p1.sawPhysicalControlTransfer && p1.sawPhysicalControlReturn &&
-               p1.sawLibraryPermanentMoved && p2.sawLibraryPermanentMoved &&
-               p1.sawLibraryTargetAbsentFromBattlefield && p2.sawLibraryTargetAbsentFromBattlefield &&
-               p2.sawTopPermanentDrawn &&
+               p1.sawAggressiveCounter && p2.sawAggressiveCounter && p1.sawAggressivePhysicalHandToExile &&
+               p2.sawAggressivePhysicalHandToExile && p1.aggressivePhysicalIdentityContinuous &&
+               p2.aggressivePhysicalIdentityContinuous && p1.sawCursePlayerAttachment && p2.sawCursePlayerAttachment &&
+               p1.hasCursePhysicalAnnotation() && p2.hasCursePhysicalAnnotation() && p1.sawBoltLifeLoss &&
+               p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss && p1.sawAttackersDeclared &&
+               p1.sawCombatLifeLoss && p2.sawBrainstormChoice && p2.submittedBrainstormChoice &&
+               p2.sawBrainstormResolved && p2.sentCleanupDiscard && p1.sawDevConjuredPermanent && p1.sawDevMana &&
+               p1.sawWaifFaceChanged && p2.sawWaifFaceChanged && p1.sawWaifBackPt && p2.sawWaifBackPt &&
+               p1.sawFlashbackGraveToStack && p1.sawFlashbackStackToExile && p1.sawAdventureStackToExile &&
+               p1.sawAdventureExileToStack && p1.sawAdventureStackToBattlefield && p1.sawEntryReplacementChoice &&
+               p1.submittedEntryReplacementChoice && p1.sawDiregrafEnterTapped && p1.sawDamagePreventionChoice &&
+               p1.submittedDamagePreventionChoice && p1.sawControlTransfer && p1.sawProtectionBranchChoice &&
+               p1.submittedProtectionBranchChoice && p1.sawProtectionHandToStack &&
+               !p1.protectionLeftStackBeforeChoice && p1.sawProtectionStackToGraveAfterChoice &&
+               p1.sawProtectionPhysicalAnnotation && p2.sawProtectionPhysicalAnnotation && p1.sawControlReturn &&
+               p1.sawPhysicalControlTransfer && p1.sawPhysicalControlReturn && p1.sawLibraryPermanentMoved &&
+               p2.sawLibraryPermanentMoved && p1.sawLibraryTargetAbsentFromBattlefield &&
+               p2.sawLibraryTargetAbsentFromBattlefield && p2.sawTopPermanentDrawn &&
                p1.sawOwnLibrarySearchCandidates && p2.sawOpponentLibrarySearchRedacted &&
                p1.submittedEvolvingWildsChoice && p1.sawEvolvingWildsPermanentMoved &&
                p2.sawEvolvingWildsPermanentMoved && p1.sawEvolvingWildsPhysicalDeckToTable &&
-               p2.sawEvolvingWildsPhysicalDeckToTable &&
-               p1.sawOwnSurveilCandidates && p2.sawOpponentSurveilRedacted &&
-               p1.submittedSurveilDestination && p1.sawSurveilPhysicalDeckToGrave &&
-               p1.sawCruelTruthsResolved && p2.sawCruelTruthsResolved &&
-               p1.sawCruelTruthsLifeLoss && p2.sawCruelTruthsLifeLoss &&
+               p2.sawEvolvingWildsPhysicalDeckToTable && p1.sawOwnSurveilCandidates && p2.sawOpponentSurveilRedacted &&
+               p1.submittedSurveilDestination && p1.sawSurveilPhysicalDeckToGrave && p1.sawCruelTruthsResolved &&
+               p2.sawCruelTruthsResolved && p1.sawCruelTruthsLifeLoss && p2.sawCruelTruthsLifeLoss &&
                p1.sawSoftCounterPaymentChoice && p1.activatedManaDuringSoftCounterPayment && p1.paidSoftCounter &&
-               p1.sawSoftCounterResolveAfterChoice &&
-               p2.softCounterConvoluteCast &&
-               p2.sawFlashbackGraveToStack && p2.sawFlashbackStackToExile && p2.handSizeByPlayer.count(p2.myId) &&
-               p2.handSizeByPlayer[p2.myId] <= 7;
+               p1.sawSoftCounterResolveAfterChoice && p2.softCounterConvoluteCast && p2.sawFlashbackGraveToStack &&
+               p2.sawFlashbackStackToExile && p2.handSizeByPlayer.count(p2.myId) && p2.handSizeByPlayer[p2.myId] <= 7;
     };
     QElapsedTimer deadline;
     deadline.start();
@@ -3144,10 +3159,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p1.submittedDamagePreventionChoice) << "damage-prevention ordering choice was never submitted";
     EXPECT_TRUE(p1.sawProtectionBranchChoice)
         << "Apostle's Blessing never published its six protection-quality branches";
-    EXPECT_TRUE(p1.submittedProtectionBranchChoice)
-        << "the ruled client never selected protection from artifacts";
-    EXPECT_TRUE(p1.sawProtectionHandToStack)
-        << "Apostle's Blessing never moved from the physical hand to the stack";
+    EXPECT_TRUE(p1.submittedProtectionBranchChoice) << "the ruled client never selected protection from artifacts";
+    EXPECT_TRUE(p1.sawProtectionHandToStack) << "Apostle's Blessing never moved from the physical hand to the stack";
     EXPECT_FALSE(p1.protectionLeftStackBeforeChoice)
         << "Apostle's Blessing left the physical stack before its resolution choice";
     EXPECT_TRUE(p1.sawProtectionStackToGraveAfterChoice)
@@ -3159,8 +3172,7 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "clients disagreed on the protected permanent's engine ObjectId";
     ASSERT_TRUE(p1.serverCardByEngineOid.count(p1.protectionTargetOid));
     ASSERT_TRUE(p2.serverCardByEngineOid.count(p2.protectionTargetOid));
-    EXPECT_EQ(p1.serverCardByEngineOid[p1.protectionTargetOid],
-              p2.serverCardByEngineOid[p2.protectionTargetOid])
+    EXPECT_EQ(p1.serverCardByEngineOid[p1.protectionTargetOid], p2.serverCardByEngineOid[p2.protectionTargetOid])
         << "clients disagreed on the protected permanent's physical Server_Card mapping";
     EXPECT_TRUE(p1.sawEntryReplacementChoice) << "battlefield-entry replacement ordering choice never arrived";
     EXPECT_TRUE(p1.submittedEntryReplacementChoice)
@@ -3190,12 +3202,9 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "Evolving Wilds moved a different physical card than the chosen library candidate";
     EXPECT_TRUE(p1.sawOwnSurveilCandidates)
         << "Cruel Truths' controller did not receive its two private surveil candidates";
-    EXPECT_TRUE(p2.sawOpponentSurveilRedacted)
-        << "Cruel Truths leaked private surveil identities to the opponent";
-    EXPECT_TRUE(p1.submittedSurveilDestination)
-        << "the surveil destination choice was never submitted";
-    EXPECT_TRUE(p1.sawSurveilPhysicalDeckToGrave)
-        << "the chosen physical surveil card did not move from DECK to GRAVE";
+    EXPECT_TRUE(p2.sawOpponentSurveilRedacted) << "Cruel Truths leaked private surveil identities to the opponent";
+    EXPECT_TRUE(p1.submittedSurveilDestination) << "the surveil destination choice was never submitted";
+    EXPECT_TRUE(p1.sawSurveilPhysicalDeckToGrave) << "the chosen physical surveil card did not move from DECK to GRAVE";
     EXPECT_TRUE(p1.sawCruelTruthsResolved && p2.sawCruelTruthsResolved)
         << "Cruel Truths did not finish resolving after the surveil choice";
     EXPECT_TRUE(p1.sawCruelTruthsLifeLoss && p2.sawCruelTruthsLifeLoss)
@@ -3205,8 +3214,7 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "clients disagreed on the searched-for Mountain's engine ObjectId";
     ASSERT_TRUE(p1.serverCardByEngineOid.count(p1.evolvingWildsChosenOid));
     ASSERT_TRUE(p2.serverCardByEngineOid.count(p2.evolvingWildsChosenOid));
-    EXPECT_EQ(p1.serverCardByEngineOid[p1.evolvingWildsChosenOid],
-              p2.serverCardByEngineOid[p2.evolvingWildsChosenOid])
+    EXPECT_EQ(p1.serverCardByEngineOid[p1.evolvingWildsChosenOid], p2.serverCardByEngineOid[p2.evolvingWildsChosenOid])
         << "clients disagreed on the searched-for Mountain's physical Server_Card mapping";
     EXPECT_EQ(p1.serverCardByEngineOid[p1.evolvingWildsChosenOid], p1.evolvingWildsPhysicalCardId)
         << "the selected engine ObjectId was not bound to the physical DECK-to-TABLE card";
@@ -3215,8 +3223,7 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p1.flashbackCast) << "seat 1 never sent its flashback cast";
     EXPECT_TRUE(p2.flashbackCast) << "seat 2 never sent its flashback cast";
     // One of these two seats does not own the canonical stack, so its cast crosses players.
-    EXPECT_TRUE(p1.sawFlashbackGraveToStack)
-        << "seat 1's flashback card never physically moved graveyard -> stack";
+    EXPECT_TRUE(p1.sawFlashbackGraveToStack) << "seat 1's flashback card never physically moved graveyard -> stack";
     EXPECT_TRUE(p2.sawFlashbackGraveToStack)
         << "seat 2's flashback card never physically moved graveyard -> stack (cross-player move "
            "rejected? see ruledAllowsCrossPlayerMove)";
@@ -3256,18 +3263,18 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "both clients did not receive the public face-down 2/2";
     EXPECT_TRUE(p1.sawManifestFaceChanged && p2.sawManifestFaceChanged)
         << "both clients did not receive the in-place turn-face-up change";
-    EXPECT_TRUE(p1.sawManifestPhysicalFaceDown && p2.sawManifestPhysicalFaceDown &&
-                p1.sawManifestPhysicalFaceUp && p2.sawManifestPhysicalFaceUp)
+    EXPECT_TRUE(p1.sawManifestPhysicalFaceDown && p2.sawManifestPhysicalFaceDown && p1.sawManifestPhysicalFaceUp &&
+                p2.sawManifestPhysicalFaceUp)
         << "the same physical card was not shown face down and then face up on both clients";
     EXPECT_TRUE(p1.sawManifestPhysicalFaceUpIdentity && p2.sawManifestPhysicalFaceUpIdentity)
         << "the face-up physical event did not immediately publish Hill Giant's display identity";
-    EXPECT_TRUE(p1.sawRoomCastDoorState && p2.sawRoomCastDoorState &&
-                p1.sawRoomFullyUnlocked && p2.sawRoomFullyUnlocked)
+    EXPECT_TRUE(p1.sawRoomCastDoorState && p2.sawRoomCastDoorState && p1.sawRoomFullyUnlocked &&
+                p2.sawRoomFullyUnlocked)
         << "both clients did not receive identical cast-door and fully-unlocked Room state";
     EXPECT_TRUE(p1.sawRoomUnlockTrigger && p2.sawRoomUnlockTrigger)
         << "the unlock action produced no physical stack object, but its resulting door trigger was not published";
-    EXPECT_TRUE(p1.roomPhysicalIdentityContinuous && p2.roomPhysicalIdentityContinuous &&
-                p1.roomServerCardId >= 0 && p1.roomServerCardId == p2.roomServerCardId)
+    EXPECT_TRUE(p1.roomPhysicalIdentityContinuous && p2.roomPhysicalIdentityContinuous && p1.roomServerCardId >= 0 &&
+                p1.roomServerCardId == p2.roomServerCardId)
         << "Room casting and unlocking did not preserve one physical Server_Card identity";
     EXPECT_TRUE(p1.hasRoomPhysicalAnnotation() && p2.hasRoomPhysicalAnnotation())
         << "both clients did not receive the fully unlocked Doors annotation";
@@ -3276,10 +3283,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p1.submittedTypecyclingChoice && p1.sawTypecyclingHandToGrave && p1.sawTypecyclingDeckToHand &&
                 p1.typecyclingPhysicalIdentityContinuous)
         << "Plainscycling physical flags: choice=" << p1.submittedTypecyclingChoice
-        << " hand_to_grave=" << p1.sawTypecyclingHandToGrave
-        << " deck_to_hand=" << p1.sawTypecyclingDeckToHand
-        << " identity=" << p1.typecyclingPhysicalIdentityContinuous
-        << " source_id=" << p1.typecyclingSourcePhysicalId
+        << " hand_to_grave=" << p1.sawTypecyclingHandToGrave << " deck_to_hand=" << p1.sawTypecyclingDeckToHand
+        << " identity=" << p1.typecyclingPhysicalIdentityContinuous << " source_id=" << p1.typecyclingSourcePhysicalId
         << " chosen_id=" << p1.typecyclingChosenPhysicalId;
     EXPECT_TRUE(p1.sawEmptyTypecyclingChoice && p1.submittedEmptyTypecyclingChoice)
         << "the second Plainscycle did not publish and submit the explicit empty fail-to-find choice";
@@ -3287,8 +3292,14 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "the graveyard ability was not published exclusively to its owner";
     EXPECT_TRUE(p1.sawRenewGraveToExile && p1.renewPhysicalIdentityContinuous && p1.sawRenewCounters)
         << "Renew did not exile the same physical source and add two +1/+1 counters plus reach";
-    EXPECT_TRUE(p1.sawAggressiveChoicePrivate && p2.sawOpponentAggressiveChoiceRedacted)
-        << "Aggressive Negotiations did not keep hand identities and eligibility chooser-private";
+    EXPECT_TRUE(p1.sawAggressivePublicReveal && p2.sawAggressivePublicReveal && p1.sawAggressiveChooserMask &&
+                p2.sawAggressiveObserverReadOnly)
+        << "Aggressive Negotiations did not publish the full hand to both seats with a chooser-only mask";
+    EXPECT_EQ(p1.aggressiveRevealNames, p2.aggressiveRevealNames)
+        << "Aggressive Negotiations recipients did not receive the same reveal cohort";
+    EXPECT_TRUE(p1.sawAggressivePublicRevealClosed && p2.sawAggressivePublicRevealClosed &&
+                !p1.aggressivePublicRevealActive && !p2.aggressivePublicRevealActive)
+        << "Aggressive Negotiations public reveal did not close for both seats after submission";
     EXPECT_TRUE(p1.submittedAggressiveChoice && p1.sawAggressiveExile && p2.sawAggressiveExile)
         << "Aggressive Negotiations did not submit and publish the selected hand-card exile";
     EXPECT_TRUE(p1.sawAggressiveCounter && p2.sawAggressiveCounter)
@@ -3339,8 +3350,8 @@ TEST_F(RuledE2ESmokeTest, IdleEngineHangupIsAnnouncedRatherThanFreezingTheGame)
     ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
 
     ASSERT_TRUE(p1.selectDeck(deckXml({{24, QStringLiteral("Mountain")}, {16, QStringLiteral("Hill Giant")}})));
-    ASSERT_TRUE(p2.selectDeck(deckXml({{24, QStringLiteral("Island")},
-                                       {16, QStringLiteral("Merfolk of the Pearl Trident")}})));
+    ASSERT_TRUE(
+        p2.selectDeck(deckXml({{24, QStringLiteral("Island")}, {16, QStringLiteral("Merfolk of the Pearl Trident")}})));
     p1.sendReady();
     p2.sendReady();
     ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "ruled game start (p1)"));

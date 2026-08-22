@@ -280,6 +280,7 @@ pub(super) fn discard_cards(
         chooser,
         card_filter,
         optional,
+        visibility,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -295,6 +296,7 @@ pub(super) fn discard_cards(
             chooser,
             card_filter: card_filter.as_ref(),
             optional,
+            visibility,
             draw_after: 0,
             action: HandCardAction::Discard,
         },
@@ -311,6 +313,7 @@ pub(super) fn exile_cards_from_hand(
         chooser,
         card_filter,
         optional,
+        visibility,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -326,6 +329,7 @@ pub(super) fn exile_cards_from_hand(
             chooser,
             card_filter: card_filter.as_ref(),
             optional,
+            visibility,
             draw_after: 0,
             action: HandCardAction::Exile,
         },
@@ -369,6 +373,7 @@ pub(super) fn draw_discard(
                     chooser: DiscardChooser::AffectedPlayer,
                     card_filter: None,
                     optional: false,
+                    visibility: HandChoiceVisibility::PrivateLook,
                     draw_after: 0,
                     action: HandCardAction::Discard,
                 },
@@ -382,6 +387,7 @@ pub(super) fn draw_discard(
                 chooser: DiscardChooser::AffectedPlayer,
                 card_filter: None,
                 optional,
+                visibility: HandChoiceVisibility::PrivateLook,
                 draw_after: draw_count,
                 action: HandCardAction::Discard,
             },
@@ -394,6 +400,7 @@ struct HandCardChoiceSpec<'a> {
     chooser: DiscardChooser,
     card_filter: Option<&'a CardTypeFilter>,
     optional: bool,
+    visibility: HandChoiceVisibility,
     draw_after: u32,
     action: HandCardAction,
 }
@@ -408,6 +415,7 @@ fn choose_hand_cards_for_player(
         chooser,
         card_filter,
         optional,
+        visibility,
         draw_after,
         action,
     } = spec;
@@ -506,6 +514,13 @@ fn choose_hand_cards_for_player(
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
                 payment_currently_legal: false,
+                reveal_audience: if visibility == HandChoiceVisibility::PublicReveal {
+                    rv1::ResolutionRevealAudience::AllParticipants as i32
+                } else {
+                    rv1::ResolutionRevealAudience::None as i32
+                },
+                revealed_zone_owner_player_id: (visibility == HandChoiceVisibility::PublicReveal)
+                    .then_some(affected_player),
             },
         )),
     });
@@ -762,6 +777,8 @@ pub(super) fn target_player_sacrifices(
                             mana_cost: String::new(),
                             generic_mana_cost: 0,
                             payment_currently_legal: false,
+                            reveal_audience: 0,
+                            revealed_zone_owner_player_id: None,
                         },
                     )),
                 });
@@ -1124,6 +1141,8 @@ fn begin_library_partition(
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
                 payment_currently_legal: false,
+                reveal_audience: 0,
+                revealed_zone_owner_player_id: None,
             },
         )),
     });
@@ -1254,6 +1273,8 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
                 payment_currently_legal: false,
+                reveal_audience: 0,
+                revealed_zone_owner_player_id: None,
             },
         )),
     });
@@ -1354,6 +1375,8 @@ pub(super) fn look_choose_to_hand(
                 generic_mana_cost: 0,
                 payment_currently_legal: false,
                 candidate_selectable: selectable,
+                reveal_audience: 0,
+                revealed_zone_owner_player_id: None,
             },
         )),
     });
@@ -1457,6 +1480,8 @@ pub(super) fn search_library(
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
                 payment_currently_legal: false,
+                reveal_audience: 0,
+                revealed_zone_owner_player_id: None,
             },
         )),
     });

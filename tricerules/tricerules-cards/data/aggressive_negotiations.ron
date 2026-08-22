@@ -9,6 +9,7 @@
       target: (kind: OpponentPlayer),
       chooser: Controller,
       card_filter: Some(Nonland),
+      visibility: PublicReveal,
     ),
     PutCounters(
       counter: PlusOnePlusOne,

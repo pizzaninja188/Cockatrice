@@ -30,6 +30,8 @@
 #include <algorithm>
 #include <google/protobuf/dynamic_message.h>
 #include <gtest/gtest.h>
+#include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
+#include <libcockatrice/protocol/pb/game_event_container.pb.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_user.pb.h>
 #include <libcockatrice/rng/rng_abstract.h>
@@ -253,6 +255,11 @@ protected:
                                          Server_AbstractParticipant *participant)
     {
         return game->ruled()->redactBatchForParticipant(batch, participant);
+    }
+
+    void updatePendingPublicRevealCache(const ruled::v1::IpcResponse &response)
+    {
+        game->ruled()->updatePendingPublicRevealCache(response);
     }
 
     bool cacheAutoPassPolicy(int playerId, const ruled::v1::SetAutoPassPolicy &policy)
@@ -707,7 +714,7 @@ TEST_F(RuledBatchTest, LibraryLookChoiceKeepsImagesAndEligibilityPrivate)
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
-// Coercion/Thoughtseize/Aggressive Negotiations expose the complete target hand and the
+// Private "look" effects such as Cracked Skull expose the complete target hand and the
 // engine-authored eligibility mask only to the deciding player. The other seat gets neither the
 // identities nor a derived type oracle.
 TEST_F(RuledBatchTest, OpponentHandChoiceKeepsIdentitiesAndEligibilityPrivate)
@@ -755,6 +762,108 @@ TEST_F(RuledBatchTest, OpponentHandChoiceKeepsIdentitiesAndEligibilityPrivate)
     EXPECT_EQ(p2Choice.candidate_server_card_ids_size(), 0);
     EXPECT_EQ(p2Choice.candidate_selectable_size(), 0);
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
+}
+
+// CR 701.20a/e: a public reveal is visible to every participant, while CR 608.2d still gives
+// only the deciding player submission authority and the engine-authored eligibility mask.
+TEST_F(RuledBatchTest, PublicOpponentHandRevealPublishesIdentityButNotSelectionAuthority)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
+    choice->set_prompt_text("Choose a nonland card to exile.");
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
+    choice->set_revealed_zone_owner_player_id(2);
+    for (const quint32 oid : {101u, 102u}) {
+        choice->add_candidate_object_ids(oid);
+    }
+    for (const char *cardId : {"forest", "grizzly_bears"}) {
+        choice->add_candidate_card_ids(cardId);
+    }
+    for (const char *name : {"Forest", "Grizzly Bears"}) {
+        choice->add_candidate_names(name);
+    }
+    choice->add_candidate_selectable(false);
+    choice->add_candidate_selectable(true);
+
+    const auto forP1 = redactFor(batch, p1);
+    const auto p1ChoiceIt = std::find_if(forP1.events().begin(), forP1.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p1ChoiceIt, forP1.events().end());
+    const auto &p1Choice = p1ChoiceIt->resolution_choice_required();
+    ASSERT_EQ(p1Choice.candidate_names_size(), 2);
+    ASSERT_EQ(p1Choice.candidate_server_card_ids_size(), 2);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(0), 0);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(1), 1);
+    ASSERT_EQ(p1Choice.candidate_selectable_size(), 2);
+    EXPECT_FALSE(p1Choice.candidate_selectable(0));
+    EXPECT_TRUE(p1Choice.candidate_selectable(1));
+    EXPECT_EQ(p1Choice.prompt_text(), "Choose a nonland card to exile.");
+
+    const auto forP2 = redactFor(batch, p2);
+    const auto p2ChoiceIt = std::find_if(forP2.events().begin(), forP2.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p2ChoiceIt, forP2.events().end());
+    const auto &p2Choice = p2ChoiceIt->resolution_choice_required();
+    ASSERT_EQ(p2Choice.candidate_object_ids_size(), 2);
+    ASSERT_EQ(p2Choice.candidate_card_ids_size(), 2);
+    ASSERT_EQ(p2Choice.candidate_names_size(), 2);
+    ASSERT_EQ(p2Choice.candidate_server_card_ids_size(), 2);
+    EXPECT_EQ(p2Choice.candidate_server_card_ids(0), 0);
+    EXPECT_EQ(p2Choice.candidate_server_card_ids(1), 1);
+    EXPECT_EQ(p2Choice.candidate_selectable_size(), 0);
+    EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
+    EXPECT_EQ(p2Choice.reveal_audience(), ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
+    ASSERT_TRUE(p2Choice.has_revealed_zone_owner_player_id());
+    EXPECT_EQ(p2Choice.revealed_zone_owner_player_id(), 2);
+}
+
+TEST_F(RuledBatchTest, PendingPublicRevealIsRestoredOnJoinAndClearedByNextAuthoritativeBatch)
+{
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *choice = response.mutable_batch()->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
+    choice->set_prompt_text("Choose a nonland card to exile.");
+    choice->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
+    choice->set_revealed_zone_owner_player_id(2);
+    choice->add_candidate_object_ids(101);
+    choice->add_candidate_card_ids("grizzly_bears");
+    choice->add_candidate_names("Grizzly Bears");
+    choice->add_candidate_selectable(true);
+    updatePendingPublicRevealCache(response);
+
+    ResponseContainer reconnect(-1);
+    game->createGameJoinedEvent(p2, reconnect, true);
+    ASSERT_EQ(reconnect.getPostResponseQueue().size(), 3);
+    const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(container, nullptr);
+    ASSERT_EQ(container->event_list_size(), 1);
+    const auto &event = container->event_list(0);
+    ASSERT_TRUE(event.HasExtension(Event_RuledPayload::ext));
+    ruled::v1::RuledEventBatch restored;
+    ASSERT_TRUE(restored.ParseFromString(event.GetExtension(Event_RuledPayload::ext).payload()));
+    ASSERT_EQ(restored.events_size(), 1);
+    ASSERT_TRUE(restored.events(0).has_resolution_choice_required());
+    const auto &restoredChoice = restored.events(0).resolution_choice_required();
+    ASSERT_EQ(restoredChoice.candidate_names_size(), 1);
+    EXPECT_EQ(restoredChoice.candidate_names(0), "Grizzly Bears");
+    ASSERT_EQ(restoredChoice.candidate_server_card_ids_size(), 1);
+    EXPECT_EQ(restoredChoice.candidate_server_card_ids(0), 0);
+    EXPECT_EQ(restoredChoice.candidate_selectable_size(), 0);
+
+    ruled::v1::IpcResponse completed;
+    completed.set_ok(true);
+    completed.mutable_batch()->add_events()->mutable_log()->set_text("Choice completed.");
+    updatePendingPublicRevealCache(completed);
+
+    ResponseContainer afterCompletion(-1);
+    game->createGameJoinedEvent(p2, afterCompletion, true);
+    EXPECT_EQ(afterCompletion.getPostResponseQueue().size(), 2);
 }
 
 // CR 603.3b: which abilities triggered is public information, so unlike a resolution choice this
@@ -1202,8 +1311,7 @@ TEST_F(RuledBatchTest, TriggerModeTargetsReachOnlyTheController)
 
     const auto forController = redactFor(batch, p1);
     ASSERT_EQ(forController.events(0).trigger_needs_target().modes_size(), 1);
-    EXPECT_EQ(forController.events(0).trigger_needs_target().modes(0).targets().groups(0).valid_permanent_ids(0),
-              101u);
+    EXPECT_EQ(forController.events(0).trigger_needs_target().modes(0).targets().groups(0).valid_permanent_ids(0), 101u);
 
     const auto forOpponent = redactFor(batch, p2);
     EXPECT_EQ(forOpponent.events(0).trigger_needs_target().modes_size(), 0);
@@ -1555,14 +1663,12 @@ TEST_F(RuledBatchTest, GenericCounterAnnotationsReplacePriorEngineLinesAndPreser
     first.set_ok(true);
     auto *firstZoneView = first.mutable_batch()->add_events()->mutable_zone_view();
     auto firstView = buildPerPlayerView(p1, {924u}, {false});
-    firstView.mutable_battlefield_objects(0)->set_counters_annotation(
-        "2 flying counter(s)\n1 stun counter(s)");
+    firstView.mutable_battlefield_objects(0)->set_counters_annotation("2 flying counter(s)\n1 stun counter(s)");
     *firstZoneView->add_per_player() = firstView;
     *firstZoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
     callBatchApply(first);
 
-    EXPECT_EQ(bear->getAnnotation(),
-              QStringLiteral("User note\n2 flying counter(s)\n1 stun counter(s)"));
+    EXPECT_EQ(bear->getAnnotation(), QStringLiteral("User note\n2 flying counter(s)\n1 stun counter(s)"));
 
     ruled::v1::IpcResponse second;
     second.set_ok(true);
@@ -2229,8 +2335,7 @@ TEST_F(RuledBatchTest, FaceDownIdentityIsControllerOnlyAndFaceUpKeepsServerCard)
     const auto maps = appendedServerMaps();
     const auto forController = redactFor(maps, p1);
     const auto forOpponent = redactFor(maps, p2);
-    const auto findFaceMap = [](const ruled::v1::RuledEventBatch &batch)
-        -> const ruled::v1::FaceDownObjectMap * {
+    const auto findFaceMap = [](const ruled::v1::RuledEventBatch &batch) -> const ruled::v1::FaceDownObjectMap * {
         for (const auto &event : batch.events()) {
             if (event.has_face_down_object_map()) {
                 return &event.face_down_object_map();

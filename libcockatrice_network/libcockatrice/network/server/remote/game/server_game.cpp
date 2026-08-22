@@ -805,6 +805,9 @@ void Server_Game::createGameJoinedEvent(Server_AbstractParticipant *joiningParti
     }
 
     rc.enqueuePostResponseItem(ServerMessage::GAME_EVENT_CONTAINER, prepareGameEvent(event2, -1));
+    if (ruledDriver) {
+        ruledDriver->enqueuePendingPublicRevealForParticipant(joiningParticipant, rc);
+    }
 }
 
 void Server_Game::sendGameEventContainer(GameEventContainer *cont,
@@ -878,8 +881,8 @@ void Server_Game::getInfo(ServerInfo_Game &result) const
     }
 }
 
-Response::ResponseCode Server_Game::processRuledPayload(int playerId, const Command_RuledPayload &cmd,
-                                                        GameEventStorage &ges)
+Response::ResponseCode
+Server_Game::processRuledPayload(int playerId, const Command_RuledPayload &cmd, GameEventStorage &ges)
 {
     return ruledDriver ? ruledDriver->processRuledPayload(playerId, cmd, ges) : Response::RespInvalidCommand;
 }

@@ -336,6 +336,8 @@ impl GameEngine {
                     mana_cost: String::new(),
                     generic_mana_cost: 0,
                     payment_currently_legal: false,
+                    reveal_audience: 0,
+                    revealed_zone_owner_player_id: None,
                 },
             )),
         });

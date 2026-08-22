@@ -183,6 +183,8 @@ fn park_resolution_branches_for(
                 payment_currently_legal: false,
                 resolution_branches: options,
                 mana_cost: String::new(),
+                reveal_audience: 0,
+                revealed_zone_owner_player_id: None,
             },
         )),
     });

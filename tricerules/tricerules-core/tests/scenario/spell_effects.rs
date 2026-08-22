@@ -2676,7 +2676,7 @@ fn zombify_cannot_target_an_opponents_graveyard() {
 /// was reordered to dodge that; it is back in Oracle order, so the `LoseLife` here only happens if
 /// `complete_parked_resolution` really does resume the tail.
 #[test]
-fn thoughtseize_caster_loses_two_life() {
+fn issue_143_thoughtseize_publicly_reveals_then_loses_two_life() {
     let decks = Some(vec![
         deck_with("swamp", &["thoughtseize"]),
         vec!["forest".into(); 20],
@@ -2728,6 +2728,12 @@ fn thoughtseize_caster_loses_two_life() {
         e.state.players[1].life, opponent_life_before,
         "the target player's life is untouched"
     );
+    let choice = find_resolution_choice(&resolve_batch).expect("Thoughtseize hand choice");
+    assert_eq!(
+        choice.reveal_audience(),
+        ResolutionRevealAudience::AllParticipants
+    );
+    assert_eq!(choice.revealed_zone_owner_player_id, Some(1));
 
     let resume_batch = e
         .apply_command(0, &submit_resolution_choice(vec![bear_oid]))

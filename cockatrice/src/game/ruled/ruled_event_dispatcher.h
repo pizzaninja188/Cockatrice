@@ -72,6 +72,10 @@ private:
         bool combatStateDirty = false;
         bool battlefieldMapDirty = false;
         bool stackTrackingDirty = false;
+        /// Public reveals are exact per-authoritative-batch snapshots. Preview echoes are the one
+        /// non-authoritative payload and deliberately do not participate in teardown.
+        bool reconcilePublicReveal = true;
+        bool publicRevealSeen = false;
         /// CR 603.3b: the ordering prompt changed somewhere in this batch. Emitted once at the end
         /// from the final state rather than per event, because a single batch both places the
         /// trigger just picked (which ends the old prompt) and raises the next one — emitting on

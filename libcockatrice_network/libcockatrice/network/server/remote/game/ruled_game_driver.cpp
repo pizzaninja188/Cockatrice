@@ -3,7 +3,6 @@
 // interface plus the `friend class RuledGameDriver` grant (participants, currentReplay).
 
 #include "ruled_game_driver.h"
-#include <libcockatrice/utility/ruled_debug.h>
 
 #include "../server_abstractuserinterface.h"
 #include "ruled_utils.h"
@@ -17,6 +16,7 @@
 #include <QDebug>
 #include <QRandomGenerator>
 #include <QSet>
+#include <algorithm>
 #include <libcockatrice/card/database/card_database_manager.h>
 #include <libcockatrice/deck_list/deck_list.h>
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
@@ -30,10 +30,11 @@
 #include <libcockatrice/protocol/pb/event_set_counter.pb.h>
 #include <libcockatrice/protocol/pb/game_replay.pb.h>
 #include <libcockatrice/protocol/pb/session_event.pb.h>
+#include <libcockatrice/utility/ruled_debug.h>
 #include <libcockatrice/utility/zone_names.h>
-#include <algorithm>
 
-namespace {
+namespace
+{
 
 QString normalizeRuledCardName(const QString &name)
 {
@@ -217,8 +218,7 @@ bool normalizeAutoPassStops(const google::protobuf::RepeatedField<int> &input,
 {
     QSet<int> unique;
     for (const int rawPhase : input) {
-        if (!ruled::v1::PhaseId_IsValid(rawPhase) ||
-            !isAutoPassStopPhase(static_cast<ruled::v1::PhaseId>(rawPhase))) {
+        if (!ruled::v1::PhaseId_IsValid(rawPhase) || !isAutoPassStopPhase(static_cast<ruled::v1::PhaseId>(rawPhase))) {
             return false;
         }
         unique.insert(rawPhase);
@@ -264,8 +264,7 @@ bool RuledGameDriver::cacheAutoPassPolicy(int playerId, const ruled::v1::SetAuto
 
 QByteArray RuledGameDriver::canonicalGameplayCommand(int playerId, const ruled::v1::RuledCommand &command) const
 {
-    if (!game || !game->getPlayers().contains(playerId) ||
-        command.cmd_case() == ruled::v1::RuledCommand::CMD_NOT_SET ||
+    if (!game || !game->getPlayers().contains(playerId) || command.cmd_case() == ruled::v1::RuledCommand::CMD_NOT_SET ||
         command.has_set_auto_pass_policy() || command.has_canonical_gameplay() ||
         command.has_preview_declare_attackers() || command.has_preview_declare_blockers()) {
         return {};
@@ -357,6 +356,7 @@ void RuledGameDriver::resetForNewGame()
     lastBroadcastHandSlotMap.Clear();
     hasLastBroadcastHandSlotMap = false;
     lastBroadcastHandSlotParticipants.clear();
+    pendingPublicReveal.reset();
     // Reset the connection-lost flag so that a back-to-back second game can report and
     // handle a fresh engine disconnect correctly. Without this reset, if game 1 lost the
     // engine connection the flag stays true, handleRuledEngineConnectionLost() returns early
@@ -406,7 +406,7 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
             out->set_attacker_id(pr.attacker_id());
             out->set_blocker_id(pr.blocker_id());
         }
-        broadcastRuledResponse(previewResp);
+        broadcastRuledResponse(previewResp, false);
         return Response::RespOk;
     }
     if (ruledCmd.has_preview_declare_attackers()) {
@@ -423,7 +423,7 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
         for (int ai = 0; ai < ids.creature_ids_size(); ++ai) {
             apMsg->add_attacker_object_ids(static_cast<uint32_t>(ids.creature_ids(ai)));
         }
-        broadcastRuledResponse(previewResp);
+        broadcastRuledResponse(previewResp, false);
         return Response::RespOk;
     }
     if (!rulesRelay) {
@@ -587,8 +587,7 @@ void RuledGameDriver::relayRuledPayloadAndBroadcast(int playerId, const QByteArr
         return;
     }
     const RuledBatchApplyResult batchResult = applyRuledBatch(resp);
-    if ((batchResult.zoneViewApplied &&
-         (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) ||
+    if ((batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) ||
         batchResult.battlefieldDisplayChanged) {
         game->sendGameStateToPlayers();
     }
@@ -636,10 +635,8 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
                 destPlayer = cp;
             }
         }
-        Server_CardZone *targetZone =
-            destPlayer->getZones().value(goesToBattlefield ? ZoneNames::TABLE
-                                                            : (goesToExile ? ZoneNames::EXILE
-                                                                           : ZoneNames::GRAVE));
+        Server_CardZone *targetZone = destPlayer->getZones().value(
+            goesToBattlefield ? ZoneNames::TABLE : (goesToExile ? ZoneNames::EXILE : ZoneNames::GRAVE));
         if (!targetZone) {
             return false;
         }
@@ -931,8 +928,8 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
             Server_CardZone *deck = owner->getZones().value(ZoneNames::DECK);
             const int position = static_cast<int>(pm.source_library_position());
             if (!deck || position < 0 || position >= deck->getCards().size()) {
-                qWarning().noquote() << "ruled indexed library PermanentMoved out of range: oid" << oid
-                                     << "position" << position << "owner" << ownerId;
+                qWarning().noquote() << "ruled indexed library PermanentMoved out of range: oid" << oid << "position"
+                                     << position << "owner" << ownerId;
                 continue;
             }
             Server_Card *indexed = deck->getCards().at(position);
@@ -1284,8 +1281,8 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
                         ruledStackObjectIdToServerCardId.insert(pushedOid, phys->getId());
                     }
                     RULED_TRACE("relay") << "stackPushed: oid=" << pushedOid
-                                         << " cardId=" << QString::fromStdString(sp.card_id())
-                                         << " name='" << pushedName << "'"
+                                         << " cardId=" << QString::fromStdString(sp.card_id()) << " name='"
+                                         << pushedName << "'"
                                          << " stackZoneSize=" << (spellZone ? spellZone->getCards().size() : -1)
                                          << " physicalCardOnStack=" << (phys ? phys->getId() : -1)
                                          << " boundServerCardId="
@@ -1306,9 +1303,8 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
             if (Server_AbstractPlayer *ab = game->getPlayer(p.player_id())) {
                 const RuledPlayerBinding::RuledZoneSyncResult sync =
                     playerBinding(p.player_id())
-                        .applyRuledEngineZoneView(static_cast<Server_Player *>(ab), p, &tapSyncGes,
-                                                  perPlayerAllowUntap, &engineUntappedOids,
-                                                  e.zone_view().battlefields_unchanged());
+                        .applyRuledEngineZoneView(static_cast<Server_Player *>(ab), p, &tapSyncGes, perPlayerAllowUntap,
+                                                  &engineUntappedOids, e.zone_view().battlefields_unchanged());
                 result.handOrLibraryChanged = result.handOrLibraryChanged || sync.handOrLibraryChanged;
                 result.battlefieldOrderChanged = result.battlefieldOrderChanged || sync.battlefieldOrderChanged;
                 result.tapStateEventsQueued = result.tapStateEventsQueued || sync.tapStateChanged;
@@ -1349,19 +1345,15 @@ Server_Card *RuledGameDriver::findBattlefieldCardByEngineOid(quint32 oid, int pr
 
 void RuledGameDriver::applyFaceDisplays(const ruled::v1::RuledEventBatch &batch, RuledBatchApplyResult &result)
 {
-    const auto applyName = [this, &result](quint32 oid,
-                                           int controllerId,
-                                           const QString &cardId,
-                                           int faceIndex,
+    const auto applyName = [this, &result](quint32 oid, int controllerId, const QString &cardId, int faceIndex,
                                            const QString &effectiveDisplayName) {
         Server_Card *card = findBattlefieldCardByEngineOid(oid, controllerId);
         if (!card) {
             return;
         }
         const QString resolvedCardId = cardId.isEmpty() ? ruledCardIdForName(card->getName()) : cardId;
-        const QString activeName = effectiveDisplayName.isEmpty()
-                                       ? ruledFaceDisplayName(resolvedCardId, faceIndex)
-                                       : effectiveDisplayName;
+        const QString activeName =
+            effectiveDisplayName.isEmpty() ? ruledFaceDisplayName(resolvedCardId, faceIndex) : effectiveDisplayName;
         if (!activeName.isEmpty() && activeName != card->getName()) {
             card->setCardRef(CardRef{activeName});
             result.battlefieldDisplayChanged = true;
@@ -1371,11 +1363,8 @@ void RuledGameDriver::applyFaceDisplays(const ruled::v1::RuledEventBatch &batch,
     for (const auto &event : batch.events()) {
         if (event.has_face_changed()) {
             const auto &changed = event.face_changed();
-            applyName(static_cast<quint32>(changed.object_id()),
-                      changed.controller_player_id(),
-                      QString(),
-                      static_cast<int>(changed.face_up_index()),
-                      QString());
+            applyName(static_cast<quint32>(changed.object_id()), changed.controller_player_id(), QString(),
+                      static_cast<int>(changed.face_up_index()), QString());
         }
         if (!event.has_zone_view() || event.zone_view().battlefields_unchanged()) {
             continue;
@@ -1388,10 +1377,8 @@ void RuledGameDriver::applyFaceDisplays(const ruled::v1::RuledEventBatch &batch,
                 if (object.face_down()) {
                     continue;
                 }
-                applyName(static_cast<quint32>(object.object_id()),
-                          view.player_id(),
-                          QString::fromStdString(object.card_id()),
-                          static_cast<int>(object.face_up_index()),
+                applyName(static_cast<quint32>(object.object_id()), view.player_id(),
+                          QString::fromStdString(object.card_id()), static_cast<int>(object.face_up_index()),
                           QString::fromStdString(object.effective_display_name()));
             }
         }
@@ -1424,18 +1411,17 @@ void RuledGameDriver::applyAttachmentRestores(const ruled::v1::RuledEventBatch &
                 auto *ownerPlayer = static_cast<Server_Player *>(ownerAb);
                 for (const auto &battlefieldObject : p.battlefield_objects()) {
                     const quint32 attachedOid = static_cast<quint32>(battlefieldObject.object_id());
-                    Server_Card *attachedCard = playerBinding(p.player_id()).findCardByEngineOid(ownerPlayer, attachedOid);
+                    Server_Card *attachedCard =
+                        playerBinding(p.player_id()).findCardByEngineOid(ownerPlayer, attachedOid);
                     if (!attachedCard || !attachedCard->getZone()) {
                         continue;
                     }
-                    const bool hasObjectRecipient =
-                        battlefieldObject.has_attachment_recipient() &&
-                        battlefieldObject.attachment_recipient().recipient_case() ==
-                            ruled::v1::AttachmentRecipient::kObjectId;
+                    const bool hasObjectRecipient = battlefieldObject.has_attachment_recipient() &&
+                                                    battlefieldObject.attachment_recipient().recipient_case() ==
+                                                        ruled::v1::AttachmentRecipient::kObjectId;
                     if (!hasObjectRecipient) {
                         if (attachedCard->getParentCard()) {
-                            playerBinding(p.player_id())
-                                .unattachRuledCard(ownerPlayer, attachedCard, attachRestoreGes);
+                            playerBinding(p.player_id()).unattachRuledCard(ownerPlayer, attachedCard, attachRestoreGes);
                             attachRestoreGesHasEvents = true;
                         }
                         continue;
@@ -1455,8 +1441,7 @@ void RuledGameDriver::applyAttachmentRestores(const ruled::v1::RuledEventBatch &
                     }
                     if (!targetCard || !targetCard->getZone()) {
                         if (attachedCard->getParentCard()) {
-                            playerBinding(p.player_id())
-                                .unattachRuledCard(ownerPlayer, attachedCard, attachRestoreGes);
+                            playerBinding(p.player_id()).unattachRuledCard(ownerPlayer, attachedCard, attachRestoreGes);
                             attachRestoreGesHasEvents = true;
                         }
                         continue;
@@ -1466,8 +1451,7 @@ void RuledGameDriver::applyAttachmentRestores(const ruled::v1::RuledEventBatch &
                         continue;
                     }
                     if (attachedCard->getParentCard()) {
-                        playerBinding(p.player_id())
-                            .unattachRuledCard(ownerPlayer, attachedCard, attachRestoreGes);
+                        playerBinding(p.player_id()).unattachRuledCard(ownerPlayer, attachedCard, attachRestoreGes);
                         attachRestoreGesHasEvents = true;
                     }
                     attachedCard->setParentCard(targetCard);
@@ -1475,8 +1459,7 @@ void RuledGameDriver::applyAttachmentRestores(const ruled::v1::RuledEventBatch &
                     // against its parent.
                     const int attachedOldX = attachedCard->getX();
                     attachedCard->setCoords(-1, attachedCard->getY());
-                    attachedCard->getZone()->updateCardCoordinates(attachedCard, attachedOldX,
-                                                                   attachedCard->getY());
+                    attachedCard->getZone()->updateCardCoordinates(attachedCard, attachedOldX, attachedCard->getY());
                     Event_AttachCard attachEv;
                     attachEv.set_start_zone(attachedCard->getZone()->getName().toStdString());
                     attachEv.set_card_id(attachedCard->getId());
@@ -1505,8 +1488,8 @@ void RuledGameDriver::applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBa
         const auto &e = batch.events(ei);
         if (e.has_face_changed()) {
             const auto &changed = e.face_changed();
-            Server_Card *card = findBattlefieldCardByEngineOid(
-                static_cast<quint32>(changed.object_id()), changed.controller_player_id());
+            Server_Card *card = findBattlefieldCardByEngineOid(static_cast<quint32>(changed.object_id()),
+                                                               changed.controller_player_id());
             if (card && card->getZone()) {
                 card->setFaceDown(changed.face_down());
                 // A face-up change publishes both state and display identity atomically. Merely
@@ -1666,8 +1649,7 @@ void RuledGameDriver::applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBa
             // Skip when the server already has this attachment: a repeated AuraAttached (e.g. in a
             // reconnect's initial batch) would otherwise re-broadcast Event_AttachCard and make the
             // client replay the attach.
-            if (auraCard && enchantedCard && auraCard->getZone() &&
-                auraCard->getParentCard() != enchantedCard) {
+            if (auraCard && enchantedCard && auraCard->getZone() && auraCard->getParentCard() != enchantedCard) {
                 auraCard->setParentCard(enchantedCard);
                 // Match cmdAttachCard: an attached card leaves the grid (x = -1) and is drawn
                 // against its parent. Without this it keeps a grid column of its own.
@@ -1692,10 +1674,13 @@ void RuledGameDriver::applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBa
     }
 }
 
-void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp)
+void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp, bool authoritative)
 {
     if (!resp.has_batch()) {
         return;
+    }
+    if (authoritative) {
+        updatePendingPublicRevealCache(resp);
     }
     ruled::v1::IpcResponse toSend;
     toSend.set_ok(resp.ok());
@@ -1745,6 +1730,42 @@ void RuledGameDriver::revealFaceDownPermanentsOnConcede(int concedingPlayerId, G
             ges.enqueueGameEvent(event, player->getPlayerId());
         }
     }
+}
+
+void RuledGameDriver::updatePendingPublicRevealCache(const ruled::v1::IpcResponse &response)
+{
+    pendingPublicReveal.reset();
+    if (!response.has_batch()) {
+        return;
+    }
+    for (const auto &event : response.batch().events()) {
+        if (!event.has_resolution_choice_required()) {
+            continue;
+        }
+        const auto &choice = event.resolution_choice_required();
+        if (choice.reveal_audience() != ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS) {
+            continue;
+        }
+        pendingPublicReveal.emplace();
+        pendingPublicReveal->CopyFrom(choice);
+    }
+}
+
+void RuledGameDriver::enqueuePendingPublicRevealForParticipant(Server_AbstractParticipant *participant,
+                                                               ResponseContainer &rc)
+{
+    if (!participant || !pendingPublicReveal.has_value()) {
+        return;
+    }
+    ruled::v1::RuledEventBatch snapshot;
+    snapshot.add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingPublicReveal);
+    const ruled::v1::RuledEventBatch filtered = redactBatchForParticipant(snapshot, participant);
+
+    Event_RuledPayload event;
+    std::string bytes;
+    filtered.SerializeToString(&bytes);
+    event.set_payload(bytes);
+    rc.enqueuePostResponseItem(ServerMessage::GAME_EVENT_CONTAINER, game->prepareGameEvent(event, -1));
 }
 
 // Appends the server-built identity-map events to the outgoing batch: a
@@ -1913,8 +1934,8 @@ void RuledGameDriver::appendServerObjectMaps(ruled::v1::IpcResponse &toSend)
             participantIds.insert(it.key());
         }
         const bool participantsChanged = participantIds != lastBroadcastHandSlotParticipants;
-        const bool mapChanged = !hasLastBroadcastHandSlotMap ||
-                                hm->SerializeAsString() != lastBroadcastHandSlotMap.SerializeAsString();
+        const bool mapChanged =
+            !hasLastBroadcastHandSlotMap || hm->SerializeAsString() != lastBroadcastHandSlotMap.SerializeAsString();
         if (participantsChanged || mapChanged) {
             lastBroadcastHandSlotMap.CopyFrom(*hm);
             hasLastBroadcastHandSlotMap = true;
@@ -1972,7 +1993,7 @@ void RuledGameDriver::appendServerObjectMaps(ruled::v1::IpcResponse &toSend)
 // drops LogMessage events not meant for them, and redacts/augments tier-3 resolution
 // choice candidates by choice kind.
 ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const ruled::v1::RuledEventBatch &batch,
-                                                                     Server_AbstractParticipant *participant)
+                                                                      Server_AbstractParticipant *participant)
 {
     ruled::v1::RuledEventBatch filtered;
     filtered.CopyFrom(batch);
@@ -1990,19 +2011,19 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
         const auto &log = ev.log();
         if (log.has_visible_to_player_id() && log.visible_to_player_id() != participant->getPlayerId()) {
             filtered.mutable_events()->DeleteSubrange(ei, 1);
-        } else if (log.has_hidden_from_player_id() &&
-                   log.hidden_from_player_id() == participant->getPlayerId()) {
+        } else if (log.has_hidden_from_player_id() && log.hidden_from_player_id() == participant->getPlayerId()) {
             filtered.mutable_events()->DeleteSubrange(ei, 1);
         }
     }
     {
         // Redact private candidates of a tier-3 resolution choice (CR 608) from everyone but the
-        // deciding player. Private kinds expose a concealed zone (see isPrivateChoiceKind):
+        // deciding player, unless the engine explicitly authorizes a public reveal. Private kinds
+        // expose a concealed zone (see isPrivateChoiceKind):
         // HAND_CARDS reveals a player's hand, LIBRARY_SEARCH their library, LIBRARY_TOP the top of
         // their library, MANIFEST_DREAD the top two, OPPONENT_HAND another player's hand, so only
-        // the decider sees the
-        // candidate object ids / names; the public kinds (REVEALED, TARGET_OBJECTS, LEGEND_KEEP)
-        // pass through.
+        // the decider sees the candidate object ids / names by default. A choice carrying
+        // ALL_PARTICIPANTS publishes those identities to every recipient, but the prompt and
+        // eligibility mask remain exclusive to the decider.
         // For HAND_CARDS, inject candidate_server_card_ids for the deciding player
         // so the client can map engine OIDs to physical hand CardItems for the hand-click UI.
         // For library-image choices, inject by name-matching from the decider's deck zone
@@ -2014,54 +2035,63 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
                 continue;
             }
             auto *rcr = filtered.mutable_events(ei)->mutable_resolution_choice_required();
-            if (isPrivateChoiceKind(rcr->choice_kind()) && rcr->deciding_player_id() != participant->getPlayerId()) {
+            const bool isDecider = rcr->deciding_player_id() == participant->getPlayerId();
+            const bool isPublicReveal =
+                rcr->reveal_audience() == ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS;
+            if (isPrivateChoiceKind(rcr->choice_kind()) && !isDecider && !isPublicReveal) {
                 rcr->clear_candidate_object_ids();
                 rcr->clear_candidate_card_ids();
                 rcr->clear_candidate_names();
                 rcr->clear_candidate_server_card_ids();
                 rcr->clear_candidate_selectable();
                 rcr->set_prompt_text("Opponent is making a resolution choice.");
-            } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS) {
-                // HandCards: populate server card ids so client hand-click UI can match engine OIDs.
-                const int deciderId = rcr->deciding_player_id();
-                auto *deciderPlayer = static_cast<Server_Player *>(game->getPlayers().value(deciderId));
-                if (deciderPlayer) {
-                    for (int ci = 0; ci < rcr->candidate_object_ids_size(); ++ci) {
-                        const quint32 oid = static_cast<quint32>(rcr->candidate_object_ids(ci));
-                        Server_Card *sc = playerBinding(deciderId).findCardByEngineOid(deciderPlayer, oid);
-                        rcr->add_candidate_server_card_ids(sc ? sc->getId() : -1);
+            } else {
+                if (isPublicReveal && !isDecider) {
+                    rcr->clear_candidate_selectable();
+                    rcr->set_prompt_text("Opponent is making a resolution choice.");
+                }
+                if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS) {
+                    // HandCards: populate server card ids so client hand-click UI can match engine OIDs.
+                    const int deciderId = rcr->deciding_player_id();
+                    auto *deciderPlayer = static_cast<Server_Player *>(game->getPlayers().value(deciderId));
+                    if (deciderPlayer) {
+                        for (int ci = 0; ci < rcr->candidate_object_ids_size(); ++ci) {
+                            const quint32 oid = static_cast<quint32>(rcr->candidate_object_ids(ci));
+                            Server_Card *sc = playerBinding(deciderId).findCardByEngineOid(deciderPlayer, oid);
+                            rcr->add_candidate_server_card_ids(sc ? sc->getId() : -1);
+                        }
                     }
-                }
-            } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH ||
-                       rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP ||
-                       rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK ||
-                       rcr->choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD) {
-                // LibrarySearch / LibraryTop / LibraryLook / ManifestDread: assign each candidate a sequential
-                // index as its server card ID.
-                // Deck cards are not in engineOidToServerCardId (only battlefield/hand/stack are),
-                // so there is no server-side lookup available. Sequential indices give every
-                // physical card (including duplicate-named ones) a unique client-side ID.
-                // The client maps index i → engine OID via candidate_object_ids[i].
-                // NB: unique *within this candidate list only* — 0, 1, 2 … collide head-on with
-                // the real Server_Card ids of cards in hand and on the battlefield. Any client
-                // lookup keyed on these must first confirm the card is in the pick's own zone
-                // (RuledActions::isResolutionPickZoneCard).
-                for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
-                    rcr->add_candidate_server_card_ids(ci);
-                }
-            } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_REVEALED &&
-                       rcr->candidate_server_card_ids_size() == 0) {
-                // RevealedCards: same sequential-index scheme for the same reason.
-                for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
-                    rcr->add_candidate_server_card_ids(ci);
-                }
-            } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND &&
-                       rcr->candidate_server_card_ids_size() == 0) {
-                // OpponentHand: reaches here only for the deciding player (non-deciders were
-                // redacted above). The candidates live in another player's hidden hand, so — like
-                // RevealedCards/LibrarySearch — use sequential indices the client maps back to OIDs.
-                for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
-                    rcr->add_candidate_server_card_ids(ci);
+                } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH ||
+                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP ||
+                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK ||
+                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD) {
+                    // LibrarySearch / LibraryTop / LibraryLook / ManifestDread: assign each candidate a sequential
+                    // index as its server card ID.
+                    // Deck cards are not in engineOidToServerCardId (only battlefield/hand/stack are),
+                    // so there is no server-side lookup available. Sequential indices give every
+                    // physical card (including duplicate-named ones) a unique client-side ID.
+                    // The client maps index i → engine OID via candidate_object_ids[i].
+                    // NB: unique *within this candidate list only* — 0, 1, 2 … collide head-on with
+                    // the real Server_Card ids of cards in hand and on the battlefield. Any client
+                    // lookup keyed on these must first confirm the card is in the pick's own zone
+                    // (RuledActions::isResolutionPickZoneCard).
+                    for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
+                        rcr->add_candidate_server_card_ids(ci);
+                    }
+                } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_REVEALED &&
+                           rcr->candidate_server_card_ids_size() == 0) {
+                    // RevealedCards: same sequential-index scheme for the same reason.
+                    for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
+                        rcr->add_candidate_server_card_ids(ci);
+                    }
+                } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND &&
+                           rcr->candidate_server_card_ids_size() == 0) {
+                    // OpponentHand candidates live in another player's hidden hand. Public reveal
+                    // recipients receive only transient sequential popup ids; the persistent
+                    // HandSlotMap and the hand's real Server_Card ids remain private.
+                    for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
+                        rcr->add_candidate_server_card_ids(ci);
+                    }
                 }
             }
         }
@@ -2258,10 +2288,9 @@ void RuledGameDriver::sendRuledEngineNotice(const QString &title, const QString 
 
 void RuledGameDriver::notifyRuledEngineUnreachable()
 {
-    sendRuledEngineNotice(
-        QStringLiteral("Cannot start ruled game"),
-        QStringLiteral("Cannot start ruled game — the rules engine is unreachable. "
-                       "Make sure the rules engine (tricerules) is running, then ready up again."));
+    sendRuledEngineNotice(QStringLiteral("Cannot start ruled game"),
+                          QStringLiteral("Cannot start ruled game — the rules engine is unreachable. "
+                                         "Make sure the rules engine (tricerules) is running, then ready up again."));
 }
 
 void RuledGameDriver::handleRuledEngineConnectionLost()

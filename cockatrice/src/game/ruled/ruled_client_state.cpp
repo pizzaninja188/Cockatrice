@@ -330,7 +330,8 @@ void RuledClientState::teardownPendingChoice()
         return;
     }
     // A Revealed pick owns a popup window; tell the tab to close it before the state goes away.
-    if (pendingChoice->kind == ChoiceKind::ResolutionPick && pendingChoice->pickZone == PickZone::Revealed) {
+    if (pendingChoice->kind == ChoiceKind::ResolutionPick && pendingChoice->pickZone == PickZone::Revealed &&
+        !pendingChoice->publicReveal) {
         emit revealedPickChanged(false, {}, {}, 0, 0);
     }
     pendingChoice.reset();
@@ -352,6 +353,22 @@ void RuledClientState::clearPendingChoiceOfKind(ChoiceKind kind)
     if (hasPendingChoiceOfKind(kind)) {
         teardownPendingChoice();
     }
+}
+
+void RuledClientState::setPublicReveal(RuledPublicReveal reveal)
+{
+    publicReveal = std::move(reveal);
+    emit publicRevealChanged(true, publicReveal->sourceObjectId, publicReveal->zoneOwnerPlayerId,
+                             publicReveal->candidateNames, publicReveal->candidateServerCardIds);
+}
+
+void RuledClientState::clearPublicReveal()
+{
+    if (!publicReveal.has_value()) {
+        return;
+    }
+    publicReveal.reset();
+    emit publicRevealChanged(false, 0, -1, {}, {});
 }
 
 void RuledClientState::sendResolutionChoice(const QVector<quint32> &chosenOids,
@@ -414,8 +431,7 @@ void RuledClientState::declinePendingClickChoice()
         return;
     }
     const ChoiceKind kind = pendingChoice->kind;
-    if (kind == ChoiceKind::CopySource || kind == ChoiceKind::CopyTarget ||
-        kind == ChoiceKind::ResolutionPick) {
+    if (kind == ChoiceKind::CopySource || kind == ChoiceKind::CopyTarget || kind == ChoiceKind::ResolutionPick) {
         clearPendingChoiceOfKind(kind);
         sendResolutionChoice({});
         return;
@@ -424,8 +440,7 @@ void RuledClientState::declinePendingClickChoice()
         const RuledPendingChoice restore = *pendingChoice;
         clearPendingChoiceOfKind(kind);
         ruled::v1::RuledCommand command;
-        command.mutable_submit_resolution_choice()->set_decision(
-            ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+        command.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
         host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
             if (!accepted && !pendingChoice.has_value()) {
                 setPendingChoice(restore);
@@ -448,10 +463,9 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
     if (!hasPendingChoiceOptions()) {
         return;
     }
-    const auto it = std::find_if(pendingChoice->choiceOptions.cbegin(), pendingChoice->choiceOptions.cend(),
-                                 [optionIndex](const RuledChoiceOption &option) {
-                                     return option.index == optionIndex;
-                                 });
+    const auto it =
+        std::find_if(pendingChoice->choiceOptions.cbegin(), pendingChoice->choiceOptions.cend(),
+                     [optionIndex](const RuledChoiceOption &option) { return option.index == optionIndex; });
     if (it == pendingChoice->choiceOptions.cend() || !it->enabled) {
         return;
     }
@@ -459,8 +473,8 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
         if (it->needsTarget) {
             pendingChoice->kind = ChoiceKind::TriggerTarget;
             pendingChoice->selectedTriggerMode = optionIndex;
-            validTargetsByAbility.insert(abilityTargetKey(lastTriggerSourceOid, static_cast<int>(lastTriggerAbilityIndex)),
-                                         it->targets);
+            validTargetsByAbility.insert(
+                abilityTargetKey(lastTriggerSourceOid, static_cast<int>(lastTriggerAbilityIndex)), it->targets);
             emit combatStateChanged();
             return;
         }
@@ -491,8 +505,7 @@ void RuledClientState::appendPendingTriggerMode(ruled::v1::ChooseTriggerTarget *
     if (!command || !hasPendingTriggerTarget() || pendingChoice->selectedTriggerMode < 0) {
         return;
     }
-    command->add_selected_modes()->set_mode_index(
-        static_cast<quint32>(pendingChoice->selectedTriggerMode));
+    command->add_selected_modes()->set_mode_index(static_cast<quint32>(pendingChoice->selectedTriggerMode));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -511,8 +524,7 @@ bool RuledClientState::isResolutionHandPickCardSelectable(int serverCardId) cons
     if (pendingChoice->selectedServerCardIds.contains(serverCardId)) {
         return true;
     }
-    if (pendingChoice->hasSelectableRestriction &&
-        !pendingChoice->selectableServerCardIds.contains(serverCardId)) {
+    if (pendingChoice->hasSelectableRestriction && !pendingChoice->selectableServerCardIds.contains(serverCardId)) {
         return false;
     }
     // When unique-names is on, exclude candidates whose name is already taken by a
@@ -1230,6 +1242,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     finishEngineCommand();
     // Pending choice + the trigger stack bookkeeping that outlives it.
     clearPendingChoice();
+    clearPublicReveal();
     lastTriggerSourceOid = 0;
     lastTriggerAbilityIndex = 0;
     lastTriggerControllerPlayerId = -1;

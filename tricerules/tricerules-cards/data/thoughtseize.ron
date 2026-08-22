@@ -12,6 +12,7 @@
       target: (kind: AnyPlayer),
       chooser: Controller,
       card_filter: Some(Nonland),
+      visibility: PublicReveal,
     ),
     LoseLife(amount: Fixed(2)),
   ],

@@ -31,6 +31,8 @@ impl GameEngine {
                         self.can_pay_resolution_mana(pending.deciding_player, &payment.mana_cost)
                     },
                     mana_cost: payment.mana_cost.to_string(),
+                    reveal_audience: 0,
+                    revealed_zone_owner_player_id: None,
                 },
             )),
         })
@@ -371,6 +373,8 @@ impl GameEngine {
                             payment_currently_legal: false,
                             resolution_branches: Vec::new(),
                             mana_cost: String::new(),
+                            reveal_audience: 0,
+                            revealed_zone_owner_player_id: None,
                         },
                     )),
                 });

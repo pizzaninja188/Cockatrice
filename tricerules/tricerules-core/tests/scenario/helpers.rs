@@ -14,9 +14,9 @@ pub(crate) use tricerules_proto::ruled::v1::{
     ChooseTriggerTarget, CostSelection, DamagePair, DeclareAttackers, DeclareBlockers,
     DiscardToHandSize, ExecutePermanentAction, FlexPipPayment, ManaSpendSelection, PassPriority,
     PermanentActionKind, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers,
-    PrimitiveYieldStructured, ResolutionChoiceRequired, RuledCommand, RuledEventBatch,
-    SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TargetRefKind,
-    UndoManaAbility,
+    PrimitiveYieldStructured, ResolutionChoiceRequired, ResolutionRevealAudience, RuledCommand,
+    RuledEventBatch, SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef,
+    TargetRefKind, UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {

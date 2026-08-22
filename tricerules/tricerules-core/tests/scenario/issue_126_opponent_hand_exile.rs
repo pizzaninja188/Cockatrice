@@ -21,7 +21,7 @@ fn aggressive_negotiations_targets(opponent: i32, creature: Option<u32>) -> Vec<
 }
 
 #[test]
-fn aggressive_negotiations_exiles_the_chosen_nonland_then_adds_the_counter() {
+fn issue_143_aggressive_negotiations_publicly_reveals_the_hand() {
     let decks = Some(vec![
         deck_with("swamp", &["aggressive_negotiations", "grizzly_bears"]),
         deck_with("forest", &["grizzly_bears"]),
@@ -60,6 +60,11 @@ fn aggressive_negotiations_exiles_the_chosen_nonland_then_adds_the_counter() {
 
     let choice = find_resolution_choice(&parked).expect("opponent-hand choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::OpponentHand);
+    assert_eq!(
+        choice.reveal_audience(),
+        ResolutionRevealAudience::AllParticipants
+    );
+    assert_eq!(choice.revealed_zone_owner_player_id, Some(1));
     assert_eq!(choice.deciding_player_id, 0);
     assert_eq!(choice.min, 1);
     assert_eq!(choice.max, 1);

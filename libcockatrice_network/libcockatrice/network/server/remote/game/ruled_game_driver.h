@@ -53,8 +53,8 @@
 #include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/response.pb.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
-
 #include <memory>
+#include <optional>
 
 class Server_Game;
 class Server_AbstractParticipant;
@@ -75,7 +75,7 @@ public:
     /// Ruled mode: forward a serialized `ruled.v1.RuledCommand` to tricerules and broadcast the batch
     /// (used for mana-pool sync on land taps — not every payload goes through `Command_RuledPayload`).
     void relayRuledPayloadAndBroadcast(int playerId, const QByteArray &ruledCmdBytes);
-    void broadcastRuledResponse(const ruled::v1::IpcResponse &resp);
+    void broadcastRuledResponse(const ruled::v1::IpcResponse &resp, bool authoritative = true);
     /// Returns false when the session was refused because a deck contains unimplemented
     /// cards (the game must not start; players were already notified). Infrastructure
     /// failures keep the legacy casual fallback and return true.
@@ -86,6 +86,9 @@ public:
     bool validateDecksForStart();
     /// Clears per-game stack bookkeeping and the connection-lost flag before a (re)start.
     void resetForNewGame();
+    /// Appends the current engine-authored public reveal, redacted for this recipient, to a
+    /// join/reconnect response. No-op when resolution is not parked on a public reveal.
+    void enqueuePendingPublicRevealForParticipant(Server_AbstractParticipant *participant, ResponseContainer &rc);
     /// Ends the sidecar session and drops the relay (game teardown).
     void endSidecarSession();
     /// CR 708.9: reveal the conceding player's face-down permanents, or every remaining one when
@@ -154,8 +157,7 @@ private:
     /// Wrap one ordinary gameplay command with a sorted, complete server-authored policy snapshot.
     /// Returns empty for a UI-only/nested command or an unknown player.
     QByteArray canonicalGameplayCommand(int playerId, const ruled::v1::RuledCommand &command) const;
-    void applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
-                                const QList<QPair<int, QStringList>> &deckByPlayer);
+    void applyRuledStartupBatch(const ruled::v1::IpcResponse &resp, const QList<QPair<int, QStringList>> &deckByPlayer);
     RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp);
     // applyRuledBatch passes, in call order (order dependencies are load-bearing — see the
     // comment in applyRuledBatch; never merge or reorder these):
@@ -180,6 +182,9 @@ private:
     // broadcastRuledResponse stages: server-built identity-map injection, then per-participant
     // hidden-info redaction.
     void appendServerObjectMaps(ruled::v1::IpcResponse &toSend);
+    /// Replace the reconnect snapshot with the public reveal in this authoritative batch, or
+    /// clear it when the batch contains none. Local UI previews must never call this method.
+    void updatePendingPublicRevealCache(const ruled::v1::IpcResponse &response);
     ruled::v1::RuledEventBatch redactBatchForParticipant(const ruled::v1::RuledEventBatch &batch,
                                                          Server_AbstractParticipant *participant);
 
@@ -230,6 +235,9 @@ private:
     ruled::v1::HandSlotMap lastBroadcastHandSlotMap;
     bool hasLastBroadcastHandSlotMap = false;
     QSet<int> lastBroadcastHandSlotParticipants;
+    /// The sole active public reveal while resolution is parked. Stored without recipient-private
+    /// ids; reconnect delivery runs the normal redaction/injection path for the joining client.
+    std::optional<ruled::v1::ResolutionChoiceRequired> pendingPublicReveal;
     /// Authenticated phase-stop preferences by seat. Missing entries are expanded to an explicit
     /// stop-everywhere row when a gameplay command is canonicalized.
     QHash<int, ruled::v1::SetAutoPassPolicy> autoPassPolicies;

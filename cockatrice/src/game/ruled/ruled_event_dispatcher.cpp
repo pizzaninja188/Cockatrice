@@ -114,8 +114,7 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
         parsed.applicationId = static_cast<quint64>(application.application_id());
         parsed.genericMana = static_cast<int>(application.generic_mana());
         for (const auto &candidate : application.affected_targets()) {
-            parsed.affectedTargets.append(
-                {candidate.kind(), static_cast<quint32>(candidate.object_id())});
+            parsed.affectedTargets.append({candidate.kind(), static_cast<quint32>(candidate.object_id())});
         }
         data.targetingCostApplications.append(parsed);
     }
@@ -152,7 +151,7 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         const QString cardName = QString::fromStdString(action.card_name());
         set.indicesByCardName.insert(cardName, handIndex);
         set.faceOptionsByIndex[handIndex].append({faceIndex, cardName, QString::fromStdString(action.cost()),
-                                                 static_cast<int>(action.generic_cost_reduction())});
+                                                  static_cast<int>(action.generic_cost_reduction())});
         if (action.has_cost_choices()) {
             set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices()));
         }
@@ -231,6 +230,15 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
 void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
 {
     BatchContext ctx;
+
+    for (const auto &event : batch.events()) {
+        if (event.has_attackers_preview() || event.has_blockers_preview()) {
+            // Servatrice synthesizes preview payloads locally and appends ordinary identity maps.
+            // They are not an authoritative engine snapshot and must not retire a parked reveal.
+            ctx.reconcilePublicReveal = false;
+            break;
+        }
+    }
 
     for (const auto &e : batch.events()) {
         if (e.has_log()) {
@@ -609,12 +617,41 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
 
     // Tier-3 custom resolution paused for a player choice (CR 608).
     ctx.promptFeed += QString::fromStdString(rcr.prompt_text()) + QStringLiteral("\n");
-    // Drop any stale pick from a previous resolution step. Deliberately not a full
-    // clearPendingChoice(): a parked trigger/copy/legend choice belongs to a different flow.
+    const bool isDecider = static_cast<int>(rcr.deciding_player_id()) == host->localPlayerId();
+    const bool isPublicReveal = rcr.reveal_audience() == ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS;
+    // Retire the previous resolution UI before publishing its replacement. A repeated public
+    // reveal marks its pending pick as shared, so this does not close the existing popup.
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPick);
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
-    if (static_cast<int>(rcr.deciding_player_id()) != host->localPlayerId()) {
+    if (isPublicReveal) {
+        const int count = rcr.candidate_names_size();
+        const bool selectableShapeValid =
+            isDecider ? rcr.candidate_selectable_size() == count : rcr.candidate_selectable_size() == 0;
+        const bool identityShapeValid =
+            count > 0 && rcr.has_revealed_zone_owner_player_id() && rcr.candidate_object_ids_size() == count &&
+            rcr.candidate_card_ids_size() == count && rcr.candidate_server_card_ids_size() == count;
+        if (!identityShapeValid || !selectableShapeValid) {
+            qWarning() << "Rejecting malformed ruled public reveal";
+            return;
+        }
+        RuledClientState::RuledPublicReveal reveal;
+        reveal.sourceObjectId = rcr.source_object_id();
+        reveal.zoneOwnerPlayerId = rcr.revealed_zone_owner_player_id();
+        for (int i = 0; i < count; ++i) {
+            reveal.candidateNames.append(QString::fromStdString(rcr.candidate_names(i)));
+            reveal.candidateServerCardIds.append(rcr.candidate_server_card_ids(i));
+        }
+        const bool snapshotChanged = !state->publicReveal.has_value() || *state->publicReveal != reveal;
+        if (snapshotChanged) {
+            ctx.timeline += QStringLiteral("P%1 reveals: %2.\n")
+                                .arg(reveal.zoneOwnerPlayerId)
+                                .arg(reveal.candidateNames.join(QStringLiteral(", ")));
+        }
+        state->setPublicReveal(std::move(reveal));
+        ctx.publicRevealSeen = true;
+    }
+    if (!isDecider) {
         state->resolutionChoiceWaitingPlayerId = static_cast<int>(rcr.deciding_player_id());
         return;
     }
@@ -712,10 +749,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     const bool isLibrarySearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH;
     const bool isLibraryLook = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK;
     const bool isManifestDread = rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD;
-    if (isLibraryLook &&
-        (rcr.candidate_object_ids_size() != rcr.candidate_names_size() ||
-         rcr.candidate_server_card_ids_size() != rcr.candidate_names_size() ||
-         rcr.candidate_selectable_size() != rcr.candidate_names_size())) {
+    if (isLibraryLook && (rcr.candidate_object_ids_size() != rcr.candidate_names_size() ||
+                          rcr.candidate_server_card_ids_size() != rcr.candidate_names_size() ||
+                          rcr.candidate_selectable_size() != rcr.candidate_names_size())) {
         qWarning() << "Rejecting malformed ruled library-look choice";
         return;
     }
@@ -792,6 +828,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         pick.promptText = QString::fromStdString(rcr.prompt_text());
         pick.pickZone = PickZone::Revealed;
         pick.hasSelectableRestriction = isOpponentHand;
+        pick.publicReveal = isPublicReveal;
         // Both kinds render identically, but they are not the same thing: REVEALED was shown to
         // the whole table, OPPONENT_HAND is a hand only the decider may look at (CR 701.7). The
         // proto does not carry whose hand it is, so the title stays seat-agnostic — if a future
@@ -818,7 +855,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         const int maximum = pick.max;
         state->setPendingChoice(std::move(pick));
         emit state->resolutionHandPickUiChanged(required, 0);
-        emit state->revealedPickChanged(true, names, scids, required, maximum);
+        if (!isPublicReveal) {
+            emit state->revealedPickChanged(true, names, scids, required, maximum);
+        }
         emit state->combatStateChanged();
         return;
     }
@@ -1171,9 +1210,9 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         state->zoneCastActions.handIndices.insert(objectId);
         const QString cardName = QString::fromStdString(action.card_name());
         state->zoneCastActions.indicesByCardName.insert(cardName, objectId);
-        state->zoneCastActions.faceOptionsByIndex[objectId].append(
-            {faceIndex, cardName, QString::fromStdString(action.cost()),
-             static_cast<int>(action.generic_cost_reduction())});
+        state->zoneCastActions.faceOptionsByIndex[objectId].append({faceIndex, cardName,
+                                                                    QString::fromStdString(action.cost()),
+                                                                    static_cast<int>(action.generic_cost_reduction())});
         state->zoneCastSourceByOid.insert(objectId, action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_EXILE
                                                         ? RuledCastSource::Exile
                                                         : RuledCastSource::Graveyard);
@@ -1351,6 +1390,9 @@ void RuledEventDispatcher::applyNoLegalActions()
 
 void RuledEventDispatcher::finishBatch(BatchContext &ctx)
 {
+    if (ctx.reconcilePublicReveal && !ctx.publicRevealSeen) {
+        state->clearPublicReveal();
+    }
     state->pruneCleanupDiscardSelectionAndEmitUi();
     emit state->legalActionsChanged();
     if (ctx.stackTrackingDirty) {

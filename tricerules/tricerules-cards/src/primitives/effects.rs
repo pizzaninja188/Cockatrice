@@ -797,6 +797,17 @@ pub enum DiscardChooser {
     Random,
 }
 
+/// Who is authorized to see a hidden-hand cohort while a controller-selected hand effect is
+/// parked for its resolution choice. The default is fail-closed: cards such as Cracked Skull say
+/// "look" and show the hand only to the chooser, while Coercion, Thoughtseize, and Aggressive
+/// Negotiations explicitly reveal the hand to every player (CR 701.20).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HandChoiceVisibility {
+    #[default]
+    PrivateLook,
+    PublicReveal,
+}
+
 /// Written order for a draw/discard sequence whose discard may suspend resolution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DrawDiscardOrder {
@@ -1254,6 +1265,10 @@ pub enum SpellEffectKind {
         /// Whether the chooser may decline after seeing the hand.
         #[serde(default)]
         optional: bool,
+        /// Whether the full hand window is chooser-private or publicly revealed while the choice
+        /// remains pending. Selection legality is still carried separately by the engine.
+        #[serde(default)]
+        visibility: HandChoiceVisibility,
     },
     /// Choose cards from a target player's hand and exile them directly. This is deliberately
     /// distinct from [`SpellEffectKind::DiscardCards`]: it does not perform the CR 701.9 discard
@@ -1268,6 +1283,8 @@ pub enum SpellEffectKind {
         card_filter: Option<CardTypeFilter>,
         #[serde(default)]
         optional: bool,
+        #[serde(default)]
+        visibility: HandChoiceVisibility,
     },
     /// Destroy every battlefield permanent matching `kind` (CR 701.7). Untargeted, so it
     /// ignores hexproof/shroud and never fizzles. `kind` selects the affected set — `Creature`

@@ -14,8 +14,8 @@
 // For GamePromptWidget::PromptMode on refreshRuledPromptState() — ruled prompt panel (fork).
 #include "../game/prompt/game_prompt_widget.h"
 // For RuledTriggerOrderCandidate on the CR 603.3b ordering signal (fork).
-#include "../game/ruled/ruled_client_state.h"
 #include "../game/player/player.h"
+#include "../game/ruled/ruled_client_state.h"
 #include "../interface/widgets/menus/tearoff_menu.h"
 #include "../interface/widgets/replay/replay_manager.h"
 #include "tab.h"
@@ -107,7 +107,7 @@ private:
     QPointer<ZoneViewWidget> librarySearchView;
     // ServerInfo_Card storage for the library search popup (owned by this instance).
     QList<ServerInfo_Card *> librarySearchCards;
-    // Revealed-cards popup shown during RevealedCards pick (Gifts Ungiven opponent step).
+    // Sole reveal popup, reused by private Gifts-style picks and public hand reveals.
     QPointer<ZoneViewWidget> revealedPickView;
     // ServerInfo_Card storage for the revealed-cards popup (owned by this instance).
     QList<ServerInfo_Card *> revealedPickCards;
@@ -228,8 +228,13 @@ private slots:
     /// Opens the local player's deck zone view for the LibrarySearch pick (Gifts Ungiven step 1).
     void onRuledLibrarySearchPickStarted(QStringList candidateNames, QVector<int> serverCardIds);
     /// Creates or closes the revealed-cards popup for RevealedCards pick (Gifts Ungiven step 2).
-    void onRuledRevealedPickChanged(bool started, QStringList cardNames, QVector<int> serverCardIds,
-                                    int min, int max);
+    void onRuledRevealedPickChanged(bool started, QStringList cardNames, QVector<int> serverCardIds, int min, int max);
+    /// Reconciles the one engine-authored public hand reveal as an exact snapshot.
+    void onRuledPublicRevealChanged(bool active,
+                                    quint32 sourceObjectId,
+                                    int zoneOwnerPlayerId,
+                                    QStringList cardNames,
+                                    QVector<int> serverCardIds);
     /// CR 603.3b: opens or closes the simultaneous-trigger ordering window. Only the deciding
     /// player is sent `active = true`, so at most one client shows it.
     void onRuledTriggerOrderUiChanged(bool active, QVector<RuledTriggerOrderCandidate> candidates);

@@ -133,7 +133,8 @@ Every signal is declared on `RuledClientState` and emitted by it or by the dispa
 | `openingBottomUiChanged(int,int)` | `TabGame` | London-mulligan bottoming prompt. |
 | `resolutionHandPickUiChanged(int,int)` | `TabGame` | Tier-3 pick prompt; `required == -1` means cleared. |
 | `librarySearchPickStarted(QStringList,QVector<int>)` | `TabGame` | Auto-open the deck zone view with the candidates. |
-| `revealedPickChanged(bool,QStringList,QVector<int>,int,int)` | `TabGame` | Open/close the revealed-cards popup. |
+| `revealedPickChanged(bool,QStringList,QVector<int>,int,int)` | `TabGame` | Open/close a chooser-private revealed-cards popup. |
+| `publicRevealChanged(bool,quint32,int,QStringList,QVector<int>)` | `TabGame` | Reconcile the table-visible public-reveal popup as an exact snapshot. |
 | `triggerNeedsTarget(QString)` | *(none today)* | Emitted on `TriggerNeedsTarget`; the prompt text currently reaches the panel through `enginePromptFeed` instead. Wire it, or drop it, when the trigger-target UI next changes. |
 
 Incoming direction — `GamePromptWidget` signals connect straight to `RuledClientState` slots
@@ -146,11 +147,14 @@ The `connect` lines live in `tab_game.cpp` and are the accepted residual fork de
 
 ## Invariants
 
-1. **One pending choice.** The engine parks at most one decision and blocks, so
+1. **One pending choice, separate public reveal.** The engine parks at most one decision and blocks, so
    `RuledClientState::pendingChoice` is a single `std::optional`. `setPendingChoice()` tears down
    whatever it replaces (including the revealed-cards popup); `clearPendingChoiceOfKind()` is how a
    follow-up engine event retires the one choice it answers; `sendResolutionChoice()` is the only
    `SubmitResolutionChoice` sender. `TriggerTarget` is answered with `ChooseTriggerTarget` instead.
+   A public reveal is mirrored separately on every participant, including observers that do not
+   own the choice; authoritative batches replace or clear that exact snapshot, while local combat
+   previews leave it untouched.
 2. **Trigger stack bookkeeping is not a choice.** `lastTriggerSourceOid` /
    `lastTriggerAbilityIndex` / `lastTriggerControllerPlayerId` are recorded on **every** client,
    because the synthetic stack card and its source arrow are built from them on seats that never

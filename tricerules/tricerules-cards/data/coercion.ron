@@ -7,6 +7,6 @@
     count: 1,
     target: (kind: OpponentPlayer),
     chooser: Controller,
-    card_filter: Some(Nonland),
+    visibility: PublicReveal,
   )],
 )

@@ -425,8 +425,8 @@ void TabGame::connectToGameEventHandler()
         });
         connect(gamePromptWidget, &GamePromptWidget::ruledResolutionPaymentPayRequested,
                 game->getGameEventHandler()->ruled(), &RuledClientState::payResolutionMana);
-        connect(gamePromptWidget, &GamePromptWidget::ruledChoiceOptionRequested,
-                game->getGameEventHandler()->ruled(), &RuledClientState::submitPendingChoiceOption);
+        connect(gamePromptWidget, &GamePromptWidget::ruledChoiceOptionRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::submitPendingChoiceOption);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionPaymentSubmissionFinished, this,
                 [this](bool accepted) {
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
@@ -439,6 +439,8 @@ void TabGame::connectToGameEventHandler()
                 &TabGame::onRuledLibrarySearchPickStarted);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::revealedPickChanged, this,
                 &TabGame::onRuledRevealedPickChanged);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::publicRevealChanged, this,
+                &TabGame::onRuledPublicRevealChanged);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerOrderUiChanged, this,
                 &TabGame::onRuledTriggerOrderUiChanged);
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget,
@@ -686,8 +688,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.text = tr("Click the trigger to put on the stack next (%1 left) — what you pick first "
                         "resolves last.")
                          .arg(state.required);
-    } else if (h->isResolutionPaymentActive() && localActions &&
-               localActions->isAwaitingRuledAbilityCostSelection()) {
+    } else if (h->isResolutionPaymentActive() && localActions && localActions->isAwaitingRuledAbilityCostSelection()) {
         // A mana ability with an interactive cost temporarily owns the prompt. Once that cost is
         // submitted or cancelled, the still-parked payment prompt resumes.
         state.mode = PromptMode::ClickChoice;
@@ -695,19 +696,18 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
     } else if (h->isResolutionPaymentActive()) {
         state.mode = PromptMode::ResolutionPayment;
         const QString coloredCost = h->resolutionPaymentManaCost();
-        const int remaining = localActions ? localActions->ruledResolutionPaymentRemaining()
-                                           : h->resolutionPaymentGenericCost();
-        state.text = coloredCost.isEmpty()
-                         ? tr("Pay mana: {%1} remaining (click mana counters or activate mana abilities).")
-                               .arg(remaining)
-                         : tr("Pay %1 (activate mana abilities, then click Pay).").arg(coloredCost);
+        const int remaining =
+            localActions ? localActions->ruledResolutionPaymentRemaining() : h->resolutionPaymentGenericCost();
+        state.text =
+            coloredCost.isEmpty()
+                ? tr("Pay mana: {%1} remaining (click mana counters or activate mana abilities).").arg(remaining)
+                : tr("Pay %1 (activate mana abilities, then click Pay).").arg(coloredCost);
         state.genericManaCost = remaining;
         state.paymentCurrentlyLegal = h->resolutionPaymentCurrentlyLegal();
     } else if (h->hasPendingChoiceOptions()) {
         state.mode = PromptMode::ChoiceOptions;
-        const ChoiceKind kind = h->hasPendingChoiceOfKind(ChoiceKind::TriggerMode)
-                                    ? ChoiceKind::TriggerMode
-                                    : ChoiceKind::ResolutionBranch;
+        const ChoiceKind kind =
+            h->hasPendingChoiceOfKind(ChoiceKind::TriggerMode) ? ChoiceKind::TriggerMode : ChoiceKind::ResolutionBranch;
         state.text = h->pendingChoicePromptText(kind);
         state.canDecline = h->pendingClickChoiceMayDecline();
         for (const auto &option : h->pendingChoiceOptions()) {
@@ -1864,8 +1864,8 @@ void TabGame::newCardAdded(AbstractCardItem *card)
         if (cardItem && cardItem->getFaceDown() && RuledActions::isRuledGame(game)) {
             RuledClientState *state = game->getGameEventHandler()->ruled();
             const int playerId = cardItem->getOwner() ? cardItem->getOwner()->getPlayerInfo()->getId() : -1;
-            const QString privateName = state ? state->privateFaceDownNameForCard(playerId, cardItem->getId())
-                                              : QString{};
+            const QString privateName =
+                state ? state->privateFaceDownNameForCard(playerId, cardItem->getId()) : QString{};
             if (!privateName.isEmpty()) {
                 cardInfoFrameWidget->setCard(privateName);
                 return;
@@ -2525,4 +2525,60 @@ void TabGame::onRuledRevealedPickChanged(bool started,
         qDeleteAll(revealedPickCards);
         revealedPickCards.clear();
     });
+}
+
+void TabGame::onRuledPublicRevealChanged(bool active,
+                                         quint32 /*sourceObjectId*/,
+                                         int zoneOwnerPlayerId,
+                                         QStringList cardNames,
+                                         QVector<int> serverCardIds)
+{
+    const bool validSnapshot =
+        active && !cardNames.isEmpty() && cardNames.size() == serverCardIds.size() && game && scene;
+    Player *zoneOwner =
+        validSnapshot ? game->getPlayerManager()->getPlayers().value(zoneOwnerPlayerId, nullptr) : nullptr;
+    CardZoneLogic *handZone = zoneOwner ? zoneOwner->getZones().value(ZoneNames::HAND) : nullptr;
+    if (!validSnapshot || !zoneOwner || !handZone) {
+        if (revealedPickView) {
+            revealedPickView->close();
+            revealedPickView = nullptr;
+        }
+        qDeleteAll(revealedPickCards);
+        revealedPickCards.clear();
+        return;
+    }
+
+    // Every active signal is an exact snapshot. Refill the existing widget for both same-key
+    // refreshes and different-key replacements, preserving geometry and never appending stale
+    // cards from an earlier reveal.
+    QList<ServerInfo_Card *> previousCards = revealedPickCards;
+    revealedPickCards.clear();
+    QList<const ServerInfo_Card *> cardList;
+    for (int i = 0; i < cardNames.size(); ++i) {
+        auto *card = new ServerInfo_Card;
+        card->set_name(cardNames.at(i).toStdString());
+        card->set_id(serverCardIds.at(i));
+        card->set_face_down(false);
+        revealedPickCards.append(card);
+        cardList.append(card);
+    }
+
+    if (revealedPickView) {
+        revealedPickView->getZone()->getLogic()->clearContents();
+        revealedPickView->getZone()->initializeCards(cardList);
+    } else {
+        // The revealed hand owner supplies the scaffold, so spectators do not need a local
+        // Player. It is read-only, control-free, and non-closeable while resolution is parked.
+        revealedPickView =
+            new ZoneViewWidget(zoneOwner, handZone, -1, true, false, cardList, false, false, true, false);
+        scene->addItem(revealedPickView);
+        revealedPickView->setPos(340, 80);
+        connect(revealedPickView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
+            revealedPickView = nullptr;
+            qDeleteAll(revealedPickCards);
+            revealedPickCards.clear();
+        });
+    }
+    revealedPickView->setWindowTitle(tr("%1's revealed hand").arg(zoneOwner->getPlayerInfo()->getName()));
+    qDeleteAll(previousCards);
 }

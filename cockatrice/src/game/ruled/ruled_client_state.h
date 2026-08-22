@@ -22,6 +22,8 @@
 #ifndef COCKATRICE_RULED_CLIENT_STATE_H
 #define COCKATRICE_RULED_CLIENT_STATE_H
 
+#include "ruled_pick_surface.h"
+
 #include <QHash>
 #include <QList>
 #include <QMultiHash>
@@ -291,12 +293,7 @@ public:
     };
 
     /// Which zone the pending pick operates on.
-    enum class PickZone
-    {
-        Hand,
-        Deck,
-        Revealed
-    };
+    using PickZone = RuledPickZone;
 
     /// The one player choice the engine has parked on this client. The engine asks for a single
     /// decision at a time and blocks until it is answered, so at most one of these is live —
@@ -367,6 +364,10 @@ public:
         // For Deck / Revealed picks: oracle card names parallel to serverCardIdToOid keys,
         // used to populate the deck zone view prompt and the revealed-cards popup.
         QStringList candidateNames;
+        // True when the popup is also owned by the separate table-visible public-reveal state.
+        // Pending-choice teardown must not close that shared window optimistically on submit;
+        // the next authoritative batch retires it for every participant together.
+        bool publicReveal = false;
 
         // --- ResolutionPayment payload -----------------------------------------------
         int genericManaCost = 0;
@@ -629,6 +630,19 @@ public:
     /// The single choice the engine is waiting on us for; nullopt when it is waiting on nobody
     /// (or on another seat). Written only through setPendingChoice / clearPendingChoice*.
     std::optional<RuledPendingChoice> pendingChoice;
+
+    struct RuledPublicReveal
+    {
+        quint32 sourceObjectId = 0;
+        int zoneOwnerPlayerId = -1;
+        QStringList candidateNames;
+        QVector<int> candidateServerCardIds;
+
+        bool operator==(const RuledPublicReveal &) const = default;
+    };
+    /// Public information mirrored on every participant independently of chooser authority.
+    /// The key is (sourceObjectId, zoneOwnerPlayerId); each incoming value is an exact snapshot.
+    std::optional<RuledPublicReveal> publicReveal;
 
     // Last TriggerNeedsTarget seen, recorded on *every* client — not just the ability's
     // controller. This is stack bookkeeping, not a choice: it is what lets the synthetic stack
@@ -1194,8 +1208,7 @@ public:
     void declinePendingClickChoice();
     [[nodiscard]] bool hasPendingChoiceOptions() const
     {
-        return hasPendingChoiceOfKind(ChoiceKind::TriggerMode) ||
-               hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
+        return hasPendingChoiceOfKind(ChoiceKind::TriggerMode) || hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
     }
     [[nodiscard]] QVector<RuledPermanentAction> permanentActionsForOid(quint32 oid) const
     {
@@ -1205,11 +1218,10 @@ public:
     /// Resolve one engine-authored permanent action by its complete optimistic-concurrency key.
     /// Permanent actions are not activated abilities and therefore have no ability index; payment
     /// revalidation must use this typed identity instead of consulting activatedAbilityIndices.
-    [[nodiscard]] std::optional<RuledPermanentAction>
-    permanentActionFor(quint32 oid,
-                       quint64 zoneChangeGeneration,
-                       ruled::v1::PermanentActionKind kind,
-                       std::optional<quint32> faceIndex) const
+    [[nodiscard]] std::optional<RuledPermanentAction> permanentActionFor(quint32 oid,
+                                                                         quint64 zoneChangeGeneration,
+                                                                         ruled::v1::PermanentActionKind kind,
+                                                                         std::optional<quint32> faceIndex) const
     {
         const auto actions = permanentActionsByOid.value(oid);
         const auto it = std::find_if(actions.cbegin(), actions.cend(), [&](const RuledPermanentAction &action) {
@@ -1299,6 +1311,25 @@ public:
     [[nodiscard]] QVector<int> resolutionHandPickCandidateServerCardIds() const;
     void toggleResolutionHandPickCard(int serverCardId);
     void submitResolutionHandPick();
+
+    [[nodiscard]] bool hasPublicReveal() const
+    {
+        return publicReveal.has_value();
+    }
+    [[nodiscard]] quint32 publicRevealSourceObjectId() const
+    {
+        return publicReveal.has_value() ? publicReveal->sourceObjectId : 0;
+    }
+    [[nodiscard]] int publicRevealOwnerPlayerId() const
+    {
+        return publicReveal.has_value() ? publicReveal->zoneOwnerPlayerId : -1;
+    }
+    [[nodiscard]] QStringList publicRevealCandidateNames() const
+    {
+        return publicReveal.has_value() ? publicReveal->candidateNames : QStringList{};
+    }
+    void setPublicReveal(RuledPublicReveal reveal);
+    void clearPublicReveal();
 
     [[nodiscard]] bool isResolutionPaymentActive() const
     {
@@ -1492,6 +1523,13 @@ signals:
     /// started=true: the opponent (deciding player) should see a revealed-cards popup.
     /// cardNames: oracle names; serverCardIds: IDs used for click-to-pick (parallel).
     void revealedPickChanged(bool started, QStringList cardNames, QVector<int> serverCardIds, int min, int max);
+    /// Exact public reveal snapshot for all players and spectators. `active=false` destroys the
+    /// sole popup; active snapshots refill the existing widget in place.
+    void publicRevealChanged(bool active,
+                             quint32 sourceObjectId,
+                             int zoneOwnerPlayerId,
+                             QStringList cardNames,
+                             QVector<int> serverCardIds);
 
 private:
     void sendOpeningBottomCommandSequence(const QList<int> &adjustedIndices, int position);

@@ -194,6 +194,8 @@ impl GameEngine {
                         PendingLibraryPartitionKind::Surveil
                         | PendingLibraryPartitionKind::Look => vec![true; n as usize],
                     },
+                    reveal_audience: 0,
+                    revealed_zone_owner_player_id: None,
                 },
             )),
         });
@@ -351,6 +353,8 @@ impl GameEngine {
                     generic_mana_cost: 0,
                     payment_currently_legal: false,
                     candidate_selectable: vec![true; remaining.len()],
+                    reveal_audience: 0,
+                    revealed_zone_owner_player_id: None,
                 },
             )),
         });

@@ -2308,12 +2308,12 @@ TEST_F(RuledClientTest, MultiplePermanentActionsAreEngineAuthoredAndClearWhenNoL
     EXPECT_EQ(parsed[1].kind, ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR);
     ASSERT_TRUE(parsed[1].faceIndex.has_value());
     EXPECT_EQ(*parsed[1].faceIndex, 1u);
-    const auto current = state->permanentActionFor(
-        9802u, 9u, ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR, std::optional<quint32>{1u});
+    const auto current = state->permanentActionFor(9802u, 9u, ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR,
+                                                   std::optional<quint32>{1u});
     ASSERT_TRUE(current.has_value());
     EXPECT_EQ(current->label, QString("Unlock Tunnel of Hate — {4}{R}{R}"));
-    EXPECT_FALSE(state->permanentActionFor(
-        9802u, 10u, ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR, std::optional<quint32>{1u}));
+    EXPECT_FALSE(state->permanentActionFor(9802u, 10u, ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR,
+                                           std::optional<quint32>{1u}));
     PendingActivatedAbility pending;
     pending.valid = true;
     pending.permanentAction = true;
@@ -2924,6 +2924,156 @@ TEST_F(RuledClientTest, OpponentHandChoiceRendersAsARevealedPickTitledAsAHand)
     EXPECT_EQ(state->resolutionHandPickSelected(), 0);
     state->toggleResolutionHandPickCard(0);
     EXPECT_EQ(state->resolutionHandPickSelected(), 1);
+}
+
+TEST_F(RuledClientTest, PublicHandRevealIsReadOnlyForObserversAndReconcilesExactSnapshots)
+{
+    QSignalSpy publicReveal(state, &RuledClientState::publicRevealChanged);
+    QSignalSpy timeline(state, &RuledClientState::engineTimeline);
+    auto makeReveal = [](quint32 sourceOid, int ownerId, std::initializer_list<const char *> names) {
+        ruled::v1::RuledEventBatch batch;
+        auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+        rcr->set_deciding_player_id(kLocalPlayer + 1);
+        rcr->set_source_object_id(sourceOid);
+        rcr->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
+        rcr->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
+        rcr->set_revealed_zone_owner_player_id(ownerId);
+        int index = 0;
+        for (const char *name : names) {
+            rcr->add_candidate_object_ids(100 + index);
+            rcr->add_candidate_card_ids(name);
+            rcr->add_candidate_names(name);
+            rcr->add_candidate_server_card_ids(index);
+            ++index;
+        }
+        return batch;
+    };
+
+    apply(makeReveal(700, 2, {"Forest", "Grizzly Bears"}));
+    ASSERT_TRUE(state->hasPublicReveal());
+    EXPECT_EQ(state->publicRevealSourceObjectId(), 700u);
+    EXPECT_EQ(state->publicRevealOwnerPlayerId(), 2);
+    EXPECT_EQ(state->publicRevealCandidateNames(),
+              QStringList({QStringLiteral("Forest"), QStringLiteral("Grizzly Bears")}));
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    ASSERT_EQ(publicReveal.count(), 1);
+    EXPECT_TRUE(publicReveal.at(0).at(0).toBool());
+    ASSERT_EQ(timeline.count(), 1);
+    EXPECT_EQ(timeline.at(0).at(0).toString(), QStringLiteral("P2 reveals: Forest, Grizzly Bears.\n"));
+
+    // An unchanged authoritative repeat (for example after a rejected stale submission) refreshes
+    // the popup but must not spam the game log.
+    apply(makeReveal(700, 2, {"Forest", "Grizzly Bears"}));
+    ASSERT_EQ(timeline.count(), 2);
+    EXPECT_TRUE(timeline.at(1).at(0).toString().isEmpty());
+
+    // Same key is a replacement snapshot, not an append.
+    apply(makeReveal(700, 2, {"Island"}));
+    EXPECT_EQ(state->publicRevealCandidateNames(), QStringList({QStringLiteral("Island")}));
+    ASSERT_EQ(publicReveal.count(), 3);
+    ASSERT_EQ(timeline.count(), 3);
+    EXPECT_EQ(timeline.at(2).at(0).toString(), QStringLiteral("P2 reveals: Island.\n"));
+
+    // A different key replaces the sole reveal rather than creating concurrent state.
+    apply(makeReveal(701, 1, {"Swamp", "Thoughtseize"}));
+    EXPECT_EQ(state->publicRevealSourceObjectId(), 701u);
+    EXPECT_EQ(state->publicRevealOwnerPlayerId(), 1);
+    EXPECT_EQ(state->publicRevealCandidateNames(),
+              QStringList({QStringLiteral("Swamp"), QStringLiteral("Thoughtseize")}));
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    ASSERT_EQ(timeline.count(), 4);
+    EXPECT_EQ(timeline.at(3).at(0).toString(), QStringLiteral("P1 reveals: Swamp, Thoughtseize.\n"));
+
+    ruled::v1::RuledEventBatch completed;
+    completed.add_events()->mutable_log()->set_text("Choice completed.");
+    apply(completed);
+    EXPECT_FALSE(state->hasPublicReveal());
+    ASSERT_EQ(publicReveal.count(), 5);
+    EXPECT_FALSE(publicReveal.at(4).at(0).toBool());
+}
+
+TEST_F(RuledClientTest, PrivateOpponentHandLookDoesNotEnterThePublicGameLog)
+{
+    QSignalSpy timeline(state, &RuledClientState::engineTimeline);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
+    rcr->add_candidate_object_ids(21);
+    rcr->add_candidate_server_card_ids(0);
+    rcr->add_candidate_names("Black Lotus");
+    rcr->add_candidate_selectable(true);
+    apply(batch);
+
+    ASSERT_EQ(timeline.count(), 1);
+    EXPECT_TRUE(timeline.at(0).at(0).toString().isEmpty());
+}
+
+TEST_F(RuledClientTest, PublicHandRevealIsInteractiveOnlyForDeciderAndIgnoresPreviewBatches)
+{
+    QSignalSpy publicReveal(state, &RuledClientState::publicRevealChanged);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_source_object_id(800);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
+    rcr->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
+    rcr->set_revealed_zone_owner_player_id(kLocalPlayer + 1);
+    for (int i = 0; i < 2; ++i) {
+        rcr->add_candidate_object_ids(200 + i);
+        rcr->add_candidate_card_ids(i == 0 ? "forest" : "grizzly_bears");
+        rcr->add_candidate_names(i == 0 ? "Forest" : "Grizzly Bears");
+        rcr->add_candidate_server_card_ids(i);
+    }
+    rcr->add_candidate_selectable(false);
+    rcr->add_candidate_selectable(true);
+    rcr->set_min(1);
+    rcr->set_max(1);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPublicReveal());
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_FALSE(state->isResolutionHandPickCardSelectable(0));
+    EXPECT_TRUE(state->isResolutionHandPickCardSelectable(1));
+
+    ruled::v1::RuledEventBatch preview;
+    preview.add_events()->mutable_attackers_preview()->set_declaring_player_id(kLocalPlayer);
+    apply(preview);
+    EXPECT_TRUE(state->hasPublicReveal());
+    EXPECT_EQ(publicReveal.count(), 1);
+}
+
+TEST(RuledPickSurfaceTest, PublicRevealAcceptsNonlocalHandViewButOtherPicksRemainLocal)
+{
+    EXPECT_TRUE(isRuledPickSurfaceCard(RuledPickZone::Revealed, RuledPickScaffoldZone::Hand, true, false));
+    EXPECT_TRUE(isRuledPickSurfaceCard(RuledPickZone::Revealed, RuledPickScaffoldZone::Deck, true, false));
+    EXPECT_FALSE(isRuledPickSurfaceCard(RuledPickZone::Revealed, RuledPickScaffoldZone::Hand, false, false));
+
+    EXPECT_FALSE(isRuledPickSurfaceCard(RuledPickZone::Hand, RuledPickScaffoldZone::Hand, false, false));
+    EXPECT_TRUE(isRuledPickSurfaceCard(RuledPickZone::Hand, RuledPickScaffoldZone::Hand, false, true));
+    EXPECT_FALSE(isRuledPickSurfaceCard(RuledPickZone::Deck, RuledPickScaffoldZone::Deck, true, false));
+    EXPECT_TRUE(isRuledPickSurfaceCard(RuledPickZone::Deck, RuledPickScaffoldZone::Deck, true, true));
+}
+
+TEST_F(RuledClientTest, MalformedPublicHandRevealFailsClosed)
+{
+    QSignalSpy publicReveal(state, &RuledClientState::publicRevealChanged);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer + 1);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
+    rcr->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
+    rcr->set_revealed_zone_owner_player_id(2);
+    rcr->add_candidate_object_ids(100);
+    rcr->add_candidate_card_ids("forest");
+    rcr->add_candidate_names("Forest");
+    // Missing the parallel transient popup id.
+    apply(batch);
+
+    EXPECT_FALSE(state->hasPublicReveal());
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    EXPECT_EQ(publicReveal.count(), 0);
+    EXPECT_EQ(host.dialogRequests, 0);
 }
 
 TEST_F(RuledClientTest, TargetObjectAndLegendKeepChoicesUseClickToSelect)

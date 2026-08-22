@@ -833,7 +833,7 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             }
             // Tier-3 resolution pick: hand cards (Brainstorm), deck zone-view cards (Gifts Ungiven
             // search), and revealed popup cards (Gifts Ungiven opponent pick).
-            if (stationaryLeft && owner->getPlayerInfo()->getLocal() && actions && zone &&
+            if (stationaryLeft && actions && zone &&
                 (zone->getName() == ZoneNames::HAND || zone->getName() == ZoneNames::DECK) &&
                 actions->tryRuledResolutionHandPickCard(this)) {
                 update();
