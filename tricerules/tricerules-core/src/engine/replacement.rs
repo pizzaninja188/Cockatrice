@@ -778,6 +778,11 @@ impl GameEngine {
                     ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                         object_id: event.object_id,
                         destination: rv1::StackResolveDestination::Battlefield as i32,
+                        owner_player_id: self
+                            .state
+                            .objects
+                            .get(&event.object_id)
+                            .map(|object| object.owner),
                     })),
                 });
                 self.commit_battlefield_entry(event, attached_to)?;

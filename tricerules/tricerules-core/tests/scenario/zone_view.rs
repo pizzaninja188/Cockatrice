@@ -53,11 +53,11 @@ fn assert_omission_is_total(view: &ZoneViewSync) {
     for p in &view.per_player {
         if p.private_zones_unchanged {
             assert!(
-                p.hand_cards.is_empty() && p.library_card_ids.is_empty(),
+                p.hand_cards.is_empty() && p.library_cards.is_empty(),
                 "P{} marked unchanged but still shipped {} hand / {} library entries",
                 p.player_id,
                 p.hand_cards.len(),
-                p.library_card_ids.len()
+                p.library_cards.len()
             );
         }
     }
@@ -99,7 +99,11 @@ impl ZoneMirror {
         for (i, p) in view.per_player.iter().enumerate() {
             if !p.private_zones_unchanged {
                 self.hands[i] = p.hand_cards.iter().map(|c| c.card_id.clone()).collect();
-                self.libraries[i] = p.library_card_ids.clone();
+                self.libraries[i] = p
+                    .library_cards
+                    .iter()
+                    .map(|card| card.card_id.clone())
+                    .collect();
             }
             if !view.battlefields_unchanged {
                 self.battlefields[i] = p.battlefield_objects.clone();
@@ -159,7 +163,7 @@ fn first_zone_view_of_a_session_is_full() {
             "P{player}'s first view must carry hand and library in full"
         );
         assert_eq!(p.hand_cards.len(), 7);
-        assert_eq!(p.library_card_ids.len(), 53);
+        assert_eq!(p.library_cards.len(), 53);
     }
 }
 
@@ -214,7 +218,7 @@ fn playing_a_land_resends_only_that_player() {
     assert_eq!(p0.hand_cards.len(), e.state.players[0].hand.len());
     // The library did not move, but it rides along: the two zones are omitted jointly because
     // Servatrice reconciles them against one pool of physical cards and cannot apply half a view.
-    assert_eq!(p0.library_card_ids.len(), e.state.players[0].library.len());
+    assert_eq!(p0.library_cards.len(), e.state.players[0].library.len());
     assert!(
         view_for(view, 1).private_zones_unchanged,
         "P1 did nothing; their concealed zones must stay omitted"

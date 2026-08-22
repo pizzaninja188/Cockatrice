@@ -345,6 +345,30 @@ public:
     bool sawAdventureStackToBattlefield = false;
     bool adventurePhysicalIdentityContinuous = true;
     int adventurePhysicalCardId = -1;
+    bool devOmenConjureSent = false;
+    bool devOmenManaSent = false;
+    bool sawOmenFaceActions = false;
+    bool omenSuccessCast = false;
+    bool sawOmenStackAnnotation = false;
+    bool sawOmenLibraryDestination = false;
+    bool sawOmenStackToLibrary = false;
+    bool omenSuccessPhysicalIdentityContinuous = true;
+    int omenSuccessPhysicalCardId = -1;
+    quint32 omenSuccessOid = 0;
+    bool devOmenFizzleTargetSent = false;
+    bool devOmenFizzleConjureSent = false;
+    bool devOmenFizzleBoltSent = false;
+    bool devOmenFizzleManaSent = false;
+    bool omenFizzleCast = false;
+    bool omenFizzleBoltCast = false;
+    bool sawOmenGraveyardDestination = false;
+    bool sawOmenStackToGraveyard = false;
+    bool omenFizzlePhysicalIdentityContinuous = true;
+    int omenFizzlePhysicalCardId = -1;
+    quint32 omenFizzleOid = 0;
+    quint32 omenFizzleTargetOid = 0;
+    bool omenSequenceEnabled = false;
+    bool libraryDetailsStayedConcealed = true;
     bool attackersSentThisCombat = false;
     bool blockersSentThisCombat = false;
     bool devConjureSent = false;
@@ -639,6 +663,22 @@ public:
                 const QLatin1String exile(ZoneNames::EXILE);
                 const QLatin1String table(ZoneNames::TABLE);
                 const QLatin1String deck(ZoneNames::DECK);
+                const int omenOwnerId = role == Role::Aggressor ? myId : oppId;
+                if (from == stack && to == deck && mc.target_player_id() == omenOwnerId &&
+                    omenSuccessPhysicalCardId >= 0 && mc.card_id() == omenSuccessPhysicalCardId) {
+                    omenSuccessPhysicalIdentityContinuous = true;
+                    omenSuccessPhysicalCardId = mc.new_card_id();
+                    sawOmenStackToLibrary = true;
+                }
+                // A failed Omen's graveyard move is public, but its Event_MoveCard name can be
+                // empty after the stack annotation is cleared. Follow the already-captured
+                // physical card id instead of depending on presentation text.
+                if (from == stack && to == grave && mc.target_player_id() == omenOwnerId &&
+                    omenFizzlePhysicalCardId >= 0 && mc.card_id() == omenFizzlePhysicalCardId) {
+                    omenFizzlePhysicalIdentityContinuous = true;
+                    omenFizzlePhysicalCardId = mc.new_card_id();
+                    sawOmenStackToGraveyard = true;
+                }
                 if (from == deck && to == table && mc.face_down()) {
                     sawManifestPhysicalFaceDown = true;
                     if (manifestServerCardId >= 0 && manifestServerCardId != mc.new_card_id()) {
@@ -697,7 +737,25 @@ public:
                         sawPhysicalControlReturn = true;
                     }
                 }
-                if (name.contains(QLatin1String("Bonecrusher Giant"))) {
+                if (name.contains(QLatin1String("Dirgur Island Dragon"))) {
+                    if (from == hand && to == stack && mc.start_player_id() == omenOwnerId) {
+                        if (omenSuccessPhysicalCardId < 0) {
+                            omenSuccessPhysicalCardId = mc.new_card_id();
+                        } else if (omenFizzlePhysicalCardId < 0) {
+                            omenFizzlePhysicalCardId = mc.new_card_id();
+                        }
+                    } else if (from == stack && to == deck && mc.target_player_id() == omenOwnerId) {
+                        omenSuccessPhysicalIdentityContinuous = omenSuccessPhysicalCardId >= 0 &&
+                                                                mc.card_id() == omenSuccessPhysicalCardId;
+                        omenSuccessPhysicalCardId = mc.new_card_id();
+                        sawOmenStackToLibrary = true;
+                    } else if (from == stack && to == grave && mc.target_player_id() == omenOwnerId) {
+                        omenFizzlePhysicalIdentityContinuous = omenFizzlePhysicalCardId >= 0 &&
+                                                               mc.card_id() == omenFizzlePhysicalCardId;
+                        omenFizzlePhysicalCardId = mc.new_card_id();
+                        sawOmenStackToGraveyard = true;
+                    }
+                } else if (name.contains(QLatin1String("Bonecrusher Giant"))) {
                     const QLatin1String hand(ZoneNames::HAND);
                     auto followPhysicalCard = [&] {
                         if (adventurePhysicalCardId >= 0 && mc.card_id() != adventurePhysicalCardId) {
@@ -832,6 +890,16 @@ public:
                 if (cardId == QLatin1String("cruel_truths")) {
                     cruelTruthsOid = sp.object_id();
                 }
+                if (cardId == QLatin1String("dirgur_island_dragon_skimming_strike")) {
+                    if (omenSuccessOid == 0) {
+                        omenSuccessOid = sp.object_id();
+                    } else if (sp.object_id() != omenSuccessOid && omenFizzleOid == 0) {
+                        omenFizzleOid = sp.object_id();
+                    }
+                    sawOmenStackAnnotation =
+                        sawOmenStackAnnotation ||
+                        (sp.description() == "Skimming Strike" && sp.ability_annotation() == "Skimming Strike");
+                }
                 if (sp.is_triggered() && QString::fromStdString(sp.ability_annotation())
                                              .contains(QStringLiteral("draw two cards"), Qt::CaseInsensitive)) {
                     sawRoomUnlockTrigger = true;
@@ -847,6 +915,14 @@ public:
                 }
                 if (cruelTruthsOid != 0 && ev.stack_resolved().object_id() == cruelTruthsOid) {
                     sawCruelTruthsResolved = true;
+                }
+                if (omenSuccessOid != 0 && ev.stack_resolved().object_id() == omenSuccessOid &&
+                    ev.stack_resolved().destination() == ruled::v1::STACK_RESOLVE_DESTINATION_LIBRARY) {
+                    sawOmenLibraryDestination = true;
+                }
+                if (omenFizzleOid != 0 && ev.stack_resolved().object_id() == omenFizzleOid &&
+                    ev.stack_resolved().destination() == ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD) {
+                    sawOmenGraveyardDestination = true;
                 }
             } else if (ev.has_life_changed()) {
                 const auto &lc = ev.life_changed();
@@ -1043,6 +1119,8 @@ public:
                     }
                 }
                 for (const ruled::v1::RuledPerPlayerView &pp : ev.zone_view().per_player()) {
+                    libraryDetailsStayedConcealed =
+                        libraryDetailsStayedConcealed && pp.library_cards_size() == 0;
                     auto &bf = battlefieldByPlayer[pp.player_id()];
                     if (!ev.zone_view().battlefields_unchanged()) {
                         bf.clear();
@@ -1097,6 +1175,11 @@ public:
                                 std::find(battlefieldObject.keywords().begin(), battlefieldObject.keywords().end(),
                                           "Reach") != battlefieldObject.keywords().end();
                             bf.push_back(perm);
+                            const int omenOwnerId = role == Role::Aggressor ? myId : oppId;
+                            if (devOmenFizzleTargetSent && pp.player_id() == omenOwnerId &&
+                                perm.cardId == QLatin1String("grizzly_bears")) {
+                                omenFizzleTargetOid = std::max(omenFizzleTargetOid, perm.oid);
+                            }
                             if (perm.faceDown && perm.creature && perm.power == 2 && perm.toughness == 2) {
                                 if (manifestOid == 0 || manifestOid == perm.oid) {
                                     manifestOid = perm.oid;
@@ -1627,6 +1710,118 @@ public:
         return false;
     }
 
+    bool tryOmenSequence()
+    {
+        if (!omenSequenceEnabled) {
+            return false;
+        }
+        if (!devOmenConjureSent) {
+            devOmenConjureSent = true;
+            ruled::v1::RuledCommand cmd;
+            auto *dev = cmd.mutable_dev_command();
+            dev->set_target_player_id(myId);
+            auto *put = dev->mutable_put_card_in_zone();
+            put->set_card_name("Dirgur Island Dragon // Skimming Strike");
+            put->set_zone(ruled::v1::DEV_ZONE_HAND);
+            sendRuled(cmd, QStringLiteral("dev: conjure first Omen into hand"));
+            return true;
+        }
+        if (!devOmenManaSent) {
+            devOmenManaSent = true;
+            ruled::v1::RuledCommand cmd;
+            auto *dev = cmd.mutable_dev_command();
+            dev->set_target_player_id(myId);
+            dev->mutable_add_mana()->set_u(2);
+            sendRuled(cmd, QStringLiteral("dev: add {1}{U} for zero-target Skimming Strike"));
+            return true;
+        }
+        if (!omenSuccessCast) {
+            const auto *normal = handAction(ruled::v1::HAND_ACTION_CAST_SPELL,
+                                            QStringLiteral("Dirgur Island Dragon"));
+            const auto *omen = handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Skimming Strike"));
+            if (normal && omen) {
+                sawOmenFaceActions = normal->face_index() == 0u && normal->cost() == "{5}{U}" &&
+                                     omen->face_index() == 1u && omen->cost() == "{1}{U}" && omen->needs_target();
+                ruled::v1::RuledCommand cmd;
+                auto *cast = cmd.mutable_cast_spell();
+                cast->mutable_source()->set_hand_index(omen->hand_index());
+                cast->set_face_index(1u);
+                omenSuccessCast = true;
+                sendRuled(cmd, QStringLiteral("cast Skimming Strike with explicitly zero targets"));
+                return true;
+            }
+            return true;
+        }
+        if (!sawOmenStackToLibrary) {
+            return true;
+        }
+        if (!devOmenFizzleTargetSent) {
+            devOmenFizzleTargetSent = true;
+            ruled::v1::RuledCommand cmd;
+            auto *dev = cmd.mutable_dev_command();
+            dev->set_target_player_id(myId);
+            auto *put = dev->mutable_put_card_in_zone();
+            put->set_card_name("Grizzly Bears");
+            put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+            put->set_ready(true);
+            sendRuled(cmd, QStringLiteral("dev: conjure the Omen fizzle target"));
+            return true;
+        }
+        if (omenFizzleTargetOid == 0) {
+            return true;
+        }
+        if (!devOmenFizzleConjureSent) {
+            devOmenFizzleConjureSent = true;
+            ruled::v1::RuledCommand cmd;
+            auto *dev = cmd.mutable_dev_command();
+            dev->set_target_player_id(myId);
+            auto *put = dev->mutable_put_card_in_zone();
+            put->set_card_name("Dirgur Island Dragon // Skimming Strike");
+            put->set_zone(ruled::v1::DEV_ZONE_HAND);
+            sendRuled(cmd, QStringLiteral("dev: conjure targeted Omen into hand"));
+            return true;
+        }
+        if (!devOmenFizzleBoltSent) {
+            devOmenFizzleBoltSent = true;
+            ruled::v1::RuledCommand cmd;
+            auto *dev = cmd.mutable_dev_command();
+            dev->set_target_player_id(myId);
+            auto *put = dev->mutable_put_card_in_zone();
+            put->set_card_name("Lightning Bolt");
+            put->set_zone(ruled::v1::DEV_ZONE_HAND);
+            sendRuled(cmd, QStringLiteral("dev: conjure the Omen target-removal spell"));
+            return true;
+        }
+        if (!devOmenFizzleManaSent) {
+            devOmenFizzleManaSent = true;
+            ruled::v1::RuledCommand cmd;
+            auto *dev = cmd.mutable_dev_command();
+            dev->set_target_player_id(myId);
+            dev->mutable_add_mana()->set_u(2);
+            dev->mutable_add_mana()->set_r(1);
+            sendRuled(cmd, QStringLiteral("dev: add mana for targeted Omen plus Bolt"));
+            return true;
+        }
+        if (!omenFizzleCast) {
+            if (const auto *omen =
+                    handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Skimming Strike"))) {
+                ruled::v1::RuledCommand cmd;
+                auto *cast = cmd.mutable_cast_spell();
+                cast->mutable_source()->set_hand_index(omen->hand_index());
+                cast->set_face_index(1u);
+                auto *target = cast->add_targets();
+                target->set_object_id(omenFizzleTargetOid);
+                target->set_group_index(0u);
+                target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+                omenFizzleCast = true;
+                sendRuled(cmd, QStringLiteral("cast Skimming Strike targeting oid %1").arg(omenFizzleTargetOid));
+                return true;
+            }
+            return true;
+        }
+        return !sawOmenStackToGraveyard;
+    }
+
     void act()
     {
         if (myId < 0 || !gameStarted || stateVersion == 0 || lastActedVersion == stateVersion) {
@@ -1896,6 +2091,25 @@ public:
         }
         const bool inMain =
             (phase == ruled::v1::PHASE_ID_MAIN1 || phase == ruled::v1::PHASE_ID_MAIN2) && activePlayer == myId;
+
+        // Remove the targeted Omen's only target while that Omen is still on the stack. This
+        // response sits outside the stack-empty main-phase script by design.
+        if (role == Role::Aggressor && omenFizzleCast && !omenFizzleBoltCast && stackDepth == 1 &&
+            priorityPlayer == myId) {
+            if (const auto *bolt =
+                    handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Lightning Bolt"))) {
+                ruled::v1::RuledCommand cmd;
+                auto *cast = cmd.mutable_cast_spell();
+                cast->mutable_source()->set_hand_index(bolt->hand_index());
+                auto *target = cast->add_targets();
+                target->set_object_id(omenFizzleTargetOid);
+                target->set_group_index(0u);
+                target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+                omenFizzleBoltCast = true;
+                sendRuled(cmd, QStringLiteral("cast Bolt above Omen at oid %1").arg(omenFizzleTargetOid));
+                return;
+            }
+        }
 
         if (role == Role::Aggressor && inMain && stackDepth == 0) {
             // Issue #98: the fixed seed puts Hill Giant and Lightning Bolt on top. Cast Manifest
@@ -2282,6 +2496,9 @@ public:
                 return;
             }
             if (tryAdventureSequence()) {
+                return;
+            }
+            if (tryOmenSequence()) {
                 return;
             }
             if (!devOrbSent) {
@@ -3050,7 +3267,7 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     ASSERT_TRUE(p2.publishMain1Stops());
 
     // --- Drive the scripted game until every milestone is observed ---
-    const auto milestonesDone = [&] {
+    const auto preOmenMilestonesDone = [&] {
         return p2.sentBottom && p1.sawBattlefieldOmission && p2.sawBattlefieldOmission && p1.sawBoltPushWithTarget &&
                p1.sawManifestChoicePrivate && p2.sawManifestChoiceRedacted && p1.submittedManifestChoice &&
                p1.sawManifestPublicFaceDown && p2.sawManifestPublicFaceDown && p1.sawManifestPrivateIdentity &&
@@ -3094,9 +3311,20 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawSoftCounterResolveAfterChoice && p2.softCounterConvoluteCast && p2.sawFlashbackGraveToStack &&
                p2.sawFlashbackStackToExile && p2.handSizeByPlayer.count(p2.myId) && p2.handSizeByPlayer[p2.myId] <= 7;
     };
+    const auto omenMilestonesDone = [&] {
+        return p1.sawOmenFaceActions && p1.omenSuccessCast && p1.omenFizzleCast && p1.omenFizzleBoltCast &&
+               p1.sawOmenStackAnnotation && p2.sawOmenStackAnnotation && p1.sawOmenLibraryDestination &&
+               p2.sawOmenLibraryDestination && p1.sawOmenStackToLibrary && p2.sawOmenStackToLibrary &&
+               p1.sawOmenGraveyardDestination && p2.sawOmenGraveyardDestination &&
+               p1.sawOmenStackToGraveyard && p2.sawOmenStackToGraveyard;
+    };
+    const auto milestonesDone = [&] { return preOmenMilestonesDone() && omenMilestonesDone(); };
     QElapsedTimer deadline;
     deadline.start();
     while (!milestonesDone() && deadline.elapsed() < kOverallDeadlineMs) {
+        if (preOmenMilestonesDone()) {
+            p1.omenSequenceEnabled = true;
+        }
         p1.pump(25);
         p2.pump(25);
         p1.act();
@@ -3238,6 +3466,27 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p1.sawAdventureStackToBattlefield) << "Bonecrusher Giant never entered the battlefield";
     EXPECT_TRUE(p1.adventurePhysicalIdentityContinuous)
         << "Adventure casting moved a different physical card between zones";
+    EXPECT_TRUE(p1.sawOmenFaceActions)
+        << "the Omen physical hand card did not publish both engine-authored face names and costs";
+    EXPECT_TRUE(p1.omenSuccessCast) << "zero-target Skimming Strike was never cast";
+    EXPECT_TRUE(p1.sawOmenStackAnnotation && p2.sawOmenStackAnnotation)
+        << "both clients did not receive the Skimming Strike alternate-face stack annotation";
+    EXPECT_TRUE(p1.sawOmenLibraryDestination && p2.sawOmenLibraryDestination)
+        << "both clients did not receive the successful Omen library destination";
+    EXPECT_TRUE(p1.sawOmenStackToLibrary && p2.sawOmenStackToLibrary)
+        << "the successful physical Omen did not move face down from stack to its owner's deck";
+    EXPECT_TRUE(p1.omenSuccessPhysicalIdentityContinuous && p2.omenSuccessPhysicalIdentityContinuous)
+        << "the successful Omen moved a different physical card into the library";
+    EXPECT_TRUE(p1.omenFizzleCast && p1.omenFizzleBoltCast)
+        << "the targeted Omen fizzle setup was not completed";
+    EXPECT_TRUE(p1.sawOmenGraveyardDestination && p2.sawOmenGraveyardDestination)
+        << "both clients did not receive the fizzled Omen graveyard destination";
+    EXPECT_TRUE(p1.sawOmenStackToGraveyard && p2.sawOmenStackToGraveyard)
+        << "the fizzled physical Omen did not move from stack to graveyard";
+    EXPECT_TRUE(p1.omenFizzlePhysicalIdentityContinuous && p2.omenFizzlePhysicalIdentityContinuous)
+        << "the fizzled Omen moved a different physical card into the graveyard";
+    EXPECT_TRUE(p1.libraryDetailsStayedConcealed && p2.libraryDetailsStayedConcealed)
+        << "a client received server-only library object identity or ordering";
     EXPECT_TRUE(p2.sawCleanupDiscardActions && p2.sentCleanupDiscard) << "cleanup discard never happened";
     ASSERT_TRUE(p2.handSizeByPlayer.count(p2.myId));
     EXPECT_LE(p2.handSizeByPlayer[p2.myId], 7) << "hand size not enforced after cleanup discard";

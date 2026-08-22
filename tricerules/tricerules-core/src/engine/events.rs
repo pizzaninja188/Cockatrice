@@ -165,7 +165,7 @@ impl GameEngine {
                 // Multi-face cards carry no flat types; describe by the primary (front) face.
                 types: def.primary_face().types.to_vec(),
                 is_permanent: def.primary_face().is_permanent(),
-                // CR 709/712/715: per-face labels for cast choices and name lookup aliases;
+                // CR 709/712/715/720: per-face labels for cast choices and name lookup aliases;
                 // empty for single-face cards.
                 face_names: if def.is_multiface() {
                     def.faces.iter().map(|f| f.name.clone()).collect()
@@ -180,7 +180,7 @@ impl GameEngine {
                         Layout::Transform | Layout::Flip | Layout::ModalDfc => {
                             def.faces.iter().map(|f| f.name.clone()).collect()
                         }
-                        Layout::Split | Layout::Room | Layout::Adventure => {
+                        Layout::Split | Layout::Room | Layout::Adventure | Layout::Omen => {
                             vec![def.name.clone(); def.faces.len()]
                         }
                         Layout::Normal => Vec::new(),
@@ -376,17 +376,22 @@ impl GameEngine {
             } else {
                 Vec::new()
             },
-            library_card_ids: if include_private {
+            library_cards: if include_private {
                 p.library
                     .iter()
                     .map(|&oid| {
-                        self.state
+                        let card_id = self
+                            .state
                             .objects
                             .get(&oid)
                             .map(|o| o.card_id.clone())
-                            .unwrap_or_default()
+                            .unwrap_or_default();
+                        rv1::LibraryCard {
+                            card_id,
+                            object_id: oid,
+                        }
                     })
-                    .collect::<Vec<_>>()
+                    .collect()
             } else {
                 Vec::new()
             },

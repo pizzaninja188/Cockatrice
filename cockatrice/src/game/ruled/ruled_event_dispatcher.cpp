@@ -514,7 +514,7 @@ void RuledEventDispatcher::applyStackResolved(const ruled::v1::StackResolved &sr
     state->stackAnnotationByOid.remove(rid);
     state->stackSourceOidByStackOid.remove(rid);
     RULED_TRACE("client") << "stackResolved: oid=" << rid << " destination=" << static_cast<int>(sr.destination())
-                          << " (1=graveyard 2=battlefield 3=exile) stackOidOrderRemaining="
+                          << " (1=graveyard 2=battlefield 3=exile 4=library) stackOidOrderRemaining="
                           << state->stackOidOrder.size()
                           << " — the physical card is moved by the RELAY, not here; this line only"
                              " confirms the client saw the resolve";

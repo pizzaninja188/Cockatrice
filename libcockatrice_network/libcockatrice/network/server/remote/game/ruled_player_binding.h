@@ -28,12 +28,21 @@ struct RuledPlayerBinding
         QHash<quint32, int> engineOidToServerCardId;
     };
 
-    // Latest mapping between engine ObjectIds in RuledPerPlayerView::battlefield_objects /
-    // hand_cards and the corresponding Server_Card. Updated each
+    // Latest server-only mapping between engine ObjectIds in RuledPerPlayerView's battlefield,
+    // hand, and library rows and the corresponding Server_Card. Updated each
     // applyRuledEngineZoneView; consumed by RuledGameDriver::applyRuledBatch when translating
     // engine-side events into client-visible Cockatrice events.
     QHash<quint32, int> engineOidToServerCardId;
     QHash<int, quint32> serverCardIdToEngineOid;
+    // Library identity is server-only and intentionally separate from the public/interactive
+    // object map above. Server_Card ids are zone-scoped, so mixing deck ids into that reverse map
+    // can shadow a battlefield card with the same numeric id.
+    QHash<quint32, int> libraryEngineOidToServerCardId;
+    QHash<int, quint32> libraryServerCardIdToEngineOid;
+    // Engine hand order, retained from the latest full private-zone view. CastSpell names an
+    // engine hand index; resolving it through this vector and the OID map avoids assuming the
+    // physical Cockatrice hand happens to have the same positional order.
+    QVector<quint32> handEngineOidsInOrder;
     QHash<quint32, bool> engineOidToSummoningSick;
     QHash<quint32, bool> engineOidToHaste;
     QHash<quint32, bool> engineOidToTrample;
@@ -89,6 +98,7 @@ struct RuledPlayerBinding
         return engineOidToUnderlyingCardId.value(engineOid);
     }
     Server_Card *findCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
+    Server_Card *findHandCardByEngineIndex(const Server_Player *player, int engineIndex) const;
     Server_Card *findGraveyardCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
     Server_Card *findExileCardByEngineOid(const Server_Player *player, quint32 engineOid) const;
     /// Remove a stale physical parent-card relationship and restore the card to its table row,
@@ -111,6 +121,11 @@ struct RuledPlayerBinding
     {
         engineOidToServerCardId.insert(engineOid, serverCardId);
         serverCardIdToEngineOid.insert(serverCardId, engineOid);
+    }
+    void registerLibraryEngineOid(quint32 engineOid, int serverCardId)
+    {
+        libraryEngineOidToServerCardId.insert(engineOid, serverCardId);
+        libraryServerCardIdToEngineOid.insert(serverCardId, engineOid);
     }
 
     /// `engineUntappedOids` (may be null) carries the batch's `PermanentsUntapped` object ids —

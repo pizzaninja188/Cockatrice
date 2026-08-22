@@ -182,6 +182,7 @@ enum GenLayout {
     ModalDfc,
     Transform,
     Adventure,
+    Omen,
 }
 
 impl GenLayout {
@@ -203,6 +204,7 @@ impl GenLayout {
             Self::ModalDfc => Some("ModalDfc"),
             Self::Transform => Some("Transform"),
             Self::Adventure => Some("Adventure"),
+            Self::Omen => Some("Omen"),
         }
     }
 }
@@ -353,6 +355,7 @@ struct GenerationStats {
     modal_dfc: usize,
     transform: usize,
     adventure: usize,
+    omen: usize,
 }
 
 impl GenerationStats {
@@ -367,11 +370,12 @@ impl GenerationStats {
             GenLayout::ModalDfc => self.modal_dfc += 1,
             GenLayout::Transform => self.transform += 1,
             GenLayout::Adventure => self.adventure += 1,
+            GenLayout::Omen => self.omen += 1,
         }
     }
 
     fn multiface_total(&self) -> usize {
-        self.split + self.modal_dfc + self.transform + self.adventure
+        self.split + self.modal_dfc + self.transform + self.adventure + self.omen
     }
 
     fn total(&self) -> usize {
@@ -391,6 +395,7 @@ impl GenerationStats {
             ("modal_dfc", self.modal_dfc),
             ("transform", self.transform),
             ("adventure", self.adventure),
+            ("omen", self.omen),
         ] {
             report.push_str(&format!("  {label:<23}{count}\n"));
         }
@@ -586,6 +591,16 @@ fn evaluate_multiface(card: &Value, layout: GenLayout) -> Result<GenCard, Skip> 
         .filter(|name| !name.trim().is_empty())
         .ok_or(Skip::MalformedFaces)?
         .to_string();
+
+    // Scryfall currently reports Omen's inset alternative-characteristic frame as `adventure`.
+    // The rules distinction lives in the alternative face's Omen subtype, not that transport
+    // label, so normalize it before emitting engine data.
+    let layout =
+        if layout == GenLayout::Adventure && faces[1].types.iter().any(|value| value == "Omen") {
+            GenLayout::Omen
+        } else {
+            layout
+        };
 
     Ok(GenCard {
         id: slugify(&name),
@@ -959,6 +974,20 @@ mod tests {
                     None,
                 ),
             ),
+            (
+                "adventure",
+                Layout::Omen,
+                face(
+                    "Wildling",
+                    "{4}{G}",
+                    "Creature — Dragon",
+                    "Flying",
+                    Some(("3", "3")),
+                    &["G"],
+                    None,
+                ),
+                face("Seek", "{G}", "Sorcery — Omen", "", None, &["G"], None),
+            ),
         ];
 
         for (scryfall_layout, expected_layout, first, second) in cases {
@@ -1181,15 +1210,17 @@ mod tests {
         stats.record_qualified(GenLayout::Normal);
         stats.record_qualified(GenLayout::Split);
         stats.record_qualified(GenLayout::Adventure);
+        stats.record_qualified(GenLayout::Omen);
         stats.record_skip(Skip::FaceText);
 
         let report = stats.render();
         assert!(report.contains("normal                 1"));
-        assert!(report.contains("multiface total        2"));
+        assert!(report.contains("multiface total        3"));
         assert!(report.contains("split                  1"));
         assert!(report.contains("modal_dfc              0"));
         assert!(report.contains("transform              0"));
         assert!(report.contains("adventure              1"));
+        assert!(report.contains("omen                   1"));
         assert!(report.contains("face rules text beyond supported keywords"));
     }
 

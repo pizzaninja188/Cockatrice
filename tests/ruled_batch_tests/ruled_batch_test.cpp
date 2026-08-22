@@ -234,6 +234,13 @@ protected:
         return game->ruled()->playerBinding(p->getPlayerId()).findCardByEngineOid(p, engineOid);
     }
 
+    void bindStackObject(quint32 engineOid, Server_Card *card, int casterPlayerId, const QString &description)
+    {
+        game->ruled()->ruledStackObjectIdToServerCardId.insert(engineOid, card->getId());
+        game->ruled()->ruledStackObjectIdToCasterPlayerId.insert(engineOid, casterPlayerId);
+        game->ruled()->ruledEngineStackPushDescriptionsByObjectId.insert(engineOid, description);
+    }
+
     const RuledPlayerBinding &bindingFor(Server_Player *p)
     {
         return game->ruled()->playerBinding(p->getPlayerId());
@@ -298,6 +305,15 @@ protected:
         return card;
     }
 
+    static Server_Card *addCardToDeck(Server_Player *p, const QString &name)
+    {
+        Server_CardZone *deck = p->getZones().value(ZoneNames::DECK);
+        const QString id = name.toLower().replace(' ', '_');
+        auto *card = new Server_Card({name, id}, p->newCardId(), 0, 0);
+        deck->insertCard(card, -1, 0);
+        return card;
+    }
+
     static void setupPlayerZonesAndCounters(Server_Player *p)
     {
         auto *deck = new Server_CardZone(p, ZoneNames::DECK, false, ServerInfo_Zone::HiddenZone);
@@ -345,7 +361,7 @@ protected:
     {
         ruled::v1::RuledPerPlayerView v;
         v.set_player_id(p->getPlayerId());
-        // Empty library: leave library_card_ids empty.
+        // Empty library: leave library_cards empty.
         Server_CardZone *table = p->getZones().value(ZoneNames::TABLE);
         const auto &cards = table->getCards();
         for (int i = 0; i < cards.size(); ++i) {
@@ -458,7 +474,9 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     auto *view = zoneView->add_per_player();
     view->set_player_id(1);
     view->add_hand_cards()->set_card_id("secret_hand_card");
-    view->add_library_card_ids("secret_top_card");
+    auto *privateLibraryCard = view->add_library_cards();
+    privateLibraryCard->set_object_id(901u);
+    privateLibraryCard->set_card_id("secret_top_card");
     // The omission marker describes the two concealed fields, so it is concealed with them:
     // a client learning "this player's hand did not change" is a (small) information leak.
     view->set_private_zones_unchanged(true);
@@ -533,7 +551,7 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
         const auto &redactedView = zoneIt->zone_view().per_player(0);
         EXPECT_TRUE(zoneIt->zone_view().battlefields_unchanged());
         EXPECT_EQ(redactedView.hand_cards_size(), 0);
-        EXPECT_EQ(redactedView.library_card_ids_size(), 0);
+        EXPECT_EQ(redactedView.library_cards_size(), 0);
         EXPECT_FALSE(redactedView.private_zones_unchanged());
         ASSERT_EQ(redactedView.battlefield_objects_size(), 1);
         EXPECT_EQ(redactedView.battlefield_objects(0).object_id(), 101u);
@@ -1010,6 +1028,8 @@ TEST_F(RuledBatchTest, PrivateZonesUnchangedSkipsTheHandAndLibraryReconcile)
     RuledPlayerBinding::RuledZoneSyncResult first = applyZoneView(p1, full, &firstGes);
     ASSERT_EQ(first.engineOidToServerCardId.value(101u, -1), bear->getId());
     ASSERT_EQ(first.engineOidToServerCardId.value(201u, -1), inHand->getId());
+    ASSERT_EQ(bindingFor(p1).findHandCardByEngineIndex(p1, 0), inHand);
+    ASSERT_EQ(bindingFor(p1).findHandCardByEngineIndex(p1, 1), nullptr);
     ASSERT_EQ(p1->getZones().value(ZoneNames::HAND)->getCards().size(), 1);
 
     // Then an omission: no hand, no library, battlefield still in full.
@@ -1028,6 +1048,8 @@ TEST_F(RuledBatchTest, PrivateZonesUnchangedSkipsTheHandAndLibraryReconcile)
     EXPECT_EQ(second.engineOidToServerCardId.value(101u, -1), bear->getId());
     EXPECT_EQ(second.engineOidToServerCardId.value(201u, -1), inHand->getId())
         << "an omitted private-zone view must preserve the hand oid map";
+    EXPECT_EQ(bindingFor(p1).findHandCardByEngineIndex(p1, 0), inHand)
+        << "an omitted private-zone view must preserve authoritative hand order";
     EXPECT_TRUE(second.tapStateChanged);
     EXPECT_TRUE(bear->getTapped());
 
@@ -1362,7 +1384,9 @@ TEST_F(RuledBatchTest, PermanentMovedToLibraryReordersTheOwnersPrivateDeckWithou
     auto *zoneView = batch->add_events()->mutable_zone_view();
     auto *ownerView = zoneView->add_per_player();
     ownerView->set_player_id(p1->getPlayerId());
-    ownerView->add_library_card_ids("grizzly_bears");
+    auto *libraryCard = ownerView->add_library_cards();
+    libraryCard->set_object_id(211u);
+    libraryCard->set_card_id("grizzly_bears");
     *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
 
     const auto forOpponent = redactFor(*batch, p2);
@@ -1370,7 +1394,7 @@ TEST_F(RuledBatchTest, PermanentMovedToLibraryReordersTheOwnersPrivateDeckWithou
                                                [](const auto &event) { return event.has_zone_view(); });
     ASSERT_NE(redactedZoneView, forOpponent.events().end());
     ASSERT_EQ(redactedZoneView->zone_view().per_player_size(), 2);
-    EXPECT_EQ(redactedZoneView->zone_view().per_player(0).library_card_ids_size(), 0);
+    EXPECT_EQ(redactedZoneView->zone_view().per_player(0).library_cards_size(), 0);
 
     const BatchOutcome outcome = callBatchApply(response);
     EXPECT_TRUE(outcome.zoneViewApplied);
@@ -1381,7 +1405,101 @@ TEST_F(RuledBatchTest, PermanentMovedToLibraryReordersTheOwnersPrivateDeckWithou
     EXPECT_TRUE(table->getCards().isEmpty());
     ASSERT_EQ(deck->getCards().size(), 1);
     EXPECT_EQ(deck->getCards().first(), bear);
-    EXPECT_EQ(findCardByEngineOid(p1, 211u), nullptr);
+    EXPECT_EQ(findCardByEngineOid(p1, 211u), bear);
+}
+
+TEST_F(RuledBatchTest, ResolvedOmenMovesTheExactStackCardFaceDownAndReconcilesDuplicateLibraryCards)
+{
+    const QString cardId = QStringLiteral("dirgur_island_dragon_skimming_strike");
+    const QString combinedName = QStringLiteral("Dirgur Island Dragon // Skimming Strike");
+    seedMultifaceCatalog(cardId, combinedName, {"Dirgur Island Dragon", "Skimming Strike"},
+                         {combinedName, combinedName});
+    Server_Card *battlefieldCard = addCardToTable(p1, QStringLiteral("Grizzly Bears"));
+    Server_Card *staysInLibrary = addCardToDeck(p1, combinedName);
+    Server_Card *resolvingOmen = addCardToDeck(p1, combinedName);
+
+    ruled::v1::RuledPerPlayerView initial;
+    initial.set_player_id(p1->getPlayerId());
+    auto *first = initial.add_library_cards();
+    first->set_object_id(301u);
+    first->set_card_id(cardId.toStdString());
+    auto *second = initial.add_library_cards();
+    second->set_object_id(302u);
+    second->set_card_id(cardId.toStdString());
+    auto *initialBattlefield = initial.add_battlefield_objects();
+    initialBattlefield->set_object_id(211u);
+    initialBattlefield->set_card_id("grizzly_bears");
+    initialBattlefield->set_owner_player_id(p1->getPlayerId());
+    applyZoneView(p1, initial, nullptr);
+    ASSERT_EQ(findCardByEngineOid(p1, 302u), resolvingOmen);
+
+    Server_CardZone *deck = p1->getZones().value(ZoneNames::DECK);
+    Server_CardZone *stack = p1->getZones().value(ZoneNames::STACK);
+    Server_CardZone *grave = p1->getZones().value(ZoneNames::GRAVE);
+    ASSERT_NE(deck, nullptr);
+    ASSERT_NE(stack, nullptr);
+    ASSERT_NE(grave, nullptr);
+    deck->removeCard(resolvingOmen);
+    stack->insertCard(resolvingOmen, -1, 0);
+    bindStackObject(302u, resolvingOmen, p1->getPlayerId(), QStringLiteral("Skimming Strike"));
+
+    // A spell above the Omen can remove a permanent and force a battlefield replacement before
+    // the Omen resolves. That sync must not discard the still-live stack object's physical map.
+    ruled::v1::RuledPerPlayerView interveningBattlefieldSync;
+    interveningBattlefieldSync.set_player_id(p1->getPlayerId());
+    interveningBattlefieldSync.set_private_zones_unchanged(true);
+    auto *interveningBattlefield = interveningBattlefieldSync.add_battlefield_objects();
+    interveningBattlefield->CopyFrom(*initialBattlefield);
+    applyZoneView(p1, interveningBattlefieldSync, nullptr);
+    ASSERT_EQ(findCardByEngineOid(p1, 302u), resolvingOmen);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *batch = response.mutable_batch();
+    auto *resolved = batch->add_events()->mutable_stack_resolved();
+    resolved->set_object_id(302u);
+    resolved->set_destination(ruled::v1::STACK_RESOLVE_DESTINATION_LIBRARY);
+    resolved->set_owner_player_id(p1->getPlayerId());
+    auto *zoneView = batch->add_events()->mutable_zone_view();
+    auto *ownerView = zoneView->add_per_player();
+    ownerView->set_player_id(p1->getPlayerId());
+    auto *top = ownerView->add_library_cards();
+    top->set_object_id(302u);
+    top->set_card_id(cardId.toStdString());
+    auto *bottom = ownerView->add_library_cards();
+    bottom->set_object_id(301u);
+    bottom->set_card_id(cardId.toStdString());
+    auto *finalBattlefield = ownerView->add_battlefield_objects();
+    finalBattlefield->CopyFrom(*initialBattlefield);
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    const BatchOutcome outcome = callBatchApply(response);
+
+    EXPECT_TRUE(outcome.zoneViewApplied);
+    EXPECT_TRUE(outcome.handOrLibraryChanged);
+    EXPECT_TRUE(stack->getCards().isEmpty());
+    EXPECT_TRUE(grave->getCards().isEmpty());
+    ASSERT_EQ(deck->getCards().size(), 2);
+    EXPECT_EQ(deck->getCards().at(0), resolvingOmen);
+    EXPECT_EQ(deck->getCards().at(1), staysInLibrary);
+    EXPECT_TRUE(resolvingOmen->getFaceDown());
+    EXPECT_EQ(findCardByEngineOid(p1, 302u), resolvingOmen);
+    EXPECT_EQ(findCardByEngineOid(p1, 301u), staysInLibrary);
+    EXPECT_EQ(findCardByEngineOid(p1, 211u), battlefieldCard);
+
+    const ruled::v1::RuledEventBatch publicMaps = appendedServerMaps();
+    bool sawBattlefieldCard = false;
+    for (const auto &event : publicMaps.events()) {
+        if (!event.has_battlefield_object_map()) {
+            continue;
+        }
+        for (const auto &entry : event.battlefield_object_map().entries()) {
+            sawBattlefieldCard = sawBattlefieldCard || entry.engine_object_id() == 211u;
+            EXPECT_NE(entry.engine_object_id(), 301u);
+            EXPECT_NE(entry.engine_object_id(), 302u);
+        }
+    }
+    EXPECT_TRUE(sawBattlefieldCard);
 }
 
 // --------------------------------------------------------------------------------------------
@@ -2079,6 +2197,7 @@ TEST_F(RuledBatchTest, ApplyRuledBatchMintsConjuredCardIntoHandAndFlagsAResync)
 
     ASSERT_EQ(p1Hand->getCards().size(), handBefore + 1);
     EXPECT_EQ(p1Hand->getCards().last()->getName(), QStringLiteral("Lightning Bolt"));
+    EXPECT_EQ(bindingFor(p1).findHandCardByEngineIndex(p1, handBefore), p1Hand->getCards().last());
     EXPECT_TRUE(r.handOrLibraryChanged) << "a hand conjure must trigger the redacted full resync";
 }
 

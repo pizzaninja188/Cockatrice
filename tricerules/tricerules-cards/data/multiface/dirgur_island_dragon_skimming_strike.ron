@@ -1,0 +1,32 @@
+// Dirgur Island Dragon // Skimming Strike (Tarkir: Dragonstorm) — Omen, CR 720.
+(
+  id: "dirgur_island_dragon_skimming_strike",
+  name: "Dirgur Island Dragon // Skimming Strike",
+  layout: Omen,
+  faces: [
+    (
+      name: "Dirgur Island Dragon",
+      mana_cost: "{5}{U}",
+      types: ["Creature", "Dragon"],
+      power: 4,
+      toughness: 4,
+      keywords: [Flying],
+    ),
+    (
+      name: "Skimming Strike",
+      mana_cost: "{1}{U}",
+      types: ["Instant", "Omen"],
+      spell_effect: [
+        Tap(subject: Chosen((kind: Creature))),
+        Draw(count: 1),
+      ],
+      targeting: Some((groups: [(
+        min: 0,
+        max: 1,
+        prompt: "Choose up to one target creature",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+  partial: "Dirgur Island Dragon's Ward {2} front-face ability is tracked by issue #103",
+)

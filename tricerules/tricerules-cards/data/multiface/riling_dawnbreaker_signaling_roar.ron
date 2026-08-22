@@ -1,0 +1,23 @@
+// Riling Dawnbreaker // Signaling Roar (Tarkir: Dragonstorm) — Omen, CR 720.
+(
+  id: "riling_dawnbreaker_signaling_roar",
+  name: "Riling Dawnbreaker // Signaling Roar",
+  layout: Omen,
+  faces: [
+    (
+      name: "Riling Dawnbreaker",
+      mana_cost: "{4}{W}",
+      types: ["Creature", "Dragon"],
+      power: 3,
+      toughness: 4,
+      keywords: [Flying, Vigilance],
+    ),
+    (
+      name: "Signaling Roar",
+      mana_cost: "{1}{W}",
+      types: ["Sorcery", "Omen"],
+      spell_effect: [CreateTokens(token: "soldier_w_2_2", count: 1)],
+    ),
+  ],
+  partial: "Riling Dawnbreaker's beginning-of-combat front-face trigger is tracked by issue #128",
+)

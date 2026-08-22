@@ -495,9 +495,8 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
                 const int handIndex = static_cast<int>(source.hand_index());
                 sourceZone = handZone;
                 sourceLabel = QStringLiteral("hand:%1").arg(handIndex);
-                if (handZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
-                    card = handZone->getCards().at(handIndex);
-                }
+                card = playerBinding(playerId).findHandCardByEngineIndex(static_cast<Server_Player *>(cmdPlayer),
+                                                                        handIndex);
             } else if (source.location_case() == ruled::v1::CastSource::kGraveyardObjectId ||
                        source.location_case() == ruled::v1::CastSource::kExileObjectId) {
                 const bool fromGraveyard = source.location_case() == ruled::v1::CastSource::kGraveyardObjectId;
@@ -621,12 +620,14 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
         const ruled::v1::StackResolveDestination dest = stackResolved.destination();
         if (dest != ruled::v1::STACK_RESOLVE_DESTINATION_BATTLEFIELD &&
             dest != ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD &&
-            dest != ruled::v1::STACK_RESOLVE_DESTINATION_EXILE) {
+            dest != ruled::v1::STACK_RESOLVE_DESTINATION_EXILE &&
+            dest != ruled::v1::STACK_RESOLVE_DESTINATION_LIBRARY) {
             qWarning() << "Ruled: StackResolved for object" << stackResolved.object_id()
                        << "has no destination; defaulting to graveyard";
         }
         const bool goesToBattlefield = (dest == ruled::v1::STACK_RESOLVE_DESTINATION_BATTLEFIELD);
         const bool goesToExile = (dest == ruled::v1::STACK_RESOLVE_DESTINATION_EXILE);
+        const bool goesToLibrary = (dest == ruled::v1::STACK_RESOLVE_DESTINATION_LIBRARY);
         const quint32 resolvedOidLocal = static_cast<quint32>(stackResolved.object_id());
         const int casterPid = ruledStackObjectIdToCasterPlayerId.value(resolvedOidLocal, -1);
         Server_AbstractPlayer *destPlayer = ab;
@@ -635,14 +636,23 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
                 destPlayer = cp;
             }
         }
-        Server_CardZone *targetZone = destPlayer->getZones().value(
-            goesToBattlefield ? ZoneNames::TABLE : (goesToExile ? ZoneNames::EXILE : ZoneNames::GRAVE));
+        if (goesToLibrary && stackResolved.has_owner_player_id()) {
+            if (Server_AbstractPlayer *owner = game->getPlayer(stackResolved.owner_player_id())) {
+                destPlayer = owner;
+            }
+        }
+        const char *targetZoneName = goesToBattlefield ? ZoneNames::TABLE
+                                     : goesToExile     ? ZoneNames::EXILE
+                                     : goesToLibrary   ? ZoneNames::DECK
+                                                       : ZoneNames::GRAVE;
+        Server_CardZone *targetZone = destPlayer->getZones().value(targetZoneName);
         if (!targetZone) {
             return false;
         }
 
         CardToMove cardToMove;
         cardToMove.set_card_id(card->getId());
+        cardToMove.set_face_down(goesToLibrary);
         GameEventStorage moveGes;
         int targetY = 0;
         if (goesToBattlefield) {
@@ -655,11 +665,25 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
                 }
             }
         }
-        // Battlefield: -1 means "find a free grid column". Graveyard and exile are piles that
-        // render their front card, so a resolved spell goes to position 0 rather than being
-        // appended behind everything already there.
-        const int targetX = goesToBattlefield ? -1 : 0;
+        // Battlefield: -1 means "find a free grid column". Library order is replaced by the
+        // authoritative ZoneView immediately afterwards, so append the card to the concealed
+        // pool first. Graveyard and exile render their newest card at position 0.
+        const int targetX = (goesToBattlefield || goesToLibrary) ? -1 : 0;
         if (ruledApplyMove(ab, moveGes, stackZone, targetZone, cardToMove, targetX, targetY, "stackResolved")) {
+            if (!goesToBattlefield) {
+                const QString cardId = ruledCardIdForName(card->getName());
+                const QString physicalDisplayName = ruledFaceDisplayName(cardId, 0);
+                if (!physicalDisplayName.isEmpty() && physicalDisplayName != card->getName()) {
+                    card->setCardRef(CardRef{physicalDisplayName});
+                }
+                card->setAnnotation(withoutRuledEnchantingAnnotation(withoutRuledCopyAnnotation(card->getAnnotation())));
+            }
+            if (goesToLibrary) {
+                // Cross-player moves can reissue Server_Card.id. Register the post-move identity
+                // before the ZoneView reconcile so duplicate-name library cards cannot swap OIDs.
+                card->setFaceDown(true);
+                playerBinding(destPlayer->getPlayerId()).registerLibraryEngineOid(resolvedOidLocal, card->getId());
+            }
             moveGes.sendToGame(game);
             return true;
         }
@@ -942,12 +966,8 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
             card = indexed;
         }
         if (!card) {
-            // Library cards (mill: library -> graveyard) are never registered in the engine-oid
-            // map (the library is synced by name list, not object ids), so the lookup above
-            // misses. Resolve by tricerules card_id within the owner's deck instead; physical
-            // instances of a given printing are fungible, so any matching-named card works. Each
-            // PermanentMoved is a separate iteration and moveCard removes the card, so repeated
-            // mills of the same card name consume distinct deck cards.
+            // Legacy fallback for a library object whose identity predates a complete private-zone
+            // sync. Current zone views carry object ids and normally resolve the exact card above.
             const QString wantCardId = QString::fromStdString(pm.card_id());
             if (!wantCardId.isEmpty()) {
                 if (Server_CardZone *deck = owner->getZones().value(ZoneNames::DECK)) {
@@ -2491,14 +2511,14 @@ void RuledGameDriver::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
                 const auto &p = z.per_player(pi);
                 const int mainN = expectedMainboardSizeForStartupSync(game, p.player_id(), deckByPlayer);
                 const int needLib = mainN - p.hand_cards_size();
-                const int libCount = p.library_card_ids_size();
+                const int libCount = p.library_cards_size();
                 // The startup view is what seeds each player's physical deck and hand, so the
                 // engine never marks it unchanged (its per-session cache starts empty). Seeing
                 // the flag here means a version-skewed sidecar; treat it exactly like a count
                 // mismatch rather than starting a ruled game on unseeded zones.
                 if (z.battlefields_unchanged() || p.private_zones_unchanged() || libCount != needLib) {
                     qWarning() << "Ruled zone sync: player" << p.player_id() << "expected" << needLib
-                               << "library card ids, library_card_ids has" << libCount
+                               << "library cards, library_cards has" << libCount
                                << "entries — is tricerules-server up to date? "
                                   "(RulesRelay read was fixed; rebuild + restart the Rust side from this repo.)";
                     for (Server_AbstractPlayer *pl : game->getPlayers().values()) {

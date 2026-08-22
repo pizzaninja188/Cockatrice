@@ -223,8 +223,9 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
     const QMap<QString, Server_CardZone *> &zones = player->getZones();
     Server_CardZone *deckZone = zones.value(ZoneNames::DECK);
     Server_CardZone *handZone = zones.value(ZoneNames::HAND);
+    Server_CardZone *stackZone = zones.value(ZoneNames::STACK);
     Server_CardZone *tableZone = zones.value(ZoneNames::TABLE);
-    if (!deckZone || !handZone || !tableZone) {
+    if (!deckZone || !handZone || !stackZone || !tableZone) {
         return result;
     }
     // Engine card ids come from the session catalog (engine-owned identity); the server
@@ -244,6 +245,15 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                           "never seeded and will stay stale until the engine reports a change";
         }
     } else {
+        // Record the engine's authoritative hand order even if the physical concealed-zone
+        // reconcile below cannot complete. A pre-existing mismatch elsewhere in the private
+        // pool must not make a later cast fall back to the card occupying the same physical
+        // index; any hand object whose OID is already bound can still be selected exactly.
+        handEngineOidsInOrder.clear();
+        handEngineOidsInOrder.reserve(v.hand_cards_size());
+        for (const auto &handCard : v.hand_cards()) {
+            handEngineOidsInOrder.append(static_cast<quint32>(handCard.object_id()));
+        }
         QList<Server_Card *> pool;
         for (Server_Card *c : deckZone->getCards()) {
             pool.append(c);
@@ -251,25 +261,47 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         for (Server_Card *c : handZone->getCards()) {
             pool.append(c);
         }
-        QStringList libWants;
-        for (const std::string &id : v.library_card_ids()) {
-            if (!id.empty()) {
-                libWants.append(QString::fromStdString(id));
-            }
+        QVector<QPair<quint32, QString>> libWants;
+        libWants.reserve(v.library_cards_size());
+        for (const auto &entry : v.library_cards()) {
+            libWants.append(qMakePair(static_cast<quint32>(entry.object_id()),
+                                      QString::fromStdString(entry.card_id())));
         }
         if (v.hand_cards_size() + libWants.size() != pool.size()) {
             qWarning() << "applyRuledEngineZoneView: count mismatch hand" << v.hand_cards_size() << "lib"
-                       << libWants.size() << "pool" << pool.size() << "library_card_ids" << v.library_card_ids_size();
+                       << libWants.size() << "pool" << pool.size() << "library_cards" << v.library_cards_size();
             return result;
         }
+        // Stable physical identity wins over name matching. The fallback is required only for the
+        // first startup sync, before the server has ever seen these engine ObjectIds. Afterwards,
+        // this prevents duplicate-name cards from exchanging identities during a shuffle.
+        const auto previousOidForCard = [this](const Server_Card *card) {
+            if (!card) {
+                return 0u;
+            }
+            const int serverCardId = card->getId();
+            if (card->getZone() && card->getZone()->getName() == ZoneNames::DECK) {
+                return libraryServerCardIdToEngineOid.value(serverCardId, 0u);
+            }
+            return serverCardIdToEngineOid.value(serverCardId, 0u);
+        };
         QList<Server_Card *> handList;
         for (int i = 0; i < v.hand_cards_size(); ++i) {
             const QString want = QString::fromStdString(v.hand_cards(i).card_id());
+            const quint32 wantOid = static_cast<quint32>(v.hand_cards(i).object_id());
             int found = -1;
             for (int j = 0; j < pool.size(); ++j) {
-                if (trId(pool[j]) == want) {
+                if (previousOidForCard(pool[j]) == wantOid && trId(pool[j]) == want) {
                     found = j;
                     break;
+                }
+            }
+            if (found < 0) {
+                for (int j = 0; j < pool.size(); ++j) {
+                    if (trId(pool[j]) == want) {
+                        found = j;
+                        break;
+                    }
                 }
             }
             if (found < 0) {
@@ -279,12 +311,22 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
             handList.append(pool.takeAt(found));
         }
         QList<Server_Card *> libList;
-        for (const QString &want : libWants) {
+        for (const auto &entry : libWants) {
+            const quint32 wantOid = entry.first;
+            const QString &want = entry.second;
             int found = -1;
             for (int j = 0; j < pool.size(); ++j) {
-                if (trId(pool[j]) == want) {
+                if (previousOidForCard(pool[j]) == wantOid && trId(pool[j]) == want) {
                     found = j;
                     break;
+                }
+            }
+            if (found < 0) {
+                for (int j = 0; j < pool.size(); ++j) {
+                    if (trId(pool[j]) == want) {
+                        found = j;
+                        break;
+                    }
                 }
             }
             if (found < 0) {
@@ -333,6 +375,24 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                 deckZone->insertCard(c, -1, 0);
             }
             result.handOrLibraryChanged = true;
+        }
+        // Rebuild every concealed-zone binding from the authoritative engine order. These maps
+        // never cross the server boundary, but they let later moves select the exact physical
+        // object even when the library contains duplicate card names.
+        for (Server_Card *card : currentHand) {
+            const auto oidIt = serverCardIdToEngineOid.constFind(card->getId());
+            if (oidIt != serverCardIdToEngineOid.constEnd()) {
+                engineOidToServerCardId.remove(*oidIt);
+                serverCardIdToEngineOid.remove(card->getId());
+            }
+        }
+        libraryEngineOidToServerCardId.clear();
+        libraryServerCardIdToEngineOid.clear();
+        for (int i = 0; i < handList.size(); ++i) {
+            registerEngineOid(static_cast<quint32>(v.hand_cards(i).object_id()), handList[i]->getId());
+        }
+        for (int i = 0; i < libList.size(); ++i) {
+            registerLibraryEngineOid(libWants[i].first, libList[i]->getId());
         }
         // Every early return above leaves this false, so a failed reconcile keeps warning about
         // later omissions rather than pretending the zones were seeded.
@@ -445,28 +505,28 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                 result.battlefieldOrderChanged = true;
             }
 
-            // Battlefield and hand share these maps. Preserve the hand half before rebuilding the
-            // battlefield half: when private_zones_unchanged is true the view deliberately carries
-            // no hand rows, so the hand pass below cannot reconstruct mappings that are cleared
-            // here. Losing them makes the next hand -> graveyard PermanentMoved unresolvable and
-            // leaves the physical hand one card larger than the engine hand.
-            QHash<quint32, int> preservedHandOidToServerCardId;
-            QHash<int, quint32> preservedHandServerCardIdToOid;
-            for (Server_Card *handCard : handZone->getCards()) {
-                if (!handCard) {
+            // Battlefield, stack, and hand share these server-only maps. Preserve the interactive
+            // nonbattlefield bindings before rebuilding the battlefield half. In particular, a
+            // state-based action can change the battlefield while another spell is still waiting
+            // underneath on the stack; losing that binding would strand its physical card when it
+            // later resolves or fizzles.
+            QHash<quint32, int> preservedNonbattlefieldOidToServerCardId;
+            QHash<int, quint32> preservedNonbattlefieldServerCardIdToOid;
+            for (Server_Card *nonbattlefieldCard : handZone->getCards() + stackZone->getCards()) {
+                if (!nonbattlefieldCard) {
                     continue;
                 }
-                const int serverCardId = handCard->getId();
+                const int serverCardId = nonbattlefieldCard->getId();
                 const auto oidIt = serverCardIdToEngineOid.constFind(serverCardId);
                 if (oidIt == serverCardIdToEngineOid.constEnd()) {
                     continue;
                 }
-                preservedHandOidToServerCardId.insert(*oidIt, serverCardId);
-                preservedHandServerCardIdToOid.insert(serverCardId, *oidIt);
+                preservedNonbattlefieldOidToServerCardId.insert(*oidIt, serverCardId);
+                preservedNonbattlefieldServerCardIdToOid.insert(serverCardId, *oidIt);
             }
 
-            engineOidToServerCardId = preservedHandOidToServerCardId;
-            serverCardIdToEngineOid = preservedHandServerCardIdToOid;
+            engineOidToServerCardId = preservedNonbattlefieldOidToServerCardId;
+            serverCardIdToEngineOid = preservedNonbattlefieldServerCardIdToOid;
             engineOidToSummoningSick.clear();
             engineOidToHaste.clear();
             engineOidToTrample.clear();
@@ -682,19 +742,47 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
 
 Server_Card *RuledPlayerBinding::findCardByEngineOid(const Server_Player *player, quint32 engineOid) const
 {
-    const auto it = engineOidToServerCardId.constFind(engineOid);
-    if (it == engineOidToServerCardId.constEnd()) {
+    auto it = engineOidToServerCardId.constFind(engineOid);
+    int serverCardId = -1;
+    if (it != engineOidToServerCardId.constEnd()) {
+        serverCardId = *it;
+    } else {
+        const auto libraryIt = libraryEngineOidToServerCardId.constFind(engineOid);
+        if (libraryIt != libraryEngineOidToServerCardId.constEnd()) {
+            serverCardId = *libraryIt;
+        }
+    }
+    if (serverCardId < 0) {
         return nullptr;
     }
-    const int serverCardId = *it;
-    for (const char *zn : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::STACK}) {
+    for (const char *zn : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::STACK, ZoneNames::DECK}) {
         if (Server_CardZone *z = player->getZones().value(zn)) {
+            if (z->getType() == ServerInfo_Zone::HiddenZone) {
+                for (Server_Card *card : z->getCards()) {
+                    if (card && card->getId() == serverCardId) {
+                        return card;
+                    }
+                }
+                continue;
+            }
             if (Server_Card *c = z->getCard(serverCardId, nullptr, false)) {
                 return c;
             }
         }
     }
     return nullptr;
+}
+
+Server_Card *RuledPlayerBinding::findHandCardByEngineIndex(const Server_Player *player, int engineIndex) const
+{
+    if (engineIndex < 0 || engineIndex >= handEngineOidsInOrder.size()) {
+        return nullptr;
+    }
+    Server_Card *card = findCardByEngineOid(player, handEngineOidsInOrder.at(engineIndex));
+    if (!card || !card->getZone() || card->getZone()->getName() != ZoneNames::HAND) {
+        return nullptr;
+    }
+    return card;
 }
 
 Server_Card *RuledPlayerBinding::findGraveyardCardByEngineIndex(const Server_Player *player, int engineIndex) const
@@ -805,6 +893,7 @@ bool RuledPlayerBinding::createRuledDevCard(Server_Player *player,
         zone->insertCard(card, -1, 0);
         engineOidToServerCardId.insert(engineOid, card->getId());
         serverCardIdToEngineOid.insert(card->getId(), engineOid);
+        handEngineOidsInOrder.append(engineOid);
         return true;
     }
 

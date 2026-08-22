@@ -1,0 +1,32 @@
+// Sagu Wildling // Roost Seek (Tarkir: Dragonstorm) — Omen, CR 720.
+(
+  id: "sagu_wildling_roost_seek",
+  name: "Sagu Wildling // Roost Seek",
+  layout: Omen,
+  faces: [
+    (
+      name: "Sagu Wildling",
+      mana_cost: "{4}{G}",
+      types: ["Creature", "Dragon"],
+      power: 3,
+      toughness: 3,
+      keywords: [Flying],
+      triggered_abilities: [(
+        trigger: WhenSelfEntersBattlefield,
+        effect: [GainLife(amount: 3)],
+        text: "When this creature enters, you gain 3 life.",
+      )],
+    ),
+    (
+      name: "Roost Seek",
+      mana_cost: "{G}",
+      types: ["Sorcery", "Omen"],
+      spell_effect: [SearchLibrary(
+        filter: Some((card_type: Some(BasicLand))),
+        destination: Hand,
+        shuffle: true,
+        reveal: true,
+      )],
+    ),
+  ],
+)

@@ -1155,11 +1155,14 @@ enum StackResolveDestination {
   STACK_RESOLVE_DESTINATION_GRAVEYARD = 1;
   STACK_RESOLVE_DESTINATION_BATTLEFIELD = 2;
   STACK_RESOLVE_DESTINATION_EXILE = 3; // CR 702.34: a spell cast with flashback
+  STACK_RESOLVE_DESTINATION_LIBRARY = 4; // CR 720.3d: a successfully resolving Omen
 }
 
 message StackResolved {
   uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   StackResolveDestination destination = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // CR 108.3/400.3: destination seat for a physical spell card. Absent for abilities and copies.
+  optional int32 owner_player_id = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message SbasApplied {
@@ -1230,11 +1233,16 @@ message HandCard {
   uint32 object_id = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
+message LibraryCard {
+  string card_id = 1 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  uint32 object_id = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+}
+
 // Authoritative per-player zone view. Servatrice consumes the server-only concealed zones to
 // synchronize physical cards, then the reflection redactor removes them from every client copy.
 message RuledPerPlayerView {
   int32 player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  reserved 2 to 27;
+  reserved 2 to 27, 29;
   reserved "hand", "lib_ids_csv", "lib_ids", "battlefield", "battlefield_tapped",
            "battlefield_object_id", "battlefield_summoning_sick", "battlefield_power",
            "battlefield_toughness", "battlefield_damage", "battlefield_is_creature",
@@ -1243,10 +1251,9 @@ message RuledPerPlayerView {
            "battlefield_activated_ability_texts", "battlefield_activated_ability_mana_costs",
            "battlefield_activated_ability_mana_produced",
            "battlefield_activated_ability_cost_labels", "battlefield_counters_annotation",
-           "battlefield_attached_to_oid", "graveyard_object_id", "battlefield_face_up_index";
+           "battlefield_attached_to_oid", "graveyard_object_id", "battlefield_face_up_index",
+           "library_card_ids";
   repeated HandCard hand_cards = 28 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
-  // Top of library first. Card ids and order are server-only concealed information.
-  repeated string library_card_ids = 29 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   // Public permanents in controller order.
   repeated BattlefieldObject battlefield_objects = 30 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Engine ObjectIds in public graveyard order, used for target identity mapping.
@@ -1254,7 +1261,7 @@ message RuledPerPlayerView {
   // Drives the distinct first-strike damage prompt within CR 510.4 combat damage processing.
   bool first_strike_step_pending = 32 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // This player's hand and library are identical to their previous view in this session, so
-  // `hand_cards` and `library_card_ids` above are omitted and the receiver keeps what it has.
+  // `hand_cards` and `library_cards` above are omitted and the receiver keeps what it has.
   // Same absent-means-unchanged contract as HandSlotMap. Never set on the first view of a
   // session (the startup sync needs a full snapshot to seed the physical zones), and decided
   // per player: a draw re-sends the drawing player in full while the other stays omitted.
@@ -1262,6 +1269,9 @@ message RuledPerPlayerView {
   bool private_zones_unchanged = 33 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   // Engine ObjectIds in public exile order, used for Adventure/source identity mapping.
   repeated uint32 exile_object_ids = 34 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Top of library first. Object identity, card identity, and order are server-only so the relay
+  // can preserve exact physical cards through shuffles without revealing the hidden zone.
+  repeated LibraryCard library_cards = 35 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 message ZoneViewSync {

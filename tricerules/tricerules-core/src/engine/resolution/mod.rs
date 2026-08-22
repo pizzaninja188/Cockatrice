@@ -85,6 +85,12 @@ enum EffectOutcome {
     RestartResolutionBranch(Option<usize>),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DeferredStackExit {
+    Resolved,
+    DidNotResolve,
+}
+
 fn simple_player_recipients(
     state: &GameState,
     controller: PlayerId,
@@ -425,6 +431,12 @@ impl GameEngine {
             .stack
             .pop()
             .ok_or(EngineError::Illegal("empty stack"))?;
+        // Preserve whether the caster actually chose any targets before CR 608.2b removes
+        // targets that have become illegal. This distinguishes an optional-target spell cast
+        // with zero targets (which resolves normally) from one whose chosen targets all became
+        // illegal (which does not resolve).
+        let had_chosen_targets =
+            !top.targets.is_empty() || top.chosen_modes.iter().any(|mode| !mode.targets.is_empty());
         self.snapshot_resolution_targets(&mut top);
         let controller = top.controller;
         let card_id = top.card_id.clone();
@@ -439,6 +451,10 @@ impl GameEngine {
         // `GameObject` in `objects`, so it must take the same no-zone-move path as an ability.
         let is_ability = top.ability_text.is_some();
         let leaves_no_object = is_ability || top.is_copy;
+        let is_omen_spell = self
+            .registry
+            .get(&card_id)
+            .is_some_and(|definition| definition.layout == Layout::Omen && top.face_index == 1);
         let custom_key = (!is_ability && !top.is_copy)
             .then(|| {
                 self.registry
@@ -456,13 +472,14 @@ impl GameEngine {
                 }
             )
         });
-        if leaves_no_object && !defer_soft_counter_exit {
+        if leaves_no_object && !defer_soft_counter_exit && !is_omen_spell {
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                     object_id: top.id,
                     // Abilities cease to exist on resolution; graveyard tells the C++ server
                     // not to expect a permanent to land.
                     destination: rv1::StackResolveDestination::Graveyard as i32,
+                    owner_player_id: None,
                 })),
             });
         } else if !leaves_no_object {
@@ -565,6 +582,11 @@ impl GameEngine {
                             ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                                 object_id: top.id,
                                 destination,
+                                owner_player_id: self
+                                    .state
+                                    .objects
+                                    .get(&top.id)
+                                    .map(|object| object.owner),
                             })),
                         });
                         self.commit_battlefield_entry(entry, attached_to)?;
@@ -575,6 +597,7 @@ impl GameEngine {
                     ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                         object_id: top.id,
                         destination,
+                        owner_player_id: self.state.objects.get(&top.id).map(|object| object.owner),
                     })),
                 });
                 move_object_to_zone(
@@ -653,7 +676,7 @@ impl GameEngine {
                 events.push(ev_log(format!(
                     "{spell_label} does nothing (its \"if\" condition is no longer true, CR 603.4)."
                 )));
-                self.finish_deferred_stack_exit(&top, events)?;
+                self.finish_deferred_stack_exit(&top, DeferredStackExit::DidNotResolve, events)?;
                 return Ok(());
             }
         }
@@ -663,13 +686,14 @@ impl GameEngine {
             .iter()
             .filter(|entry| !entry.role_group_indices.is_empty())
             .collect();
-        let fizzle = !targeted_effects.is_empty()
+        let fizzle = had_chosen_targets
+            && !targeted_effects.is_empty()
             && targeted_effects
                 .iter()
                 .all(|entry| entry.targets.is_empty());
         if fizzle {
             events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
-            self.finish_deferred_stack_exit(&top, events)?;
+            self.finish_deferred_stack_exit(&top, DeferredStackExit::DidNotResolve, events)?;
             return Ok(());
         }
 
@@ -683,6 +707,7 @@ impl GameEngine {
     fn finish_deferred_stack_exit(
         &mut self,
         top: &StackItem,
+        exit: DeferredStackExit,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         let has_stack_item = self.state.stack.iter().any(|item| item.id == top.id);
@@ -691,12 +716,27 @@ impl GameEngine {
             .objects
             .get(&top.id)
             .is_some_and(|object| object.zone == Zone::Stack);
-        if !has_stack_item && !has_stack_object {
+        let is_omen_spell = self
+            .registry
+            .get(&top.card_id)
+            .is_some_and(|definition| definition.layout == Layout::Omen && top.face_index == 1);
+        // A spell copy has neither a backing object nor a second stack entry after
+        // `resolve_top_of_stack` pops it. Omen copies still need the typed Library resolution
+        // event and their controller's deterministic shuffle, so they are the sole no-object
+        // deferred exit that reaches the completion path.
+        let has_deferred_exit =
+            has_stack_item || has_stack_object || (top.is_copy && is_omen_spell);
+        if !has_deferred_exit {
             return Ok(());
         }
 
         self.state.stack.retain(|item| item.id != top.id);
-        let destination = if top.flashback {
+        let is_resolved_omen = exit == DeferredStackExit::Resolved && is_omen_spell;
+        let physical_owner = self.state.objects.get(&top.id).map(|object| object.owner);
+        let shuffle_player = physical_owner.unwrap_or(top.controller);
+        let destination = if is_resolved_omen {
+            rv1::StackResolveDestination::Library
+        } else if top.flashback {
             rv1::StackResolveDestination::Exile
         } else {
             rv1::StackResolveDestination::Graveyard
@@ -705,6 +745,7 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                 object_id: top.id,
                 destination: destination as i32,
+                owner_player_id: physical_owner,
             })),
         });
         if has_stack_object {
@@ -712,13 +753,22 @@ impl GameEngine {
                 &mut self.state,
                 self.registry,
                 top.id,
-                if top.flashback {
+                if is_resolved_omen {
+                    Zone::Library
+                } else if top.flashback {
                     Zone::Exile
                 } else {
                     Zone::Graveyard
                 },
                 None,
             )?;
+        }
+        if is_resolved_omen {
+            shuffle_player_library_for_current_command(&mut self.state, shuffle_player);
+            events.push(ev_log(format!(
+                "P{} shuffles the resolving Omen into P{}'s library.",
+                top.controller, shuffle_player
+            )));
         }
         Ok(())
     }
@@ -1155,7 +1205,7 @@ impl GameEngine {
             }
             previous_effect_result = effect_result;
         }
-        self.finish_deferred_stack_exit(top, events)?;
+        self.finish_deferred_stack_exit(top, DeferredStackExit::Resolved, events)?;
         events.push(ev_log(format!("{spell_label} resolves.")));
         // CR 608.2m: the spell lands in its owner's graveyard *after* its effects, so it sits
         // beneath anything those effects put there (e.g. a self-targeted Tome Scour's five cards).

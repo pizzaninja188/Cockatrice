@@ -663,6 +663,50 @@ TEST_F(RuledClientTest, AdventureCastFacesCarryEngineNamesAndCosts)
     EXPECT_TRUE(state->handActionNeedsTarget(ruled::v1::HAND_ACTION_CAST_SPELL, 6, 1));
 }
 
+TEST_F(RuledClientTest, OmenFacesOptionalTargetAndStackAnnotationStayEngineAuthored)
+{
+    ruled::v1::RuledEventBatch legalBatch;
+    auto &actions = (*legalBatch.mutable_legal_by_player())[kLocalPlayer];
+    addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 6, "Dirgur Island Dragon", 0, false, "{5}{U}");
+    addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 6, "Skimming Strike", 1, true, "{1}{U}");
+    auto &targets = (*actions.mutable_valid_targets_by_hand_slot())[(6u << 8) | 1u];
+    auto *group = targets.add_groups();
+    group->set_group_index(0);
+    group->set_prompt_text("Choose up to one target creature");
+    group->set_min(0);
+    group->set_max(1);
+    group->add_valid_permanent_ids(101u);
+    apply(legalBatch);
+
+    const QVector<RuledFaceOption> faces =
+        state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 6);
+    ASSERT_EQ(faces.size(), 2);
+    EXPECT_EQ(faces[0].faceName, QStringLiteral("Dirgur Island Dragon"));
+    EXPECT_EQ(faces[0].manaCost, QStringLiteral("{5}{U}"));
+    EXPECT_EQ(faces[1].faceName, QStringLiteral("Skimming Strike"));
+    EXPECT_EQ(faces[1].manaCost, QStringLiteral("{1}{U}"));
+    ASSERT_EQ(state->spellTargetData(6, 1).groups.size(), 1);
+    EXPECT_TRUE(ruledTargetGroupUsesExplicitConfirmation(state->spellTargetData(6, 1).groups.first()));
+
+    ruled::v1::RuledEventBatch stackBatch;
+    auto *push = stackBatch.add_events()->mutable_stack_pushed();
+    push->set_object_id(700u);
+    push->set_card_id("dirgur_island_dragon_skimming_strike");
+    push->set_description("Skimming Strike");
+    push->set_ability_annotation("Skimming Strike");
+    apply(stackBatch);
+    EXPECT_EQ(state->stackAnnotation(700u), QStringLiteral("Skimming Strike"));
+    EXPECT_EQ(state->getStackOidOrder(), QList<quint32>({700u}));
+
+    ruled::v1::RuledEventBatch resolvedBatch;
+    auto *resolved = resolvedBatch.add_events()->mutable_stack_resolved();
+    resolved->set_object_id(700u);
+    resolved->set_destination(ruled::v1::STACK_RESOLVE_DESTINATION_LIBRARY);
+    apply(resolvedBatch);
+    EXPECT_FALSE(state->hasStackItems());
+    EXPECT_TRUE(state->stackAnnotation(700u).isEmpty());
+}
+
 TEST_F(RuledClientTest, AppliesAuthoritativeModalModeDataPerFace)
 {
     ruled::v1::RuledEventBatch batch;

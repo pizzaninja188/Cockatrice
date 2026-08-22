@@ -76,7 +76,7 @@ impl ModalDef {
     }
 }
 
-/// Physical card layout (CR 709/710/712/715). Drives how many faces a card has and how each
+/// Physical card layout (CR 709/710/712/715/720). Drives how many faces a card has and how each
 /// face becomes castable. `Normal` is the overwhelming majority — one face, authored flat.
 /// The multi-face variants author [`RawCardDefinition::faces`] explicitly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -95,6 +95,9 @@ pub enum Layout {
     Transform,
     /// CR 715: cast the adventure (spell) half, then later the creature half from exile.
     Adventure,
+    /// CR 720: cast either the normal permanent characteristics or the inset instant/sorcery
+    /// characteristics; a resolving Omen is shuffled into its owner's library.
+    Omen,
     /// CR 710: one card, two states stacked on one face (older Kamigawa flip cards).
     Flip,
 }
@@ -440,12 +443,14 @@ pub struct CardDefinition {
 
 impl CardDefinition {
     /// Display-database identity for `face_index`. Cockatrice stores transform, flip, and MDFC
-    /// faces as separate entries, while split and Adventure cards retain the whole-card entry.
+    /// faces as separate entries, while split, Adventure, and Omen cards retain the whole-card entry.
     pub fn face_display_name(&self, face_index: usize) -> Option<&str> {
         let face = self.face(face_index)?;
         Some(match self.layout {
             Layout::Transform | Layout::Flip | Layout::ModalDfc => face.name.as_str(),
-            Layout::Normal | Layout::Split | Layout::Room | Layout::Adventure => self.name.as_str(),
+            Layout::Normal | Layout::Split | Layout::Room | Layout::Adventure | Layout::Omen => {
+                self.name.as_str()
+            }
         })
     }
 
@@ -631,13 +636,13 @@ impl CardDefinition {
     }
 
     /// Whether `face_index` is a face the player may choose while playing this card from hand.
-    /// Split cards, modal DFCs, and Adventures expose both authored spell/land choices there;
+    /// Split cards, modal DFCs, Adventures, and Omens expose both authored spell/land choices there;
     /// transforming DFCs and flip cards expose only their front/top face. This is a layout rule,
     /// independent of timing, costs, targets, and whether the chosen face is a spell or land.
     pub fn face_available_from_hand(&self, face_index: usize) -> bool {
         match self.layout {
             Layout::Normal | Layout::Transform | Layout::Flip => face_index == 0,
-            Layout::Split | Layout::Room | Layout::ModalDfc | Layout::Adventure => {
+            Layout::Split | Layout::Room | Layout::ModalDfc | Layout::Adventure | Layout::Omen => {
                 face_index < self.face_count()
             }
         }
@@ -680,6 +685,7 @@ mod tests {
 
         for layout in [
             Layout::Adventure,
+            Layout::Omen,
             Layout::Flip,
             Layout::Transform,
             Layout::ModalDfc,
@@ -709,6 +715,14 @@ mod tests {
         let adventure = definition(Layout::Adventure, vec![front, back]);
         assert!(adventure.has_name_outside_stack("Bonecrusher Giant"));
         assert!(!adventure.has_name_outside_stack("Stomp"));
+
+        let mut normal = face(&["Creature", "Dragon"]);
+        normal.name = "Sagu Wildling".into();
+        let mut omen = face(&["Sorcery", "Omen"]);
+        omen.name = "Roost Seek".into();
+        let omen_card = definition(Layout::Omen, vec![normal, omen]);
+        assert!(omen_card.has_name_outside_stack("Sagu Wildling"));
+        assert!(!omen_card.has_name_outside_stack("Roost Seek"));
     }
 
     #[test]

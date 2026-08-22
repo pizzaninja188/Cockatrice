@@ -1,0 +1,32 @@
+// Stormshriek Feral // Flush Out (Tarkir: Dragonstorm) — Omen, CR 720.
+(
+  id: "stormshriek_feral_flush_out",
+  name: "Stormshriek Feral // Flush Out",
+  layout: Omen,
+  faces: [
+    (
+      name: "Stormshriek Feral",
+      mana_cost: "{4}{R}",
+      types: ["Creature", "Dragon"],
+      power: 3,
+      toughness: 3,
+      keywords: [Flying, Haste],
+      activated_abilities: [(
+        costs: [Mana("{1}{R}")],
+        effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+        text: "{1}{R}: This creature gets +1/+0 until end of turn.",
+      )],
+    ),
+    (
+      name: "Flush Out",
+      mana_cost: "{1}{R}",
+      types: ["Sorcery", "Omen"],
+      spell_effect: [DrawDiscard(
+        draw_count: 2,
+        discard_count: 1,
+        order: DiscardThenDraw,
+        optional: false,
+      )],
+    ),
+  ],
+)

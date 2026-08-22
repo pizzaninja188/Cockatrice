@@ -249,7 +249,21 @@ impl CardRegistry {
                     });
                 }
             }
-            // Validate every face's effects at startup — multi-face cards (CR 709/712/715)
+            if card.layout == Layout::Omen {
+                let valid_roles = card.faces.len() == 2
+                    && card.faces[0].is_permanent()
+                    && (card.faces[1].is_instant || card.faces[1].is_sorcery)
+                    && !card.faces[1].is_permanent()
+                    && card.faces[1].types.iter().any(|value| value == "Omen");
+                if !valid_roles {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "Omen requires exactly two faces: permanent face 0 and instant/sorcery Omen face 1"
+                            .into(),
+                    });
+                }
+            }
+            // Validate every face's effects at startup — multi-face cards (CR 709/712/715/720)
             // validate each face uniformly. Spell effects have no source permanent, so `Source`
             // subjects are rejected here (EffectContext::Spell); activated/triggered
             // effects bind to a source (Ability).
@@ -2779,6 +2793,45 @@ mod tests {
                     Err(RegistryError::InvalidCard { .. })
                 ),
                 "expected malformed Adventure definition to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn load_rejects_malformed_omen_faces() {
+        let invalid = [
+            r#"(
+                id: "one_face_omen",
+                name: "One Face Omen",
+                layout: Omen,
+                faces: [(name: "Creature", mana_cost: "{2}{G}", types: ["Creature"])],
+            )"#,
+            r#"(
+                id: "spell_first_omen",
+                name: "Spell First Omen",
+                layout: Omen,
+                faces: [
+                    (name: "Spell", mana_cost: "{G}", types: ["Instant"]),
+                    (name: "Omen", mana_cost: "{1}{G}", types: ["Sorcery", "Omen"]),
+                ],
+            )"#,
+            r#"(
+                id: "missing_omen_subtype",
+                name: "Missing Omen Subtype",
+                layout: Omen,
+                faces: [
+                    (name: "Creature", mana_cost: "{2}{G}", types: ["Creature"]),
+                    (name: "Spell", mana_cost: "{1}{G}", types: ["Sorcery"]),
+                ],
+            )"#,
+        ];
+        for bad in invalid {
+            assert!(
+                matches!(
+                    CardRegistry::from_chunks(&[bad]),
+                    Err(RegistryError::InvalidCard { .. })
+                ),
+                "expected malformed Omen definition to be rejected"
             );
         }
     }
