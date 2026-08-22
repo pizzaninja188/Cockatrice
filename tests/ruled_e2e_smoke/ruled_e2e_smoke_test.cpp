@@ -381,6 +381,17 @@ public:
     bool evolvingWildsPhysicalIdentityContinuous = true;
     quint32 evolvingWildsChosenOid = 0;
     int evolvingWildsPhysicalCardId = -1;
+    bool devCruelTruthsSent = false;
+    bool devCruelTruthsManaSent = false;
+    bool cruelTruthsCast = false;
+    bool sawOwnSurveilCandidates = false;
+    bool sawOpponentSurveilRedacted = false;
+    bool submittedSurveilDestination = false;
+    bool sawSurveilPhysicalDeckToGrave = false;
+    bool sawCruelTruthsResolved = false;
+    bool sawCruelTruthsLifeLoss = false;
+    quint32 cruelTruthsOid = 0;
+    QString surveilChosenName;
     bool sawCursePlayerAttachment = false;
     quint32 curseOid = 0;
     std::map<quint32, int> serverCardByEngineOid;
@@ -639,6 +650,9 @@ public:
                         typecyclingPhysicalIdentityContinuous && typecyclingChosenPhysicalId >= 0 &&
                         mc.card_id() == typecyclingChosenPhysicalId;
                 }
+                if (submittedSurveilDestination && !sawSurveilPhysicalDeckToGrave && from == deck && to == grave) {
+                    sawSurveilPhysicalDeckToGrave = !surveilChosenName.isEmpty() && name == surveilChosenName;
+                }
                 if (renewActivated && !sawRenewGraveToExile && from == grave && to == exile) {
                     sawRenewGraveToExile = true;
                     renewPhysicalIdentityContinuous = renewSourcePhysicalId >= 0 && mc.card_id() == renewSourcePhysicalId;
@@ -787,6 +801,9 @@ public:
                 if (cardId == QLatin1String("convolute")) {
                     softCounterConvoluteOid = sp.object_id();
                 }
+                if (cardId == QLatin1String("cruel_truths")) {
+                    cruelTruthsOid = sp.object_id();
+                }
                 if (sp.is_triggered() &&
                     QString::fromStdString(sp.ability_annotation()).contains(
                         QStringLiteral("draw two cards"), Qt::CaseInsensitive)) {
@@ -802,6 +819,9 @@ public:
                     softCounterLeftStackBeforeChoice = !sawSoftCounterPaymentChoice;
                     sawSoftCounterResolveAfterChoice = sawSoftCounterPaymentChoice;
                 }
+                if (cruelTruthsOid != 0 && ev.stack_resolved().object_id() == cruelTruthsOid) {
+                    sawCruelTruthsResolved = true;
+                }
             } else if (ev.has_life_changed()) {
                 const auto &lc = ev.life_changed();
                 lifeByPlayer[lc.player_id()] = lc.new_total();
@@ -814,6 +834,9 @@ public:
                 }
                 if (lc.delta() == -4 && borosCharmOid != 0 && !sawBorosCharmLifeLoss && !inCombatDamageWindow) {
                     sawBorosCharmLifeLoss = true;
+                }
+                if (lc.delta() == -2 && cruelTruthsOid != 0) {
+                    sawCruelTruthsLifeLoss = true;
                 }
                 if (lc.delta() < 0 && (batchDeclaredAttackers || batchCombatDamage)) {
                     sawCombatLifeLoss = true;
@@ -893,6 +916,18 @@ public:
                                                     rcr.candidate_card_ids_size() == 0 &&
                                                     rcr.candidate_names_size() == 0 &&
                                                     rcr.candidate_server_card_ids_size() == 0;
+                    }
+                }
+                if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK) {
+                    if (rcr.deciding_player_id() == myId) {
+                        sawOwnSurveilCandidates =
+                            rcr.candidate_object_ids_size() == 2 && rcr.candidate_card_ids_size() == 2 &&
+                            rcr.candidate_names_size() == 2 && rcr.candidate_server_card_ids_size() == 2 &&
+                            rcr.min() == 0 && rcr.max() == 2 && rcr.ordered();
+                    } else {
+                        sawOpponentSurveilRedacted =
+                            rcr.candidate_object_ids_size() == 0 && rcr.candidate_card_ids_size() == 0 &&
+                            rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0;
                     }
                 }
                 if (rcr.deciding_player_id() == myId &&
@@ -1625,6 +1660,7 @@ public:
             const bool isEmptyTypecycling =
                 isLibrarySearch && emptyTypecyclingActivated && !submittedEmptyTypecyclingChoice;
             const bool isManifestDread = rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD;
+            const bool isSurveil = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK;
             const QString prompt = QString::fromStdString(rcr.prompt_text());
             const bool isEntryReplacement = isReplacement && prompt.contains(QStringLiteral("entering the battlefield"));
             const bool isDamagePrevention = isReplacement && !isEntryReplacement;
@@ -1639,7 +1675,7 @@ public:
             }
             ruled::v1::RuledCommand cmd;
             auto *choice = cmd.mutable_submit_resolution_choice();
-            const int need = isLibrarySearch && rcr.candidate_object_ids_size() > 0
+            const int need = (isLibrarySearch && rcr.candidate_object_ids_size() > 0) || isSurveil
                                  ? 1
                                  : static_cast<int>(rcr.min());
             if (isManifestDread) {
@@ -1668,6 +1704,12 @@ public:
                 submittedTypecyclingChoice = true;
             } else if (isEmptyTypecycling && need == 0) {
                 submittedEmptyTypecyclingChoice = true;
+            } else if (isSurveil && need == 1) {
+                // Library image IDs are picker-local sequential proxies, not persistent
+                // Server_Card IDs. Exact hidden-zone identity is carried by the engine's
+                // source_library_position on the ensuing PermanentMoved event.
+                surveilChosenName = QString::fromStdString(rcr.candidate_names(0));
+                submittedSurveilDestination = true;
             } else if (isLibrarySearch && need == 1) {
                 evolvingWildsChosenOid = rcr.candidate_object_ids(0);
                 submittedEvolvingWildsChoice = true;
@@ -1677,7 +1719,7 @@ public:
                 submittedDamagePreventionChoice = true;
             } else if (isEntryReplacement) {
                 submittedEntryReplacementChoice = true;
-            } else if (!isManifestDread && !isTypecycling && !isEmptyTypecycling) {
+            } else if (!isManifestDread && !isTypecycling && !isEmptyTypecycling && !isSurveil) {
                 submittedBrainstormChoice = true;
             }
             sendRuled(cmd, QStringLiteral("submit resolution choice (%1 cards)").arg(need));
@@ -2460,6 +2502,39 @@ public:
                     }
                 }
             }
+            if (sawLibraryTargetAbsentFromBattlefield && !sawCruelTruthsResolved) {
+                if (!devCruelTruthsSent) {
+                    devCruelTruthsSent = true;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(myId);
+                    auto *put = dev->mutable_put_card_in_zone();
+                    put->set_card_name("Cruel Truths");
+                    put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                    sendRuled(cmd, QStringLiteral("dev: conjure Cruel Truths into hand"));
+                    return;
+                }
+                if (!devCruelTruthsManaSent) {
+                    devCruelTruthsManaSent = true;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(myId);
+                    dev->mutable_add_mana()->set_b(1);
+                    dev->mutable_add_mana()->set_c(3);
+                    sendRuled(cmd, QStringLiteral("dev: add {3}{B} for Cruel Truths"));
+                    return;
+                }
+                if (!cruelTruthsCast) {
+                    if (const auto *spell =
+                            handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Cruel Truths"))) {
+                        ruled::v1::RuledCommand cmd;
+                        cmd.mutable_cast_spell()->mutable_source()->set_hand_index(spell->hand_index());
+                        cruelTruthsCast = true;
+                        sendRuled(cmd, QStringLiteral("cast Cruel Truths"));
+                        return;
+                    }
+                }
+            }
             if (!devWaifSent) {
                 devWaifSent = true;
                 ruled::v1::RuledCommand cmd;
@@ -2865,6 +2940,10 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.submittedEvolvingWildsChoice && p1.sawEvolvingWildsPermanentMoved &&
                p2.sawEvolvingWildsPermanentMoved && p1.sawEvolvingWildsPhysicalDeckToTable &&
                p2.sawEvolvingWildsPhysicalDeckToTable &&
+               p1.sawOwnSurveilCandidates && p2.sawOpponentSurveilRedacted &&
+               p1.submittedSurveilDestination && p1.sawSurveilPhysicalDeckToGrave &&
+               p1.sawCruelTruthsResolved && p2.sawCruelTruthsResolved &&
+               p1.sawCruelTruthsLifeLoss && p2.sawCruelTruthsLifeLoss &&
                p1.sawSoftCounterPaymentChoice && p1.activatedManaDuringSoftCounterPayment && p1.paidSoftCounter &&
                p1.sawSoftCounterResolveAfterChoice &&
                p2.softCounterConvoluteCast &&
@@ -2980,6 +3059,18 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "the chosen physical Mountain did not move from DECK to TABLE for both clients";
     EXPECT_TRUE(p1.evolvingWildsPhysicalIdentityContinuous && p2.evolvingWildsPhysicalIdentityContinuous)
         << "Evolving Wilds moved a different physical card than the chosen library candidate";
+    EXPECT_TRUE(p1.sawOwnSurveilCandidates)
+        << "Cruel Truths' controller did not receive its two private surveil candidates";
+    EXPECT_TRUE(p2.sawOpponentSurveilRedacted)
+        << "Cruel Truths leaked private surveil identities to the opponent";
+    EXPECT_TRUE(p1.submittedSurveilDestination)
+        << "the surveil destination choice was never submitted";
+    EXPECT_TRUE(p1.sawSurveilPhysicalDeckToGrave)
+        << "the chosen physical surveil card did not move from DECK to GRAVE";
+    EXPECT_TRUE(p1.sawCruelTruthsResolved && p2.sawCruelTruthsResolved)
+        << "Cruel Truths did not finish resolving after the surveil choice";
+    EXPECT_TRUE(p1.sawCruelTruthsLifeLoss && p2.sawCruelTruthsLifeLoss)
+        << "both clients did not observe Cruel Truths' trailing life loss";
     ASSERT_NE(p1.evolvingWildsChosenOid, 0u);
     EXPECT_EQ(p1.evolvingWildsChosenOid, p2.evolvingWildsChosenOid)
         << "clients disagreed on the searched-for Mountain's engine ObjectId";

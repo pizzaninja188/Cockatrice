@@ -860,13 +860,8 @@ pub(super) fn return_triggered_card_from_graveyard(
     }
 }
 
-/// CR 701.18: look at the top N cards of your library, then decide which go to the bottom and in
-/// what order the rest sit on top.
-///
-/// Parks the first of up to two interrupts (see `finish_scry` for the second). The cards stay in
-/// the library throughout — scry reorders a hidden zone, it does not move cards through zones — so
-/// nothing here touches `move_object_to_zone` and no zone-change trigger can see it. Only the
-/// *count* is public; the card names go to the scrying player alone.
+/// CR 701.18 scry enters the shared private top-library partition state machine. Scry's selected
+/// cohort goes to the library bottom; the retained cohort may require a second ordering choice.
 pub(super) fn scry(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -874,6 +869,39 @@ pub(super) fn scry(
     let SpellEffectKind::Scry { count } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    begin_library_partition(cx, count, 0, None, PendingLibraryPartitionKind::Scry)
+}
+
+/// CR 701.25 surveil and nonkeyword bounded looks share the same private choice contract. The
+/// selected cohort goes to the graveyard; cards retained on top are ordered in a second step when
+/// necessary.
+pub(super) fn library_partition(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::LibraryPartition {
+        count,
+        top_min,
+        top_max,
+        kind,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let pending_kind = match kind {
+        LibraryPartitionKind::Surveil => PendingLibraryPartitionKind::Surveil,
+        LibraryPartitionKind::Look => PendingLibraryPartitionKind::Look,
+    };
+    begin_library_partition(cx, count, top_min, top_max, pending_kind)
+}
+
+fn begin_library_partition(
+    cx: &mut EffectCx<'_>,
+    count: u32,
+    top_min: u32,
+    top_max: Option<u32>,
+    kind: PendingLibraryPartitionKind,
+) -> Result<EffectOutcome, EngineError> {
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let top = cx.top;
@@ -892,36 +920,72 @@ pub(super) fn scry(
         .collect();
     let n = candidates.len() as u32;
     if n == 0 {
+        let verb = match kind {
+            PendingLibraryPartitionKind::Scry => "scries",
+            PendingLibraryPartitionKind::Surveil => "surveils",
+            PendingLibraryPartitionKind::Look => "looks at",
+        };
         events.push(ev_log(format!(
-            "P{controller} scries {count} with an empty library ({spell_label})."
+            "P{controller} {verb} {count} with an empty library ({spell_label})."
         )));
+        // CR 701.25d: the surveil event happens after the process is complete even when every
+        // action was impossible because the library was empty.
+        if kind == PendingLibraryPartitionKind::Surveil {
+            engine.fire_triggers(&[GameEvent::Surveilled { player: controller }]);
+        }
         return Ok(EffectOutcome::Continue);
     }
 
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
-    let prompt = format!(
-        "Scry {n}: click any number of cards to put on the bottom of your library — they go down \
-         in the order you click them, so the last one ends up bottom-most. The rest stay on top."
-    );
+    let effective_top_min = top_min.min(n);
+    let effective_top_max = top_max.unwrap_or(n).min(n);
+    let destination_min = n - effective_top_max;
+    let destination_max = n - effective_top_min;
+    let (prompt, choice_kind, candidate_selectable) = match kind {
+        PendingLibraryPartitionKind::Scry => (
+            format!(
+                "Scry {n}: click any number of cards to put on the bottom of your library — they \
+                 go down in the order you click them, so the last one ends up bottom-most. The \
+                 rest stay on top."
+            ),
+            custom::ChoiceKind::LibraryTop,
+            Vec::new(),
+        ),
+        PendingLibraryPartitionKind::Surveil => (
+            format!(
+                "Surveil {n}: click any number of cards to put into your graveyard — the last one \
+                 you click becomes the top card of your graveyard. The rest stay on top of your \
+                 library."
+            ),
+            custom::ChoiceKind::LibraryLook,
+            vec![true; n as usize],
+        ),
+        PendingLibraryPartitionKind::Look => (
+            format!(
+                "Look at the top {n} cards: click between {destination_min} and {destination_max} \
+                 cards to put into your graveyard — the last one you click becomes the top card \
+                 of your graveyard. The rest stay on top of your library."
+            ),
+            custom::ChoiceKind::LibraryLook,
+            vec![true; n as usize],
+        ),
+    };
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
                 deciding_player_id: controller,
                 source_object_id: top.id,
                 prompt_text: prompt.clone(),
-                choice_kind: custom::ChoiceKind::LibraryTop as i32,
+                choice_kind: choice_kind as i32,
                 candidate_object_ids: candidates.clone(),
                 candidate_card_ids,
                 candidate_names: candidate_names.clone(),
-                min: 0,
-                max: n,
-                // CR 701.18a puts the bottomed cards down "in any order", and `finish_scry`
-                // seats them in submitted order — so the order is load-bearing here, not
-                // incidental.
+                min: destination_min,
+                max: destination_max,
                 ordered: true,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
-                candidate_selectable: Vec::new(),
+                candidate_selectable,
                 resolution_branches: Vec::new(),
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
@@ -929,8 +993,13 @@ pub(super) fn scry(
             },
         )),
     });
-    // The count is public knowledge; what was seen is not.
-    events.push(ev_log(format!("P{controller} scries {n} ({spell_label}).")));
+    let verb = match kind {
+        PendingLibraryPartitionKind::Scry => "scries",
+        PendingLibraryPartitionKind::Surveil => "surveils",
+        PendingLibraryPartitionKind::Look => "looks at",
+    };
+    // The count is public knowledge; the identities are not.
+    events.push(ev_log(format!("P{controller} {verb} {n} ({spell_label}).")));
     events.push(ev_log_private(
         format!("P{controller} looks at {}.", candidate_names.join(", ")),
         controller,
@@ -940,17 +1009,18 @@ pub(super) fn scry(
         presentation: PendingResolutionPresentation {
             source_object_id: top.id,
             candidates: candidates.clone(),
-            min: 0,
-            max: n,
+            min: destination_min,
+            max: destination_max,
             ordered: true,
             unique_names: false,
             prompt,
-            choice_kind: custom::ChoiceKind::LibraryTop,
+            choice_kind,
         },
-        continuation: ResolutionContinuation::Scry {
+        continuation: ResolutionContinuation::LibraryPartition {
             stack: ParkedStackResolution::new(top.clone()),
             looked_at: candidates,
-            stage: PendingScryStage::ChooseBottom,
+            stage: PendingLibraryPartitionStage::ChooseDestination,
+            kind,
         },
     });
     Ok(EffectOutcome::Suspended)

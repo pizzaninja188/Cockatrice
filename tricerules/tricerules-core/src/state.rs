@@ -535,9 +535,16 @@ pub struct PendingResolutionPresentation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PendingScryStage {
-    ChooseBottom,
+pub enum PendingLibraryPartitionStage {
+    ChooseDestination,
     OrderTop,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PendingLibraryPartitionKind {
+    Scry,
+    Surveil,
+    Look,
 }
 
 #[derive(Debug, Clone)]
@@ -584,10 +591,11 @@ pub enum ResolutionContinuation {
         shuffle: bool,
         reveal: bool,
     },
-    Scry {
+    LibraryPartition {
         stack: ParkedStackResolution,
         looked_at: Vec<ObjectId>,
-        stage: PendingScryStage,
+        stage: PendingLibraryPartitionStage,
+        kind: PendingLibraryPartitionKind,
     },
     LibraryLook {
         stack: ParkedStackResolution,
@@ -620,7 +628,7 @@ impl ResolutionContinuation {
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
-            | Self::Scry { stack, .. }
+            | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
             | Self::ManifestDread { stack, .. }
             | Self::EntryCopySource { stack }
@@ -639,7 +647,7 @@ impl ResolutionContinuation {
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
-            | Self::Scry { stack, .. }
+            | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
             | Self::ManifestDread { stack, .. }
             | Self::EntryCopySource { stack }

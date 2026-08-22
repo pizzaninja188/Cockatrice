@@ -10,7 +10,8 @@ use super::events::{
 };
 use super::legal_actions::fill_legal;
 use super::resolution::{
-    counter_stack_spell, move_object_to_zone, permanent_moved_event, sacrifice_permanent,
+    counter_stack_spell, move_object_to_zone, permanent_moved_event,
+    permanent_moved_event_with_library_position, sacrifice_permanent,
     seat_resolved_spell_last_in_graveyard,
 };
 use super::targeting::{
@@ -145,7 +146,9 @@ impl GameEngine {
             ResolutionContinuation::SearchLibrary { .. } => {
                 return self.finish_library_search(pending, chosen);
             }
-            ResolutionContinuation::Scry { .. } => return self.finish_scry(pending, chosen),
+            ResolutionContinuation::LibraryPartition { .. } => {
+                return self.finish_library_partition(pending, chosen);
+            }
             ResolutionContinuation::LibraryLook { .. } => {
                 return self.finish_look_choose_bottom(pending, chosen);
             }

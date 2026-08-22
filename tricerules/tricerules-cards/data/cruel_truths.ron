@@ -1,0 +1,12 @@
+// Oracle checked against Scryfall on 2026-08-21; there are no card-specific rulings.
+(
+  id: "cruel_truths",
+  name: "Cruel Truths",
+  mana_cost: "{3}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil),
+    Draw(count: 2),
+    LoseLife(amount: Fixed(2)),
+  ],
+)

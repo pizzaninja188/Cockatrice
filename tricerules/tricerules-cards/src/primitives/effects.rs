@@ -772,6 +772,17 @@ pub enum LibraryBottomOrder {
     Chosen,
 }
 
+/// Rules meaning attached to a top-library partition.
+///
+/// `Surveil` is the CR 701.25 keyword action and therefore emits the corresponding completed
+/// game event. `Look` covers nonkeyword instructions such as Gutless Plunderer that use the same
+/// private partition machinery without counting as surveilling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LibraryPartitionKind {
+    Surveil,
+    Look,
+}
+
 /// Who chooses cards for a discard instruction.
 ///
 /// CR 701.9b makes the affected player the default chooser. Coercion and Thoughtseize override
@@ -954,6 +965,18 @@ pub enum SpellEffectKind {
     /// Preordain and Opt.
     Scry {
         count: u32,
+    },
+    /// Look at the top `count` cards, put a bounded number back on top in any order, and put the
+    /// rest into the graveyard in any order. The player selects the graveyard cohort first; when
+    /// two or more cards remain, resolution parks again for their top-library order.
+    ///
+    /// Surveil (CR 701.25) uses an unrestricted top cohort and emits a surveil event only after
+    /// both choices complete. Gutless Plunderer uses `Look` with at most one card retained.
+    LibraryPartition {
+        count: u32,
+        top_min: u32,
+        top_max: Option<u32>,
+        kind: LibraryPartitionKind,
     },
     /// CR 701.62: look at the top two cards, manifest one, then put the other into the
     /// graveyard. The choice is private, logged, and resumable through the engine's library
@@ -1769,6 +1792,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ChooseResolutionBranch { .. }
             | SpellEffectKind::CreateReflexiveTrigger { .. }
             | SpellEffectKind::Scry { .. }
+            | SpellEffectKind::LibraryPartition { .. }
             | SpellEffectKind::ManifestDread
             | SpellEffectKind::LookChooseToHand { .. }
             | SpellEffectKind::TapAllCreatures { .. }
@@ -2530,6 +2554,28 @@ impl SpellEffectKind {
                 } else {
                     Ok(())
                 }
+            }
+            SpellEffectKind::LibraryPartition {
+                count,
+                top_min,
+                top_max,
+                kind,
+            } => {
+                if *count == 0 {
+                    return Err("LibraryPartition requires a count of at least 1".into());
+                }
+                if *top_min > *count {
+                    return Err("LibraryPartition top_min cannot exceed count".into());
+                }
+                if top_max.is_some_and(|maximum| maximum < *top_min || maximum > *count) {
+                    return Err("LibraryPartition top_max must be between top_min and count".into());
+                }
+                if *kind == LibraryPartitionKind::Surveil && (*top_min != 0 || top_max.is_some()) {
+                    return Err(
+                        "Surveil LibraryPartition must allow any number of cards on top".into(),
+                    );
+                }
+                Ok(())
             }
             SpellEffectKind::ManifestDread => Ok(()),
             // CR 303.4a: an Aura may enchant an object or player. Keep mixed AnyTarget out until

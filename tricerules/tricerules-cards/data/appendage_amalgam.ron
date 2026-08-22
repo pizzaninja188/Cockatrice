@@ -1,0 +1,15 @@
+// Oracle checked against Scryfall on 2026-08-21; there are no card-specific rulings.
+(
+  id: "appendage_amalgam",
+  name: "Appendage Amalgam",
+  mana_cost: "{2}{B}",
+  types: ["Enchantment", "Creature", "Horror"],
+  power: 3,
+  toughness: 2,
+  keywords: [Flash],
+  triggered_abilities: [(
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
+    text: "Whenever this creature attacks, surveil 1.",
+  )],
+)

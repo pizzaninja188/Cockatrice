@@ -8,11 +8,12 @@ use crate::state::{
     CopiableValues, DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
     EntryReplacementApplication, EntryReplacementEffectId, GameObject, GameState, ObjectId,
     OpeningSequence, ParkedStackResolution, PendingBattlefieldEntry, PendingDiscard,
-    PendingLibraryLookStage, PendingManaPayment, PendingResolution, PendingResolutionBranch,
-    PendingResolutionBranchStage, PendingResolutionPresentation, PendingScryStage, PendingTrigger,
-    PendingTriggerOrder, PlayerId, PlayerState, ReplacementPriority, ResolutionContinuation,
-    RoomState, StackItem, StackTarget, StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry,
-    TriggerContext, TriggerObjectRef, TurnHistory, TurnStep, UndoableManaAbility, Zone,
+    PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
+    PendingManaPayment, PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
+    PendingResolutionPresentation, PendingTrigger, PendingTriggerOrder, PlayerId, PlayerState,
+    ReplacementPriority, ResolutionContinuation, RoomState, StackItem, StackTarget, StagedTrigger,
+    StagedTriggerGroup, TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TurnHistory,
+    TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -31,13 +32,14 @@ use tricerules_cards::primitives::{
     DamagePreventionSubject, DiscardChooser, DrawDiscardOrder, EffectDuration, EffectSubject,
     EntersTappedAffected, EntersWithCountersAffected, Evasion, FaceChangeAction, GameCondition,
     GraveyardAggregate, InterveningIf, Keyword, LibraryBottomOrder, LibraryCardFilter,
-    LibraryPlacement, LifeAmount, ManaAmount, ManaSpendFilter, PermanentTypeFilter,
-    PlayerLifeAggregate, PlayerRecipient, PowerComparison, PreventionAmountBasis,
-    ProtectionCardType, ProtectionGrant, ProtectionQuality, RelativePlayerSet, ResolutionBranchDef,
-    ResolutionCost, ReturnController, SearchDestination, SpecialActionAffected, SpecialActionKind,
-    SpellCostModifier, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
-    TargetController, TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected,
-    TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
+    LibraryPartitionKind, LibraryPlacement, LifeAmount, ManaAmount, ManaSpendFilter,
+    PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
+    PreventionAmountBasis, ProtectionCardType, ProtectionGrant, ProtectionQuality,
+    RelativePlayerSet, ResolutionBranchDef, ResolutionCost, ReturnController, SearchDestination,
+    SpecialActionAffected, SpecialActionKind, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
+    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind, TargetingCostAction,
+    TargetingCostProtected, TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef,
+    TriggeredCardReference,
 };
 use tricerules_cards::{CardDefinition, CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -377,6 +379,11 @@ enum GameEvent {
     /// for every gain edge. The amount is deliberately not carried — no trigger reads it; a
     /// "gain that much" payoff adds it with its first card.
     LifeGained {
+        player: PlayerId,
+    },
+    /// CR 701.25d: one completed surveil action. This is emitted after the complete library
+    /// partition, including any retained-card ordering, even when the library was empty.
+    Surveilled {
         player: PlayerId,
     },
     /// Fired when a spell is put on the stack (CR 601.2; triggers on cast, not resolution).

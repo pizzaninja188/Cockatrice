@@ -449,6 +449,15 @@ pub enum TriggerCondition {
         #[serde(default)]
         player: CastTriggerPlayer,
     },
+    /// Whenever a player completes a surveil action (CR 701.25d). The event is emitted only
+    /// after both the graveyard selection and retained-card ordering are complete. Dimir Spybug
+    /// and Thoughtbound Phantasm share this observer vocabulary.
+    WheneverPlayerSurveils {
+        /// Whose surveil triggers this, relative to the source permanent's controller.
+        /// Defaults to `Controller` ("whenever you surveil").
+        #[serde(default)]
+        player: CastTriggerPlayer,
+    },
 }
 
 impl TriggerCondition {

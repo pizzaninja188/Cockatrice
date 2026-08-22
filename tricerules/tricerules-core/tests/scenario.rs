@@ -113,6 +113,8 @@ mod issue_89_battlefield_to_library;
 mod issue_90_evolving_wilds;
 #[path = "scenario/issue_92_library_choice.rs"]
 mod issue_92_library_choice;
+#[path = "scenario/issue_96_surveil.rs"]
+mod issue_96_surveil;
 #[path = "scenario/issue_97_entry_replacements.rs"]
 mod issue_97_entry_replacements;
 #[path = "scenario/issue_98_face_down.rs"]

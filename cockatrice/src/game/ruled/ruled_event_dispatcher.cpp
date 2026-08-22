@@ -742,6 +742,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         if (isLibraryLook) {
             pick.viewTitle = tr("Look at cards");
             pick.hasSelectableRestriction = true;
+            pick.showViewControls = false;
         } else if (isManifestDread) {
             pick.viewTitle = tr("Manifest dread");
             pick.showViewControls = false;

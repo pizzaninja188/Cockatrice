@@ -2,7 +2,8 @@
 #![allow(dead_code)]
 
 pub(crate) use tricerules_core::state::{
-    PendingLibraryLookStage, PendingResolutionBranchStage, PendingScryStage, ResolutionContinuation,
+    PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
+    PendingResolutionBranchStage, ResolutionContinuation,
 };
 pub(crate) use tricerules_core::{AttachmentRecipient, GameEngine};
 use tricerules_proto::ruled::v1 as rv1;

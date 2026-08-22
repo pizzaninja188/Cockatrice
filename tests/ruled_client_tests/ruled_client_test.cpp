@@ -2594,6 +2594,7 @@ TEST_F(RuledClientTest, LibrarySearchChoiceEnforcesUniqueNamesAndOpensTheDeckVie
     ASSERT_TRUE(state->isResolutionHandPickActive());
     EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Deck);
     EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Search your library"));
+    EXPECT_TRUE(state->resolutionHandPickShowViewControls());
     ASSERT_EQ(started.count(), 1);
     EXPECT_EQ(started.at(0).at(0).toStringList(),
               QStringList({QStringLiteral("Forest"), QStringLiteral("Forest"), QStringLiteral("Island")}));
@@ -2761,6 +2762,7 @@ TEST_F(RuledClientTest, LibraryLookChoiceShowsEveryCardImageButOnlyMatchingCards
     ASSERT_TRUE(state->isResolutionHandPickActive());
     EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Deck);
     EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Look at cards"));
+    EXPECT_FALSE(state->resolutionHandPickShowViewControls());
     ASSERT_EQ(started.count(), 1);
     EXPECT_EQ(started.at(0).at(0).toStringList(),
               QStringList({QStringLiteral("Forest"), QStringLiteral("Grizzly Bears"), QStringLiteral("Island"),

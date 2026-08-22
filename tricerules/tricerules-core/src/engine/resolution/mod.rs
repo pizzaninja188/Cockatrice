@@ -976,6 +976,9 @@ impl GameEngine {
                         zones::draw_discard(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Scry { .. } => zones::scry(&mut cx, effect)?,
+                    effect @ SpellEffectKind::LibraryPartition { .. } => {
+                        zones::library_partition(&mut cx, effect)?
+                    }
                     SpellEffectKind::ManifestDread => zones::manifest_dread(&mut cx)?,
                     effect @ SpellEffectKind::LookChooseToHand { .. } => {
                         zones::look_choose_to_hand(&mut cx, effect)?

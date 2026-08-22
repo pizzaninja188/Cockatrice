@@ -801,6 +801,26 @@ impl GameEngine {
                     })
                     .collect()
             }
+            GameEvent::Surveilled {
+                player: surveilling,
+            } => sources
+                .iter()
+                .flat_map(|source| {
+                    self.matching_snapshot_abilities(source, |condition| {
+                        let TriggerCondition::WheneverPlayerSurveils {
+                            player: player_filter,
+                        } = condition
+                        else {
+                            return false;
+                        };
+                        self.relative_player_matches(
+                            *player_filter,
+                            *surveilling,
+                            source.controller,
+                        )
+                    })
+                })
+                .collect(),
             GameEvent::TargetsChosen {
                 controller: targeting_controller,
                 source: targeting_source,
@@ -1314,7 +1334,8 @@ impl GameEngine {
         match event {
             GameEvent::UpkeepBegin { player }
             | GameEvent::DrawStepBegin { player }
-            | GameEvent::EndStepBegin { player } => Some(*player),
+            | GameEvent::EndStepBegin { player }
+            | GameEvent::Surveilled { player } => Some(*player),
             GameEvent::CardDrawn { drawer, .. } => Some(*drawer),
             GameEvent::TargetsChosen { controller, .. } => Some(*controller),
             _ => None,

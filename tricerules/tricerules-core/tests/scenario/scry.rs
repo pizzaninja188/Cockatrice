@@ -68,8 +68,9 @@ fn opt_bottoming_the_scried_card_draws_the_next_one() {
             .as_ref()
             .expect("scry continuation")
             .continuation,
-        ResolutionContinuation::Scry {
-            stage: PendingScryStage::ChooseBottom,
+        ResolutionContinuation::LibraryPartition {
+            stage: PendingLibraryPartitionStage::ChooseDestination,
+            kind: PendingLibraryPartitionKind::Scry,
             ..
         }
     ));
@@ -180,8 +181,9 @@ fn preordain_keeping_both_asks_for_an_order_then_draws_the_new_top() {
             .as_ref()
             .expect("scry ordering continuation")
             .continuation,
-        ResolutionContinuation::Scry {
-            stage: PendingScryStage::OrderTop,
+        ResolutionContinuation::LibraryPartition {
+            stage: PendingLibraryPartitionStage::OrderTop,
+            kind: PendingLibraryPartitionKind::Scry,
             ..
         }
     ));

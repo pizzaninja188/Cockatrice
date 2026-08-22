@@ -1,84 +1,125 @@
 use super::*;
 
 impl GameEngine {
-    /// CR 701.18: apply one step of a scry.
-    ///
-    /// Step 0's `chosen` is the set going to the bottom of the library; the cards left over stay
-    /// on top. If two or more stay on top the player still has an ordering decision to make
-    /// (CR 701.18a "in any order"), so a second interrupt is parked for it — skipped when 0 or 1
-    /// card remains, where the "choice" has exactly one answer. Scry 1 therefore never reaches
-    /// step 1.
-    ///
-    /// **Both steps place cards one at a time, in submitted order, moving away from the middle of
-    /// the library.** Step 0 pushes each successive card further down, so its *last* entry is
-    /// bottom-most; step 1 pushes each successive card further up, so its *last* entry is the next
-    /// card drawn (matching Brainstorm's put-back). The two prompts spell their direction out,
-    /// since it is not self-evident from the UI.
-    ///
-    /// Both steps are pure reorders of the library `VecDeque`: scry looks at cards without moving
-    /// them between zones, so nothing here goes through `move_object_to_zone` and no zone-change
-    /// trigger fires.
-    pub(super) fn finish_scry(
+    /// Apply one step of a private top-library partition. Scry sends the selected cohort to the
+    /// library bottom; surveil and bounded looks send it to the graveyard. Every kind shares the
+    /// same second interrupt for ordering two or more cards retained on top.
+    pub(super) fn finish_library_partition(
         &mut self,
         pending: PendingResolution,
         chosen: &[u32],
     ) -> Result<RuledEventBatch, EngineError> {
         let controller = pending.deciding_player;
         let Some(idx) = self.state.player_idx(controller) else {
-            return Err(EngineError::Illegal("scrying player missing"));
+            return Err(EngineError::Illegal("library-partition player missing"));
         };
         let mut ev = vec![];
-        let (stack, looked_at, stage) = match &pending.continuation {
-            ResolutionContinuation::Scry {
+        let (stack, looked_at, stage, kind) = match &pending.continuation {
+            ResolutionContinuation::LibraryPartition {
                 stack,
                 looked_at,
                 stage,
-            } => (stack.clone(), looked_at.clone(), *stage),
-            _ => return Err(EngineError::Illegal("scry continuation missing")),
+                kind,
+            } => (stack.clone(), looked_at.clone(), *stage, *kind),
+            _ => {
+                return Err(EngineError::Illegal(
+                    "library-partition continuation missing",
+                ));
+            }
         };
 
-        if stage == PendingScryStage::ChooseBottom {
-            // Everything looked at that was not sent to the bottom stays on top, keeping the
-            // library order it already had. The bottomed cards go down in submitted order
-            // (`push_back` each in turn), so the last one clicked ends up bottom-most.
+        if stage == PendingLibraryPartitionStage::ChooseDestination {
             let remaining: Vec<ObjectId> = looked_at
                 .iter()
                 .copied()
                 .filter(|oid| !chosen.contains(oid))
                 .collect();
 
-            if !chosen.is_empty() {
-                let names = self.object_names(chosen);
-                self.state.players[idx]
-                    .library
-                    .retain(|o| !chosen.contains(o));
-                for &oid in chosen {
-                    self.state.players[idx].library.push_back(oid);
+            match kind {
+                PendingLibraryPartitionKind::Scry => {
+                    if !chosen.is_empty() {
+                        let names = self.object_names(chosen);
+                        self.state.players[idx]
+                            .library
+                            .retain(|oid| !chosen.contains(oid));
+                        for &oid in chosen {
+                            self.state.players[idx].library.push_back(oid);
+                        }
+                        let noun = if chosen.len() == 1 { "card" } else { "cards" };
+                        ev.push(ev_log(format!(
+                            "P{controller} puts {} {noun} on the bottom of their library.",
+                            chosen.len()
+                        )));
+                        ev.push(ev_log_private(
+                            format!("P{controller} bottoms {}.", names.join(", ")),
+                            controller,
+                        ));
+                    } else {
+                        ev.push(ev_log(format!(
+                            "P{controller} keeps every scried card on top."
+                        )));
+                    }
                 }
-                let noun = if chosen.len() == 1 { "card" } else { "cards" };
-                ev.push(ev_log(format!(
-                    "P{controller} puts {} {noun} on the bottom of their library.",
-                    chosen.len()
-                )));
-                ev.push(ev_log_private(
-                    format!("P{controller} bottoms {}.", names.join(", ")),
-                    controller,
-                ));
-            } else {
-                ev.push(ev_log(format!(
-                    "P{controller} keeps every scried card on top."
-                )));
+                PendingLibraryPartitionKind::Surveil | PendingLibraryPartitionKind::Look => {
+                    if !chosen.is_empty() {
+                        let names = self.object_names(chosen);
+                        for &oid in chosen {
+                            let owner = self
+                                .state
+                                .objects
+                                .get(&oid)
+                                .map(|object| object.owner)
+                                .ok_or(EngineError::Illegal("library candidate missing"))?;
+                            let source_library_position = self.state.players[idx]
+                                .library
+                                .iter()
+                                .position(|candidate| *candidate == oid)
+                                .ok_or(EngineError::Illegal(
+                                    "library candidate no longer in library",
+                                ))?
+                                as u32;
+                            move_object_to_zone(
+                                &mut self.state,
+                                self.registry,
+                                oid,
+                                Zone::Graveyard,
+                                None,
+                            )?;
+                            ev.push(permanent_moved_event_with_library_position(
+                                &self.state,
+                                oid,
+                                owner,
+                                rv1::permanent_moved::Destination::Graveyard,
+                                source_library_position,
+                            ));
+                        }
+                        let noun = if chosen.len() == 1 { "card" } else { "cards" };
+                        ev.push(ev_log(format!(
+                            "P{controller} puts {} {noun} into their graveyard.",
+                            chosen.len()
+                        )));
+                        ev.push(ev_log_private(
+                            format!(
+                                "P{controller} puts {} into their graveyard.",
+                                names.join(", ")
+                            ),
+                            controller,
+                        ));
+                    } else {
+                        ev.push(ev_log(format!(
+                            "P{controller} keeps every looked-at card on top."
+                        )));
+                    }
+                }
             }
 
             if remaining.len() > 1 {
-                return self.park_scry_ordering(pending, remaining, ev);
+                return self.park_library_partition_ordering(pending, remaining, ev);
             }
         } else {
-            // Step 1: `chosen` is every remaining card, bottom first. Pull them out and re-seat
-            // them in front in submitted order, so the *last* one ends up as the next draw.
             self.state.players[idx]
                 .library
-                .retain(|o| !chosen.contains(o));
+                .retain(|oid| !chosen.contains(oid));
             for &oid in chosen {
                 self.state.players[idx].library.push_front(oid);
             }
@@ -95,12 +136,10 @@ impl GameEngine {
             ));
         }
 
-        self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
+        self.complete_library_partition(stack, controller, kind, ev)
     }
 
-    /// Park scry's second interrupt: order the cards staying on top (CR 701.18a "in any order").
-    /// Same `item` and `resume_effect_index` as step 0, so the spell's tail still resumes after.
-    fn park_scry_ordering(
+    fn park_library_partition_ordering(
         &mut self,
         pending: PendingResolution,
         remaining: Vec<ObjectId>,
@@ -112,17 +151,32 @@ impl GameEngine {
         let n = remaining.len() as u32;
         let (candidate_card_ids, candidate_names) =
             super::resolution::candidate_identities(self, &remaining);
+        let kind = match &pending.continuation {
+            ResolutionContinuation::LibraryPartition { kind, .. } => *kind,
+            _ => unreachable!("validated library-partition continuation"),
+        };
+        let label = match kind {
+            PendingLibraryPartitionKind::Scry => "Scry",
+            PendingLibraryPartitionKind::Surveil => "Surveil",
+            PendingLibraryPartitionKind::Look => "Look",
+        };
         let prompt = format!(
-            "Scry: click the {n} cards staying on top in order — the last one you click is the \
+            "{label}: click the {n} cards staying on top in order — the last one you click is the \
              next card you draw."
         );
+        let choice_kind = match kind {
+            PendingLibraryPartitionKind::Scry => rv1::ChoiceKind::LibraryTop,
+            PendingLibraryPartitionKind::Surveil | PendingLibraryPartitionKind::Look => {
+                rv1::ChoiceKind::LibraryLook
+            }
+        };
         ev.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     deciding_player_id: controller,
                     source_object_id,
                     prompt_text: prompt.clone(),
-                    choice_kind: rv1::ChoiceKind::LibraryTop as i32,
+                    choice_kind: choice_kind as i32,
                     candidate_object_ids: remaining.clone(),
                     candidate_card_ids,
                     candidate_names,
@@ -131,11 +185,15 @@ impl GameEngine {
                     ordered: true,
                     unique_names: false,
                     candidate_server_card_ids: Vec::new(),
-                    candidate_selectable: Vec::new(),
                     resolution_branches: Vec::new(),
                     mana_cost: String::new(),
                     generic_mana_cost: 0,
                     payment_currently_legal: false,
+                    candidate_selectable: match kind {
+                        PendingLibraryPartitionKind::Scry => Vec::new(),
+                        PendingLibraryPartitionKind::Surveil
+                        | PendingLibraryPartitionKind::Look => vec![true; n as usize],
+                    },
                 },
             )),
         });
@@ -145,12 +203,26 @@ impl GameEngine {
         pending.presentation.max = n;
         pending.presentation.ordered = true;
         pending.presentation.prompt = prompt;
-        let ResolutionContinuation::Scry { stage, .. } = &mut pending.continuation else {
-            unreachable!("validated scry continuation")
+        let ResolutionContinuation::LibraryPartition { stage, .. } = &mut pending.continuation
+        else {
+            unreachable!("validated library-partition continuation")
         };
-        *stage = PendingScryStage::OrderTop;
+        *stage = PendingLibraryPartitionStage::OrderTop;
         self.state.pending_resolution = Some(pending);
         Ok(finish_with_events(self, ev))
+    }
+
+    fn complete_library_partition(
+        &mut self,
+        stack: ParkedStackResolution,
+        controller: PlayerId,
+        kind: PendingLibraryPartitionKind,
+        ev: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if kind == PendingLibraryPartitionKind::Surveil {
+            self.fire_triggers(&[GameEvent::Surveilled { player: controller }]);
+        }
+        self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
     }
 
     /// Finish either step of a bounded library look. Step 0 may move one matching card to hand;
