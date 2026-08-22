@@ -287,14 +287,48 @@ pub(super) fn discard_cards(
     let Some(&target) = cx.targets.first() else {
         return Ok(EffectOutcome::Continue);
     };
-    discard_for_player(
+    choose_hand_cards_for_player(
         cx,
         target as PlayerId,
+        HandCardChoiceSpec {
+            count,
+            chooser,
+            card_filter: card_filter.as_ref(),
+            optional,
+            draw_after: 0,
+            action: HandCardAction::Discard,
+        },
+    )
+}
+
+pub(super) fn exile_cards_from_hand(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ExileCardsFromHand {
         count,
+        target: _,
         chooser,
-        card_filter.as_ref(),
+        card_filter,
         optional,
-        0,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(&target) = cx.targets.first() else {
+        return Ok(EffectOutcome::Continue);
+    };
+    choose_hand_cards_for_player(
+        cx,
+        target as PlayerId,
+        HandCardChoiceSpec {
+            count,
+            chooser,
+            card_filter: card_filter.as_ref(),
+            optional,
+            draw_after: 0,
+            action: HandCardAction::Exile,
+        },
     )
 }
 
@@ -327,37 +361,56 @@ pub(super) fn draw_discard(
     match order {
         DrawDiscardOrder::DrawThenDiscard => {
             draw_cards_for_player(cx.engine, cx.events, player, draw_count, cx.spell_label)?;
-            discard_for_player(
+            choose_hand_cards_for_player(
                 cx,
                 player,
-                discard_count,
-                DiscardChooser::AffectedPlayer,
-                None,
-                false,
-                0,
+                HandCardChoiceSpec {
+                    count: discard_count,
+                    chooser: DiscardChooser::AffectedPlayer,
+                    card_filter: None,
+                    optional: false,
+                    draw_after: 0,
+                    action: HandCardAction::Discard,
+                },
             )
         }
-        DrawDiscardOrder::DiscardThenDraw => discard_for_player(
+        DrawDiscardOrder::DiscardThenDraw => choose_hand_cards_for_player(
             cx,
             player,
-            discard_count,
-            DiscardChooser::AffectedPlayer,
-            None,
-            optional,
-            draw_count,
+            HandCardChoiceSpec {
+                count: discard_count,
+                chooser: DiscardChooser::AffectedPlayer,
+                card_filter: None,
+                optional,
+                draw_after: draw_count,
+                action: HandCardAction::Discard,
+            },
         ),
     }
 }
 
-fn discard_for_player(
-    cx: &mut EffectCx<'_>,
-    affected_player: PlayerId,
+struct HandCardChoiceSpec<'a> {
     count: u32,
     chooser: DiscardChooser,
-    card_filter: Option<&CardTypeFilter>,
+    card_filter: Option<&'a CardTypeFilter>,
     optional: bool,
     draw_after: u32,
+    action: HandCardAction,
+}
+
+fn choose_hand_cards_for_player(
+    cx: &mut EffectCx<'_>,
+    affected_player: PlayerId,
+    spec: HandCardChoiceSpec<'_>,
 ) -> Result<EffectOutcome, EngineError> {
+    let HandCardChoiceSpec {
+        count,
+        chooser,
+        card_filter,
+        optional,
+        draw_after,
+        action,
+    } = spec;
     let controller = cx.controller;
     let top = cx.top;
     let spell_label = cx.spell_label;
@@ -376,42 +429,35 @@ fn discard_for_player(
         .collect();
 
     if chooser == DiscardChooser::Random {
-        let discard_count = (count as usize).min(eligible.len());
-        if discard_count == 0 {
+        let chosen_count = (count as usize).min(eligible.len());
+        if chosen_count == 0 {
             events.push(ev_log(format!(
-                "P{affected_player} has no cards to discard ({spell_label})."
+                "P{affected_player} has no eligible cards to {} ({spell_label}).",
+                hand_action_verb(action)
             )));
         } else {
             let mut shuffled = eligible;
             shuffle_object_ids_for_current_command(&engine.state, affected_player, &mut shuffled);
-            for oid in shuffled.into_iter().take(discard_count) {
-                let card_name = object_display_name(&engine.state, engine.registry, oid);
-                move_object_to_zone(
-                    &mut engine.state,
-                    engine.registry,
-                    oid,
-                    Zone::Graveyard,
-                    None,
-                )?;
-                events.push(permanent_moved_event(
-                    &engine.state,
-                    oid,
+            for oid in shuffled.into_iter().take(chosen_count) {
+                perform_hand_card_action(
+                    engine,
+                    events,
                     affected_player,
-                    rv1::permanent_moved::Destination::Graveyard,
-                ));
-                events.push(ev_log(format!(
-                    "P{affected_player} discards {card_name} ({spell_label})."
-                )));
+                    oid,
+                    action,
+                    spell_label,
+                )?;
             }
         }
         return Ok(EffectOutcome::Continue);
     }
 
-    if hand.is_empty() {
+    if eligible.is_empty() {
         events.push(ev_log(format!(
-            "P{affected_player} has no cards to discard ({spell_label})."
+            "P{affected_player} has no eligible cards to {} ({spell_label}).",
+            hand_action_verb(action)
         )));
-        if draw_after > 0 && !optional {
+        if action == HandCardAction::Discard && draw_after > 0 && !optional {
             draw_cards_for_player(engine, events, affected_player, draw_after, spell_label)?;
         }
         return Ok(EffectOutcome::Continue);
@@ -434,10 +480,11 @@ fn discard_for_player(
         .iter()
         .map(|object_id| eligible.contains(object_id))
         .collect();
+    let verb = hand_action_verb(action);
     let prompt = if optional {
-        format!("P{deciding_player}: you may choose a card for P{affected_player} to discard.")
+        format!("P{deciding_player}: you may choose a card for P{affected_player} to {verb}.")
     } else {
-        format!("P{deciding_player}: choose {n} card(s) for P{affected_player} to discard.")
+        format!("P{deciding_player}: choose {n} card(s) for P{affected_player} to {verb}.")
     };
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
@@ -467,7 +514,7 @@ fn discard_for_player(
         deciding_player,
         presentation: PendingResolutionPresentation {
             source_object_id: top.id,
-            candidates: eligible,
+            candidates: eligible.clone(),
             min,
             max: n,
             ordered: false,
@@ -475,16 +522,103 @@ fn discard_for_player(
             prompt,
             choice_kind,
         },
-        continuation: ResolutionContinuation::Discard {
+        continuation: ResolutionContinuation::HandChoice {
             stack: ParkedStackResolution::new(top.clone()),
-            discard: PendingDiscard {
+            hand_choice: PendingHandChoice {
                 affected_player,
+                action,
+                candidate_generations: eligible
+                    .iter()
+                    .map(|object_id| {
+                        (
+                            *object_id,
+                            engine
+                                .state
+                                .zone_change_generation
+                                .get(object_id)
+                                .copied()
+                                .unwrap_or(0),
+                        )
+                    })
+                    .collect(),
                 draw_after,
                 draw_only_if_discarded: optional,
             },
         },
     });
     Ok(EffectOutcome::Suspended)
+}
+
+fn hand_action_verb(action: HandCardAction) -> &'static str {
+    match action {
+        HandCardAction::Discard => "discard",
+        HandCardAction::Exile => "exile",
+    }
+}
+
+fn perform_discard_action(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    affected_player: PlayerId,
+    object_id: ObjectId,
+    spell_label: &str,
+) -> Result<(), EngineError> {
+    let (card_name, moved) = perform_discard(
+        &mut engine.state,
+        engine.registry,
+        affected_player,
+        object_id,
+    )?;
+    events.push(moved);
+    events.push(ev_log(format!(
+        "P{affected_player} discards {card_name} ({spell_label})."
+    )));
+    Ok(())
+}
+
+fn perform_exile_from_hand(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    affected_player: PlayerId,
+    object_id: ObjectId,
+    spell_label: &str,
+) -> Result<(), EngineError> {
+    let card_name = object_display_name(&engine.state, engine.registry, object_id);
+    move_object_to_zone(
+        &mut engine.state,
+        engine.registry,
+        object_id,
+        Zone::Exile,
+        None,
+    )?;
+    events.push(permanent_moved_event(
+        &engine.state,
+        object_id,
+        affected_player,
+        rv1::permanent_moved::Destination::Exile,
+    ));
+    events.push(ev_log(format!(
+        "P{affected_player} exiles {card_name} from their hand ({spell_label})."
+    )));
+    Ok(())
+}
+
+pub(crate) fn perform_hand_card_action(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    affected_player: PlayerId,
+    object_id: ObjectId,
+    action: HandCardAction,
+    spell_label: &str,
+) -> Result<(), EngineError> {
+    match action {
+        HandCardAction::Discard => {
+            perform_discard_action(engine, events, affected_player, object_id, spell_label)
+        }
+        HandCardAction::Exile => {
+            perform_exile_from_hand(engine, events, affected_player, object_id, spell_label)
+        }
+    }
 }
 
 pub(super) fn mill_target_player(

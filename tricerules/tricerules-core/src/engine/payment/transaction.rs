@@ -417,21 +417,14 @@ impl GameEngine {
                     owner,
                     ..
                 } => {
-                    let card_name = object_display_name(&self.state, self.registry, oid);
-                    crate::engine::resolution::move_object_to_zone(
+                    let (card_name, moved) = crate::engine::resolution::perform_discard(
                         &mut self.state,
                         self.registry,
+                        owner,
                         oid,
-                        Zone::Graveyard,
-                        None,
                     )
                     .expect("prevalidated discard cost must commit");
-                    payment.move_events.push(permanent_moved_event(
-                        &self.state,
-                        oid,
-                        owner,
-                        rv1::permanent_moved::Destination::Graveyard,
-                    ));
+                    payment.move_events.push(moved);
                     let paid_cost = PaidCardCost::Discard {
                         object_id: oid,
                         card_name,

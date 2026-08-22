@@ -707,6 +707,56 @@ TEST_F(RuledBatchTest, LibraryLookChoiceKeepsImagesAndEligibilityPrivate)
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+// Coercion/Thoughtseize/Aggressive Negotiations expose the complete target hand and the
+// engine-authored eligibility mask only to the deciding player. The other seat gets neither the
+// identities nor a derived type oracle.
+TEST_F(RuledBatchTest, OpponentHandChoiceKeepsIdentitiesAndEligibilityPrivate)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
+    choice->set_prompt_text("Choose a nonland card to exile.");
+    choice->set_min(1);
+    choice->set_max(1);
+    for (const quint32 oid : {101u, 102u}) {
+        choice->add_candidate_object_ids(oid);
+    }
+    for (const char *cardId : {"forest", "grizzly_bears"}) {
+        choice->add_candidate_card_ids(cardId);
+    }
+    for (const char *name : {"Forest", "Grizzly Bears"}) {
+        choice->add_candidate_names(name);
+    }
+    choice->add_candidate_selectable(false);
+    choice->add_candidate_selectable(true);
+
+    const auto forP1 = redactFor(batch, p1);
+    const auto p1ChoiceIt = std::find_if(forP1.events().begin(), forP1.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p1ChoiceIt, forP1.events().end());
+    const auto &p1Choice = p1ChoiceIt->resolution_choice_required();
+    ASSERT_EQ(p1Choice.candidate_names_size(), 2);
+    ASSERT_EQ(p1Choice.candidate_server_card_ids_size(), 2);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(0), 0);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(1), 1);
+    ASSERT_EQ(p1Choice.candidate_selectable_size(), 2);
+    EXPECT_FALSE(p1Choice.candidate_selectable(0));
+    EXPECT_TRUE(p1Choice.candidate_selectable(1));
+
+    const auto forP2 = redactFor(batch, p2);
+    const auto p2ChoiceIt = std::find_if(forP2.events().begin(), forP2.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p2ChoiceIt, forP2.events().end());
+    const auto &p2Choice = p2ChoiceIt->resolution_choice_required();
+    EXPECT_EQ(p2Choice.candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_card_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_names_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_selectable_size(), 0);
+    EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
+}
+
 // CR 603.3b: which abilities triggered is public information, so unlike a resolution choice this
 // event survives redaction intact for everyone. Only the *choice* belongs to the deciding player,
 // and that is enforced by the engine rejecting a SubmitTriggerOrder from anyone else.
@@ -898,6 +948,44 @@ TEST_F(RuledBatchTest, PrivateZonesUnchangedSkipsTheHandAndLibraryReconcile)
     const QList<Server_Card *> &graveyard = p1->getZones().value(ZoneNames::GRAVE)->getCards();
     ASSERT_EQ(graveyard.size(), 1);
     EXPECT_EQ(graveyard.first(), inHand) << "cleanup must move the selected physical card";
+}
+
+TEST_F(RuledBatchTest, OpponentHandExileMovesTheBoundPhysicalCardToPublicExile)
+{
+    Server_Card *selected = addCardToHand(p2, "Grizzly Bears");
+    const int physicalId = selected->getId();
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    ruled::v1::RuledPerPlayerView p2View = buildPerPlayerView(p2, {}, {});
+    auto *handCard = p2View.add_hand_cards();
+    handCard->set_card_id("grizzly_bears");
+    handCard->set_object_id(12601u);
+    *seedView->add_per_player() = p2View;
+    callBatchApply(seed);
+    ASSERT_EQ(bindingFor(p2).findCardByEngineOid(p2, 12601u), selected);
+
+    ruled::v1::IpcResponse exile;
+    exile.set_ok(true);
+    auto *moved = exile.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(12601u);
+    moved->set_owner_player_id(p2->getPlayerId());
+    moved->set_controller_player_id(p2->getPlayerId());
+    moved->set_card_id("grizzly_bears");
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_EXILE);
+    auto *postView = exile.mutable_batch()->add_events()->mutable_zone_view();
+    ruled::v1::RuledPerPlayerView postP2 = buildPerPlayerView(p2, {}, {});
+    postP2.add_exile_object_ids(12601u);
+    *postView->add_per_player() = postP2;
+
+    callBatchApply(exile);
+
+    EXPECT_TRUE(p2->getZones().value(ZoneNames::HAND)->getCards().isEmpty());
+    const QList<Server_Card *> &publicExile = p2->getZones().value(ZoneNames::EXILE)->getCards();
+    ASSERT_EQ(publicExile.size(), 1);
+    EXPECT_EQ(publicExile.first(), selected);
+    EXPECT_EQ(publicExile.first()->getId(), physicalId);
 }
 
 TEST_F(RuledBatchTest, BattlefieldOmissionRetainsMapsFlagsAndPhysicalState)

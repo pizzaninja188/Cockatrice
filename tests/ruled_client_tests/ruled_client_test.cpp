@@ -1004,6 +1004,27 @@ TEST(RuledTargetRefKindTest, UsesGraveyardCandidateDomainForSelectionPresentatio
     EXPECT_EQ(ruledTargetRefKind(group, 7, kLocalPlayer), ruled::v1::TARGET_REF_KIND_GRAVEYARD);
 }
 
+TEST(RuledTargetGroupConfirmationTest, OptionalSingleTargetNeedsAnExplicitZeroTargetConfirmation)
+{
+    RuledTargetGroupData optionalCreature;
+    optionalCreature.minTargets = 0;
+    optionalCreature.maxTargets = 1;
+
+    EXPECT_TRUE(ruledTargetGroupUsesExplicitConfirmation(optionalCreature));
+
+    RuledTargetGroupData requiredSingle;
+    requiredSingle.minTargets = 1;
+    requiredSingle.maxTargets = 1;
+    EXPECT_FALSE(ruledTargetGroupUsesExplicitConfirmation(requiredSingle));
+
+    PendingRuledSpellCast pending;
+    pending.valid = true;
+    pending.waitingForTarget = true;
+    pending.minTargets = 0;
+    pending.maxTargets = 1;
+    EXPECT_TRUE(ruledPendingTargetSelectionCanConfirm(pending));
+}
+
 TEST(RuledRestrictedManaModelTest, FullyStagedGroupConsumesNoLayoutColumn)
 {
     RuledRestrictedManaGroup group;
@@ -2886,6 +2907,8 @@ TEST_F(RuledClientTest, OpponentHandChoiceRendersAsARevealedPickTitledAsAHand)
     }
     rcr->add_candidate_names("Black Lotus");
     rcr->add_candidate_names("Swamp");
+    rcr->add_candidate_selectable(true);
+    rcr->add_candidate_selectable(false);
     apply(batch);
 
     ASSERT_EQ(revealed.count(), 1);
@@ -2895,6 +2918,10 @@ TEST_F(RuledClientTest, OpponentHandChoiceRendersAsARevealedPickTitledAsAHand)
     EXPECT_EQ(revealed.at(0).at(1).toStringList(),
               QStringList({QStringLiteral("Black Lotus"), QStringLiteral("Swamp")}));
 
+    EXPECT_TRUE(state->isResolutionHandPickCardSelectable(0));
+    EXPECT_FALSE(state->isResolutionHandPickCardSelectable(1));
+    state->toggleResolutionHandPickCard(1);
+    EXPECT_EQ(state->resolutionHandPickSelected(), 0);
     state->toggleResolutionHandPickCard(0);
     EXPECT_EQ(state->resolutionHandPickSelected(), 1);
 }

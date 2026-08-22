@@ -47,7 +47,7 @@ void RuledTargetUi::reconcile(PlayerActions *actions)
         const auto group = currentRuledSpellTargetGroup(spell, *state);
         const QString prompt = group.has_value() ? group->promptText : spell.cardName;
         emit actions->ruledSpellTargetingChanged(true, prompt);
-        if (group.has_value() && group->maxTargets != 1) {
+        if (group.has_value() && ruledTargetGroupUsesExplicitConfirmation(*group)) {
             emit actions->ruledMultiTargetSelectionUpdated(spell.selectedTargetOids.size(), group->minTargets,
                                                            group->maxTargets);
         }

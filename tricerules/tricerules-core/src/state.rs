@@ -574,9 +574,9 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         branch: PendingResolutionBranch,
     },
-    Discard {
+    HandChoice {
         stack: ParkedStackResolution,
-        discard: PendingDiscard,
+        hand_choice: PendingHandChoice,
     },
     Sacrifice {
         stack: ParkedStackResolution,
@@ -624,7 +624,7 @@ impl ResolutionContinuation {
             Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
-            | Self::Discard { stack, .. }
+            | Self::HandChoice { stack, .. }
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
@@ -643,7 +643,7 @@ impl ResolutionContinuation {
             Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
-            | Self::Discard { stack, .. }
+            | Self::HandChoice { stack, .. }
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
@@ -680,9 +680,17 @@ pub struct PendingResolution {
     pub continuation: ResolutionContinuation,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct PendingDiscard {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HandCardAction {
+    Discard,
+    Exile,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingHandChoice {
     pub affected_player: PlayerId,
+    pub action: HandCardAction,
+    pub candidate_generations: Vec<(ObjectId, u64)>,
     pub draw_after: u32,
     pub draw_only_if_discarded: bool,
 }

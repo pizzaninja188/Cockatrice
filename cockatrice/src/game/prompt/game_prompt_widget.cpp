@@ -648,7 +648,8 @@ void GamePromptWidget::updateCombatButtonsVisibility()
             confirmSpellDamageButton->setVisible(true);
             return;
         }
-        // Multi-target spells confirm an in-progress selection; single-target ones just wait.
+        // Variable and optional target ranges need confirmation; required exactly-one groups
+        // complete directly on the target click.
         confirmTargetsButton->setVisible(targetingSources.testFlag(TargetingSource::SpellTargetSelection) &&
                                          multiTargetMaxCount >= 0 && multiTargetSelectedCount >= 0);
         confirmTargetsButton->setEnabled(multiTargetSelectedCount >= multiTargetMinCount &&

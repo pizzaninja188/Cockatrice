@@ -22,7 +22,7 @@ use super::*;
 
 mod branches;
 mod copy_choices;
-mod discard;
+mod hand_choice;
 mod library_order;
 mod library_search;
 mod manifest_dread;
@@ -155,8 +155,8 @@ impl GameEngine {
             ResolutionContinuation::ManifestDread { .. } => {
                 return self.finish_manifest_dread(pending, chosen[0]);
             }
-            ResolutionContinuation::Discard { .. } => {
-                return self.finish_discard_chosen(pending, chosen);
+            ResolutionContinuation::HandChoice { .. } => {
+                return self.finish_hand_choice(pending, chosen);
             }
             ResolutionContinuation::Sacrifice { .. } => {
                 return self.finish_sacrifice_chosen(pending, chosen);

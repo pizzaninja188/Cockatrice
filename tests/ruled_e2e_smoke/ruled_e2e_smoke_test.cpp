@@ -256,6 +256,18 @@ public:
     quint32 latestBoltOid = 0;
     bool devCurseConjureSent = false;
     bool devCurseManaSent = false;
+    bool devAggressiveVictimSent = false;
+    bool devAggressiveConjureSent = false;
+    bool devAggressiveManaSent = false;
+    bool aggressiveCast = false;
+    bool sawAggressiveChoicePrivate = false;
+    bool sawOpponentAggressiveChoiceRedacted = false;
+    bool submittedAggressiveChoice = false;
+    bool sawAggressiveExile = false;
+    bool sawAggressiveCounter = false;
+    bool sawAggressivePhysicalHandToExile = false;
+    bool aggressivePhysicalIdentityContinuous = true;
+    quint32 aggressiveChosenOid = 0;
     bool curseCast = false;
     bool devManifestSpellConjured = false;
     bool devManifestManaSent = false;
@@ -285,6 +297,7 @@ public:
     quint32 roomOid = 0;
     quint64 roomGeneration = 0;
     int roomServerCardId = -1;
+    bool sawRoomPhysicalAnnotation = false;
     // Flashback (CR 702.34) exercises the one relay path nothing else covers: the physical
     // card is sourced from the GRAVE pile rather than the hand. Tracked through the freeform
     // Event_MoveCard stream, because the ruled batch looks identical whether or not the relay
@@ -657,6 +670,12 @@ public:
                     sawRenewGraveToExile = true;
                     renewPhysicalIdentityContinuous = renewSourcePhysicalId >= 0 && mc.card_id() == renewSourcePhysicalId;
                 }
+                if (name == QLatin1String("Grizzly Bears") && from == hand && to == exile &&
+                    (submittedAggressiveChoice || sawOpponentAggressiveChoiceRedacted)) {
+                    sawAggressiveExile = true;
+                    sawAggressivePhysicalHandToExile = true;
+                    aggressivePhysicalIdentityContinuous = mc.card_id() == mc.new_card_id();
+                }
                 if (name == QLatin1String("Apostle's Blessing") &&
                     (mc.start_player_id() == myId || mc.target_player_id() == myId)) {
                     if (from == hand && to == stack) {
@@ -709,7 +728,9 @@ public:
                         sawFlashbackStackToExile = true;
                         log(QStringLiteral("flashback: '%1' stack -> exile (mine)").arg(name));
                     }
-                } else if ((from == grave || to == exile) && name != QLatin1String("Sagu Pummeler")) {
+                } else if ((from == grave || to == exile) && name != QLatin1String("Sagu Pummeler") &&
+                           !(name == QLatin1String("Grizzly Bears") &&
+                             (submittedAggressiveChoice || sawOpponentAggressiveChoiceRedacted))) {
                     // Any *other* card taking the flashback path is the wrong-card bug.
                     ADD_FAILURE() << "unexpected card on the flashback path: "
                                   << name.toStdString() << " " << from.toStdString() << " -> "
@@ -723,6 +744,10 @@ public:
                     sawPhysicalUntap = sawPhysicalUntap || attr.attr_value() == "0";
                 } else if (attr.attribute() == AttrAnnotation) {
                     annotationByServerCardId[attr.card_id()] = QString::fromStdString(attr.attr_value());
+                    sawRoomPhysicalAnnotation =
+                        sawRoomPhysicalAnnotation ||
+                        QString::fromStdString(attr.attr_value())
+                            .contains(QStringLiteral("Doors: Derelict Attic (unlocked), Widow's Walk (unlocked)"));
                     sawProtectionPhysicalAnnotation =
                         sawProtectionPhysicalAnnotation ||
                         QString::fromStdString(attr.attr_value()).contains(
@@ -930,6 +955,26 @@ public:
                             rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0;
                     }
                 }
+                if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND) {
+                    if (rcr.deciding_player_id() == myId) {
+                        bool hasEligibleBear = false;
+                        for (int i = 0; i < rcr.candidate_names_size(); ++i) {
+                            if (rcr.candidate_names(i) == "Grizzly Bears" &&
+                                i < rcr.candidate_selectable_size() && rcr.candidate_selectable(i)) {
+                                hasEligibleBear = true;
+                            }
+                        }
+                        sawAggressiveChoicePrivate =
+                            rcr.candidate_object_ids_size() == rcr.candidate_names_size() &&
+                            rcr.candidate_names_size() == rcr.candidate_server_card_ids_size() &&
+                            rcr.candidate_names_size() == rcr.candidate_selectable_size() && hasEligibleBear;
+                    } else {
+                        sawOpponentAggressiveChoiceRedacted =
+                            rcr.candidate_object_ids_size() == 0 && rcr.candidate_card_ids_size() == 0 &&
+                            rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0 &&
+                            rcr.candidate_selectable_size() == 0;
+                    }
+                }
                 if (rcr.deciding_player_id() == myId &&
                     (rcr.candidate_object_ids_size() > 0 ||
                      (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH && rcr.min() == 0) ||
@@ -945,6 +990,12 @@ public:
                 }
             } else if (ev.has_permanent_moved()) {
                 const auto &moved = ev.permanent_moved();
+                if (moved.destination() == ruled::v1::PermanentMoved::DESTINATION_EXILE &&
+                    moved.card_id() == "grizzly_bears" &&
+                    (submittedAggressiveChoice || sawOpponentAggressiveChoiceRedacted)) {
+                    aggressiveChosenOid = moved.object_id();
+                    sawAggressiveExile = true;
+                }
                 if (moved.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD &&
                     (moved.card_id() == "mountain" || sawEvolvingWildsPhysicalDeckToTable)) {
                     sawEvolvingWildsPermanentMoved = true;
@@ -1044,6 +1095,11 @@ public:
                             }
                             if (perm.cardId == QLatin1String("anti-venom,_horrifying_healer")) {
                                 protectionTargetOid = perm.oid;
+                            }
+                            if (perm.oid == manifestOid &&
+                                (submittedAggressiveChoice || sawOpponentAggressiveChoiceRedacted) &&
+                                perm.power >= 6 && perm.toughness >= 6) {
+                                sawAggressiveCounter = true;
                             }
                             const int expectedCurseTarget = role == Role::Aggressor ? oppId : myId;
                             if (perm.cardId == QLatin1String("curse_of_disturbance") &&
@@ -1394,12 +1450,7 @@ public:
 
     bool hasRoomPhysicalAnnotation() const
     {
-        if (roomServerCardId < 0) {
-            return false;
-        }
-        const auto annotation = annotationByServerCardId.find(roomServerCardId);
-        return annotation != annotationByServerCardId.end() &&
-               annotation->second.contains(QStringLiteral("Doors: Derelict Attic (unlocked), Widow's Walk (unlocked)"));
+        return sawRoomPhysicalAnnotation;
     }
 
     std::optional<quint32> firstOwnUntapped(const QString &cardId) const
@@ -1661,6 +1712,7 @@ public:
                 isLibrarySearch && emptyTypecyclingActivated && !submittedEmptyTypecyclingChoice;
             const bool isManifestDread = rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD;
             const bool isSurveil = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK;
+            const bool isOpponentHand = rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND;
             const QString prompt = QString::fromStdString(rcr.prompt_text());
             const bool isEntryReplacement = isReplacement && prompt.contains(QStringLiteral("entering the battlefield"));
             const bool isDamagePrevention = isReplacement && !isEntryReplacement;
@@ -1694,6 +1746,23 @@ public:
                 choice->add_chosen_object_ids(rcr.candidate_object_ids(chosen));
                 manifestOid = rcr.candidate_object_ids(chosen);
                 submittedManifestChoice = true;
+            } else if (isOpponentHand) {
+                int chosen = -1;
+                for (int i = 0; i < rcr.candidate_names_size(); ++i) {
+                    if (rcr.candidate_names(i) == "Grizzly Bears" &&
+                        i < rcr.candidate_selectable_size() && rcr.candidate_selectable(i)) {
+                        chosen = i;
+                        break;
+                    }
+                }
+                if (chosen < 0) {
+                    ADD_FAILURE() << "opponent-hand candidates did not contain an eligible Grizzly Bears";
+                    pendingChoice.reset();
+                    return;
+                }
+                aggressiveChosenOid = rcr.candidate_object_ids(chosen);
+                choice->add_chosen_object_ids(aggressiveChosenOid);
+                submittedAggressiveChoice = true;
             } else {
                 for (int i = 0; i < need && i < rcr.candidate_object_ids_size(); ++i) {
                     choice->add_chosen_object_ids(rcr.candidate_object_ids(i));
@@ -1719,7 +1788,7 @@ public:
                 submittedDamagePreventionChoice = true;
             } else if (isEntryReplacement) {
                 submittedEntryReplacementChoice = true;
-            } else if (!isManifestDread && !isTypecycling && !isEmptyTypecycling && !isSurveil) {
+            } else if (!isManifestDread && !isOpponentHand && !isTypecycling && !isEmptyTypecycling && !isSurveil) {
                 submittedBrainstormChoice = true;
             }
             sendRuled(cmd, QStringLiteral("submit resolution choice (%1 cards)").arg(need));
@@ -2084,11 +2153,66 @@ public:
                                                                  permanent.power == 5 && permanent.toughness == 5 &&
                                                                  permanent.reach;
                                                       });
-                    sawRenewCounters = renewed != battlefield->second.end();
+                    sawRenewCounters = sawRenewCounters || renewed != battlefield->second.end();
                 }
                 if (!sawRenewCounters) {
                     return;
                 }
+            }
+            if (!devAggressiveVictimSent) {
+                devAggressiveVictimSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(oppId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Grizzly Bears");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure Aggressive Negotiations victim into opponent hand"));
+                return;
+            }
+            if (!devAggressiveConjureSent) {
+                devAggressiveConjureSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                auto *put = dev->mutable_put_card_in_zone();
+                put->set_card_name("Aggressive Negotiations");
+                put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                sendRuled(cmd, QStringLiteral("dev: conjure Aggressive Negotiations into hand"));
+                return;
+            }
+            if (!devAggressiveManaSent) {
+                devAggressiveManaSent = true;
+                ruled::v1::RuledCommand cmd;
+                auto *dev = cmd.mutable_dev_command();
+                dev->set_target_player_id(myId);
+                dev->mutable_add_mana()->set_b(1);
+                dev->mutable_add_mana()->set_c(2);
+                sendRuled(cmd, QStringLiteral("dev: add {2}{B} for Aggressive Negotiations"));
+                return;
+            }
+            if (!aggressiveCast) {
+                if (const auto *spell =
+                        handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Aggressive Negotiations"))) {
+                    ruled::v1::RuledCommand cmd;
+                    auto *cast = cmd.mutable_cast_spell();
+                    cast->mutable_source()->set_hand_index(spell->hand_index());
+                    auto *opponent = cast->add_targets();
+                    opponent->set_object_id(static_cast<quint32>(oppId));
+                    opponent->set_group_index(0);
+                    opponent->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+                    auto *creature = cast->add_targets();
+                    creature->set_object_id(manifestOid);
+                    creature->set_group_index(1);
+                    creature->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+                    aggressiveCast = true;
+                    sendRuled(cmd, QStringLiteral("cast Aggressive Negotiations targeting opponent and oid %1")
+                                       .arg(manifestOid));
+                    return;
+                }
+            }
+            if (aggressiveCast && !submittedAggressiveChoice) {
+                return;
             }
             if (!devCurseConjureSent) {
                 devCurseConjureSent = true;
@@ -2918,6 +3042,11 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.submittedEmptyTypecyclingChoice &&
                p1.sawOwnRenewAction && p2.sawOpponentRenewActionRedacted && p1.sawRenewGraveToExile &&
                p1.renewPhysicalIdentityContinuous && p1.sawRenewCounters &&
+               p1.sawAggressiveChoicePrivate && p2.sawOpponentAggressiveChoiceRedacted &&
+               p1.submittedAggressiveChoice && p1.sawAggressiveExile && p2.sawAggressiveExile &&
+               p1.sawAggressiveCounter && p2.sawAggressiveCounter &&
+               p1.sawAggressivePhysicalHandToExile && p2.sawAggressivePhysicalHandToExile &&
+               p1.aggressivePhysicalIdentityContinuous && p2.aggressivePhysicalIdentityContinuous &&
                p1.sawCursePlayerAttachment && p2.sawCursePlayerAttachment && p1.hasCursePhysicalAnnotation() &&
                p2.hasCursePhysicalAnnotation() &&
                p1.sawBoltLifeLoss && p1.sawBorosCharmPushWithMode && p1.sawBorosCharmLifeLoss &&
@@ -3158,6 +3287,15 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "the graveyard ability was not published exclusively to its owner";
     EXPECT_TRUE(p1.sawRenewGraveToExile && p1.renewPhysicalIdentityContinuous && p1.sawRenewCounters)
         << "Renew did not exile the same physical source and add two +1/+1 counters plus reach";
+    EXPECT_TRUE(p1.sawAggressiveChoicePrivate && p2.sawOpponentAggressiveChoiceRedacted)
+        << "Aggressive Negotiations did not keep hand identities and eligibility chooser-private";
+    EXPECT_TRUE(p1.submittedAggressiveChoice && p1.sawAggressiveExile && p2.sawAggressiveExile)
+        << "Aggressive Negotiations did not submit and publish the selected hand-card exile";
+    EXPECT_TRUE(p1.sawAggressiveCounter && p2.sawAggressiveCounter)
+        << "the +1/+1 counter was not published after the parked hand choice resumed";
+    EXPECT_TRUE(p1.sawAggressivePhysicalHandToExile && p2.sawAggressivePhysicalHandToExile &&
+                p1.aggressivePhysicalIdentityContinuous && p2.aggressivePhysicalIdentityContinuous)
+        << "Aggressive Negotiations did not preserve the selected physical hand card in exile";
     EXPECT_EQ(p1.manifestServerCardId, p2.manifestServerCardId)
         << "clients disagreed on manifested Server_Card identity";
     EXPECT_TRUE(p1.sawWaifOnBattlefield && p2.sawWaifOnBattlefield)

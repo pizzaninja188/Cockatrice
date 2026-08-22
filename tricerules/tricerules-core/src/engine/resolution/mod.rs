@@ -1050,6 +1050,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::DiscardCards { .. } => {
                         zones::discard_cards(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::ExileCardsFromHand { .. } => {
+                        zones::exile_cards_from_hand(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::MillTargetPlayer { .. } => {
                         zones::mill_target_player(&mut cx, effect)?
                     }
@@ -1434,6 +1437,35 @@ pub(super) fn snapshot_creature_scope(
         })
         .map(|(oid, _)| oid)
         .collect()
+}
+
+/// The semantic discard seam. Authored discard effects, discard costs, and cleanup discards all
+/// pass through here; generic hand-to-zone movement does not. Future discard occurrences and
+/// replacement effects attach here rather than inferring discard from a graveyard destination.
+pub(crate) fn perform_discard(
+    state: &mut GameState,
+    registry: &'static CardRegistry,
+    affected_player: PlayerId,
+    object_id: ObjectId,
+) -> Result<(String, rv1::RuledEvent), EngineError> {
+    let object = state
+        .objects
+        .get(&object_id)
+        .ok_or(EngineError::Illegal("discarded card object not found"))?;
+    if object.owner != affected_player || object.zone != Zone::Hand {
+        return Err(EngineError::Illegal(
+            "discarded card is not in its owner's hand",
+        ));
+    }
+    let card_name = object_display_name(state, registry, object_id);
+    move_object_to_zone(state, registry, object_id, Zone::Graveyard, None)?;
+    let moved = permanent_moved_event(
+        state,
+        object_id,
+        affected_player,
+        rv1::permanent_moved::Destination::Graveyard,
+    );
+    Ok((card_name, moved))
 }
 
 /// Move `oid` into zone `z`, maintaining every zone list and the CR 400.7 new-object resets.

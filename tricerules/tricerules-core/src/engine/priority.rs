@@ -1,6 +1,6 @@
 use super::events::{ev_game_over, ev_log, ev_phase, ev_priority_changed, finish_with_events};
 use super::legal_actions::fill_legal;
-use super::resolution::{draw_card, move_object_to_zone, permanent_moved_event};
+use super::resolution::{draw_card, perform_discard};
 use super::*;
 
 /// Sorcery-speed window: your main phase, stack empty, you are the active player (CR 307.5,
@@ -510,19 +510,10 @@ impl GameEngine {
                 .get(&oid)
                 .map(|o| o.owner)
                 .ok_or(EngineError::Illegal("no object"))?;
-            let card_name = self
-                .registry
-                .get(&self.state.objects.get(&oid).unwrap().card_id)
-                .map(|d| d.name.clone())
-                .unwrap_or_else(|| "card".into());
-            move_object_to_zone(&mut self.state, self.registry, oid, Zone::Graveyard, None)?;
+            let (card_name, moved) = perform_discard(&mut self.state, self.registry, player, oid)?;
             ev.push(ev_log(format!("P{player} discards {card_name} (cleanup)")));
-            ev.push(permanent_moved_event(
-                &self.state,
-                oid,
-                owner,
-                rv1::permanent_moved::Destination::Graveyard,
-            ));
+            debug_assert_eq!(owner, player);
+            ev.push(moved);
         }
         self.apply_sbas(&mut ev)?;
         if self.state.players[idx].hand.len() > MAX_HAND_SIZE {

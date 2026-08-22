@@ -1809,9 +1809,10 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     if (pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget &&
         pendingRuledSpellCast.handIndex == ruledHandIndex && pendingRuledSpellCast.faceIndex == faceIndex &&
         pendingRuledSpellCast.source == source) {
-        // For multi-target spells, clicking the spell again while 1+ targets are chosen confirms
-        // the selection (instead of canceling); clicking with 0 targets cancels as before.
-        if (pendingRuledSpellCast.maxTargets != 1 &&
+        // Target ranges with an explicit confirmation surface may also be confirmed by clicking
+        // the spell again. In particular, 0-1 means "skip this target", not "cancel the cast".
+        if (ruledTargetRangeUsesExplicitConfirmation(pendingRuledSpellCast.minTargets,
+                                                      pendingRuledSpellCast.maxTargets) &&
             pendingRuledSpellCast.selectedTargetOids.size() >= pendingRuledSpellCast.minTargets) {
             return finalizeTargetSelectionAndContinue();
         }
@@ -1943,7 +1944,8 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
                 ? pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).label
                 : pendingRuledSpellCast.cardName;
         emit ruledSpellTargetingChanged(true, effectText);
-        if (pendingRuledSpellCast.maxTargets != 1) {
+        if (ruledTargetRangeUsesExplicitConfirmation(pendingRuledSpellCast.minTargets,
+                                                      pendingRuledSpellCast.maxTargets)) {
             emit ruledMultiTargetSelectionUpdated(0, pendingRuledSpellCast.minTargets,
                                                   pendingRuledSpellCast.maxTargets);
         }
@@ -2144,10 +2146,7 @@ bool PlayerActions::isPlayerSelectedAsPendingSpellTarget(int playerId) const
 
 void PlayerActions::confirmMultiTargetSelection()
 {
-    if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget ||
-        pendingRuledSpellCast.maxTargets == 1 ||
-        pendingRuledSpellCast.selectedTargetOids.size() < pendingRuledSpellCast.minTargets ||
-        pendingRuledSpellCast.selectedTargetOids.size() > pendingRuledSpellCast.maxTargets) {
+    if (!ruledPendingTargetSelectionCanConfirm(pendingRuledSpellCast)) {
         return;
     }
     finalizeTargetSelectionAndContinue();
@@ -2323,7 +2322,7 @@ bool PlayerActions::storeCurrentTargetGroupAndAdvance()
     pendingRuledSpellCast.waitingForTarget = true;
     const auto &next = data->groups.at(current + 1);
     emit ruledSpellTargetingChanged(true, next.promptText);
-    if (next.maxTargets != 1) {
+    if (ruledTargetGroupUsesExplicitConfirmation(next)) {
         emit ruledMultiTargetSelectionUpdated(pendingRuledSpellCast.selectedTargetOids.size(), next.minTargets,
                                               next.maxTargets);
     }
@@ -2369,6 +2368,12 @@ bool PlayerActions::storeCurrentModalTargetsAndAdvance()
         const QString prompt =
             nextMode.targets.groups.isEmpty() ? nextMode.label : nextMode.targets.groups.first().promptText;
         emit ruledSpellTargetingChanged(true, prompt);
+        if (!nextMode.targets.groups.isEmpty() &&
+            ruledTargetGroupUsesExplicitConfirmation(nextMode.targets.groups.first())) {
+            const auto &group = nextMode.targets.groups.first();
+            emit ruledMultiTargetSelectionUpdated(pendingRuledSpellCast.selectedTargetOids.size(), group.minTargets,
+                                                  group.maxTargets);
+        }
         RuledActions::updateGraveyardTargetHint(player, pendingRuledSpellCast.handIndex,
                                                 pendingRuledSpellCast.faceIndex);
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(prompt);

@@ -2253,7 +2253,8 @@ fn coercion_caster_chooses_which_card_to_discard() {
             .as_ref()
             .expect("discard continuation")
             .continuation,
-        ResolutionContinuation::Discard { .. }
+        ResolutionContinuation::HandChoice { hand_choice, .. }
+            if hand_choice.action == HandCardAction::Discard
     ));
 
     // P0 picks the grizzly_bears.

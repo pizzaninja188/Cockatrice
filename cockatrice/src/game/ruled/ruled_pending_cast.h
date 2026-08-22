@@ -154,6 +154,27 @@ struct PendingRuledSpellCast
     int activeModePosition = -1;
 };
 
+/// A required exactly-one target group completes on the target click. Every other legal range
+/// needs an explicit confirmation surface, including optional 0-1 groups where confirming zero
+/// targets is semantically different from cancelling the entire cast.
+[[nodiscard]] inline bool ruledTargetRangeUsesExplicitConfirmation(int minTargets, int maxTargets)
+{
+    return minTargets == 0 || maxTargets != 1;
+}
+
+[[nodiscard]] inline bool ruledTargetGroupUsesExplicitConfirmation(const RuledTargetGroupData &group)
+{
+    return ruledTargetRangeUsesExplicitConfirmation(group.minTargets, group.maxTargets);
+}
+
+[[nodiscard]] inline bool ruledPendingTargetSelectionCanConfirm(const PendingRuledSpellCast &spell)
+{
+    const int selected = spell.selectedTargetOids.size();
+    return spell.valid && spell.waitingForTarget &&
+           ruledTargetRangeUsesExplicitConfirmation(spell.minTargets, spell.maxTargets) &&
+           selected >= spell.minTargets && selected <= spell.maxTargets;
+}
+
 enum class RuledPendingPaymentAction
 {
     None,

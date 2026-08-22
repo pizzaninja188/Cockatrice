@@ -777,6 +777,11 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     if ((rcr.choice_kind() == ruled::v1::CHOICE_KIND_REVEALED ||
          rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND) &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() && rcr.candidate_names_size() > 0) {
+        const bool isOpponentHand = rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND;
+        if (isOpponentHand && rcr.candidate_selectable_size() != rcr.candidate_names_size()) {
+            qWarning() << "Rejecting malformed ruled opponent-hand choice";
+            return;
+        }
         // RevealedCards or PrivateRevealedHand with server card ids: zone popup pick. The deciding
         // player chooses from the revealed cards (OpponentHand = a target player's hand shown only
         // to the caster; the relay redacted it from everyone else).
@@ -786,6 +791,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         pick.max = static_cast<int>(rcr.max());
         pick.promptText = QString::fromStdString(rcr.prompt_text());
         pick.pickZone = PickZone::Revealed;
+        pick.hasSelectableRestriction = isOpponentHand;
         // Both kinds render identically, but they are not the same thing: REVEALED was shown to
         // the whole table, OPPONENT_HAND is a hand only the decider may look at (CR 701.7). The
         // proto does not carry whose hand it is, so the title stays seat-agnostic — if a future
@@ -799,6 +805,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             const int scid = rcr.candidate_server_card_ids(i);
             if (scid >= 0) {
                 pick.serverCardIdToOid.insert(scid, oid);
+                if (isOpponentHand && rcr.candidate_selectable(i)) {
+                    pick.selectableServerCardIds.insert(scid);
+                }
             }
             const QString name = QString::fromStdString(rcr.candidate_names(i));
             pick.candidateNames.append(name);

@@ -75,6 +75,8 @@ mod issue_117_fight;
 mod issue_119_self_combat_restrictions;
 #[path = "scenario/issue_125_death_replacement.rs"]
 mod issue_125_death_replacement;
+#[path = "scenario/issue_126_opponent_hand_exile.rs"]
+mod issue_126_opponent_hand_exile;
 #[path = "scenario/issue_127_trigger_event_filters.rs"]
 mod issue_127_trigger_event_filters;
 #[path = "scenario/issue_130_calibration_creatures.rs"]

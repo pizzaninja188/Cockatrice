@@ -1255,6 +1255,20 @@ pub enum SpellEffectKind {
         #[serde(default)]
         optional: bool,
     },
+    /// Choose cards from a target player's hand and exile them directly. This is deliberately
+    /// distinct from [`SpellEffectKind::DiscardCards`]: it does not perform the CR 701.9 discard
+    /// action and must not satisfy future discard triggers or replacement effects. Aggressive
+    /// Negotiations and Elite Spellbinder share the controller-chosen nonland shape.
+    ExileCardsFromHand {
+        count: u32,
+        target: TargetFilter,
+        #[serde(default)]
+        chooser: DiscardChooser,
+        #[serde(default)]
+        card_filter: Option<CardTypeFilter>,
+        #[serde(default)]
+        optional: bool,
+    },
     /// Destroy every battlefield permanent matching `kind` (CR 701.7). Untargeted, so it
     /// ignores hexproof/shroud and never fizzles. `kind` selects the affected set — `Creature`
     /// for Wrath of God / Day of Judgment, `AnyPermanent` for "destroy all permanents". Only
@@ -1769,6 +1783,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DrainTarget { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
             | SpellEffectKind::DiscardCards { target, .. }
+            | SpellEffectKind::ExileCardsFromHand { target, .. }
             | SpellEffectKind::AuraAttach { target }
             | SpellEffectKind::Equip { target }
             | SpellEffectKind::TargetPlayerSacrifices { target, .. }
@@ -2241,7 +2256,8 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::DrainTarget { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
-            | SpellEffectKind::DiscardCards { target, .. } => {
+            | SpellEffectKind::DiscardCards { target, .. }
+            | SpellEffectKind::ExileCardsFromHand { target, .. } => {
                 if target.is_player() {
                     Ok(())
                 } else {
