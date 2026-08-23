@@ -341,6 +341,21 @@ pub enum TriggerCondition {
         #[serde(default = "any_player_trigger")]
         player: CastTriggerPlayer,
     },
+    /// CR 506.1 / 603.2b: at the beginning of a combat phase. `Controller` is the common
+    /// "at the beginning of combat on your turn" template used by Riling Dawnbreaker and
+    /// Aethershield Artificer; the relative player keeps the vocabulary multiplayer-safe.
+    AtBeginningOfCombat {
+        #[serde(default)]
+        player: CastTriggerPlayer,
+    },
+    /// CR 505.1-1b / 603.2b: at the beginning of the second main phase of a turn. Survival
+    /// cards such as Acrobatic Cheerleader and Cautious Survivor use this boundary. `Main2` is
+    /// the engine's uniquely modeled second main phase; additional-main-phase creation remains
+    /// a separate turn-structure capability.
+    AtBeginningOfSecondMainPhase {
+        #[serde(default)]
+        player: CastTriggerPlayer,
+    },
     /// CR 513.1-2: at the beginning of an end step. `player` filters whose end step qualifies,
     /// relative to the source's controller. Defaults to `Controller`, the common "your end step"
     /// template used by Sabertooth Mauler and Twinblade Assassins.
@@ -679,6 +694,8 @@ pub enum TargetingSourceFilter {
 pub enum InterveningIf {
     /// "if {this} is untapped" — Howling Mine.
     SourceUntapped,
+    /// "if this creature is tapped" — Acrobatic Cheerleader and Cautious Survivor.
+    SourceTapped,
     /// Total spells successfully cast during the immediately preceding turn, inclusive bounds.
     /// `None` is an open bound. Covers both faces of the original Innistrad werewolves.
     SpellsCastLastTurn {
@@ -720,6 +737,12 @@ pub struct TriggeredAbilityDef {
     /// on the stack and again on resolution. `None` for the overwhelming majority of triggers.
     #[serde(default)]
     pub intervening_if: Option<InterveningIf>,
+    /// Printed "This ability triggers only once." Persistent for this ability on this exact
+    /// battlefield object, not merely once per turn. Acrobatic Cheerleader and Sleuth Instructor
+    /// establish reuse across phase and event triggers. A CR 400.7 zone change creates a new
+    /// object incarnation and therefore a fresh allowance.
+    #[serde(default)]
+    pub triggers_only_once: bool,
 }
 
 impl TriggeredAbilityDef {

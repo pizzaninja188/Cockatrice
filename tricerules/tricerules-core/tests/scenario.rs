@@ -81,6 +81,8 @@ mod issue_125_death_replacement;
 mod issue_126_opponent_hand_exile;
 #[path = "scenario/issue_127_trigger_event_filters.rs"]
 mod issue_127_trigger_event_filters;
+#[path = "scenario/issue_128_phase_triggers.rs"]
+mod issue_128_phase_triggers;
 #[path = "scenario/issue_130_calibration_creatures.rs"]
 mod issue_130_calibration_creatures;
 #[path = "scenario/issue_139_pending_trigger_publication.rs"]

@@ -43,10 +43,15 @@ impl GameEngine {
             }
         }
 
-        let mut delayed = if events
-            .iter()
-            .any(|event| matches!(event, GameEvent::EndStepBegin { .. }))
-        {
+        let mut delayed = if events.iter().any(|event| {
+            matches!(
+                event,
+                GameEvent::PhaseBegan {
+                    phase: rv1::PhaseId::EndStep,
+                    ..
+                }
+            )
+        }) {
             self.state.take_next_end_step_delayed()
         } else {
             Vec::new()
@@ -128,6 +133,19 @@ impl GameEngine {
             return;
         }
         collected.sort_by_key(|trigger| self.state.apnap_rank(trigger.controller));
+        collected.retain(|trigger| {
+            !trigger.ability.triggers_only_once
+                || self.state.triggered_once.insert(TriggeredOnceKey {
+                    object_id: trigger.source_id,
+                    zone_change_generation: trigger.source_zone_change,
+                    card_id: trigger.card_id.clone(),
+                    face_index: trigger.face_index,
+                    ability_index: trigger.ability_index,
+                })
+        });
+        if collected.is_empty() {
+            return;
+        }
         let triggers = collected
             .into_iter()
             .map(|trigger| {
@@ -249,9 +267,9 @@ impl GameEngine {
     /// Triggers collected in this order go on the stack in the order the rules require.
     ///
     /// The single source of this ordering. Five event arms need it, and the one that rolled its
-    /// own — `UpkeepBegin` — scanned only the active player's battlefield, so a nonactive
-    /// player's upkeep trigger never fired at all (CR 603.2: *every* permanent observes the
-    /// event). `sort_by_key` is stable, so each player's battlefield keeps its own order.
+    /// own — the former upkeep-specific arm — scanned only the active player's battlefield, so a
+    /// nonactive player's upkeep trigger never fired at all (CR 603.2: *every* permanent observes
+    /// the event). `sort_by_key` is stable, so each player's battlefield keeps its own order.
     fn battlefield_sources_apnap(&self) -> Vec<TriggerSourceSnapshot> {
         let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
         ordered.sort_by_key(|&i| self.state.apnap_rank(self.state.players[i].id));
@@ -702,49 +720,44 @@ impl GameEngine {
 
                 out
             }
-            GameEvent::UpkeepBegin { player: upkeep } => {
-                // CR 603.2: every player's permanents watch, not just the active player's — a
-                // Sulfuric Vortex under a nonactive player's control still triggers on the
-                // active player's upkeep. Walked in APNAP order (CR 603.3b); all of them land on
-                // the stack before the active player gets priority (CR 503.1a).
-                sources
-                    .iter()
-                    .flat_map(|source| {
-                        self.matching_snapshot_abilities(source, |tc| {
-                            let TriggerCondition::AtBeginningOfUpkeep {
-                                player: player_filter,
-                            } = tc
-                            else {
-                                return false;
-                            };
-                            self.relative_player_matches(*player_filter, *upkeep, source.controller)
-                        })
-                    })
-                    .collect()
-            }
-            GameEvent::DrawStepBegin { player: drawing } => {
-                // Every player's permanents watch (CR 603.2) — Howling Mine triggers on the
-                // opponent's draw step too — walked in APNAP order (CR 603.3b) via
-                // `battlefield_sources_apnap`, as for `LifeGained` and `UpkeepBegin`.
-                sources
-                    .iter()
-                    .flat_map(|source| {
-                        self.matching_snapshot_abilities(source, |tc| {
-                            let TriggerCondition::AtBeginningOfDrawStep {
-                                player: player_filter,
-                            } = tc
-                            else {
-                                return false;
-                            };
-                            self.relative_player_matches(
-                                *player_filter,
-                                *drawing,
-                                source.controller,
+            GameEvent::PhaseBegan {
+                phase,
+                active_player,
+            } => sources
+                .iter()
+                .flat_map(|source| {
+                    self.matching_snapshot_abilities(source, |condition| {
+                        let player_filter = match (phase, condition) {
+                            (
+                                rv1::PhaseId::Upkeep,
+                                TriggerCondition::AtBeginningOfUpkeep { player },
                             )
-                        })
+                            | (
+                                rv1::PhaseId::Draw,
+                                TriggerCondition::AtBeginningOfDrawStep { player },
+                            )
+                            | (
+                                rv1::PhaseId::EndStep,
+                                TriggerCondition::AtBeginningOfEndStep { player },
+                            )
+                            | (
+                                rv1::PhaseId::BeginCombat,
+                                TriggerCondition::AtBeginningOfCombat { player },
+                            )
+                            | (
+                                rv1::PhaseId::Main2,
+                                TriggerCondition::AtBeginningOfSecondMainPhase { player },
+                            ) => player,
+                            _ => return false,
+                        };
+                        self.relative_player_matches(
+                            *player_filter,
+                            *active_player,
+                            source.controller,
+                        )
                     })
-                    .collect()
-            }
+                })
+                .collect(),
             GameEvent::CardDrawn { drawer, ordinal } => sources
                 .iter()
                 .flat_map(|source| {
@@ -762,20 +775,6 @@ impl GameEngine {
                                 *drawer,
                                 source.controller,
                             )
-                    })
-                })
-                .collect(),
-            GameEvent::EndStepBegin { player: active } => sources
-                .iter()
-                .flat_map(|source| {
-                    self.matching_snapshot_abilities(source, |tc| {
-                        let TriggerCondition::AtBeginningOfEndStep {
-                            player: player_filter,
-                        } = tc
-                        else {
-                            return false;
-                        };
-                        self.relative_player_matches(*player_filter, *active, source.controller)
                     })
                 })
                 .collect(),
@@ -1269,29 +1268,26 @@ impl GameEngine {
     ) -> bool {
         match clause {
             None => true,
-            Some(InterveningIf::SourceUntapped) => match self.state.objects.get(&source_id) {
-                Some(o)
-                    if o.zone == Zone::Battlefield
-                        && source_generation.is_none_or(|generation| {
-                            self.state
-                                .zone_change_generation
-                                .get(&source_id)
-                                .copied()
-                                .unwrap_or(0)
-                                == generation
-                        }) =>
-                {
-                    // "if {this} is untapped" (Howling Mine), read live while the same object
-                    // is still in play.
-                    !o.tapped
-                }
-                // CR 608.2h / 113.7a: the source has left the battlefield since it triggered, so
-                // the check uses its *last known* tap status — bounced or destroyed while untapped,
-                // the ability still resolves (Howling Mine ruling, 2004-10-04). Reading the live
-                // object would be wrong twice over: CR 400.7 resets `tapped` on the way out, so a
-                // permanent that left tapped would read as untapped.
-                _ => {
-                    let lki = source_generation
+            Some(InterveningIf::SourceUntapped) | Some(InterveningIf::SourceTapped) => {
+                let requires_tapped = matches!(clause, Some(InterveningIf::SourceTapped));
+                let source_is_tapped = match self.state.objects.get(&source_id) {
+                    Some(o)
+                        if o.zone == Zone::Battlefield
+                            && source_generation.is_none_or(|generation| {
+                                self.state
+                                    .zone_change_generation
+                                    .get(&source_id)
+                                    .copied()
+                                    .unwrap_or(0)
+                                    == generation
+                            }) =>
+                    {
+                        o.tapped
+                    }
+                    // CR 608.2h / 113.7a: if the source left after triggering, evaluate the
+                    // intervening condition from generation-scoped last known tap status. Reading
+                    // the live object would confuse a returned object and CR 400.7's tap reset.
+                    _ => source_generation
                         .and_then(|generation| {
                             self.state
                                 .last_known_tapped_by_generation
@@ -1299,10 +1295,10 @@ impl GameEngine {
                                 .copied()
                         })
                         .or_else(|| self.state.last_known_tapped.get(&source_id).copied())
-                        .unwrap_or(false);
-                    !lki
-                }
-            },
+                        .unwrap_or(false),
+                };
+                source_is_tapped == requires_tapped
+            }
             Some(InterveningIf::SpellsCastLastTurn { min, max }) => {
                 let count = self.state.turn_history.previous.spells_cast;
                 min.is_none_or(|minimum| count >= minimum)
@@ -1332,10 +1328,8 @@ impl GameEngine {
     /// beneficiary survives the trip through the stack and any responses.
     fn trigger_player_for(event: &GameEvent) -> Option<PlayerId> {
         match event {
-            GameEvent::UpkeepBegin { player }
-            | GameEvent::DrawStepBegin { player }
-            | GameEvent::EndStepBegin { player }
-            | GameEvent::Surveilled { player } => Some(*player),
+            GameEvent::PhaseBegan { active_player, .. } => Some(*active_player),
+            GameEvent::Surveilled { player } => Some(*player),
             GameEvent::CardDrawn { drawer, .. } => Some(*drawer),
             GameEvent::TargetsChosen { controller, .. } => Some(*controller),
             _ => None,
@@ -1713,6 +1707,7 @@ mod tests {
                     text: "Whenever enchanted player is attacked, draw a card.".into(),
                     may: false,
                     intervening_if: None,
+                    triggers_only_once: false,
                 },
             )],
         };

@@ -2296,6 +2296,7 @@ mod attached_subject_tests {
             text: "Choose, then gain more life.".into(),
             may: false,
             intervening_if: None,
+            triggers_only_once: false,
         });
         let (effects, label) = engine.build_resolution_effects(&item);
         let mut events = Vec::new();
@@ -2367,6 +2368,7 @@ mod attached_subject_tests {
             text: "Use the first live branch, then gain more life.".into(),
             may: false,
             intervening_if: None,
+            triggers_only_once: false,
         });
         let (effects, label) = engine.build_resolution_effects(&item);
         let mut events = Vec::new();
@@ -2426,6 +2428,7 @@ mod attached_subject_tests {
             text: "Choose if possible, then gain life.".into(),
             may: false,
             intervening_if: None,
+            triggers_only_once: false,
         });
         let (effects, label) = engine.build_resolution_effects(&item);
         let mut events = Vec::new();

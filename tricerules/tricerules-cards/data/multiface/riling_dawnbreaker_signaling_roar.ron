@@ -11,6 +11,15 @@
       power: 3,
       toughness: 4,
       keywords: [Flying, Vigilance],
+      triggered_abilities: [(
+        trigger: AtBeginningOfCombat(player: Controller),
+        effect: [PumpTarget(
+          power: 1,
+          toughness: 0,
+          subject: Chosen((kind: Creature, controller: You, exclude_source: true)),
+        )],
+        text: "At the beginning of combat on your turn, another target creature you control gets +1/+0 until end of turn.",
+      )],
     ),
     (
       name: "Signaling Roar",
@@ -19,5 +28,4 @@
       spell_effect: [CreateTokens(token: "soldier_w_2_2", count: 1)],
     ),
   ],
-  partial: "Riling Dawnbreaker's beginning-of-combat front-face trigger is tracked by issue #128",
 )

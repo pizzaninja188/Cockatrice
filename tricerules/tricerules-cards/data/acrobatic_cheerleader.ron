@@ -1,0 +1,17 @@
+// Acrobatic Cheerleader — CR 505.1 / 603.4 Survival trigger. The once-only allowance belongs
+// to this battlefield object incarnation; leaving and returning creates a fresh object (CR 400.7).
+(
+  id: "acrobatic_cheerleader",
+  name: "Acrobatic Cheerleader",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Survivor"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: AtBeginningOfSecondMainPhase(player: Controller),
+    effect: [PutCounters(counter: Keyword(Flying), count: 1, subject: Source)],
+    text: "Survival — At the beginning of your second main phase, if this creature is tapped, put a flying counter on it. This ability triggers only once.",
+    intervening_if: Some(SourceTapped),
+    triggers_only_once: true,
+  )],
+)

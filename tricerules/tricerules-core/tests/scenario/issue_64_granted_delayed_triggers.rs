@@ -402,6 +402,7 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
             text: "At the beginning of the next end step, tap it.".into(),
             may: false,
             intervening_if: None,
+            triggers_only_once: false,
         },
     });
 

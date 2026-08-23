@@ -12,8 +12,8 @@ use crate::state::{
     PendingManaPayment, PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
     PendingResolutionPresentation, PendingTrigger, PendingTriggerOrder, PlayerId, PlayerState,
     ReplacementPriority, ResolutionContinuation, RoomState, StackItem, StackTarget, StagedTrigger,
-    StagedTriggerGroup, TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TurnHistory,
-    TurnStep, UndoableManaAbility, Zone,
+    StagedTriggerGroup, TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TriggeredOnceKey,
+    TurnHistory, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -346,32 +346,20 @@ enum GameEvent {
     DamageDealt {
         event: damage::DamageEvent,
     },
-    /// CR 503.1a: an upkeep step began. Fired before the active player gets priority, so every
-    /// ability that triggered at the beginning of the upkeep is already on the stack when they
-    /// get it. `player` is the player whose upkeep it is — always the active player (CR 500.1) —
-    /// and becomes the trigger's affected player, so "this enchantment deals 2 damage to **that
-    /// player**" (Sulfuric Vortex) hits them and not the source's controller.
-    UpkeepBegin {
-        player: PlayerId,
-    },
-    /// CR 504: a draw step began. Fired *after* the turn-based draw (CR 504.1, which doesn't use
-    /// the stack) so draw-step triggers go on the stack on top of a hand that already contains
-    /// the normal draw (CR 504.2). `player` is the player whose draw step it is — the active
-    /// player — and becomes the trigger's affected player, so "that player draws an additional
-    /// card" (Howling Mine) benefits them rather than the source's controller.
-    DrawStepBegin {
-        player: PlayerId,
+    /// The engine reached the trigger-collection boundary for one typed phase or step. This is
+    /// deliberately separate from the public `PhaseChanged` event: the latter updates clients,
+    /// while this event snapshots every battlefield trigger source before priority. Draw-step
+    /// collection happens after the turn-based draw (CR 504.1-2), preserving that load-bearing
+    /// ordering while using the same vocabulary as the other phase boundaries.
+    PhaseBegan {
+        phase: rv1::PhaseId,
+        active_player: PlayerId,
     },
     /// One card successfully moved from a library to a hand. `ordinal` is that player's
     /// one-based draw number in the current turn after this committed draw.
     CardDrawn {
         drawer: PlayerId,
         ordinal: u32,
-    },
-    /// CR 513.1-2: an end step began. Fired exactly once while entering `EndStep`, before the
-    /// active player receives priority. Permanents that enter later cannot observe this past event.
-    EndStepBegin {
-        player: PlayerId,
     },
     /// A player gained life (CR 118.3). One event per life-gain *event*, not per point: gaining 3
     /// life fires this once, while two lifelink creatures dealing damage in the same combat-damage
@@ -731,6 +719,7 @@ impl GameEngine {
             passes_since_stack_change: 0,
             lands_played_this_turn: 0,
             activation_uses_this_turn: HashMap::new(),
+            triggered_once: HashSet::new(),
             turn_history: TurnHistory::default(),
             combat: None,
             winner: None,
