@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    Amount, CreatureScopeController, CreatureScopeFilter, SpellEffectKind,
+    Amount, CreatureScopeController, CreatureScopeFilter, PlayerRecipient, SpellEffectKind,
 };
 use tricerules_cards::CardRegistry;
 
@@ -27,6 +27,7 @@ fn opponent_mass_scope_cards_have_complete_oracle_behavior() {
                 toughness: 0,
             },
             SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
                 count: Amount::Fixed(1),
             },
         ]

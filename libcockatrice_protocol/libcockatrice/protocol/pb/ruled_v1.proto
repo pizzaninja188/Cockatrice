@@ -529,12 +529,15 @@ enum CostChoiceZone {
   COST_CHOICE_ZONE_UNSPECIFIED = 0;
   COST_CHOICE_ZONE_HAND = 1;
   COST_CHOICE_ZONE_BATTLEFIELD = 2;
+  COST_CHOICE_ZONE_GRAVEYARD = 3;
 }
 
 message LegalCostChoice {
   uint32 cost_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   CostChoiceZone zone = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 candidate_ids = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 min = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 max = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalCostChoices {
@@ -882,6 +885,19 @@ enum ChoiceKind {
   // CR 701.62 manifest dread: exactly one of the top two cards is chosen to manifest. Private,
   // rendered through the deck-zone card-image popup without library-search sorting controls.
   CHOICE_KIND_MANIFEST_DREAD = 12;
+  // Cards from one or more of the deciding player's hand, graveyard, and library. Private because
+  // the cohort may expose hidden hand/library contents even when some candidates are public.
+  CHOICE_KIND_ZONE_SEARCH = 13;
+  // Cards selected from the deciding player's public graveyard during resolution. Kept private
+  // while pending so only the deciding participant receives selectable metadata.
+  CHOICE_KIND_GRAVEYARD_CARDS = 14;
+}
+
+enum ChoiceCandidateSourceZone {
+  CHOICE_CANDIDATE_SOURCE_ZONE_UNSPECIFIED = 0;
+  CHOICE_CANDIDATE_SOURCE_ZONE_HAND = 1;
+  CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD = 2;
+  CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY = 3;
 }
 
 // Whether a concealed-zone cohort attached to a resolution choice is merely looked at by the
@@ -906,6 +922,10 @@ message ResolutionBranchOption {
   ResolutionBranchCostKind cost_kind = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   string cost_text = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool selectable = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Nonempty only when this branch represents one engine-authored combination of searchable
+  // zones. Clients render the union as checkboxes and map the checked set back to branch_index;
+  // labels remain display-only and are never parsed for legality.
+  repeated ChoiceCandidateSourceZone search_zones = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A parked custom resolution (CR 608) requesting input from one player. Reused by every tier-3
@@ -963,6 +983,9 @@ message ResolutionChoiceRequired {
   // Owner of the hidden zone being publicly revealed. Present only when reveal_audience is
   // ALL_PARTICIPANTS; absence must never be inferred from targets or Oracle display data.
   optional int32 revealed_zone_owner_player_id = 19 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Parallel to candidate_object_ids for multi-zone cohorts. Empty remains valid for legacy
+  // single-zone kinds; malformed nonempty vectors fail closed in relay and client consumers.
+  repeated ChoiceCandidateSourceZone candidate_source_zones = 20 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no
@@ -1129,7 +1152,12 @@ message CostSelection {
   oneof selection {
     uint32 hand_index = 2;
     uint32 permanent_id = 3;
+    GraveyardObjectIds graveyard_object_ids = 4;
   }
+}
+
+message GraveyardObjectIds {
+  repeated uint32 object_ids = 1;
 }
 
 message ChooseTriggerTarget {

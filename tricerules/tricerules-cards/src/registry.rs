@@ -1036,9 +1036,9 @@ mod tests {
         Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer, CountExpression, CounterKind,
         CreatureEventFilter, CreatureScopeController, CreatureScopeFilter, EffectSubject,
         EntersTappedAffected, EntersWithCountersAffected, GameCondition, InterveningIf, ManaAmount,
-        PermanentTypeFilter, PlayerLifeAggregate, PowerComparison, RelativePlayerSet,
-        SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetFilter, TargetKind,
-        TriggerCondition,
+        PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
+        RelativePlayerSet, SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetFilter,
+        TargetKind, TriggerCondition,
     };
 
     #[test]
@@ -1630,6 +1630,7 @@ mod tests {
                     target: TargetFilter::default_creature(),
                 },
                 SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
                     count: Amount::Fixed(1),
                 },
             ]
@@ -1776,7 +1777,10 @@ mod tests {
             mana_cost: "{B}",
             types: ["Sorcery"],
             spell_effect: [
-                ReturnFromGraveyard(filter: (owner: AnyPlayer, card_type: Some(Creature)), destination: Battlefield),
+                ReturnFromGraveyard(
+                    filter: (owner: AnyPlayer, card_type: Some(Creature)),
+                    destination: Battlefield(tapped: false),
+                ),
                 LoseLife(amount: TargetManaValue),
             ],
         )"#;
@@ -2667,6 +2671,7 @@ mod tests {
         assert_eq!(
             assassins.effect,
             [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
                 count: Amount::Fixed(1),
             }]
         );

@@ -874,6 +874,40 @@ TEST_F(RuledClientTest, ParsesTargetingTablesForHandSlotsAndAbilities)
     EXPECT_TRUE(state->canAbilityTargetSelf(100, 2));
 }
 
+TEST_F(RuledClientTest, MultiZoneSearchCarriesSourceAnnotationsAndMalformedMetadataFailsClosed)
+{
+    QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_ZONE_SEARCH);
+    choice->set_prompt_text("Search the selected zones for Altanak");
+    choice->set_min(0);
+    choice->set_max(1);
+    for (const quint32 oid : {71u, 72u, 73u}) choice->add_candidate_object_ids(oid);
+    for (const int scid : {0, 1, 2}) choice->add_candidate_server_card_ids(scid);
+    for (int i = 0; i < 3; ++i) choice->add_candidate_names("Altanak, the Thrice-Called");
+    choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+    choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD);
+    choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
+    apply(batch);
+
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Search selected zones"));
+    EXPECT_FALSE(state->resolutionHandPickShowViewControls());
+    EXPECT_EQ(state->resolutionHandPickCandidateAnnotations(),
+              QStringList({QStringLiteral("Hand"), QStringLiteral("Graveyard"), QStringLiteral("Library")}));
+    ASSERT_EQ(started.count(), 1);
+
+    state->clearPendingChoice();
+    ruled::v1::RuledEventBatch malformed;
+    auto *bad = malformed.add_events()->mutable_resolution_choice_required();
+    bad->CopyFrom(*choice);
+    bad->mutable_candidate_source_zones()->RemoveLast();
+    apply(malformed);
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+}
+
 TEST_F(RuledClientTest, ParsesAuthoritativeActivatedCostChoicesAndPayability)
 {
     ruled::v1::RuledEventBatch batch;
@@ -890,16 +924,71 @@ TEST_F(RuledClientTest, ParsesAuthoritativeActivatedCostChoicesAndPayability)
     sacrifice->set_cost_index(2);
     sacrifice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
     sacrifice->add_candidate_ids(100);
+    auto *graveyard = costs.add_choices();
+    graveyard->set_cost_index(3);
+    graveyard->set_zone(ruled::v1::COST_CHOICE_ZONE_GRAVEYARD);
+    graveyard->set_min(2);
+    graveyard->set_max(2);
+    graveyard->add_candidate_ids(501);
+    graveyard->add_candidate_ids(502);
     apply(batch);
 
     EXPECT_FALSE(state->abilityActivatable(100, 2));
     const auto choices = state->abilityCostChoices(100, 2);
-    ASSERT_EQ(choices.size(), 2);
+    ASSERT_EQ(choices.size(), 3);
     EXPECT_EQ(choices.at(0).costIndex, 0);
     EXPECT_EQ(choices.at(0).zone, RuledCostChoiceZone::Hand);
     EXPECT_EQ(choices.at(0).candidateIds, QSet<quint32>({1, 3}));
     EXPECT_EQ(choices.at(1).zone, RuledCostChoiceZone::Battlefield);
     EXPECT_TRUE(choices.at(1).candidateIds.contains(100));
+    EXPECT_EQ(choices.at(2).zone, RuledCostChoiceZone::Graveyard);
+    EXPECT_EQ(choices.at(2).min, 2);
+    EXPECT_EQ(choices.at(2).max, 2);
+    EXPECT_EQ(choices.at(2).candidateIds, QSet<quint32>({501, 502}));
+}
+
+TEST(RuledPendingCostSelectionTest, GraveyardSelectionMembershipTracksPhysicalObjectIds)
+{
+    PendingActivatedAbility pending;
+    pending.valid = true;
+    pending.waitingForCost = true;
+    pending.costChoices.append(
+        {3, RuledCostChoiceZone::Graveyard, QSet<quint32>({501u, 502u}), 2, 2});
+    pending.costSelections.append({3, RuledCostChoiceZone::Graveyard, QVector<quint32>({501u, 502u})});
+
+    EXPECT_TRUE(ruledPendingGraveyardCostSelectionContains(pending, 501u));
+    EXPECT_TRUE(ruledPendingGraveyardCostSelectionContains(pending, 502u));
+    EXPECT_FALSE(ruledPendingGraveyardCostSelectionContains(pending, 503u));
+    pending.waitingForCost = false;
+    EXPECT_FALSE(ruledPendingGraveyardCostSelectionContains(pending, 501u));
+}
+
+TEST(RuledPendingCostSelectionTest, GraveyardProgressCountsOnlyCurrentEngineCandidates)
+{
+    PendingActivatedAbility pending;
+    pending.valid = true;
+    pending.waitingForCost = true;
+    pending.nextCostChoice = 0;
+
+    RuledCostChoice choice;
+    choice.costIndex = 4;
+    choice.zone = RuledCostChoiceZone::Graveyard;
+    choice.candidateIds = {501u, 502u};
+    choice.min = 2;
+    choice.max = 2;
+    pending.costChoices = {choice};
+
+    // 500 is the activated source and is intentionally absent from the engine-authored cohort.
+    // It must not make Confirm legal even if a stale local transaction contains it.
+    pending.costSelections = {{4, RuledCostChoiceZone::Graveyard, {500u, 501u, 501u}}};
+
+    const auto progress = ruledPendingGraveyardCostSelectionProgress(pending);
+    ASSERT_TRUE(progress.has_value());
+    EXPECT_EQ(progress->required, 2);
+    EXPECT_EQ(progress->selected, 1);
+    EXPECT_FALSE(progress->confirmable);
+    EXPECT_FALSE(ruledPendingGraveyardCostSelectionContains(pending, 500u));
+    EXPECT_TRUE(ruledPendingGraveyardCostSelectionContains(pending, 501u));
 }
 
 TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
@@ -2533,6 +2622,82 @@ TEST_F(RuledClientTest, ResolutionBranchesSubmitOpaqueIndexWithoutOpeningADialog
     const auto &submission = host.sentCommands[0].submit_resolution_choice();
     EXPECT_EQ(submission.decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
     EXPECT_EQ(submission.selected_branch_index(), 0u);
+}
+
+TEST_F(RuledClientTest, MandatoryResolutionBranchesCannotSubmitDecline)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    choice->set_prompt_text("Put the permanent on top or bottom.");
+    choice->set_min(1);
+    choice->set_max(1);
+    for (int index = 0; index < 2; ++index) {
+        auto *branch = choice->add_resolution_branches();
+        branch->set_branch_index(index);
+        branch->set_label(index == 0 ? "Top" : "Bottom");
+        branch->set_selectable(true);
+    }
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::ResolutionBranch));
+    EXPECT_FALSE(state->pendingClickChoiceMayDecline());
+    state->declinePendingClickChoice();
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    EXPECT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::ResolutionBranch));
+}
+
+TEST_F(RuledClientTest, SearchZoneBranchesRemainStructuredAndSubmitTheirOpaqueCombinationIndex)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    choice->set_prompt_text("Choose which zones to search.");
+    for (int index = 0; index < 7; ++index) {
+        auto *branch = choice->add_resolution_branches();
+        branch->set_branch_index(index);
+        branch->set_label(QStringLiteral("branch %1").arg(index).toStdString());
+        branch->set_selectable(true);
+        if (index == 0 || index == 3 || index == 4 || index == 6) {
+            branch->add_search_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+        }
+        if (index == 1 || index == 3 || index == 5 || index == 6) {
+            branch->add_search_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD);
+        }
+        if (index == 2 || index == 4 || index == 5 || index == 6) {
+            branch->add_search_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
+        }
+    }
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingZoneScopeChoice());
+    ASSERT_EQ(state->pendingChoiceOptions().size(), 7);
+    EXPECT_EQ(state->pendingChoiceOptions().at(4).searchZones,
+              QSet<int>({ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND,
+                         ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY}));
+    state->submitPendingChoiceOption(4);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().selected_branch_index(), 4u);
+}
+
+TEST_F(RuledClientTest, MixedStructuredAndOrdinaryResolutionBranchesFailClosed)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    auto *structured = choice->add_resolution_branches();
+    structured->set_branch_index(0);
+    structured->set_selectable(true);
+    structured->add_search_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+    auto *missing = choice->add_resolution_branches();
+    missing->set_branch_index(1);
+    missing->set_selectable(true);
+    apply(batch);
+
+    EXPECT_FALSE(state->hasPendingChoiceOptions());
 }
 
 TEST_F(RuledClientTest, PrivateHandChoiceMakesTheNonDecidingPlayerWait)

@@ -406,6 +406,18 @@ void TabGame::connectToGameEventHandler()
                 });
         connect(gamePromptWidget, &GamePromptWidget::ruledResolutionHandPickConfirmRequested,
                 game->getGameEventHandler()->ruled(), &RuledClientState::submitResolutionHandPick);
+        connect(gamePromptWidget, &GamePromptWidget::ruledCostSelectionConfirmRequested, this, [this]() {
+            const int localId = game->getPlayerManager()->getLocalPlayerId();
+            if (Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
+                local->getPlayerActions()->confirmRuledGraveyardCostSelection();
+            }
+        });
+        connect(gamePromptWidget, &GamePromptWidget::ruledCostSelectionCancelRequested, this, [this]() {
+            const int localId = game->getPlayerManager()->getLocalPlayerId();
+            if (Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
+                local->getPlayerActions()->cancelRuledGraveyardCostSelection();
+            }
+        });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionPaymentUiChanged, this,
                 [this](bool active) {
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
@@ -702,6 +714,14 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
                 : tr("Pay %1 (click mana counters or activate mana abilities).").arg(coloredCost);
         state.genericManaCost = remaining;
         state.paymentCurrentlyLegal = h->resolutionPaymentCurrentlyLegal();
+    } else if (h->hasPendingZoneScopeChoice()) {
+        state.mode = PromptMode::ZoneSelection;
+        state.text = h->pendingChoicePromptText(ChoiceKind::ResolutionBranch);
+        for (const auto &option : h->pendingChoiceOptions()) {
+            QVector<int> zones(option.searchZones.cbegin(), option.searchZones.cend());
+            std::sort(zones.begin(), zones.end());
+            state.choiceOptions.append({option.index, option.label, option.enabled, zones});
+        }
     } else if (h->hasPendingChoiceOptions()) {
         state.mode = PromptMode::ChoiceOptions;
         const ChoiceKind kind =
@@ -768,6 +788,14 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
     } else if (localActions && localActions->isAwaitingRuledSpellCostSelection()) {
         state.mode = PromptMode::ClickChoice;
         state.text = localActions->pendingRuledSpellPromptText();
+    } else if (localActions && localActions->isAwaitingRuledGraveyardCostSelection()) {
+        state.mode = PromptMode::CostSelection;
+        state.text = localActions->pendingRuledAbilityCostPromptText();
+        // Reconstruct from the pending engine-authored choice on every refresh. A rejected click,
+        // mana action, or unrelated UI refresh must not reset this to 0/0 and enable Confirm.
+        state.required = 1;
+        state.selected = 0;
+        (void)localActions->getRuledGraveyardCostSelectionProgress(state.required, state.selected);
     } else if (localActions && localActions->isAwaitingRuledAbilityCostSelection()) {
         state.mode = PromptMode::ClickChoice;
         state.text = localActions->pendingRuledAbilityCostPromptText();
@@ -1610,6 +1638,38 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                 });
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledAbilityCostPromptChanged, this,
                 [this]() { refreshRuledPromptState(); });
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledGraveyardCostSelectionChanged, this,
+                [this, newPlayer](bool active, int required, int selected) {
+                    if (!newPlayer->getPlayerInfo()->getLocal() || !game || !scene) {
+                        return;
+                    }
+                    const int playerId = newPlayer->getPlayerInfo()->getId();
+                    const QString graveName = QStringLiteral("grave");
+                    if (active) {
+                        if (!ruledAutoOpenedGraveyardViews.contains(playerId) &&
+                            !scene->isZoneViewOpen(newPlayer, graveName)) {
+                            scene->toggleZoneView(newPlayer, graveName, -1);
+                            ruledAutoOpenedGraveyardViews.insert(playerId,
+                                                               scene->zoneViewWidgetFor(newPlayer, graveName));
+                        }
+                        GamePromptWidget::RuledPromptState prompt;
+                        prompt.mode = GamePromptWidget::PromptMode::CostSelection;
+                        prompt.required = required;
+                        prompt.selected = selected;
+                        prompt.text = newPlayer->getPlayerActions()->pendingRuledAbilityCostPromptText();
+                        gamePromptWidget->setRuledPromptState(prompt);
+                    } else {
+                        auto it = ruledAutoOpenedGraveyardViews.find(playerId);
+                        if (it != ruledAutoOpenedGraveyardViews.end()) {
+                            if (it.value() && scene->zoneViewWidgetFor(newPlayer, graveName) == it.value()) {
+                                it.value()->close();
+                            }
+                            ruledAutoOpenedGraveyardViews.erase(it);
+                        }
+                        refreshRuledPromptState();
+                    }
+                    scene->update();
+                });
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledResolutionManaPromptChanged, this,
                 [this]() { refreshRuledPromptState(); });
         connect(gamePromptWidget, &GamePromptWidget::undoLandTapRequested, newPlayer->getPlayerActions(),
@@ -2378,6 +2438,10 @@ void TabGame::onRuledLibrarySearchPickStarted(QStringList candidateNames, QVecto
         sic->set_name(candidateNames.at(i).toStdString());
         sic->set_id(i < serverCardIds.size() ? serverCardIds.at(i) : -1);
         sic->set_face_down(false);
+        const auto *ruledState = game->getGameEventHandler()->ruled();
+        if (ruledState && i < ruledState->resolutionHandPickCandidateAnnotations().size()) {
+            sic->set_annotation(ruledState->resolutionHandPickCandidateAnnotations().at(i).toStdString());
+        }
         librarySearchCards.append(sic);
         cardList.append(sic);
     }

@@ -1,6 +1,7 @@
 #include "game_prompt_widget.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QLabel>
 #include <QPushButton>
 #include <QSignalSpy>
@@ -308,6 +309,27 @@ TEST_F(GamePromptWidgetTest, ResolutionPaymentUsesNormalCostControlsAndSuppresse
     EXPECT_EQ(declineSpy.count(), 1);
 }
 
+TEST_F(GamePromptWidgetTest, GraveyardCostSelectionRequiresExactCountAndCanCancelLocally)
+{
+    QSignalSpy confirmSpy(widget.get(), &GamePromptWidget::ruledCostSelectionConfirmRequested);
+    QSignalSpy cancelSpy(widget.get(), &GamePromptWidget::ruledCostSelectionCancelRequested);
+    widget->setLocalPlayerHasPriority(true);
+    widget->setRuledPromptState({PromptMode::CostSelection, 2, 1, "Choose two graveyard cards.", {}});
+
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::CostSelection);
+    EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isHidden());
+    EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isEnabled());
+    EXPECT_FALSE(btn("openingBottomCancelButton")->isHidden());
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+
+    widget->setRuledPromptState({PromptMode::CostSelection, 2, 2, "Choose two graveyard cards.", {}});
+    EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isEnabled());
+    btn("resolutionHandPickConfirmButton")->click();
+    btn("openingBottomCancelButton")->click();
+    EXPECT_EQ(confirmSpy.count(), 1);
+    EXPECT_EQ(cancelSpy.count(), 1);
+}
+
 TEST_F(GamePromptWidgetTest, ChoiceOptionsRenderAsOrdinaryLabeledButtons)
 {
     QSignalSpy optionSpy(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);
@@ -334,6 +356,45 @@ TEST_F(GamePromptWidgetTest, ChoiceOptionsRenderAsOrdinaryLabeledButtons)
     EXPECT_EQ(optionSpy.takeFirst().at(0).toInt(), 0);
     btn("declineClickChoiceButton")->click();
     EXPECT_EQ(declineSpy.count(), 1);
+}
+
+TEST_F(GamePromptWidgetTest, ZoneSelectionUsesCheckboxesAndConfirmsTheMatchingAuthoredBranch)
+{
+    QSignalSpy optionSpy(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::ZoneSelection;
+    state.text = "Choose which zones to search.";
+    state.choiceOptions = {
+        {0, "Hand", true, {1}},
+        {1, "Graveyard", true, {2}},
+        {2, "Library", true, {3}},
+        {3, "Hand + Graveyard", true, {1, 2}},
+        {4, "Hand + Library", true, {1, 3}},
+        {5, "Graveyard + Library", true, {2, 3}},
+        {6, "Hand + Graveyard + Library", true, {1, 2, 3}},
+    };
+    widget->setRuledPromptState(state);
+
+    auto *hand = widget->findChild<QCheckBox *>("zoneSelectionHandCheckBox");
+    auto *graveyard = widget->findChild<QCheckBox *>("zoneSelectionGraveyardCheckBox");
+    auto *library = widget->findChild<QCheckBox *>("zoneSelectionLibraryCheckBox");
+    auto *confirm = btn("zoneSelectionConfirmButton");
+    ASSERT_NE(hand, nullptr);
+    ASSERT_NE(graveyard, nullptr);
+    ASSERT_NE(library, nullptr);
+    ASSERT_NE(confirm, nullptr);
+    EXPECT_FALSE(hand->isHidden());
+    EXPECT_FALSE(graveyard->isHidden());
+    EXPECT_FALSE(library->isHidden());
+    EXPECT_FALSE(confirm->isEnabled());
+    EXPECT_EQ(btn("ruledChoiceOptionButton_0"), nullptr);
+
+    hand->click();
+    graveyard->click();
+    EXPECT_TRUE(confirm->isEnabled());
+    confirm->click();
+    ASSERT_EQ(optionSpy.count(), 1);
+    EXPECT_EQ(optionSpy.takeFirst().at(0).toInt(), 3);
 }
 
 TEST_F(GamePromptWidgetTest, ResolutionPaymentAutoCompletesAndHasNoPayButton)

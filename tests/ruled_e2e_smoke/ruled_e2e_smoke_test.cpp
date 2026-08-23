@@ -24,8 +24,8 @@
 //     is the only cross-language check that a C++-built DevCommand decodes and applies in Rust.
 //   * continuous control change: Act of Treason moves one physical permanent to the caster's
 //     TABLE for the turn, grants haste, then returns it to the owner's TABLE at cleanup
-//   * battlefield-to-library placement: Totally Lost moves that permanent to the top of its
-//     owner's private DECK; both clients see the public move and only the owner sees its next draw
+//   * owner-chosen battlefield-to-library placement: Uncharted Voyage lets the target's owner
+//     choose Top, both clients see the public move, and only that owner sees its next draw
 //   * player-attached Aura: Curse of Disturbance targets the other seat, stays on its controller's
 //     TABLE, and publishes the same typed recipient / physical mapping to both clients
 //
@@ -424,6 +424,8 @@ public:
     bool devTotallyLostSent = false;
     bool devTotallyLostManaSent = false;
     bool totallyLostCast = false;
+    bool sawOwnerPlacementChoice = false;
+    bool submittedOwnerPlacementChoice = false;
     bool sawLibraryPermanentMoved = false;
     bool sawLibraryTargetAbsentFromBattlefield = false;
     bool sawTopPermanentDrawn = false;
@@ -437,6 +439,18 @@ public:
     bool evolvingWildsPhysicalIdentityContinuous = true;
     quint32 evolvingWildsChosenOid = 0;
     int evolvingWildsPhysicalCardId = -1;
+    int sayItsNameConjured = 0;
+    int sayItsNameMovedToGraveyard = 0;
+    bool altanakConjuredToHand = false;
+    bool altanakConjuredToLibrary = false;
+    bool sayItsNameActivated = false;
+    bool sawZoneScopeChoice = false;
+    bool submittedZoneScopeChoice = false;
+    bool sawOwnZoneSearchCandidates = false;
+    bool sawOpponentZoneSearchRedacted = false;
+    bool submittedZoneSearchChoice = false;
+    bool sawAltanakEnterBattlefield = false;
+    int sayItsNameGraveToExileCount = 0;
     bool devCruelTruthsSent = false;
     bool devCruelTruthsManaSent = false;
     bool cruelTruthsCast = false;
@@ -709,6 +723,7 @@ public:
                 }
                 if (name == QLatin1String("Mountain") && from == deck && to == table) {
                     sawEvolvingWildsPhysicalDeckToTable = true;
+                    sawEvolvingWildsPermanentMoved = true;
                     if (evolvingWildsPhysicalCardId >= 0 && mc.new_card_id() != evolvingWildsPhysicalCardId) {
                         evolvingWildsPhysicalIdentityContinuous = false;
                     }
@@ -721,9 +736,10 @@ public:
                 }
                 if (submittedTypecyclingChoice && !sawTypecyclingDeckToHand && from == deck && to == hand) {
                     sawTypecyclingDeckToHand = true;
-                    typecyclingPhysicalIdentityContinuous = typecyclingPhysicalIdentityContinuous &&
-                                                            typecyclingChosenPhysicalId >= 0 &&
-                                                            mc.card_id() == typecyclingChosenPhysicalId;
+                    // Library picker IDs are transient snapshot-local values, not persistent
+                    // Server_Card IDs. Capture the physical identity from the authoritative move;
+                    // the following HandSlotMap publication proves that exact object landed in hand.
+                    typecyclingChosenPhysicalId = mc.new_card_id();
                 }
                 if (submittedSurveilDestination && !sawSurveilPhysicalDeckToGrave && from == deck && to == grave) {
                     sawSurveilPhysicalDeckToGrave = !surveilChosenName.isEmpty() && name == surveilChosenName;
@@ -795,6 +811,14 @@ public:
                     } else if (from == stack && to == table && mc.target_player_id() == myId) {
                         followPhysicalCard();
                         sawAdventureStackToBattlefield = true;
+                    }
+                } else if (name == QLatin1String("Say Its Name")) {
+                    if (from == grave && to == exile) {
+                        ++sayItsNameGraveToExileCount;
+                    }
+                } else if (name == QLatin1String("Altanak, the Thrice-Called")) {
+                    if (from == deck && to == table) {
+                        sawAltanakEnterBattlefield = true;
                     }
                 } else if (name == QLatin1String("Bump in the Night")) {
                     // Scope to THIS seat's card. Every client sees both seats' moves, so an
@@ -1004,6 +1028,13 @@ public:
             } else if (ev.has_battlefield_object_map()) {
                 for (const auto &entry : ev.battlefield_object_map().entries()) {
                     serverCardByEngineOid[entry.engine_object_id()] = entry.server_card_id();
+                    if (sawEvolvingWildsPhysicalDeckToTable && evolvingWildsPhysicalCardId >= 0 &&
+                        entry.server_card_id() == evolvingWildsPhysicalCardId) {
+                        if (evolvingWildsChosenOid != 0 && evolvingWildsChosenOid != entry.engine_object_id()) {
+                            evolvingWildsPhysicalIdentityContinuous = false;
+                        }
+                        evolvingWildsChosenOid = entry.engine_object_id();
+                    }
                 }
             } else if (ev.has_graveyard_object_map()) {
                 for (const auto &entry : ev.graveyard_object_map().entries()) {
@@ -1070,6 +1101,25 @@ public:
                         sawOpponentLibrarySearchRedacted =
                             rcr.candidate_object_ids_size() == 0 && rcr.candidate_card_ids_size() == 0 &&
                             rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0;
+                    }
+                }
+                if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_ZONE_SEARCH) {
+                    if (rcr.deciding_player_id() == myId) {
+                        bool hasAltanak = false;
+                        for (int i = 0; i < rcr.candidate_names_size(); ++i) {
+                            hasAltanak = hasAltanak || rcr.candidate_names(i) == "Altanak, the Thrice-Called";
+                        }
+                        sawOwnZoneSearchCandidates =
+                            hasAltanak && rcr.candidate_object_ids_size() == rcr.candidate_card_ids_size() &&
+                            rcr.candidate_object_ids_size() == rcr.candidate_names_size() &&
+                            rcr.candidate_object_ids_size() == rcr.candidate_server_card_ids_size() &&
+                            rcr.candidate_object_ids_size() == rcr.candidate_source_zones_size();
+                    } else {
+                        sawOpponentZoneSearchRedacted =
+                            rcr.candidate_object_ids_size() == 0 && rcr.candidate_card_ids_size() == 0 &&
+                            rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0 &&
+                            rcr.candidate_source_zones_size() == 0 &&
+                            rcr.prompt_text() == "Opponent is making a resolution choice.";
                     }
                 }
                 if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD) {
@@ -1172,13 +1222,21 @@ public:
                     sawAggressiveExile = true;
                 }
                 if (moved.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD &&
-                    (moved.card_id() == "mountain" || sawEvolvingWildsPhysicalDeckToTable)) {
+                    moved.card_id() == "mountain") {
                     sawEvolvingWildsPermanentMoved = true;
                     if (evolvingWildsChosenOid == 0) {
                         evolvingWildsChosenOid = moved.object_id();
                     } else if (evolvingWildsChosenOid != moved.object_id()) {
                         evolvingWildsPhysicalIdentityContinuous = false;
                     }
+                }
+                if (moved.card_id() == "altanak,_the_thrice-called" &&
+                    moved.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD) {
+                    sawAltanakEnterBattlefield = true;
+                }
+                if (moved.card_id() == "say_its_name" &&
+                    moved.destination() == ruled::v1::PermanentMoved::DESTINATION_EXILE) {
+                    ++sayItsNameGraveToExileCount;
                 }
                 if (moved.object_id() == controlTargetOid &&
                     moved.destination() == ruled::v1::PermanentMoved::DESTINATION_LIBRARY) {
@@ -1327,7 +1385,7 @@ public:
                     text.endsWith(QStringLiteral(" (cleanup)"))) {
                     sawOpponentCleanupDiscard = true;
                 }
-                if (text == QStringLiteral("Totally Lost puts Grizzly Bears on top of its owner's library.")) {
+                if (text == QStringLiteral("Uncharted Voyage puts Grizzly Bears on top of its owner's library.")) {
                     sawLibraryPermanentMoved = true;
                 }
                 log(QStringLiteral("gamelog: %1").arg(text.left(160)));
@@ -1372,9 +1430,12 @@ public:
                         return QString::fromStdString(action.card_name()) == QLatin1String("Plains");
                     });
                 if (plains != latestLegal.hand_actions().end()) {
-                    sawTypecyclingDeckToHand = handServerCardBySlot.count(static_cast<int>(plains->hand_index())) > 0;
-                    typecyclingPhysicalIdentityContinuous =
-                        typecyclingPhysicalIdentityContinuous && sawTypecyclingDeckToHand;
+                    const auto physical = handServerCardBySlot.find(static_cast<int>(plains->hand_index()));
+                    sawTypecyclingDeckToHand = physical != handServerCardBySlot.end();
+                    typecyclingPhysicalIdentityContinuous = typecyclingPhysicalIdentityContinuous &&
+                                                            sawTypecyclingDeckToHand &&
+                                                            typecyclingChosenPhysicalId >= 0 &&
+                                                            physical->second == typecyclingChosenPhysicalId;
                 }
             }
             const auto hasZoneAbility = [this](const QString &cardName, ruled::v1::AbilitySourceZone sourceZone) {
@@ -1951,6 +2012,43 @@ public:
             if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH) {
                 const bool isProtection =
                     rcr.resolution_branches_size() == 6 && rcr.resolution_branches(0).label() == "artifacts";
+                const bool isOwnerPlacement = rcr.resolution_branches_size() == 2 &&
+                                              rcr.resolution_branches(0).label() == "Top" &&
+                                              rcr.resolution_branches(1).label() == "Bottom";
+                const bool isZoneScope =
+                    rcr.resolution_branches_size() == 7 &&
+                    std::all_of(rcr.resolution_branches().begin(), rcr.resolution_branches().end(),
+                                [](const auto &branch) { return branch.search_zones_size() > 0; });
+                if (isZoneScope) {
+                    sawZoneScopeChoice = true;
+                    const auto allZones = std::find_if(
+                        rcr.resolution_branches().begin(), rcr.resolution_branches().end(), [](const auto &branch) {
+                            return branch.search_zones_size() == 3;
+                        });
+                    if (allZones == rcr.resolution_branches().end()) {
+                        ADD_FAILURE() << "zone-scope choice omitted the all-zones combination";
+                        return;
+                    }
+                    ruled::v1::RuledCommand cmd;
+                    auto *choice = cmd.mutable_submit_resolution_choice();
+                    choice->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
+                    choice->set_selected_branch_index(allZones->branch_index());
+                    pendingChoice.reset();
+                    submittedZoneScopeChoice = true;
+                    sendRuled(cmd, QStringLiteral("search hand, graveyard, and library"));
+                    return;
+                }
+                if (isOwnerPlacement) {
+                    sawOwnerPlacementChoice = true;
+                    ruled::v1::RuledCommand cmd;
+                    auto *choice = cmd.mutable_submit_resolution_choice();
+                    choice->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
+                    choice->set_selected_branch_index(0);
+                    pendingChoice.reset();
+                    submittedOwnerPlacementChoice = true;
+                    sendRuled(cmd, QStringLiteral("owner chooses top of library"));
+                    return;
+                }
                 if (!isProtection) {
                     ADD_FAILURE() << "unexpected authored resolution-branch choice";
                     pendingChoice.reset();
@@ -1994,6 +2092,7 @@ public:
             }
             const bool isReplacement = rcr.choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT;
             const bool isLibrarySearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH;
+            const bool isZoneSearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_ZONE_SEARCH;
             const bool isTypecycling = isLibrarySearch && typecyclingActivated && !submittedTypecyclingChoice;
             const bool isEmptyTypecycling =
                 isLibrarySearch && emptyTypecyclingActivated && !submittedEmptyTypecyclingChoice;
@@ -2015,8 +2114,9 @@ public:
             }
             ruled::v1::RuledCommand cmd;
             auto *choice = cmd.mutable_submit_resolution_choice();
-            const int need =
-                (isLibrarySearch && rcr.candidate_object_ids_size() > 0) || isSurveil ? 1 : static_cast<int>(rcr.min());
+            const int need = ((isLibrarySearch || isZoneSearch) && rcr.candidate_object_ids_size() > 0) || isSurveil
+                                 ? 1
+                                 : static_cast<int>(rcr.min());
             if (isManifestDread) {
                 int chosen = -1;
                 for (int i = 0; i < rcr.candidate_names_size(); ++i) {
@@ -2056,7 +2156,6 @@ public:
                 }
             }
             if (isTypecycling && need == 1) {
-                typecyclingChosenPhysicalId = rcr.candidate_server_card_ids(0);
                 submittedTypecyclingChoice = true;
             } else if (isEmptyTypecycling && need == 0) {
                 submittedEmptyTypecyclingChoice = true;
@@ -2069,13 +2168,16 @@ public:
             } else if (isLibrarySearch && need == 1) {
                 evolvingWildsChosenOid = rcr.candidate_object_ids(0);
                 submittedEvolvingWildsChoice = true;
+            } else if (isZoneSearch && need == 1) {
+                submittedZoneSearchChoice = true;
             }
             pendingChoice.reset();
             if (isDamagePrevention) {
                 submittedDamagePreventionChoice = true;
             } else if (isEntryReplacement) {
                 submittedEntryReplacementChoice = true;
-            } else if (!isManifestDread && !isOpponentHand && !isTypecycling && !isEmptyTypecycling && !isSurveil) {
+            } else if (!isManifestDread && !isOpponentHand && !isTypecycling && !isEmptyTypecycling && !isSurveil &&
+                       !isZoneSearch) {
                 submittedBrainstormChoice = true;
             }
             sendRuled(cmd, QStringLiteral("submit resolution choice (%1 cards)").arg(need));
@@ -2910,16 +3012,104 @@ public:
                     }
                 }
             }
-            if (sawEvolvingWildsPermanentMoved && !sawLibraryTargetAbsentFromBattlefield) {
+            if (sawEvolvingWildsPermanentMoved && !sawAltanakEnterBattlefield) {
+                if (sayItsNameConjured == sayItsNameMovedToGraveyard && sayItsNameConjured < 3) {
+                    ++sayItsNameConjured;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(myId);
+                    auto *put = dev->mutable_put_card_in_zone();
+                    put->set_card_name("Say Its Name");
+                    put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                    sendRuled(cmd, QStringLiteral("dev: conjure Say Its Name %1 into hand").arg(sayItsNameConjured));
+                    return;
+                }
+                if (sayItsNameMovedToGraveyard < sayItsNameConjured) {
+                    ++sayItsNameMovedToGraveyard;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(myId);
+                    auto *move = dev->mutable_move_card();
+                    move->set_card_name("Say Its Name");
+                    move->set_zone(ruled::v1::DEV_ZONE_GRAVEYARD);
+                    sendRuled(cmd,
+                              QStringLiteral("dev: move Say Its Name %1 to graveyard")
+                                  .arg(sayItsNameMovedToGraveyard));
+                    return;
+                }
+                if (!altanakConjuredToHand) {
+                    altanakConjuredToHand = true;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(myId);
+                    auto *put = dev->mutable_put_card_in_zone();
+                    put->set_card_name("Altanak, the Thrice-Called");
+                    put->set_zone(ruled::v1::DEV_ZONE_HAND);
+                    sendRuled(cmd, QStringLiteral("dev: conjure Altanak into hand"));
+                    return;
+                }
+                if (!altanakConjuredToLibrary) {
+                    altanakConjuredToLibrary = true;
+                    ruled::v1::RuledCommand cmd;
+                    auto *dev = cmd.mutable_dev_command();
+                    dev->set_target_player_id(myId);
+                    auto *move = dev->mutable_move_card();
+                    move->set_card_name("Altanak, the Thrice-Called");
+                    move->set_zone(ruled::v1::DEV_ZONE_LIBRARY);
+                    sendRuled(cmd, QStringLiteral("dev: move Altanak into library"));
+                    return;
+                }
+                if (!sayItsNameActivated) {
+                    const auto *action =
+                        zoneAbilityAction(QStringLiteral("Say Its Name"), ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+                    if (!action) {
+                        return;
+                    }
+                    const quint64 key = (static_cast<quint64>(action->object_id()) << 32) | action->ability_index();
+                    const auto &costsByAbility = latestLegal.cost_choices_by_ability();
+                    const auto costsIt = costsByAbility.find(key);
+                    if (costsIt == costsByAbility.end()) {
+                        return;
+                    }
+                    const ruled::v1::LegalCostChoice *graveyardCost = nullptr;
+                    for (const auto &cost : costsIt->second.choices()) {
+                        if (cost.zone() == ruled::v1::COST_CHOICE_ZONE_GRAVEYARD && cost.min() == 2 &&
+                            cost.max() == 2 && cost.candidate_ids_size() >= 2) {
+                            graveyardCost = &cost;
+                            break;
+                        }
+                    }
+                    if (!graveyardCost) {
+                        return;
+                    }
+                    ruled::v1::RuledCommand cmd;
+                    auto *ability = cmd.mutable_activate_ability();
+                    ability->set_source_object_id(action->object_id());
+                    ability->set_source_zone(action->source_zone());
+                    ability->set_expected_zone_change_generation(action->zone_change_generation());
+                    ability->set_ability_index(action->ability_index());
+                    auto *selection = ability->add_cost_selections();
+                    selection->set_cost_index(graveyardCost->cost_index());
+                    selection->mutable_graveyard_object_ids()->add_object_ids(graveyardCost->candidate_ids(0));
+                    selection->mutable_graveyard_object_ids()->add_object_ids(graveyardCost->candidate_ids(1));
+                    sayItsNameActivated = true;
+                    sendRuled(cmd, QStringLiteral("activate Say Its Name with two exact graveyard cards"));
+                    return;
+                }
+                if (!submittedZoneSearchChoice) {
+                    return;
+                }
+            }
+            if (sawAltanakEnterBattlefield && !sawLibraryTargetAbsentFromBattlefield) {
                 if (!devTotallyLostSent) {
                     devTotallyLostSent = true;
                     ruled::v1::RuledCommand cmd;
                     auto *dev = cmd.mutable_dev_command();
                     dev->set_target_player_id(myId);
                     auto *put = dev->mutable_put_card_in_zone();
-                    put->set_card_name("Totally Lost");
+                    put->set_card_name("Uncharted Voyage");
                     put->set_zone(ruled::v1::DEV_ZONE_HAND);
-                    sendRuled(cmd, QStringLiteral("dev: conjure Totally Lost into hand"));
+                    sendRuled(cmd, QStringLiteral("dev: conjure Uncharted Voyage into hand"));
                     return;
                 }
                 if (!devTotallyLostManaSent) {
@@ -2928,19 +3118,19 @@ public:
                     auto *dev = cmd.mutable_dev_command();
                     dev->set_target_player_id(myId);
                     dev->mutable_add_mana()->set_u(1);
-                    dev->mutable_add_mana()->set_c(4);
-                    sendRuled(cmd, QStringLiteral("dev: add {4}{U} for Totally Lost"));
+                    dev->mutable_add_mana()->set_c(3);
+                    sendRuled(cmd, QStringLiteral("dev: add {3}{U} for Uncharted Voyage"));
                     return;
                 }
                 if (!totallyLostCast) {
                     if (const auto *spell =
-                            handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Totally Lost"))) {
+                            handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Uncharted Voyage"))) {
                         ruled::v1::RuledCommand cmd;
                         auto *cast = cmd.mutable_cast_spell();
                         cast->mutable_source()->set_hand_index(spell->hand_index());
                         cast->add_targets()->set_object_id(controlTargetOid);
                         totallyLostCast = true;
-                        sendRuled(cmd, QStringLiteral("cast Totally Lost on oid %1").arg(controlTargetOid));
+                        sendRuled(cmd, QStringLiteral("cast Uncharted Voyage on oid %1").arg(controlTargetOid));
                         return;
                     }
                 }
@@ -3379,7 +3569,12 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p1.sawOwnLibrarySearchCandidates && p2.sawOpponentLibrarySearchRedacted &&
                p1.submittedEvolvingWildsChoice && p1.sawEvolvingWildsPermanentMoved &&
                p2.sawEvolvingWildsPermanentMoved && p1.sawEvolvingWildsPhysicalDeckToTable &&
-               p2.sawEvolvingWildsPhysicalDeckToTable && p1.sawOwnSurveilCandidates && p2.sawOpponentSurveilRedacted &&
+               p2.sawEvolvingWildsPhysicalDeckToTable && p1.sawZoneScopeChoice &&
+               p1.submittedZoneScopeChoice && p1.sawOwnZoneSearchCandidates &&
+               p2.sawOpponentZoneSearchRedacted && p1.submittedZoneSearchChoice &&
+               p1.sawAltanakEnterBattlefield && p2.sawAltanakEnterBattlefield &&
+               p1.sayItsNameGraveToExileCount == 3 && p2.sayItsNameGraveToExileCount == 3 &&
+               p1.sawOwnSurveilCandidates && p2.sawOpponentSurveilRedacted &&
                p1.submittedSurveilDestination && p1.sawSurveilPhysicalDeckToGrave && p1.sawCruelTruthsResolved &&
                p2.sawCruelTruthsResolved && p1.sawCruelTruthsLifeLoss && p2.sawCruelTruthsLifeLoss &&
                p1.sawSoftCounterPaymentChoice && p1.activatedManaDuringSoftCounterPayment && p1.paidSoftCounter &&
@@ -3486,7 +3681,9 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     EXPECT_TRUE(p1.sawPhysicalControlTransfer) << "the physical control target never crossed TABLE zones";
     EXPECT_TRUE(p1.sawControlReturn) << "the control target did not return at cleanup";
     EXPECT_TRUE(p1.sawPhysicalControlReturn) << "the physical control target did not return to its owner's TABLE";
-    EXPECT_TRUE(p1.totallyLostCast) << "Totally Lost was never cast";
+    EXPECT_TRUE(p1.totallyLostCast) << "Uncharted Voyage was never cast";
+    EXPECT_TRUE(p2.sawOwnerPlacementChoice && p2.submittedOwnerPlacementChoice)
+        << "the target owner did not receive and submit the Top/Bottom choice";
     EXPECT_TRUE(p1.sawLibraryPermanentMoved && p2.sawLibraryPermanentMoved)
         << "both clients did not receive the public battlefield-to-library move";
     EXPECT_TRUE(p1.sawLibraryTargetAbsentFromBattlefield && p2.sawLibraryTargetAbsentFromBattlefield)
@@ -3503,6 +3700,20 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "the chosen physical Mountain did not move from DECK to TABLE for both clients";
     EXPECT_TRUE(p1.evolvingWildsPhysicalIdentityContinuous && p2.evolvingWildsPhysicalIdentityContinuous)
         << "Evolving Wilds moved a different physical card than the chosen library candidate";
+    EXPECT_TRUE(p1.sayItsNameActivated) << "Say Its Name's graveyard ability was never activated";
+    EXPECT_TRUE(p1.sawZoneScopeChoice && p1.submittedZoneScopeChoice)
+        << "Say Its Name did not offer and accept the seven authored zone-scope choices";
+    EXPECT_TRUE(p1.sawOwnZoneSearchCandidates)
+        << "Say Its Name's controller did not receive aligned private multi-zone candidates";
+    EXPECT_TRUE(p2.sawOpponentZoneSearchRedacted)
+        << "Say Its Name leaked private multi-zone candidate metadata to the opponent";
+    EXPECT_TRUE(p1.submittedZoneSearchChoice) << "Say Its Name's Altanak candidate was never selected";
+    EXPECT_EQ(p1.sayItsNameGraveToExileCount, 3)
+        << "Say Its Name did not exile its source plus exactly two chosen namesake cards";
+    EXPECT_EQ(p2.sayItsNameGraveToExileCount, 3)
+        << "the opponent did not observe exactly three public Say Its Name exile moves";
+    EXPECT_TRUE(p1.sawAltanakEnterBattlefield && p2.sawAltanakEnterBattlefield)
+        << "both clients did not observe the exact searched Altanak enter the battlefield";
     EXPECT_TRUE(p1.sawOwnSurveilCandidates)
         << "Cruel Truths' controller did not receive its two private surveil candidates";
     EXPECT_TRUE(p2.sawOpponentSurveilRedacted) << "Cruel Truths leaked private surveil identities to the opponent";

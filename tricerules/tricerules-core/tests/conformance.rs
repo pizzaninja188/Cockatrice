@@ -174,6 +174,8 @@ fn try_drain_stack(e: &mut GameEngine) {
                     decision: if matches!(
                         pending.continuation,
                         tricerules_core::state::ResolutionContinuation::AuthoredBranch { .. }
+                            | tricerules_core::state::ResolutionContinuation::OwnerLibraryPlacement { .. }
+                            | tricerules_core::state::ResolutionContinuation::SearchZoneScope { .. }
                     ) {
                         ResolutionChoiceDecision::SelectBranch as i32
                     } else {

@@ -1,0 +1,14 @@
+// Oracle and rulings verified 2026-08-23. CR 400.3, 401.4, 608.2b, and 701.25.
+(
+  id: "uncharted_voyage",
+  name: "Uncharted Voyage",
+  mana_cost: "{3}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    PutTargetPermanentInOwnersLibrary(
+      target: (kind: Creature),
+      placement: OwnerChoiceTopOrBottom,
+    ),
+    LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil),
+  ],
+)

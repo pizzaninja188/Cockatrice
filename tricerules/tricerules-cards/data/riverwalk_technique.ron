@@ -1,0 +1,27 @@
+// Oracle verified 2026-08-23. CR 400.3, 401.4, 601.2b, 608.2b, and 701.5.
+(
+  id: "riverwalk_technique",
+  name: "Riverwalk Technique",
+  mana_cost: "{3}{U}",
+  types: ["Instant"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (
+        label: "Owner puts target nonland permanent on top or bottom",
+        effects: [PutTargetPermanentInOwnersLibrary(
+          target: (kind: AnyPermanent, not_land: true),
+          placement: OwnerChoiceTopOrBottom,
+        )],
+      ),
+      (
+        label: "Counter target noncreature spell",
+        effects: [CounterTargetSpell(
+          spell_filter: Noncreature,
+          unless_controller_pays: None,
+        )],
+      ),
+    ],
+  ),
+)

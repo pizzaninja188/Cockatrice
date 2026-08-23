@@ -288,6 +288,9 @@ fn activated_ability_info(
             AbilityCost::ExileSelf => "Exile this card".to_string(),
             AbilityCost::SacrificeSelf => "Sacrifice this".to_string(),
             AbilityCost::SacrificePermanent { .. } => "Sacrifice a permanent".to_string(),
+            AbilityCost::ExileGraveyardCards { count, .. } => {
+                format!("Exile {count} graveyard cards")
+            }
         })
         .collect::<Vec<_>>()
         .join(", ");
@@ -481,6 +484,8 @@ fn legal_ability_cost_choices(
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Hand as i32,
                     candidate_ids,
+                    min: 1,
+                    max: 1,
                 });
             }
             AbilityCost::SacrificeSelf | AbilityCost::DiscardSelf | AbilityCost::ExileSelf => {
@@ -501,6 +506,38 @@ fn legal_ability_cost_choices(
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Battlefield as i32,
                     candidate_ids,
+                    min: 1,
+                    max: 1,
+                });
+            }
+            AbilityCost::ExileGraveyardCards {
+                count,
+                filter,
+                exclude_source,
+            } => {
+                let candidate_ids: Vec<ObjectId> = eng.state.players[player_idx]
+                    .graveyard
+                    .iter()
+                    .copied()
+                    .filter(|oid| !exclude_source || *oid != source)
+                    .filter(|oid| {
+                        super::resolution::library_card_matches_filter(
+                            &eng.state,
+                            eng.registry,
+                            *oid,
+                            Some(filter),
+                        )
+                    })
+                    .collect();
+                for _ in 0..*count {
+                    assignment_candidates.push(candidate_ids.clone());
+                }
+                choices.push(rv1::LegalCostChoice {
+                    cost_index: cost_index as u32,
+                    zone: rv1::CostChoiceZone::Graveyard as i32,
+                    candidate_ids,
+                    min: *count,
+                    max: *count,
                 });
             }
             AbilityCost::Tap | AbilityCost::Mana(_) => {}
@@ -540,6 +577,8 @@ fn legal_spell_cost_choices(
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Hand as i32,
                     candidate_ids: candidates.into_iter().map(|(slot, _)| slot).collect(),
+                    min: 1,
+                    max: 1,
                 });
             }
             AdditionalCost::SacrificePermanent { filter } => {
@@ -555,6 +594,8 @@ fn legal_spell_cost_choices(
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Battlefield as i32,
                     candidate_ids,
+                    min: 1,
+                    max: 1,
                 });
             }
         }

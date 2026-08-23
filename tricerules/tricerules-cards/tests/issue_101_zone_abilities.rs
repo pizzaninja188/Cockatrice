@@ -25,6 +25,7 @@ fn typecycling_is_authored_from_hand_with_self_discard_and_subtype_search() {
             destination: SearchDestination::Hand,
             shuffle: true,
             reveal: true,
+            ..
         }] = ability.effect.as_slice()
         else {
             panic!("typecycling uses the shared revealed subtype search")

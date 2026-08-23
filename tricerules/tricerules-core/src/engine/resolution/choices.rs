@@ -154,6 +154,7 @@ fn park_resolution_branches_for(
                 cost_kind: kind as i32,
                 cost_text,
                 selectable: true,
+                search_zones: Vec::new(),
             }
         })
         .collect();
@@ -185,6 +186,7 @@ fn park_resolution_branches_for(
                 mana_cost: String::new(),
                 reveal_audience: 0,
                 revealed_zone_owner_player_id: None,
+                candidate_source_zones: Vec::new(),
             },
         )),
     });

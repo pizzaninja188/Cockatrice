@@ -409,8 +409,12 @@ impl GraveyardFilter {
 pub enum GraveyardDestination {
     /// The card goes to its owner's hand (Raise Dead, Disentomb, Gravedigger ETB).
     Hand,
-    /// The card enters the battlefield under the caster's control (reanimation spells).
-    Battlefield,
+    /// The card enters the battlefield under the caster's control. Zombify/Reanimate use the
+    /// untapped default; Altanak's hand ability instructs the returned land to enter tapped.
+    Battlefield {
+        #[serde(default)]
+        tapped: bool,
+    },
 }
 
 fn default_creature_filter() -> TargetFilter {

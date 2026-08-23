@@ -8,7 +8,7 @@
   activated_abilities: [
     (
       costs: [Mana("{5}{G}"), Tap],
-      effect: [LookChooseToHand(count: 4, filter: Creature, bottom_order: Random)],
+      effect: [LookChooseToHand(count: 4, filter: (card_type: Some(Creature)), bottom_order: Random)],
       text: "{5}{G}, {T}: Look at the top four cards of your library. You may reveal a creature card from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
     ),
   ],

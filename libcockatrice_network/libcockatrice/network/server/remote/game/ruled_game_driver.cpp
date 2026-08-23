@@ -2065,6 +2065,20 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
                 continue;
             }
             auto *rcr = filtered.mutable_events(ei)->mutable_resolution_choice_required();
+            const bool requiresSourceZones = rcr->choice_kind() == ruled::v1::CHOICE_KIND_ZONE_SEARCH ||
+                                             rcr->choice_kind() == ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS;
+            if (requiresSourceZones &&
+                (rcr->candidate_source_zones_size() != rcr->candidate_object_ids_size() ||
+                 rcr->candidate_card_ids_size() != rcr->candidate_object_ids_size() ||
+                 rcr->candidate_names_size() != rcr->candidate_object_ids_size())) {
+                rcr->clear_candidate_object_ids();
+                rcr->clear_candidate_card_ids();
+                rcr->clear_candidate_names();
+                rcr->clear_candidate_server_card_ids();
+                rcr->clear_candidate_selectable();
+                rcr->clear_candidate_source_zones();
+                rcr->set_prompt_text("Resolution choice metadata is unavailable.");
+            }
             const bool isDecider = rcr->deciding_player_id() == participant->getPlayerId();
             const bool isPublicReveal =
                 rcr->reveal_audience() == ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS;
@@ -2074,6 +2088,7 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
                 rcr->clear_candidate_names();
                 rcr->clear_candidate_server_card_ids();
                 rcr->clear_candidate_selectable();
+                rcr->clear_candidate_source_zones();
                 rcr->set_prompt_text("Opponent is making a resolution choice.");
             } else {
                 if (isPublicReveal && !isDecider) {
@@ -2094,7 +2109,9 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
                 } else if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH ||
                            rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP ||
                            rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK ||
-                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD) {
+                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD ||
+                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_ZONE_SEARCH ||
+                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS) {
                     // LibrarySearch / LibraryTop / LibraryLook / ManifestDread: assign each candidate a sequential
                     // index as its server card ID.
                     // Deck cards are not in engineOidToServerCardId (only battlefield/hand/stack are),
@@ -2193,6 +2210,7 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
         choice->mutable_candidate_names()->CopyFrom(choiceIt.value().candidate_names());
         choice->mutable_candidate_server_card_ids()->CopyFrom(choiceIt.value().candidate_server_card_ids());
         choice->mutable_candidate_selectable()->CopyFrom(choiceIt.value().candidate_selectable());
+        choice->mutable_candidate_source_zones()->CopyFrom(choiceIt.value().candidate_source_zones());
         if (choiceIt.value().deciding_player_id() == participant->getPlayerId()) {
             choice->mutable_resolution_branches()->CopyFrom(choiceIt.value().resolution_branches());
         }

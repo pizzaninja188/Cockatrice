@@ -1470,6 +1470,73 @@ mod mana_payment_tests {
     }
 
     #[test]
+    fn bounded_graveyard_cost_is_distinct_source_excluding_and_atomic() {
+        use rv1::cost_selection::Selection;
+
+        let mut e = engine_with_priority();
+        let namesake_card_id = e.state.objects[&e.state.players[0].library[0]]
+            .card_id
+            .clone();
+        let cards: Vec<ObjectId> = e.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .filter(|oid| e.state.objects[oid].card_id == namesake_card_id)
+            .take(3)
+            .collect();
+        assert_eq!(cards.len(), 3, "default deck has three namesakes");
+        let namesake = e
+            .registry
+            .get(&namesake_card_id)
+            .expect("registered namesake")
+            .name
+            .clone();
+        for &oid in &cards {
+            e.state.players[0]
+                .library
+                .retain(|candidate| *candidate != oid);
+            e.state.players[0].graveyard.push(oid);
+            e.state.objects.get_mut(&oid).expect("object").zone = Zone::Graveyard;
+        }
+        let source = cards[0];
+        let costs = [
+            AbilityCost::ExileSelf,
+            AbilityCost::ExileGraveyardCards {
+                count: 2,
+                filter: ZoneCardFilter {
+                    exact_name: Some(namesake),
+                    ..Default::default()
+                },
+                exclude_source: true,
+            },
+        ];
+        let select = |ids| rv1::CostSelection {
+            cost_index: 1,
+            selection: Some(Selection::GraveyardObjectIds(rv1::GraveyardObjectIds {
+                object_ids: ids,
+            })),
+        };
+
+        let duplicate = [select(vec![cards[1], cards[1]])];
+        assert!(e
+            .plan_ability_costs(0, 0, source, &costs, &[], &duplicate, &[], 0)
+            .is_err());
+        assert!(cards
+            .iter()
+            .all(|oid| e.state.objects[oid].zone == Zone::Graveyard));
+
+        let selected = [select(vec![cards[1], cards[2]])];
+        let plan = e
+            .plan_ability_costs(0, 0, source, &costs, &[], &selected, &[], 0)
+            .expect("three distinct graveyard objects validate together");
+        e.commit_cost_transaction(plan)
+            .expect("costs commit atomically");
+        assert!(cards
+            .iter()
+            .all(|oid| e.state.objects[oid].zone == Zone::Exile));
+    }
+
+    #[test]
     fn source_exclusion_is_preserved_through_disjunctive_cost_filters() {
         let mut e = engine_with_priority();
         let source = e.state.players[0].library.pop_front().expect("source card");

@@ -188,6 +188,7 @@ impl ActivatedAbilityDef {
             return Err("activated ability may have at most one mana cost component".into());
         }
         for cost in &self.costs {
+            cost.validate()?;
             if let AbilityCost::SacrificePermanent { filter } = cost {
                 filter.validate_characteristic_constraints()?;
                 if !filter.all_terminal_filters_match(|leaf| {

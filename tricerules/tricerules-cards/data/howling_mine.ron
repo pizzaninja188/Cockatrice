@@ -9,7 +9,7 @@
         (
             trigger: AtBeginningOfDrawStep(player: AnyPlayer),
             intervening_if: Some(SourceUntapped),
-            effect: [Draw(count: 1)],
+            effect: [Draw(who: AffectedPlayer, count: 1)],
             text: "At the beginning of each player's draw step, if this artifact is untapped, that player draws an additional card.",
         ),
     ],

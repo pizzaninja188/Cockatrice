@@ -451,6 +451,9 @@ impl GameEngine {
                                         AbilityCost::SacrificePermanent { .. } => {
                                             "Sacrifice a permanent".to_string()
                                         }
+                                        AbilityCost::ExileGraveyardCards { count, .. } => {
+                                            format!("Exile {count} graveyard cards")
+                                        }
                                     })
                                     .collect::<Vec<_>>()
                                     .join(", ");

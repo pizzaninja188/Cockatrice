@@ -1,0 +1,38 @@
+// Oracle verified 2026-08-23. CR 602, 608.2h, 701.13, 701.23b, and 701.24.
+(
+  id: "say_its_name",
+  name: "Say Its Name",
+  mana_cost: "{1}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Mill(count: 3),
+    ChooseGraveyardCard(
+      filter: (any_of: Some([
+        (card_type: Some(Creature)),
+        (card_type: Some(Land)),
+      ])),
+      destination: Hand,
+      optional: true,
+    ),
+  ],
+  activated_abilities: [(
+    source_zone: Graveyard,
+    costs: [
+      ExileSelf,
+      ExileGraveyardCards(
+        count: 2,
+        filter: (exact_name: Some("Say Its Name")),
+        exclude_source: true,
+      ),
+    ],
+    effect: [SearchLibrary(
+      filter: Some((exact_name: Some("Altanak, the Thrice-Called"))),
+      zones: PlayerChoice([Hand, Graveyard, Library]),
+      destination: Battlefield(tapped: false),
+      shuffle: true,
+      reveal: false,
+    )],
+    timing: SorcerySpeed,
+    text: "Exile this card and two other cards named Say Its Name from your graveyard: Search your graveyard, hand, and/or library for a card named Altanak, the Thrice-Called and put it onto the battlefield. If you search your library this way, shuffle. Activate only as a sorcery.",
+  )],
+)

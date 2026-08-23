@@ -65,6 +65,8 @@ mod issue_102_activation_limits;
 mod issue_103_ward;
 #[path = "scenario/issue_108_graveyard_aggregates.rs"]
 mod issue_108_graveyard_aggregates;
+#[path = "scenario/issue_110_library_search.rs"]
+mod issue_110_library_search;
 #[path = "scenario/issue_111_turn_history.rs"]
 mod issue_111_turn_history;
 #[path = "scenario/issue_114_disjunctive_filters.rs"]

@@ -354,6 +354,59 @@ impl GameEngine {
                     let owner = self.state.objects[&oid].owner;
                     debits.push(CostDebit::Sacrifice { snapshot, owner });
                 }
+                AbilityCost::ExileGraveyardCards {
+                    count,
+                    filter,
+                    exclude_source,
+                } => {
+                    expected_selections += 1;
+                    let Some(selection) = by_index.get(&cost_index) else {
+                        return Err(EngineError::Illegal(
+                            "missing graveyard-card cost selection",
+                        ));
+                    };
+                    let Some(Selection::GraveyardObjectIds(selected)) =
+                        selection.selection.as_ref()
+                    else {
+                        return Err(EngineError::Illegal(
+                            "graveyard-card cost requires graveyard object ids",
+                        ));
+                    };
+                    if selected.object_ids.len() != *count as usize {
+                        return Err(EngineError::Illegal(
+                            "incorrect graveyard-card cost selection count",
+                        ));
+                    }
+                    for &oid in &selected.object_ids {
+                        if (*exclude_source && oid == permanent_id)
+                            || !self.state.players[idx].graveyard.contains(&oid)
+                            || !super::super::resolution::library_card_matches_filter(
+                                &self.state,
+                                self.registry,
+                                oid,
+                                Some(filter),
+                            )
+                        {
+                            return Err(EngineError::Illegal(
+                                "illegal graveyard-card cost selection",
+                            ));
+                        }
+                        if !consumed.insert(oid) {
+                            return Err(EngineError::Illegal("one object cannot pay two costs"));
+                        }
+                        let object = &self.state.objects[&oid];
+                        debits.push(CostDebit::Exile {
+                            object_id: oid,
+                            generation: self
+                                .state
+                                .zone_change_generation
+                                .get(&oid)
+                                .copied()
+                                .unwrap_or(0),
+                            owner: object.owner,
+                        });
+                    }
+                }
             }
         }
         if !saw_mana && extra_generic > 0 {

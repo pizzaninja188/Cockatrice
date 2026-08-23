@@ -1,4 +1,6 @@
-use tricerules_cards::primitives::{SpellEffectKind, TargetController, TargetKind};
+use tricerules_cards::primitives::{
+    PlayerRecipient, SpellEffectKind, TargetController, TargetKind,
+};
 use tricerules_cards::{AdditionalCost, Amount, CardRegistry};
 
 #[test]
@@ -23,6 +25,7 @@ fn issue_53_cards_have_exact_additional_costs_and_effects() {
         assert!(matches!(
             face.spell_effect.as_slice(),
             [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
                 count: Amount::Fixed(2)
             }]
         ));

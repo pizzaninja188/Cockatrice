@@ -623,6 +623,12 @@ bool isSelectedSpellTarget(const AbstractGame *game, quint32 oid)
     return actions && actions->isTargetSelectedForPendingSpell(oid);
 }
 
+bool isSelectedGraveyardCostObject(const AbstractGame *game, quint32 oid)
+{
+    PlayerActions *actions = localPlayerActions(game);
+    return actions && actions->isRuledGraveyardCostObjectSelected(oid);
+}
+
 bool isPlayerSelectedAsSpellTarget(const AbstractGame *game, int playerId)
 {
     PlayerActions *actions = localPlayerActions(game);

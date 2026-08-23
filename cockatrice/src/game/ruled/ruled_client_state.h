@@ -128,6 +128,9 @@ struct RuledChoiceOption
     bool enabled = false;
     bool needsTarget = false;
     RuledSpellTargetData targets;
+    /// Nonempty for an engine-authored searchable-zone combination. The client matches the
+    /// checked zone set back to this opaque option index; labels are never parsed for legality.
+    QSet<int> searchZones;
 };
 
 struct RuledPermanentAction
@@ -145,6 +148,7 @@ enum class RuledCostChoiceZone : int
 {
     Hand,
     Battlefield,
+    Graveyard,
 };
 
 struct RuledCostChoice
@@ -152,6 +156,8 @@ struct RuledCostChoice
     int costIndex = -1;
     RuledCostChoiceZone zone = RuledCostChoiceZone::Battlefield;
     QSet<quint32> candidateIds;
+    int min = 1;
+    int max = 1;
 };
 
 struct RuledCostData
@@ -364,6 +370,8 @@ public:
         // For Deck / Revealed picks: oracle card names parallel to serverCardIdToOid keys,
         // used to populate the deck zone view prompt and the revealed-cards popup.
         QStringList candidateNames;
+        /// Source-zone labels parallel to candidateNames for unified private search cohorts.
+        QStringList candidateAnnotations;
         // True when the popup is also owned by the separate table-visible public-reveal state.
         // Pending-choice teardown must not close that shared window optimistically on submit;
         // the next authoritative batch retires it for every participant together.
@@ -1298,6 +1306,19 @@ public:
     [[nodiscard]] QStringList resolutionHandPickCandidateNames() const
     {
         return isResolutionHandPickActive() ? pendingChoice->candidateNames : QStringList{};
+    }
+    [[nodiscard]] bool hasPendingZoneScopeChoice() const
+    {
+        if (!hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch) || pendingChoice->choiceOptions.isEmpty()) {
+            return false;
+        }
+        return std::all_of(pendingChoice->choiceOptions.cbegin(), pendingChoice->choiceOptions.cend(),
+                           [](const RuledChoiceOption &option) { return !option.searchZones.isEmpty(); });
+    }
+
+    [[nodiscard]] QStringList resolutionHandPickCandidateAnnotations() const
+    {
+        return isResolutionHandPickActive() ? pendingChoice->candidateAnnotations : QStringList{};
     }
     /// Window title for the Deck / Revealed pick popup (empty for a hand pick, which has none).
     [[nodiscard]] QString resolutionHandPickViewTitle() const

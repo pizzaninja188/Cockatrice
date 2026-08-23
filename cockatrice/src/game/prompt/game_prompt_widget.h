@@ -7,6 +7,7 @@
 class QLabel;
 class QPushButton;
 class QHBoxLayout;
+class QCheckBox;
 
 class GamePromptWidget : public QWidget
 {
@@ -43,10 +44,14 @@ public:
         CleanupDiscard,
         /// Tier-3 resolution pick over cards in a zone (Brainstorm, Gifts Ungiven, …).
         ResolutionPick,
+        /// A local activation transaction is collecting an engine-authored bounded graveyard set.
+        CostSelection,
         /// CR 608.2g resolution-time mana payment; normal priority controls stay hidden.
         ResolutionPayment,
         /// Engine-authored labeled choices rendered as ordinary buttons in this panel.
         ChoiceOptions,
+        /// Engine-authored searchable-zone combinations rendered as checkboxes plus Confirm.
+        ZoneSelection,
         /// Another player is answering a public parked resolution choice. No local action exists.
         WaitingForChoice,
         /// CR 603.3b: ordering this player's simultaneous triggers. The picking happens in the
@@ -66,6 +71,7 @@ public:
             int index = -1;
             QString label;
             bool enabled = false;
+            QVector<int> searchZones;
         };
         PromptMode mode = PromptMode::Normal;
         /// Cards required / selected — CleanupDiscard, OpeningBottom, ResolutionPick. For the
@@ -170,6 +176,8 @@ signals:
     void ruledOpeningBottomDoneRequested();
     void undoLandTapRequested();
     void ruledResolutionHandPickConfirmRequested();
+    void ruledCostSelectionConfirmRequested();
+    void ruledCostSelectionCancelRequested();
     void ruledResolutionPaymentDeclineRequested();
     void ruledChoiceOptionRequested(int optionIndex);
 
@@ -182,6 +190,8 @@ private:
     void setTargetingSource(TargetingSource source, bool active);
     /// Hide every priority / combat / targeting control — what the take-over modes all do.
     void hideActionAndCombatButtons();
+    void updateZoneSelectionControls();
+    [[nodiscard]] int matchingZoneSelectionOption() const;
 
     QLabel *promptLabel;
     QPushButton *passPriorityButton;
@@ -231,6 +241,11 @@ private:
     QPushButton *resolutionPaymentDeclineButton = nullptr;
     QHBoxLayout *choiceOptionsRow = nullptr;
     QVector<QPushButton *> choiceOptionButtons;
+    QHBoxLayout *zoneSelectionRow = nullptr;
+    QCheckBox *zoneSelectionHandCheckBox = nullptr;
+    QCheckBox *zoneSelectionGraveyardCheckBox = nullptr;
+    QCheckBox *zoneSelectionLibraryCheckBox = nullptr;
+    QPushButton *zoneSelectionConfirmButton = nullptr;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(GamePromptWidget::TargetingSources)

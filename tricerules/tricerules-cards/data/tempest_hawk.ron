@@ -1,0 +1,27 @@
+// Oracle verified 2026-08-23. CR 510.2, 603.2, 701.16, 701.20, and 701.23.
+(
+  id: "tempest_hawk",
+  name: "Tempest Hawk",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Bird"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [(
+    trigger: WheneverSelfDealsCombatDamageToPlayer,
+    effect: [ChooseResolutionBranch(
+      optional: true,
+      branches: [(
+        label: "Search for Tempest Hawk",
+        cost: None,
+        effects: [SearchLibrary(
+          filter: Some((exact_name: Some("Tempest Hawk"))),
+          destination: Hand,
+          shuffle: true,
+          reveal: true,
+        )],
+      )],
+    )],
+    text: "Whenever this creature deals combat damage to a player, you may search your library for a card named Tempest Hawk, reveal it, put it into your hand, then shuffle.",
+  )],
+)

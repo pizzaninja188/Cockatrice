@@ -750,6 +750,45 @@ TEST_F(RuledBatchTest, LibraryLookChoiceKeepsImagesAndEligibilityPrivate)
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+TEST_F(RuledBatchTest, MultiZoneSearchMetadataAndTransientIdsAreDeciderPrivate)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_ZONE_SEARCH);
+    choice->set_prompt_text("Search hand, graveyard, and library");
+    for (const quint32 oid : {501u, 501u, 777u}) choice->add_candidate_object_ids(oid);
+    for (int i = 0; i < 3; ++i) {
+        choice->add_candidate_card_ids("altanak");
+        choice->add_candidate_names("Altanak, the Thrice-Called");
+    }
+    choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+    choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD);
+    choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
+
+    const auto forP1 = redactFor(batch, p1);
+    const auto p1It = std::find_if(forP1.events().begin(), forP1.events().end(),
+                                   [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p1It, forP1.events().end());
+    const auto &p1Choice = p1It->resolution_choice_required();
+    EXPECT_EQ(p1Choice.candidate_source_zones_size(), 3);
+    ASSERT_EQ(p1Choice.candidate_server_card_ids_size(), 3);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(0), 0);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(1), 1);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(2), 2);
+
+    const auto forP2 = redactFor(batch, p2);
+    const auto p2It = std::find_if(forP2.events().begin(), forP2.events().end(),
+                                   [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p2It, forP2.events().end());
+    const auto &p2Choice = p2It->resolution_choice_required();
+    EXPECT_EQ(p2Choice.candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_names_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_source_zones_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
+}
+
 // Private "look" effects such as Cracked Skull expose the complete target hand and the
 // engine-authored eligibility mask only to the deciding player. The other seat gets neither the
 // identities nor a derived type oracle.
@@ -1357,7 +1396,7 @@ TEST_F(RuledBatchTest, TriggerModeTargetsReachOnlyTheController)
     EXPECT_EQ(forOpponent.events(0).trigger_needs_target().modes_size(), 0);
 }
 
-TEST_F(RuledBatchTest, ResolutionBranchButtonsReachOnlyTheDecidingPlayer)
+TEST_F(RuledBatchTest, ResolutionBranchMetadataReachesOnlyTheDecidingPlayer)
 {
     ruled::v1::RuledEventBatch batch;
     auto *choice = batch.add_events()->mutable_resolution_choice_required();
@@ -1368,10 +1407,13 @@ TEST_F(RuledBatchTest, ResolutionBranchButtonsReachOnlyTheDecidingPlayer)
     branch->set_branch_index(0);
     branch->set_label("Discard a creature card");
     branch->set_selectable(true);
+    branch->add_search_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+    branch->add_search_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
 
     const auto forController = redactFor(batch, p1);
     ASSERT_EQ(forController.events(0).resolution_choice_required().resolution_branches_size(), 1);
     EXPECT_EQ(forController.events(0).resolution_choice_required().resolution_branches(0).branch_index(), 0u);
+    EXPECT_EQ(forController.events(0).resolution_choice_required().resolution_branches(0).search_zones_size(), 2);
 
     const auto forOpponent = redactFor(batch, p2);
     EXPECT_EQ(forOpponent.events(0).resolution_choice_required().resolution_branches_size(), 0);

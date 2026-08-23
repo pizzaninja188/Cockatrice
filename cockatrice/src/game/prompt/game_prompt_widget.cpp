@@ -1,9 +1,12 @@
 #include "game_prompt_widget.h"
 
+#include <QCheckBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QObject>
 #include <QPushButton>
+#include <QSet>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 #include <QtAlgorithms>
 
@@ -146,16 +149,26 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     layout->addLayout(openingRowLayout);
     connect(openingKeepButton, &QPushButton::clicked, this, &GamePromptWidget::ruledOpeningMulliganKeepRequested);
     connect(openingMulliganButton, &QPushButton::clicked, this, &GamePromptWidget::ruledOpeningMulliganRedrawRequested);
-    connect(openingBottomCancelButton, &QPushButton::clicked,
-            this, &GamePromptWidget::ruledOpeningBottomCancelRequested);
+    connect(openingBottomCancelButton, &QPushButton::clicked, this, [this]() {
+        if (effectiveMode() == PromptMode::CostSelection) {
+            emit ruledCostSelectionCancelRequested();
+        } else {
+            emit ruledOpeningBottomCancelRequested();
+        }
+    });
     connect(openingBottomDoneButton, &QPushButton::clicked,
             this, &GamePromptWidget::ruledOpeningBottomDoneRequested);
 
     resolutionHandPickConfirmButton = new QPushButton(this);
     resolutionHandPickConfirmButton->setObjectName("resolutionHandPickConfirmButton");
     resolutionHandPickConfirmButton->hide();
-    connect(resolutionHandPickConfirmButton, &QPushButton::clicked, this,
-            &GamePromptWidget::ruledResolutionHandPickConfirmRequested);
+    connect(resolutionHandPickConfirmButton, &QPushButton::clicked, this, [this]() {
+        if (effectiveMode() == PromptMode::CostSelection) {
+            emit ruledCostSelectionConfirmRequested();
+        } else {
+            emit ruledResolutionHandPickConfirmRequested();
+        }
+    });
     layout->addWidget(resolutionHandPickConfirmButton);
 
     auto *resolutionPaymentRow = new QHBoxLayout;
@@ -173,6 +186,31 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     choiceOptionsRow->setContentsMargins(0, 0, 0, 0);
     choiceOptionsRow->setSpacing(4);
     layout->addLayout(choiceOptionsRow);
+
+    zoneSelectionRow = new QHBoxLayout;
+    zoneSelectionRow->setContentsMargins(0, 0, 0, 0);
+    zoneSelectionRow->setSpacing(8);
+    zoneSelectionHandCheckBox = new QCheckBox(this);
+    zoneSelectionHandCheckBox->setObjectName("zoneSelectionHandCheckBox");
+    zoneSelectionGraveyardCheckBox = new QCheckBox(this);
+    zoneSelectionGraveyardCheckBox->setObjectName("zoneSelectionGraveyardCheckBox");
+    zoneSelectionLibraryCheckBox = new QCheckBox(this);
+    zoneSelectionLibraryCheckBox->setObjectName("zoneSelectionLibraryCheckBox");
+    zoneSelectionConfirmButton = new QPushButton(this);
+    zoneSelectionConfirmButton->setObjectName("zoneSelectionConfirmButton");
+    for (auto *check : {zoneSelectionHandCheckBox, zoneSelectionGraveyardCheckBox,
+                        zoneSelectionLibraryCheckBox}) {
+        connect(check, &QCheckBox::toggled, this, [this]() { updateZoneSelectionControls(); });
+        zoneSelectionRow->addWidget(check);
+    }
+    connect(zoneSelectionConfirmButton, &QPushButton::clicked, this, [this]() {
+        const int optionIndex = matchingZoneSelectionOption();
+        if (optionIndex >= 0) {
+            emit ruledChoiceOptionRequested(optionIndex);
+        }
+    });
+    zoneSelectionRow->addWidget(zoneSelectionConfirmButton);
+    layout->addLayout(zoneSelectionRow);
 
     passPriorityButton = new QPushButton(this);
     passPriorityButton->setObjectName("passPriorityButton");
@@ -268,6 +306,10 @@ void GamePromptWidget::retranslateUi()
     }
     resolutionHandPickConfirmButton->setText(tr("Confirm"));
     resolutionPaymentDeclineButton->setText(tr("Decline"));
+    zoneSelectionHandCheckBox->setText(tr("Hand"));
+    zoneSelectionGraveyardCheckBox->setText(tr("Graveyard"));
+    zoneSelectionLibraryCheckBox->setText(tr("Library"));
+    zoneSelectionConfirmButton->setText(tr("Confirm"));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -282,8 +324,10 @@ GamePromptWidget::PromptMode GamePromptWidget::effectiveMode() const
         case PromptMode::CommandPending:
         case PromptMode::UpdatingGame:
         case PromptMode::ResolutionPick:
+        case PromptMode::CostSelection:
         case PromptMode::ResolutionPayment:
         case PromptMode::ChoiceOptions:
+        case PromptMode::ZoneSelection:
         case PromptMode::WaitingForChoice:
         // The engine is hard-blocked on the ordering answer, so a leftover mid-cast targeting
         // state cannot legitimately coexist with it — this takes over.
@@ -307,10 +351,15 @@ GamePromptWidget::PromptMode GamePromptWidget::effectiveMode() const
 
 void GamePromptWidget::setRuledPromptState(RuledPromptState newState)
 {
+    const bool enteringZoneSelection =
+        promptState.mode != PromptMode::ZoneSelection && newState.mode == PromptMode::ZoneSelection;
     promptState = std::move(newState);
     qDeleteAll(choiceOptionButtons);
     choiceOptionButtons.clear();
     for (const auto &option : promptState.choiceOptions) {
+        if (promptState.mode == PromptMode::ZoneSelection) {
+            continue;
+        }
         auto *button = new QPushButton(option.label, this);
         button->setObjectName(QStringLiteral("ruledChoiceOptionButton_%1").arg(option.index));
         button->setEnabled(option.enabled);
@@ -318,6 +367,14 @@ void GamePromptWidget::setRuledPromptState(RuledPromptState newState)
                 [this, index = option.index] { emit ruledChoiceOptionRequested(index); });
         choiceOptionsRow->addWidget(button);
         choiceOptionButtons.append(button);
+    }
+    if (enteringZoneSelection) {
+        const QSignalBlocker handBlocker(zoneSelectionHandCheckBox);
+        const QSignalBlocker graveyardBlocker(zoneSelectionGraveyardCheckBox);
+        const QSignalBlocker libraryBlocker(zoneSelectionLibraryCheckBox);
+        zoneSelectionHandCheckBox->setChecked(false);
+        zoneSelectionGraveyardCheckBox->setChecked(false);
+        zoneSelectionLibraryCheckBox->setChecked(false);
     }
     // The seat buttons carry the seat ids in their click handlers, so rewire them on entry.
     openingPickSeatButton1->disconnect();
@@ -367,8 +424,10 @@ void GamePromptWidget::applyPromptStateText()
             return;
         case PromptMode::ClickChoice:
         case PromptMode::ResolutionPick:
+        case PromptMode::CostSelection:
         case PromptMode::ResolutionPayment:
         case PromptMode::ChoiceOptions:
+        case PromptMode::ZoneSelection:
         case PromptMode::WaitingForChoice:
         case PromptMode::TriggerOrder:
             // Engine-authored: the caller passed the prompt the engine wrote.
@@ -592,6 +651,51 @@ void GamePromptWidget::hideActionAndCombatButtons()
     resolutionPaymentDeclineButton->setVisible(false);
 }
 
+int GamePromptWidget::matchingZoneSelectionOption() const
+{
+    if (effectiveMode() != PromptMode::ZoneSelection) {
+        return -1;
+    }
+    QSet<int> selected;
+    if (zoneSelectionHandCheckBox->isChecked()) {
+        selected.insert(1);
+    }
+    if (zoneSelectionGraveyardCheckBox->isChecked()) {
+        selected.insert(2);
+    }
+    if (zoneSelectionLibraryCheckBox->isChecked()) {
+        selected.insert(3);
+    }
+    for (const auto &option : promptState.choiceOptions) {
+        if (!option.enabled) {
+            continue;
+        }
+        const QSet<int> authored(option.searchZones.cbegin(), option.searchZones.cend());
+        if (!authored.isEmpty() && authored == selected) {
+            return option.index;
+        }
+    }
+    return -1;
+}
+
+void GamePromptWidget::updateZoneSelectionControls()
+{
+    const bool active = effectiveMode() == PromptMode::ZoneSelection;
+    QSet<int> available;
+    if (active) {
+        for (const auto &option : promptState.choiceOptions) {
+            for (const int zone : option.searchZones) {
+                available.insert(zone);
+            }
+        }
+    }
+    zoneSelectionHandCheckBox->setVisible(active && available.contains(1));
+    zoneSelectionGraveyardCheckBox->setVisible(active && available.contains(2));
+    zoneSelectionLibraryCheckBox->setVisible(active && available.contains(3));
+    zoneSelectionConfirmButton->setVisible(active);
+    zoneSelectionConfirmButton->setEnabled(active && matchingZoneSelectionOption() >= 0);
+}
+
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
     const PromptMode mode = effectiveMode();
@@ -604,18 +708,22 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     openingKeepButton->setVisible(mode == PromptMode::OpeningMulligan);
     // No mulligan below a zero-card hand.
     openingMulliganButton->setVisible(mode == PromptMode::OpeningMulligan && (7 - promptState.required) - 1 >= 0);
-    openingBottomCancelButton->setVisible(mode == PromptMode::OpeningBottom && promptState.selected >= 1);
+    openingBottomCancelButton->setVisible((mode == PromptMode::OpeningBottom && promptState.selected >= 1) ||
+                                          mode == PromptMode::CostSelection);
     openingBottomDoneButton->setVisible(mode == PromptMode::OpeningBottom && promptState.required > 0 &&
                                         promptState.selected == promptState.required);
-    resolutionHandPickConfirmButton->setVisible(mode == PromptMode::ResolutionPick);
+    resolutionHandPickConfirmButton->setVisible(mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection);
     resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment);
     for (auto *button : choiceOptionButtons) {
         button->setVisible(mode == PromptMode::ChoiceOptions);
     }
+    updateZoneSelectionControls();
     declineClickChoiceButton->setVisible(
         (mode == PromptMode::ClickChoice || mode == PromptMode::ChoiceOptions) && promptState.canDecline);
-    if (mode == PromptMode::ResolutionPick) {
-        resolutionHandPickConfirmButton->setEnabled(promptState.selected >= promptState.required);
+    if (mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection) {
+        resolutionHandPickConfirmButton->setEnabled(mode == PromptMode::CostSelection
+                                                        ? promptState.selected == promptState.required
+                                                        : promptState.selected >= promptState.required);
     }
 
     // Every take-over mode suppresses the priority / combat / targeting controls.

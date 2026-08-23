@@ -1,0 +1,18 @@
+// Oracle verified 2026-08-23. CR 603.6c, 701.20, and 701.24; random bottom order is seeded.
+(
+  id: "living_phone",
+  name: "Living Phone",
+  mana_cost: "{2}{W}",
+  types: ["Artifact", "Creature", "Toy"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    trigger: WhenSelfDies,
+    effect: [LookChooseToHand(
+      count: 5,
+      filter: (card_type: Some(Creature), printed_power: Some(AtMost(2))),
+      bottom_order: Random,
+    )],
+    text: "When this creature dies, look at the top five cards of your library. You may reveal a creature card with power 2 or less from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
+  )],
+)

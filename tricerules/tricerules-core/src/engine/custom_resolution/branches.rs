@@ -33,6 +33,7 @@ impl GameEngine {
                     mana_cost: payment.mana_cost.to_string(),
                     reveal_audience: 0,
                     revealed_zone_owner_player_id: None,
+                    candidate_source_zones: Vec::new(),
                 },
             )),
         })
@@ -385,6 +386,7 @@ impl GameEngine {
                             mana_cost: String::new(),
                             reveal_audience: 0,
                             revealed_zone_owner_player_id: None,
+                            candidate_source_zones: Vec::new(),
                         },
                     )),
                 });

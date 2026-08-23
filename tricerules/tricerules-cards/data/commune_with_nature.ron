@@ -4,6 +4,6 @@
   mana_cost: "{G}",
   types: ["Sorcery"],
   spell_effect: [
-    LookChooseToHand(count: 5, filter: Creature, bottom_order: Chosen),
+    LookChooseToHand(count: 5, filter: (card_type: Some(Creature)), bottom_order: Chosen),
   ],
 )

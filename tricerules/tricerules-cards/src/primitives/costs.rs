@@ -1,6 +1,6 @@
 //! Costs paid to activate abilities.
 
-use super::{GameCondition, TargetFilter};
+use super::{GameCondition, TargetFilter, ZoneCardFilter};
 use crate::mana::ManaCost;
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +26,27 @@ pub enum AbilityCost {
     /// Vine's "Sacrifice a creature with defender"). This is selection, not targeting: shroud
     /// and hexproof do not apply.
     SacrificePermanent { filter: TargetFilter },
+    /// Exile exactly `count` matching cards from the activating player's graveyard. This is a
+    /// selection cost, not targeting. Say Its Name excludes its own source object; Bearscape and
+    /// Grim Lavamancer reuse the same bounded graveyard-cohort payment without source exclusion.
+    ExileGraveyardCards {
+        count: u32,
+        filter: ZoneCardFilter,
+        #[serde(default)]
+        exclude_source: bool,
+    },
+}
+
+impl AbilityCost {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::ExileGraveyardCards { count: 0, .. } => {
+                Err("graveyard-card exile cost requires a positive count".into())
+            }
+            Self::ExileGraveyardCards { filter, .. } => filter.validate(),
+            _ => Ok(()),
+        }
+    }
 }
 
 /// Mandatory additional costs paid while casting a spell (CR 118.8, 601.2f-h).

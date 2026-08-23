@@ -85,6 +85,12 @@ impl GameEngine {
         };
         if matches!(
             pending.continuation,
+            ResolutionContinuation::SearchZoneScope { .. }
+        ) {
+            return self.finish_search_zone_scope(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::AuthoredBranch {
                 branch: PendingResolutionBranch {
                     stage: PendingResolutionBranchStage::Selecting,
@@ -94,6 +100,12 @@ impl GameEngine {
             }
         ) {
             return self.select_resolution_branch(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::OwnerLibraryPlacement { .. }
+        ) {
+            return self.finish_owner_library_placement(pending, answer, decision);
         }
         if let Some(payment) = pending.continuation.mana_payment().cloned() {
             return self.finish_resolution_mana_payment(pending, payment, answer, decision, player);
@@ -173,6 +185,12 @@ impl GameEngine {
             ResolutionContinuation::SearchLibrary { .. } => {
                 return self.finish_library_search(pending, chosen);
             }
+            ResolutionContinuation::SearchZoneScope { .. } => {
+                unreachable!("search-zone branch handled before object-choice validation")
+            }
+            ResolutionContinuation::OwnerLibraryPlacement { .. } => {
+                unreachable!("owner placement branch handled before object-choice validation")
+            }
             ResolutionContinuation::LibraryPartition { .. } => {
                 return self.finish_library_partition(pending, chosen);
             }
@@ -184,6 +202,9 @@ impl GameEngine {
             }
             ResolutionContinuation::HandChoice { .. } => {
                 return self.finish_hand_choice(pending, chosen);
+            }
+            ResolutionContinuation::GraveyardChoice { .. } => {
+                return self.finish_graveyard_choice(pending, chosen);
             }
             ResolutionContinuation::Sacrifice { .. } => {
                 return self.finish_sacrifice_chosen(pending, chosen);
@@ -368,6 +389,7 @@ impl GameEngine {
                     payment_currently_legal: false,
                     reveal_audience: 0,
                     revealed_zone_owner_player_id: None,
+                    candidate_source_zones: Vec::new(),
                 },
             )),
         });

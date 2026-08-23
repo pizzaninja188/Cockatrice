@@ -63,6 +63,7 @@ signals:
     /// Emitted as generic pips are staged for a resolution-time payment.
     void ruledResolutionManaPromptChanged();
     void ruledAbilityCostPromptChanged();
+    void ruledGraveyardCostSelectionChanged(bool active, int required, int selected);
     /// Emitted when an activated ability enters or leaves the target-selection waiting state.
     void ruledActivatedAbilityTargetPendingChanged(bool pending, QString abilityText);
 
@@ -165,6 +166,11 @@ public:
     [[nodiscard]] QString pendingRuledAbilityPromptText() const;
     [[nodiscard]] bool isAwaitingRuledAbilityCostSelection() const;
     [[nodiscard]] QString pendingRuledAbilityCostPromptText() const;
+    [[nodiscard]] bool isAwaitingRuledGraveyardCostSelection() const;
+    [[nodiscard]] bool isRuledGraveyardCostObjectSelected(quint32 objectId) const;
+    [[nodiscard]] bool getRuledGraveyardCostSelectionProgress(int &required, int &selected) const;
+    void confirmRuledGraveyardCostSelection();
+    void cancelRuledGraveyardCostSelection();
     bool tryToggleRuledCleanupDiscard(CardItem *card);
     bool tryRuledOpeningBottomCard(CardItem *card);
     bool tryRuledResolutionHandPickCard(CardItem *card);

@@ -6,15 +6,13 @@ pub(super) fn draw(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::Draw { count } = effect else {
+    let SpellEffectKind::Draw { who, count } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let drawers = player_recipients(cx, who);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let top = cx.top;
-    // "That player draws…" (Howling Mine) resolves against the trigger's affected player; for a
-    // spell or an ordinary ability this *is* the controller.
-    let drawer = cx.affected_player;
     let spell_label = cx.spell_label;
 
     // Blue Sun's Zenith / Braingeyser: `count` may be the cast-time X.
@@ -23,7 +21,9 @@ pub(super) fn draw(
         AmountContext::for_stack_item(top, cx.controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
-    draw_cards_for_player(engine, events, drawer, count, spell_label)?;
+    for drawer in drawers {
+        draw_cards_for_player(engine, events, drawer, count, spell_label)?;
+    }
 
     Ok(EffectOutcome::Continue)
 }
@@ -203,7 +203,7 @@ pub(super) fn return_to_owners_hand(
     Ok(EffectOutcome::Continue)
 }
 
-fn move_permanent_to_owners_library(
+pub(in crate::engine) fn move_permanent_to_owners_library(
     engine: &mut GameEngine,
     events: &mut Vec<rv1::RuledEvent>,
     tid: ObjectId,
@@ -242,6 +242,11 @@ fn move_permanent_to_owners_library(
             crate::engine::shuffle_player_library_for_current_command(&mut engine.state, owner);
             events.push(ev_log(format!("P{owner} shuffles their library.")));
         }
+        LibraryPlacement::OwnerChoiceTopOrBottom => {
+            return Err(EngineError::Illegal(
+                "owner library placement choice must be resolved before movement",
+            ));
+        }
     }
     events.push(permanent_moved_event(
         &engine.state,
@@ -264,6 +269,91 @@ pub(super) fn put_target_permanent_in_owners_library(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     if let Some(&tid) = cx.targets.first() {
+        if placement == LibraryPlacement::OwnerChoiceTopOrBottom {
+            let Some(object) = cx.engine.state.objects.get(&tid) else {
+                return Ok(EffectOutcome::Continue);
+            };
+            let owner = object.owner;
+            let generation = cx
+                .engine
+                .state
+                .zone_change_generation
+                .get(&tid)
+                .copied()
+                .unwrap_or(0);
+            let prompt = format!(
+                "P{owner}: put {} on the top or bottom of its owner's library.",
+                object_display_name(&cx.engine.state, cx.engine.registry, tid)
+            );
+            cx.events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                    rv1::ResolutionChoiceRequired {
+                        deciding_player_id: owner,
+                        source_object_id: cx.top.id,
+                        prompt_text: prompt.clone(),
+                        choice_kind: custom::ChoiceKind::ResolutionBranch as i32,
+                        candidate_object_ids: Vec::new(),
+                        candidate_card_ids: Vec::new(),
+                        // Exactly one placement branch is mandatory. These cardinalities also
+                        // drive the ruled client's Decline affordance; 0/0 would falsely present
+                        // this CR 608 choice as optional even though submission rejects decline.
+                        min: 1,
+                        max: 1,
+                        ordered: false,
+                        candidate_names: Vec::new(),
+                        candidate_server_card_ids: Vec::new(),
+                        unique_names: false,
+                        generic_mana_cost: 0,
+                        payment_currently_legal: false,
+                        resolution_branches: vec![
+                            rv1::ResolutionBranchOption {
+                                branch_index: 0,
+                                label: "Top".into(),
+                                cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                                cost_text: String::new(),
+                                selectable: true,
+                                search_zones: Vec::new(),
+                            },
+                            rv1::ResolutionBranchOption {
+                                branch_index: 1,
+                                label: "Bottom".into(),
+                                cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                                cost_text: String::new(),
+                                selectable: true,
+                                search_zones: Vec::new(),
+                            },
+                        ],
+                        mana_cost: String::new(),
+                        candidate_selectable: Vec::new(),
+                        reveal_audience: 0,
+                        revealed_zone_owner_player_id: None,
+                        candidate_source_zones: Vec::new(),
+                    },
+                )),
+            });
+            cx.events.push(ev_log(prompt.clone()));
+            cx.engine.state.pending_resolution = Some(PendingResolution {
+                deciding_player: owner,
+                presentation: PendingResolutionPresentation {
+                    source_object_id: cx.top.id,
+                    candidates: Vec::new(),
+                    min: 1,
+                    max: 1,
+                    ordered: false,
+                    prompt,
+                    choice_kind: custom::ChoiceKind::ResolutionBranch,
+                    unique_names: false,
+                },
+                continuation: ResolutionContinuation::OwnerLibraryPlacement {
+                    stack: ParkedStackResolution::new(cx.top.clone()),
+                    object_id: tid,
+                    owner,
+                    zone_change_generation: generation,
+                    spell_label: cx.spell_label.to_string(),
+                },
+            });
+            return Ok(EffectOutcome::Suspended);
+        }
         move_permanent_to_owners_library(cx.engine, cx.events, tid, placement, cx.spell_label)?;
     }
 
@@ -521,6 +611,7 @@ fn choose_hand_cards_for_player(
                 },
                 revealed_zone_owner_player_id: (visibility == HandChoiceVisibility::PublicReveal)
                     .then_some(affected_player),
+                candidate_source_zones: Vec::new(),
             },
         )),
     });
@@ -779,6 +870,7 @@ pub(super) fn target_player_sacrifices(
                             payment_currently_legal: false,
                             reveal_audience: 0,
                             revealed_zone_owner_player_id: None,
+                            candidate_source_zones: Vec::new(),
                         },
                     )),
                 });
@@ -805,6 +897,109 @@ pub(super) fn target_player_sacrifices(
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn choose_graveyard_card(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ChooseGraveyardCard {
+        filter,
+        destination,
+        optional,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let controller = cx.controller;
+    let Some(index) = cx.engine.state.player_idx(controller) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let candidates: Vec<ObjectId> = cx.engine.state.players[index]
+        .graveyard
+        .iter()
+        .copied()
+        .filter(|oid| {
+            library_card_matches_filter(&cx.engine.state, cx.engine.registry, *oid, Some(&filter))
+        })
+        .collect();
+    if candidates.is_empty() {
+        cx.events.push(ev_log(format!(
+            "P{controller} has no matching graveyard card ({}).",
+            cx.spell_label
+        )));
+        return Ok(EffectOutcome::Continue);
+    }
+    let min = if optional { 0 } else { 1 };
+    let prompt = if optional {
+        format!("P{controller}: you may choose a matching card from your graveyard.")
+    } else {
+        format!("P{controller}: choose a matching card from your graveyard.")
+    };
+    let (candidate_card_ids, candidate_names) = candidate_identities(cx.engine, &candidates);
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: controller,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::GraveyardCards as i32,
+                candidate_object_ids: candidates.clone(),
+                candidate_card_ids,
+                min,
+                max: 1,
+                ordered: false,
+                candidate_names,
+                candidate_server_card_ids: Vec::new(),
+                unique_names: false,
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                candidate_selectable: Vec::new(),
+                reveal_audience: 0,
+                revealed_zone_owner_player_id: None,
+                candidate_source_zones: vec![
+                    rv1::ChoiceCandidateSourceZone::Graveyard as i32;
+                    candidates.len()
+                ],
+            },
+        )),
+    });
+    cx.events.push(ev_log(prompt.clone()));
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: candidates.clone(),
+            min,
+            max: 1,
+            ordered: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::GraveyardCards,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::GraveyardChoice {
+            stack: ParkedStackResolution::new(cx.top.clone()),
+            destination,
+            candidate_generations: candidates
+                .iter()
+                .map(|oid| {
+                    (
+                        *oid,
+                        cx.engine
+                            .state
+                            .zone_change_generation
+                            .get(oid)
+                            .copied()
+                            .unwrap_or(0),
+                    )
+                })
+                .collect(),
+            spell_label: cx.spell_label.to_string(),
+        },
+    });
+    Ok(EffectOutcome::Suspended)
 }
 
 pub(super) fn return_from_graveyard(
@@ -857,11 +1052,13 @@ pub(super) fn return_from_graveyard(
             use tricerules_cards::primitives::GraveyardDestination;
             let dest_zone = match destination {
                 GraveyardDestination::Hand => Zone::Hand,
-                GraveyardDestination::Battlefield => Zone::Battlefield,
+                GraveyardDestination::Battlefield { .. } => Zone::Battlefield,
             };
             let dest_proto = match destination {
                 GraveyardDestination::Hand => rv1::permanent_moved::Destination::Hand,
-                GraveyardDestination::Battlefield => rv1::permanent_moved::Destination::Battlefield,
+                GraveyardDestination::Battlefield { .. } => {
+                    rv1::permanent_moved::Destination::Battlefield
+                }
             };
             // CR 110.2: a card put onto the battlefield by an effect enters under the controller
             // of that effect ("under your control"), not under its owner's control. Irrelevant
@@ -879,7 +1076,10 @@ pub(super) fn return_from_graveyard(
                         unlock_room_door: None,
                         chosen_x: 0,
                         player_life_snapshot: engine.player_life_snapshot(),
-                        tapped: false,
+                        tapped: matches!(
+                            destination,
+                            GraveyardDestination::Battlefield { tapped: true }
+                        ),
                         entry_counters: BTreeMap::new(),
                         applied_effects: Vec::new(),
                     },
@@ -902,7 +1102,7 @@ pub(super) fn return_from_graveyard(
             }
             let dest_name = match destination {
                 GraveyardDestination::Hand => "hand",
-                GraveyardDestination::Battlefield => "battlefield",
+                GraveyardDestination::Battlefield { .. } => "battlefield",
             };
             events.push(ev_log(format!(
                 "{spell_label} returns {tgt} from graveyard to {dest_name}."
@@ -1143,6 +1343,7 @@ fn begin_library_partition(
                 payment_currently_legal: false,
                 reveal_audience: 0,
                 revealed_zone_owner_player_id: None,
+                candidate_source_zones: Vec::new(),
             },
         )),
     });
@@ -1275,6 +1476,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 payment_currently_legal: false,
                 reveal_audience: 0,
                 revealed_zone_owner_player_id: None,
+                candidate_source_zones: Vec::new(),
             },
         )),
     });
@@ -1342,7 +1544,7 @@ pub(super) fn look_choose_to_hand(
 
     let selectable: Vec<bool> = looked
         .iter()
-        .map(|&oid| card_matches_type_filter(&engine.state, engine.registry, oid, Some(&filter)))
+        .map(|&oid| library_card_matches_filter(&engine.state, engine.registry, oid, Some(&filter)))
         .collect();
     let legal: Vec<ObjectId> = looked
         .iter()
@@ -1377,6 +1579,7 @@ pub(super) fn look_choose_to_hand(
                 candidate_selectable: selectable,
                 reveal_audience: 0,
                 revealed_zone_owner_player_id: None,
+                candidate_source_zones: Vec::new(),
             },
         )),
     });
@@ -1411,62 +1614,114 @@ pub(super) fn look_choose_to_hand(
     Ok(EffectOutcome::Suspended)
 }
 
-pub(super) fn search_library(
-    cx: &mut EffectCx<'_>,
-    effect: SpellEffectKind,
-) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::SearchLibrary {
+pub(in crate::engine) fn search_zone_combinations(
+    available: &[CardSearchZone],
+) -> Vec<Vec<CardSearchZone>> {
+    let mut combinations = Vec::new();
+    for size in 1..=available.len() {
+        for mask in 1usize..(1usize << available.len()) {
+            if mask.count_ones() as usize == size {
+                combinations.push(
+                    available
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, zone)| ((mask & (1 << index)) != 0).then_some(*zone))
+                        .collect(),
+                );
+            }
+        }
+    }
+    combinations
+}
+
+fn search_zone_label(zone: CardSearchZone) -> &'static str {
+    match zone {
+        CardSearchZone::Hand => "Hand",
+        CardSearchZone::Graveyard => "Graveyard",
+        CardSearchZone::Library => "Library",
+    }
+}
+
+fn search_zone_proto(zone: CardSearchZone) -> i32 {
+    match zone {
+        CardSearchZone::Hand => rv1::ChoiceCandidateSourceZone::Hand as i32,
+        CardSearchZone::Graveyard => rv1::ChoiceCandidateSourceZone::Graveyard as i32,
+        CardSearchZone::Library => rv1::ChoiceCandidateSourceZone::Library as i32,
+    }
+}
+
+pub(in crate::engine) struct ZoneSearchRequest {
+    pub filter: Option<ZoneCardFilter>,
+    pub zones: Vec<CardSearchZone>,
+    pub destination: SearchDestination,
+    pub conditional_destination: Option<ConditionalSearchDestination>,
+    pub shuffle: bool,
+    pub reveal: bool,
+}
+
+pub(in crate::engine) fn park_zone_search_choice(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    top: &StackItem,
+    request: ZoneSearchRequest,
+) -> Result<(), EngineError> {
+    let ZoneSearchRequest {
         filter,
+        zones,
         destination,
+        conditional_destination,
         shuffle,
         reveal,
-    } = effect
-    else {
-        return Err(EngineError::Illegal("resolution dispatch mismatch"));
-    };
-    let engine = &mut *cx.engine;
-    let events = &mut *cx.events;
-    let top = cx.top;
-    let controller = cx.controller;
-    let spell_label = cx.spell_label;
-
-    let candidates: Vec<ObjectId> = {
-        let Some(idx) = engine.state.player_idx(controller) else {
-            events.push(ev_log(format!("{spell_label} resolves (no library).")));
-            return Ok(EffectOutcome::Suspended);
+    } = request;
+    let controller = top.controller;
+    let idx = engine
+        .state
+        .player_idx(controller)
+        .ok_or(EngineError::UnknownPlayer(controller))?;
+    let mut candidates = Vec::new();
+    let mut candidate_zones = Vec::new();
+    for zone in &zones {
+        let cohort: Vec<ObjectId> = match zone {
+            CardSearchZone::Hand => engine.state.players[idx].hand.clone(),
+            CardSearchZone::Graveyard => engine.state.players[idx].graveyard.clone(),
+            CardSearchZone::Library => engine.state.players[idx].library.iter().copied().collect(),
         };
-        engine.state.players[idx]
-            .library
-            .iter()
-            .copied()
-            .filter(|&oid| {
-                library_card_matches_filter(&engine.state, engine.registry, oid, filter.as_ref())
-            })
-            .collect()
-    };
-    // When a hidden-zone search requires a stated quality, the searching player may fail to find
-    // even when a matching card is present. An unrestricted search must still find a card when
-    // the library is nonempty.
-    let min = if filter.is_some() || candidates.is_empty() {
-        0u32
+        for oid in cohort.into_iter().filter(|oid| {
+            library_card_matches_filter(&engine.state, engine.registry, *oid, filter.as_ref())
+        }) {
+            candidates.push(oid);
+            candidate_zones.push(search_zone_proto(*zone));
+        }
+    }
+    let public_graveyard_match = candidates
+        .iter()
+        .zip(&candidate_zones)
+        .any(|(_, zone)| *zone == rv1::ChoiceCandidateSourceZone::Graveyard as i32);
+    let min = if public_graveyard_match || (filter.is_none() && !candidates.is_empty()) {
+        1
     } else {
-        1u32
+        0
     };
-    let prompt = match &filter {
-        None => format!("P{controller}: search your library for a card."),
-        Some(f) => format!(
-            "P{controller}: search your library for a {} card.",
-            library_card_filter_desc(f)
-        ),
-    };
+    let zone_names = zones
+        .iter()
+        .map(|zone| search_zone_label(*zone))
+        .collect::<Vec<_>>()
+        .join(" / ");
+    let prompt = format!("P{controller}: search {zone_names} for up to one matching card.");
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
+    let multi_zone = zones.len() > 1 || zones.first() != Some(&CardSearchZone::Library);
+    let choice_kind = if multi_zone {
+        custom::ChoiceKind::ZoneSearch
+    } else {
+        custom::ChoiceKind::LibrarySearch
+    };
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
                 deciding_player_id: controller,
                 source_object_id: top.id,
                 prompt_text: prompt.clone(),
-                choice_kind: custom::ChoiceKind::LibrarySearch as i32,
+                choice_kind: choice_kind as i32,
                 candidate_object_ids: candidates.clone(),
                 candidate_card_ids,
                 candidate_names,
@@ -1482,6 +1737,11 @@ pub(super) fn search_library(
                 payment_currently_legal: false,
                 reveal_audience: 0,
                 revealed_zone_owner_player_id: None,
+                candidate_source_zones: if multi_zone {
+                    candidate_zones
+                } else {
+                    Vec::new()
+                },
             },
         )),
     });
@@ -1496,15 +1756,122 @@ pub(super) fn search_library(
             ordered: false,
             unique_names: false,
             prompt,
-            choice_kind: custom::ChoiceKind::LibrarySearch,
+            choice_kind,
         },
         continuation: ResolutionContinuation::SearchLibrary {
             stack: ParkedStackResolution::new(top.clone()),
+            zones,
             destination,
+            conditional_destination,
             shuffle,
             reveal,
         },
     });
+    Ok(())
+}
+
+pub(super) fn search_library(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::SearchLibrary {
+        filter,
+        zones,
+        destination,
+        conditional_destination,
+        shuffle,
+        reveal,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    match zones {
+        SearchZoneSelection::Fixed(zones) => park_zone_search_choice(
+            cx.engine,
+            cx.events,
+            cx.top,
+            ZoneSearchRequest {
+                filter,
+                zones,
+                destination,
+                conditional_destination,
+                shuffle,
+                reveal,
+            },
+        )?,
+        SearchZoneSelection::PlayerChoice(available_zones) => {
+            let combinations = search_zone_combinations(&available_zones);
+            let prompt = format!("P{}: choose which zones to search.", cx.controller);
+            let branches = combinations
+                .iter()
+                .enumerate()
+                .map(|(index, zones)| rv1::ResolutionBranchOption {
+                    branch_index: index as u32,
+                    label: zones
+                        .iter()
+                        .map(|zone| search_zone_label(*zone))
+                        .collect::<Vec<_>>()
+                        .join(" + "),
+                    cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                    cost_text: String::new(),
+                    selectable: true,
+                    search_zones: zones.iter().map(|zone| search_zone_proto(*zone)).collect(),
+                })
+                .collect();
+            cx.events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                    rv1::ResolutionChoiceRequired {
+                        deciding_player_id: cx.controller,
+                        source_object_id: cx.top.id,
+                        prompt_text: prompt.clone(),
+                        choice_kind: custom::ChoiceKind::ResolutionBranch as i32,
+                        candidate_object_ids: Vec::new(),
+                        candidate_card_ids: Vec::new(),
+                        // The player must choose one nonempty authored zone combination before
+                        // the search can begin. Failure to find happens in the following search,
+                        // not by declining this scope choice.
+                        min: 1,
+                        max: 1,
+                        ordered: false,
+                        candidate_names: Vec::new(),
+                        candidate_server_card_ids: Vec::new(),
+                        unique_names: false,
+                        generic_mana_cost: 0,
+                        payment_currently_legal: false,
+                        resolution_branches: branches,
+                        mana_cost: String::new(),
+                        candidate_selectable: Vec::new(),
+                        reveal_audience: 0,
+                        revealed_zone_owner_player_id: None,
+                        candidate_source_zones: Vec::new(),
+                    },
+                )),
+            });
+            cx.events.push(ev_log(prompt.clone()));
+            cx.engine.state.pending_resolution = Some(PendingResolution {
+                deciding_player: cx.controller,
+                presentation: PendingResolutionPresentation {
+                    source_object_id: cx.top.id,
+                    candidates: Vec::new(),
+                    min: 1,
+                    max: 1,
+                    ordered: false,
+                    prompt,
+                    choice_kind: custom::ChoiceKind::ResolutionBranch,
+                    unique_names: false,
+                },
+                continuation: ResolutionContinuation::SearchZoneScope {
+                    stack: ParkedStackResolution::new(cx.top.clone()),
+                    available_zones,
+                    filter,
+                    destination,
+                    conditional_destination,
+                    shuffle,
+                    reveal,
+                },
+            });
+        }
+    }
     // Resolution is now parked; the "resolves." log is emitted by finish_library_search.
     Ok(EffectOutcome::Suspended)
 }
@@ -1551,6 +1918,23 @@ mod tests {
         assert_eq!(
             engine.state.objects.get(&target).expect("target").zone,
             Zone::Library
+        );
+    }
+
+    #[test]
+    fn three_search_zones_produce_all_seven_nonempty_combinations_deterministically() {
+        use CardSearchZone::{Graveyard, Hand, Library};
+        assert_eq!(
+            search_zone_combinations(&[Hand, Graveyard, Library]),
+            vec![
+                vec![Hand],
+                vec![Graveyard],
+                vec![Library],
+                vec![Hand, Graveyard],
+                vec![Hand, Library],
+                vec![Graveyard, Library],
+                vec![Hand, Graveyard, Library],
+            ]
         );
     }
 }

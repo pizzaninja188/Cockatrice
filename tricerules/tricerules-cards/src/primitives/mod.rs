@@ -34,6 +34,96 @@ mod tests {
     }
 
     #[test]
+    fn zone_card_filters_validate_leaf_and_recursive_or_shapes() {
+        let living_phone = ZoneCardFilter {
+            card_type: Some(CardTypeFilter::Creature),
+            printed_power: Some(PowerComparison::AtMost(2)),
+            ..Default::default()
+        };
+        assert!(living_phone.validate().is_ok());
+
+        let say_its_name = ZoneCardFilter {
+            any_of: Some(vec![
+                ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Creature),
+                    ..Default::default()
+                },
+                ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Land),
+                    ..Default::default()
+                },
+            ]),
+            ..Default::default()
+        };
+        assert!(say_its_name.validate().is_ok());
+
+        let tempest_hawk = ZoneCardFilter {
+            exact_name: Some("Tempest Hawk".into()),
+            ..Default::default()
+        };
+        assert!(tempest_hawk.validate().is_ok());
+
+        assert!(ZoneCardFilter::default().validate().is_err());
+        assert!(ZoneCardFilter {
+            exact_name: Some(" ".into()),
+            ..Default::default()
+        }
+        .validate()
+        .is_err());
+        assert!(ZoneCardFilter {
+            any_of: Some(vec![tempest_hawk]),
+            ..Default::default()
+        }
+        .validate()
+        .is_err());
+        assert!(ZoneCardFilter {
+            any_of: Some(vec![
+                ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Creature),
+                    ..Default::default()
+                },
+                ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Land),
+                    ..Default::default()
+                },
+            ]),
+            subtype: Some("Bird".into()),
+            ..Default::default()
+        }
+        .validate()
+        .is_err());
+    }
+
+    #[test]
+    fn graveyard_card_cost_requires_a_positive_bounded_filtered_cohort() {
+        let namesake = ZoneCardFilter {
+            exact_name: Some("Say Its Name".into()),
+            ..Default::default()
+        };
+        assert!(AbilityCost::ExileGraveyardCards {
+            count: 2,
+            filter: namesake.clone(),
+            exclude_source: true,
+        }
+        .validate()
+        .is_ok());
+        assert!(AbilityCost::ExileGraveyardCards {
+            count: 0,
+            filter: namesake,
+            exclude_source: true,
+        }
+        .validate()
+        .is_err());
+        assert!(AbilityCost::ExileGraveyardCards {
+            count: 1,
+            filter: ZoneCardFilter::default(),
+            exclude_source: false,
+        }
+        .validate()
+        .is_err());
+    }
+
+    #[test]
     fn optional_draw_discard_is_only_single_card_discard_then_draw() {
         let effect = |who, discard_count, order| SpellEffectKind::DrawDiscard {
             who,
@@ -203,6 +293,7 @@ mod tests {
                 },
             ),
             effects: vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
                 count: Amount::Fixed(1),
             }],
         };
@@ -433,6 +524,7 @@ mod tests {
         assert!(SpellEffectKind::validate_list(&[
             mill,
             SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
                 count: Amount::Fixed(1),
             },
             counted_gain,

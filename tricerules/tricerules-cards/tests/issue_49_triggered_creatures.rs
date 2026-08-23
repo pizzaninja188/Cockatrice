@@ -384,6 +384,7 @@ fn issue_49_untargeted_etbs_compose_existing_effects() {
         assert_eq!(
             trigger(id).effect,
             [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
                 count: Amount::Fixed(1),
             }],
             "{id}"
@@ -486,6 +487,7 @@ fn issue_49_attack_triggers_use_existing_ordered_effects() {
     assert_eq!(
         trigger("library_larcenist").effect,
         [SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
             count: Amount::Fixed(1),
         }]
     );
@@ -493,6 +495,7 @@ fn issue_49_attack_triggers_use_existing_ordered_effects() {
         trigger("audacious_thief").effect,
         [
             SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
                 count: Amount::Fixed(1),
             },
             SpellEffectKind::LoseLife {

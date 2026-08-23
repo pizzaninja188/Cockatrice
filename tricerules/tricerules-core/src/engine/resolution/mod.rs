@@ -1153,6 +1153,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::ReturnFromGraveyard { .. } => {
                         zones::return_from_graveyard(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::ChooseGraveyardCard { .. } => {
+                        zones::choose_graveyard_card(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. } => {
                         zones::return_triggered_card_from_graveyard(&mut cx, effect)?
                     }
@@ -1852,7 +1855,7 @@ pub(super) fn library_card_matches_filter(
     state: &GameState,
     registry: &'static CardRegistry,
     oid: ObjectId,
-    filter: Option<&LibraryCardFilter>,
+    filter: Option<&ZoneCardFilter>,
 ) -> bool {
     let Some(filter) = filter else {
         return true;
@@ -1864,40 +1867,65 @@ pub(super) fn library_card_matches_filter(
     else {
         return false;
     };
+    if let Some(branches) = &filter.any_of {
+        return branches
+            .iter()
+            .any(|branch| library_card_matches_filter(state, registry, oid, Some(branch)));
+    }
     filter
-        .card_type
-        .is_none_or(|card_type| def.matches_card_type_outside_stack(card_type))
+        .exact_name
+        .as_deref()
+        .is_none_or(|name| def.name == name)
+        && filter
+            .card_type
+            .is_none_or(|card_type| def.matches_card_type_outside_stack(card_type))
         && filter
             .subtype
             .as_deref()
             .is_none_or(|subtype| def.has_subtype_outside_stack(subtype))
+        && filter.printed_power.is_none_or(|comparison| {
+            def.primary_face()
+                .power
+                .is_some_and(|power| match comparison {
+                    PowerComparison::AtLeast(minimum) => power >= minimum,
+                    PowerComparison::AtMost(maximum) => power <= maximum,
+                })
+        })
 }
 
-/// Human-readable description of a [`CardTypeFilter`] for prompt text.
-fn card_type_filter_desc(f: &CardTypeFilter) -> &'static str {
-    match f {
-        CardTypeFilter::BasicLand => "basic land",
-        CardTypeFilter::Land => "land",
-        CardTypeFilter::Instant => "instant",
-        CardTypeFilter::Sorcery => "sorcery",
-        CardTypeFilter::InstantOrSorcery => "instant or sorcery",
-        CardTypeFilter::Creature => "creature",
-        CardTypeFilter::Artifact => "artifact",
-        CardTypeFilter::Enchantment => "enchantment",
-        CardTypeFilter::Planeswalker => "planeswalker",
-        CardTypeFilter::Nonland => "nonland",
-        CardTypeFilter::Noncreature => "noncreature",
-    }
-}
+#[cfg(test)]
+mod zone_card_filter_tests {
+    use super::*;
 
-fn library_card_filter_desc(filter: &LibraryCardFilter) -> String {
-    match (filter.card_type.as_ref(), filter.subtype.as_deref()) {
-        (Some(card_type), Some(subtype)) => {
-            format!("{subtype} {}", card_type_filter_desc(card_type))
-        }
-        (Some(card_type), None) => card_type_filter_desc(card_type).to_string(),
-        (None, Some(subtype)) => subtype.to_string(),
-        (None, None) => "matching".to_string(),
+    #[test]
+    fn multiface_cards_use_front_face_printed_power_outside_the_battlefield() {
+        let decks = Some(vec![
+            vec!["reckless_waif_merciless_predator".to_string(); 12],
+            vec!["forest".to_string(); 12],
+        ]);
+        let engine = GameEngine::new(110_001, &[0, 1], 20, decks, true).expect("new game");
+        let object_id = engine.state.players[0].library[0];
+        let front_face_power = ZoneCardFilter {
+            printed_power: Some(PowerComparison::AtMost(1)),
+            ..Default::default()
+        };
+        let back_face_power = ZoneCardFilter {
+            printed_power: Some(PowerComparison::AtLeast(3)),
+            ..Default::default()
+        };
+
+        assert!(library_card_matches_filter(
+            &engine.state,
+            engine.registry,
+            object_id,
+            Some(&front_face_power),
+        ));
+        assert!(!library_card_matches_filter(
+            &engine.state,
+            engine.registry,
+            object_id,
+            Some(&back_face_power),
+        ));
     }
 }
 

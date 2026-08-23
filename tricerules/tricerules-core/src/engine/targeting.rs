@@ -1168,6 +1168,7 @@ fn validate_effect_targets(
         // interrupt, not a target declared at cast time. Scry is the same shape — the cards it
         // acts on are the top of the controller's own library, decided at resolution.
         | SpellEffectKind::SearchLibrary { .. }
+        | SpellEffectKind::ChooseGraveyardCard { .. }
         | SpellEffectKind::LookChooseToHand { .. }
         | SpellEffectKind::Scry { .. }
         | SpellEffectKind::LibraryPartition { .. }

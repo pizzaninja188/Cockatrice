@@ -55,6 +55,7 @@ pub(super) fn counter_target_spell(
                         payment_currently_legal,
                         reveal_audience: 0,
                         revealed_zone_owner_player_id: None,
+                        candidate_source_zones: Vec::new(),
                     },
                 )),
             });
@@ -184,6 +185,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 },
                 reveal_audience: 0,
                 revealed_zone_owner_player_id: None,
+                candidate_source_zones: Vec::new(),
             };
             (presentation, PendingWardPaymentStage::Mana(payment), event)
         }
@@ -253,6 +255,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 payment_currently_legal: false,
                 reveal_audience: 0,
                 revealed_zone_owner_player_id: None,
+                candidate_source_zones: Vec::new(),
             };
             (
                 presentation,
@@ -568,6 +571,7 @@ pub(super) fn copy_target_spell(
                                 payment_currently_legal: false,
                                 reveal_audience: 0,
                                 revealed_zone_owner_player_id: None,
+                                candidate_source_zones: Vec::new(),
                             },
                         )),
                     });

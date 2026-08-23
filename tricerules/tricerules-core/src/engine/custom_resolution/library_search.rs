@@ -1,6 +1,227 @@
 use super::*;
 
 impl GameEngine {
+    pub(super) fn finish_search_zone_scope(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, available_zones, filter, destination, conditional_destination, shuffle, reveal) =
+            match &pending.continuation {
+                ResolutionContinuation::SearchZoneScope {
+                    stack,
+                    available_zones,
+                    filter,
+                    destination,
+                    conditional_destination,
+                    shuffle,
+                    reveal,
+                } => (
+                    stack.clone(),
+                    available_zones.clone(),
+                    filter.clone(),
+                    *destination,
+                    conditional_destination.clone(),
+                    *shuffle,
+                    *reveal,
+                ),
+                _ => return Err(EngineError::Illegal("search-zone continuation missing")),
+            };
+        let combinations = resolution::zones::search_zone_combinations(&available_zones);
+        let selected = combinations
+            .get(answer.selected_branch_index as usize)
+            .cloned();
+        if decision != rv1::ResolutionChoiceDecision::SelectBranch
+            || !answer.chosen_object_ids.is_empty()
+            || selected.is_none()
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("invalid search-zone selection"));
+        }
+        let mut events = Vec::new();
+        resolution::zones::park_zone_search_choice(
+            self,
+            &mut events,
+            &stack.item,
+            resolution::zones::ZoneSearchRequest {
+                filter,
+                zones: selected.expect("validated selected zones"),
+                destination,
+                conditional_destination,
+                shuffle,
+                reveal,
+            },
+        )?;
+        Ok(finish_with_events(self, events))
+    }
+
+    pub(super) fn finish_owner_library_placement(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, object_id, owner, generation, spell_label) = match &pending.continuation {
+            ResolutionContinuation::OwnerLibraryPlacement {
+                stack,
+                object_id,
+                owner,
+                zone_change_generation,
+                spell_label,
+            } => (
+                stack.clone(),
+                *object_id,
+                *owner,
+                *zone_change_generation,
+                spell_label.clone(),
+            ),
+            _ => return Err(EngineError::Illegal("owner-placement continuation missing")),
+        };
+        let invalid_shape = decision != rv1::ResolutionChoiceDecision::SelectBranch
+            || !answer.chosen_object_ids.is_empty()
+            || answer.selected_branch_index > 1;
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        let stale = !self
+            .state
+            .objects
+            .get(&object_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield && object.owner == owner)
+            || current_generation != generation;
+        if invalid_shape || stale {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(if stale {
+                "owner-placement target became stale"
+            } else {
+                "owner placement requires Top or Bottom"
+            }));
+        }
+
+        let placement = if answer.selected_branch_index == 0 {
+            LibraryPlacement::Top
+        } else {
+            LibraryPlacement::Bottom
+        };
+        let mut events = Vec::new();
+        resolution::zones::move_permanent_to_owners_library(
+            self,
+            &mut events,
+            object_id,
+            placement,
+            &spell_label,
+        )?;
+        self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+    }
+
+    pub(super) fn finish_graveyard_choice(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, destination, generations, spell_label) = match &pending.continuation {
+            ResolutionContinuation::GraveyardChoice {
+                stack,
+                destination,
+                candidate_generations,
+                spell_label,
+            } => (
+                stack.clone(),
+                *destination,
+                candidate_generations.clone(),
+                spell_label.clone(),
+            ),
+            _ => {
+                return Err(EngineError::Illegal(
+                    "graveyard-choice continuation missing",
+                ))
+            }
+        };
+        let controller = stack.item.controller;
+        let mut events = Vec::new();
+        let Some(&oid) = chosen.first() else {
+            events.push(ev_log(format!(
+                "P{controller} declines to return a graveyard card."
+            )));
+            return self.complete_parked_resolution(stack.item, stack.resume_effect_index, events);
+        };
+        let expected_generation = generations
+            .iter()
+            .find_map(|(candidate, generation)| (*candidate == oid).then_some(*generation));
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&oid)
+            .copied()
+            .unwrap_or(0);
+        if expected_generation != Some(current_generation)
+            || !self
+                .state
+                .objects
+                .get(&oid)
+                .is_some_and(|object| object.zone == Zone::Graveyard && object.owner == controller)
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("graveyard choice became stale"));
+        }
+        let card_label = object_display_name(&self.state, self.registry, oid);
+        match destination {
+            tricerules_cards::primitives::GraveyardDestination::Hand => {
+                move_object_to_zone(&mut self.state, self.registry, oid, Zone::Hand, None)?;
+                events.push(ev_log(format!(
+                    "{spell_label} returns {card_label} from graveyard to hand."
+                )));
+                events.push(permanent_moved_event(
+                    &self.state,
+                    oid,
+                    controller,
+                    rv1::permanent_moved::Destination::Hand,
+                ));
+            }
+            tricerules_cards::primitives::GraveyardDestination::Battlefield { tapped } => {
+                match self.begin_battlefield_entry(
+                    stack.item.clone(),
+                    BattlefieldEntryEvent {
+                        object_id: oid,
+                        deciding_player: controller,
+                        destination_controller: controller,
+                        face_index: 0,
+                        unlock_room_door: None,
+                        chosen_x: 0,
+                        player_life_snapshot: self.player_life_snapshot(),
+                        tapped,
+                        entry_counters: BTreeMap::new(),
+                        applied_effects: Vec::new(),
+                    },
+                    BattlefieldEntryCompletion::ResolutionEffect {
+                        owner: controller,
+                        spell_label,
+                        object_label: card_label,
+                    },
+                    &mut events,
+                ) {
+                    super::replacement::BattlefieldEntryProgress::Parked => {
+                        return Ok(finish_with_events(self, events));
+                    }
+                    super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                        self.commit_battlefield_entry(entry, None)?;
+                    }
+                }
+                events.push(permanent_moved_event(
+                    &self.state,
+                    oid,
+                    controller,
+                    rv1::permanent_moved::Destination::Battlefield,
+                ));
+            }
+        }
+        self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+    }
+
     /// CR 701.18: the controller submitted their library search choice. Move the found card to
     /// the declared destination, optionally reveal it publicly, then optionally shuffle.
     pub(super) fn finish_library_search(
@@ -8,16 +229,35 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[u32],
     ) -> Result<RuledEventBatch, EngineError> {
-        let (stack, destination, shuffle, reveal) = match &pending.continuation {
-            ResolutionContinuation::SearchLibrary {
-                stack,
-                destination,
-                shuffle,
-                reveal,
-            } => (stack.clone(), *destination, *shuffle, *reveal),
-            _ => return Err(EngineError::Illegal("library-search continuation missing")),
-        };
+        let (stack, zones, mut destination, conditional_destination, shuffle, reveal) =
+            match &pending.continuation {
+                ResolutionContinuation::SearchLibrary {
+                    stack,
+                    zones,
+                    destination,
+                    conditional_destination,
+                    shuffle,
+                    reveal,
+                } => (
+                    stack.clone(),
+                    zones.clone(),
+                    *destination,
+                    conditional_destination.clone(),
+                    *shuffle,
+                    *reveal,
+                ),
+                _ => return Err(EngineError::Illegal("library-search continuation missing")),
+            };
         let controller = stack.item.controller;
+        let shuffle = shuffle && zones.contains(&CardSearchZone::Library);
+        if let Some(conditional) = conditional_destination.filter(|conditional| {
+            self.condition_holds(
+                &conditional.condition,
+                ConditionContext::for_stack_item(&stack.item),
+            )
+        }) {
+            destination = conditional.destination;
+        }
 
         let mut ev = vec![];
 
@@ -42,13 +282,18 @@ impl GameEngine {
 
             match destination {
                 SearchDestination::Hand => {
-                    // Move to hand first, then shuffle.
-                    if let Some(idx) = self.state.player_idx(controller) {
-                        self.state.players[idx].library.retain(|&x| x != oid);
-                        self.state.players[idx].hand.push(oid);
-                    }
-                    if let Some(o) = self.state.objects.get_mut(&oid) {
-                        o.zone = Zone::Hand;
+                    let owner = self.state.objects.get(&oid).map(|object| object.owner);
+                    let origin = self.state.objects.get(&oid).map(|object| object.zone);
+                    if origin != Some(Zone::Hand) {
+                        move_object_to_zone(&mut self.state, self.registry, oid, Zone::Hand, None)?;
+                        if let Some(owner) = owner {
+                            ev.push(permanent_moved_event(
+                                &self.state,
+                                oid,
+                                owner,
+                                rv1::permanent_moved::Destination::Hand,
+                            ));
+                        }
                     }
                     if reveal {
                         ev.push(ev_log(format!("P{controller} reveals {card_name}.")));
@@ -75,6 +320,25 @@ impl GameEngine {
                 }
                 SearchDestination::TopOfLibrary => {
                     // Oracle: "then shuffle and put that card on top" — shuffle first, then put on top.
+                    let owner = self.state.objects.get(&oid).map(|object| object.owner);
+                    if self.state.objects.get(&oid).map(|object| object.zone) != Some(Zone::Library)
+                    {
+                        move_object_to_zone(
+                            &mut self.state,
+                            self.registry,
+                            oid,
+                            Zone::Library,
+                            None,
+                        )?;
+                        if let Some(owner) = owner {
+                            ev.push(permanent_moved_event(
+                                &self.state,
+                                oid,
+                                owner,
+                                rv1::permanent_moved::Destination::Library,
+                            ));
+                        }
+                    }
                     if let Some(idx) = self.state.player_idx(controller) {
                         self.state.players[idx].library.retain(|&x| x != oid);
                     }

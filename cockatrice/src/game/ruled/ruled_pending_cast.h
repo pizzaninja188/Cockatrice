@@ -57,8 +57,9 @@ struct RuledPendingCostSelection
 {
     int costIndex = -1;
     RuledCostChoiceZone zone = RuledCostChoiceZone::Battlefield;
-    /// Stable Server_Card.id for hand choices; engine ObjectId for battlefield choices.
-    quint32 selectedId = 0;
+    /// Stable Server_Card.id for hand choices; engine ObjectId for battlefield/graveyard choices.
+    /// Single-card legacy costs carry one value; bounded graveyard costs carry the complete set.
+    QVector<quint32> selectedIds;
 };
 
 struct PendingActivatedAbility
@@ -86,6 +87,66 @@ struct PendingActivatedAbility
     QVector<quint32> lifePipIndices;
     bool targetingCostApplied = false;
 };
+
+struct RuledGraveyardCostSelectionProgress
+{
+    int required = 0;
+    int selected = 0;
+    bool confirmable = false;
+};
+
+/// Reconstruct the visible graveyard-cost transaction from the current engine-authored choice.
+/// Generic prompt refreshes use this instead of defaulting to 0/0, and stale, duplicate, or
+/// non-candidate object ids never contribute to the visible selected count.
+[[nodiscard]] inline std::optional<RuledGraveyardCostSelectionProgress>
+ruledPendingGraveyardCostSelectionProgress(const PendingActivatedAbility &pending)
+{
+    if (!pending.valid || !pending.waitingForCost || pending.nextCostChoice < 0 ||
+        pending.nextCostChoice >= pending.costChoices.size()) {
+        return std::nullopt;
+    }
+    const auto &choice = pending.costChoices.at(pending.nextCostChoice);
+    if (choice.zone != RuledCostChoiceZone::Graveyard) {
+        return std::nullopt;
+    }
+
+    QVector<quint32> validSelectedIds;
+    const auto selection =
+        std::find_if(pending.costSelections.cbegin(), pending.costSelections.cend(), [&choice](const auto &entry) {
+            return entry.costIndex == choice.costIndex && entry.zone == choice.zone;
+        });
+    if (selection != pending.costSelections.cend()) {
+        for (const quint32 objectId : selection->selectedIds) {
+            if (choice.candidateIds.contains(objectId) && !validSelectedIds.contains(objectId)) {
+                validSelectedIds.append(objectId);
+            }
+        }
+    }
+
+    const int selected = validSelectedIds.size();
+    return RuledGraveyardCostSelectionProgress{
+        choice.min,
+        selected,
+        selected >= choice.min && selected <= choice.max,
+    };
+}
+
+[[nodiscard]] inline bool ruledPendingGraveyardCostSelectionContains(const PendingActivatedAbility &pending,
+                                                                      quint32 objectId)
+{
+    if (objectId == 0 || !ruledPendingGraveyardCostSelectionProgress(pending).has_value()) {
+        return false;
+    }
+    const auto &choice = pending.costChoices.at(pending.nextCostChoice);
+    if (!choice.candidateIds.contains(objectId)) {
+        return false;
+    }
+    return std::any_of(
+        pending.costSelections.cbegin(), pending.costSelections.cend(), [&choice, objectId](const auto &selection) {
+            return selection.costIndex == choice.costIndex && selection.zone == choice.zone &&
+                   selection.selectedIds.contains(objectId);
+        });
+}
 
 /// Revalidate the source identity of a pending activated-ability-shaped UI transaction. Generic
 /// permanent actions deliberately carry no activated-ability index, so they must be matched

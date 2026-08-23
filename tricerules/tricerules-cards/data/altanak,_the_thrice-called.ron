@@ -1,0 +1,24 @@
+// Oracle and rulings verified 2026-08-23. CR 115.9, 603.2, 602, and 701.23.
+(
+  id: "altanak,_the_thrice-called",
+  name: "Altanak, the Thrice-Called",
+  mana_cost: "{5}{G}{G}",
+  types: ["Legendary", "Creature", "Insect", "Beast"],
+  power: 9,
+  toughness: 9,
+  keywords: [Trample],
+  triggered_abilities: [(
+    trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+    effect: [Draw(count: 1)],
+    text: "Whenever Altanak becomes the target of a spell or ability an opponent controls, draw a card.",
+  )],
+  activated_abilities: [(
+    source_zone: Hand,
+    costs: [Mana("{1}{G}"), DiscardSelf],
+    effect: [ReturnFromGraveyard(
+      filter: (owner: Controller, card_type: Some(Land)),
+      destination: Battlefield(tapped: true),
+    )],
+    text: "{1}{G}, Discard this card: Return target land card from your graveyard to the battlefield tapped.",
+  )],
+)

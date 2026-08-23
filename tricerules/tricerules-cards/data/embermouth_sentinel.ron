@@ -1,0 +1,34 @@
+// Oracle verified 2026-08-23. CR 603.6a, 701.23, and 701.24.
+(
+  id: "embermouth_sentinel",
+  name: "Embermouth Sentinel",
+  mana_cost: "{2}",
+  types: ["Artifact", "Creature", "Chimera"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ChooseResolutionBranch(
+      optional: true,
+      branches: [(
+        label: "Search for a basic land",
+        cost: None,
+        effects: [SearchLibrary(
+          filter: Some((card_type: Some(BasicLand))),
+          destination: TopOfLibrary,
+          conditional_destination: Some((
+            condition: BattlefieldCreatureCount(
+              filter: (controllers: Controller, subtype: Some("Dragon")),
+              min: Some(1),
+              max: None,
+            ),
+            destination: Battlefield(tapped: true),
+          )),
+          shuffle: true,
+          reveal: true,
+        )],
+      )],
+    )],
+    text: "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top. If you control a Dragon, put that card onto the battlefield tapped instead.",
+  )],
+)

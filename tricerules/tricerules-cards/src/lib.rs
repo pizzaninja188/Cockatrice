@@ -12,12 +12,13 @@ pub use mana::{ColorPip, ManaCost, ManaSymbol};
 pub use primitives::{
     AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivationCondition, ActivationTiming,
     AdditionalCost, Amount, BattlefieldAggregate, BattlefieldCreatureCountFilter,
-    BattlefieldPermanentFilter, CastTriggerPlayer, Color, ConditionalManaOutput,
-    ContinuousEffectKind, ControllerReference, CountExpression, CounterKind, EffectContext,
-    EffectDuration, Evasion, GameCondition, GraveyardAggregate, Keyword, LibraryCardFilter,
-    LibraryPartitionKind, ManaAmount, ManaSpendFilter, ManaSpendingRestriction,
-    PermanentTypeFilter, PtScale, RelativePlayerSet, SearchDestination, SpellCostModifier,
-    SpellEffectKind, TriggerCondition, TriggeredAbilityDef, TypeLineAddition,
+    BattlefieldPermanentFilter, CardSearchZone, CastTriggerPlayer, Color, ConditionalManaOutput,
+    ConditionalSearchDestination, ContinuousEffectKind, ControllerReference, CountExpression,
+    CounterKind, EffectContext, EffectDuration, Evasion, GameCondition, GraveyardAggregate,
+    Keyword, LibraryPartitionKind, ManaAmount, ManaSpendFilter, ManaSpendingRestriction,
+    PermanentTypeFilter, PtScale, RelativePlayerSet, SearchDestination, SearchZoneSelection,
+    SpellCostModifier, SpellEffectKind, TriggerCondition, TriggeredAbilityDef, TypeLineAddition,
+    ZoneCardFilter,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

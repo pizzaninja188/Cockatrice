@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
-    ActivatedAbilityDef, Color, ContinuousEffectKind, CounterKind, CreatureScopeFilter,
-    DamagePreventionAdditionalEffect, EffectDuration, GameCondition, Keyword, LibraryBottomOrder,
-    ManaAmount, ManaSpendingRestriction, SearchDestination, TargetFilter, TriggerCondition,
-    TriggeredAbilityDef,
+    ActivatedAbilityDef, CardSearchZone, Color, ConditionalSearchDestination, ContinuousEffectKind,
+    CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect, EffectDuration,
+    GameCondition, Keyword, LibraryBottomOrder, ManaAmount, ManaSpendingRestriction,
+    SearchDestination, TargetFilter, TriggerCondition, TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{CardFace, ManaCost};
@@ -620,6 +620,12 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         hand_choice: PendingHandChoice,
     },
+    GraveyardChoice {
+        stack: ParkedStackResolution,
+        destination: tricerules_cards::primitives::GraveyardDestination,
+        candidate_generations: Vec<(ObjectId, u64)>,
+        spell_label: String,
+    },
     Sacrifice {
         stack: ParkedStackResolution,
     },
@@ -629,9 +635,27 @@ pub enum ResolutionContinuation {
     },
     SearchLibrary {
         stack: ParkedStackResolution,
+        zones: Vec<CardSearchZone>,
         destination: SearchDestination,
+        conditional_destination: Option<ConditionalSearchDestination>,
         shuffle: bool,
         reveal: bool,
+    },
+    SearchZoneScope {
+        stack: ParkedStackResolution,
+        available_zones: Vec<CardSearchZone>,
+        filter: Option<ZoneCardFilter>,
+        destination: SearchDestination,
+        conditional_destination: Option<ConditionalSearchDestination>,
+        shuffle: bool,
+        reveal: bool,
+    },
+    OwnerLibraryPlacement {
+        stack: ParkedStackResolution,
+        object_id: ObjectId,
+        owner: PlayerId,
+        zone_change_generation: u64,
+        spell_label: String,
     },
     LibraryPartition {
         stack: ParkedStackResolution,
@@ -668,9 +692,12 @@ impl ResolutionContinuation {
             | Self::AuthoredBranch { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
+            | Self::GraveyardChoice { stack, .. }
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
+            | Self::SearchZoneScope { stack, .. }
+            | Self::OwnerLibraryPlacement { stack, .. }
             | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
             | Self::ManifestDread { stack, .. }
@@ -688,9 +715,12 @@ impl ResolutionContinuation {
             | Self::AuthoredBranch { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
+            | Self::GraveyardChoice { stack, .. }
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
+            | Self::SearchZoneScope { stack, .. }
+            | Self::OwnerLibraryPlacement { stack, .. }
             | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
             | Self::ManifestDread { stack, .. }

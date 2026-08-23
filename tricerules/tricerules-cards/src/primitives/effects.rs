@@ -2,8 +2,9 @@
 
 use super::{
     ActivatedAbilityDef, CardTypeFilter, Color, CreatureScopeFilter, GraveyardDestination,
-    GraveyardFilter, Keyword, ProtectionQuality, ReflexiveTriggeredAbilityDef, SpecialActionKind,
-    TargetController, TargetFilter, TargetKind, TargetRole, TriggeredAbilityDef, TypeLineAddition,
+    GraveyardFilter, Keyword, PowerComparison, ProtectionQuality, ReflexiveTriggeredAbilityDef,
+    SpecialActionKind, TargetController, TargetFilter, TargetKind, TargetRole, TriggeredAbilityDef,
+    TypeLineAddition,
 };
 use crate::ManaCost;
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
@@ -759,6 +760,9 @@ pub enum LibraryPlacement {
     Top,
     Bottom,
     Shuffle,
+    /// The targeted object's owner makes a logged resolution-time choice. Uncharted Voyage and
+    /// Riverwalk Technique share this owner-relative placement primitive.
+    OwnerChoiceTopOrBottom,
 }
 
 /// How cards left over from a bounded library look are placed on the bottom.
@@ -934,6 +938,8 @@ pub enum SpellEffectKind {
         extra_mana_per_target: u32,
     },
     Draw {
+        #[serde(default)]
+        who: PlayerRecipient,
         count: Amount,
     },
     /// Draw and discard as one resumable instruction. This is intentionally untargeted: `who`
@@ -1001,7 +1007,7 @@ pub enum SpellEffectKind {
     /// creature, chosen) share this resumable primitive.
     LookChooseToHand {
         count: u32,
-        filter: CardTypeFilter,
+        filter: ZoneCardFilter,
         bottom_order: LibraryBottomOrder,
     },
     /// CR 701.7: destroy `subject`. Chosen subjects are CR 115 targets; source, attachment, and
@@ -1243,6 +1249,15 @@ pub enum SpellEffectKind {
         filter: GraveyardFilter,
         destination: GraveyardDestination,
     },
+    /// Choose a card from the controller's graveyard when this instruction resolves rather than
+    /// targeting it while casting. Say Its Name mills first, then optionally chooses the current
+    /// creature-or-land cohort; Corpse Churn shares the same post-mill timing.
+    ChooseGraveyardCard {
+        filter: ZoneCardFilter,
+        destination: GraveyardDestination,
+        #[serde(default)]
+        optional: bool,
+    },
     MillTargetPlayer {
         count: u32,
         target: TargetFilter,
@@ -1381,10 +1396,18 @@ pub enum SpellEffectKind {
     SearchLibrary {
         /// `None` = any card is valid; `Some(f)` = every authored predicate must match.
         #[serde(default)]
-        filter: Option<LibraryCardFilter>,
+        filter: Option<ZoneCardFilter>,
+        /// Which of the controller's zones are searched. Existing tutors default to library;
+        /// Say Its Name lets its controller choose any nonempty hand/graveyard/library subset.
+        #[serde(default)]
+        zones: SearchZoneSelection,
         /// Where the found card goes. Default: Hand.
         #[serde(default)]
         destination: SearchDestination,
+        /// Live destination replacement evaluated only after the search choice is submitted.
+        /// Embermouth Sentinel and Caravan Vigil share this conditional placement seam.
+        #[serde(default)]
+        conditional_destination: Option<ConditionalSearchDestination>,
         /// Shuffle the library after searching. Default: true (all canonical tutors shuffle).
         #[serde(default = "default_true")]
         shuffle: bool,
@@ -1455,27 +1478,63 @@ fn default_destroy_subject() -> EffectSubject {
     EffectSubject::Chosen(TargetFilter::default_creature())
 }
 
-/// Printed characteristics required of a card found in a library. Card type and subtype compose
-/// with AND semantics; Evolving Wilds uses the former and typecycling uses the latter.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LibraryCardFilter {
+/// Printed characteristics required of a card in a nonbattlefield zone. Leaf predicates compose
+/// with AND semantics; `any_of` recursively joins two or more filters with OR. Tempest Hawk and
+/// Living Phone use exact-name and printed-power leaves, while Say Its Name uses creature-or-land.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct ZoneCardFilter {
+    #[serde(default)]
+    pub any_of: Option<Vec<Self>>,
+    #[serde(default)]
+    pub exact_name: Option<String>,
     #[serde(default)]
     pub card_type: Option<CardTypeFilter>,
     #[serde(default)]
     pub subtype: Option<String>,
+    #[serde(default)]
+    pub printed_power: Option<PowerComparison>,
 }
 
-impl LibraryCardFilter {
+impl ZoneCardFilter {
     pub fn validate(&self) -> Result<(), String> {
-        if self.card_type.is_none() && self.subtype.is_none() {
-            return Err("library card filter requires a card type or subtype".into());
+        if let Some(branches) = &self.any_of {
+            if branches.len() < 2 {
+                return Err("zone card filter any_of requires at least two branches".into());
+            }
+            if self.exact_name.is_some()
+                || self.card_type.is_some()
+                || self.subtype.is_some()
+                || self.printed_power.is_some()
+            {
+                return Err(
+                    "zone card filter any_of cannot be combined with leaf predicates".into(),
+                );
+            }
+            for branch in branches {
+                branch.validate()?;
+            }
+            return Ok(());
+        }
+        if self.exact_name.is_none()
+            && self.card_type.is_none()
+            && self.subtype.is_none()
+            && self.printed_power.is_none()
+        {
+            return Err("zone card filter requires at least one predicate".into());
+        }
+        if self
+            .exact_name
+            .as_ref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            return Err("zone card filter exact name cannot be empty".into());
         }
         if self
             .subtype
             .as_ref()
             .is_some_and(|value| value.trim().is_empty())
         {
-            return Err("library card filter subtype cannot be empty".into());
+            return Err("zone card filter subtype cannot be empty".into());
         }
         Ok(())
     }
@@ -1496,6 +1555,52 @@ pub enum SearchDestination {
         #[serde(default)]
         tapped: bool,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CardSearchZone {
+    Hand,
+    Graveyard,
+    Library,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SearchZoneSelection {
+    Fixed(Vec<CardSearchZone>),
+    PlayerChoice(Vec<CardSearchZone>),
+}
+
+impl Default for SearchZoneSelection {
+    fn default() -> Self {
+        Self::Fixed(vec![CardSearchZone::Library])
+    }
+}
+
+impl SearchZoneSelection {
+    fn validate(&self) -> Result<(), String> {
+        let zones = match self {
+            Self::Fixed(zones) | Self::PlayerChoice(zones) => zones,
+        };
+        if zones.is_empty() {
+            return Err("zone search requires at least one available zone".into());
+        }
+        let mut unique = zones.clone();
+        unique.sort_by_key(|zone| *zone as u8);
+        unique.dedup();
+        if unique.len() != zones.len() {
+            return Err("zone search zones must be distinct".into());
+        }
+        if matches!(self, Self::PlayerChoice(_)) && zones.len() < 2 {
+            return Err("player-selected zone search requires at least two zones".into());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConditionalSearchDestination {
+    pub condition: GameCondition,
+    pub destination: SearchDestination,
 }
 
 /// One bag of mana a mana ability can produce (CR 106): a count per mana type. A mana ability's
@@ -1847,6 +1952,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PumpAll { .. }
             | SpellEffectKind::GrantKeywordsAll { .. }
             | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
+            | SpellEffectKind::ChooseGraveyardCard { .. }
             | SpellEffectKind::GrantKeywordsAllPermanents { .. }
             | SpellEffectKind::GainLife { .. }
             | SpellEffectKind::LoseLife { .. }
@@ -1920,7 +2026,7 @@ impl SpellEffectKind {
             let amount = match effect {
                 SpellEffectKind::DamageTarget { amount, .. }
                 | SpellEffectKind::DamagePlayer { amount, .. }
-                | SpellEffectKind::Draw { count: amount }
+                | SpellEffectKind::Draw { count: amount, .. }
                 | SpellEffectKind::GainLife { amount }
                 | SpellEffectKind::Mill { count: amount, .. }
                 | SpellEffectKind::CreateTokens { count: amount, .. } => Some(amount),
@@ -1964,7 +2070,7 @@ impl SpellEffectKind {
         match self {
             SpellEffectKind::DamageTarget { amount, .. }
             | SpellEffectKind::DamagePlayer { amount, .. }
-            | SpellEffectKind::Draw { count: amount }
+            | SpellEffectKind::Draw { count: amount, .. }
             | SpellEffectKind::GainLife { amount }
             | SpellEffectKind::Mill { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. } => amount.validate()?,
@@ -2606,12 +2712,28 @@ impl SpellEffectKind {
             },
             // Library searches use the resolution-interrupt machinery and are legal on spells
             // and nonmana abilities alike (Demonic Tutor, Evolving Wilds).
-            SpellEffectKind::SearchLibrary { filter, .. } => {
+            SpellEffectKind::SearchLibrary {
+                filter,
+                zones,
+                conditional_destination,
+                ..
+            } => {
                 if let Some(filter) = filter {
                     filter.validate()?;
                 }
+                zones.validate()?;
+                if let Some(conditional) = conditional_destination {
+                    conditional.condition.validate()?;
+                }
                 Ok(())
             }
+            SpellEffectKind::LookChooseToHand { count, filter, .. } => {
+                if *count == 0 {
+                    return Err("LookChooseToHand requires a positive count".into());
+                }
+                filter.validate()
+            }
+            SpellEffectKind::ChooseGraveyardCard { filter, .. } => filter.validate(),
             // CR 701.18: scry is legal on spells and on abilities alike (scry lands, Sensei's
             // Divining Top-style activations), so the only malformed case is scrying zero cards.
             SpellEffectKind::Scry { count } => {

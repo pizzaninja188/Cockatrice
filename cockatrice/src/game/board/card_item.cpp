@@ -287,6 +287,17 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             painter->drawPath(shape());
             painter->restore();
         }
+        if (zone && zone->getName() == ZoneNames::GRAVE && owner && owner->getPlayerInfo()->getLocal() &&
+            ruledTargetSelectionOid != 0 &&
+            RuledActions::isSelectedGraveyardCostObject(ruledGame, ruledTargetSelectionOid)) {
+            painter->save();
+            painter->setRenderHint(QPainter::Antialiasing, true);
+            QPen pen(QColor(255, 165, 0));
+            pen.setWidth(4);
+            painter->setPen(pen);
+            painter->drawPath(shape());
+            painter->restore();
+        }
         if (zone && zone->getName() == ZoneNames::HAND && owner && owner->getPlayerInfo()->getLocal() &&
             ruledHandler->localPlayerMustCleanupDiscard()) {
             if (zone->getCards().indexOf(const_cast<CardItem *>(this)) >= 0) {

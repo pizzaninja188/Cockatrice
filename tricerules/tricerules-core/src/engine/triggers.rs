@@ -1706,6 +1706,7 @@ mod tests {
                 TriggeredAbilityDef {
                     trigger: TriggerCondition::WheneverAttachedPlayerIsAttacked,
                     effect: vec![SpellEffectKind::Draw {
+                        who: PlayerRecipient::Controller,
                         count: Amount::Fixed(1),
                     }],
                     modal: None,

@@ -54,13 +54,15 @@ fn issue_117_bushwhack_has_search_and_two_target_fight_modes() {
     assert!(matches!(
         modal.modes[0].effects.as_slice(),
         [SpellEffectKind::SearchLibrary {
-            filter: Some(tricerules_cards::primitives::LibraryCardFilter {
+            filter: Some(tricerules_cards::primitives::ZoneCardFilter {
                 card_type: Some(CardTypeFilter::BasicLand),
                 subtype: None,
+                ..
             }),
             destination: SearchDestination::Hand,
             shuffle: true,
             reveal: true,
+            ..
         }]
     ));
     let [SpellEffectKind::Fight { first, second }] = modal.modes[1].effects.as_slice() else {

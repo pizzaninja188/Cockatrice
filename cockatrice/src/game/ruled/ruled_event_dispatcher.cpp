@@ -128,8 +128,19 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
     for (const auto &choice : src.choices()) {
         RuledCostChoice parsed;
         parsed.costIndex = static_cast<int>(choice.cost_index());
-        parsed.zone = choice.zone() == ruled::v1::COST_CHOICE_ZONE_HAND ? RuledCostChoiceZone::Hand
-                                                                        : RuledCostChoiceZone::Battlefield;
+        switch (choice.zone()) {
+            case ruled::v1::COST_CHOICE_ZONE_HAND:
+                parsed.zone = RuledCostChoiceZone::Hand;
+                break;
+            case ruled::v1::COST_CHOICE_ZONE_GRAVEYARD:
+                parsed.zone = RuledCostChoiceZone::Graveyard;
+                break;
+            default:
+                parsed.zone = RuledCostChoiceZone::Battlefield;
+                break;
+        }
+        parsed.min = static_cast<int>(choice.min());
+        parsed.max = static_cast<int>(choice.max());
         for (const quint32 candidate : choice.candidate_ids()) {
             parsed.candidateIds.insert(candidate);
         }
@@ -673,12 +684,36 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         choice.kind = ChoiceKind::ResolutionBranch;
         choice.promptText = QString::fromStdString(rcr.prompt_text());
         choice.mayDecline = rcr.min() == 0;
+        bool anySearchZones = false;
+        bool malformedSearchZones = false;
         for (const auto &branch : rcr.resolution_branches()) {
             RuledChoiceOption option;
             option.index = static_cast<int>(branch.branch_index());
             option.label = QString::fromStdString(branch.label());
             option.enabled = branch.selectable();
+            for (const int rawZone : branch.search_zones()) {
+                if (rawZone != ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND &&
+                    rawZone != ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD &&
+                    rawZone != ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY) {
+                    malformedSearchZones = true;
+                    break;
+                }
+                if (option.searchZones.contains(rawZone)) {
+                    malformedSearchZones = true;
+                    break;
+                }
+                option.searchZones.insert(rawZone);
+            }
+            anySearchZones = anySearchZones || !option.searchZones.isEmpty();
             choice.choiceOptions.append(option);
+        }
+        if (malformedSearchZones ||
+            (anySearchZones && std::any_of(choice.choiceOptions.cbegin(), choice.choiceOptions.cend(),
+                                           [](const RuledChoiceOption &option) {
+                                               return option.searchZones.isEmpty();
+                                           }))) {
+            qWarning() << "Rejecting malformed ruled search-zone branches";
+            return;
         }
         state->setPendingChoice(std::move(choice));
         emit state->combatStateChanged();
@@ -761,15 +796,23 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     const bool isLibrarySearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH;
     const bool isLibraryLook = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK;
     const bool isManifestDread = rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD;
+    const bool isZoneSearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_ZONE_SEARCH;
+    const bool isGraveyardCards = rcr.choice_kind() == ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS;
     if (isLibraryLook && (rcr.candidate_object_ids_size() != rcr.candidate_names_size() ||
                           rcr.candidate_server_card_ids_size() != rcr.candidate_names_size() ||
                           rcr.candidate_selectable_size() != rcr.candidate_names_size())) {
         qWarning() << "Rejecting malformed ruled library-look choice";
         return;
     }
+    if ((isZoneSearch || isGraveyardCards) &&
+        (rcr.candidate_source_zones_size() != rcr.candidate_names_size() ||
+         rcr.candidate_object_ids_size() != rcr.candidate_names_size())) {
+        qWarning() << "Rejecting malformed ruled multi-zone choice";
+        return;
+    }
 
     if ((isLibrarySearch || rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP || isLibraryLook ||
-         isManifestDread) &&
+         isManifestDread || isZoneSearch || isGraveyardCards) &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
         (rcr.candidate_names_size() > 0 || isEmptyLibrarySearch)) {
         // LibrarySearch, LibraryTop, LibraryLook, or ManifestDread with server card ids: deck
@@ -794,6 +837,12 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         } else if (isManifestDread) {
             pick.viewTitle = tr("Manifest dread");
             pick.showViewControls = false;
+        } else if (isZoneSearch) {
+            pick.viewTitle = tr("Search selected zones");
+            pick.showViewControls = false;
+        } else if (isGraveyardCards) {
+            pick.viewTitle = tr("Choose from your graveyard");
+            pick.showViewControls = false;
         } else {
             pick.viewTitle =
                 rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP ? tr("Scry") : tr("Search your library");
@@ -811,6 +860,24 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
                 }
             }
             pick.candidateNames.append(name);
+            if (isZoneSearch || isGraveyardCards) {
+                switch (rcr.candidate_source_zones(i)) {
+                    case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND:
+                        pick.candidateAnnotations.append(tr("Hand"));
+                        break;
+                    case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD:
+                        pick.candidateAnnotations.append(tr("Graveyard"));
+                        break;
+                    case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY:
+                        pick.candidateAnnotations.append(tr("Library"));
+                        break;
+                    default:
+                        qWarning() << "Rejecting ruled choice with unspecified source zone";
+                        return;
+                }
+            } else {
+                pick.candidateAnnotations.append(QString{});
+            }
             libScids.append(scid);
         }
         const int required = pick.min;
