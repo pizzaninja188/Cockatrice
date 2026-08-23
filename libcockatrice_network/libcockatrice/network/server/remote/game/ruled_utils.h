@@ -16,6 +16,10 @@ int ruledPhaseToCockatricePhase(ruled::v1::PhaseId phase);
 /// Public kinds (revealed cards, battlefield targets, legend keep) pass through untouched.
 bool isPrivateChoiceKind(ruled::v1::ChoiceKind kind);
 
+/// Cockatrice's three ruled battlefield rows, derived only from engine-authored effective types.
+/// Creature takes precedence for creature lands: top=0, other permanent=1, land=2.
+int ruledBattlefieldGridY(bool isCreature, bool isLand);
+
 class Server_Game;
 class Server_CardZone;
 

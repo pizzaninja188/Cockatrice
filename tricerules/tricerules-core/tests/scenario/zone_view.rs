@@ -216,6 +216,16 @@ fn playing_a_land_resends_only_that_player() {
         "P0's hand shrank by the land, so their view must be full"
     );
     assert_eq!(p0.hand_cards.len(), e.state.players[0].hand.len());
+    let played_land = p0
+        .battlefield_objects
+        .iter()
+        .find(|object| object.card_id == "mountain")
+        .expect("played Mountain in battlefield view");
+    assert!(
+        played_land.is_land,
+        "the authoritative battlefield view must classify a normally played land"
+    );
+    assert!(!played_land.is_creature);
     // The library did not move, but it rides along: the two zones are omitted jointly because
     // Servatrice reconciles them against one pool of physical cards and cannot apply half a view.
     assert_eq!(p0.library_cards.len(), e.state.players[0].library.len());

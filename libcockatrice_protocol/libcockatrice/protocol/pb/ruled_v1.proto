@@ -1256,6 +1256,9 @@ message BattlefieldObject {
   bool face_down = 19 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint64 zone_change_generation = 20 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   repeated RoomDoorState room_doors = 21 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Effective land type after CR 613 characteristics. Servatrice consumes this to place the
+  // physical card in Cockatrice's land row; clients receive the resulting table coordinates.
+  bool is_land = 22 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
 message RoomDoorState {

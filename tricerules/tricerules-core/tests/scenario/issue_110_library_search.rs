@@ -330,6 +330,29 @@ fn altanak_hand_ability_discards_itself_and_returns_the_exact_land_tapped() {
     pass_both_players(&mut engine);
     assert_eq!(engine.state.objects[&land].zone, Zone::Battlefield);
     assert!(engine.state.objects[&land].tapped);
+
+    let snapshot = engine.initial_response_batch();
+    let returned_land = snapshot
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ZoneView(view)) => view
+                .per_player
+                .iter()
+                .find(|player| player.player_id == 0)
+                .and_then(|player| {
+                    player
+                        .battlefield_objects
+                        .iter()
+                        .find(|object| object.object_id == land)
+                }),
+            _ => None,
+        })
+        .expect("returned Mountain in battlefield snapshot");
+    assert!(
+        returned_land.is_land,
+        "Altanak's returned Mountain must retain authoritative land identity"
+    );
 }
 
 #[test]

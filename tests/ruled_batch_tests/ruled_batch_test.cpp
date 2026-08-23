@@ -368,6 +368,15 @@ protected:
         return card;
     }
 
+    static Server_Card *addCardToGraveyard(Server_Player *p, const QString &name)
+    {
+        Server_CardZone *graveyard = p->getZones().value(ZoneNames::GRAVE);
+        const QString id = name.toLower().replace(' ', '_');
+        auto *card = new Server_Card({name, id}, p->newCardId(), 0, 0);
+        graveyard->insertCard(card, 0, 0);
+        return card;
+    }
+
     // Builds a RuledPerPlayerView consistent with the player's current TABLE zone
     // and the supplied tap state. Hand / library counts must already be zero on
     // the server side for this synthetic batch (we don't seed hand/library cards,
@@ -1024,6 +1033,105 @@ TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
     EXPECT_EQ(findCardByEngineOid(p1, 101u), bear);
     EXPECT_EQ(findCardByEngineOid(p1, 102u), wolf);
     EXPECT_EQ(findCardByEngineOid(p1, 999u), nullptr);
+}
+
+TEST_F(RuledBatchTest, ZoneViewPlacesPermanentsByAuthoritativeEffectiveType)
+{
+    seedCardCatalog({"Forest", "Sol Ring"});
+    Server_Card *creature = addCardToTable(p1, "Grizzly Bears");
+    Server_Card *creatureLand = addCardToTable(p1, "Timber Wolves");
+    Server_Card *land = addCardToTable(p1, "Forest");
+    Server_Card *other = addCardToTable(p1, "Sol Ring");
+
+    ruled::v1::RuledPerPlayerView view =
+        buildPerPlayerView(p1, {101u, 102u, 103u, 104u}, {false, false, false, false});
+    view.mutable_battlefield_objects(0)->set_is_creature(true);
+    view.mutable_battlefield_objects(1)->set_is_creature(true);
+    view.mutable_battlefield_objects(1)->set_is_land(true);
+    view.mutable_battlefield_objects(2)->set_is_land(true);
+
+    GameEventStorage ges;
+    const auto result = applyZoneView(p1, view, &ges);
+
+    EXPECT_TRUE(result.battlefieldOrderChanged);
+    EXPECT_EQ(creature->getY(), 0);
+    EXPECT_EQ(creatureLand->getY(), 0) << "creature takes precedence over land";
+    EXPECT_EQ(land->getY(), 2);
+    EXPECT_EQ(other->getY(), 1);
+
+    ruled::v1::RuledPerPlayerView omitted;
+    omitted.set_player_id(p1->getPlayerId());
+    omitted.set_private_zones_unchanged(true);
+    const auto retained = applyZoneView(p1, omitted, &ges, true, nullptr, true);
+    EXPECT_FALSE(retained.battlefieldOrderChanged);
+    EXPECT_EQ(land->getY(), 2) << "an omitted battlefield retains the prior authoritative row";
+}
+
+TEST_F(RuledBatchTest, PermanentMovedLandUsesAuthoritativeBottomRowAndStableIdentity)
+{
+    seedCardCatalog({"Mountain"});
+    Server_Card *mountain = addCardToGraveyard(p1, "Mountain");
+    const int physicalId = mountain->getId();
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    p1Seed.add_graveyard_object_ids(201u);
+    *seedView->add_per_player() = p1Seed;
+    *seedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+    ASSERT_EQ(bindingFor(p1).findGraveyardCardByEngineOid(p1, 201u), mountain);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *moved = response.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(201u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_controller_player_id(p1->getPlayerId());
+    moved->set_card_id("mountain");
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+    auto *zoneView = response.mutable_batch()->add_events()->mutable_zone_view();
+    auto *p1View = zoneView->add_per_player();
+    p1View->set_player_id(p1->getPlayerId());
+    p1View->set_private_zones_unchanged(true);
+    auto *object = p1View->add_battlefield_objects();
+    object->set_object_id(201u);
+    object->set_card_id("mountain");
+    object->set_owner_player_id(p1->getPlayerId());
+    object->set_is_land(true);
+    auto *p2View = zoneView->add_per_player();
+    p2View->set_player_id(p2->getPlayerId());
+    p2View->set_private_zones_unchanged(true);
+
+    callBatchApply(response);
+
+    ASSERT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards().size(), 1);
+    EXPECT_EQ(mountain->getZone()->getName(), QString(ZoneNames::TABLE));
+    EXPECT_EQ(mountain->getId(), physicalId);
+    EXPECT_EQ(findCardByEngineOid(p1, 201u), mountain);
+    EXPECT_EQ(mountain->getY(), 2);
+}
+
+TEST_F(RuledBatchTest, BattlefieldLandClassificationIsServerOnly)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *zoneView = batch.add_events()->mutable_zone_view();
+    auto *view = zoneView->add_per_player();
+    view->set_player_id(p1->getPlayerId());
+    auto *object = view->add_battlefield_objects();
+    object->set_object_id(301u);
+    object->set_is_land(true);
+
+    for (Server_AbstractParticipant *participant : {static_cast<Server_AbstractParticipant *>(p1),
+                                                    static_cast<Server_AbstractParticipant *>(p2)}) {
+        const auto redacted = redactFor(batch, participant);
+        ASSERT_EQ(redacted.events_size(), 1);
+        ASSERT_TRUE(redacted.events(0).has_zone_view());
+        ASSERT_EQ(redacted.events(0).zone_view().per_player_size(), 1);
+        ASSERT_EQ(redacted.events(0).zone_view().per_player(0).battlefield_objects_size(), 1);
+        EXPECT_FALSE(redacted.events(0).zone_view().per_player(0).battlefield_objects(0).is_land());
+    }
 }
 
 TEST_F(RuledBatchTest, ReplacementEffectChoiceSurvivesRedactionForEveryParticipant)
@@ -2306,6 +2414,41 @@ TEST_F(RuledBatchTest, ApplyRuledBatchMintsConjuredCardOnTableAsARealCardNotATok
     // card for the engine's new slot and abandons the whole reconcile.
     EXPECT_EQ(findCardByEngineOid(p1, 701u), conjured);
     EXPECT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().size(), 0);
+}
+
+TEST_F(RuledBatchTest, ApplyRuledBatchMintsConjuredLandInBottomRow)
+{
+    seedCardCatalog({"Forest"});
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *conjured = response.mutable_batch()->add_events()->mutable_dev_card_conjured();
+    conjured->set_object_id(703u);
+    conjured->set_owner_player_id(p1->getPlayerId());
+    conjured->set_card_name("Forest");
+    conjured->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+    conjured->set_is_creature(false);
+
+    auto *zoneView = response.mutable_batch()->add_events()->mutable_zone_view();
+    auto *p1View = zoneView->add_per_player();
+    p1View->set_player_id(p1->getPlayerId());
+    p1View->set_private_zones_unchanged(true);
+    auto *forest = p1View->add_battlefield_objects();
+    forest->set_object_id(703u);
+    forest->set_card_id("forest");
+    forest->set_owner_player_id(p1->getPlayerId());
+    forest->set_is_land(true);
+    auto *p2View = zoneView->add_per_player();
+    p2View->set_player_id(p2->getPlayerId());
+    p2View->set_private_zones_unchanged(true);
+
+    callBatchApply(response);
+
+    Server_CardZone *table = p1->getZones().value(ZoneNames::TABLE);
+    ASSERT_EQ(table->getCards().size(), 1);
+    Server_Card *card = table->getCards().first();
+    EXPECT_EQ(card->getName(), QStringLiteral("Forest"));
+    EXPECT_EQ(card->getY(), 2);
+    EXPECT_EQ(findCardByEngineOid(p1, 703u), card);
 }
 
 TEST_F(RuledBatchTest, ApplyRuledBatchMintsConjuredCardIntoHandAndFlagsAResync)

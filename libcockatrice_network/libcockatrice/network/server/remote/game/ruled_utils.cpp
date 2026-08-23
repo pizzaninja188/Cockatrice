@@ -115,6 +115,14 @@ bool isPrivateChoiceKind(ruled::v1::ChoiceKind kind)
     }
 }
 
+int ruledBattlefieldGridY(bool isCreature, bool isLand)
+{
+    if (isCreature) {
+        return 0;
+    }
+    return isLand ? 2 : 1;
+}
+
 int ruledPhaseToCockatricePhase(ruled::v1::PhaseId phase)
 {
     switch (phase) {

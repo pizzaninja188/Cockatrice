@@ -17,7 +17,6 @@
 #include <QRandomGenerator>
 #include <QSet>
 #include <algorithm>
-#include <libcockatrice/card/database/card_database_manager.h>
 #include <libcockatrice/deck_list/deck_list.h>
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
 #include <libcockatrice/protocol/pb/command_move_card.pb.h>
@@ -39,6 +38,23 @@ namespace
 QString normalizeRuledCardName(const QString &name)
 {
     return name.trimmed().toLower().replace(QLatin1Char('_'), QLatin1Char(' '));
+}
+
+QHash<quint32, int> authoritativeBattlefieldGridRows(const ruled::v1::RuledEventBatch &batch)
+{
+    QHash<quint32, int> rows;
+    for (const auto &event : batch.events()) {
+        if (!event.has_zone_view() || event.zone_view().battlefields_unchanged()) {
+            continue;
+        }
+        for (const auto &player : event.zone_view().per_player()) {
+            for (const auto &object : player.battlefield_objects()) {
+                rows.insert(static_cast<quint32>(object.object_id()),
+                            ruledBattlefieldGridY(object.is_creature(), object.is_land()));
+            }
+        }
+    }
+    return rows;
 }
 
 QString withoutRuledCopyAnnotation(const QString &annotation)
@@ -597,7 +613,8 @@ void RuledGameDriver::relayRuledPayloadAndBroadcast(int playerId, const QByteArr
     broadcastRuledResponse(resp);
 }
 
-void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved)
+void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved,
+                                                   const QHash<quint32, int> &battlefieldGridRows)
 {
     const quint32 resolvedOid = static_cast<quint32>(stackResolved.object_id());
     // CR 707.10d: a spell copy ceases to exist on resolution and has no physical card to move.
@@ -609,8 +626,9 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
     }
     const QString engineStackDescription = ruledEngineStackPushDescriptionsByObjectId.value(resolvedOid);
 
-    auto tryResolveCardOnStack = [this, &stackResolved](Server_AbstractPlayer *ab, Server_CardZone *stackZone,
-                                                        Server_Card *card) -> bool {
+    auto tryResolveCardOnStack = [this, &stackResolved, &battlefieldGridRows](Server_AbstractPlayer *ab,
+                                                                             Server_CardZone *stackZone,
+                                                                             Server_Card *card) -> bool {
         if (!ab || !stackZone || !card) {
             return false;
         }
@@ -656,13 +674,13 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
         GameEventStorage moveGes;
         int targetY = 0;
         if (goesToBattlefield) {
-            targetY = 1; // default: middle row (noncreature nonland)
-            if (const CardDatabaseQuerier *q = CardDatabaseManager::query()) {
-                if (const CardInfoPtr info = q->getCardInfo(card->getName())) {
-                    if (info->getUiAttributes().tableRow == 2) {
-                        targetY = 0; // creature → top row
-                    }
-                }
+            const auto rowIt = battlefieldGridRows.constFind(resolvedOidLocal);
+            if (rowIt != battlefieldGridRows.constEnd()) {
+                targetY = *rowIt;
+            } else {
+                targetY = 1;
+                qWarning() << "ruled StackResolved battlefield entry missing authoritative row for oid"
+                           << resolvedOidLocal;
             }
         }
         // Battlefield: -1 means "find a free grid column". Library order is replaced by the
@@ -758,6 +776,7 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
         return result;
     }
     const ruled::v1::RuledEventBatch &batch = resp.batch();
+    const QHash<quint32, int> battlefieldGridRows = authoritativeBattlefieldGridRows(batch);
 
     // One named method per pass. The pass order is load-bearing — never merge or reorder:
     // the catalog must be indexed before anything resolves a card name through it, the
@@ -769,7 +788,7 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     // Mid-game catalog refresh. Almost every batch carries no CardCatalog and leaves the index
     // untouched; a batch that does carries the whole catalog and replaces it.
     indexCardCatalogEvents(batch);
-    applyDevCardConjures(batch, result);
+    applyDevCardConjures(batch, battlefieldGridRows, result);
 
     // Capture the pre-batch engine_oid -> Server_Card map per player. The engine has
     // already removed dead permanents from its battlefield, so the upcoming zone-view
@@ -783,9 +802,9 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
         preBatchOidMaps.insert(ab->getPlayerId(), playerBinding(ab->getPlayerId()).engineOidToServerCardId);
     }
 
-    applyTokenCreations(batch);
-    applyPermanentMoves(batch, preBatchOidMaps);
-    applyPhaseStackAndZoneViews(batch, result);
+    applyTokenCreations(batch, battlefieldGridRows);
+    applyPermanentMoves(batch, preBatchOidMaps, battlefieldGridRows);
+    applyPhaseStackAndZoneViews(batch, battlefieldGridRows, result);
     applyFaceDisplays(batch, result);
     applyAttachmentRestores(batch);
     applyLifeManaAndCombatEvents(batch);
@@ -799,7 +818,9 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
 //
 // Runs before applyTokenCreations and applyPermanentMoves because a card conjured by this batch
 // may also be moved by it.
-void RuledGameDriver::applyDevCardConjures(const ruled::v1::RuledEventBatch &batch, RuledBatchApplyResult &result)
+void RuledGameDriver::applyDevCardConjures(const ruled::v1::RuledEventBatch &batch,
+                                           const QHash<quint32, int> &battlefieldGridRows,
+                                           RuledBatchApplyResult &result)
 {
     GameEventStorage conjureGes;
     bool conjureGesHasEvents = false;
@@ -814,9 +835,18 @@ void RuledGameDriver::applyDevCardConjures(const ruled::v1::RuledEventBatch &bat
             continue;
         }
         const bool toBattlefield = dc.zone() == ruled::v1::DEV_ZONE_BATTLEFIELD;
+        int battlefieldGridY = ruledBattlefieldGridY(dc.is_creature(), false);
+        if (toBattlefield) {
+            const auto rowIt = battlefieldGridRows.constFind(static_cast<quint32>(dc.object_id()));
+            if (rowIt != battlefieldGridRows.constEnd()) {
+                battlefieldGridY = *rowIt;
+            } else {
+                qWarning() << "ruled dev battlefield conjure missing authoritative row for oid" << dc.object_id();
+            }
+        }
         const bool created = playerBinding(dc.owner_player_id())
                                  .createRuledDevCard(static_cast<Server_Player *>(owner), dc.object_id(),
-                                                     QString::fromStdString(dc.card_name()), dc.is_creature(),
+                                                     QString::fromStdString(dc.card_name()), battlefieldGridY,
                                                      toBattlefield, conjureGes);
         if (!created) {
             continue;
@@ -839,7 +869,8 @@ void RuledGameDriver::applyDevCardConjures(const ruled::v1::RuledEventBatch &bat
 // one on the controller's table for each TokenCreated event before the zone-view sync,
 // so that sync can bind the engine battlefield slot to a real Server_Card by ObjectId. Runs
 // before PermanentMoved: a token created this batch cannot also have died this batch.
-void RuledGameDriver::applyTokenCreations(const ruled::v1::RuledEventBatch &batch)
+void RuledGameDriver::applyTokenCreations(const ruled::v1::RuledEventBatch &batch,
+                                          const QHash<quint32, int> &battlefieldGridRows)
 {
     GameEventStorage tokenCreateGes;
     bool tokenCreateGesHasEvents = false;
@@ -852,10 +883,22 @@ void RuledGameDriver::applyTokenCreations(const ruled::v1::RuledEventBatch &batc
         if (!tc.has_identity()) {
             continue;
         }
+        const quint32 objectId = static_cast<quint32>(tc.object_id());
+        const bool identityIsLand =
+            std::any_of(tc.identity().types().begin(), tc.identity().types().end(), [](const std::string &type) {
+                return type == "Land";
+            });
+        int battlefieldGridY = ruledBattlefieldGridY(tc.identity().is_creature(), identityIsLand);
+        const auto rowIt = battlefieldGridRows.constFind(objectId);
+        if (rowIt != battlefieldGridRows.constEnd()) {
+            battlefieldGridY = *rowIt;
+        } else {
+            qWarning() << "ruled token creation missing authoritative row for oid" << objectId;
+        }
         if (Server_AbstractPlayer *controller = game->getPlayer(tc.controller_player_id())) {
             playerBinding(tc.controller_player_id())
-                .createRuledToken(static_cast<Server_Player *>(controller), static_cast<quint32>(tc.object_id()),
-                                  tc.identity(), tokenCreateGes);
+                .createRuledToken(static_cast<Server_Player *>(controller), objectId, tc.identity(), battlefieldGridY,
+                                  tokenCreateGes);
             tokenCreateGesHasEvents = true;
         }
     }
@@ -868,7 +911,8 @@ void RuledGameDriver::applyTokenCreations(const ruled::v1::RuledEventBatch &batc
 // engine hand list in the sync that follows, so the server must move the physical card
 // first or applyRuledEngineZoneView's deck+hand pool counts disagree with the engine.
 void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batch,
-                                          const QHash<int, QHash<quint32, int>> &preBatchOidMaps)
+                                          const QHash<int, QHash<quint32, int>> &preBatchOidMaps,
+                                          const QHash<quint32, int> &battlefieldGridRows)
 {
     GameEventStorage permanentMoveGes;
     bool permanentMoveGesHasEvents = false;
@@ -1081,7 +1125,18 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
         // controlled by someone else the card sits on the *controller's* table, and moveCard
         // builds its event from startzone->getPlayer().
         Server_AbstractPlayer *mover = startZone->getPlayer() ? startZone->getPlayer() : owner;
-        if (ruledApplyMove(mover, permanentMoveGes, startZone, targetZone, cardToMove, destX, 0, "permanentMoved")) {
+        int destY = 0;
+        if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD) {
+            const auto rowIt = battlefieldGridRows.constFind(oid);
+            if (rowIt != battlefieldGridRows.constEnd()) {
+                destY = *rowIt;
+            } else {
+                destY = 1;
+                qWarning() << "ruled PermanentMoved battlefield entry missing authoritative row for oid" << oid;
+            }
+        }
+        if (ruledApplyMove(mover, permanentMoveGes, startZone, targetZone, cardToMove, destX, destY,
+                           "permanentMoved")) {
             permanentMoveGesHasEvents = true;
             // A cross-player move reissues Server_Card::id from the destination player's space
             // (server_abstract_player.cpp), and the engine oid is absent from the destination
@@ -1173,6 +1228,7 @@ void RuledGameDriver::applyBattlefieldControllerTransfers(const ruled::v1::ZoneV
 // Tap state propagates from the engine on every batch — declare attackers, mana
 // payment, and untap all use this path (no longer gated on an explicit untap event).
 void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBatch &batch,
+                                                  const QHash<quint32, int> &battlefieldGridRows,
                                                   RuledBatchApplyResult &result)
 {
     GameEventStorage tapSyncGes;
@@ -1320,7 +1376,7 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
                 }
             }
             if (e.has_stack_resolved()) {
-                applyRuledStackResolvedEvent(e.stack_resolved());
+                applyRuledStackResolvedEvent(e.stack_resolved(), battlefieldGridRows);
             }
             if (e.has_stack_object_countered()) {
                 applyRuledStackObjectCounteredEvent(e.stack_object_countered());

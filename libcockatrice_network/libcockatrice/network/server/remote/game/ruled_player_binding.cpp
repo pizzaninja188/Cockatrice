@@ -7,6 +7,7 @@
 
 #include "../server_response_containers.h"
 #include "ruled_game_driver.h"
+#include "ruled_utils.h"
 #include "server_card.h"
 #include "server_cardzone.h"
 #include "server_game.h"
@@ -454,20 +455,13 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         }
 
         if (ordered.size() == v.battlefield_objects_size()) {
-            // Determine expected row per card. Creatures → row 0 (top), lands → row 2
-            // (bottom, preserved from play-land placement), other permanents → row 1 (middle).
+            // The engine's effective types are authoritative. This also reflows a permanent after
+            // a type-changing effect and repairs stale coordinates during join/reconnect.
             QList<int> expectedY;
             expectedY.reserve(ordered.size());
             for (int i = 0; i < ordered.size(); ++i) {
-                const Server_Card *c = ordered[i];
-                const int currentY = c ? c->getY() : 0;
-                if (v.battlefield_objects(i).is_creature()) {
-                    expectedY.append(0);
-                } else if (currentY == 2) {
-                    expectedY.append(2); // land — keep in bottom row
-                } else {
-                    expectedY.append(1); // noncreature nonland permanent
-                }
+                const auto &object = v.battlefield_objects(i);
+                expectedY.append(ruledBattlefieldGridY(object.is_creature(), object.is_land()));
             }
 
             const QList<Server_Card *> &zoneOrderBefore = tableZone->getCards();
@@ -821,6 +815,7 @@ Server_Card *RuledPlayerBinding::findExileCardByEngineOid(const Server_Player *p
 void RuledPlayerBinding::createRuledToken(Server_Player *player,
                                           quint32 engineOid,
                                           const ruled::v1::TokenIdentity &identity,
+                                          int battlefieldGridY,
                                           GameEventStorage &ges)
 {
     Server_CardZone *table = player->getZones().value(ZoneNames::TABLE);
@@ -828,9 +823,7 @@ void RuledPlayerBinding::createRuledToken(Server_Player *player,
         return;
     }
     const QString name = QString::fromStdString(identity.name());
-    // Creatures sit in the top row, other token permanents in the middle (mirrors the
-    // creature/noncreature row split applyRuledEngineZoneView applies to deck-card permanents).
-    int y = identity.is_creature() ? 0 : 1;
+    const int y = battlefieldGridY;
     int x = 0;
     if (table->hasCoords()) {
         x = table->getFreeGridColumn(-1, y, name, true);
@@ -873,7 +866,7 @@ void RuledPlayerBinding::createRuledToken(Server_Player *player,
 bool RuledPlayerBinding::createRuledDevCard(Server_Player *player,
                                             quint32 engineOid,
                                             const QString &cardName,
-                                            bool isCreature,
+                                            int battlefieldGridY,
                                             bool toBattlefield,
                                             GameEventStorage &ges)
 {
@@ -897,9 +890,9 @@ bool RuledPlayerBinding::createRuledDevCard(Server_Player *player,
         return true;
     }
 
-    // Table: same row split and grid placement createRuledToken uses, so a conjured permanent
-    // lands where a legitimately played one would.
-    int y = isCreature ? 0 : 1;
+    // Table: the driver resolved the engine-authored effective type from the batch's full
+    // battlefield view before this early physical creation pass.
+    const int y = battlefieldGridY;
     int x = 0;
     if (zone->hasCoords()) {
         x = zone->getFreeGridColumn(-1, y, cardName, true);

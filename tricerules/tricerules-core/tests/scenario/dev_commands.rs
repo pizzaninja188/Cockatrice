@@ -307,6 +307,61 @@ fn dev_conjure_emits_catalog_and_conjure_events() {
 }
 
 #[test]
+fn dev_conjured_land_is_classified_in_the_battlefield_view() {
+    let mut e = basics_engine(940);
+    let batch = e
+        .apply_command(0, &put(0, DevZone::Battlefield, "Forest"))
+        .expect("conjure Forest");
+    let forest = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ZoneView(view)) => view
+                .per_player
+                .iter()
+                .find(|player| player.player_id == 0)
+                .and_then(|player| {
+                    player
+                        .battlefield_objects
+                        .iter()
+                        .find(|object| object.card_id == "forest")
+                }),
+            _ => None,
+        })
+        .expect("conjured Forest in battlefield view");
+    assert!(forest.is_land);
+    assert!(!forest.is_creature);
+
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
+        .expect("conjure creature");
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Glorious Anthem"))
+        .expect("conjure noncreature nonland permanent");
+    let snapshot = e.initial_response_batch();
+    let view = snapshot
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ZoneView(view)) => view.per_player.iter().find(|player| player.player_id == 0),
+            _ => None,
+        })
+        .expect("player battlefield snapshot");
+    let creature = view
+        .battlefield_objects
+        .iter()
+        .find(|object| object.card_id == "grizzly_bears")
+        .expect("conjured creature in battlefield view");
+    assert!(creature.is_creature);
+    assert!(!creature.is_land);
+    let other = view
+        .battlefield_objects
+        .iter()
+        .find(|object| object.card_id == "glorious_anthem")
+        .expect("conjured noncreature nonland permanent in battlefield view");
+    assert!(!other.is_creature);
+    assert!(!other.is_land);
+}
+
+#[test]
 fn dev_conjure_waits_for_entry_replacement_choice_before_announcing_or_committing() {
     let mut e = basics_engine(933);
     e.apply_command(0, &put(0, DevZone::Battlefield, "Orb of Dreams"))

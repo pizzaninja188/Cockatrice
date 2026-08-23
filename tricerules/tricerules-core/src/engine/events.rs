@@ -409,6 +409,9 @@ impl GameEngine {
                         let is_creature = characteristics
                             .as_ref()
                             .is_some_and(Characteristics::is_creature);
+                        let is_land = characteristics
+                            .as_ref()
+                            .is_some_and(|value| value.has_type("Land"));
                         let face = self.effective_face(oid);
                         let rules_annotation_labels = self.rules_annotation_labels(
                             oid,
@@ -590,6 +593,7 @@ impl GameEngine {
                                 .copied()
                                 .unwrap_or(0),
                             room_doors,
+                            is_land,
                         }
                     })
                     .collect()
