@@ -190,6 +190,10 @@ impl GameEngine {
         self.fire_triggers(&[GameEvent::TargetsChosen {
             controller,
             source: TargetingSourceKind::Ability,
+            stack_object: StackObjectRef {
+                object_id: virtual_id,
+                zone_change_generation: None,
+            },
             targets: trefs,
         }]);
 

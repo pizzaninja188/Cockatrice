@@ -806,7 +806,7 @@ void Server_Game::createGameJoinedEvent(Server_AbstractParticipant *joiningParti
 
     rc.enqueuePostResponseItem(ServerMessage::GAME_EVENT_CONTAINER, prepareGameEvent(event2, -1));
     if (ruledDriver) {
-        ruledDriver->enqueuePendingPublicRevealForParticipant(joiningParticipant, rc);
+        ruledDriver->enqueuePendingResolutionChoiceForParticipant(joiningParticipant, rc);
     }
 }
 

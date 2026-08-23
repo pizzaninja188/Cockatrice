@@ -356,7 +356,7 @@ void RuledGameDriver::resetForNewGame()
     lastBroadcastHandSlotMap.Clear();
     hasLastBroadcastHandSlotMap = false;
     lastBroadcastHandSlotParticipants.clear();
-    pendingPublicReveal.reset();
+    pendingResolutionChoice.reset();
     // Reset the connection-lost flag so that a back-to-back second game can report and
     // handle a fresh engine disconnect correctly. Without this reset, if game 1 lost the
     // engine connection the flag stays true, handleRuledEngineConnectionLost() returns early
@@ -739,6 +739,16 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
         }
         break;
     }
+}
+
+void RuledGameDriver::applyRuledStackObjectCounteredEvent(const ruled::v1::StackObjectCountered &countered)
+{
+    const quint32 objectId = static_cast<quint32>(countered.object_id());
+    ruledStackCopyObjectIds.remove(objectId);
+    ruledStackTargetsByObjectId.remove(objectId);
+    ruledStackObjectIdToServerCardId.remove(objectId);
+    ruledStackObjectIdToCasterPlayerId.remove(objectId);
+    ruledEngineStackPushDescriptionsByObjectId.remove(objectId);
 }
 
 RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ruled::v1::IpcResponse &resp)
@@ -1312,6 +1322,9 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
             if (e.has_stack_resolved()) {
                 applyRuledStackResolvedEvent(e.stack_resolved());
             }
+            if (e.has_stack_object_countered()) {
+                applyRuledStackObjectCounteredEvent(e.stack_object_countered());
+            }
             continue;
         }
         applyBattlefieldControllerTransfers(e.zone_view(), result);
@@ -1700,7 +1713,7 @@ void RuledGameDriver::broadcastRuledResponse(const ruled::v1::IpcResponse &resp,
         return;
     }
     if (authoritative) {
-        updatePendingPublicRevealCache(resp);
+        updatePendingResolutionChoiceCache(resp);
     }
     ruled::v1::IpcResponse toSend;
     toSend.set_ok(resp.ok());
@@ -1752,9 +1765,9 @@ void RuledGameDriver::revealFaceDownPermanentsOnConcede(int concedingPlayerId, G
     }
 }
 
-void RuledGameDriver::updatePendingPublicRevealCache(const ruled::v1::IpcResponse &response)
+void RuledGameDriver::updatePendingResolutionChoiceCache(const ruled::v1::IpcResponse &response)
 {
-    pendingPublicReveal.reset();
+    pendingResolutionChoice.reset();
     if (!response.has_batch()) {
         return;
     }
@@ -1763,22 +1776,19 @@ void RuledGameDriver::updatePendingPublicRevealCache(const ruled::v1::IpcRespons
             continue;
         }
         const auto &choice = event.resolution_choice_required();
-        if (choice.reveal_audience() != ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS) {
-            continue;
-        }
-        pendingPublicReveal.emplace();
-        pendingPublicReveal->CopyFrom(choice);
+        pendingResolutionChoice.emplace();
+        pendingResolutionChoice->CopyFrom(choice);
     }
 }
 
-void RuledGameDriver::enqueuePendingPublicRevealForParticipant(Server_AbstractParticipant *participant,
-                                                               ResponseContainer &rc)
+void RuledGameDriver::enqueuePendingResolutionChoiceForParticipant(Server_AbstractParticipant *participant,
+                                                                   ResponseContainer &rc)
 {
-    if (!participant || !pendingPublicReveal.has_value()) {
+    if (!participant || !pendingResolutionChoice.has_value()) {
         return;
     }
     ruled::v1::RuledEventBatch snapshot;
-    snapshot.add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingPublicReveal);
+    snapshot.add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingResolutionChoice);
     const ruled::v1::RuledEventBatch filtered = redactBatchForParticipant(snapshot, participant);
 
     Event_RuledPayload event;

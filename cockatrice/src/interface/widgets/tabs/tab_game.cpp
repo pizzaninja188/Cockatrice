@@ -423,8 +423,6 @@ void TabGame::connectToGameEventHandler()
                 localPlayer->getPlayerActions()->declineRuledResolutionPayment();
             }
         });
-        connect(gamePromptWidget, &GamePromptWidget::ruledResolutionPaymentPayRequested,
-                game->getGameEventHandler()->ruled(), &RuledClientState::payResolutionMana);
         connect(gamePromptWidget, &GamePromptWidget::ruledChoiceOptionRequested, game->getGameEventHandler()->ruled(),
                 &RuledClientState::submitPendingChoiceOption);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionPaymentSubmissionFinished, this,
@@ -701,7 +699,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.text =
             coloredCost.isEmpty()
                 ? tr("Pay mana: {%1} remaining (click mana counters or activate mana abilities).").arg(remaining)
-                : tr("Pay %1 (activate mana abilities, then click Pay).").arg(coloredCost);
+                : tr("Pay %1 (click mana counters or activate mana abilities).").arg(coloredCost);
         state.genericManaCost = remaining;
         state.paymentCurrentlyLegal = h->resolutionPaymentCurrentlyLegal();
     } else if (h->hasPendingChoiceOptions()) {

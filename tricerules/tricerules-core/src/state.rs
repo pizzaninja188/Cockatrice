@@ -43,6 +43,16 @@ pub struct TriggerObjectRef {
     pub controller_at_event: PlayerId,
 }
 
+/// Generation-aware identity for the spell or ability whose target-selection event created a
+/// trigger. Physical spells may reuse their object id after leaving and being cast again, so they
+/// carry the stack-entry zone-change generation; virtual ability/copy ids are globally unique and
+/// therefore use `None`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StackObjectRef {
+    pub object_id: ObjectId,
+    pub zone_change_generation: Option<u64>,
+}
+
 /// Event-time facts carried by a triggered ability from collection through resolution. Keeping
 /// these together prevents target publication, target validation, and effect resolution from
 /// reconstructing relationships after objects detach, change controller, or leave a zone.
@@ -50,6 +60,7 @@ pub struct TriggerObjectRef {
 pub struct TriggerContext {
     pub affected_player: Option<PlayerId>,
     pub observed_object: Option<TriggerObjectRef>,
+    pub targeting_stack_object: Option<StackObjectRef>,
     pub attacking_player: Option<PlayerId>,
     pub defending_player: Option<PlayerId>,
 }
@@ -496,6 +507,20 @@ pub struct PendingManaPayment {
 }
 
 #[derive(Debug, Clone)]
+pub struct PendingWardPayment {
+    pub target: StackObjectRef,
+    pub stage: PendingWardPaymentStage,
+}
+
+#[derive(Debug, Clone)]
+pub enum PendingWardPaymentStage {
+    Mana(PendingManaPayment),
+    Discard {
+        candidate_generations: Vec<(ObjectId, u64)>,
+    },
+}
+
+#[derive(Debug, Clone)]
 pub struct PendingResolutionBranch {
     pub optional: bool,
     pub chooser: PlayerRecipient,
@@ -587,6 +612,10 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         branch: PendingResolutionBranch,
     },
+    WardPayment {
+        stack: ParkedStackResolution,
+        ward: PendingWardPayment,
+    },
     HandChoice {
         stack: ParkedStackResolution,
         hand_choice: PendingHandChoice,
@@ -637,6 +666,7 @@ impl ResolutionContinuation {
             Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
+            | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
@@ -656,6 +686,7 @@ impl ResolutionContinuation {
             Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
+            | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
@@ -677,6 +708,14 @@ impl ResolutionContinuation {
                 branch:
                     PendingResolutionBranch {
                         stage: PendingResolutionBranchStage::PayingMana { payment, .. },
+                        ..
+                    },
+                ..
+            } => Some(payment),
+            Self::WardPayment {
+                ward:
+                    PendingWardPayment {
+                        stage: PendingWardPaymentStage::Mana(payment),
                         ..
                     },
                 ..

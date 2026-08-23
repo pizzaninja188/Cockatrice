@@ -10,7 +10,7 @@ use super::events::{
 };
 use super::legal_actions::fill_legal;
 use super::resolution::{
-    counter_stack_spell, move_object_to_zone, permanent_moved_event,
+    counter_stack_object_ref, counter_stack_spell, move_object_to_zone, permanent_moved_event,
     permanent_moved_event_with_library_position, sacrifice_permanent,
     seat_resolved_spell_last_in_graveyard,
 };
@@ -28,6 +28,7 @@ mod library_search;
 mod manifest_dread;
 mod sacrifice_choices;
 mod trigger_choices;
+mod ward;
 
 impl GameEngine {
     /// Begin a tier-3 custom resolution (CR 608).
@@ -97,6 +98,32 @@ impl GameEngine {
         if let Some(payment) = pending.continuation.mana_payment().cloned() {
             return self.finish_resolution_mana_payment(pending, payment, answer, decision, player);
         }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::WardPayment {
+                ward: PendingWardPayment {
+                    stage: PendingWardPaymentStage::Discard { .. },
+                    ..
+                },
+                ..
+            }
+        ) {
+            if decision == rv1::ResolutionChoiceDecision::Decline {
+                if !answer.chosen_object_ids.is_empty() {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "declining Ward cannot include a discard",
+                    ));
+                }
+                return self.finish_ward_discard(pending, &[]);
+            }
+            if decision != rv1::ResolutionChoiceDecision::Unspecified {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "Ward discard requires a card choice or decline",
+                ));
+            }
+        }
         if decision != rv1::ResolutionChoiceDecision::Unspecified {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
@@ -163,6 +190,9 @@ impl GameEngine {
             }
             ResolutionContinuation::AuthoredBranch { .. } => {
                 return self.finish_resolution_branch_object(pending, chosen);
+            }
+            ResolutionContinuation::WardPayment { .. } => {
+                return self.finish_ward_discard(pending, chosen);
             }
             ResolutionContinuation::EntryCopySource { .. } => {
                 return self.finish_entry_copy_source_choice(pending, chosen);

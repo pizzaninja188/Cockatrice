@@ -171,7 +171,6 @@ signals:
     void undoLandTapRequested();
     void ruledResolutionHandPickConfirmRequested();
     void ruledResolutionPaymentDeclineRequested();
-    void ruledResolutionPaymentPayRequested();
     void ruledChoiceOptionRequested(int optionIndex);
 
 private:
@@ -230,7 +229,6 @@ private:
     QPushButton *openingBottomDoneButton = nullptr;
     QPushButton *resolutionHandPickConfirmButton = nullptr;
     QPushButton *resolutionPaymentDeclineButton = nullptr;
-    QPushButton *resolutionPaymentPayButton = nullptr;
     QHBoxLayout *choiceOptionsRow = nullptr;
     QVector<QPushButton *> choiceOptionButtons;
 };

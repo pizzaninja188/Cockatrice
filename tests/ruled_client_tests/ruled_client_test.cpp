@@ -1254,8 +1254,10 @@ TEST_F(RuledClientTest, CounteredSpellLeavesTheStackWithItsCounterspell)
     apply(push);
     ASSERT_EQ(state->getStackOidOrder().size(), 2);
 
-    // Only the Counterspell gets a StackResolved; the countered spell must go too.
+    // The engine explicitly names the countered object; resolving Counterspell retires only
+    // Counterspell itself.
     ruled::v1::RuledEventBatch resolve;
+    resolve.add_events()->mutable_stack_object_countered()->set_object_id(10);
     resolve.add_events()->mutable_stack_resolved()->set_object_id(11);
     apply(resolve);
     EXPECT_TRUE(state->getStackOidOrder().isEmpty());
@@ -3034,6 +3036,61 @@ TEST_F(RuledClientTest, PublicHandRevealIsReadOnlyForObserversAndReconcilesExact
     EXPECT_FALSE(state->hasPublicReveal());
     ASSERT_EQ(publicReveal.count(), 5);
     EXPECT_FALSE(publicReveal.at(4).at(0).toBool());
+}
+
+TEST_F(RuledClientTest, WardAnnotationAndPaymentUseTheExistingRuledPromptModes)
+{
+    ruled::v1::RuledEventBatch manaWard;
+    auto *pushed = manaWard.add_events()->mutable_stack_pushed();
+    pushed->set_object_id(700u);
+    pushed->set_description("Dirgur Island Dragon");
+    pushed->set_ability_annotation("Ward {2}");
+    pushed->set_is_triggered(true);
+    auto *payment = manaWard.add_events()->mutable_resolution_choice_required();
+    payment->set_deciding_player_id(kLocalPlayer);
+    payment->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    payment->set_prompt_text("Ward {2}: Pay {2} or decline.");
+    payment->set_generic_mana_cost(2);
+    payment->set_payment_currently_legal(false);
+    apply(manaWard);
+
+    EXPECT_EQ(state->stackAnnotation(700u), QStringLiteral("Ward {2}"));
+    EXPECT_TRUE(state->isResolutionPaymentActive());
+    EXPECT_EQ(state->resolutionPaymentGenericCost(), 2);
+    EXPECT_FALSE(state->resolutionPaymentCurrentlyLegal());
+
+    ruled::v1::RuledEventBatch discardWardObserver;
+    auto *discard = discardWardObserver.add_events()->mutable_resolution_choice_required();
+    discard->set_deciding_player_id(kOpponent);
+    discard->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    discard->set_prompt_text("Opponent is making a resolution choice.");
+    apply(discardWardObserver);
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    EXPECT_TRUE(state->isWaitingForResolutionChoice());
+    EXPECT_EQ(state->resolutionChoiceWaitingPlayer(), kOpponent);
+}
+
+TEST_F(RuledClientTest, CounterEventRemovesOnlyTheExactSyntheticStackObject)
+{
+    ruled::v1::RuledEventBatch push;
+    auto *first = push.add_events()->mutable_stack_pushed();
+    first->set_object_id(900);
+    first->set_description("Ward target ability");
+    first->set_ability_annotation("Target ability");
+    auto *second = push.add_events()->mutable_stack_pushed();
+    second->set_object_id(901);
+    second->set_description("Unrelated ability");
+    second->set_ability_annotation("Unrelated ability");
+    apply(push);
+    ASSERT_EQ(state->getStackOidOrder().size(), 2);
+
+    ruled::v1::RuledEventBatch counter;
+    counter.add_events()->mutable_stack_object_countered()->set_object_id(900);
+    apply(counter);
+
+    EXPECT_EQ(state->getStackOidOrder(), QVector<quint32>({901}));
+    EXPECT_EQ(host.removedSyntheticCards, QVector<quint32>({900}));
+    EXPECT_EQ(state->stackAnnotation(901), QStringLiteral("Unrelated ability"));
 }
 
 TEST_F(RuledClientTest, PrivateOpponentHandLookDoesNotEnterThePublicGameLog)

@@ -365,6 +365,11 @@ fn countered_spell_moves_to_its_owners_graveyard() {
         .apply_command(0, &pass())
         .expect("p0 pass resolves counter");
 
+    assert!(resolve_batch.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(Ev::StackObjectCountered(countered)) if countered.object_id == bolt_oid
+    )));
+
     // The decisive assertion: the engine routes the countered bolt to its OWNER (P0).
     let bolt_move = permanents_moved_in(&resolve_batch)
         .into_iter()

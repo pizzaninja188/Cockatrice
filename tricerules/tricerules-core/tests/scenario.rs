@@ -61,6 +61,8 @@ mod issue_100_omen;
 mod issue_101_zone_abilities;
 #[path = "scenario/issue_102_activation_limits.rs"]
 mod issue_102_activation_limits;
+#[path = "scenario/issue_103_ward.rs"]
+mod issue_103_ward;
 #[path = "scenario/issue_108_graveyard_aggregates.rs"]
 mod issue_108_graveyard_aggregates;
 #[path = "scenario/issue_111_turn_history.rs"]

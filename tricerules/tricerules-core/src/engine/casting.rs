@@ -325,12 +325,23 @@ impl GameEngine {
             .iter()
             .map(|target| target.object_id)
             .collect();
+        let stack_generation = self
+            .state
+            .zone_change_generation
+            .get(&oid)
+            .copied()
+            .unwrap_or(0)
+            .saturating_add(1);
         // CR 115.9: target-watchers see the final legal target set. Collect now so the event's
         // battlefield identity is exact, but do not stage anything unless all costs are paid and
         // the spell is successfully cast.
         let mut target_triggers = self.collect_event_triggers(&[GameEvent::TargetsChosen {
             controller: player,
             source: TargetingSourceKind::SpellCast,
+            stack_object: StackObjectRef {
+                object_id: oid,
+                zone_change_generation: Some(stack_generation),
+            },
             targets: trefs.clone(),
         }]);
         let payment = self.commit_cost_transaction(payment_plan)?;
@@ -695,11 +706,18 @@ impl GameEngine {
         )?;
 
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
+        // Reserve without consuming: a failed payment must not advance the deterministic id
+        // stream, while target triggers still need the eventual ability's exact identity.
+        let virtual_id = self.state.next_object_id;
         // Snapshot target-watchers before costs: the source itself can be sacrificed while paying
         // for the activation. Nothing is staged unless payment succeeds and the ability is pushed.
         let mut target_triggers = self.collect_event_triggers(&[GameEvent::TargetsChosen {
             controller: player,
             source: TargetingSourceKind::Ability,
+            stack_object: StackObjectRef {
+                object_id: virtual_id,
+                zone_change_generation: None,
+            },
             targets: trefs.clone(),
         }]);
 
@@ -734,7 +752,6 @@ impl GameEngine {
             .map(|d| d.name.clone())
             .unwrap_or_else(|| card_id.clone());
 
-        let virtual_id = self.state.next_object_id;
         self.state.next_object_id += 1;
 
         self.state.stack.push(StackItem {

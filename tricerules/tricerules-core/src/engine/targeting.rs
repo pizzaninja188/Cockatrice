@@ -1133,6 +1133,7 @@ fn validate_effect_targets(
         // validator only needs them present for exhaustiveness (spell targets go through
         // `spell_target_legality_error`).
         | SpellEffectKind::CounterTargetSpell { .. }
+        | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::DamageAll { .. }

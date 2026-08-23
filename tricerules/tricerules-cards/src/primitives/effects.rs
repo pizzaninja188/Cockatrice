@@ -1081,6 +1081,13 @@ pub enum SpellEffectKind {
         #[serde(default)]
         unless_controller_pays: Option<u32>,
     },
+    /// CR 702.21: counter the exact spell or ability whose target-selection event created this
+    /// trigger unless that object's controller pays `cost`. This is an untargeted event reference,
+    /// not a CR 115 stack target. Cackling Prowler and Dirgur Island Dragon use mana; Spectral
+    /// Snatcher uses a discard cost.
+    CounterTriggeringStackObjectUnlessPays {
+        cost: ResolutionCost,
+    },
     /// CR 707.10: put `count` copies of target spell on the stack, each controlled by this
     /// spell's controller. A copy is **not cast** (no mana, no cast triggers, no storm count) and
     /// ceases to exist after it resolves (CR 707.10d). The copy uses the original's chosen modes,
@@ -1746,6 +1753,13 @@ impl SpellEffectKind {
         )
     }
 
+    pub(crate) fn uses_targeting_stack_reference(&self) -> bool {
+        matches!(
+            self,
+            SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
+        )
+    }
+
     pub fn needs_target(&self) -> bool {
         !self.target_roles().is_empty()
     }
@@ -1821,6 +1835,7 @@ impl SpellEffectKind {
             SpellEffectKind::DamagePlayer { .. }
             | SpellEffectKind::Draw { .. }
             | SpellEffectKind::DrawDiscard { .. }
+            | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
             | SpellEffectKind::ChooseResolutionBranch { .. }
             | SpellEffectKind::CreateReflexiveTrigger { .. }
             | SpellEffectKind::Scry { .. }
@@ -2571,6 +2586,24 @@ impl SpellEffectKind {
                 unless_controller_pays: Some(0),
                 ..
             } => Err("CounterTargetSpell unless_controller_pays must be at least 1".into()),
+            SpellEffectKind::CounterTriggeringStackObjectUnlessPays { cost } => match cost {
+                ResolutionCost::Mana(cost)
+                    if !cost.pips.is_empty()
+                        && !cost
+                            .pips
+                            .iter()
+                            .any(|pip| matches!(pip, crate::ManaSymbol::X)) =>
+                {
+                    Ok(())
+                }
+                ResolutionCost::DiscardCard { .. } => Ok(()),
+                ResolutionCost::Mana(_) => {
+                    Err("Ward mana cost must be nonempty and cannot contain X".into())
+                }
+                ResolutionCost::None | ResolutionCost::SacrificePermanent { .. } => {
+                    Err("Ward supports only mana and discard-card costs".into())
+                }
+            },
             // Library searches use the resolution-interrupt machinery and are legal on spells
             // and nonmana abilities alike (Demonic Tutor, Evolving Wilds).
             SpellEffectKind::SearchLibrary { filter, .. } => {

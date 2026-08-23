@@ -86,9 +86,9 @@ public:
     bool validateDecksForStart();
     /// Clears per-game stack bookkeeping and the connection-lost flag before a (re)start.
     void resetForNewGame();
-    /// Appends the current engine-authored public reveal, redacted for this recipient, to a
-    /// join/reconnect response. No-op when resolution is not parked on a public reveal.
-    void enqueuePendingPublicRevealForParticipant(Server_AbstractParticipant *participant, ResponseContainer &rc);
+    /// Appends the sole current engine-authored resolution choice, redacted for this recipient,
+    /// to a join/reconnect response. No-op when resolution is not parked on a choice.
+    void enqueuePendingResolutionChoiceForParticipant(Server_AbstractParticipant *participant, ResponseContainer &rc);
     /// Ends the sidecar session and drops the relay (game teardown).
     void endSidecarSession();
     /// CR 708.9: reveal the conceding player's face-down permanents, or every remaining one when
@@ -179,12 +179,13 @@ private:
     void applyAttachmentRestores(const ruled::v1::RuledEventBatch &batch);
     void applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBatch &batch);
     void applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved);
+    void applyRuledStackObjectCounteredEvent(const ruled::v1::StackObjectCountered &countered);
     // broadcastRuledResponse stages: server-built identity-map injection, then per-participant
     // hidden-info redaction.
     void appendServerObjectMaps(ruled::v1::IpcResponse &toSend);
     /// Replace the reconnect snapshot with the public reveal in this authoritative batch, or
     /// clear it when the batch contains none. Local UI previews must never call this method.
-    void updatePendingPublicRevealCache(const ruled::v1::IpcResponse &response);
+    void updatePendingResolutionChoiceCache(const ruled::v1::IpcResponse &response);
     ruled::v1::RuledEventBatch redactBatchForParticipant(const ruled::v1::RuledEventBatch &batch,
                                                          Server_AbstractParticipant *participant);
 
@@ -235,9 +236,9 @@ private:
     ruled::v1::HandSlotMap lastBroadcastHandSlotMap;
     bool hasLastBroadcastHandSlotMap = false;
     QSet<int> lastBroadcastHandSlotParticipants;
-    /// The sole active public reveal while resolution is parked. Stored without recipient-private
-    /// ids; reconnect delivery runs the normal redaction/injection path for the joining client.
-    std::optional<ruled::v1::ResolutionChoiceRequired> pendingPublicReveal;
+    /// The sole active resolution choice while resolution is parked. Stored without
+    /// recipient-private physical ids; reconnect delivery runs normal redaction/injection.
+    std::optional<ruled::v1::ResolutionChoiceRequired> pendingResolutionChoice;
     /// Authenticated phase-stop preferences by seat. Missing entries are expanded to an explicit
     /// stop-everywhere row when a gameplay command is canonicalized.
     QHash<int, ruled::v1::SetAutoPassPolicy> autoPassPolicies;

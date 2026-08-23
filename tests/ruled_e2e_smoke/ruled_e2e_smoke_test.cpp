@@ -251,6 +251,23 @@ public:
     bool softCounterLeftStackBeforeChoice = false;
     bool sawSoftCounterResolveAfterChoice = false;
     quint32 latestBoltOid = 0;
+    bool wardManaFlowActive = false;
+    bool wardDiscardFlowActive = false;
+    quint32 wardManaSpellOid = 0;
+    quint32 wardDiscardSpellOid = 0;
+    quint32 wardDiscardSourceOid = 0;
+    quint32 wardDiscardChosenOid = 0;
+    int wardDiscardChosenServerCardId = -1;
+    int wardDiscardMovedServerCardId = -1;
+    bool sawWardManaAnnotation = false;
+    bool sawWardDiscardAnnotation = false;
+    bool sawWardManaCountered = false;
+    bool sawWardDiscardPrivateCandidates = false;
+    bool sawWardDiscardObserverRedaction = false;
+    bool sawWardDiscardCardMoved = false;
+    bool sawWardDiscardPhysicalHandToGrave = false;
+    bool sawWardDiscardSpellResolved = false;
+    bool sawWardDiscardSourceToHand = false;
     bool devCurseConjureSent = false;
     bool devCurseManaSent = false;
     bool devAggressiveVictimSent = false;
@@ -664,6 +681,10 @@ public:
                 const QLatin1String table(ZoneNames::TABLE);
                 const QLatin1String deck(ZoneNames::DECK);
                 const int omenOwnerId = role == Role::Aggressor ? myId : oppId;
+                if (wardDiscardFlowActive && from == hand && to == grave) {
+                    wardDiscardMovedServerCardId = mc.card_id();
+                    sawWardDiscardPhysicalHandToGrave = true;
+                }
                 if (from == stack && to == deck && mc.target_player_id() == omenOwnerId &&
                     omenSuccessPhysicalCardId >= 0 && mc.card_id() == omenSuccessPhysicalCardId) {
                     omenSuccessPhysicalIdentityContinuous = true;
@@ -890,6 +911,20 @@ public:
                 if (cardId == QLatin1String("cruel_truths")) {
                     cruelTruthsOid = sp.object_id();
                 }
+                if (cardId == QLatin1String("unsummon")) {
+                    if (wardManaFlowActive) {
+                        wardManaSpellOid = sp.object_id();
+                    } else if (wardDiscardFlowActive) {
+                        wardDiscardSpellOid = sp.object_id();
+                    }
+                }
+                const QString annotation = QString::fromStdString(sp.ability_annotation());
+                if (annotation == QLatin1String("Ward {2}")) {
+                    sawWardManaAnnotation = true;
+                }
+                if (annotation == QStringLiteral("Ward—Discard a card")) {
+                    sawWardDiscardAnnotation = true;
+                }
                 if (cardId == QLatin1String("dirgur_island_dragon_skimming_strike")) {
                     if (omenSuccessOid == 0) {
                         omenSuccessOid = sp.object_id();
@@ -923,6 +958,14 @@ public:
                 if (omenFizzleOid != 0 && ev.stack_resolved().object_id() == omenFizzleOid &&
                     ev.stack_resolved().destination() == ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD) {
                     sawOmenGraveyardDestination = true;
+                }
+                if (wardDiscardSpellOid != 0 && ev.stack_resolved().object_id() == wardDiscardSpellOid) {
+                    sawWardDiscardSpellResolved = true;
+                }
+            } else if (ev.has_stack_object_countered()) {
+                stackDepth = std::max(0, stackDepth - 1);
+                if (wardManaSpellOid != 0 && ev.stack_object_countered().object_id() == wardManaSpellOid) {
+                    sawWardManaCountered = true;
                 }
             } else if (ev.has_life_changed()) {
                 const auto &lc = ev.life_changed();
@@ -987,6 +1030,28 @@ public:
                 }
             } else if (ev.has_resolution_choice_required()) {
                 const auto &rcr = ev.resolution_choice_required();
+                if (wardDiscardFlowActive && rcr.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS) {
+                    if (rcr.deciding_player_id() == myId) {
+                        bool sawBear = false;
+                        for (int i = 0; i < rcr.candidate_names_size(); ++i) {
+                            if (rcr.candidate_names(i) == "Grizzly Bears") {
+                                sawBear = true;
+                                wardDiscardChosenOid = rcr.candidate_object_ids(i);
+                                wardDiscardChosenServerCardId = rcr.candidate_server_card_ids(i);
+                            }
+                        }
+                        sawWardDiscardPrivateCandidates = sawBear && rcr.min() == 0 && rcr.max() == 1 &&
+                                                          rcr.candidate_object_ids_size() ==
+                                                              rcr.candidate_names_size() &&
+                                                          rcr.candidate_object_ids_size() ==
+                                                              rcr.candidate_server_card_ids_size();
+                    } else {
+                        sawWardDiscardObserverRedaction =
+                            rcr.candidate_object_ids_size() == 0 && rcr.candidate_card_ids_size() == 0 &&
+                            rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0 &&
+                            rcr.prompt_text() == "Opponent is making a resolution choice.";
+                    }
+                }
                 if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH) {
                     if (rcr.deciding_player_id() == myId) {
                         if (emptyTypecyclingActivated && rcr.candidate_object_ids_size() == 0) {
@@ -1091,6 +1156,16 @@ public:
                 }
             } else if (ev.has_permanent_moved()) {
                 const auto &moved = ev.permanent_moved();
+                if (wardDiscardFlowActive && moved.card_id() == "grizzly_bears" &&
+                    moved.destination() == ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD &&
+                    (wardDiscardChosenOid == 0 || moved.object_id() == wardDiscardChosenOid)) {
+                    wardDiscardChosenOid = moved.object_id();
+                    sawWardDiscardCardMoved = true;
+                }
+                if (wardDiscardSourceOid != 0 && moved.object_id() == wardDiscardSourceOid &&
+                    moved.destination() == ruled::v1::PermanentMoved::DESTINATION_HAND) {
+                    sawWardDiscardSourceToHand = true;
+                }
                 if (moved.destination() == ruled::v1::PermanentMoved::DESTINATION_EXILE &&
                     moved.card_id() == "grizzly_bears" && (submittedAggressiveChoice || sawAggressivePublicReveal)) {
                     aggressiveChosenOid = moved.object_id();
@@ -3570,6 +3645,188 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
     if (::testing::Test::HasFailure()) {
         ADD_FAILURE() << "milestones incomplete after " << deadline.elapsed() << " ms; see transcript below";
     }
+}
+
+TEST_F(RuledE2ESmokeTest, WardManaDeclineAndPrivateDiscardPayment)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("wardp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("wardp2"), &transcript);
+    // This focused cohort needs only a kept opening hand before dev setup.
+    p2.didMulligan = true;
+
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Mountain")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "Ward cohort game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "Ward cohort game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer openingDeadline;
+    openingDeadline.start();
+    while (openingDeadline.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command,
+                           const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 &&
+               (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto devPut = [&](int targetPlayer, const char *cardName, ruled::v1::DevZone zone, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(targetPlayer);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(cardName);
+        put->set_zone(zone);
+        put->set_ready(ready);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1 for Ward cohort").arg(cardName));
+    };
+    auto devBlueMana = [&](int targetPlayer) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(targetPlayer);
+        dev->mutable_add_mana()->set_u(1);
+        return sendAndPump(p1, command, QStringLiteral("dev: add blue mana for Ward cohort"));
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority in Ward cohort"));
+    };
+    auto legalPermanentTargets = [](const SmokeClient &client, const ruled::v1::LegalHandAction &action) {
+        std::vector<quint32> targets;
+        const quint32 key = action.hand_index() << 8;
+        const auto found = client.latestLegal.valid_targets_by_hand_slot().find(key);
+        if (found == client.latestLegal.valid_targets_by_hand_slot().end()) {
+            return targets;
+        }
+        for (const auto &group : found->second.groups()) {
+            targets.insert(targets.end(), group.valid_permanent_ids().begin(), group.valid_permanent_ids().end());
+        }
+        return targets;
+    };
+
+    // Ward {2}: the targeting player sees the choice, declines, and both clients receive the
+    // exact public counter event for the physical Unsummon.
+    ASSERT_TRUE(devPut(p1.myId, "Dirgur Island Dragon // Skimming Strike",
+                       ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(devPut(p2.myId, "Unsummon", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(devBlueMana(p2.myId));
+    p1.wardManaFlowActive = true;
+    p2.wardManaFlowActive = true;
+    ASSERT_TRUE(passPriority(p1));
+    const auto *manaUnsummon = p2.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Unsummon"));
+    ASSERT_NE(manaUnsummon, nullptr);
+    const auto manaTargets = legalPermanentTargets(p2, *manaUnsummon);
+    ASSERT_EQ(manaTargets.size(), 1u);
+    const quint32 dirgurOid = manaTargets.front();
+    ruled::v1::RuledCommand castManaWard;
+    castManaWard.mutable_cast_spell()->mutable_source()->set_hand_index(manaUnsummon->hand_index());
+    auto *manaTarget = castManaWard.mutable_cast_spell()->add_targets();
+    manaTarget->set_object_id(dirgurOid);
+    manaTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    ASSERT_TRUE(sendAndPump(p2, castManaWard, QStringLiteral("cast Unsummon at Dirgur")));
+    ASSERT_TRUE(passPriority(p2));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    EXPECT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    EXPECT_FALSE(p1.pendingChoice.has_value());
+    ruled::v1::RuledCommand declineManaWard;
+    declineManaWard.mutable_submit_resolution_choice()->set_decision(
+        ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+    p2.pendingChoice.reset();
+    ASSERT_TRUE(sendAndPump(p2, declineManaWard, QStringLiteral("decline Ward {2}")));
+    EXPECT_TRUE(p1.sawWardManaAnnotation && p2.sawWardManaAnnotation);
+    EXPECT_TRUE(p1.sawWardManaCountered && p2.sawWardManaCountered);
+    EXPECT_NE(p1.wardManaSpellOid, 0u);
+    EXPECT_EQ(p1.wardManaSpellOid, p2.wardManaSpellOid);
+    p1.wardManaFlowActive = false;
+    p2.wardManaFlowActive = false;
+
+    // Ward—Discard a card: only the payer receives aligned hand identities. Paying discards the
+    // chosen physical Bear, then the preserved Unsummon resolves and returns Spectral Snatcher.
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+    ASSERT_TRUE(devPut(p1.myId, "Spectral Snatcher", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(devPut(p2.myId, "Grizzly Bears", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(devPut(p2.myId, "Unsummon", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(devBlueMana(p2.myId));
+    p1.wardDiscardFlowActive = true;
+    p2.wardDiscardFlowActive = true;
+    ASSERT_TRUE(passPriority(p1));
+    const auto *discardUnsummon = p2.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Unsummon"));
+    ASSERT_NE(discardUnsummon, nullptr);
+    const auto discardTargets = legalPermanentTargets(p2, *discardUnsummon);
+    const auto snatcher = std::find_if(discardTargets.begin(), discardTargets.end(),
+                                      [dirgurOid](quint32 objectId) { return objectId != dirgurOid; });
+    ASSERT_NE(snatcher, discardTargets.end());
+    const quint32 snatcherOid = *snatcher;
+    p1.wardDiscardSourceOid = snatcherOid;
+    p2.wardDiscardSourceOid = snatcherOid;
+    ruled::v1::RuledCommand castDiscardWard;
+    castDiscardWard.mutable_cast_spell()->mutable_source()->set_hand_index(discardUnsummon->hand_index());
+    auto *discardTarget = castDiscardWard.mutable_cast_spell()->add_targets();
+    discardTarget->set_object_id(snatcherOid);
+    discardTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    ASSERT_TRUE(sendAndPump(p2, castDiscardWard, QStringLiteral("cast Unsummon at Spectral Snatcher")));
+    ASSERT_TRUE(passPriority(p2));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    EXPECT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_HAND_CARDS);
+    EXPECT_TRUE(p2.sawWardDiscardPrivateCandidates);
+    EXPECT_TRUE(p1.sawWardDiscardObserverRedaction);
+    ASSERT_NE(p2.wardDiscardChosenOid, 0u);
+    ruled::v1::RuledCommand payDiscardWard;
+    payDiscardWard.mutable_submit_resolution_choice()->add_chosen_object_ids(p2.wardDiscardChosenOid);
+    p2.pendingChoice.reset();
+    ASSERT_TRUE(sendAndPump(p2, payDiscardWard, QStringLiteral("discard Grizzly Bears to pay Ward")));
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+
+    EXPECT_TRUE(p1.sawWardDiscardAnnotation && p2.sawWardDiscardAnnotation);
+    EXPECT_TRUE(p1.sawWardDiscardPhysicalHandToGrave && p2.sawWardDiscardPhysicalHandToGrave);
+    EXPECT_EQ(p2.wardDiscardMovedServerCardId, p2.wardDiscardChosenServerCardId);
+    EXPECT_TRUE(p1.sawWardDiscardSpellResolved && p2.sawWardDiscardSpellResolved);
+    EXPECT_TRUE(p1.sawWardDiscardSourceToHand && p2.sawWardDiscardSourceToHand);
+    EXPECT_EQ(p1.wardDiscardSpellOid, p2.wardDiscardSpellOid);
 }
 
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can

@@ -94,6 +94,240 @@ pub(super) fn counter_target_spell(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn counter_triggering_stack_object_unless_pays(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::CounterTriggeringStackObjectUnlessPays { cost } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(target) = cx.top.trigger_context.targeting_stack_object else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if !stack_object_ref_present(cx.engine, target) {
+        return Ok(EffectOutcome::Continue);
+    }
+    let deciding_player = cx
+        .top
+        .trigger_context
+        .affected_player
+        .ok_or(EngineError::Illegal(
+            "Ward payer missing from trigger context",
+        ))?;
+    let ward_text = cx.top.ability_text.as_deref().unwrap_or("Ward").to_string();
+    let prompt = match &cost {
+        ResolutionCost::Mana(mana) => format!("Pay {mana} for {ward_text}?"),
+        ResolutionCost::DiscardCard { .. } => {
+            format!("Discard a matching card to pay for {ward_text}, or decline.")
+        }
+        ResolutionCost::None | ResolutionCost::SacrificePermanent { .. } => {
+            return Err(EngineError::Illegal("unsupported Ward cost"));
+        }
+    };
+
+    let (presentation, stage, event) = match cost {
+        ResolutionCost::Mana(mana_cost) => {
+            // Pure generic resolution costs use the established staged-pip transaction: pool
+            // clicks and newly produced mana reduce the remainder, the last pip auto-submits, and
+            // Decline rewinds payment-time mana abilities. Keeping Ward {2} in `mana_cost` would
+            // bypass that flow and require an explicit Pay action.
+            let generic_mana_cost = mana_cost
+                .pips
+                .iter()
+                .try_fold(0u32, |total, pip| match pip {
+                    ManaSymbol::Generic(amount) => total.checked_add(*amount),
+                    _ => None,
+                });
+            let (generic_mana_cost, payment_mana_cost) = match generic_mana_cost {
+                Some(amount) => (amount, ManaCost::default()),
+                None => (0, mana_cost.clone()),
+            };
+            let payment = PendingManaPayment {
+                target_spell_id: target.object_id,
+                generic_mana_cost,
+                mana_cost: payment_mana_cost.clone(),
+                undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
+            };
+            let presentation = PendingResolutionPresentation {
+                source_object_id: cx.top.id,
+                candidates: Vec::new(),
+                min: 0,
+                max: 0,
+                ordered: false,
+                prompt: prompt.clone(),
+                choice_kind: custom::ChoiceKind::ManaPayment,
+                unique_names: false,
+            };
+            let event = rv1::ResolutionChoiceRequired {
+                deciding_player_id: deciding_player,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::ManaPayment as i32,
+                candidate_object_ids: Vec::new(),
+                candidate_card_ids: Vec::new(),
+                min: 0,
+                max: 0,
+                ordered: false,
+                candidate_names: Vec::new(),
+                candidate_server_card_ids: Vec::new(),
+                candidate_selectable: Vec::new(),
+                resolution_branches: Vec::new(),
+                mana_cost: payment_mana_cost.to_string(),
+                unique_names: false,
+                generic_mana_cost,
+                payment_currently_legal: if payment_mana_cost.is_empty() {
+                    cx.engine
+                        .can_pay_generic_mana(deciding_player, generic_mana_cost)
+                } else {
+                    cx.engine
+                        .can_pay_resolution_mana(deciding_player, &payment_mana_cost)
+                },
+                reveal_audience: 0,
+                revealed_zone_owner_player_id: None,
+            };
+            (presentation, PendingWardPaymentStage::Mana(payment), event)
+        }
+        ResolutionCost::DiscardCard { filter } => {
+            let cost = ResolutionCost::DiscardCard { filter };
+            let candidates = cx.engine.resolution_cost_candidates(deciding_player, &cost);
+            if candidates.is_empty() {
+                counter_stack_object_ref(cx.engine, target, &ward_text, cx.events)?;
+                return Ok(EffectOutcome::Continue);
+            }
+            let candidate_generations = candidates
+                .iter()
+                .map(|oid| {
+                    (
+                        *oid,
+                        cx.engine
+                            .state
+                            .zone_change_generation
+                            .get(oid)
+                            .copied()
+                            .unwrap_or(0),
+                    )
+                })
+                .collect();
+            let candidate_card_ids = candidates
+                .iter()
+                .map(|oid| {
+                    cx.engine
+                        .state
+                        .objects
+                        .get(oid)
+                        .map(|object| object.card_id.clone())
+                        .unwrap_or_default()
+                })
+                .collect();
+            let candidate_names = candidates
+                .iter()
+                .map(|oid| object_display_name(&cx.engine.state, cx.engine.registry, *oid))
+                .collect();
+            let presentation = PendingResolutionPresentation {
+                source_object_id: cx.top.id,
+                candidates: candidates.clone(),
+                min: 0,
+                max: 1,
+                ordered: false,
+                prompt: prompt.clone(),
+                choice_kind: custom::ChoiceKind::HandCards,
+                unique_names: false,
+            };
+            let event = rv1::ResolutionChoiceRequired {
+                deciding_player_id: deciding_player,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::HandCards as i32,
+                candidate_object_ids: candidates,
+                candidate_card_ids,
+                min: 0,
+                max: 1,
+                ordered: false,
+                candidate_names,
+                candidate_server_card_ids: Vec::new(),
+                candidate_selectable: Vec::new(),
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                unique_names: false,
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                reveal_audience: 0,
+                revealed_zone_owner_player_id: None,
+            };
+            (
+                presentation,
+                PendingWardPaymentStage::Discard {
+                    candidate_generations,
+                },
+                event,
+            )
+        }
+        ResolutionCost::None | ResolutionCost::SacrificePermanent { .. } => unreachable!(),
+    };
+
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(event)),
+    });
+    cx.events.push(ev_log(format!(
+        "P{deciding_player} must decide whether to pay {ward_text}."
+    )));
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player,
+        presentation,
+        continuation: ResolutionContinuation::WardPayment {
+            stack: ParkedStackResolution::new(cx.top.clone()),
+            ward: PendingWardPayment { target, stage },
+        },
+    });
+    if !cx
+        .engine
+        .state
+        .stack
+        .iter()
+        .any(|item| item.id == cx.top.id)
+    {
+        cx.engine.state.stack.push(cx.top.clone());
+    }
+    Ok(EffectOutcome::Suspended)
+}
+
+pub(crate) fn stack_object_ref_present(engine: &GameEngine, target: StackObjectRef) -> bool {
+    if !engine
+        .state
+        .stack
+        .iter()
+        .any(|item| item.id == target.object_id)
+    {
+        return false;
+    }
+    target.zone_change_generation.is_none_or(|generation| {
+        engine
+            .state
+            .objects
+            .get(&target.object_id)
+            .is_some_and(|object| object.zone == Zone::Stack)
+            && engine
+                .state
+                .zone_change_generation
+                .get(&target.object_id)
+                .copied()
+                .unwrap_or(0)
+                == generation
+    })
+}
+
+pub(crate) fn counter_stack_object_ref(
+    engine: &mut GameEngine,
+    target: StackObjectRef,
+    counter_label: &str,
+    events: &mut Vec<rv1::RuledEvent>,
+) -> Result<(), EngineError> {
+    if !stack_object_ref_present(engine, target) {
+        return Ok(());
+    }
+    counter_stack_spell(engine, target.object_id, counter_label, events)
+}
+
 pub(crate) fn counter_stack_spell(
     engine: &mut GameEngine,
     target_id: ObjectId,
@@ -109,12 +343,19 @@ pub(crate) fn counter_stack_spell(
         return Ok(());
     };
     let st = engine.state.stack.remove(pos);
+    events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::StackObjectCountered(
+            rv1::StackObjectCountered {
+                object_id: target_id,
+            },
+        )),
+    });
     let tgt = engine
         .registry
         .get(&st.card_id)
         .map(|definition| definition.name.as_str())
         .unwrap_or("spell");
-    if !st.is_copy {
+    if st.ability_text.is_none() && !st.is_copy {
         let owner = engine.state.objects.get(&st.id).map(|object| object.owner);
         let destination = if st.flashback {
             Zone::Exile
@@ -380,6 +621,10 @@ pub(super) fn copy_target_spell(
                     engine.fire_triggers(&[GameEvent::TargetsChosen {
                         controller,
                         source: TargetingSourceKind::SpellCopy,
+                        stack_object: StackObjectRef {
+                            object_id: copy_id,
+                            zone_change_generation: None,
+                        },
                         targets: src.targets.iter().map(|target| target.object_id).collect(),
                     }]);
                 }

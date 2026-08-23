@@ -336,25 +336,15 @@ TEST_F(GamePromptWidgetTest, ChoiceOptionsRenderAsOrdinaryLabeledButtons)
     EXPECT_EQ(declineSpy.count(), 1);
 }
 
-TEST_F(GamePromptWidgetTest, ResolutionPaymentPayButtonFollowsEngineAffordability)
+TEST_F(GamePromptWidgetTest, ResolutionPaymentAutoCompletesAndHasNoPayButton)
 {
-    QSignalSpy paySpy(widget.get(), &GamePromptWidget::ruledResolutionPaymentPayRequested);
     GamePromptWidget::RuledPromptState state;
     state.mode = PromptMode::ResolutionPayment;
     state.text = "Pay {2}{R}.";
     state.paymentCurrentlyLegal = false;
     widget->setRuledPromptState(state);
-    auto *pay = btn("resolutionPaymentPayButton");
-    ASSERT_NE(pay, nullptr);
-    EXPECT_FALSE(pay->isHidden());
-    EXPECT_FALSE(pay->isEnabled());
-
-    state.paymentCurrentlyLegal = true;
-    widget->setRuledPromptState(state);
-    pay = btn("resolutionPaymentPayButton");
-    ASSERT_TRUE(pay->isEnabled());
-    pay->click();
-    EXPECT_EQ(paySpy.count(), 1);
+    EXPECT_EQ(btn("resolutionPaymentPayButton"), nullptr);
+    EXPECT_FALSE(btn("resolutionPaymentDeclineButton")->isHidden());
 }
 
 TEST_F(GamePromptWidgetTest, WaitingForResolutionChoiceSuppressesEveryActionControl)

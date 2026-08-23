@@ -241,6 +241,24 @@ protected:
         game->ruled()->ruledEngineStackPushDescriptionsByObjectId.insert(engineOid, description);
     }
 
+    void seedSyntheticStackBookkeeping(quint32 engineOid, quint32 targetOid, bool isCopy)
+    {
+        game->ruled()->ruledStackTargetsByObjectId.insert(engineOid, {targetOid});
+        game->ruled()->ruledStackObjectIdToCasterPlayerId.insert(engineOid, p1->getPlayerId());
+        game->ruled()->ruledEngineStackPushDescriptionsByObjectId.insert(engineOid, QStringLiteral("Synthetic"));
+        if (isCopy) {
+            game->ruled()->ruledStackCopyObjectIds.insert(engineOid);
+        }
+    }
+
+    bool hasSyntheticStackBookkeeping(quint32 engineOid) const
+    {
+        return game->ruled()->ruledStackTargetsByObjectId.contains(engineOid) ||
+               game->ruled()->ruledStackObjectIdToCasterPlayerId.contains(engineOid) ||
+               game->ruled()->ruledEngineStackPushDescriptionsByObjectId.contains(engineOid) ||
+               game->ruled()->ruledStackCopyObjectIds.contains(engineOid);
+    }
+
     const RuledPlayerBinding &bindingFor(Server_Player *p)
     {
         return game->ruled()->playerBinding(p->getPlayerId());
@@ -264,9 +282,9 @@ protected:
         return game->ruled()->redactBatchForParticipant(batch, participant);
     }
 
-    void updatePendingPublicRevealCache(const ruled::v1::IpcResponse &response)
+    void updatePendingResolutionChoiceCache(const ruled::v1::IpcResponse &response)
     {
-        game->ruled()->updatePendingPublicRevealCache(response);
+        game->ruled()->updatePendingResolutionChoiceCache(response);
     }
 
     bool cacheAutoPassPolicy(int playerId, const ruled::v1::SetAutoPassPolicy &policy)
@@ -853,7 +871,7 @@ TEST_F(RuledBatchTest, PendingPublicRevealIsRestoredOnJoinAndClearedByNextAuthor
     choice->add_candidate_card_ids("grizzly_bears");
     choice->add_candidate_names("Grizzly Bears");
     choice->add_candidate_selectable(true);
-    updatePendingPublicRevealCache(response);
+    updatePendingResolutionChoiceCache(response);
 
     ResponseContainer reconnect(-1);
     game->createGameJoinedEvent(p2, reconnect, true);
@@ -877,7 +895,7 @@ TEST_F(RuledBatchTest, PendingPublicRevealIsRestoredOnJoinAndClearedByNextAuthor
     ruled::v1::IpcResponse completed;
     completed.set_ok(true);
     completed.mutable_batch()->add_events()->mutable_log()->set_text("Choice completed.");
-    updatePendingPublicRevealCache(completed);
+    updatePendingResolutionChoiceCache(completed);
 
     ResponseContainer afterCompletion(-1);
     game->createGameJoinedEvent(p2, afterCompletion, true);
@@ -1408,6 +1426,63 @@ TEST_F(RuledBatchTest, PermanentMovedToLibraryReordersTheOwnersPrivateDeckWithou
     EXPECT_EQ(findCardByEngineOid(p1, 211u), bear);
 }
 
+TEST_F(RuledBatchTest, PendingPrivateWardDiscardIsRestoredForPayerAndRedactedForOpponent)
+{
+    Server_Card *bear = addCardToHand(p1, QStringLiteral("Grizzly Bears"));
+    ruled::v1::RuledPerPlayerView view;
+    view.set_player_id(p1->getPlayerId());
+    auto *handCard = view.add_hand_cards();
+    handCard->set_object_id(501u);
+    handCard->set_card_id("grizzly_bears");
+    applyZoneView(p1, view, nullptr);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *choice = response.mutable_batch()->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    choice->set_prompt_text("Discard a matching card to pay for Ward—Discard a card, or decline.");
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(501u);
+    choice->add_candidate_card_ids("grizzly_bears");
+    choice->add_candidate_names("Grizzly Bears");
+    updatePendingResolutionChoiceCache(response);
+
+    ResponseContainer payerReconnect(-1);
+    game->createGameJoinedEvent(p1, payerReconnect, true);
+    ASSERT_EQ(payerReconnect.getPostResponseQueue().size(), 3);
+    const auto *payerContainer =
+        dynamic_cast<const GameEventContainer *>(payerReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(payerContainer, nullptr);
+    ruled::v1::RuledEventBatch payerBatch;
+    ASSERT_TRUE(payerBatch.ParseFromString(
+        payerContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    const auto &payerChoice = payerBatch.events(0).resolution_choice_required();
+    ASSERT_EQ(payerChoice.candidate_object_ids_size(), 1);
+    EXPECT_EQ(payerChoice.candidate_object_ids(0), 501u);
+    ASSERT_EQ(payerChoice.candidate_server_card_ids_size(), 1);
+    EXPECT_EQ(payerChoice.candidate_server_card_ids(0), bear->getId());
+    EXPECT_EQ(payerChoice.prompt_text(),
+              "Discard a matching card to pay for Ward—Discard a card, or decline.");
+
+    ResponseContainer opponentReconnect(-1);
+    game->createGameJoinedEvent(p2, opponentReconnect, true);
+    ASSERT_EQ(opponentReconnect.getPostResponseQueue().size(), 3);
+    const auto *opponentContainer =
+        dynamic_cast<const GameEventContainer *>(opponentReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(opponentContainer, nullptr);
+    ruled::v1::RuledEventBatch opponentBatch;
+    ASSERT_TRUE(opponentBatch.ParseFromString(
+        opponentContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    const auto &opponentChoice = opponentBatch.events(0).resolution_choice_required();
+    EXPECT_EQ(opponentChoice.candidate_object_ids_size(), 0);
+    EXPECT_EQ(opponentChoice.candidate_card_ids_size(), 0);
+    EXPECT_EQ(opponentChoice.candidate_names_size(), 0);
+    EXPECT_EQ(opponentChoice.candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(opponentChoice.prompt_text(), "Opponent is making a resolution choice.");
+}
+
 TEST_F(RuledBatchTest, ResolvedOmenMovesTheExactStackCardFaceDownAndReconcilesDuplicateLibraryCards)
 {
     const QString cardId = QStringLiteral("dirgur_island_dragon_skimming_strike");
@@ -1500,6 +1575,22 @@ TEST_F(RuledBatchTest, ResolvedOmenMovesTheExactStackCardFaceDownAndReconcilesDu
         }
     }
     EXPECT_TRUE(sawBattlefieldCard);
+}
+
+TEST_F(RuledBatchTest, StackObjectCounteredRetiresOnlyTheExactAbilityOrCopyBinding)
+{
+    seedSyntheticStackBookkeeping(900u, 101u, true);
+    seedSyntheticStackBookkeeping(901u, 102u, false);
+    ASSERT_TRUE(hasSyntheticStackBookkeeping(900u));
+    ASSERT_TRUE(hasSyntheticStackBookkeeping(901u));
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    response.mutable_batch()->add_events()->mutable_stack_object_countered()->set_object_id(900u);
+    callBatchApply(response);
+
+    EXPECT_FALSE(hasSyntheticStackBookkeeping(900u));
+    EXPECT_TRUE(hasSyntheticStackBookkeeping(901u));
 }
 
 // --------------------------------------------------------------------------------------------

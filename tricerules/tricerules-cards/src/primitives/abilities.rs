@@ -556,6 +556,13 @@ impl TriggerCondition {
                 | Self::WheneverAttachedPlayerIsAttacked
         )
     }
+
+    pub(crate) fn supplies_targeting_stack_object(&self) -> bool {
+        matches!(
+            self,
+            Self::WheneverSelfBecomesTarget { .. } | Self::WheneverPermanentBecomesTarget { .. }
+        )
+    }
 }
 
 /// Derived creature characteristics captured by a discrete trigger event. Keyword and power
@@ -783,6 +790,16 @@ impl TriggeredAbilityDef {
             return Err(
                 "defending-player target requires an attack trigger that supplies a defender"
                     .into(),
+            );
+        }
+        if effects
+            .iter()
+            .copied()
+            .any(SpellEffectKind::uses_targeting_stack_reference)
+            && !self.trigger.supplies_targeting_stack_object()
+        {
+            return Err(
+                "counter-triggering-stack-object effect requires a becomes-target trigger".into(),
             );
         }
         if let Some(InterveningIf::GameCondition(condition)) = self.intervening_if.as_ref() {

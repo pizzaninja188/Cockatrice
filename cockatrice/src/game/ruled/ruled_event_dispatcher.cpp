@@ -260,6 +260,9 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         if (e.has_stack_resolved()) {
             applyStackResolved(e.stack_resolved(), ctx);
         }
+        if (e.has_stack_object_countered()) {
+            applyStackObjectCountered(e.stack_object_countered(), ctx);
+        }
         if (e.has_trigger_needs_target()) {
             applyTriggerNeedsTarget(e.trigger_needs_target(), ctx);
         }
@@ -502,9 +505,26 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
 void RuledEventDispatcher::applyStackResolved(const ruled::v1::StackResolved &sr, BatchContext &ctx)
 {
     const quint32 rid = sr.object_id();
-    // Countered spells leave the engine stack without their own StackResolved; remove this
-    // spell's stack targets (e.g. the countered object id) so stackOidOrder matches the real
-    // stack (pass button + stack window).
+    retireStackObject(rid, ctx);
+    RULED_TRACE("client") << "stackResolved: oid=" << rid << " destination=" << static_cast<int>(sr.destination())
+                          << " (1=graveyard 2=battlefield 3=exile 4=library) stackOidOrderRemaining="
+                          << state->stackOidOrder.size()
+                          << " — the physical card is moved by the RELAY, not here; this line only"
+                             " confirms the client saw the resolve";
+}
+
+void RuledEventDispatcher::applyStackObjectCountered(const ruled::v1::StackObjectCountered &countered,
+                                                      BatchContext &ctx)
+{
+    const quint32 objectId = countered.object_id();
+    retireStackObject(objectId, ctx);
+    RULED_TRACE("client") << "stackObjectCountered: oid=" << objectId
+                          << " stackOidOrderRemaining=" << state->stackOidOrder.size();
+}
+
+void RuledEventDispatcher::retireStackObject(quint32 objectId, BatchContext &ctx)
+{
+    const quint32 rid = objectId;
     const QVector<quint32> spellTargets = state->stackTargetsByStackOid.value(rid);
     state->stackOidOrder.removeOne(rid);
     state->stackTargetsByStackOid.remove(rid);
@@ -513,15 +533,7 @@ void RuledEventDispatcher::applyStackResolved(const ruled::v1::StackResolved &sr
     }
     state->stackAnnotationByOid.remove(rid);
     state->stackSourceOidByStackOid.remove(rid);
-    RULED_TRACE("client") << "stackResolved: oid=" << rid << " destination=" << static_cast<int>(sr.destination())
-                          << " (1=graveyard 2=battlefield 3=exile 4=library) stackOidOrderRemaining="
-                          << state->stackOidOrder.size()
-                          << " — the physical card is moved by the RELAY, not here; this line only"
-                             " confirms the client saw the resolve";
     host->removeSyntheticStackCard(rid);
-    for (quint32 t : spellTargets) {
-        state->stackOidOrder.removeOne(t);
-    }
     ctx.stackTrackingDirty = true;
 }
 

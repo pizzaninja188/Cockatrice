@@ -823,6 +823,7 @@ impl GameEngine {
             GameEvent::TargetsChosen {
                 controller: targeting_controller,
                 source: targeting_source,
+                stack_object,
                 targets,
             } => {
                 // CR 603.2/115.9: becoming a target is observed after the complete legal target
@@ -881,6 +882,7 @@ impl GameEngine {
                         for trigger in &mut matching {
                             trigger.trigger_context.observed_object =
                                 self.trigger_object_ref(*target_id);
+                            trigger.trigger_context.targeting_stack_object = Some(*stack_object);
                         }
                         out.extend(matching);
                     }
@@ -1660,6 +1662,10 @@ mod tests {
         engine.fire_triggers(&[GameEvent::TargetsChosen {
             controller: 1,
             source: TargetingSourceKind::SpellCast,
+            stack_object: StackObjectRef {
+                object_id: 999_001,
+                zone_change_generation: None,
+            },
             targets: vec![giants[0], giants[0], giants[1]],
         }]);
 

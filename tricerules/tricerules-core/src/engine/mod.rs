@@ -10,10 +10,11 @@ use crate::state::{
     ObjectId, OpeningSequence, ParkedStackResolution, PendingBattlefieldEntry, PendingHandChoice,
     PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
     PendingManaPayment, PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
-    PendingResolutionPresentation, PendingTrigger, PendingTriggerOrder, PlayerId, PlayerState,
-    ReplacementPriority, ResolutionContinuation, RoomState, StackItem, StackTarget, StagedTrigger,
-    StagedTriggerGroup, TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TriggeredOnceKey,
-    TurnHistory, TurnStep, UndoableManaAbility, Zone,
+    PendingResolutionPresentation, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
+    PendingWardPaymentStage, PlayerId, PlayerState, ReplacementPriority, ResolutionContinuation,
+    RoomState, StackItem, StackObjectRef, StackTarget, StagedTrigger, StagedTriggerGroup,
+    TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TriggeredOnceKey, TurnHistory,
+    TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -390,6 +391,7 @@ enum GameEvent {
     TargetsChosen {
         controller: PlayerId,
         source: TargetingSourceKind,
+        stack_object: StackObjectRef,
         targets: Vec<ObjectId>,
     },
 }

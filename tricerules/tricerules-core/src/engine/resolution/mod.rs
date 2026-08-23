@@ -26,7 +26,7 @@ mod misc;
 mod pump_counters;
 mod restrictions;
 mod stack_ops;
-pub(super) use stack_ops::counter_stack_spell;
+pub(super) use stack_ops::{counter_stack_object_ref, counter_stack_spell};
 mod tokens;
 pub(in crate::engine) mod zones;
 
@@ -469,7 +469,7 @@ impl GameEngine {
                 SpellEffectKind::CounterTargetSpell {
                     unless_controller_pays: Some(_),
                     ..
-                }
+                } | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
             )
         });
         if leaves_no_object && !defer_soft_counter_exit && !is_omen_spell {
@@ -1069,6 +1069,9 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::CounterTargetSpell { .. } => {
                         stack_ops::counter_target_spell(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. } => {
+                        stack_ops::counter_triggering_stack_object_unless_pays(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::CopyTargetSpell { .. } => {
                         stack_ops::copy_target_spell(&mut cx, effect)?

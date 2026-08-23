@@ -111,6 +111,16 @@ impl GameEngine {
                     let mut item = stack.item.clone();
                     item.resolution_branch_choices.insert(effect_index, None);
                     return self.complete_parked_resolution(item, Some(effect_index), events);
+                } else if let ResolutionContinuation::WardPayment { stack, ward } =
+                    &pending.continuation
+                {
+                    let label = stack
+                        .item
+                        .ability_text
+                        .as_deref()
+                        .unwrap_or("Ward")
+                        .to_string();
+                    counter_stack_object_ref(self, ward.target, &label, &mut events)?;
                 } else {
                     let stack = pending
                         .continuation

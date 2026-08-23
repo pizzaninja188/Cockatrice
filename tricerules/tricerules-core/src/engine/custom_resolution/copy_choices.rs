@@ -170,6 +170,10 @@ impl GameEngine {
         self.fire_triggers(&[GameEvent::TargetsChosen {
             controller,
             source: TargetingSourceKind::SpellCopy,
+            stack_object: StackObjectRef {
+                object_id: copy_id,
+                zone_change_generation: None,
+            },
             targets: chosen.to_vec(),
         }]);
 

@@ -41,6 +41,7 @@ class ResolutionChoiceRequired;
 class RuledEventBatch;
 class StackPushed;
 class StackResolved;
+class StackObjectCountered;
 class TriggerNeedsTarget;
 class TriggerOrderRequired;
 class ZoneViewSync;
@@ -91,6 +92,8 @@ private:
     void applyPhaseChanged(const ruled::v1::PhaseChanged &pc, BatchContext &ctx);
     void applyStackPushed(const ruled::v1::StackPushed &sp, BatchContext &ctx);
     void applyStackResolved(const ruled::v1::StackResolved &sr, BatchContext &ctx);
+    void applyStackObjectCountered(const ruled::v1::StackObjectCountered &countered, BatchContext &ctx);
+    void retireStackObject(quint32 objectId, BatchContext &ctx);
     void applyTriggerNeedsTarget(const ruled::v1::TriggerNeedsTarget &tnt, BatchContext &ctx);
     void applyTriggerOrderRequired(const ruled::v1::TriggerOrderRequired &tor, BatchContext &ctx);
     void applyResolutionChoiceRequired(const ruled::v1::ResolutionChoiceRequired &rcr, BatchContext &ctx);
