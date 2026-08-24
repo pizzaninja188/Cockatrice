@@ -390,6 +390,7 @@ mod damage_source_tests {
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_cost_receipts: Vec::new(),
+            payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         }
@@ -434,8 +435,8 @@ mod damage_source_tests {
         let targets_by_role = vec![vec![chosen]];
         let target_damage = Vec::new();
         let target_group_indices = vec![0];
-        let previous_effect_result = EffectResult::None;
-        let mut effect_result = EffectResult::None;
+        let previous_effect_result = EffectResult::default();
+        let mut effect_result = EffectResult::default();
         let mut events = Vec::new();
         let mut cx = EffectCx {
             engine,

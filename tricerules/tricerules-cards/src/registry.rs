@@ -1,9 +1,9 @@
 use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
-    AdditionalCost, BattlefieldAggregate, CastCostGroupDef, CastCostReceiptCondition,
-    EffectContext, FaceChangeAction, GameCondition, InterveningIf, ResolutionBranchRequirement,
-    SpecialActionAffected, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
-    TargetingDef, TriggerCondition,
+    AbilityCost, AdditionalCost, Amount, BattlefieldAggregate, CardResultAction, CardResultSource,
+    CastCostGroupDef, CastCostReceiptCondition, EffectContext, FaceChangeAction, GameCondition,
+    InterveningIf, ResolutionBranchRequirement, SpecialActionAffected, SpellEffectKind,
+    StaticAbilityDef, TargetController, TargetKind, TargetingDef, TriggerCondition,
 };
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
@@ -106,6 +106,69 @@ fn validate_effect_cast_cost_conditions(
         }
         _ => Ok(()),
     }
+}
+
+fn validate_effect_payment_results(
+    allowed: &[CardResultAction],
+    effect: &SpellEffectKind,
+) -> Result<(), String> {
+    let amount = match effect {
+        SpellEffectKind::DamageTarget { amount, .. }
+        | SpellEffectKind::DamagePlayer { amount, .. }
+        | SpellEffectKind::Draw { count: amount, .. }
+        | SpellEffectKind::GainLife { amount }
+        | SpellEffectKind::Mill { count: amount, .. }
+        | SpellEffectKind::CreateTokens { count: amount, .. } => Some(amount),
+        SpellEffectKind::PumpTarget {
+            scale: Some(scale), ..
+        } => Some(&scale.amount),
+        _ => None,
+    };
+    if let Some(filter) = amount.and_then(Amount::card_result_filter) {
+        if filter.source == CardResultSource::Payment && !allowed.contains(&filter.action) {
+            return Err("Payment card result requires a compatible card cost".into());
+        }
+    }
+    if let SpellEffectKind::ChooseResolutionBranch { branches, .. } = effect {
+        for branch in branches {
+            if let ResolutionBranchRequirement::CardResultCount { filter, .. } = &branch.requirement
+            {
+                if filter.source == CardResultSource::Payment && !allowed.contains(&filter.action) {
+                    return Err("Payment card result requires a compatible card cost".into());
+                }
+            }
+            for nested in &branch.effects {
+                validate_effect_payment_results(allowed, nested)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn additional_cost_result_actions(costs: &[AdditionalCost]) -> Vec<CardResultAction> {
+    costs
+        .iter()
+        .map(|cost| match cost {
+            AdditionalCost::DiscardCard => CardResultAction::Discard,
+            AdditionalCost::SacrificePermanent { .. } => CardResultAction::Sacrifice,
+        })
+        .collect()
+}
+
+fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
+    costs
+        .iter()
+        .filter_map(|cost| match cost {
+            AbilityCost::Discard | AbilityCost::DiscardSelf => Some(CardResultAction::Discard),
+            AbilityCost::ExileSelf | AbilityCost::ExileGraveyardCards { .. } => {
+                Some(CardResultAction::Exile)
+            }
+            AbilityCost::SacrificeSelf | AbilityCost::SacrificePermanent { .. } => {
+                Some(CardResultAction::Sacrifice)
+            }
+            AbilityCost::Tap | AbilityCost::Mana(_) => None,
+        })
+        .collect()
 }
 
 impl CardRegistry {
@@ -350,7 +413,14 @@ impl CardRegistry {
                             .into(),
                     });
                 }
+                let spell_payment_actions = additional_cost_result_actions(&face.additional_costs);
                 for effect in &face.spell_effect {
+                    validate_effect_payment_results(&spell_payment_actions, effect).map_err(
+                        |reason| RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        },
+                    )?;
                     validate_effect_cast_cost_conditions(&face.cast_cost_groups, effect).map_err(
                         |reason| RegistryError::InvalidCard {
                             id: card.id.clone(),
@@ -387,6 +457,11 @@ impl CardRegistry {
                 if let Some(modal) = &face.modal_spell {
                     for mode in &modal.modes {
                         for effect in &mode.effects {
+                            validate_effect_payment_results(&spell_payment_actions, effect)
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
                             validate_effect_cast_cost_conditions(&face.cast_cost_groups, effect)
                                 .map_err(|reason| RegistryError::InvalidCard {
                                     id: card.id.clone(),
@@ -637,11 +712,12 @@ impl CardRegistry {
                                     reason,
                                 })?;
                         }
-                        if amount.uses_milled_result() {
+                        if amount.card_result_filter().is_some() {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
-                                reason: "CardsMilledThisWay is valid only in an effect list immediately following mill"
-                                    .into(),
+                                reason:
+                                    "card result counts are valid only in a resolving effect list"
+                                        .into(),
                             });
                         }
                         amount
@@ -922,6 +998,25 @@ impl CardRegistry {
                             id: card.id.clone(),
                             reason,
                         })?;
+                    let allowed = ability_cost_result_actions(&ability.costs);
+                    for effect in &ability.effect {
+                        validate_effect_payment_results(&allowed, effect).map_err(|reason| {
+                            RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            }
+                        })?;
+                    }
+                }
+                for ability in &face.triggered_abilities {
+                    for effect in &ability.effect {
+                        validate_effect_payment_results(&[], effect).map_err(|reason| {
+                            RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            }
+                        })?;
+                    }
                 }
                 for cost in &face.additional_costs {
                     if let AdditionalCost::SacrificePermanent { filter } = cost {
@@ -1134,6 +1229,63 @@ mod tests {
     #[test]
     fn embedded_registry_loads() {
         CardRegistry::from_embedded().unwrap();
+    }
+
+    #[test]
+    fn previous_card_result_rejects_an_incompatible_preceding_effect() {
+        let card = r#"(
+            id: "bad_previous_result",
+            name: "Bad Previous Result",
+            mana_cost: "{1}",
+            types: ["Sorcery"],
+            spell_effect: [
+                Draw(count: 1),
+                GainLife(amount: Count(CardsMatchingResult(filter: (
+                    source: PreviousEffect,
+                    action: Discard,
+                    players: All,
+                    card_type: None,
+                )))),
+            ],
+        )"#;
+
+        let error = CardRegistry::from_chunks(&[card]).expect_err("invalid result dependency");
+        assert!(error
+            .to_string()
+            .contains("immediately preceding compatible"));
+    }
+
+    #[test]
+    fn payment_card_result_requires_a_compatible_authored_cost() {
+        let card = r#"(
+            id: "bad_payment_result",
+            name: "Bad Payment Result",
+            mana_cost: "{1}",
+            types: ["Sorcery"],
+            spell_effect: [ChooseResolutionBranch(
+                selection: FirstApplicable,
+                branches: [
+                    (
+                        label: "Paid discard",
+                        cost: None,
+                        requirement: CardResultCount(
+                            filter: (
+                                source: Payment,
+                                action: Discard,
+                                players: Controller,
+                                card_type: None,
+                            ),
+                            min: Some(1),
+                        ),
+                        effects: [],
+                    ),
+                    (label: "Fallback", cost: None, requirement: Always, effects: []),
+                ],
+            )],
+        )"#;
+
+        let error = CardRegistry::from_chunks(&[card]).expect_err("missing discard cost");
+        assert!(error.to_string().contains("compatible card cost"));
     }
 
     #[test]

@@ -341,10 +341,9 @@ pub enum CountExpression {
     /// The committed, identity-free number of creatures that died during the current turn.
     /// Bloodcrazed Paladin shares this watcher with `GameCondition::CreatureDeathsThisTurn`.
     CreatureDeathsThisTurn,
-    /// Count cards with `filter` among the exact objects produced by the immediately preceding
-    /// mill effect in this resolving effect list. Gorging Vulture consumes the count as life;
-    /// Tribune of Rot consumes the same cohort as a token count.
-    CardsMilledThisWay { filter: CardTypeFilter },
+    /// Count cards in an engine-owned payment or immediately preceding effect cohort. Gerrard's
+    /// Verdict and Gorging Vulture share this without re-examining an object's current zone.
+    CardsMatchingResult { filter: CardResultFilter },
 }
 
 impl CountExpression {
@@ -356,7 +355,7 @@ impl CountExpression {
             }
             CountExpression::GraveyardCardsNamed { .. }
             | CountExpression::CreatureDeathsThisTurn
-            | CountExpression::CardsMilledThisWay { .. } => Ok(()),
+            | CountExpression::CardsMatchingResult { .. } => Ok(()),
         }
     }
 }
@@ -408,11 +407,11 @@ impl Amount {
         matches!(self, Amount::Conditional { .. } | Amount::Count(_))
     }
 
-    pub(crate) fn uses_milled_result(&self) -> bool {
-        matches!(
-            self,
-            Amount::Count(CountExpression::CardsMilledThisWay { .. })
-        )
+    pub(crate) fn card_result_filter(&self) -> Option<&CardResultFilter> {
+        match self {
+            Amount::Count(CountExpression::CardsMatchingResult { filter }) => Some(filter),
+            _ => None,
+        }
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -858,6 +857,32 @@ pub struct ResolutionBranchDef {
     pub effects: Vec<SpellEffectKind>,
 }
 
+/// Selects an engine-owned cohort of cards produced while paying for the resolving stack item or
+/// by the immediately preceding primitive instruction. The cohort is never published; consumers
+/// expose only their ordinary public result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CardResultFilter {
+    pub source: CardResultSource,
+    pub action: CardResultAction,
+    pub players: RelativePlayerSet,
+    #[serde(default)]
+    pub card_type: Option<CardTypeFilter>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CardResultSource {
+    Payment,
+    PreviousEffect,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CardResultAction {
+    Discard,
+    Exile,
+    Sacrifice,
+    Mill,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ResolutionBranchRequirement {
     #[default]
@@ -869,6 +894,15 @@ pub enum ResolutionBranchRequirement {
     /// A linked cast-time choice recorded on this spell's stack item (CR 607.2i). Kicker and
     /// behold effects remain true even if the object used for the choice later changes zones.
     CastCostReceipt(CastCostReceiptCondition),
+    /// Compare the size of an exact paid-or-moved card cohort. Grab the Prize reads its discard
+    /// payment; Soul-Shackled Zombie and Fanatic of the Harrowing read a preceding instruction.
+    CardResultCount {
+        filter: CardResultFilter,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -2026,6 +2060,25 @@ impl SpellEffectKind {
     /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
     /// [`SpellEffectKind::validate`], which the caller runs too.
     pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
+        fn produces_card_result(effect: &SpellEffectKind, action: CardResultAction) -> bool {
+            match action {
+                CardResultAction::Discard => matches!(
+                    effect,
+                    SpellEffectKind::DiscardCards { .. } | SpellEffectKind::DrawDiscard { .. }
+                ),
+                CardResultAction::Exile => {
+                    matches!(effect, SpellEffectKind::ExileCardsFromHand { .. })
+                }
+                CardResultAction::Sacrifice => {
+                    matches!(effect, SpellEffectKind::TargetPlayerSacrifices { .. })
+                }
+                CardResultAction::Mill => matches!(
+                    effect,
+                    SpellEffectKind::Mill { .. } | SpellEffectKind::MillTargetPlayer { .. }
+                ),
+            }
+        }
+
         if effects
             .iter()
             .filter(|effect| matches!(effect, SpellEffectKind::ChooseResolutionBranch { .. }))
@@ -2067,18 +2120,35 @@ impl SpellEffectKind {
                 } => Some(&scale.amount),
                 _ => None,
             };
-            if amount.is_some_and(Amount::uses_milled_result)
-                && !matches!(
-                    index
-                        .checked_sub(1)
-                        .and_then(|previous| effects.get(previous)),
-                    Some(SpellEffectKind::Mill { .. } | SpellEffectKind::MillTargetPlayer { .. })
-                )
-            {
-                return Err(
-                    "CardsMilledThisWay requires an immediately preceding Mill or MillTargetPlayer effect"
-                        .into(),
-                );
+            let previous = index
+                .checked_sub(1)
+                .and_then(|previous| effects.get(previous));
+            if let Some(filter) = amount.and_then(Amount::card_result_filter) {
+                if filter.source == CardResultSource::PreviousEffect
+                    && !previous.is_some_and(|effect| produces_card_result(effect, filter.action))
+                {
+                    return Err(
+                        "PreviousEffect card result requires an immediately preceding compatible card-moving effect"
+                            .into(),
+                    );
+                }
+            }
+            if let SpellEffectKind::ChooseResolutionBranch { branches, .. } = effect {
+                for branch in branches {
+                    if let ResolutionBranchRequirement::CardResultCount { filter, .. } =
+                        &branch.requirement
+                    {
+                        if filter.source == CardResultSource::PreviousEffect
+                            && !previous
+                                .is_some_and(|effect| produces_card_result(effect, filter.action))
+                        {
+                            return Err(
+                                "PreviousEffect card result requires an immediately preceding compatible card-moving effect"
+                                    .into(),
+                            );
+                        }
+                    }
+                }
             }
         }
         Ok(())
@@ -2235,6 +2305,19 @@ impl SpellEffectKind {
                         &branch.requirement
                     {
                         condition.validate()?;
+                    }
+                    if let ResolutionBranchRequirement::CardResultCount { min, max, .. } =
+                        &branch.requirement
+                    {
+                        if min.is_none() && max.is_none() {
+                            return Err("card result count requires a minimum or maximum".into());
+                        }
+                        if min
+                            .zip(*max)
+                            .is_some_and(|(minimum, maximum)| minimum > maximum)
+                        {
+                            return Err("card result count minimum cannot exceed maximum".into());
+                        }
                     }
                     for effect in &branch.effects {
                         if effect.needs_target() {

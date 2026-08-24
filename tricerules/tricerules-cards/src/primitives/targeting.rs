@@ -299,6 +299,23 @@ pub enum CardTypeFilter {
     Noncreature,
 }
 
+impl CardTypeFilter {
+    /// Exhaustive list used when an action snapshots the card types it matched at that moment.
+    pub const ALL: [Self; 11] = [
+        Self::BasicLand,
+        Self::Land,
+        Self::Enchantment,
+        Self::Instant,
+        Self::Sorcery,
+        Self::InstantOrSorcery,
+        Self::Creature,
+        Self::Artifact,
+        Self::Planeswalker,
+        Self::Nonland,
+        Self::Noncreature,
+    ];
+}
+
 /// Controller relationship required of a permanent target, relative to the spell or ability
 /// controller. This remains independently composable with the other `TargetFilter` predicates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

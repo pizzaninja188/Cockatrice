@@ -34,7 +34,13 @@ pub(super) fn choose_resolution_branch(
         .iter()
         .enumerate()
         .filter(|(_, branch)| {
-            resolution_branch_is_live(cx.engine, cx.top, *deciding_player, branch)
+            resolution_branch_is_live(
+                cx.engine,
+                cx.top,
+                cx.previous_effect_result,
+                *deciding_player,
+                branch,
+            )
         })
         .collect::<Vec<_>>();
     if selection == ResolutionBranchSelection::FirstApplicable {
@@ -78,6 +84,7 @@ pub(super) fn choose_resolution_branch(
 pub(in crate::engine) fn resolution_branch_is_live(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
+    previous_result: &crate::state::CardResultCohort,
     deciding_player: i32,
     branch: &ResolutionBranchDef,
 ) -> bool {
@@ -101,12 +108,65 @@ pub(in crate::engine) fn resolution_branch_is_live(
                     && receipt.option_index == condition.option_index
             }) == condition.expected_selected
         }
+        ResolutionBranchRequirement::CardResultCount { filter, min, max } => {
+            let count = card_result_count(engine, top, previous_result, filter);
+            min.is_none_or(|minimum| count >= minimum) && max.is_none_or(|maximum| count <= maximum)
+        }
     };
     requirement_met
         && (matches!(branch.cost, ResolutionCost::None | ResolutionCost::Mana(_))
             || !engine
                 .resolution_cost_candidates(deciding_player, &branch.cost)
                 .is_empty())
+}
+
+pub(in crate::engine) fn card_result_count(
+    engine: &crate::engine::GameEngine,
+    top: &StackItem,
+    previous_result: &crate::state::CardResultCohort,
+    filter: &tricerules_cards::primitives::CardResultFilter,
+) -> u32 {
+    card_result_count_from_cohorts(
+        &engine.state,
+        top.controller,
+        &top.payment_result,
+        previous_result,
+        filter,
+    )
+}
+
+fn card_result_count_from_cohorts(
+    state: &crate::state::GameState,
+    controller: i32,
+    payment_result: &crate::state::CardResultCohort,
+    previous_result: &crate::state::CardResultCohort,
+    filter: &tricerules_cards::primitives::CardResultFilter,
+) -> u32 {
+    let cohort = match filter.source {
+        tricerules_cards::primitives::CardResultSource::Payment => payment_result,
+        tricerules_cards::primitives::CardResultSource::PreviousEffect => previous_result,
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    cohort
+        .cards
+        .iter()
+        .filter(|entry| seen.insert((entry.object_id, entry.zone_change_generation)))
+        .filter(|entry| entry.action == filter.action)
+        .filter(|entry| {
+            crate::engine::history::relative_player_set_contains(
+                state,
+                filter.players,
+                controller,
+                entry.affected_player,
+            )
+        })
+        .filter(|entry| {
+            filter
+                .card_type
+                .is_none_or(|card_type| entry.matched_card_types.contains(&card_type))
+        })
+        .count()
+        .min(u32::MAX as usize) as u32
 }
 
 pub(super) fn park_resolution_branches(
@@ -138,7 +198,15 @@ fn park_resolution_branches_for(
     let options = branches
         .iter()
         .enumerate()
-        .filter(|(_, branch)| resolution_branch_is_live(cx.engine, cx.top, deciding_player, branch))
+        .filter(|(_, branch)| {
+            resolution_branch_is_live(
+                cx.engine,
+                cx.top,
+                cx.previous_effect_result,
+                deciding_player,
+                branch,
+            )
+        })
         .map(|(index, branch)| {
             let (kind, cost_text) = match &branch.cost {
                 ResolutionCost::None => (rv1::ResolutionBranchCostKind::Unspecified, String::new()),
@@ -210,7 +278,8 @@ fn park_resolution_branches_for(
             unique_names: false,
         },
         continuation: ResolutionContinuation::AuthoredBranch {
-            stack: ParkedStackResolution::new(cx.top.clone()),
+            stack: ParkedStackResolution::new(cx.top.clone())
+                .with_previous_result(cx.previous_effect_result.clone()),
             branch: PendingResolutionBranch {
                 optional,
                 chooser,
@@ -273,4 +342,60 @@ pub(super) fn create_reflexive_trigger(
             }],
         });
     Ok(EffectOutcome::Continue)
+}
+
+#[cfg(test)]
+mod result_count_tests {
+    use super::*;
+    use crate::state::{CardResultCohort, CardResultEntry};
+    use tricerules_cards::primitives::{
+        CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter, RelativePlayerSet,
+    };
+
+    #[test]
+    fn opponent_filter_is_player_set_generic() {
+        let engine = crate::engine::GameEngine::new(122_009, &[0, 1], 20, None, true).unwrap();
+        let previous_result = CardResultCohort {
+            cards: vec![
+                CardResultEntry {
+                    action: CardResultAction::Discard,
+                    affected_player: 0,
+                    object_id: 1,
+                    zone_change_generation: 1,
+                    matched_card_types: vec![CardTypeFilter::Land],
+                },
+                CardResultEntry {
+                    action: CardResultAction::Discard,
+                    affected_player: 1,
+                    object_id: 2,
+                    zone_change_generation: 1,
+                    matched_card_types: vec![CardTypeFilter::Land],
+                },
+                CardResultEntry {
+                    action: CardResultAction::Discard,
+                    affected_player: 2,
+                    object_id: 3,
+                    zone_change_generation: 1,
+                    matched_card_types: vec![CardTypeFilter::Land],
+                },
+            ],
+        };
+        let filter = CardResultFilter {
+            source: CardResultSource::PreviousEffect,
+            action: CardResultAction::Discard,
+            players: RelativePlayerSet::Opponents,
+            card_type: Some(CardTypeFilter::Land),
+        };
+
+        assert_eq!(
+            card_result_count_from_cohorts(
+                &engine.state,
+                0,
+                &CardResultCohort::default(),
+                &previous_result,
+                &filter,
+            ),
+            2
+        );
+    }
 }

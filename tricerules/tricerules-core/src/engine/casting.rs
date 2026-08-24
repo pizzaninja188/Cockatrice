@@ -413,6 +413,13 @@ impl GameEngine {
         let payment = self.commit_cost_transaction(payment_plan)?;
         let life_paid = payment.life_paid;
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
+        let payment_result = CardResultCohort {
+            cards: payment
+                .paid_card_costs
+                .iter()
+                .map(|cost| cost.result().clone())
+                .collect(),
+        };
         let cast_cost_receipts = payment.cast_cost_receipts;
         let chosen_cast_cost_labels = cast_cost_receipts
             .iter()
@@ -443,6 +450,7 @@ impl GameEngine {
             face_index,
             chosen_modes,
             cast_cost_receipts,
+            payment_result,
             resolution_branch_choices: Default::default(),
             // A spell's effects always act on its controller.
             trigger_context: TriggerContext::default(),
@@ -853,6 +861,13 @@ impl GameEngine {
             face_index: face_up_index,
             chosen_modes: vec![],
             cast_cost_receipts: vec![],
+            payment_result: CardResultCohort {
+                cards: payment
+                    .paid_card_costs
+                    .iter()
+                    .map(|cost| cost.result().clone())
+                    .collect(),
+            },
             resolution_branch_choices: Default::default(),
             // An activated ability's effects act on the player who activated it.
             trigger_context: TriggerContext::default(),
@@ -1417,6 +1432,7 @@ impl GameEngine {
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_cost_receipts: Vec::new(),
+            payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         };
@@ -1496,11 +1512,19 @@ mod mana_payment_tests {
 
     #[test]
     fn paid_card_cost_log_formats_any_number_of_components() {
+        let result = |action, object_id| CardResultEntry {
+            action,
+            affected_player: 0,
+            object_id,
+            zone_change_generation: 1,
+            matched_card_types: Vec::new(),
+        };
         assert_eq!(format_paid_card_costs_log(&[]), "");
         assert_eq!(
             format_paid_card_costs_log(&[PaidCardCost::Discard {
                 object_id: 1,
                 card_name: "Mountain".into(),
+                result: result(CardResultAction::Discard, 1),
             }]),
             " discarding Mountain"
         );
@@ -1509,10 +1533,12 @@ mod mana_payment_tests {
                 PaidCardCost::Discard {
                     object_id: 1,
                     card_name: "Mountain".into(),
+                    result: result(CardResultAction::Discard, 1),
                 },
                 PaidCardCost::Sacrifice {
                     object_id: 2,
                     card_name: "Grizzly Bears".into(),
+                    result: result(CardResultAction::Sacrifice, 2),
                 },
             ]),
             " discarding Mountain and sacrificing Grizzly Bears"
@@ -1522,14 +1548,17 @@ mod mana_payment_tests {
                 PaidCardCost::Discard {
                     object_id: 1,
                     card_name: "Mountain".into(),
+                    result: result(CardResultAction::Discard, 1),
                 },
                 PaidCardCost::Sacrifice {
                     object_id: 2,
                     card_name: "Grizzly Bears".into(),
+                    result: result(CardResultAction::Sacrifice, 2),
                 },
                 PaidCardCost::Sacrifice {
                     object_id: 3,
                     card_name: "Hill Giant".into(),
+                    result: result(CardResultAction::Sacrifice, 3),
                 },
             ]),
             " discarding Mountain, sacrificing Grizzly Bears, and sacrificing Hill Giant"

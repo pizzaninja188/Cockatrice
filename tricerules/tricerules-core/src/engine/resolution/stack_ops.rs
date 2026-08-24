@@ -474,6 +474,7 @@ pub(super) fn copy_target_spell(
                     face_index: src.face_index,
                     chosen_modes: src.chosen_modes.clone(),
                     cast_cost_receipts: src.cast_cost_receipts.clone(),
+                    payment_result: src.payment_result.clone(),
                     resolution_branch_choices: Default::default(),
                     // CR 707.2: the copy has the original's characteristics and choices. `None`
                     // for every spell today, but copying inherits it rather than dropping it.

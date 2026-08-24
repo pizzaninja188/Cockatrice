@@ -16,6 +16,7 @@ use super::*;
 use tricerules_cards::primitives::{TargetRole, TargetingDef};
 
 mod choices;
+pub(in crate::engine) use choices::card_result_count;
 pub(super) use choices::resolution_branch_is_live;
 mod damage;
 /// `pub(super)` so the combat damage step can reach `life::apply_life_gain` — lifelink is the one
@@ -1026,8 +1027,26 @@ impl GameEngine {
         start: usize,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
+        self.run_effect_list_with_previous(
+            top,
+            spell_label,
+            resolution_effects,
+            start,
+            EffectResult::default(),
+            events,
+        )
+    }
+
+    pub(super) fn run_effect_list_with_previous(
+        &mut self,
+        top: &StackItem,
+        spell_label: &str,
+        resolution_effects: Vec<ResolutionEffect>,
+        start: usize,
+        mut previous_effect_result: EffectResult,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
         let controller = top.controller;
-        let mut previous_effect_result = EffectResult::None;
         for (index, entry) in resolution_effects.into_iter().enumerate().skip(start) {
             let ResolutionEffect {
                 effect,
@@ -1037,7 +1056,7 @@ impl GameEngine {
                 role_group_indices,
             } = entry;
             if !role_group_indices.is_empty() && effect_targets.is_empty() {
-                previous_effect_result = EffectResult::None;
+                previous_effect_result = EffectResult::default();
                 continue;
             }
             let targets_by_role = role_group_indices
@@ -1052,7 +1071,7 @@ impl GameEngine {
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
-            let mut effect_result = EffectResult::None;
+            let mut effect_result = EffectResult::default();
             let outcome = {
                 let mut cx = EffectCx {
                     engine: self,
@@ -1264,6 +1283,7 @@ impl GameEngine {
                     if let Some(pending) = self.state.pending_resolution.as_mut() {
                         if let Some(stack) = pending.continuation.stack_mut() {
                             stack.resume_effect_index = Some(index as u32 + 1);
+                            stack.previous_result = effect_result;
                         }
                     }
                     return Ok(());
@@ -1273,7 +1293,14 @@ impl GameEngine {
                     item.resolution_branch_choices
                         .insert(index as u32, branch_index);
                     let (effects, label) = self.build_resolution_effects(&item);
-                    return self.run_effect_list(&item, &label, effects, index, events);
+                    return self.run_effect_list_with_previous(
+                        &item,
+                        &label,
+                        effects,
+                        index,
+                        previous_effect_result,
+                        events,
+                    );
                 }
                 EffectOutcome::Continue => {}
             }
@@ -2220,6 +2247,7 @@ mod attached_subject_tests {
             chosen_x: 0,
             chosen_modes: vec![],
             cast_cost_receipts: vec![],
+            payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         }
@@ -2621,8 +2649,8 @@ mod attached_subject_tests {
         item.trigger_context.attacking_player = Some(30);
         item.trigger_context.defending_player = Some(20);
         let mut events = Vec::new();
-        let previous_effect_result = EffectResult::None;
-        let mut effect_result = EffectResult::None;
+        let previous_effect_result = EffectResult::default();
+        let mut effect_result = EffectResult::default();
         let cx = EffectCx {
             engine: &mut engine,
             events: &mut events,
@@ -2681,6 +2709,7 @@ mod source_keyword_tests {
             chosen_x: 0,
             chosen_modes: vec![],
             cast_cost_receipts: vec![],
+            payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         }
@@ -2706,6 +2735,7 @@ mod source_keyword_tests {
             chosen_x,
             chosen_modes: vec![],
             cast_cost_receipts: vec![],
+            payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         }
@@ -2828,8 +2858,8 @@ mod source_keyword_tests {
             .spell_effect[0]
             .clone();
         let mut events = vec![];
-        let previous_effect_result = EffectResult::None;
-        let mut effect_result = EffectResult::None;
+        let previous_effect_result = EffectResult::default();
+        let mut effect_result = EffectResult::default();
         let mut cx = EffectCx {
             engine: &mut engine,
             events: &mut events,
@@ -2869,8 +2899,8 @@ mod source_keyword_tests {
             .spell_effect[0]
             .clone();
         let mut events = vec![];
-        let previous_effect_result = EffectResult::None;
-        let mut effect_result = EffectResult::None;
+        let previous_effect_result = EffectResult::default();
+        let mut effect_result = EffectResult::default();
         let mut cx = EffectCx {
             engine: &mut engine,
             events: &mut events,

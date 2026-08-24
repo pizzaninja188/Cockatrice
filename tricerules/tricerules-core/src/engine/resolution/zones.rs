@@ -588,7 +588,7 @@ fn choose_hand_cards_for_player(
             let mut shuffled = eligible;
             shuffle_object_ids_for_current_command(&engine.state, affected_player, &mut shuffled);
             for oid in shuffled.into_iter().take(chosen_count) {
-                perform_hand_card_action(
+                let result = perform_hand_card_action(
                     engine,
                     events,
                     affected_player,
@@ -596,6 +596,7 @@ fn choose_hand_cards_for_player(
                     action,
                     spell_label,
                 )?;
+                cx.effect_result.cards.push(result);
             }
         }
         return Ok(EffectOutcome::Continue);
@@ -719,7 +720,7 @@ fn perform_discard_action(
     affected_player: PlayerId,
     object_id: ObjectId,
     spell_label: &str,
-) -> Result<(), EngineError> {
+) -> Result<CardResultEntry, EngineError> {
     let (card_name, moved) = perform_discard(
         &mut engine.state,
         engine.registry,
@@ -730,7 +731,13 @@ fn perform_discard_action(
     events.push(ev_log(format!(
         "P{affected_player} discards {card_name} ({spell_label})."
     )));
-    Ok(())
+    Ok(payment::card_result_entry(
+        &engine.state,
+        engine.registry,
+        CardResultAction::Discard,
+        affected_player,
+        object_id,
+    ))
 }
 
 fn perform_exile_from_hand(
@@ -739,7 +746,7 @@ fn perform_exile_from_hand(
     affected_player: PlayerId,
     object_id: ObjectId,
     spell_label: &str,
-) -> Result<(), EngineError> {
+) -> Result<CardResultEntry, EngineError> {
     let card_name = object_display_name(&engine.state, engine.registry, object_id);
     move_object_to_zone(
         &mut engine.state,
@@ -757,7 +764,13 @@ fn perform_exile_from_hand(
     events.push(ev_log(format!(
         "P{affected_player} exiles {card_name} from their hand ({spell_label})."
     )));
-    Ok(())
+    Ok(payment::card_result_entry(
+        &engine.state,
+        engine.registry,
+        CardResultAction::Exile,
+        affected_player,
+        object_id,
+    ))
 }
 
 pub(crate) fn perform_hand_card_action(
@@ -767,7 +780,7 @@ pub(crate) fn perform_hand_card_action(
     object_id: ObjectId,
     action: HandCardAction,
     spell_label: &str,
-) -> Result<(), EngineError> {
+) -> Result<CardResultEntry, EngineError> {
     match action {
         HandCardAction::Discard => {
             perform_discard_action(engine, events, affected_player, object_id, spell_label)
@@ -787,8 +800,7 @@ pub(super) fn mill_target_player(
     };
     let recipients = cx.targets.first().map(|target| *target as PlayerId);
     if let Some(recipient) = recipients {
-        let milled = mill_players(cx, &[recipient], count);
-        *cx.effect_result = EffectResult::MilledCards(milled);
+        *cx.effect_result = mill_players(cx, &[recipient], count)?;
     }
 
     Ok(EffectOutcome::Continue)
@@ -805,17 +817,20 @@ pub(super) fn mill(
         .with_previous_effect_result(cx.previous_effect_result);
     let count = cx.engine.resolve_amount(&count, amount_context);
     let recipients = player_recipients(cx, who);
-    let milled = mill_players(cx, &recipients, count);
-    *cx.effect_result = EffectResult::MilledCards(milled);
+    *cx.effect_result = mill_players(cx, &recipients, count)?;
 
     Ok(EffectOutcome::Continue)
 }
 
-fn mill_players(cx: &mut EffectCx<'_>, recipients: &[PlayerId], count: u32) -> Vec<ObjectId> {
+fn mill_players(
+    cx: &mut EffectCx<'_>,
+    recipients: &[PlayerId],
+    count: u32,
+) -> Result<CardResultCohort, EngineError> {
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let spell_label = cx.spell_label;
-    let mut result = vec![];
+    let mut result = CardResultCohort::default();
 
     for &pid in recipients {
         let Some(pi) = engine.state.player_idx(pid) else {
@@ -823,20 +838,29 @@ fn mill_players(cx: &mut EffectCx<'_>, recipients: &[PlayerId], count: u32) -> V
         };
         let mut milled = 0u32;
         for _ in 0..count {
-            let Some(oid) = engine.state.players[pi].library.pop_front() else {
+            let Some(oid) = engine.state.players[pi].library.front().copied() else {
                 break;
             };
-            engine.state.players[pi].graveyard.push(oid);
-            if let Some(o) = engine.state.objects.get_mut(&oid) {
-                o.zone = Zone::Graveyard;
-            }
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                oid,
+                Zone::Graveyard,
+                None,
+            )?;
             events.push(permanent_moved_event(
                 &engine.state,
                 oid,
                 pid,
                 rv1::permanent_moved::Destination::Graveyard,
             ));
-            result.push(oid);
+            result.cards.push(payment::card_result_entry(
+                &engine.state,
+                engine.registry,
+                CardResultAction::Mill,
+                pid,
+                oid,
+            ));
             milled += 1;
         }
         events.push(ev_log(format!(
@@ -844,7 +868,7 @@ fn mill_players(cx: &mut EffectCx<'_>, recipients: &[PlayerId], count: u32) -> V
         )));
     }
 
-    result
+    Ok(result)
 }
 
 pub(super) fn target_player_sacrifices(

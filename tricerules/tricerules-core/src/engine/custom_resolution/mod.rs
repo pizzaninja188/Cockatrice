@@ -306,11 +306,33 @@ impl GameEngine {
         &mut self,
         item: StackItem,
         resume_effect_index: Option<u32>,
+        ev: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        self.complete_parked_resolution_with_previous(
+            item,
+            resume_effect_index,
+            CardResultCohort::default(),
+            ev,
+        )
+    }
+
+    pub(super) fn complete_parked_resolution_with_previous(
+        &mut self,
+        item: StackItem,
+        resume_effect_index: Option<u32>,
+        previous_result: CardResultCohort,
         mut ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         if let Some(start) = resume_effect_index {
             let (effects, spell_label) = self.build_resolution_effects(&item);
-            self.run_effect_list(&item, &spell_label, effects, start as usize, &mut ev)?;
+            self.run_effect_list_with_previous(
+                &item,
+                &spell_label,
+                effects,
+                start as usize,
+                previous_result,
+                &mut ev,
+            )?;
         }
         if self.state.pending_resolution.is_none() {
             // The original pass-priority call deliberately skipped SBAs while this primitive was

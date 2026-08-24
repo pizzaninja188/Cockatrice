@@ -49,8 +49,22 @@ impl GameEngine {
             }]);
         }
         let _ = self.apply_sbas(&mut ev);
+        let result = CardResultCohort {
+            cards: vec![payment::card_result_entry(
+                &self.state,
+                self.registry,
+                CardResultAction::Sacrifice,
+                pending.deciding_player,
+                oid,
+            )],
+        };
 
-        self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            result,
+            ev,
+        )
     }
 
     /// CR 704.5j: the controller has chosen which legend to keep. Sacrifice all other candidates

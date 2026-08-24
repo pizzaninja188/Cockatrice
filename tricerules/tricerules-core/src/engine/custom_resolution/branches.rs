@@ -111,7 +111,12 @@ impl GameEngine {
                         ))?;
                     let mut item = stack.item.clone();
                     item.resolution_branch_choices.insert(effect_index, None);
-                    return self.complete_parked_resolution(item, Some(effect_index), events);
+                    return self.complete_parked_resolution_with_previous(
+                        item,
+                        Some(effect_index),
+                        stack.previous_result.clone(),
+                        events,
+                    );
                 } else if let ResolutionContinuation::WardPayment { stack, ward } =
                     &pending.continuation
                 {
@@ -168,7 +173,12 @@ impl GameEngine {
         } else {
             stack.resume_effect_index
         };
-        self.complete_parked_resolution(stack.item, resume, events)
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            resume,
+            stack.previous_result,
+            events,
+        )
     }
 
     pub(in crate::engine) fn resolution_cost_candidates(
@@ -243,9 +253,10 @@ impl GameEngine {
             }
             let mut item = stack.item;
             item.resolution_branch_choices.insert(effect_index, None);
-            return self.complete_parked_resolution(
+            return self.complete_parked_resolution_with_previous(
                 item,
                 Some(effect_index),
+                stack.previous_result,
                 vec![ev_log(format!(
                     "P{} declines the optional resolution choice.",
                     pending.deciding_player
@@ -266,6 +277,7 @@ impl GameEngine {
         if !resolution::resolution_branch_is_live(
             self,
             &stack.item,
+            &stack.previous_result,
             pending.deciding_player,
             &branch,
         ) {
@@ -296,14 +308,15 @@ impl GameEngine {
         ))];
         match branch.cost {
             ResolutionCost::None => {
-                return self.complete_parked_resolution(
-                    pending
-                        .continuation
-                        .stack()
-                        .expect("authored branch has a stack continuation")
-                        .item
-                        .clone(),
+                let stack = pending
+                    .continuation
+                    .stack()
+                    .expect("authored branch has a stack continuation")
+                    .clone();
+                return self.complete_parked_resolution_with_previous(
+                    stack.item,
                     Some(effect_index),
+                    stack.previous_result,
                     ev,
                 );
             }
@@ -437,9 +450,10 @@ impl GameEngine {
             }
             let mut item = stack.item;
             item.resolution_branch_choices.insert(effect_index, None);
-            return self.complete_parked_resolution(
+            return self.complete_parked_resolution_with_previous(
                 item,
                 Some(effect_index),
+                stack.previous_result,
                 vec![ev_log(format!(
                     "P{} declines the optional resolution choice.",
                     pending.deciding_player
@@ -516,6 +530,11 @@ impl GameEngine {
                 return Err(EngineError::Illegal("mana branch requires mana payment"));
             }
         }
-        self.complete_parked_resolution(stack.item, Some(effect_index), ev)
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            Some(effect_index),
+            stack.previous_result,
+            ev,
+        )
     }
 }

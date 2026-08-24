@@ -648,6 +648,7 @@ impl GameEngine {
                 stack: ParkedStackResolution {
                     item,
                     resume_effect_index,
+                    previous_result: CardResultCohort::default(),
                 },
                 effect_ids: candidate_effect_ids,
             },
@@ -698,6 +699,7 @@ impl GameEngine {
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_cost_receipts: Vec::new(),
+            payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         };
@@ -868,6 +870,7 @@ impl GameEngine {
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_cost_receipts: Vec::new(),
+            payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         };

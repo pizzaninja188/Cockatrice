@@ -1,10 +1,10 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
-    ActivatedAbilityDef, CardSearchZone, CastCostReceiptCondition, Color,
-    ConditionalSearchDestination, ContinuousEffectKind, CounterKind, CreatureScopeFilter,
-    DamagePreventionAdditionalEffect, EffectDuration, GameCondition, Keyword, LibraryBottomOrder,
-    ManaAmount, ManaSpendingRestriction, SearchDestination, TargetFilter, TriggerCondition,
-    TriggeredAbilityDef, ZoneCardFilter,
+    ActivatedAbilityDef, CardResultAction, CardSearchZone, CardTypeFilter,
+    CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
+    CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect, EffectDuration,
+    GameCondition, Keyword, LibraryBottomOrder, ManaAmount, ManaSpendingRestriction,
+    SearchDestination, TargetFilter, TriggerCondition, TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{CardFace, ManaCost};
@@ -12,6 +12,23 @@ use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
 pub type PlayerId = i32;
 pub type ObjectId = u32;
+
+/// Private rules-only snapshot of one card that was actually moved by a cost or instruction.
+/// `matched_card_types` is captured at the action boundary, so later predicates never inspect a
+/// destination zone or a newer object generation.
+#[derive(Debug, Clone)]
+pub(crate) struct CardResultEntry {
+    pub action: CardResultAction,
+    pub affected_player: PlayerId,
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub matched_card_types: Vec<CardTypeFilter>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct CardResultCohort {
+    pub cards: Vec<CardResultEntry>,
+}
 
 /// The exact activated ability on the exact incarnation of a permanent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -561,6 +578,10 @@ pub struct ParkedStackResolution {
     /// Index of the next primitive effect to execute after this choice. `None` is retained for
     /// continuations that own their complete resolution flow.
     pub resume_effect_index: Option<u32>,
+    /// Exact card cohort produced by the primitive that parked this resolution. It remains
+    /// engine-private while a player answers the choice, then becomes the next primitive's
+    /// `PreviousEffect` input.
+    pub(crate) previous_result: CardResultCohort,
 }
 
 impl ParkedStackResolution {
@@ -568,7 +589,13 @@ impl ParkedStackResolution {
         Self {
             item,
             resume_effect_index: None,
+            previous_result: CardResultCohort::default(),
         }
+    }
+
+    pub(crate) fn with_previous_result(mut self, result: CardResultCohort) -> Self {
+        self.previous_result = result;
+        self
     }
 }
 
@@ -1017,6 +1044,9 @@ pub struct StackItem {
     /// CR 601.2b / 607.2i: stable announced additional-cost choices. Resolution and spell copies
     /// consume this receipt instead of rechecking the object used to pay.
     pub cast_cost_receipts: Vec<CastCostReceipt>,
+    /// Exact card objects used to pay this spell or ability's costs. Copies retain the original
+    /// cohort under CR 707.10.
+    pub(crate) payment_result: CardResultCohort,
     /// Resolution branches already answered, keyed by their index in the original effect list.
     /// `None` records an optional decline; `Some(i)` records the chosen authored branch.
     pub resolution_branch_choices: BTreeMap<u32, Option<usize>>,

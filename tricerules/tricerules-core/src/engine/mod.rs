@@ -4,13 +4,14 @@ use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
     ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement, ActiveDelayedTrigger,
     ActiveExilePlayPermission, AffectedScope, AttachmentRecipient, BattlefieldEntryCompletion,
-    BattlefieldEntryEvent, BlockingChoice, CastCostObjectReceipt, CastCostReceipt, ChosenMode,
-    CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
-    DamagePreventionProhibition, DamagePreventionScope, EntryReplacementApplication,
-    EntryReplacementEffectId, ExilePlayPermissionScope, GameObject, GameState, HandCardAction,
-    ObjectId, OpeningSequence, ParkedStackResolution, PendingBattlefieldEntry, PendingHandChoice,
-    PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
-    PendingManaPayment, PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
+    BattlefieldEntryEvent, BlockingChoice, CardResultCohort, CardResultEntry,
+    CastCostObjectReceipt, CastCostReceipt, ChosenMode, CombatState, ContinuousEffect,
+    CopiableValues, DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
+    EntryReplacementApplication, EntryReplacementEffectId, ExilePlayPermissionScope, GameObject,
+    GameState, HandCardAction, ObjectId, OpeningSequence, ParkedStackResolution,
+    PendingBattlefieldEntry, PendingHandChoice, PendingLibraryLookStage,
+    PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
+    PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
     PendingResolutionPresentation, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
     PendingWardPaymentStage, PlayerId, PlayerState, ReplacementPriority, ResolutionContinuation,
     RoomState, SpellCastMethod, StackItem, StackObjectRef, StackTarget, StagedTrigger,
@@ -27,8 +28,8 @@ use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivatedAbilityDef, AdditionalCost, Amount, AttachmentFilter,
-    AttachmentKind, BattlefieldAggregate, BattlefieldPermanentFilter, CardSearchZone,
-    CardTypeFilter, CastCostGroupDef, CastCostOptionDef, CastCostReceiptCondition,
+    AttachmentKind, BattlefieldAggregate, BattlefieldPermanentFilter, CardResultAction,
+    CardSearchZone, CardTypeFilter, CastCostGroupDef, CastCostOptionDef, CastCostReceiptCondition,
     CastTriggerPlayer, Color, CombatRestriction, CombatRestrictionScope,
     ConditionalSearchDestination, ContinuousEffectKind, ControllerReference, CountExpression,
     CounterKind, CreatureEventFilter, CreatureScopeController, CreatureScopeFilter, DamageDivision,
@@ -70,15 +71,11 @@ fn attachment_recipient_proto(recipient: AttachmentRecipient) -> rv1::Attachment
     }
 }
 
-#[derive(Clone, Debug, Default)]
-enum EffectResult {
-    #[default]
-    None,
-    MilledCards(Vec<ObjectId>),
-}
+type EffectResult = CardResultCohort;
 
 #[derive(Clone, Copy)]
 struct AmountContext<'a> {
+    stack_item: Option<&'a StackItem>,
     controller: PlayerId,
     source_object_id: ObjectId,
     source_zone_change: u64,
@@ -91,8 +88,9 @@ struct AmountContext<'a> {
 }
 
 impl<'a> AmountContext<'a> {
-    fn for_stack_item(item: &StackItem, controller: PlayerId) -> Self {
+    fn for_stack_item(item: &'a StackItem, controller: PlayerId) -> Self {
         Self {
+            stack_item: Some(item),
             controller,
             source_object_id: item.source_permanent_id.unwrap_or(item.id),
             source_zone_change: item.source_zone_change,

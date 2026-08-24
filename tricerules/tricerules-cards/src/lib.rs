@@ -12,8 +12,9 @@ pub use mana::{ColorPip, ManaCost, ManaSymbol};
 pub use primitives::{
     AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivationCondition, ActivationTiming,
     AdditionalCost, Amount, BattlefieldAggregate, BattlefieldCreatureCountFilter,
-    BattlefieldPermanentFilter, CardSearchZone, CastCostConditionalAmount, CastCostGroupDef,
-    CastCostOptionDef, CastCostReceiptCondition, CastTriggerPlayer, Color, ConditionalManaOutput,
+    BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
+    CardSearchZone, CastCostConditionalAmount, CastCostGroupDef, CastCostOptionDef,
+    CastCostReceiptCondition, CastTriggerPlayer, Color, ConditionalManaOutput,
     ConditionalSearchDestination, ContinuousEffectKind, ControllerReference, CountExpression,
     CounterKind, EffectContext, EffectDuration, Evasion, GameCondition, GraveyardAggregate,
     Keyword, LibraryPartitionKind, ManaAmount, ManaSpendFilter, ManaSpendingRestriction,

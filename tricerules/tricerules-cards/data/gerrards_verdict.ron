@@ -1,0 +1,50 @@
+// Oracle checked 2026-08-24. The life gain reads the exact cards discarded by the targeted
+// player, including their card types at the moment they moved (CR 608.2c, 701.9a).
+(
+  id: "gerrards_verdict",
+  name: "Gerrard's Verdict",
+  mana_cost: "{W}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    DiscardCards(count: 2, target: (kind: AnyPlayer)),
+    ChooseResolutionBranch(
+      selection: FirstApplicable,
+      branches: [
+        (
+          label: "Gain 6 life",
+          cost: None,
+          requirement: CardResultCount(
+            filter: (
+              source: PreviousEffect,
+              action: Discard,
+              players: All,
+              card_type: Some(Land),
+            ),
+            min: Some(2),
+          ),
+          effects: [GainLife(amount: 6)],
+        ),
+        (
+          label: "Gain 3 life",
+          cost: None,
+          requirement: CardResultCount(
+            filter: (
+              source: PreviousEffect,
+              action: Discard,
+              players: All,
+              card_type: Some(Land),
+            ),
+            min: Some(1),
+          ),
+          effects: [GainLife(amount: 3)],
+        ),
+        (
+          label: "Gain no life",
+          cost: None,
+          requirement: Always,
+          effects: [],
+        ),
+      ],
+    ),
+  ],
+)

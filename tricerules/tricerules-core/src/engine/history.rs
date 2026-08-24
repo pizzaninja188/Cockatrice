@@ -432,20 +432,12 @@ impl GameEngine {
             Amount::Count(CountExpression::CreatureDeathsThisTurn) => {
                 self.state.turn_history.current.creatures_died
             }
-            Amount::Count(CountExpression::CardsMilledThisWay { filter }) => {
-                let Some(EffectResult::MilledCards(object_ids)) = context.previous_effect_result
-                else {
-                    return 0;
-                };
-                let count = object_ids
-                    .iter()
-                    .filter_map(|oid| self.state.objects.get(oid))
-                    .filter(|object| object.zone == Zone::Graveyard)
-                    .filter_map(|object| self.registry.get(&object.card_id))
-                    .filter(|definition| definition.matches_card_type_outside_stack(*filter))
-                    .count();
-                clamp_public_count(count)
-            }
+            Amount::Count(CountExpression::CardsMatchingResult { filter }) => context
+                .previous_effect_result
+                .zip(context.stack_item)
+                .map_or(0, |(previous, top)| {
+                    super::resolution::card_result_count(self, top, previous, filter)
+                }),
         }
     }
 }

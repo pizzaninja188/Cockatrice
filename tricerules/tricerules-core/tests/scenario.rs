@@ -83,6 +83,8 @@ mod issue_116_condition_branches;
 mod issue_117_fight;
 #[path = "scenario/issue_119_self_combat_restrictions.rs"]
 mod issue_119_self_combat_restrictions;
+#[path = "scenario/issue_122_result_cohorts.rs"]
+mod issue_122_result_cohorts;
 #[path = "scenario/issue_123_exile_play.rs"]
 mod issue_123_exile_play;
 #[path = "scenario/issue_125_death_replacement.rs"]

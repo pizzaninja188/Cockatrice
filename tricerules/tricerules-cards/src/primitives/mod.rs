@@ -194,8 +194,13 @@ mod tests {
                 name: "Growth Cycle".into(),
             }),
             Amount::Count(CountExpression::CreatureDeathsThisTurn),
-            Amount::Count(CountExpression::CardsMilledThisWay {
-                filter: CardTypeFilter::Creature,
+            Amount::Count(CountExpression::CardsMatchingResult {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Mill,
+                    players: RelativePlayerSet::Controller,
+                    card_type: Some(CardTypeFilter::Creature),
+                },
             }),
         ] {
             let encoded = ron::to_string(&amount).unwrap();
@@ -510,10 +515,15 @@ mod tests {
     }
 
     #[test]
-    fn milled_result_amount_requires_an_immediately_preceding_mill() {
+    fn previous_result_amount_requires_an_immediately_preceding_compatible_effect() {
         let counted_gain = SpellEffectKind::GainLife {
-            amount: Amount::Count(CountExpression::CardsMilledThisWay {
-                filter: CardTypeFilter::Creature,
+            amount: Amount::Count(CountExpression::CardsMatchingResult {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Mill,
+                    players: RelativePlayerSet::Controller,
+                    card_type: Some(CardTypeFilter::Creature),
+                },
             }),
         };
         let mill = SpellEffectKind::Mill {

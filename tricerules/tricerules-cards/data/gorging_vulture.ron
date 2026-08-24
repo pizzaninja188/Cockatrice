@@ -13,7 +13,12 @@
       trigger: WhenSelfEntersBattlefield,
       effect: [
         Mill(count: 4),
-        GainLife(amount: Count(CardsMilledThisWay(filter: Creature))),
+        GainLife(amount: Count(CardsMatchingResult(filter: (
+          source: PreviousEffect,
+          action: Mill,
+          players: Controller,
+          card_type: Some(Creature),
+        )))),
       ],
       text: "When this creature enters, mill four cards. You gain 1 life for each creature card milled this way.",
     ),

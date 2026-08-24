@@ -401,6 +401,7 @@ impl GameEngine {
                         let count = self.resolve_amount(
                             amount,
                             AmountContext {
+                                stack_item: None,
                                 controller: event.destination_controller,
                                 source_object_id: event.object_id,
                                 source_zone_change: self
@@ -458,6 +459,7 @@ impl GameEngine {
                         let count = self.resolve_amount(
                             amount,
                             AmountContext {
+                                stack_item: None,
                                 controller,
                                 source_object_id: *source_id,
                                 source_zone_change: *source_generation,

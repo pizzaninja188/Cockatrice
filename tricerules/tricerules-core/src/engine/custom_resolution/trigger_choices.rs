@@ -161,6 +161,7 @@ impl GameEngine {
             face_index: source_face_index,
             chosen_modes,
             cast_cost_receipts: vec![],
+            payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
             trigger_context,
             cast_method: SpellCastMethod::Normal,

@@ -58,14 +58,17 @@ pub(in crate::engine) enum PaidCardCost {
     Discard {
         object_id: ObjectId,
         card_name: String,
+        result: CardResultEntry,
     },
     Exile {
         object_id: ObjectId,
         card_name: String,
+        result: CardResultEntry,
     },
     Sacrifice {
         object_id: ObjectId,
         card_name: String,
+        result: CardResultEntry,
     },
 }
 
@@ -84,6 +87,45 @@ impl PaidCardCost {
             Self::Exile { card_name, .. } => format!("exiling {card_name}"),
             Self::Sacrifice { card_name, .. } => format!("sacrificing {card_name}"),
         }
+    }
+
+    pub(in crate::engine) fn result(&self) -> &CardResultEntry {
+        match self {
+            Self::Discard { result, .. }
+            | Self::Exile { result, .. }
+            | Self::Sacrifice { result, .. } => result,
+        }
+    }
+}
+
+pub(in crate::engine) fn card_result_entry(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    action: CardResultAction,
+    affected_player: PlayerId,
+    object_id: ObjectId,
+) -> CardResultEntry {
+    let matched_card_types = state
+        .objects
+        .get(&object_id)
+        .and_then(|object| registry.get(&object.card_id))
+        .map(|definition| {
+            CardTypeFilter::ALL
+                .into_iter()
+                .filter(|filter| definition.matches_card_type_outside_stack(*filter))
+                .collect()
+        })
+        .unwrap_or_default();
+    CardResultEntry {
+        action,
+        affected_player,
+        object_id,
+        zone_change_generation: state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0),
+        matched_card_types,
     }
 }
 
@@ -703,6 +745,13 @@ impl GameEngine {
                     let paid_cost = PaidCardCost::Discard {
                         object_id: oid,
                         card_name,
+                        result: card_result_entry(
+                            &self.state,
+                            self.registry,
+                            CardResultAction::Discard,
+                            owner,
+                            oid,
+                        ),
                     };
                     debug_assert_eq!(paid_cost.object_id(), oid);
                     payment.paid_card_costs.push(paid_cost);
@@ -730,6 +779,13 @@ impl GameEngine {
                     let paid_cost = PaidCardCost::Exile {
                         object_id: oid,
                         card_name,
+                        result: card_result_entry(
+                            &self.state,
+                            self.registry,
+                            CardResultAction::Exile,
+                            owner,
+                            oid,
+                        ),
                     };
                     debug_assert_eq!(paid_cost.object_id(), oid);
                     payment.paid_card_costs.push(paid_cost);
@@ -751,6 +807,13 @@ impl GameEngine {
                     let paid_cost = PaidCardCost::Sacrifice {
                         object_id: oid,
                         card_name,
+                        result: card_result_entry(
+                            &self.state,
+                            self.registry,
+                            CardResultAction::Sacrifice,
+                            owner,
+                            oid,
+                        ),
                     };
                     debug_assert_eq!(paid_cost.object_id(), oid);
                     payment.paid_card_costs.push(paid_cost);

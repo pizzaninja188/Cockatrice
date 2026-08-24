@@ -1,0 +1,37 @@
+// Oracle checked 2026-08-24. CR 118.8/601.2h: the discard is paid with the total cost.
+// CR 608.2i and 707.10: resolution and spell copies use the exact paid card snapshot.
+(
+  id: "grab_the_prize",
+  name: "Grab the Prize",
+  mana_cost: "{1}{R}",
+  types: ["Sorcery"],
+  additional_costs: [DiscardCard],
+  spell_effect: [
+    Draw(count: 2),
+    ChooseResolutionBranch(
+      selection: FirstApplicable,
+      branches: [
+        (
+          label: "Deal 2 damage to each opponent",
+          cost: None,
+          requirement: CardResultCount(
+            filter: (
+              source: Payment,
+              action: Discard,
+              players: All,
+              card_type: Some(Nonland),
+            ),
+            min: Some(1),
+          ),
+          effects: [DamagePlayer(amount: 2, who: EachOpponent)],
+        ),
+        (
+          label: "No additional effect",
+          cost: None,
+          requirement: Always,
+          effects: [],
+        ),
+      ],
+    ),
+  ],
+)

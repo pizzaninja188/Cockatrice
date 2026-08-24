@@ -10,7 +10,7 @@ pub(super) mod transaction;
 #[cfg(test)]
 pub(in crate::engine) use mana::plan_mana_payment_with_reduction;
 pub(in crate::engine) use mana::{commit_mana_payment, plan_mana_payment};
-pub(in crate::engine) use transaction::{PaidCardCost, SacrificeSnapshot};
+pub(in crate::engine) use transaction::{card_result_entry, PaidCardCost, SacrificeSnapshot};
 
 use super::*;
 
