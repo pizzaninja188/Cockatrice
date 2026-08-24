@@ -450,6 +450,11 @@ message SpellTargets {
   // target groups and selected modes. The engine independently recomputes the cost.
   repeated TargetingCostApplication targeting_cost_applications = 12
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // One application per face-authored target-dependent reduction. The client activates an
+  // application when at least one selected typed target is in qualifying_targets and deduplicates
+  // by application_id across target groups and selected modes. The engine recomputes payment.
+  repeated TargetedCostReductionApplication targeted_cost_reduction_applications = 13
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message TargetCandidateRef {
@@ -475,6 +480,13 @@ message LegalTargetGroup {
   repeated uint32 valid_graveyard_ids = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 distinct_from_group_indices = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool same_graveyard = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message TargetedCostReductionApplication {
+  uint64 application_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 generic_mana = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated TargetCandidateRef qualifying_targets = 3
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // How a DamageTargets spell assigns its damage among the targets that were chosen.

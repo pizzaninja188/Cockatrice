@@ -152,6 +152,10 @@ impl SourceQualities {
 }
 
 impl TargetSourceIdentity {
+    pub(super) fn object_id(self) -> ObjectId {
+        self.object_id
+    }
+
     pub(super) fn current(engine: &GameEngine, object_id: ObjectId) -> Self {
         Self::captured(
             object_id,
@@ -1635,8 +1639,9 @@ pub(super) fn compute_spell_targets(
     source: TargetSourceIdentity,
     effects: &[SpellEffectKind],
     targeting: Option<&TargetingDef>,
+    cost_modifiers: &[SpellCostModifier],
 ) -> rv1::SpellTargets {
-    compute_targets_with_context(
+    let mut targets = compute_targets_with_context(
         engine,
         caster,
         source,
@@ -1644,7 +1649,14 @@ pub(super) fn compute_spell_targets(
         targeting,
         TriggerContext::default(),
         Some(TargetingCostAction::Spells),
-    )
+    );
+    targets.targeted_cost_reduction_applications = engine.targeted_cost_reduction_applications(
+        caster,
+        source,
+        cost_modifiers,
+        &targets.groups,
+    );
+    targets
 }
 
 pub(super) fn compute_ability_targets(
@@ -1804,6 +1816,7 @@ fn compute_targets_with_context(
         damage_division: damage_division as i32,
         groups,
         targeting_cost_applications,
+        targeted_cost_reduction_applications: Vec::new(),
     }
 }
 
@@ -1852,7 +1865,7 @@ mod tests {
             ],
         };
         let source = TargetSourceIdentity::current(&engine, u32::MAX);
-        let published = compute_spell_targets(&engine, 10, source, &effects, Some(&targeting));
+        let published = compute_spell_targets(&engine, 10, source, &effects, Some(&targeting), &[]);
         assert_eq!(published.groups.len(), 2);
         assert!(published.groups[0].can_target_self);
         assert!(published.groups[0].can_target_opponent);

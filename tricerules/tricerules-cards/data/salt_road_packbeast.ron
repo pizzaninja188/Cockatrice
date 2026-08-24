@@ -1,0 +1,19 @@
+// Oracle checked 2026-08-24. CR 702.41a: affinity for creatures reduces only generic
+// mana by the number of creatures the caster controls as the total cost is determined.
+(
+  id: "salt_road_packbeast",
+  name: "Salt Road Packbeast",
+  mana_cost: "{5}{W}",
+  cost_modifiers: [BattlefieldCountGenericReduction(
+    amount_per_match: 1,
+    filter: (controllers: Controller, card_type: Some(Creature)),
+  )],
+  types: ["Creature", "Beast"],
+  power: 4,
+  toughness: 3,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Draw(count: 1)],
+    text: "When this creature enters, draw a card.",
+  )],
+)

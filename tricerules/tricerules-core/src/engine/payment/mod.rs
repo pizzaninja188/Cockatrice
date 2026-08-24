@@ -319,6 +319,55 @@ impl GameEngine {
         applications
     }
 
+    pub(super) fn targeted_cost_reduction_applications(
+        &self,
+        actor: PlayerId,
+        source: super::targeting::TargetSourceIdentity,
+        modifiers: &[SpellCostModifier],
+        groups: &[rv1::LegalTargetGroup],
+    ) -> Vec<rv1::TargetedCostReductionApplication> {
+        let mut candidates = groups
+            .iter()
+            .flat_map(|group| group.valid_permanent_ids.iter().copied())
+            .collect::<Vec<_>>();
+        candidates.sort_unstable();
+        candidates.dedup();
+
+        modifiers
+            .iter()
+            .enumerate()
+            .filter_map(|(modifier_index, modifier)| {
+                let SpellCostModifier::TargetMatchGenericReduction { amount, filter } = modifier
+                else {
+                    return None;
+                };
+                let qualifying_targets = candidates
+                    .iter()
+                    .copied()
+                    .filter(|candidate| {
+                        super::targeting::target_filter_legal_at_resolution(
+                            self,
+                            filter,
+                            *candidate,
+                            actor,
+                            source,
+                            TriggerContext::default(),
+                        )
+                    })
+                    .map(|object_id| rv1::TargetCandidateRef {
+                        kind: rv1::TargetRefKind::Permanent as i32,
+                        object_id,
+                    })
+                    .collect::<Vec<_>>();
+                (!qualifying_targets.is_empty()).then_some(rv1::TargetedCostReductionApplication {
+                    application_id: (u64::from(source.object_id()) << 32) | modifier_index as u64,
+                    generic_mana: *amount,
+                    qualifying_targets,
+                })
+            })
+            .collect()
+    }
+
     pub(super) fn eligible_restricted_mana_for_spell(
         &self,
         player_idx: usize,
@@ -376,6 +425,7 @@ impl GameEngine {
         &self,
         player: PlayerId,
         source_oid: ObjectId,
+        face: &CardFace,
         modifiers: &[SpellCostModifier],
     ) -> u32 {
         let context = ConditionContext {
@@ -389,7 +439,7 @@ impl GameEngine {
                 .unwrap_or(0),
             resolving_spell_id: None,
         };
-        modifiers
+        let intrinsic = modifiers
             .iter()
             .fold(0u32, |total, modifier| match modifier {
                 SpellCostModifier::ConditionalGenericReduction { amount, condition }
@@ -398,7 +448,103 @@ impl GameEngine {
                     total.saturating_add(*amount)
                 }
                 SpellCostModifier::ConditionalGenericReduction { .. } => total,
-            })
+                SpellCostModifier::BattlefieldCountGenericReduction {
+                    amount_per_match,
+                    filter,
+                } => total.saturating_add(
+                    self.battlefield_aggregate_value(filter, BattlefieldAggregate::Count, context)
+                        .saturating_mul(*amount_per_match),
+                ),
+                SpellCostModifier::TargetMatchGenericReduction { .. } => total,
+            });
+
+        let mut sources = self
+            .state
+            .players
+            .iter()
+            .flat_map(|candidate| candidate.battlefield.iter().copied())
+            .collect::<Vec<_>>();
+        sources.sort_unstable();
+        sources.into_iter().fold(intrinsic, |total, source_id| {
+            let Some(source_controller) = self.controller_of(source_id) else {
+                return total;
+            };
+            let Some(source_face) = self.effective_face(source_id) else {
+                return total;
+            };
+            source_face
+                .static_abilities
+                .iter()
+                .fold(total, |total, ability| {
+                    let StaticAbilityDef::SpellGenericReduction {
+                        casters,
+                        spell_type,
+                        amount,
+                        condition,
+                    } = ability
+                    else {
+                        return total;
+                    };
+                    let caster_matches = match casters {
+                        RelativePlayerSet::Controller => player == source_controller,
+                        RelativePlayerSet::Opponents => {
+                            self.state.are_opponents(player, source_controller)
+                        }
+                        RelativePlayerSet::All => true,
+                    };
+                    if !caster_matches
+                        || spell_type.is_some_and(|card_type| !face.matches_card_type(card_type))
+                    {
+                        return total;
+                    }
+                    let ability_context = ConditionContext {
+                        controller: source_controller,
+                        source_object_id: source_id,
+                        source_zone_change: self
+                            .state
+                            .zone_change_generation
+                            .get(&source_id)
+                            .copied()
+                            .unwrap_or(0),
+                        resolving_spell_id: None,
+                    };
+                    if condition
+                        .as_ref()
+                        .is_some_and(|condition| !self.condition_holds(condition, ability_context))
+                    {
+                        return total;
+                    }
+                    total.saturating_add(*amount)
+                })
+        })
+    }
+
+    pub(super) fn spell_target_generic_reduction(
+        &self,
+        player: PlayerId,
+        source: super::targeting::TargetSourceIdentity,
+        targets: &[rv1::TargetRef],
+        modifiers: &[SpellCostModifier],
+    ) -> u32 {
+        modifiers.iter().fold(0u32, |total, modifier| {
+            let SpellCostModifier::TargetMatchGenericReduction { amount, filter } = modifier else {
+                return total;
+            };
+            if targets.iter().any(|target| {
+                super::targeting::target_filter_legal_at_resolution(
+                    self,
+                    filter,
+                    target.object_id,
+                    player,
+                    source,
+                    TriggerContext::default(),
+                )
+            }) {
+                total.saturating_add(*amount)
+            } else {
+                total
+            }
+        })
     }
 
     pub(super) fn can_pay_generic_mana(&self, player: PlayerId, amount: u32) -> bool {

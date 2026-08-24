@@ -4294,6 +4294,120 @@ TEST_F(RuledE2ESmokeTest, BeholdCastCostIsPrivateUntilItsPublicStackReveal)
     EXPECT_FALSE(p1.activeBeholdReveal || p2.activeBeholdReveal);
 }
 
+TEST_F(RuledE2ESmokeTest, TappedTargetReductionIsPrivateAndAuthoritativeThroughBothClients)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("reductionp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("reductionp2"), &transcript);
+    p2.didMulligan = true;
+
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Plains")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Swamp")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "target reduction game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "target reduction game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer openingDeadline;
+    openingDeadline.start();
+    while (openingDeadline.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command,
+                           const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 &&
+               (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto devPut = [&](int targetPlayer, const char *cardName, ruled::v1::DevZone zone, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(targetPlayer);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(cardName);
+        put->set_zone(zone);
+        put->set_ready(ready);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1 for target reduction").arg(cardName));
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority in target reduction cohort"));
+    };
+
+    ASSERT_TRUE(devPut(p1.myId, "Luminous Rebuke", ruled::v1::DEV_ZONE_HAND, false));
+    // Diregraf Ghoul's intrinsic replacement makes it a naturally tapped creature target.
+    ASSERT_TRUE(devPut(p2.myId, "Diregraf Ghoul", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ruled::v1::RuledCommand addMana;
+    addMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_w(1);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_c(1);
+    ASSERT_TRUE(sendAndPump(p1, addMana, QStringLiteral("dev: add {1}{W} for target reduction")));
+
+    const auto *rebuke = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Luminous Rebuke"));
+    ASSERT_NE(rebuke, nullptr);
+    EXPECT_EQ(rebuke->generic_cost_reduction(), 0u);
+    EXPECT_EQ(p2.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Luminous Rebuke")), nullptr);
+    const quint32 targetKey = rebuke->hand_index() << 8;
+    const auto targets = p1.latestLegal.valid_targets_by_hand_slot().find(targetKey);
+    ASSERT_NE(targets, p1.latestLegal.valid_targets_by_hand_slot().end());
+    ASSERT_EQ(targets->second.groups_size(), 1);
+    ASSERT_EQ(targets->second.groups(0).valid_permanent_ids_size(), 1);
+    ASSERT_EQ(targets->second.targeted_cost_reduction_applications_size(), 1);
+    const quint32 ghoulOid = targets->second.groups(0).valid_permanent_ids(0);
+    const auto &reduction = targets->second.targeted_cost_reduction_applications(0);
+    EXPECT_EQ(reduction.generic_mana(), 3u);
+    ASSERT_EQ(reduction.qualifying_targets_size(), 1);
+    EXPECT_EQ(reduction.qualifying_targets(0).kind(), ruled::v1::TARGET_REF_KIND_PERMANENT);
+    EXPECT_EQ(reduction.qualifying_targets(0).object_id(), ghoulOid);
+
+    ruled::v1::RuledCommand cast;
+    cast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    cast.mutable_cast_spell()->mutable_source()->set_hand_index(rebuke->hand_index());
+    auto *target = cast.mutable_cast_spell()->add_targets();
+    target->set_object_id(ghoulOid);
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    ASSERT_TRUE(sendAndPump(p1, cast, QStringLiteral("cast Luminous Rebuke for {1}{W}")));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+}
+
 TEST_F(RuledE2ESmokeTest, HarmonizeUsesOwnerOnlyReductionAndPreservesPhysicalIdentity)
 {
     const auto started = startServers();

@@ -257,7 +257,7 @@ impl GameEngine {
             .unwrap_or(u32::MAX)
     }
 
-    fn battlefield_aggregate_value(
+    pub(super) fn battlefield_aggregate_value(
         &self,
         filter: &BattlefieldPermanentFilter,
         aggregate: BattlefieldAggregate,

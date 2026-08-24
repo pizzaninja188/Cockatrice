@@ -86,6 +86,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         TargetSourceIdentity::spell_face(eng, oid, face_index),
                         &face.spell_effect,
                         face.targeting.as_ref(),
+                        &face.cost_modifiers,
                     );
                     let key = (slot as u32) << 8 | face_index as u32;
                     valid_targets_by_hand_slot.insert(key, t);
@@ -193,6 +194,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     ),
                     &face.spell_effect,
                     face.targeting.as_ref(),
+                    &face.cost_modifiers,
                 ),
             );
         }
@@ -1016,7 +1018,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     eng.eligible_restricted_mana_for_spell(player_index, face);
                 action.cost = face.mana_cost.to_string();
                 action.generic_cost_reduction =
-                    eng.spell_generic_reduction(pid, oid, &face.cost_modifiers);
+                    eng.spell_generic_reduction(pid, oid, face, &face.cost_modifiers);
                 if !cost_choices.non_mana_costs_payable {
                     continue;
                 }
@@ -1037,6 +1039,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                                 TargetSourceIdentity::spell_face(eng, oid, face_index),
                                 &mode.effects,
                                 mode.targeting.as_ref(),
+                                &face.cost_modifiers,
                             );
                             let selectable =
                                 !needs_target || spell_targets_have_candidate(&targets);
@@ -1139,6 +1142,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     generic_cost_reduction: eng.spell_generic_reduction(
                         pid,
                         oid,
+                        face,
                         &face.cost_modifiers,
                     ),
                     cast_method: cast_method as i32,
@@ -1163,6 +1167,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                                 TargetSourceIdentity::spell_face(eng, oid, face_index),
                                 &mode.effects,
                                 mode.targeting.as_ref(),
+                                &face.cost_modifiers,
                             );
                             let selectable =
                                 !needs_target || spell_targets_have_candidate(&targets);
@@ -1250,6 +1255,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 generic_cost_reduction: eng.spell_generic_reduction(
                     pid,
                     object.id,
+                    face,
                     &face.cost_modifiers,
                 ),
                 cast_method: rv1::CastMethod::Normal as i32,
@@ -1274,6 +1280,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                             TargetSourceIdentity::current(eng, object.id),
                             &mode.effects,
                             mode.targeting.as_ref(),
+                            &face.cost_modifiers,
                         );
                         rv1::LegalSpellMode {
                             mode_index: mode_index as u32,

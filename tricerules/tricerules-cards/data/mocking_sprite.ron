@@ -1,0 +1,16 @@
+// Oracle checked 2026-08-24. CR 601.2f and 118.7a: each battlefield copy contributes
+// one independent reduction to instant and sorcery spells its controller casts.
+(
+  id: "mocking_sprite",
+  name: "Mocking Sprite",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Faerie", "Rogue"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  static_abilities: [SpellGenericReduction(
+    casters: Controller,
+    spell_type: Some(InstantOrSorcery),
+    amount: 1,
+  )],
+)

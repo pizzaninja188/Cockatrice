@@ -130,7 +130,8 @@ impl GameEngine {
                         timestamp,
                     });
                 }
-                StaticAbilityDef::TargetingCostIncrease { .. } => {
+                StaticAbilityDef::TargetingCostIncrease { .. }
+                | StaticAbilityDef::SpellGenericReduction { .. } => {
                     // Evaluated live while an action's targets and total cost are finalized.
                 }
                 StaticAbilityDef::ProhibitSpecialAction {

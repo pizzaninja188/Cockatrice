@@ -1,6 +1,6 @@
 //! Costs paid to activate abilities.
 
-use super::{GameCondition, TargetFilter, ZoneCardFilter};
+use super::{BattlefieldPermanentFilter, GameCondition, TargetFilter, TargetKind, ZoneCardFilter};
 use crate::mana::ManaCost;
 use serde::{Deserialize, Serialize};
 
@@ -161,16 +161,48 @@ pub enum SpellCostModifier {
         amount: u32,
         condition: GameCondition,
     },
+    /// Reduce this spell's generic cost once when at least one announced permanent target
+    /// matches `filter`. Luminous Rebuke and Seized from Slumber share the tapped-creature form.
+    TargetMatchGenericReduction { amount: u32, filter: TargetFilter },
+    /// Reduce this spell's generic cost for each matching battlefield permanent. Affinity for
+    /// creatures and future affinity-style cohorts share this counted form.
+    BattlefieldCountGenericReduction {
+        amount_per_match: u32,
+        filter: BattlefieldPermanentFilter,
+    },
 }
 
 impl SpellCostModifier {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
-            SpellCostModifier::ConditionalGenericReduction { amount, condition } => {
+            Self::ConditionalGenericReduction { amount, condition } => {
                 if *amount == 0 {
                     return Err("conditional generic cost reduction must be nonzero".into());
                 }
                 condition.validate()
+            }
+            Self::TargetMatchGenericReduction { amount, filter } => {
+                if *amount == 0 {
+                    return Err("target-matching generic cost reduction must be nonzero".into());
+                }
+                filter.validate_target_constraints()?;
+                if !filter.all_terminal_filters_match(|leaf| {
+                    matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                }) {
+                    return Err(
+                        "target-matching generic cost reduction requires permanent targets".into(),
+                    );
+                }
+                Ok(())
+            }
+            Self::BattlefieldCountGenericReduction {
+                amount_per_match,
+                filter,
+            } => {
+                if *amount_per_match == 0 {
+                    return Err("battlefield-count generic cost reduction must be nonzero".into());
+                }
+                filter.validate()
             }
         }
     }

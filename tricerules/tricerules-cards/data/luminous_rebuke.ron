@@ -1,0 +1,13 @@
+// Oracle checked 2026-08-24. CR 601.2f and 118.7a: the reduction is determined from
+// the announced targets, applies once, and affects only the generic component.
+(
+  id: "luminous_rebuke",
+  name: "Luminous Rebuke",
+  mana_cost: "{4}{W}",
+  cost_modifiers: [TargetMatchGenericReduction(
+    amount: 3,
+    filter: (kind: Creature, tapped: Some(true)),
+  )],
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature)))],
+)

@@ -420,6 +420,61 @@ inline void ruledAccumulateTargetingCosts(const RuledSpellTargetData &data,
     return total;
 }
 
+inline void ruledAccumulateTargetedCostReductions(const RuledSpellTargetData &data,
+                                                  const QVector<QVector<quint32>> &selectedByGroup,
+                                                  const QVector<quint32> &fallbackSelected,
+                                                  int localPlayerId,
+                                                  QHash<quint64, int> &activeApplications)
+{
+    for (int groupPosition = 0; groupPosition < data.groups.size(); ++groupPosition) {
+        const auto &group = data.groups.at(groupPosition);
+        const QVector<quint32> selected = groupPosition < selectedByGroup.size()
+                                                ? selectedByGroup.at(groupPosition)
+                                                : (data.groups.size() == 1 ? fallbackSelected : QVector<quint32>{});
+        for (const quint32 oid : selected) {
+            const auto kind = ruledTargetRefKind(group, oid, localPlayerId);
+            for (const auto &application : data.targetedCostReductionApplications) {
+                const bool qualifies = std::any_of(
+                    application.qualifyingTargets.cbegin(), application.qualifyingTargets.cend(),
+                    [kind, oid](const auto &candidate) { return candidate.kind == kind && candidate.oid == oid; });
+                if (qualifies) {
+                    activeApplications.insert(application.applicationId, application.genericMana);
+                }
+            }
+        }
+    }
+}
+
+[[nodiscard]] inline int ruledModalSpellTargetedCostReduction(const PendingRuledSpellCast &spell,
+                                                               int localPlayerId)
+{
+    QHash<quint64, int> active;
+    for (const auto &mode : spell.selectedModes) {
+        ruledAccumulateTargetedCostReductions(mode.targets, mode.selectedTargetOidsByGroup,
+                                              mode.selectedTargetOids, localPlayerId, active);
+    }
+    int total = 0;
+    for (auto it = active.cbegin(); it != active.cend(); ++it) {
+        total += it.value();
+    }
+    return total;
+}
+
+[[nodiscard]] inline int ruledTargetedCostReductionForSelection(
+    const RuledSpellTargetData &data,
+    const QVector<QVector<quint32>> &selectedByGroup,
+    const QVector<quint32> &fallbackSelected,
+    int localPlayerId)
+{
+    QHash<quint64, int> active;
+    ruledAccumulateTargetedCostReductions(data, selectedByGroup, fallbackSelected, localPlayerId, active);
+    int total = 0;
+    for (auto it = active.cbegin(); it != active.cend(); ++it) {
+        total += it.value();
+    }
+    return total;
+}
+
 /// CR 601.2f quote arithmetic: the caller's base generic already includes chosen X; all generic
 /// increases are added before reductions, and reductions cannot make the generic component negative.
 [[nodiscard]] inline int ruledFinalGenericCost(int baseGeneric, int genericIncreases, int genericReduction)

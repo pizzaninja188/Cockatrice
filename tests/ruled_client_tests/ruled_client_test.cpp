@@ -1321,6 +1321,53 @@ TEST(RuledTargetingCostTest, SumsDistinctApplicationsButDeduplicatesAcrossModes)
     EXPECT_EQ(ruledModalSpellTargetingCost(spell, kLocalPlayer), 4);
 }
 
+TEST(RuledTargetedCostReductionTest, DeduplicatesOneApplicationAcrossGroupsAndUsesTypedCandidates)
+{
+    RuledSpellTargetData data;
+    RuledTargetGroupData first;
+    first.validPermanentIds.insert(1); // Deliberately collides with kOpponent.
+    first.validPermanentIds.insert(20);
+    RuledTargetGroupData second;
+    second.validPermanentIds.insert(21);
+    data.groups = {first, second};
+
+    data.targetedCostReductionApplications = {
+        {200,
+         3,
+         {
+             {ruled::v1::TARGET_REF_KIND_PLAYER, 1},
+             {ruled::v1::TARGET_REF_KIND_PERMANENT, 20},
+             {ruled::v1::TARGET_REF_KIND_PERMANENT, 21},
+         }},
+    };
+
+    EXPECT_EQ(ruledTargetedCostReductionForSelection(data, {{1, 20}, {21}}, {}, kLocalPlayer), 3);
+    EXPECT_EQ(ruledTargetedCostReductionForSelection(data, {{1}, {}}, {}, kLocalPlayer), 0);
+}
+
+TEST(RuledTargetedCostReductionTest, SumsDistinctApplicationsButDeduplicatesAcrossModes)
+{
+    RuledSpellTargetData data;
+    RuledTargetGroupData group;
+    group.validPermanentIds.insert(30);
+    data.groups = {group};
+    data.targetedCostReductionApplications = {
+        {300, 3, {{ruled::v1::TARGET_REF_KIND_PERMANENT, 30}}},
+        {301, 1, {{ruled::v1::TARGET_REF_KIND_PERMANENT, 30}}},
+    };
+    EXPECT_EQ(ruledTargetedCostReductionForSelection(data, {{30}}, {}, kLocalPlayer), 4);
+
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    PendingRuledSpellCast::SelectedMode first;
+    first.targets = data;
+    first.selectedTargetOids = {30};
+    first.selectedTargetOidsByGroup = {{30}};
+    PendingRuledSpellCast::SelectedMode second = first;
+    spell.selectedModes = {first, second};
+    EXPECT_EQ(ruledModalSpellTargetedCostReduction(spell, kLocalPlayer), 4);
+}
+
 TEST(RuledTargetingCostTest, AppliesReductionsAfterXAndAllIncreases)
 {
     // Base generic includes the chosen X (2); Fireball and targeting taxes add 3; reduction is 4.
@@ -1328,7 +1375,7 @@ TEST(RuledTargetingCostTest, AppliesReductionsAfterXAndAllIncreases)
     EXPECT_EQ(ruledFinalGenericCost(0, 2, 5), 0);
 }
 
-TEST_F(RuledClientTest, ParsesRawCostReductionAndTargetingApplications)
+TEST_F(RuledClientTest, ParsesRawCostReductionAndTargetApplications)
 {
     ruled::v1::RuledEventBatch batch;
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
@@ -1344,6 +1391,12 @@ TEST_F(RuledClientTest, ParsesRawCostReductionAndTargetingApplications)
     auto *candidate = application->add_affected_targets();
     candidate->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
     candidate->set_object_id(30);
+    auto *reduction = targets.add_targeted_cost_reduction_applications();
+    reduction->set_application_id(701);
+    reduction->set_generic_mana(3);
+    auto *qualifying = reduction->add_qualifying_targets();
+    qualifying->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    qualifying->set_object_id(30);
 
     apply(batch);
 
@@ -1355,6 +1408,11 @@ TEST_F(RuledClientTest, ParsesRawCostReductionAndTargetingApplications)
     ASSERT_EQ(parsed.targetingCostApplications.size(), 1);
     EXPECT_EQ(parsed.targetingCostApplications.first().applicationId, 700u);
     EXPECT_EQ(parsed.targetingCostApplications.first().genericMana, 2);
+    ASSERT_EQ(parsed.targetedCostReductionApplications.size(), 1);
+    EXPECT_EQ(parsed.targetedCostReductionApplications.first().applicationId, 701u);
+    EXPECT_EQ(parsed.targetedCostReductionApplications.first().genericMana, 3);
+    ASSERT_EQ(parsed.targetedCostReductionApplications.first().qualifyingTargets.size(), 1);
+    EXPECT_EQ(parsed.targetedCostReductionApplications.first().qualifyingTargets.first().oid, 30u);
 }
 
 // CR 608.2b: a target that changes zones becomes a new object, so the arrow endpoint recorded when

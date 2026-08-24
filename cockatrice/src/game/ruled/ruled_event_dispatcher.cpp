@@ -119,6 +119,15 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
         }
         data.targetingCostApplications.append(parsed);
     }
+    for (const auto &application : src.targeted_cost_reduction_applications()) {
+        RuledTargetedCostReductionApplication parsed;
+        parsed.applicationId = static_cast<quint64>(application.application_id());
+        parsed.genericMana = static_cast<int>(application.generic_mana());
+        for (const auto &candidate : application.qualifying_targets()) {
+            parsed.qualifyingTargets.append({candidate.kind(), static_cast<quint32>(candidate.object_id())});
+        }
+        data.targetedCostReductionApplications.append(parsed);
+    }
     return data;
 }
 

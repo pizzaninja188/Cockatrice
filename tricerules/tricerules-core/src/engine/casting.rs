@@ -369,6 +369,14 @@ impl GameEngine {
             &public_targets,
         ));
 
+        let generic_cost_reduction = self
+            .spell_generic_reduction(player, oid, face, &cost_modifiers)
+            .saturating_add(self.spell_target_generic_reduction(
+                player,
+                target_source,
+                &public_targets,
+                &cost_modifiers,
+            ));
         let payment_plan = self.plan_spell_costs(
             player,
             idx,
@@ -376,7 +384,7 @@ impl GameEngine {
             &face_mana,
             chosen_x,
             extra_generic,
-            self.spell_generic_reduction(player, oid, &cost_modifiers),
+            generic_cost_reduction,
             flex_payments,
             &additional_costs,
             cost_selections,

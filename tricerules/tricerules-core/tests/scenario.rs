@@ -75,6 +75,8 @@ mod issue_108_graveyard_aggregates;
 mod issue_110_library_search;
 #[path = "scenario/issue_111_turn_history.rs"]
 mod issue_111_turn_history;
+#[path = "scenario/issue_112_spell_cost_reductions.rs"]
+mod issue_112_spell_cost_reductions;
 #[path = "scenario/issue_114_disjunctive_filters.rs"]
 mod issue_114_disjunctive_filters;
 #[path = "scenario/issue_115_attachment_observers.rs"]

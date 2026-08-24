@@ -509,6 +509,7 @@ pub(super) fn copy_target_spell(
                             TargetSourceIdentity::for_stack_item(engine, &copy_template),
                             &effects,
                             None,
+                            &[],
                         );
                         for group in sp.groups {
                             candidates.extend(group.valid_permanent_ids);

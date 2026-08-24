@@ -616,6 +616,25 @@ impl CardRegistry {
                             }
                         }
                     }
+                    if let StaticAbilityDef::SpellGenericReduction {
+                        amount, condition, ..
+                    } = ability
+                    {
+                        if *amount == 0 {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "SpellGenericReduction amount must be nonzero".into(),
+                            });
+                        }
+                        if let Some(condition) = condition {
+                            condition
+                                .validate()
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
+                        }
+                    }
                     if let StaticAbilityDef::ConditionalSelfModifier {
                         condition,
                         delta_power,

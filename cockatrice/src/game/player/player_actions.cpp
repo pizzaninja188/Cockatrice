@@ -2914,16 +2914,21 @@ void PlayerActions::finalizePendingSpellManaCost()
     }
     const int localPlayerId = player->getPlayerInfo()->getId();
     int increases = 0;
+    int targetedReductions = 0;
     if (pendingRuledSpellCast.selectedModes.isEmpty()) {
         const auto data = state->spellTargetData(pendingRuledSpellCast.handIndex, pendingRuledSpellCast.faceIndex,
                                                  pendingRuledSpellCast.source);
         increases += ruledTargetingCostForSelection(data, pendingRuledSpellCast.selectedTargetOidsByGroup,
                                                     pendingRuledSpellCast.selectedTargetOids, localPlayerId);
+        targetedReductions += ruledTargetedCostReductionForSelection(
+            data, pendingRuledSpellCast.selectedTargetOidsByGroup, pendingRuledSpellCast.selectedTargetOids,
+            localPlayerId);
         if (data.isDamageTargets && data.extraManaPerTarget > 0) {
             increases += data.extraManaPerTarget * qMax(0, pendingRuledSpellCast.selectedTargetOids.size() - 1);
         }
     } else {
         increases += ruledModalSpellTargetingCost(pendingRuledSpellCast, localPlayerId);
+        targetedReductions += ruledModalSpellTargetedCostReduction(pendingRuledSpellCast, localPlayerId);
         for (const auto &mode : pendingRuledSpellCast.selectedModes) {
             if (mode.targets.isDamageTargets && mode.targets.extraManaPerTarget > 0) {
                 increases += mode.targets.extraManaPerTarget * qMax(0, mode.selectedTargetOids.size() - 1);
@@ -2933,7 +2938,8 @@ void PlayerActions::finalizePendingSpellManaCost()
     const int reducedGeneric = ruledFinalGenericCost(pendingRuledSpellCast.remainingCost.value(QChar('X'), 0),
                                                       increases,
                                                       pendingRuledSpellCast.genericCostReduction +
-                                                          pendingRuledSpellCast.castCostGenericReduction);
+                                                          pendingRuledSpellCast.castCostGenericReduction +
+                                                          targetedReductions);
     if (reducedGeneric == 0) {
         pendingRuledSpellCast.remainingCost.remove(QChar('X'));
     } else {

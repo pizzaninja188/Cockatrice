@@ -1060,6 +1060,17 @@ pub enum StaticAbilityDef {
         actions: TargetingCostAction,
         amount: u32,
     },
+    /// CR 601.2f: spells cast by the selected players receive a fixed generic reduction while
+    /// this permanent remains on the battlefield. Mocking Sprite filters by spell type;
+    /// Highspire Bell-Ringer additionally gates the reduction on committed turn history.
+    SpellGenericReduction {
+        casters: RelativePlayerSet,
+        #[serde(default)]
+        spell_type: Option<CardTypeFilter>,
+        amount: u32,
+        #[serde(default)]
+        condition: Option<GameCondition>,
+    },
     /// Prohibit an engine special action for a dynamically evaluated permanent scope. Unable to
     /// Scream uses `AttachedPermanent`; Karlov Watchdog uses a controller-filtered scope plus an
     /// active-player condition.

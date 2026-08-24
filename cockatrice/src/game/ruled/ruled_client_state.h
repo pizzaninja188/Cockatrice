@@ -108,6 +108,13 @@ struct RuledTargetingCostApplication
     QVector<RuledTargetingCostCandidate> affectedTargets;
 };
 
+struct RuledTargetedCostReductionApplication
+{
+    quint64 applicationId = 0;
+    int genericMana = 0;
+    QVector<RuledTargetingCostCandidate> qualifyingTargets;
+};
+
 /// Engine-authoritative targeting data for one spell, mode, activated ability, or trigger.
 struct RuledSpellTargetData : RuledTargetGroupData
 {
@@ -120,6 +127,7 @@ struct RuledSpellTargetData : RuledTargetGroupData
     /// allocation, must not demand one damage per target, and may send zero targets.
     bool damageDividedEvenly = false;
     QVector<RuledTargetingCostApplication> targetingCostApplications;
+    QVector<RuledTargetedCostReductionApplication> targetedCostReductionApplications;
 };
 
 struct RuledChoiceOption
