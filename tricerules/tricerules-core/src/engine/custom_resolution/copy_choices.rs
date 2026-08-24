@@ -164,6 +164,11 @@ impl GameEngine {
                 kind: target.kind,
             })
             .collect();
+        let chosen_cast_cost_labels = copy_item
+            .cast_cost_receipts
+            .iter()
+            .map(|receipt| receipt.label.clone())
+            .collect();
         self.state.stack.push(copy_item);
         self.state.passes_since_stack_change = 0;
 
@@ -191,6 +196,7 @@ impl GameEngine {
                     copy_source_object_id,
                     chosen_mode_indices: vec![],
                     chosen_mode_labels: vec![],
+                    chosen_cast_cost_labels,
                 })),
             },
             ev_log(format!(

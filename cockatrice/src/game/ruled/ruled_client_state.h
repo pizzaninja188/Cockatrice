@@ -160,10 +160,38 @@ struct RuledCostChoice
     int max = 1;
 };
 
+enum class RuledCastCostOptionKind : int
+{
+    Mana,
+    Behold,
+};
+
+struct RuledCastCostOption
+{
+    int optionIndex = -1;
+    QString label;
+    RuledCastCostOptionKind kind = RuledCastCostOptionKind::Mana;
+    QString additionalManaCost;
+    QSet<quint32> validHandIndices;
+    QSet<quint32> validPermanentIds;
+    QHash<quint32, quint64> validPermanentGenerations;
+    bool selectable = false;
+};
+
+struct RuledCastCostGroup
+{
+    int groupIndex = -1;
+    QString prompt;
+    int min = 0;
+    int max = 1;
+    QVector<RuledCastCostOption> options;
+};
+
 struct RuledCostData
 {
     bool nonManaCostsPayable = true;
     QVector<RuledCostChoice> choices;
+    QVector<RuledCastCostGroup> castCostGroups;
 };
 
 /// One engine-authored CR 106.6 pool group. Counts are absolute snapshots and remain separate
@@ -651,6 +679,21 @@ public:
     /// Public information mirrored on every participant independently of chooser authority.
     /// The key is (sourceObjectId, zoneOwnerPlayerId); each incoming value is an exact snapshot.
     std::optional<RuledPublicReveal> publicReveal;
+
+    struct RuledActivePublicReveal
+    {
+        quint32 sourceStackObjectId = 0;
+        quint32 groupIndex = 0;
+        int revealingPlayerId = -1;
+        QString sourceDescription;
+        QString cardId;
+        QString cardName;
+
+        bool operator==(const RuledActivePublicReveal &) const = default;
+    };
+    /// Exact public snapshot of cards revealed to satisfy optional cast costs whose spells are
+    /// still on the stack. Multiple spells may contribute entries concurrently.
+    QVector<RuledActivePublicReveal> activePublicReveals;
 
     // Last TriggerNeedsTarget seen, recorded on *every* client — not just the ability's
     // controller. This is stack bookkeeping, not a choice: it is what lets the synthetic stack
@@ -1351,6 +1394,11 @@ public:
     }
     void setPublicReveal(RuledPublicReveal reveal);
     void clearPublicReveal();
+    [[nodiscard]] QVector<RuledActivePublicReveal> getActivePublicReveals() const
+    {
+        return activePublicReveals;
+    }
+    void setActivePublicReveals(QVector<RuledActivePublicReveal> reveals);
 
     [[nodiscard]] bool isResolutionPaymentActive() const
     {
@@ -1551,6 +1599,9 @@ signals:
                              int zoneOwnerPlayerId,
                              QStringList cardNames,
                              QVector<int> serverCardIds);
+    /// Exact snapshot of behold-style cast-cost reveals. Names and revealing-player ids are
+    /// parallel and empty means the persistent read-only popup must be destroyed.
+    void activePublicRevealsChanged(QStringList cardNames, QVector<int> revealingPlayerIds);
 
 private:
     void sendOpeningBottomCommandSequence(const QList<int> &adjustedIndices, int position);

@@ -160,6 +160,7 @@ impl GameEngine {
             chosen_x: 0,
             face_index: source_face_index,
             chosen_modes,
+            cast_cost_receipts: vec![],
             resolution_branch_choices: Default::default(),
             trigger_context,
             flashback: false,
@@ -182,6 +183,7 @@ impl GameEngine {
                 copy_source_object_id: 0,
                 chosen_mode_indices,
                 chosen_mode_labels,
+                chosen_cast_cost_labels: vec![],
             })),
         });
 

@@ -28,6 +28,16 @@ pub(super) fn castable_at_instant_speed(face: &tricerules_cards::FaceRef<'_>) ->
     face.is_instant || face.keywords.contains(&tricerules_cards::Keyword::Flash)
 }
 
+fn command_satisfies_cast_cost_condition(
+    selections: &[rv1::CastCostGroupSelection],
+    condition: tricerules_cards::CastCostReceiptCondition,
+) -> bool {
+    selections.iter().any(|selection| {
+        selection.group_index == condition.group_index
+            && selection.option_index == condition.option_index
+    }) == condition.expected_selected
+}
+
 impl GameEngine {
     pub(super) fn cast_spell(
         &mut self,
@@ -40,6 +50,7 @@ impl GameEngine {
         let face_index = command.face_index as usize;
         let selected_modes = command.selected_modes.as_slice();
         let cost_selections = command.cost_selections.as_slice();
+        let cast_cost_group_selections = command.cast_cost_group_selections.as_slice();
         let restricted_mana = command.restricted_mana.as_slice();
         if self.state.turn_step == TurnStep::Cleanup {
             return Err(EngineError::Illegal("no spells during cleanup"));
@@ -125,19 +136,23 @@ impl GameEngine {
         let face_targeting = face.targeting.clone();
         let modal_spell = face.modal_spell.clone();
         let additional_costs = face.additional_costs.clone();
+        let cast_cost_groups = face.cast_cost_groups.clone();
         let cost_modifiers = face.cost_modifiers.clone();
         let eligible_restricted_mana = self.eligible_restricted_mana_for_spell(idx, face);
         let sorcery_ok = super::priority::sorcery_speed_available(&self.state, player);
         let instant_ok = super::priority::instant_timing_step_allowed(&self.state);
+        let conditional_instant = face.instant_speed_cast_cost.is_some_and(|condition| {
+            command_satisfies_cast_cost_condition(cast_cost_group_selections, condition)
+        });
         if face_is_sorcery {
-            if !sorcery_ok {
+            if !(sorcery_ok || instant_ok && conditional_instant) {
                 return Err(EngineError::Illegal("sorcery speed only"));
             }
         } else if face_instant_speed {
             if !instant_ok {
                 return Err(EngineError::Illegal("instant timing"));
             }
-        } else if !sorcery_ok {
+        } else if !(sorcery_ok || instant_ok && conditional_instant) {
             return Err(EngineError::Illegal("sorcery speed only"));
         }
         if priority_locked_for_combat_declaration(&self.state) {
@@ -317,6 +332,8 @@ impl GameEngine {
             flex_payments,
             &additional_costs,
             cost_selections,
+            &cast_cost_groups,
+            cast_cost_group_selections,
             restricted_mana,
             &eligible_restricted_mana,
         )?;
@@ -347,6 +364,11 @@ impl GameEngine {
         let payment = self.commit_cost_transaction(payment_plan)?;
         let life_paid = payment.life_paid;
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
+        let cast_cost_receipts = payment.cast_cost_receipts;
+        let chosen_cast_cost_labels = cast_cost_receipts
+            .iter()
+            .map(|receipt| receipt.label.clone())
+            .collect::<Vec<_>>();
 
         let stack_targets = public_targets
             .iter()
@@ -371,6 +393,7 @@ impl GameEngine {
             chosen_x,
             face_index,
             chosen_modes,
+            cast_cost_receipts,
             resolution_branch_choices: Default::default(),
             // A spell's effects always act on its controller.
             trigger_context: TriggerContext::default(),
@@ -412,6 +435,14 @@ impl GameEngine {
         if !chosen_mode_labels.is_empty() {
             stack_annotation = chosen_mode_labels.join("\n");
         }
+        if !chosen_cast_cost_labels.is_empty() {
+            let costs = chosen_cast_cost_labels.join("\n");
+            stack_annotation = if stack_annotation.is_empty() {
+                costs
+            } else {
+                format!("{stack_annotation}\n{costs}")
+            };
+        }
         // CR 702.34: nothing on the card face says a spell was cast for its flashback cost, and it
         // is exiled instead of going to its owner's graveyard when it leaves the stack — so the
         // annotation is the only warning an opponent gets while it is still resolvable. Prepended
@@ -451,6 +482,7 @@ impl GameEngine {
                 copy_source_object_id: 0,
                 chosen_mode_indices,
                 chosen_mode_labels,
+                chosen_cast_cost_labels,
             })),
         });
         let ordinal = self.record_spell_cast(player);
@@ -774,6 +806,7 @@ impl GameEngine {
             chosen_x: 0,
             face_index: face_up_index,
             chosen_modes: vec![],
+            cast_cost_receipts: vec![],
             resolution_branch_choices: Default::default(),
             // An activated ability's effects act on the player who activated it.
             trigger_context: TriggerContext::default(),
@@ -816,6 +849,7 @@ impl GameEngine {
                 copy_source_object_id: 0,
                 chosen_mode_indices: vec![],
                 chosen_mode_labels: vec![],
+                chosen_cast_cost_labels: vec![],
             })),
         });
         // CR 603.3b: a trigger that fired while the cost was being paid goes on the stack *above*
@@ -1299,6 +1333,7 @@ impl GameEngine {
             flashback: false,
             chosen_x: 0,
             chosen_modes: Vec::new(),
+            cast_cost_receipts: Vec::new(),
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         };
@@ -1311,6 +1346,7 @@ impl GameEngine {
                 face_index,
                 unlock_room_door: None,
                 chosen_x: 0,
+                cast_cost_receipts: Vec::new(),
                 player_life_snapshot: self.player_life_snapshot(),
                 tapped: false,
                 entry_counters: BTreeMap::new(),
@@ -1345,6 +1381,34 @@ mod mana_payment_tests {
         let mut e = GameEngine::new_with_default_decks(1, &[0, 1], 20).expect("new");
         e.state.priority_idx = 0;
         e
+    }
+
+    #[test]
+    fn conditional_instant_timing_requires_the_linked_cast_cost_selection() {
+        let condition = CastCostReceiptCondition {
+            group_index: 0,
+            option_index: 1,
+            expected_selected: true,
+        };
+        assert!(!command_satisfies_cast_cost_condition(&[], condition));
+        assert!(!command_satisfies_cast_cost_condition(
+            &[rv1::CastCostGroupSelection {
+                group_index: 0,
+                option_index: 0,
+                selected_object: None,
+                expected_zone_change_generation: 0,
+            }],
+            condition,
+        ));
+        assert!(command_satisfies_cast_cost_condition(
+            &[rv1::CastCostGroupSelection {
+                group_index: 0,
+                option_index: 1,
+                selected_object: None,
+                expected_zone_change_generation: 0,
+            }],
+            condition,
+        ));
     }
 
     #[test]
@@ -1640,6 +1704,8 @@ mod mana_payment_tests {
                 &selections,
                 &[],
                 &[],
+                &[],
+                &[],
             )
             .expect("reduced mana and discard cost should validate together");
         let payment = e
@@ -1679,6 +1745,8 @@ mod mana_payment_tests {
                 &[],
                 &costs,
                 &selections,
+                &[],
+                &[],
                 &[],
                 &[],
             )

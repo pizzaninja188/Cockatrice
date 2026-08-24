@@ -111,6 +111,12 @@ public:
     /// Returns the mana-payment prompt text if a spell is pending and still needs mana, otherwise empty.
     [[nodiscard]] QString pendingRuledSpellPromptText() const;
     [[nodiscard]] bool isAwaitingRuledSpellCostSelection() const;
+    [[nodiscard]] bool isAwaitingRuledCastCostObject() const;
+    [[nodiscard]] bool isAwaitingRuledCastCostOption() const;
+    [[nodiscard]] bool pendingRuledCastCostGroupIsOptional() const;
+    [[nodiscard]] QVector<RuledCastCostOption> pendingRuledCastCostOptions() const;
+    void selectPendingRuledCastCostOption(int optionIndex);
+    void backPendingRuledCastCostObject();
     /// Activated abilities on a battlefield permanent. With `leftClick` true, a permanent whose sole
     /// ability is a mana ability (CR 605) is activated directly (the mana floats, no menu); every
     /// other case (multiple abilities, or a non-mana ability) opens the activation menu. Right-click
@@ -391,6 +397,8 @@ private:
     // Same as resolvePendingSpellFlexiblePips for the pending activated ability.
     bool resolvePendingAbilityFlexiblePips();
     bool completePendingRuledSpellCast();
+    bool promptForNextRuledCastCostGroup();
+    void continuePendingSpellAfterCastCostGroups();
     void continuePendingSpellAfterChoice();
     bool tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
     void finishPendingSpellManaPaymentStep();

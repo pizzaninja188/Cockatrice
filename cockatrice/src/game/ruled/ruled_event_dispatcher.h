@@ -24,6 +24,7 @@ namespace ruled::v1
 {
 class AttackersDeclared;
 class AttackersPreview;
+class ActivePublicRevealSnapshot;
 class BattlefieldObjectMap;
 class BlockersDeclared;
 class BlockersPreview;
@@ -111,6 +112,7 @@ private:
     void applyRemovedFromCombat(const ruled::v1::CreaturesRemovedFromCombat &rfc, BatchContext &ctx);
     void applyLifeChanged(const ruled::v1::LifeChanged &lc, BatchContext &ctx);
     void applyManaPoolUpdated(const ruled::v1::ManaPoolUpdated &mpu, BatchContext &ctx);
+    void applyActivePublicRevealSnapshot(const ruled::v1::ActivePublicRevealSnapshot &snapshot);
 
     /// The local player's `LegalActions` entry: hand-action label parsing, targeting tables,
     /// opening-UI kind, and the must-attack / must-block requirement sets.

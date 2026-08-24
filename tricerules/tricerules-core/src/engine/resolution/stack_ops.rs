@@ -6,6 +6,7 @@ pub(super) fn counter_target_spell(
 ) -> Result<EffectOutcome, EngineError> {
     let SpellEffectKind::CounterTargetSpell {
         unless_controller_pays,
+        unless_controller_pays_by_cast_cost,
         ..
     } = effect
     else {
@@ -17,7 +18,18 @@ pub(super) fn counter_target_spell(
     let spell_label = cx.spell_label;
 
     if let Some(&tid) = targets.first() {
-        if let Some(generic_mana_cost) = unless_controller_pays {
+        let receipt_payment = unless_controller_pays_by_cast_cost.map(|conditional| {
+            if cx.top.cast_cost_receipts.iter().any(|receipt| {
+                receipt.group_index == conditional.condition.group_index
+                    && receipt.option_index == conditional.condition.option_index
+            }) == conditional.condition.expected_selected
+            {
+                conditional.if_selected
+            } else {
+                conditional.otherwise
+            }
+        });
+        if let Some(generic_mana_cost) = unless_controller_pays.or(receipt_payment) {
             let Some(target) = engine
                 .state
                 .stack
@@ -461,6 +473,7 @@ pub(super) fn copy_target_spell(
                     chosen_x: src.chosen_x,
                     face_index: src.face_index,
                     chosen_modes: src.chosen_modes.clone(),
+                    cast_cost_receipts: src.cast_cost_receipts.clone(),
                     resolution_branch_choices: Default::default(),
                     // CR 707.2: the copy has the original's characteristics and choices. `None`
                     // for every spell today, but copying inherits it rather than dropping it.
@@ -617,6 +630,11 @@ pub(super) fn copy_target_spell(
                             copy_source_object_id: src.id,
                             chosen_mode_indices: chosen_mode_indices.clone(),
                             chosen_mode_labels: chosen_mode_labels.clone(),
+                            chosen_cast_cost_labels: src
+                                .cast_cost_receipts
+                                .iter()
+                                .map(|receipt| receipt.label.clone())
+                                .collect(),
                         })),
                     });
                     events.push(ev_log(format!(

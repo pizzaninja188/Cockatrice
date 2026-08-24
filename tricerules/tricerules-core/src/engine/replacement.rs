@@ -139,11 +139,20 @@ impl GameEngine {
                         }
                         StaticAbilityDef::EntersWithCounters {
                             affected: EntersWithCountersAffected::Self_,
+                            cast_cost_condition,
                             ..
-                        } => (
-                            ReplacementPriority::Other,
-                            Some(format!("{} — enters with counters", face.name)),
-                        ),
+                        } if cast_cost_condition.as_ref().is_none_or(|condition| {
+                            event.cast_cost_receipts.iter().any(|receipt| {
+                                receipt.group_index == condition.group_index
+                                    && receipt.option_index == condition.option_index
+                            }) == condition.expected_selected
+                        }) =>
+                        {
+                            (
+                                ReplacementPriority::Other,
+                                Some(format!("{} — enters with counters", face.name)),
+                            )
+                        }
                         _ => (ReplacementPriority::Other, None),
                     };
                     let Some(label) = label else {
@@ -387,6 +396,7 @@ impl GameEngine {
                         affected: EntersWithCountersAffected::Self_,
                         counter,
                         amount,
+                        ..
                     }) => {
                         let count = self.resolve_amount(
                             amount,
@@ -440,6 +450,7 @@ impl GameEngine {
                         affected: EntersWithCountersAffected::Creatures(_),
                         counter,
                         amount,
+                        ..
                     }) => {
                         let controller = self
                             .controller_of(*source_id)
@@ -811,8 +822,9 @@ impl GameEngine {
             BattlefieldEntryCompletion::LibrarySearch {
                 owner,
                 card_label,
+                remaining_object_ids,
+                tapped,
                 shuffle,
-                resume_effect_index,
             } => {
                 let object_id = event.object_id;
                 let controller = event.destination_controller;
@@ -826,14 +838,13 @@ impl GameEngine {
                     owner,
                     rv1::permanent_moved::Destination::Battlefield,
                 ));
-                if shuffle {
-                    crate::engine::shuffle_player_library_for_current_command(
-                        &mut self.state,
-                        controller,
-                    );
-                    events.push(ev_log(format!("P{controller} shuffles their library.")));
-                }
-                self.complete_parked_resolution(stack.item, resume_effect_index, events)
+                self.continue_library_search_battlefield_entries(
+                    stack,
+                    remaining_object_ids,
+                    tapped,
+                    shuffle,
+                    events,
+                )
             }
             BattlefieldEntryCompletion::ManifestDread {
                 owner,
@@ -1092,6 +1103,7 @@ mod tests {
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
+            cast_cost_receipts: Vec::new(),
             player_life_snapshot: snapshot,
             tapped: false,
             entry_counters: BTreeMap::new(),
@@ -1154,6 +1166,7 @@ mod tests {
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
+            cast_cost_receipts: Vec::new(),
             player_life_snapshot: engine.player_life_snapshot(),
             tapped: false,
             entry_counters: BTreeMap::new(),

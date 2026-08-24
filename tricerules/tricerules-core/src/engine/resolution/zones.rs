@@ -1075,6 +1075,7 @@ pub(super) fn return_from_graveyard(
                         face_index: 0,
                         unlock_room_door: None,
                         chosen_x: 0,
+                        cast_cost_receipts: Vec::new(),
                         player_life_snapshot: engine.player_life_snapshot(),
                         tapped: matches!(
                             destination,
@@ -1181,6 +1182,7 @@ pub(super) fn return_triggered_card_from_graveyard(
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
+            cast_cost_receipts: Vec::new(),
             player_life_snapshot: cx.engine.player_life_snapshot(),
             tapped,
             entry_counters,
@@ -1419,6 +1421,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 face_index: 0,
                 unlock_room_door: None,
                 chosen_x: 0,
+                cast_cost_receipts: Vec::new(),
                 player_life_snapshot: engine.player_life_snapshot(),
                 tapped: false,
                 entry_counters: BTreeMap::new(),
@@ -1651,6 +1654,7 @@ fn search_zone_proto(zone: CardSearchZone) -> i32 {
 }
 
 pub(in crate::engine) struct ZoneSearchRequest {
+    pub count: u32,
     pub filter: Option<ZoneCardFilter>,
     pub zones: Vec<CardSearchZone>,
     pub destination: SearchDestination,
@@ -1666,6 +1670,7 @@ pub(in crate::engine) fn park_zone_search_choice(
     request: ZoneSearchRequest,
 ) -> Result<(), EngineError> {
     let ZoneSearchRequest {
+        count,
         filter,
         zones,
         destination,
@@ -1698,7 +1703,7 @@ pub(in crate::engine) fn park_zone_search_choice(
         .zip(&candidate_zones)
         .any(|(_, zone)| *zone == rv1::ChoiceCandidateSourceZone::Graveyard as i32);
     let min = if public_graveyard_match || (filter.is_none() && !candidates.is_empty()) {
-        1
+        count.min(candidates.len() as u32)
     } else {
         0
     };
@@ -1707,7 +1712,7 @@ pub(in crate::engine) fn park_zone_search_choice(
         .map(|zone| search_zone_label(*zone))
         .collect::<Vec<_>>()
         .join(" / ");
-    let prompt = format!("P{controller}: search {zone_names} for up to one matching card.");
+    let prompt = format!("P{controller}: search {zone_names} for up to {count} matching card(s).");
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
     let multi_zone = zones.len() > 1 || zones.first() != Some(&CardSearchZone::Library);
     let choice_kind = if multi_zone {
@@ -1726,7 +1731,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                 candidate_card_ids,
                 candidate_names,
                 min,
-                max: 1,
+                max: count,
                 ordered: false,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
@@ -1752,7 +1757,7 @@ pub(in crate::engine) fn park_zone_search_choice(
             source_object_id: top.id,
             candidates,
             min,
-            max: 1,
+            max: count,
             ordered: false,
             unique_names: false,
             prompt,
@@ -1776,6 +1781,8 @@ pub(super) fn search_library(
 ) -> Result<EffectOutcome, EngineError> {
     let SpellEffectKind::SearchLibrary {
         filter,
+        count,
+        count_by_cast_cost,
         zones,
         destination,
         conditional_destination,
@@ -1785,12 +1792,20 @@ pub(super) fn search_library(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let count = count_by_cast_cost.map_or(count, |conditional| {
+        if cx.top.cast_cost_condition_matches(conditional.condition) {
+            conditional.if_selected
+        } else {
+            conditional.otherwise
+        }
+    });
     match zones {
         SearchZoneSelection::Fixed(zones) => park_zone_search_choice(
             cx.engine,
             cx.events,
             cx.top,
             ZoneSearchRequest {
+                count,
                 filter,
                 zones,
                 destination,
@@ -1862,6 +1877,7 @@ pub(super) fn search_library(
                 },
                 continuation: ResolutionContinuation::SearchZoneScope {
                     stack: ParkedStackResolution::new(cx.top.clone()),
+                    count,
                     available_zones,
                     filter,
                     destination,

@@ -33,6 +33,16 @@ enum CostDebit {
         snapshot: SacrificeSnapshot,
         owner: PlayerId,
     },
+    ObserveHand {
+        object_id: ObjectId,
+        generation: u64,
+        owner: PlayerId,
+    },
+    ObservePermanent {
+        object_id: ObjectId,
+        generation: u64,
+        controller: PlayerId,
+    },
 }
 
 pub(in crate::engine) struct CostPaymentReceipt {
@@ -41,6 +51,7 @@ pub(in crate::engine) struct CostPaymentReceipt {
     pub(in crate::engine) paid_card_costs: Vec<PaidCardCost>,
     pub(in crate::engine) life_paid: u32,
     pub(in crate::engine) restricted_mana_spent: Vec<(u32, ManaAmount)>,
+    pub(in crate::engine) cast_cost_receipts: Vec<CastCostReceipt>,
 }
 
 pub(in crate::engine) enum PaidCardCost {
@@ -80,6 +91,7 @@ pub(in crate::engine) struct CostTransactionPlan {
     player: PlayerId,
     player_idx: usize,
     debits: Vec<CostDebit>,
+    cast_cost_receipts: Vec<CastCostReceipt>,
 }
 
 impl GameEngine {
@@ -96,6 +108,8 @@ impl GameEngine {
         flex_payments: &[rv1::FlexPipPayment],
         costs: &[AdditionalCost],
         selections: &[rv1::CostSelection],
+        cast_cost_groups: &[CastCostGroupDef],
+        cast_cost_group_selections: &[rv1::CastCostGroupSelection],
         restricted_mana: &[rv1::ManaSpendSelection],
         eligible_restricted_mana: &[u32],
     ) -> Result<CostTransactionPlan, EngineError> {
@@ -109,7 +123,149 @@ impl GameEngine {
             }
         }
 
-        let mut debits = Vec::with_capacity(costs.len() + 1);
+        let mut debits = Vec::with_capacity(costs.len() + cast_cost_groups.len() + 1);
+        let mut combined_mana = mana_cost.clone();
+        let mut cast_cost_receipts = Vec::new();
+        let mut group_selections = HashMap::new();
+        for selection in cast_cost_group_selections {
+            let group_index = selection.group_index as usize;
+            if group_index >= cast_cost_groups.len()
+                || group_selections.insert(group_index, selection).is_some()
+            {
+                return Err(EngineError::Illegal(
+                    "invalid or duplicate cast cost group selection",
+                ));
+            }
+        }
+        for (group_index, group) in cast_cost_groups.iter().enumerate() {
+            let Some(selection) = group_selections.get(&group_index) else {
+                if group.min == 0 {
+                    continue;
+                }
+                return Err(EngineError::Illegal(
+                    "missing required cast cost group selection",
+                ));
+            };
+            let option = group
+                .options
+                .get(selection.option_index as usize)
+                .ok_or(EngineError::Illegal("invalid cast cost option"))?;
+            let object = match option {
+                CastCostOptionDef::Mana { cost, .. } => {
+                    if selection.selected_object.is_some() {
+                        return Err(EngineError::Illegal(
+                            "mana cast cost option cannot select an object",
+                        ));
+                    }
+                    combined_mana.pips.extend(cost.pips.iter().cloned());
+                    None
+                }
+                CastCostOptionDef::Behold {
+                    hand_filter,
+                    permanent_filter,
+                    ..
+                } => {
+                    use rv1::cast_cost_group_selection::SelectedObject;
+                    match selection.selected_object {
+                        Some(SelectedObject::HandIndex(hand_index)) => {
+                            let object_id = self.state.players[player_idx]
+                                .hand
+                                .get(hand_index as usize)
+                                .copied()
+                                .ok_or(EngineError::Illegal("invalid behold hand slot"))?;
+                            if object_id == source_oid
+                                || !super::super::resolution::library_card_matches_filter(
+                                    &self.state,
+                                    self.registry,
+                                    object_id,
+                                    Some(hand_filter),
+                                )
+                            {
+                                return Err(EngineError::Illegal("illegal behold hand selection"));
+                            }
+                            let object = &self.state.objects[&object_id];
+                            let generation = self
+                                .state
+                                .zone_change_generation
+                                .get(&object_id)
+                                .copied()
+                                .unwrap_or(0);
+                            debits.push(CostDebit::ObserveHand {
+                                object_id,
+                                generation,
+                                owner: object.owner,
+                            });
+                            Some(CastCostObjectReceipt::RevealedHand {
+                                object_id,
+                                zone_change_generation: generation,
+                                card_id: object.card_id.clone(),
+                                card_name: object_display_name(
+                                    &self.state,
+                                    self.registry,
+                                    object_id,
+                                ),
+                            })
+                        }
+                        Some(SelectedObject::PermanentId(object_id)) => {
+                            if !self.ability_cost_permanent_matches(
+                                player,
+                                None,
+                                object_id,
+                                permanent_filter,
+                            ) {
+                                return Err(EngineError::Illegal(
+                                    "illegal behold permanent selection",
+                                ));
+                            }
+                            let object = &self.state.objects[&object_id];
+                            let generation = self
+                                .state
+                                .zone_change_generation
+                                .get(&object_id)
+                                .copied()
+                                .unwrap_or(0);
+                            if selection.expected_zone_change_generation != generation {
+                                return Err(EngineError::Illegal(
+                                    "stale behold permanent selection",
+                                ));
+                            }
+                            debits.push(CostDebit::ObservePermanent {
+                                object_id,
+                                generation,
+                                controller: player,
+                            });
+                            Some(CastCostObjectReceipt::ChosenPermanent {
+                                object_id,
+                                zone_change_generation: generation,
+                                card_id: object.card_id.clone(),
+                                card_name: object_display_name(
+                                    &self.state,
+                                    self.registry,
+                                    object_id,
+                                ),
+                            })
+                        }
+                        None => {
+                            return Err(EngineError::Illegal("behold requires a selected object"))
+                        }
+                    }
+                }
+            };
+            let label = match option {
+                CastCostOptionDef::Mana { label, .. } | CastCostOptionDef::Behold { label, .. } => {
+                    label.clone()
+                }
+            };
+            cast_cost_receipts.push(CastCostReceipt {
+                group_index: group_index as u32,
+                option_index: selection.option_index,
+                label,
+                object,
+            });
+        }
+        if group_selections.len() != cast_cost_group_selections.len() {
+            return Err(EngineError::Illegal("unexpected cast cost group selection"));
+        }
         let mut consumed = HashSet::new();
         for (cost_index, cost) in costs.iter().enumerate() {
             let Some(selection) = by_index.get(&cost_index) else {
@@ -174,7 +330,7 @@ impl GameEngine {
             CostDebit::Mana(plan_mana_payment_with_restricted_reduction(
                 &self.state,
                 player_idx,
-                mana_cost,
+                &combined_mana,
                 x_value,
                 extra_generic,
                 generic_reduction,
@@ -187,6 +343,7 @@ impl GameEngine {
             player,
             player_idx,
             debits,
+            cast_cost_receipts,
         })
     }
 
@@ -437,6 +594,7 @@ impl GameEngine {
             player,
             player_idx: idx,
             debits,
+            cast_cost_receipts: vec![],
         })
     }
 
@@ -452,6 +610,7 @@ impl GameEngine {
             paid_card_costs: vec![],
             life_paid: 0,
             restricted_mana_spent: vec![],
+            cast_cost_receipts: plan.cast_cost_receipts,
         };
         for debit in plan.debits {
             match debit {
@@ -533,6 +692,7 @@ impl GameEngine {
                     debug_assert_eq!(paid_cost.object_id(), oid);
                     payment.paid_card_costs.push(paid_cost);
                 }
+                CostDebit::ObserveHand { .. } | CostDebit::ObservePermanent { .. } => {}
             }
         }
         Ok(payment)
@@ -613,6 +773,39 @@ impl GameEngine {
                             .copied()
                             .unwrap_or(0)
                             == snapshot.source.zone_change_generation
+                    }
+                    CostDebit::ObserveHand {
+                        object_id,
+                        generation,
+                        owner,
+                    } => {
+                        self.state.objects.get(object_id).is_some_and(|object| {
+                            object.zone == Zone::Hand
+                                && object.owner == *owner
+                                && *owner == plan.player
+                                && self.state.players[plan.player_idx].hand.contains(object_id)
+                        }) && self
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == *generation
+                    }
+                    CostDebit::ObservePermanent {
+                        object_id,
+                        generation,
+                        controller,
+                    } => {
+                        self.state.objects.get(object_id).is_some_and(|object| {
+                            object.zone == Zone::Battlefield && object.controller == *controller
+                        }) && self
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == *generation
                     }
                 };
             if !valid {

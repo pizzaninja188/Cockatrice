@@ -371,6 +371,23 @@ void RuledClientState::clearPublicReveal()
     emit publicRevealChanged(false, 0, -1, {}, {});
 }
 
+void RuledClientState::setActivePublicReveals(QVector<RuledActivePublicReveal> reveals)
+{
+    if (activePublicReveals == reveals) {
+        return;
+    }
+    activePublicReveals = std::move(reveals);
+    QStringList names;
+    QVector<int> playerIds;
+    names.reserve(activePublicReveals.size());
+    playerIds.reserve(activePublicReveals.size());
+    for (const auto &reveal : activePublicReveals) {
+        names.append(reveal.cardName);
+        playerIds.append(reveal.revealingPlayerId);
+    }
+    emit activePublicRevealsChanged(std::move(names), std::move(playerIds));
+}
+
 void RuledClientState::sendResolutionChoice(const QVector<quint32> &chosenOids,
                                             ruled::v1::ResolutionChoiceDecision decision)
 {

@@ -53,6 +53,7 @@ impl GameEngine {
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
+            cast_cost_receipts: Vec::new(),
             player_life_snapshot: self.player_life_snapshot(),
             tapped: false,
             entry_counters: BTreeMap::new(),

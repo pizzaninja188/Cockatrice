@@ -248,7 +248,13 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     declineClickChoiceButton = new QPushButton(this);
     declineClickChoiceButton->setObjectName("declineClickChoiceButton");
     declineClickChoiceButton->hide();
-    connect(declineClickChoiceButton, &QPushButton::clicked, this, &GamePromptWidget::declineClickChoiceRequested);
+    connect(declineClickChoiceButton, &QPushButton::clicked, this, [this]() {
+        if (effectiveMode() == PromptMode::CastCostObject) {
+            emit ruledCastCostBackRequested();
+        } else {
+            emit declineClickChoiceRequested();
+        }
+    });
 
     confirmSpellDamageButton = new QPushButton(this);
     confirmSpellDamageButton->setObjectName("confirmSpellDamageButton");
@@ -327,6 +333,8 @@ GamePromptWidget::PromptMode GamePromptWidget::effectiveMode() const
         case PromptMode::CostSelection:
         case PromptMode::ResolutionPayment:
         case PromptMode::ChoiceOptions:
+        case PromptMode::CastCostOptions:
+        case PromptMode::CastCostObject:
         case PromptMode::ZoneSelection:
         case PromptMode::WaitingForChoice:
         // The engine is hard-blocked on the ordering answer, so a leftover mid-cast targeting
@@ -363,8 +371,13 @@ void GamePromptWidget::setRuledPromptState(RuledPromptState newState)
         auto *button = new QPushButton(option.label, this);
         button->setObjectName(QStringLiteral("ruledChoiceOptionButton_%1").arg(option.index));
         button->setEnabled(option.enabled);
-        connect(button, &QPushButton::clicked, this,
-                [this, index = option.index] { emit ruledChoiceOptionRequested(index); });
+        connect(button, &QPushButton::clicked, this, [this, index = option.index] {
+            if (promptState.mode == PromptMode::CastCostOptions) {
+                emit ruledCastCostOptionRequested(index);
+            } else {
+                emit ruledChoiceOptionRequested(index);
+            }
+        });
         choiceOptionsRow->addWidget(button);
         choiceOptionButtons.append(button);
     }
@@ -427,6 +440,8 @@ void GamePromptWidget::applyPromptStateText()
         case PromptMode::CostSelection:
         case PromptMode::ResolutionPayment:
         case PromptMode::ChoiceOptions:
+        case PromptMode::CastCostOptions:
+        case PromptMode::CastCostObject:
         case PromptMode::ZoneSelection:
         case PromptMode::WaitingForChoice:
         case PromptMode::TriggerOrder:
@@ -699,6 +714,7 @@ void GamePromptWidget::updateZoneSelectionControls()
 void GamePromptWidget::updateCombatButtonsVisibility()
 {
     const PromptMode mode = effectiveMode();
+    declineClickChoiceButton->setText(mode == PromptMode::CastCostObject ? tr("Back") : tr("Decline"));
     confirmSpellDamageButton->setVisible(false);
 
     // Mode-owned buttons: shown by exactly one mode each, hidden everywhere else.
@@ -715,7 +731,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     resolutionHandPickConfirmButton->setVisible(mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection);
     resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment);
     for (auto *button : choiceOptionButtons) {
-        button->setVisible(mode == PromptMode::ChoiceOptions);
+        button->setVisible(mode == PromptMode::ChoiceOptions || mode == PromptMode::CastCostOptions);
     }
     updateZoneSelectionControls();
     declineClickChoiceButton->setVisible(
@@ -729,8 +745,10 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     // Every take-over mode suppresses the priority / combat / targeting controls.
     if (mode != PromptMode::Normal && mode != PromptMode::Targeting) {
         hideActionAndCombatButtons();
+        cancelTargetingButton->setVisible(mode == PromptMode::CastCostOptions || mode == PromptMode::CastCostObject);
         declineClickChoiceButton->setVisible(
-            (mode == PromptMode::ClickChoice || mode == PromptMode::ChoiceOptions) && promptState.canDecline);
+            mode == PromptMode::CastCostObject ||
+            ((mode == PromptMode::ClickChoice || mode == PromptMode::ChoiceOptions) && promptState.canDecline));
         resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment);
         undoLandTapButton->setVisible(mode == PromptMode::ResolutionPayment && landTapUndoAvailable);
         return;

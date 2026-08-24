@@ -358,6 +358,67 @@ TEST_F(GamePromptWidgetTest, ChoiceOptionsRenderAsOrdinaryLabeledButtons)
     EXPECT_EQ(declineSpy.count(), 1);
 }
 
+TEST_F(GamePromptWidgetTest, CastCostOptionsUseTheirOwnButtonRouteAndSuppressPriorityControls)
+{
+    QSignalSpy optionSpy(widget.get(), &GamePromptWidget::ruledCastCostOptionRequested);
+    QSignalSpy resolutionSpy(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);
+    QSignalSpy cancelSpy(widget.get(), &GamePromptWidget::cancelTargetingRequested);
+    QSignalSpy backSpy(widget.get(), &GamePromptWidget::ruledCastCostBackRequested);
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::CastCostOptions;
+    state.text = "Behold a Dragon or pay {1}.";
+    state.choiceOptions = {{-1, "Cast normally", true}, {0, "Behold a Dragon", true}, {1, "Pay {1}", true}};
+    widget->setRuledPromptState(state);
+
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::CastCostOptions);
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_FALSE(btn("cancelTargetingButton")->isHidden());
+    auto *behold = btn("ruledChoiceOptionButton_0");
+    ASSERT_NE(behold, nullptr);
+    behold->click();
+    ASSERT_EQ(optionSpy.count(), 1);
+    EXPECT_EQ(optionSpy.takeFirst().at(0).toInt(), 0);
+    EXPECT_EQ(resolutionSpy.count(), 0);
+    btn("cancelTargetingButton")->click();
+    EXPECT_EQ(cancelSpy.count(), 1);
+
+    state.mode = PromptMode::CastCostObject;
+    state.choiceOptions.clear();
+    widget->setRuledPromptState(state);
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::CastCostObject);
+    EXPECT_FALSE(btn("cancelTargetingButton")->isHidden());
+    EXPECT_FALSE(btn("declineClickChoiceButton")->isHidden());
+    EXPECT_EQ(btn("declineClickChoiceButton")->text(), "Back");
+    btn("declineClickChoiceButton")->click();
+    EXPECT_EQ(backSpy.count(), 1);
+    EXPECT_EQ(resolutionSpy.count(), 0);
+}
+
+TEST_F(GamePromptWidgetTest, CastCostOptionControllerCanReplaceStaleButtonsWithObjectPicker)
+{
+    GamePromptWidget::RuledPromptState options;
+    options.mode = PromptMode::CastCostOptions;
+    options.text = "Behold a Dragon or pay {1}.";
+    options.choiceOptions = {{0, "Behold a Dragon", true}, {1, "Pay {1}", true}};
+    widget->setRuledPromptState(options);
+
+    QObject::connect(widget.get(), &GamePromptWidget::ruledCastCostOptionRequested, widget.get(),
+                     [this](int optionIndex) {
+        ASSERT_EQ(optionIndex, 0);
+        GamePromptWidget::RuledPromptState objectPicker;
+        objectPicker.mode = PromptMode::CastCostObject;
+        objectPicker.text = "Choose a Dragon you control or a Dragon card in your hand.";
+        widget->setRuledPromptState(objectPicker);
+                     });
+
+    btn("ruledChoiceOptionButton_0")->click();
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::CastCostObject);
+    EXPECT_EQ(btn("ruledChoiceOptionButton_0"), nullptr);
+    EXPECT_EQ(btn("ruledChoiceOptionButton_1"), nullptr);
+    EXPECT_EQ(label("promptLabel")->text(), "Choose a Dragon you control or a Dragon card in your hand.");
+    EXPECT_FALSE(btn("cancelTargetingButton")->isHidden());
+}
+
 TEST_F(GamePromptWidgetTest, ZoneSelectionUsesCheckboxesAndConfirmsTheMatchingAuthoredBranch)
 {
     QSignalSpy optionSpy(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);

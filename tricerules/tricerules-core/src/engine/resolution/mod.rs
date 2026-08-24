@@ -469,6 +469,9 @@ impl GameEngine {
                 SpellEffectKind::CounterTargetSpell {
                     unless_controller_pays: Some(_),
                     ..
+                } | SpellEffectKind::CounterTargetSpell {
+                    unless_controller_pays_by_cast_cost: Some(_),
+                    ..
                 } | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
             )
         });
@@ -568,6 +571,7 @@ impl GameEngine {
                         face_index: top.face_index,
                         unlock_room_door: Some(top.face_index),
                         chosen_x: top.chosen_x,
+                        cast_cost_receipts: top.cast_cost_receipts.clone(),
                         player_life_snapshot: self.player_life_snapshot(),
                         tapped: false,
                         entry_counters: BTreeMap::new(),
@@ -1334,6 +1338,7 @@ impl GameEngine {
                         face_index: 0,
                         unlock_room_door: None,
                         chosen_x: 0,
+                        cast_cost_receipts: Vec::new(),
                         player_life_snapshot: player_life_snapshot.clone(),
                         tapped: false,
                         entry_counters: BTreeMap::new(),
@@ -2105,6 +2110,7 @@ mod attached_subject_tests {
             flashback: false,
             chosen_x: 0,
             chosen_modes: vec![],
+            cast_cost_receipts: vec![],
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         }
@@ -2565,6 +2571,7 @@ mod source_keyword_tests {
             flashback: false,
             chosen_x: 0,
             chosen_modes: vec![],
+            cast_cost_receipts: vec![],
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         }
@@ -2589,6 +2596,7 @@ mod source_keyword_tests {
             flashback: false,
             chosen_x,
             chosen_modes: vec![],
+            cast_cost_receipts: vec![],
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         }

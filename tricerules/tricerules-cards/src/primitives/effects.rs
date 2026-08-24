@@ -1,15 +1,19 @@
 //! Spell and continuous-effect vocabulary plus shared effect parameters.
 
 use super::{
-    ActivatedAbilityDef, CardTypeFilter, Color, CreatureScopeFilter, GraveyardDestination,
-    GraveyardFilter, Keyword, PowerComparison, ProtectionQuality, ReflexiveTriggeredAbilityDef,
-    SpecialActionKind, TargetController, TargetFilter, TargetKind, TargetRole, TriggeredAbilityDef,
-    TypeLineAddition,
+    ActivatedAbilityDef, CardTypeFilter, CastCostReceiptCondition, Color, CreatureScopeFilter,
+    GraveyardDestination, GraveyardFilter, Keyword, PowerComparison, ProtectionQuality,
+    ReflexiveTriggeredAbilityDef, SpecialActionKind, TargetController, TargetFilter, TargetKind,
+    TargetRole, TriggeredAbilityDef, TypeLineAddition,
 };
 use crate::ManaCost;
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
 use serde::ser::SerializeStructVariant;
 use serde::{Deserialize, Serialize};
+
+fn default_one() -> u32 {
+    1
+}
 use std::fmt;
 
 /// A public game-state predicate evaluated by the rules engine at the timing required by its
@@ -862,6 +866,9 @@ pub enum ResolutionBranchRequirement {
     /// The branch is live only when this public game-state predicate holds as the instruction
     /// resolves. Trade Route Envoy and Embermouth Sentinel use condition/fallback branches.
     GameCondition(GameCondition),
+    /// A linked cast-time choice recorded on this spell's stack item (CR 607.2i). Kicker and
+    /// behold effects remain true even if the object used for the choice later changes zones.
+    CastCostReceipt(CastCostReceiptCondition),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -871,6 +878,13 @@ pub enum ResolutionBranchSelection {
     PlayerChoice,
     /// Resolve the first live branch in authored order without publishing a player choice.
     FirstApplicable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CastCostConditionalAmount {
+    pub condition: CastCostReceiptCondition,
+    pub if_selected: u32,
+    pub otherwise: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1086,6 +1100,10 @@ pub enum SpellEffectKind {
         spell_filter: Option<CardTypeFilter>,
         #[serde(default)]
         unless_controller_pays: Option<u32>,
+        /// Receipt-conditioned soft-counter amount. Dispelling Exhale uses `{4}` when a Dragon
+        /// was beheld and `{2}` otherwise. Mutually exclusive with `unless_controller_pays`.
+        #[serde(default)]
+        unless_controller_pays_by_cast_cost: Option<CastCostConditionalAmount>,
     },
     /// CR 702.21: counter the exact spell or ability whose target-selection event created this
     /// trigger unless that object's controller pays `cost`. This is an untargeted event reference,
@@ -1394,6 +1412,13 @@ pub enum SpellEffectKind {
     /// Mystical Tutor (instant or sorcery → top of library), and Evolving Wilds (basic land →
     /// battlefield tapped).
     SearchLibrary {
+        /// Number of cards to choose. Existing search effects default to one.
+        #[serde(default = "default_one")]
+        count: u32,
+        /// Optional linked replacement for `count`, fixed by the cast-cost receipt. Grow from the
+        /// Ashes searches for two basics when kicked and one otherwise.
+        #[serde(default)]
+        count_by_cast_cost: Option<CastCostConditionalAmount>,
         /// `None` = any card is valid; `Some(f)` = every authored predicate must match.
         #[serde(default)]
         filter: Option<ZoneCardFilter>,
@@ -2156,8 +2181,15 @@ impl SpellEffectKind {
                 ) {
                     return Err("resolution choice requires exactly one deciding player".into());
                 }
-                for branch in branches {
-                    if branch.label.trim().is_empty() || branch.effects.is_empty() {
+                for (branch_index, branch) in branches.iter().enumerate() {
+                    let is_first_applicable_noop_fallback = *selection
+                        == ResolutionBranchSelection::FirstApplicable
+                        && branch_index + 1 == branches.len()
+                        && matches!(branch.requirement, ResolutionBranchRequirement::Always)
+                        && branch.cost == ResolutionCost::None;
+                    if branch.label.trim().is_empty()
+                        || (branch.effects.is_empty() && !is_first_applicable_noop_fallback)
+                    {
                         return Err(
                             "resolution choice branches require a label and at least one effect"
                                 .into(),
@@ -2689,6 +2721,17 @@ impl SpellEffectKind {
                 Ok(())
             }
             SpellEffectKind::CounterTargetSpell {
+                unless_controller_pays: Some(_),
+                unless_controller_pays_by_cast_cost: Some(_),
+                ..
+            } => Err("CounterTargetSpell payment forms are mutually exclusive".into()),
+            SpellEffectKind::CounterTargetSpell {
+                unless_controller_pays_by_cast_cost: Some(conditional),
+                ..
+            } if conditional.if_selected == 0 || conditional.otherwise == 0 => {
+                Err("receipt-conditioned CounterTargetSpell payments must be at least 1".into())
+            }
+            SpellEffectKind::CounterTargetSpell {
                 unless_controller_pays: Some(0),
                 ..
             } => Err("CounterTargetSpell unless_controller_pays must be at least 1".into()),
@@ -2713,11 +2756,21 @@ impl SpellEffectKind {
             // Library searches use the resolution-interrupt machinery and are legal on spells
             // and nonmana abilities alike (Demonic Tutor, Evolving Wilds).
             SpellEffectKind::SearchLibrary {
+                count,
                 filter,
                 zones,
                 conditional_destination,
+                count_by_cast_cost,
                 ..
             } => {
+                if *count == 0 {
+                    return Err("SearchLibrary requires a positive count".into());
+                }
+                if count_by_cast_cost.is_some_and(|conditional| {
+                    conditional.if_selected == 0 || conditional.otherwise == 0
+                }) {
+                    return Err("SearchLibrary cast-cost counts must be positive".into());
+                }
                 if let Some(filter) = filter {
                     filter.validate()?;
                 }

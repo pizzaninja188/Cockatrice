@@ -62,6 +62,22 @@ struct RuledPendingCostSelection
     QVector<quint32> selectedIds;
 };
 
+struct RuledPendingCastCostSelection
+{
+    enum class ObjectKind
+    {
+        None,
+        Hand,
+        Permanent,
+    };
+    int groupIndex = -1;
+    int optionIndex = -1;
+    ObjectKind objectKind = ObjectKind::None;
+    /// Stable Server_Card.id for hand choices; engine ObjectId for battlefield choices.
+    quint32 selectedId = 0;
+    quint64 expectedZoneChangeGeneration = 0;
+};
+
 struct PendingActivatedAbility
 {
     bool valid = false;
@@ -211,6 +227,12 @@ struct PendingRuledSpellCast
     QVector<RuledCostChoice> costChoices;
     int nextCostChoice = 0;
     QVector<RuledPendingCostSelection> costSelections;
+    QVector<RuledCastCostGroup> castCostGroups;
+    int nextCastCostGroup = 0;
+    bool waitingForCastCostObject = false;
+    int activeCastCostOption = -1;
+    QString castCostObjectError;
+    QVector<RuledPendingCastCostSelection> castCostSelections;
     QVector<SelectedMode> selectedModes;
     int activeModePosition = -1;
 };
@@ -260,6 +282,36 @@ enum class RuledTargetClickEligibility
     Legal,
     Illegal,
 };
+
+enum class RuledCastCostCandidateKind
+{
+    Hand,
+    Permanent,
+};
+
+/// Engine-authored click affordance for the object stage of a cast-cost option. This stays
+/// separate from CR 115 targeting: behold is a nontargeted cost choice, but the card surface still
+/// needs the same legal/illegal cursor contract while the local transaction is staged.
+[[nodiscard]] inline RuledTargetClickEligibility
+ruledCastCostObjectEligibility(const PendingRuledSpellCast &spell, RuledCastCostCandidateKind kind, quint32 id)
+{
+    if (!spell.valid || !spell.waitingForCastCostObject) {
+        return RuledTargetClickEligibility::NotTargeting;
+    }
+    if (spell.nextCastCostGroup < 0 || spell.nextCastCostGroup >= spell.castCostGroups.size()) {
+        return RuledTargetClickEligibility::Illegal;
+    }
+    const auto &group = spell.castCostGroups.at(spell.nextCastCostGroup);
+    const auto option = std::find_if(group.options.cbegin(), group.options.cend(), [&spell](const auto &entry) {
+        return entry.optionIndex == spell.activeCastCostOption;
+    });
+    if (option == group.options.cend() || !option->selectable || option->kind != RuledCastCostOptionKind::Behold) {
+        return RuledTargetClickEligibility::Illegal;
+    }
+    const bool legal = kind == RuledCastCostCandidateKind::Hand ? option->validHandIndices.contains(id)
+                                                                : option->validPermanentIds.contains(id);
+    return legal ? RuledTargetClickEligibility::Legal : RuledTargetClickEligibility::Illegal;
+}
 
 [[nodiscard]] inline bool ruledTargetDataContains(const RuledTargetGroupData &data,
                                                   RuledTargetCandidateKind kind,

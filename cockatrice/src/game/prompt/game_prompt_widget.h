@@ -50,6 +50,11 @@ public:
         ResolutionPayment,
         /// Engine-authored labeled choices rendered as ordinary buttons in this panel.
         ChoiceOptions,
+        /// Engine-authored optional casting-cost choices. These are local transaction staging,
+        /// not parked resolution choices, so their buttons route back to PlayerActions.
+        CastCostOptions,
+        /// A selected optional casting cost is waiting for a click on one published object.
+        CastCostObject,
         /// Engine-authored searchable-zone combinations rendered as checkboxes plus Confirm.
         ZoneSelection,
         /// Another player is answering a public parked resolution choice. No local action exists.
@@ -180,6 +185,8 @@ signals:
     void ruledCostSelectionCancelRequested();
     void ruledResolutionPaymentDeclineRequested();
     void ruledChoiceOptionRequested(int optionIndex);
+    void ruledCastCostOptionRequested(int optionIndex);
+    void ruledCastCostBackRequested();
 
 private:
     void updatePassPriorityButtonText();

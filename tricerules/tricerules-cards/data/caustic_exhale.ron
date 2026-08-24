@@ -1,0 +1,25 @@
+// Oracle and rulings checked 2026-08-23. CR 701.4 behold is a nontargeted cast-cost choice.
+(
+  id: "caustic_exhale",
+  name: "Caustic Exhale",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    prompt: "Behold a Dragon or pay {1}",
+    min: 1,
+    max: 1,
+    options: [
+      Behold(
+        label: "Behold a Dragon",
+        hand_filter: (subtype: Some("Dragon")),
+        permanent_filter: (
+          kind: AnyPermanent,
+          controller: You,
+          required_subtypes: ["Dragon"],
+        ),
+      ),
+      Mana(label: "Pay {1}", cost: "{1}"),
+    ],
+  )],
+  spell_effect: [PumpTarget(power: -3, toughness: -3)],
+)

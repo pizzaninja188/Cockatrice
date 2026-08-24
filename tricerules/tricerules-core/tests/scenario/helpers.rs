@@ -10,8 +10,8 @@ use tricerules_proto::ruled::v1 as rv1;
 pub(crate) use tricerules_proto::ruled::v1::ruled_command::Cmd;
 pub(crate) use tricerules_proto::ruled::v1::ruled_event::Ev;
 pub(crate) use tricerules_proto::ruled::v1::{
-    ActivateAbility, AssignCombatDamage, BlockPair, CastSource, CastSpell, ChoiceKind,
-    ChooseTriggerTarget, CostSelection, DamagePair, DeclareAttackers, DeclareBlockers,
+    ActivateAbility, AssignCombatDamage, BlockPair, CastCostGroupSelection, CastSource, CastSpell,
+    ChoiceKind, ChooseTriggerTarget, CostSelection, DamagePair, DeclareAttackers, DeclareBlockers,
     DiscardToHandSize, ExecutePermanentAction, FlexPipPayment, ManaSpendSelection, PassPriority,
     PermanentActionKind, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers,
     PrimitiveYieldStructured, ResolutionChoiceRequired, ResolutionRevealAudience, RuledCommand,
@@ -115,6 +115,21 @@ pub(crate) fn cast_spell_with_costs(
             source: Some(hand_cast_source(hand_card_index)),
             targets,
             cost_selections,
+            ..Default::default()
+        })),
+    }
+}
+
+pub(crate) fn cast_spell_with_cast_cost_groups(
+    hand_card_index: usize,
+    targets: Vec<TargetRef>,
+    cast_cost_group_selections: Vec<CastCostGroupSelection>,
+) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::CastSpell(CastSpell {
+            source: Some(hand_cast_source(hand_card_index)),
+            targets,
+            cast_cost_group_selections,
             ..Default::default()
         })),
     }

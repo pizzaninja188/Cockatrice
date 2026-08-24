@@ -95,6 +95,12 @@ pub(in crate::engine) fn resolution_branch_is_live(
             condition,
             crate::engine::ConditionContext::for_stack_item(top),
         ),
+        ResolutionBranchRequirement::CastCostReceipt(condition) => {
+            top.cast_cost_receipts.iter().any(|receipt| {
+                receipt.group_index == condition.group_index
+                    && receipt.option_index == condition.option_index
+            }) == condition.expected_selected
+        }
     };
     requirement_met
         && (matches!(branch.cost, ResolutionCost::None | ResolutionCost::Mana(_))

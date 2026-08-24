@@ -1,33 +1,114 @@
 use super::*;
 
 impl GameEngine {
+    pub(in crate::engine) fn continue_library_search_battlefield_entries(
+        &mut self,
+        stack: ParkedStackResolution,
+        mut object_ids: Vec<ObjectId>,
+        tapped: bool,
+        shuffle: bool,
+        mut events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let controller = stack.item.controller;
+        while !object_ids.is_empty() {
+            let oid = object_ids.remove(0);
+            let object = self
+                .state
+                .objects
+                .get(&oid)
+                .ok_or(EngineError::Illegal("searched card is stale"))?;
+            let owner = object.owner;
+            let card_label = self
+                .registry
+                .get(&object.card_id)
+                .map(|definition| definition.name.clone())
+                .unwrap_or_else(|| "card".to_string());
+            let completion = BattlefieldEntryCompletion::LibrarySearch {
+                owner,
+                card_label: card_label.clone(),
+                remaining_object_ids: object_ids.clone(),
+                tapped,
+                shuffle,
+            };
+            match self.begin_battlefield_entry(
+                stack.item.clone(),
+                BattlefieldEntryEvent {
+                    object_id: oid,
+                    deciding_player: controller,
+                    destination_controller: controller,
+                    face_index: 0,
+                    unlock_room_door: None,
+                    chosen_x: 0,
+                    cast_cost_receipts: Vec::new(),
+                    player_life_snapshot: self.player_life_snapshot(),
+                    tapped,
+                    entry_counters: BTreeMap::new(),
+                    applied_effects: Vec::new(),
+                },
+                completion,
+                &mut events,
+            ) {
+                super::replacement::BattlefieldEntryProgress::Parked => {
+                    return Ok(finish_with_events(self, events));
+                }
+                super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                    self.commit_battlefield_entry(entry, None)?;
+                }
+            }
+            events.push(ev_log(format!(
+                "P{controller} puts {card_label} onto the battlefield."
+            )));
+            events.push(permanent_moved_event(
+                &self.state,
+                oid,
+                owner,
+                rv1::permanent_moved::Destination::Battlefield,
+            ));
+        }
+        if shuffle {
+            crate::engine::shuffle_player_library_for_current_command(&mut self.state, controller);
+            events.push(ev_log(format!("P{controller} shuffles their library.")));
+        }
+        self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+    }
+
     pub(super) fn finish_search_zone_scope(
         &mut self,
         pending: PendingResolution,
         answer: &rv1::SubmitResolutionChoice,
         decision: rv1::ResolutionChoiceDecision,
     ) -> Result<RuledEventBatch, EngineError> {
-        let (stack, available_zones, filter, destination, conditional_destination, shuffle, reveal) =
-            match &pending.continuation {
-                ResolutionContinuation::SearchZoneScope {
-                    stack,
-                    available_zones,
-                    filter,
-                    destination,
-                    conditional_destination,
-                    shuffle,
-                    reveal,
-                } => (
-                    stack.clone(),
-                    available_zones.clone(),
-                    filter.clone(),
-                    *destination,
-                    conditional_destination.clone(),
-                    *shuffle,
-                    *reveal,
-                ),
-                _ => return Err(EngineError::Illegal("search-zone continuation missing")),
-            };
+        let (
+            stack,
+            count,
+            available_zones,
+            filter,
+            destination,
+            conditional_destination,
+            shuffle,
+            reveal,
+        ) = match &pending.continuation {
+            ResolutionContinuation::SearchZoneScope {
+                stack,
+                count,
+                available_zones,
+                filter,
+                destination,
+                conditional_destination,
+                shuffle,
+                reveal,
+            } => (
+                stack.clone(),
+                *count,
+                available_zones.clone(),
+                filter.clone(),
+                *destination,
+                conditional_destination.clone(),
+                *shuffle,
+                *reveal,
+            ),
+            _ => return Err(EngineError::Illegal("search-zone continuation missing")),
+        };
         let combinations = resolution::zones::search_zone_combinations(&available_zones);
         let selected = combinations
             .get(answer.selected_branch_index as usize)
@@ -45,6 +126,7 @@ impl GameEngine {
             &mut events,
             &stack.item,
             resolution::zones::ZoneSearchRequest {
+                count,
                 filter,
                 zones: selected.expect("validated selected zones"),
                 destination,
@@ -192,6 +274,7 @@ impl GameEngine {
                         face_index: 0,
                         unlock_room_door: None,
                         chosen_x: 0,
+                        cast_cost_receipts: Vec::new(),
                         player_life_snapshot: self.player_life_snapshot(),
                         tapped,
                         entry_counters: BTreeMap::new(),
@@ -372,58 +455,13 @@ impl GameEngine {
                     }
                 }
                 SearchDestination::Battlefield { tapped } => {
-                    let owner = self
-                        .state
-                        .objects
-                        .get(&oid)
-                        .map(|object| object.owner)
-                        .ok_or(EngineError::Illegal("searched card is stale"))?;
-                    let completion = BattlefieldEntryCompletion::LibrarySearch {
-                        owner,
-                        card_label: card_name.clone(),
+                    return self.continue_library_search_battlefield_entries(
+                        stack,
+                        chosen.to_vec(),
+                        tapped,
                         shuffle,
-                        resume_effect_index: stack.resume_effect_index,
-                    };
-                    match self.begin_battlefield_entry(
-                        stack.item.clone(),
-                        BattlefieldEntryEvent {
-                            object_id: oid,
-                            deciding_player: controller,
-                            destination_controller: controller,
-                            face_index: 0,
-                            unlock_room_door: None,
-                            chosen_x: 0,
-                            player_life_snapshot: self.player_life_snapshot(),
-                            tapped,
-                            entry_counters: BTreeMap::new(),
-                            applied_effects: Vec::new(),
-                        },
-                        completion,
-                        &mut ev,
-                    ) {
-                        super::replacement::BattlefieldEntryProgress::Parked => {
-                            return Ok(finish_with_events(self, ev));
-                        }
-                        super::replacement::BattlefieldEntryProgress::Ready(entry) => {
-                            self.commit_battlefield_entry(entry, None)?;
-                        }
-                    }
-                    ev.push(ev_log(format!(
-                        "P{controller} puts {card_name} onto the battlefield."
-                    )));
-                    ev.push(permanent_moved_event(
-                        &self.state,
-                        oid,
-                        owner,
-                        rv1::permanent_moved::Destination::Battlefield,
-                    ));
-                    if shuffle {
-                        crate::engine::shuffle_player_library_for_current_command(
-                            &mut self.state,
-                            controller,
-                        );
-                        ev.push(ev_log(format!("P{controller} shuffles their library.")));
-                    }
+                        ev,
+                    );
                 }
             }
         }

@@ -1,0 +1,30 @@
+// Oracle and rulings checked 2026-08-23. CR 702.33 links the entry replacement to kicker.
+(
+  id: "gnarlid_colony",
+  name: "Gnarlid Colony",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Beast"],
+  power: 2,
+  toughness: 2,
+  cast_cost_groups: [(
+    prompt: "Pay kicker?",
+    min: 0,
+    max: 1,
+    options: [Mana(label: "Kicker {2}{G}", cost: "{2}{G}")],
+  )],
+  static_abilities: [
+    EntersWithCounters(
+      counter: PlusOnePlusOne,
+      amount: 2,
+      cast_cost_condition: Some((
+        group_index: 0,
+        option_index: 0,
+        expected_selected: true,
+      )),
+    ),
+    AnthemKeyword(
+      filter: (controller: YouControl, required_counter: PlusOnePlusOne),
+      keyword: Trample,
+    ),
+  ],
+)

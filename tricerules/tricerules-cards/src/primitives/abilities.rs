@@ -1,9 +1,9 @@
 //! Activated, triggered, and static ability definitions.
 
 use super::{
-    AbilityCost, Amount, BattlefieldCreatureCountFilter, CardTypeFilter, Color, CounterKind,
-    EffectContext, GameCondition, Keyword, PowerComparison, RelativePlayerSet, SpellEffectKind,
-    TargetController, TargetFilter, TargetKind, TargetingDef,
+    AbilityCost, Amount, BattlefieldCreatureCountFilter, CardTypeFilter, CastCostReceiptCondition,
+    Color, CounterKind, EffectContext, GameCondition, Keyword, PowerComparison, RelativePlayerSet,
+    SpellEffectKind, TargetController, TargetFilter, TargetKind, TargetingDef,
 };
 use crate::{ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
@@ -1037,6 +1037,10 @@ pub enum StaticAbilityDef {
         affected: EntersWithCountersAffected,
         counter: CounterKind,
         amount: Amount,
+        /// For permanent spells such as Gnarlid Colony, apply the intrinsic replacement only
+        /// when the linked cast-cost option was selected.
+        #[serde(default)]
+        cast_cost_condition: Option<CastCostReceiptCondition>,
     },
     /// CR 615: a prevention effect generated continuously while this permanent is on the
     /// battlefield. Anti-Venom protects itself and counts attempted damage; Vigor protects other

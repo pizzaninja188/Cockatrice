@@ -666,6 +666,13 @@ pub(super) fn permanent_matches_filter_characteristics(
     if filter.not_land && characteristics.has_type("Land") {
         return false;
     }
+    if !filter
+        .required_subtypes
+        .iter()
+        .all(|subtype| characteristics.has_type(subtype))
+    {
+        return false;
+    }
     if filter
         .excluded_subtypes
         .iter()

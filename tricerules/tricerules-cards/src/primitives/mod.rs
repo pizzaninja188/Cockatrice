@@ -24,11 +24,13 @@ mod tests {
         let invalid = SpellEffectKind::CounterTargetSpell {
             spell_filter: None,
             unless_controller_pays: Some(0),
+            unless_controller_pays_by_cast_cost: None,
         };
         assert!(invalid.validate(EffectContext::Spell).is_err());
         let mana_leak_shape = SpellEffectKind::CounterTargetSpell {
             spell_filter: None,
             unless_controller_pays: Some(3),
+            unless_controller_pays_by_cast_cost: None,
         };
         assert!(mana_leak_shape.validate(EffectContext::Spell).is_ok());
     }

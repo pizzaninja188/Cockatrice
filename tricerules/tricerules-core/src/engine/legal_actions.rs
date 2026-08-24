@@ -9,6 +9,44 @@ use super::targeting::{
 use super::*;
 
 pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
+    batch.events.retain(|event| {
+        !matches!(
+            event.ev,
+            Some(rv1::ruled_event::Ev::ActivePublicRevealSnapshot(_))
+        )
+    });
+    let reveals = if eng.state.winner.is_some() {
+        vec![]
+    } else {
+        eng.state
+            .stack
+            .iter()
+            .filter(|item| !item.is_copy)
+            .flat_map(|item| {
+                item.cast_cost_receipts.iter().filter_map(|receipt| {
+                    let CastCostObjectReceipt::RevealedHand {
+                        card_id, card_name, ..
+                    } = receipt.object.as_ref()?
+                    else {
+                        return None;
+                    };
+                    Some(rv1::ActivePublicReveal {
+                        source_stack_object_id: item.id,
+                        group_index: receipt.group_index,
+                        revealing_player_id: item.controller,
+                        source_description: object_display_name(&eng.state, eng.registry, item.id),
+                        card_id: card_id.clone(),
+                        card_name: card_name.clone(),
+                    })
+                })
+            })
+            .collect()
+    };
+    batch.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ActivePublicRevealSnapshot(
+            rv1::ActivePublicRevealSnapshot { reveals },
+        )),
+    });
     if eng.state.winner.is_some() {
         batch.legal_by_player.clear();
         return;
@@ -547,6 +585,7 @@ fn legal_ability_cost_choices(
     rv1::LegalCostChoices {
         non_mana_costs_payable: structurally_payable,
         choices,
+        cast_cost_groups: vec![],
     }
 }
 
@@ -555,6 +594,7 @@ fn legal_spell_cost_choices(
     player: PlayerId,
     source: ObjectId,
     costs: &[AdditionalCost],
+    cast_cost_groups: &[CastCostGroupDef],
 ) -> rv1::LegalCostChoices {
     let Some(player_idx) = eng.state.player_idx(player) else {
         return rv1::LegalCostChoices::default();
@@ -600,12 +640,144 @@ fn legal_spell_cost_choices(
             }
         }
     }
-    let non_mana_costs_payable =
+    let mut non_mana_costs_payable =
         distinct_assignment_exists(&assignment_candidates, 0, &mut HashSet::new());
+    let legal_cast_cost_groups = cast_cost_groups
+        .iter()
+        .enumerate()
+        .map(|(group_index, group)| {
+            let options = group
+                .options
+                .iter()
+                .enumerate()
+                .map(|(option_index, option)| match option {
+                    CastCostOptionDef::Mana { label, cost } => rv1::LegalCastCostOption {
+                        option_index: option_index as u32,
+                        label: label.clone(),
+                        kind: rv1::CastCostOptionKind::Mana as i32,
+                        additional_mana_cost: cost.to_string(),
+                        selectable: true,
+                        ..Default::default()
+                    },
+                    CastCostOptionDef::Behold {
+                        label,
+                        hand_filter,
+                        permanent_filter,
+                    } => {
+                        let valid_hand_indices = eng.state.players[player_idx]
+                            .hand
+                            .iter()
+                            .copied()
+                            .enumerate()
+                            .filter(|(_, oid)| {
+                                *oid != source
+                                    && super::resolution::library_card_matches_filter(
+                                        &eng.state,
+                                        eng.registry,
+                                        *oid,
+                                        Some(hand_filter),
+                                    )
+                            })
+                            .map(|(slot, _)| slot as u32)
+                            .collect::<Vec<_>>();
+                        let valid_permanent_ids = eng
+                            .state
+                            .players
+                            .iter()
+                            .flat_map(|state| state.battlefield.iter().copied())
+                            .filter(|oid| {
+                                eng.ability_cost_permanent_matches(
+                                    player,
+                                    None,
+                                    *oid,
+                                    permanent_filter,
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        let valid_permanent_generations = valid_permanent_ids
+                            .iter()
+                            .map(|oid| {
+                                eng.state
+                                    .zone_change_generation
+                                    .get(oid)
+                                    .copied()
+                                    .unwrap_or(0)
+                            })
+                            .collect::<Vec<_>>();
+                        let selectable =
+                            !valid_hand_indices.is_empty() || !valid_permanent_ids.is_empty();
+                        rv1::LegalCastCostOption {
+                            option_index: option_index as u32,
+                            label: label.clone(),
+                            kind: rv1::CastCostOptionKind::Behold as i32,
+                            additional_mana_cost: String::new(),
+                            valid_hand_indices,
+                            valid_permanent_ids,
+                            valid_permanent_generations,
+                            selectable,
+                        }
+                    }
+                })
+                .collect::<Vec<_>>();
+            if group.min > 0 && !options.iter().any(|option| option.selectable) {
+                non_mana_costs_payable = false;
+            }
+            rv1::LegalCastCostGroup {
+                group_index: group_index as u32,
+                prompt: group.prompt.clone(),
+                min: group.min,
+                max: group.max,
+                options,
+            }
+        })
+        .collect();
     rv1::LegalCostChoices {
         non_mana_costs_payable,
         choices,
+        cast_cost_groups: legal_cast_cost_groups,
     }
+}
+
+fn cast_cost_timing_condition_available(
+    costs: &rv1::LegalCostChoices,
+    condition: CastCostReceiptCondition,
+) -> bool {
+    let Some(group) = costs
+        .cast_cost_groups
+        .iter()
+        .find(|group| group.group_index == condition.group_index)
+    else {
+        return false;
+    };
+    let selected_available = group
+        .options
+        .iter()
+        .any(|option| option.option_index == condition.option_index && option.selectable);
+    if condition.expected_selected {
+        selected_available
+    } else {
+        group.min == 0
+            || group
+                .options
+                .iter()
+                .any(|option| option.option_index != condition.option_index && option.selectable)
+    }
+}
+
+fn face_cast_timing_available(
+    face: &CardFace,
+    costs: &rv1::LegalCostChoices,
+    instant_ok: bool,
+    sorcery_ok: bool,
+) -> bool {
+    if castable_at_instant_speed(&face) {
+        return instant_ok;
+    }
+    sorcery_ok
+        || (instant_ok
+            && face
+                .instant_speed_cast_cost
+                .is_some_and(|condition| cast_cost_timing_condition_available(costs, condition)))
 }
 
 fn hand_action(
@@ -764,11 +936,14 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
             if combat_decl_lock {
                 continue;
             }
-            let cast_ok = if castable_at_instant_speed(&face) {
-                instant_ok
-            } else {
-                sorcery_ok
-            };
+            let cost_choices = legal_spell_cost_choices(
+                eng,
+                pid,
+                oid,
+                &face.additional_costs,
+                &face.cast_cost_groups,
+            );
+            let cast_ok = face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
             if cast_ok {
                 let mut action = hand_action(
                     rv1::HandActionKind::HandActionCastSpell,
@@ -782,7 +957,6 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 action.cost = face.mana_cost.to_string();
                 action.generic_cost_reduction =
                     eng.spell_generic_reduction(pid, oid, &face.cost_modifiers);
-                let cost_choices = legal_spell_cost_choices(eng, pid, oid, &face.additional_costs);
                 if !cost_choices.non_mana_costs_payable {
                     continue;
                 }
@@ -859,11 +1033,14 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             if face.flashback_cost.is_none() || face.is_land {
                 continue;
             }
-            let cast_ok = if castable_at_instant_speed(&face) {
-                instant_ok
-            } else {
-                sorcery_ok
-            };
+            let cost_choices = legal_spell_cost_choices(
+                eng,
+                pid,
+                oid,
+                &face.additional_costs,
+                &face.cast_cost_groups,
+            );
+            let cast_ok = face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
             if !cast_ok {
                 continue;
             }
@@ -887,7 +1064,6 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     .eligible_restricted_mana_for_spell(player_index, face),
                 generic_cost_reduction: eng.spell_generic_reduction(pid, oid, &face.cost_modifiers),
             };
-            let cost_choices = legal_spell_cost_choices(eng, pid, oid, &face.additional_costs);
             if !cost_choices.non_mana_costs_payable {
                 continue;
             }
@@ -957,11 +1133,14 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
         if face.is_land {
             continue;
         }
-        let cast_ok = if castable_at_instant_speed(&face) {
-            instant_ok
-        } else {
-            sorcery_ok
-        };
+        let cost_choices = legal_spell_cost_choices(
+            eng,
+            pid,
+            object.id,
+            &face.additional_costs,
+            &face.cast_cost_groups,
+        );
+        let cast_ok = face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
         if !cast_ok {
             continue;
         }
@@ -984,7 +1163,6 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 &face.cost_modifiers,
             ),
         };
-        let cost_choices = legal_spell_cost_choices(eng, pid, object.id, &face.additional_costs);
         if !cost_choices.non_mana_costs_payable {
             continue;
         }
@@ -1169,11 +1347,14 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
                         }
                     }
                 } else if !combat_decl_lock {
-                    let cast_ok = if castable_at_instant_speed(&face) {
-                        instant_ok
-                    } else {
-                        sorcery_ok
-                    };
+                    let costs = legal_spell_cost_choices(
+                        eng,
+                        pid,
+                        oid,
+                        &face.additional_costs,
+                        &face.cast_cost_groups,
+                    );
+                    let cast_ok = face_cast_timing_available(face, &costs, instant_ok, sorcery_ok);
                     if cast_ok {
                         let needs_target =
                             target_schema(&face.spell_effect, face.targeting.as_ref())
@@ -1191,4 +1372,42 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
         }
     }
     v
+}
+
+#[cfg(test)]
+mod cast_cost_timing_tests {
+    use super::*;
+
+    #[test]
+    fn conditional_instant_timing_is_published_only_with_a_live_cost_option() {
+        let condition = CastCostReceiptCondition {
+            group_index: 0,
+            option_index: 0,
+            expected_selected: true,
+        };
+        let mut face = CardFace {
+            instant_speed_cast_cost: Some(condition),
+            ..Default::default()
+        };
+        face.is_sorcery = true;
+        let mut costs = rv1::LegalCostChoices {
+            non_mana_costs_payable: true,
+            cast_cost_groups: vec![rv1::LegalCastCostGroup {
+                group_index: 0,
+                min: 0,
+                max: 1,
+                options: vec![rv1::LegalCastCostOption {
+                    option_index: 0,
+                    selectable: false,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(!face_cast_timing_available(&face, &costs, true, false));
+        costs.cast_cost_groups[0].options[0].selectable = true;
+        assert!(face_cast_timing_available(&face, &costs, true, false));
+        assert!(face_cast_timing_available(&face, &costs, true, true));
+    }
 }

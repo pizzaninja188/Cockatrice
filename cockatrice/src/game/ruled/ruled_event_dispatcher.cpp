@@ -146,6 +146,37 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
         }
         data.choices.append(parsed);
     }
+    for (const auto &group : src.cast_cost_groups()) {
+        RuledCastCostGroup parsedGroup;
+        parsedGroup.groupIndex = static_cast<int>(group.group_index());
+        parsedGroup.prompt = QString::fromStdString(group.prompt());
+        parsedGroup.min = static_cast<int>(group.min());
+        parsedGroup.max = static_cast<int>(group.max());
+        for (const auto &option : group.options()) {
+            RuledCastCostOption parsedOption;
+            parsedOption.optionIndex = static_cast<int>(option.option_index());
+            parsedOption.label = QString::fromStdString(option.label());
+            parsedOption.kind = option.kind() == ruled::v1::CAST_COST_OPTION_KIND_BEHOLD
+                                    ? RuledCastCostOptionKind::Behold
+                                    : RuledCastCostOptionKind::Mana;
+            parsedOption.additionalManaCost = QString::fromStdString(option.additional_mana_cost());
+            parsedOption.selectable = option.selectable();
+            for (const quint32 candidate : option.valid_hand_indices()) {
+                parsedOption.validHandIndices.insert(candidate);
+            }
+            for (const quint32 candidate : option.valid_permanent_ids()) {
+                parsedOption.validPermanentIds.insert(candidate);
+            }
+            const int generationCount = std::min(option.valid_permanent_ids_size(),
+                                                 option.valid_permanent_generations_size());
+            for (int i = 0; i < generationCount; ++i) {
+                parsedOption.validPermanentGenerations.insert(option.valid_permanent_ids(i),
+                                                               option.valid_permanent_generations(i));
+            }
+            parsedGroup.options.append(parsedOption);
+        }
+        data.castCostGroups.append(parsedGroup);
+    }
     return data;
 }
 
@@ -282,6 +313,9 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         }
         if (e.has_resolution_choice_required()) {
             applyResolutionChoiceRequired(e.resolution_choice_required(), ctx);
+        }
+        if (e.has_active_public_reveal_snapshot()) {
+            applyActivePublicRevealSnapshot(e.active_public_reveal_snapshot());
         }
         if (e.has_battlefield_object_map()) {
             applyBattlefieldObjectMap(e.battlefield_object_map(), ctx);
@@ -522,6 +556,19 @@ void RuledEventDispatcher::applyStackResolved(const ruled::v1::StackResolved &sr
                           << state->stackOidOrder.size()
                           << " — the physical card is moved by the RELAY, not here; this line only"
                              " confirms the client saw the resolve";
+}
+
+void RuledEventDispatcher::applyActivePublicRevealSnapshot(
+    const ruled::v1::ActivePublicRevealSnapshot &snapshot)
+{
+    QVector<RuledClientState::RuledActivePublicReveal> reveals;
+    reveals.reserve(snapshot.reveals_size());
+    for (const auto &entry : snapshot.reveals()) {
+        reveals.append({entry.source_stack_object_id(), entry.group_index(), entry.revealing_player_id(),
+                        QString::fromStdString(entry.source_description()), QString::fromStdString(entry.card_id()),
+                        QString::fromStdString(entry.card_name())});
+    }
+    state->setActivePublicReveals(std::move(reveals));
 }
 
 void RuledEventDispatcher::applyStackObjectCountered(const ruled::v1::StackObjectCountered &countered,

@@ -1576,6 +1576,43 @@ TEST_F(RuledBatchTest, PermanentMovedToLibraryReordersTheOwnersPrivateDeckWithou
     EXPECT_EQ(findCardByEngineOid(p1, 211u), bear);
 }
 
+TEST_F(RuledBatchTest, CastCostCandidatesStayPrivateWhileActiveBeholdRevealIsPublic)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *action = (*batch.mutable_legal_by_player())[p1->getPlayerId()].add_hand_actions();
+    action->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    action->set_hand_index(3);
+    auto *option = action->mutable_cost_choices()->add_cast_cost_groups()->add_options();
+    option->set_option_index(0);
+    option->set_label("Behold a Dragon");
+    option->set_kind(ruled::v1::CAST_COST_OPTION_KIND_BEHOLD);
+    option->add_valid_hand_indices(7);
+    option->add_valid_permanent_ids(900);
+    option->add_valid_permanent_generations(12);
+    option->set_selectable(true);
+    auto *reveal = batch.add_events()->mutable_active_public_reveal_snapshot()->add_reveals();
+    reveal->set_source_stack_object_id(700);
+    reveal->set_group_index(0);
+    reveal->set_revealing_player_id(p1->getPlayerId());
+    reveal->set_source_description("Caustic Exhale");
+    reveal->set_card_id("adult_gold_dragon");
+    reveal->set_card_name("Adult Gold Dragon");
+
+    const auto forController = redactFor(batch, p1);
+    ASSERT_TRUE(forController.legal_by_player().contains(p1->getPlayerId()));
+    const auto &controllerOption =
+        forController.legal_by_player().at(p1->getPlayerId()).hand_actions(0).cost_choices().cast_cost_groups(0).options(0);
+    EXPECT_EQ(controllerOption.valid_hand_indices_size(), 1);
+    EXPECT_EQ(controllerOption.valid_permanent_generations(0), 12u);
+    ASSERT_EQ(forController.events_size(), 1);
+    EXPECT_EQ(forController.events(0).active_public_reveal_snapshot().reveals(0).card_name(), "Adult Gold Dragon");
+
+    const auto forOpponent = redactFor(batch, p2);
+    EXPECT_FALSE(forOpponent.legal_by_player().contains(p1->getPlayerId()));
+    ASSERT_EQ(forOpponent.events_size(), 1);
+    EXPECT_EQ(forOpponent.events(0).active_public_reveal_snapshot().reveals(0).card_id(), "adult_gold_dragon");
+}
+
 TEST_F(RuledBatchTest, PendingPrivateWardDiscardIsRestoredForPayerAndRedactedForOpponent)
 {
     Server_Card *bear = addCardToHand(p1, QStringLiteral("Grizzly Bears"));

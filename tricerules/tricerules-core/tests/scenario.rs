@@ -63,6 +63,8 @@ mod issue_101_zone_abilities;
 mod issue_102_activation_limits;
 #[path = "scenario/issue_103_ward.rs"]
 mod issue_103_ward;
+#[path = "scenario/issue_104_optional_cast_costs.rs"]
+mod issue_104_optional_cast_costs;
 #[path = "scenario/issue_108_graveyard_aggregates.rs"]
 mod issue_108_graveyard_aggregates;
 #[path = "scenario/issue_110_library_search.rs"]

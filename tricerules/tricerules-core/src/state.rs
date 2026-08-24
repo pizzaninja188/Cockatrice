@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
-    ActivatedAbilityDef, CardSearchZone, Color, ConditionalSearchDestination, ContinuousEffectKind,
-    CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect, EffectDuration,
-    GameCondition, Keyword, LibraryBottomOrder, ManaAmount, ManaSpendingRestriction,
-    SearchDestination, TargetFilter, TriggerCondition, TriggeredAbilityDef, ZoneCardFilter,
+    ActivatedAbilityDef, CardSearchZone, CastCostReceiptCondition, Color,
+    ConditionalSearchDestination, ContinuousEffectKind, CounterKind, CreatureScopeFilter,
+    DamagePreventionAdditionalEffect, EffectDuration, GameCondition, Keyword, LibraryBottomOrder,
+    ManaAmount, ManaSpendingRestriction, SearchDestination, TargetFilter, TriggerCondition,
+    TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{CardFace, ManaCost};
@@ -643,6 +644,7 @@ pub enum ResolutionContinuation {
     },
     SearchZoneScope {
         stack: ParkedStackResolution,
+        count: u32,
         available_zones: Vec<CardSearchZone>,
         filter: Option<ZoneCardFilter>,
         destination: SearchDestination,
@@ -815,6 +817,7 @@ pub(crate) struct BattlefieldEntryEvent {
     pub unlock_room_door: Option<usize>,
     /// X chosen for the entering permanent spell. Non-spell entry paths carry zero.
     pub chosen_x: u32,
+    pub cast_cost_receipts: Vec<CastCostReceipt>,
     /// Public life totals captured when this event is proposed. Simultaneous entries receive the
     /// same snapshot, so replacement ordering cannot retroactively change an entry predicate.
     pub player_life_snapshot: BTreeMap<PlayerId, i32>,
@@ -853,8 +856,9 @@ pub(crate) enum BattlefieldEntryCompletion {
     LibrarySearch {
         owner: PlayerId,
         card_label: String,
+        remaining_object_ids: Vec<ObjectId>,
+        tapped: bool,
         shuffle: bool,
-        resume_effect_index: Option<u32>,
     },
     ManifestDread {
         owner: PlayerId,
@@ -905,6 +909,30 @@ pub struct StackTarget {
     pub zone_change_generation: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CastCostObjectReceipt {
+    RevealedHand {
+        object_id: ObjectId,
+        zone_change_generation: u64,
+        card_id: String,
+        card_name: String,
+    },
+    ChosenPermanent {
+        object_id: ObjectId,
+        zone_change_generation: u64,
+        card_id: String,
+        card_name: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CastCostReceipt {
+    pub group_index: u32,
+    pub option_index: u32,
+    pub label: String,
+    pub object: Option<CastCostObjectReceipt>,
+}
+
 #[derive(Debug, Clone)]
 pub struct StackItem {
     pub id: ObjectId,
@@ -949,6 +977,9 @@ pub struct StackItem {
     pub chosen_x: u32,
     /// Atomic modal choices in printed order. Empty for nonmodal spells and abilities.
     pub chosen_modes: Vec<ChosenMode>,
+    /// CR 601.2b / 607.2i: stable announced additional-cost choices. Resolution and spell copies
+    /// consume this receipt instead of rechecking the object used to pay.
+    pub cast_cost_receipts: Vec<CastCostReceipt>,
     /// Resolution branches already answered, keyed by their index in the original effect list.
     /// `None` records an optional decline; `Some(i)` records the chosen authored branch.
     pub resolution_branch_choices: BTreeMap<u32, Option<usize>>,
@@ -957,6 +988,15 @@ pub struct StackItem {
     /// participants. Empty for spells and activated abilities. Trigger context never changes who
     /// controls the stack item.
     pub trigger_context: TriggerContext,
+}
+
+impl StackItem {
+    pub fn cast_cost_condition_matches(&self, condition: CastCostReceiptCondition) -> bool {
+        self.cast_cost_receipts.iter().any(|receipt| {
+            receipt.group_index == condition.group_index
+                && receipt.option_index == condition.option_index
+        }) == condition.expected_selected
+    }
 }
 
 /// Pre-game: choose first player, then London-style mulligans (redraw to 7, then put N on bottom).

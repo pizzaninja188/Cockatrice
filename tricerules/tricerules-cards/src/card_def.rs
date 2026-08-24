@@ -15,9 +15,10 @@
 
 use crate::mana::ManaCost;
 use crate::primitives::{
-    ActivatedAbilityDef, AdditionalCost, CardTypeFilter, Color, EffectContext, Evasion, Keyword,
-    PermanentTypeFilter, ProtectionQuality, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
-    TargetingDef, TriggeredAbilityDef,
+    ActivatedAbilityDef, AdditionalCost, CardTypeFilter, CastCostGroupDef,
+    CastCostReceiptCondition, Color, EffectContext, Evasion, Keyword, PermanentTypeFilter,
+    ProtectionQuality, SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetingDef,
+    TriggeredAbilityDef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -120,6 +121,13 @@ pub struct CardFace {
     /// Mandatory nonmana costs paid in addition to this face's mana cost (CR 118.8).
     #[serde(default)]
     pub additional_costs: Vec<AdditionalCost>,
+    /// Announced optional/alternative cast-time payments such as kicker and behold.
+    #[serde(default)]
+    pub cast_cost_groups: Vec<CastCostGroupDef>,
+    /// This normally sorcery-speed face may be announced at instant timing only when the named
+    /// cast-cost option is selected. Molten Exhale is the calibration consumer.
+    #[serde(default)]
+    pub instant_speed_cast_cost: Option<CastCostReceiptCondition>,
     /// Face-authored adjustments used to determine this spell's total cost (CR 601.2f).
     #[serde(default)]
     pub cost_modifiers: Vec<SpellCostModifier>,
@@ -320,6 +328,10 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub additional_costs: Vec<AdditionalCost>,
     #[serde(default)]
+    pub cast_cost_groups: Vec<CastCostGroupDef>,
+    #[serde(default)]
+    pub instant_speed_cast_cost: Option<CastCostReceiptCondition>,
+    #[serde(default)]
     pub cost_modifiers: Vec<SpellCostModifier>,
     #[serde(default)]
     pub types: Vec<String>,
@@ -389,6 +401,8 @@ impl RawCardDefinition {
                 mana_cost: self.mana_cost,
                 flashback_cost: self.flashback_cost,
                 additional_costs: self.additional_costs,
+                cast_cost_groups: self.cast_cost_groups,
+                instant_speed_cast_cost: self.instant_speed_cast_cost,
                 cost_modifiers: self.cost_modifiers,
                 types: self.types,
                 supertypes: self.supertypes,
@@ -517,6 +531,12 @@ impl CardDefinition {
             result
                 .additional_costs
                 .extend(door.additional_costs.clone());
+            result
+                .cast_cost_groups
+                .extend(door.cast_cost_groups.clone());
+            result.instant_speed_cast_cost = result
+                .instant_speed_cast_cost
+                .or(door.instant_speed_cast_cost);
             result.cost_modifiers.extend(door.cost_modifiers.clone());
             result.spell_effect.extend(door.spell_effect.clone());
             result.keywords.extend(door.keywords.clone());

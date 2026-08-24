@@ -268,6 +268,13 @@ public:
     bool sawWardDiscardPhysicalHandToGrave = false;
     bool sawWardDiscardSpellResolved = false;
     bool sawWardDiscardSourceToHand = false;
+    bool optionalCastCostFlowActive = false;
+    bool sawPrivateBeholdCandidates = false;
+    bool sawBeholdCandidateRedaction = false;
+    bool sawBeholdStackReceipt = false;
+    bool sawActiveBeholdReveal = false;
+    bool sawActiveBeholdRevealClosed = false;
+    bool activeBeholdReveal = false;
     bool devCurseConjureSent = false;
     bool devCurseManaSent = false;
     bool devAggressiveVictimSent = false;
@@ -942,6 +949,11 @@ public:
                         wardDiscardSpellOid = sp.object_id();
                     }
                 }
+                if (cardId == QLatin1String("caustic_exhale")) {
+                    sawBeholdStackReceipt =
+                        std::any_of(sp.chosen_cast_cost_labels().begin(), sp.chosen_cast_cost_labels().end(),
+                                    [](const std::string &label) { return label == "Behold a Dragon"; });
+                }
                 const QString annotation = QString::fromStdString(sp.ability_annotation());
                 if (annotation == QLatin1String("Ward {2}")) {
                     sawWardManaAnnotation = true;
@@ -1204,6 +1216,20 @@ public:
                             .arg(rcr.ordered())
                             .arg(rcr.candidate_object_ids_size()));
                 }
+            } else if (ev.has_active_public_reveal_snapshot()) {
+                bool hasDragon = false;
+                for (const auto &reveal : ev.active_public_reveal_snapshot().reveals()) {
+                    hasDragon = hasDragon ||
+                                (reveal.card_id() == "adult_gold_dragon" &&
+                                 reveal.card_name() == "Adult Gold Dragon");
+                }
+                if (hasDragon) {
+                    sawActiveBeholdReveal = true;
+                    activeBeholdReveal = true;
+                } else if (activeBeholdReveal) {
+                    activeBeholdReveal = false;
+                    sawActiveBeholdRevealClosed = true;
+                }
             } else if (ev.has_permanent_moved()) {
                 const auto &moved = ev.permanent_moved();
                 if (wardDiscardFlowActive && moved.card_id() == "grizzly_bears" &&
@@ -1417,6 +1443,10 @@ public:
             sawLibraryTargetAbsentFromBattlefield = true;
         }
         EXPECT_LE(phaseEvents, 1) << "one settled ruled batch published multiple phase states";
+        if (optionalCastCostFlowActive && role == Role::Hoarder && oppId >= 0) {
+            sawBeholdCandidateRedaction =
+                sawBeholdCandidateRedaction || batch.legal_by_player().find(oppId) == batch.legal_by_player().end();
+        }
         const auto it = batch.legal_by_player().find(myId);
         if (it != batch.legal_by_player().end()) {
             labels.clear();
@@ -1424,6 +1454,20 @@ public:
                 labels.append(QString::fromStdString(l));
             }
             latestLegal = it->second;
+            if (optionalCastCostFlowActive && role == Role::Aggressor) {
+                const auto caustic = std::find_if(
+                    latestLegal.hand_actions().begin(), latestLegal.hand_actions().end(), [](const auto &action) {
+                        return action.kind() == ruled::v1::HAND_ACTION_CAST_SPELL &&
+                               action.card_name() == "Caustic Exhale";
+                    });
+                if (caustic != latestLegal.hand_actions().end() &&
+                    caustic->cost_choices().cast_cost_groups_size() == 1) {
+                    const auto &group = caustic->cost_choices().cast_cost_groups(0);
+                    sawPrivateBeholdCandidates =
+                        group.options_size() == 2 && group.options(0).kind() == ruled::v1::CAST_COST_OPTION_KIND_BEHOLD &&
+                        group.options(0).selectable() && group.options(0).valid_hand_indices_size() == 1;
+                }
+            }
             if (submittedTypecyclingChoice) {
                 const auto plains = std::find_if(
                     latestLegal.hand_actions().begin(), latestLegal.hand_actions().end(), [](const auto &action) {
@@ -4038,6 +4082,132 @@ TEST_F(RuledE2ESmokeTest, WardManaDeclineAndPrivateDiscardPayment)
     EXPECT_TRUE(p1.sawWardDiscardSpellResolved && p2.sawWardDiscardSpellResolved);
     EXPECT_TRUE(p1.sawWardDiscardSourceToHand && p2.sawWardDiscardSourceToHand);
     EXPECT_EQ(p1.wardDiscardSpellOid, p2.wardDiscardSpellOid);
+}
+
+TEST_F(RuledE2ESmokeTest, BeholdCastCostIsPrivateUntilItsPublicStackReveal)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("beholdp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("beholdp2"), &transcript);
+    p2.didMulligan = true;
+
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Swamp")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "Behold cohort game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "Behold cohort game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer openingDeadline;
+    openingDeadline.start();
+    while (openingDeadline.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command,
+                           const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 &&
+               (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto devPut = [&](int targetPlayer, const char *cardName, ruled::v1::DevZone zone, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(targetPlayer);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(cardName);
+        put->set_zone(zone);
+        put->set_ready(ready);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1 for Behold cohort").arg(cardName));
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority in Behold cohort"));
+    };
+
+    ASSERT_TRUE(devPut(p1.myId, "Caustic Exhale", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(devPut(p1.myId, "Adult Gold Dragon", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(devPut(p2.myId, "Grizzly Bears", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    p1.optionalCastCostFlowActive = true;
+    p2.optionalCastCostFlowActive = true;
+    ruled::v1::RuledCommand addMana;
+    addMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_b(1);
+    ASSERT_TRUE(sendAndPump(p1, addMana, QStringLiteral("dev: add black mana for Behold cohort")));
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    const auto *caustic = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Caustic Exhale"));
+    ASSERT_NE(caustic, nullptr);
+    ASSERT_EQ(caustic->cost_choices().cast_cost_groups_size(), 1);
+    const auto &group = caustic->cost_choices().cast_cost_groups(0);
+    ASSERT_GE(group.options_size(), 1);
+    const auto &behold = group.options(0);
+    ASSERT_EQ(behold.kind(), ruled::v1::CAST_COST_OPTION_KIND_BEHOLD);
+    ASSERT_EQ(behold.valid_hand_indices_size(), 1);
+    ASSERT_TRUE(p1.sawPrivateBeholdCandidates);
+    ASSERT_TRUE(p2.sawBeholdCandidateRedaction);
+
+    const quint32 targetKey = caustic->hand_index() << 8;
+    const auto targetGroups = p1.latestLegal.valid_targets_by_hand_slot().find(targetKey);
+    ASSERT_NE(targetGroups, p1.latestLegal.valid_targets_by_hand_slot().end());
+    ASSERT_EQ(targetGroups->second.groups_size(), 1);
+    ASSERT_EQ(targetGroups->second.groups(0).valid_permanent_ids_size(), 1);
+
+    ruled::v1::RuledCommand cast;
+    cast.mutable_cast_spell()->mutable_source()->set_hand_index(caustic->hand_index());
+    auto *selection = cast.mutable_cast_spell()->add_cast_cost_group_selections();
+    selection->set_group_index(group.group_index());
+    selection->set_option_index(behold.option_index());
+    selection->set_hand_index(behold.valid_hand_indices(0));
+    auto *target = cast.mutable_cast_spell()->add_targets();
+    target->set_object_id(targetGroups->second.groups(0).valid_permanent_ids(0));
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    ASSERT_TRUE(sendAndPump(p1, cast, QStringLiteral("cast Caustic Exhale by beholding a Dragon")));
+
+    EXPECT_TRUE(p1.sawBeholdStackReceipt && p2.sawBeholdStackReceipt);
+    EXPECT_TRUE(p1.sawActiveBeholdReveal && p2.sawActiveBeholdReveal);
+    EXPECT_TRUE(p1.activeBeholdReveal && p2.activeBeholdReveal);
+
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+    EXPECT_TRUE(p1.sawActiveBeholdRevealClosed && p2.sawActiveBeholdRevealClosed);
+    EXPECT_FALSE(p1.activeBeholdReveal || p2.activeBeholdReveal);
 }
 
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can

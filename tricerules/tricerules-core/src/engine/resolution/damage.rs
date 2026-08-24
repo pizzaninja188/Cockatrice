@@ -389,6 +389,7 @@ mod damage_source_tests {
             flashback: false,
             chosen_x: 0,
             chosen_modes: Vec::new(),
+            cast_cost_receipts: Vec::new(),
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
         }

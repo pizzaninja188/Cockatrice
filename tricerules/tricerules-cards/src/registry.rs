@@ -1,8 +1,9 @@
 use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
-    AdditionalCost, BattlefieldAggregate, EffectContext, FaceChangeAction, GameCondition,
-    InterveningIf, SpecialActionAffected, SpellEffectKind, StaticAbilityDef, TargetController,
-    TargetKind, TargetingDef, TriggerCondition,
+    AdditionalCost, BattlefieldAggregate, CastCostGroupDef, CastCostReceiptCondition,
+    EffectContext, FaceChangeAction, GameCondition, InterveningIf, ResolutionBranchRequirement,
+    SpecialActionAffected, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
+    TargetingDef, TriggerCondition,
 };
 use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
@@ -63,6 +64,48 @@ fn face_can_reference_attached_player(face: &CardFace) -> bool {
         && face.spell_effect.iter().any(
             |effect| matches!(effect, SpellEffectKind::AuraAttach { target } if target.is_player()),
         )
+}
+
+fn validate_cast_cost_condition(
+    groups: &[CastCostGroupDef],
+    condition: CastCostReceiptCondition,
+) -> Result<(), String> {
+    let group = groups
+        .get(condition.group_index as usize)
+        .ok_or_else(|| "cast-cost condition references an unknown group".to_string())?;
+    if group.options.get(condition.option_index as usize).is_none() {
+        return Err("cast-cost condition references an unknown option".into());
+    }
+    Ok(())
+}
+
+fn validate_effect_cast_cost_conditions(
+    groups: &[CastCostGroupDef],
+    effect: &SpellEffectKind,
+) -> Result<(), String> {
+    match effect {
+        SpellEffectKind::CounterTargetSpell {
+            unless_controller_pays_by_cast_cost: Some(conditional),
+            ..
+        }
+        | SpellEffectKind::SearchLibrary {
+            count_by_cast_cost: Some(conditional),
+            ..
+        } => validate_cast_cost_condition(groups, conditional.condition),
+        SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
+            for branch in branches {
+                if let ResolutionBranchRequirement::CastCostReceipt(condition) = branch.requirement
+                {
+                    validate_cast_cost_condition(groups, condition)?;
+                }
+                for nested in &branch.effects {
+                    validate_effect_cast_cost_conditions(groups, nested)?;
+                }
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
 }
 
 impl CardRegistry {
@@ -276,6 +319,22 @@ impl CardRegistry {
                             reason,
                         })?;
                 }
+                if let Some(condition) = face.instant_speed_cast_cost {
+                    if !condition.expected_selected {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason:
+                                "instant-speed cast-cost permission must require a selected option"
+                                    .into(),
+                        });
+                    }
+                    validate_cast_cost_condition(&face.cast_cost_groups, condition).map_err(
+                        |reason| RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        },
+                    )?;
+                }
                 // One resolution owner per face (CR 608): ordinary data, modal data, and a
                 // custom (tier-3) effect are mutually exclusive. The
                 // matching custom impl is validated to exist on the `tricerules-core` side
@@ -292,6 +351,12 @@ impl CardRegistry {
                     });
                 }
                 for effect in &face.spell_effect {
+                    validate_effect_cast_cost_conditions(&face.cast_cost_groups, effect).map_err(
+                        |reason| RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        },
+                    )?;
                     if effect.uses_defending_player_reference() {
                         return Err(RegistryError::InvalidCard {
                             id: card.id.clone(),
@@ -320,6 +385,15 @@ impl CardRegistry {
                         reason,
                     })?;
                 if let Some(modal) = &face.modal_spell {
+                    for mode in &modal.modes {
+                        for effect in &mode.effects {
+                            validate_effect_cast_cost_conditions(&face.cast_cost_groups, effect)
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
+                        }
+                    }
                     modal.validate(EffectContext::Spell).map_err(|reason| {
                         RegistryError::InvalidCard {
                             id: card.id.clone(),
@@ -537,8 +611,16 @@ impl CardRegistry {
                         affected,
                         counter,
                         amount,
+                        cast_cost_condition,
                     } = ability
                     {
+                        if let Some(condition) = cast_cost_condition {
+                            validate_cast_cost_condition(&face.cast_cost_groups, *condition)
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
+                        }
                         counter
                             .validate()
                             .map_err(|reason| RegistryError::InvalidCard {
@@ -860,6 +942,14 @@ impl CardRegistry {
                             });
                         }
                     }
+                }
+                for group in &face.cast_cost_groups {
+                    group
+                        .validate()
+                        .map_err(|reason| RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        })?;
                 }
                 for effects in face
                     .activated_abilities
@@ -2621,6 +2711,7 @@ mod tests {
                 }),
                 counter: CounterKind::PlusOnePlusOne,
                 amount: Amount::Fixed(1),
+                ..
             } if subtype == "Dragon"
         )));
     }

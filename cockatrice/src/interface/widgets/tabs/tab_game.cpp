@@ -451,6 +451,8 @@ void TabGame::connectToGameEventHandler()
                 &TabGame::onRuledRevealedPickChanged);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::publicRevealChanged, this,
                 &TabGame::onRuledPublicRevealChanged);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::activePublicRevealsChanged, this,
+                &TabGame::onRuledActivePublicRevealsChanged);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerOrderUiChanged, this,
                 &TabGame::onRuledTriggerOrderUiChanged);
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget,
@@ -785,6 +787,18 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.mode = PromptMode::ClickChoice;
         state.canDecline = h->pendingTriggerMayDecline();
         state.text = tr("Choose a target for “%1”.").arg(h->pendingTriggerText());
+    } else if (localActions && localActions->isAwaitingRuledCastCostObject()) {
+        state.mode = PromptMode::CastCostObject;
+        state.text = localActions->pendingRuledSpellPromptText();
+    } else if (localActions && localActions->isAwaitingRuledCastCostOption()) {
+        state.mode = PromptMode::CastCostOptions;
+        state.text = localActions->pendingRuledSpellPromptText();
+        if (localActions->pendingRuledCastCostGroupIsOptional()) {
+            state.choiceOptions.append({-1, tr("Cast normally"), true});
+        }
+        for (const auto &option : localActions->pendingRuledCastCostOptions()) {
+            state.choiceOptions.append({option.optionIndex, option.label, option.selectable});
+        }
     } else if (localActions && localActions->isAwaitingRuledSpellCostSelection()) {
         state.mode = PromptMode::ClickChoice;
         state.text = localActions->pendingRuledSpellPromptText();
@@ -1613,6 +1627,15 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                 &GamePromptWidget::setLandTapUndoAvailable);
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellCastPendingChanged, gamePromptWidget,
                 &GamePromptWidget::setSpellCastPending);
+        // `pending` remains true while a cast advances from a cast-cost option to its object
+        // picker (for example, Behold -> click a Dragon). Re-derive the prompt on every emission;
+        // GamePromptWidget's targeting-source setter intentionally ignores repeated bool values.
+        connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellCastPendingChanged, this,
+                [this](bool /*pending*/) { refreshRuledPromptState(); });
+        connect(gamePromptWidget, &GamePromptWidget::ruledCastCostOptionRequested, newPlayer->getPlayerActions(),
+                &PlayerActions::selectPendingRuledCastCostOption);
+        connect(gamePromptWidget, &GamePromptWidget::ruledCastCostBackRequested, newPlayer->getPlayerActions(),
+                &PlayerActions::backPendingRuledCastCostObject);
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellManaPromptChanged, this, [this, newPlayer]() {
             if (!gamePromptWidget || !newPlayer->getPlayerInfo()->getLocal()) {
                 return;
@@ -2642,5 +2665,51 @@ void TabGame::onRuledPublicRevealChanged(bool active,
         });
     }
     revealedPickView->setWindowTitle(tr("%1's revealed hand").arg(zoneOwner->getPlayerInfo()->getName()));
+    qDeleteAll(previousCards);
+}
+
+void TabGame::onRuledActivePublicRevealsChanged(QStringList cardNames, QVector<int> revealingPlayerIds)
+{
+    const bool validSnapshot = !cardNames.isEmpty() && cardNames.size() == revealingPlayerIds.size() && game && scene;
+    Player *scaffoldPlayer =
+        validSnapshot ? game->getPlayerManager()->getPlayers().value(revealingPlayerIds.constFirst(), nullptr) : nullptr;
+    CardZoneLogic *handZone = scaffoldPlayer ? scaffoldPlayer->getZones().value(ZoneNames::HAND) : nullptr;
+    if (!validSnapshot || !scaffoldPlayer || !handZone) {
+        if (activeCastRevealView) {
+            activeCastRevealView->close();
+            activeCastRevealView = nullptr;
+        }
+        qDeleteAll(activeCastRevealCards);
+        activeCastRevealCards.clear();
+        return;
+    }
+
+    QList<ServerInfo_Card *> previousCards = activeCastRevealCards;
+    activeCastRevealCards.clear();
+    QList<const ServerInfo_Card *> cards;
+    for (int i = 0; i < cardNames.size(); ++i) {
+        auto *card = new ServerInfo_Card;
+        card->set_name(cardNames.at(i).toStdString());
+        card->set_id(-100000 - i);
+        card->set_face_down(false);
+        activeCastRevealCards.append(card);
+        cards.append(card);
+    }
+
+    if (activeCastRevealView) {
+        activeCastRevealView->getZone()->getLogic()->clearContents();
+        activeCastRevealView->getZone()->initializeCards(cards);
+    } else {
+        activeCastRevealView =
+            new ZoneViewWidget(scaffoldPlayer, handZone, -1, true, false, cards, false, false, true, false);
+        scene->addItem(activeCastRevealView);
+        activeCastRevealView->setPos(680, 80);
+        connect(activeCastRevealView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
+            activeCastRevealView = nullptr;
+            qDeleteAll(activeCastRevealCards);
+            activeCastRevealCards.clear();
+        });
+    }
+    activeCastRevealView->setWindowTitle(tr("Cards revealed for spells on the stack"));
     qDeleteAll(previousCards);
 }

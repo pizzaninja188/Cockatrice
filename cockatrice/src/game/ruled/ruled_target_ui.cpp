@@ -76,6 +76,33 @@ RuledTargetClickEligibility RuledTargetUi::cardEligibility(const PlayerActions *
     if (!state || !RuledActions::isRuledGame(actions->player->getGame())) {
         return RuledTargetClickEligibility::NotTargeting;
     }
+    if (actions->pendingRuledSpellCast.valid && actions->pendingRuledSpellCast.waitingForCastCostObject) {
+        if (!card || !card->getZone()) {
+            return RuledTargetClickEligibility::Illegal;
+        }
+        const QString zoneName = card->getZone()->getName();
+        if (zoneName == ZoneNames::HAND) {
+            Player *const handPlayer = card->getZone()->getPlayer();
+            if (handPlayer != actions->player || !handPlayer->getPlayerInfo()) {
+                return RuledTargetClickEligibility::Illegal;
+            }
+            const int handSlot =
+                state->engineHandSlotForServerCard(handPlayer->getPlayerInfo()->getId(), card->getId());
+            return handSlot < 0
+                       ? RuledTargetClickEligibility::Illegal
+                       : ruledCastCostObjectEligibility(actions->pendingRuledSpellCast,
+                                                        RuledCastCostCandidateKind::Hand,
+                                                        static_cast<quint32>(handSlot));
+        }
+        if (zoneName == ZoneNames::TABLE) {
+            const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+            const quint32 oid = state->engineOidForCardId(ownerPlayerId, card->getId());
+            return oid == 0 ? RuledTargetClickEligibility::Illegal
+                            : ruledCastCostObjectEligibility(actions->pendingRuledSpellCast,
+                                                             RuledCastCostCandidateKind::Permanent, oid);
+        }
+        return RuledTargetClickEligibility::Illegal;
+    }
     RuledTargetCandidateKind kind = RuledTargetCandidateKind::Battlefield;
     quint32 oid = 0;
     if (card && card->getZone()) {

@@ -1,0 +1,33 @@
+// Oracle and rulings checked 2026-08-23. Behold changes the linked soft-counter payment.
+(
+  id: "dispelling_exhale",
+  name: "Dispelling Exhale",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    prompt: "Behold a Dragon?",
+    min: 0,
+    max: 1,
+    options: [Behold(
+      label: "Behold a Dragon",
+      hand_filter: (subtype: Some("Dragon")),
+      permanent_filter: (
+        kind: AnyPermanent,
+        controller: You,
+        required_subtypes: ["Dragon"],
+      ),
+    )],
+  )],
+  spell_effect: [CounterTargetSpell(
+    spell_filter: None,
+    unless_controller_pays_by_cast_cost: Some((
+      condition: (
+        group_index: 0,
+        option_index: 0,
+        expected_selected: true,
+      ),
+      if_selected: 4,
+      otherwise: 2,
+    )),
+  )],
+)

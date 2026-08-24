@@ -1,0 +1,43 @@
+// Oracle and rulings checked 2026-08-23. The behold result is fixed when the cost is announced.
+(
+  id: "osseous_exhale",
+  name: "Osseous Exhale",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    prompt: "Behold a Dragon?",
+    min: 0,
+    max: 1,
+    options: [Behold(
+      label: "Behold a Dragon",
+      hand_filter: (subtype: Some("Dragon")),
+      permanent_filter: (
+        kind: AnyPermanent,
+        controller: You,
+        required_subtypes: ["Dragon"],
+      ),
+    )],
+  )],
+  spell_effect: [
+    DamageTarget(
+      amount: 5,
+      target: (kind: Creature, attacking_or_blocking: true),
+    ),
+    ChooseResolutionBranch(
+      selection: FirstApplicable,
+      branches: [
+        (
+          label: "Gain 2 life",
+          cost: None,
+          requirement: CastCostReceipt((
+            group_index: 0,
+            option_index: 0,
+            expected_selected: true,
+          )),
+          effects: [GainLife(amount: 2)],
+        ),
+        (label: "No additional effect", cost: None, requirement: Always, effects: []),
+      ],
+    ),
+  ],
+)

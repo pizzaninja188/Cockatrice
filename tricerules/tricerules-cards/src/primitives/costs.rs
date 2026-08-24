@@ -61,6 +61,93 @@ pub enum AdditionalCost {
     SacrificePermanent { filter: TargetFilter },
 }
 
+/// One announced cast-time cost choice group (CR 601.2b). Kicker and behold share this
+/// vocabulary: both record an option before targets are chosen, then let later rules text query
+/// the stable receipt instead of re-examining the paid object.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CastCostGroupDef {
+    pub prompt: String,
+    #[serde(default)]
+    pub min: u32,
+    #[serde(default = "default_one")]
+    pub max: u32,
+    pub options: Vec<CastCostOptionDef>,
+}
+
+fn default_one() -> u32 {
+    1
+}
+
+/// One mutually distinguishable option in a cast-cost group.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CastCostOptionDef {
+    /// Pay this additional mana as part of the spell's single total cost. Grow from the Ashes and
+    /// Gnarlid Colony use this for kicker.
+    Mana { label: String, cost: ManaCost },
+    /// CR 701.4: reveal one matching hand card or choose one matching permanent you control.
+    /// Caustic Exhale and Osseous Exhale use the same typed selection.
+    Behold {
+        label: String,
+        hand_filter: ZoneCardFilter,
+        permanent_filter: Box<TargetFilter>,
+    },
+}
+
+impl CastCostGroupDef {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if self.prompt.trim().is_empty() {
+            return Err("cast cost group prompt must not be empty".into());
+        }
+        if self.options.is_empty() || self.min > self.max || self.max != 1 {
+            return Err("cast cost group requires min <= max = 1".into());
+        }
+        let mut labels = std::collections::HashSet::new();
+        for option in &self.options {
+            let label = match option {
+                CastCostOptionDef::Mana { label, .. } | CastCostOptionDef::Behold { label, .. } => {
+                    label
+                }
+            };
+            if !labels.insert(label.trim()) {
+                return Err("cast cost group option labels must be unique".into());
+            }
+            match option {
+                CastCostOptionDef::Mana { label, cost } => {
+                    if label.trim().is_empty() || cost.is_empty() {
+                        return Err("cast mana option requires a label and nonempty cost".into());
+                    }
+                }
+                CastCostOptionDef::Behold {
+                    label,
+                    hand_filter,
+                    permanent_filter,
+                } => {
+                    if label.trim().is_empty() {
+                        return Err("behold option requires a label".into());
+                    }
+                    hand_filter.validate()?;
+                    permanent_filter.validate_target_constraints()?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A typed linked condition over an announced cast-cost option. `expected_selected = false`
+/// supports the inverse branch without requiring clients or effects to infer a default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CastCostReceiptCondition {
+    pub group_index: u32,
+    pub option_index: u32,
+    #[serde(default = "default_true")]
+    pub expected_selected: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
 /// A face-authored modifier applied while determining that spell's total cost (CR 601.2f).
 ///
 /// The condition vocabulary is shared with triggers, activated abilities, and conditional

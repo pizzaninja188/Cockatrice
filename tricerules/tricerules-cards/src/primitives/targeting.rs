@@ -484,6 +484,10 @@ pub struct TargetFilter {
     /// `[Artifact, Creature, Land]`; an empty list means no additional type restriction.
     #[serde(default)]
     pub permanent_types: Vec<super::PermanentTypeFilter>,
+    /// Subtypes every matching permanent must currently have. Behold uses this for choosing a
+    /// Dragon you control without turning the selection into a target.
+    #[serde(default)]
+    pub required_subtypes: Vec<String>,
     /// Subtypes that disqualify the target (for example, Eyeblight's Ending's "non-Elf"
     /// restriction). Empty means no excluded subtypes.
     #[serde(default)]
@@ -619,6 +623,24 @@ impl TargetFilter {
             ));
         }
         if self
+            .required_subtypes
+            .iter()
+            .chain(self.excluded_subtypes.iter())
+            .any(|subtype| subtype.trim().is_empty())
+        {
+            return Err("target filter subtype names must not be empty".into());
+        }
+        if has_duplicates(&self.required_subtypes) || has_duplicates(&self.excluded_subtypes) {
+            return Err("target filter cannot repeat a subtype predicate".into());
+        }
+        if self
+            .required_subtypes
+            .iter()
+            .any(|subtype| self.excluded_subtypes.contains(subtype))
+        {
+            return Err("target filter cannot both require and exclude a subtype".into());
+        }
+        if self
             .excluded_subtypes
             .iter()
             .any(|subtype| subtype.trim().is_empty())
@@ -638,6 +660,7 @@ impl TargetFilter {
             || self.controller != TargetController::Any
             || self.exclude_source
             || !self.permanent_types.is_empty()
+            || !self.required_subtypes.is_empty()
             || !self.excluded_subtypes.is_empty()
             || self.power.is_some()
             || !self.required_keywords.is_empty()
@@ -977,6 +1000,7 @@ mod tests {
         let stack = SpellEffectKind::CounterTargetSpell {
             spell_filter: Some(CardTypeFilter::Creature),
             unless_controller_pays: None,
+            unless_controller_pays_by_cast_cost: None,
         };
         let graveyard = SpellEffectKind::ReturnFromGraveyard {
             filter: GraveyardFilter::default(),

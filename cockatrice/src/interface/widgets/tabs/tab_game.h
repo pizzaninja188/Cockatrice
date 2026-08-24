@@ -111,6 +111,10 @@ private:
     QPointer<ZoneViewWidget> revealedPickView;
     // ServerInfo_Card storage for the revealed-cards popup (owned by this instance).
     QList<ServerInfo_Card *> revealedPickCards;
+    /// Read-only exact snapshot of cards revealed for spells that remain on the stack. Separate
+    /// from resolution reveals so the two lifecycles cannot close or overwrite each other.
+    QPointer<ZoneViewWidget> activeCastRevealView;
+    QList<ServerInfo_Card *> activeCastRevealCards;
     // CR 603.3b: card-image popup for picking which trigger goes on the stack next. Alive only
     // while this client is the deciding player, and rebuilt after each pick with what remains.
     QPointer<ZoneViewWidget> triggerOrderView;
@@ -235,6 +239,7 @@ private slots:
                                     int zoneOwnerPlayerId,
                                     QStringList cardNames,
                                     QVector<int> serverCardIds);
+    void onRuledActivePublicRevealsChanged(QStringList cardNames, QVector<int> revealingPlayerIds);
     /// CR 603.3b: opens or closes the simultaneous-trigger ordering window. Only the deciding
     /// player is sent `active = true`, so at most one client shows it.
     void onRuledTriggerOrderUiChanged(bool active, QVector<RuledTriggerOrderCandidate> candidates);

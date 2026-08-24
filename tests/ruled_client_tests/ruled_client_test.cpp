@@ -458,6 +458,36 @@ TEST(RuledPendingTargetTest, ClickEligibilityCoversAbilitiesTriggersAndCopyRetar
               RuledTargetClickEligibility::Illegal);
 }
 
+TEST(RuledPendingTargetTest, CastCostObjectEligibilityUsesThePublishedOptionCandidates)
+{
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.waitingForCastCostObject = true;
+    spell.nextCastCostGroup = 0;
+    spell.activeCastCostOption = 3;
+
+    RuledCastCostOption behold;
+    behold.optionIndex = 3;
+    behold.kind = RuledCastCostOptionKind::Behold;
+    behold.selectable = true;
+    behold.validHandIndices = {7};
+    behold.validPermanentIds = {900};
+    RuledCastCostGroup group;
+    group.options = {behold};
+    spell.castCostGroups = {group};
+
+    EXPECT_EQ(ruledCastCostObjectEligibility(spell, RuledCastCostCandidateKind::Hand, 7),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledCastCostObjectEligibility(spell, RuledCastCostCandidateKind::Hand, 8),
+              RuledTargetClickEligibility::Illegal);
+    EXPECT_EQ(ruledCastCostObjectEligibility(spell, RuledCastCostCandidateKind::Permanent, 900),
+              RuledTargetClickEligibility::Legal);
+
+    spell.waitingForCastCostObject = false;
+    EXPECT_EQ(ruledCastCostObjectEligibility(spell, RuledCastCostCandidateKind::Hand, 7),
+              RuledTargetClickEligibility::NotTargeting);
+}
+
 TEST(RuledPendingTargetTest, ReconcileDropsTargetsMissingFromLatestLegalSnapshot)
 {
     FakeHost host;
@@ -2622,6 +2652,90 @@ TEST_F(RuledClientTest, ResolutionBranchesSubmitOpaqueIndexWithoutOpeningADialog
     const auto &submission = host.sentCommands[0].submit_resolution_choice();
     EXPECT_EQ(submission.decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
     EXPECT_EQ(submission.selected_branch_index(), 0u);
+}
+
+TEST_F(RuledClientTest, ParsesEngineAuthoredOptionalCastCostGroups)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *hand = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
+    hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_hand_index(3);
+    auto *group = hand->mutable_cost_choices()->add_cast_cost_groups();
+    group->set_group_index(0);
+    group->set_prompt("Choose an additional cost.");
+    group->set_min(0);
+    group->set_max(1);
+    auto *kicker = group->add_options();
+    kicker->set_option_index(0);
+    kicker->set_label("Kicker {2}");
+    kicker->set_kind(ruled::v1::CAST_COST_OPTION_KIND_MANA);
+    kicker->set_additional_mana_cost("{2}");
+    kicker->set_selectable(true);
+    auto *behold = group->add_options();
+    behold->set_option_index(1);
+    behold->set_label("Behold a Dragon");
+    behold->set_kind(ruled::v1::CAST_COST_OPTION_KIND_BEHOLD);
+    behold->add_valid_hand_indices(7);
+    behold->add_valid_permanent_ids(900);
+    behold->add_valid_permanent_generations(12);
+    behold->set_selectable(true);
+    apply(batch);
+
+    const auto costs = state->spellCostData(3, 0, RuledCastSource::Hand);
+    ASSERT_EQ(costs.castCostGroups.size(), 1);
+    EXPECT_EQ(costs.castCostGroups.first().prompt, QStringLiteral("Choose an additional cost."));
+    ASSERT_EQ(costs.castCostGroups.first().options.size(), 2);
+    EXPECT_EQ(costs.castCostGroups.first().options.at(0).additionalManaCost, QStringLiteral("{2}"));
+    EXPECT_EQ(costs.castCostGroups.first().options.at(1).validHandIndices, QSet<quint32>({7}));
+    EXPECT_EQ(costs.castCostGroups.first().options.at(1).validPermanentIds, QSet<quint32>({900}));
+    EXPECT_EQ(costs.castCostGroups.first().options.at(1).validPermanentGenerations.value(900), 12u);
+}
+
+TEST_F(RuledClientTest, ActiveCastRevealsReplaceAsExactSnapshotsAndClear)
+{
+    QSignalSpy changed(state, &RuledClientState::activePublicRevealsChanged);
+    ruled::v1::RuledEventBatch first;
+    auto *snapshot = first.add_events()->mutable_active_public_reveal_snapshot();
+    auto *caustic = snapshot->add_reveals();
+    caustic->set_source_stack_object_id(700);
+    caustic->set_group_index(0);
+    caustic->set_revealing_player_id(kLocalPlayer);
+    caustic->set_source_description("Caustic Exhale");
+    caustic->set_card_id("adult_gold_dragon");
+    caustic->set_card_name("Adult Gold Dragon");
+    auto *osseous = snapshot->add_reveals();
+    osseous->set_source_stack_object_id(701);
+    osseous->set_group_index(0);
+    osseous->set_revealing_player_id(kOpponent);
+    osseous->set_source_description("Osseous Exhale");
+    osseous->set_card_id("shivan_dragon");
+    osseous->set_card_name("Shivan Dragon");
+    apply(first);
+
+    ASSERT_EQ(state->getActivePublicReveals().size(), 2);
+    ASSERT_EQ(changed.count(), 1);
+    EXPECT_EQ(changed.at(0).at(0).toStringList(),
+              QStringList({QStringLiteral("Adult Gold Dragon"), QStringLiteral("Shivan Dragon")}));
+    EXPECT_EQ(changed.at(0).at(1).value<QVector<int>>(), QVector<int>({kLocalPlayer, kOpponent}));
+
+    ruled::v1::RuledEventBatch second;
+    auto *replacement = second.add_events()->mutable_active_public_reveal_snapshot()->add_reveals();
+    replacement->set_source_stack_object_id(701);
+    replacement->set_group_index(0);
+    replacement->set_revealing_player_id(kOpponent);
+    replacement->set_source_description("Osseous Exhale");
+    replacement->set_card_id("shivan_dragon");
+    replacement->set_card_name("Shivan Dragon");
+    apply(second);
+    ASSERT_EQ(state->getActivePublicReveals().size(), 1);
+    EXPECT_EQ(state->getActivePublicReveals().first().sourceStackObjectId, 701u);
+
+    ruled::v1::RuledEventBatch cleared;
+    cleared.add_events()->mutable_active_public_reveal_snapshot();
+    apply(cleared);
+    EXPECT_TRUE(state->getActivePublicReveals().isEmpty());
+    ASSERT_EQ(changed.count(), 3);
+    EXPECT_TRUE(changed.at(2).at(0).toStringList().isEmpty());
 }
 
 TEST_F(RuledClientTest, MandatoryResolutionBranchesCannotSubmitDecline)
