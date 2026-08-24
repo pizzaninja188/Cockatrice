@@ -419,6 +419,35 @@ TEST_F(GamePromptWidgetTest, CastCostOptionControllerCanReplaceStaleButtonsWithO
     EXPECT_FALSE(btn("cancelTargetingButton")->isHidden());
 }
 
+TEST_F(GamePromptWidgetTest, HarmonizeShowsFullCostAndCreatureBranchesWithBackAndCancel)
+{
+    QSignalSpy optionSpy(widget.get(), &GamePromptWidget::ruledCastCostOptionRequested);
+    QSignalSpy cancelSpy(widget.get(), &GamePromptWidget::cancelTargetingRequested);
+    QSignalSpy backSpy(widget.get(), &GamePromptWidget::ruledCastCostBackRequested);
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::CastCostOptions;
+    state.text = "Harmonize: you may tap an untapped creature you control.";
+    state.choiceOptions = {{-1, "Pay full Harmonize cost", true}, {0, "Tap a creature", true}};
+    widget->setRuledPromptState(state);
+
+    ASSERT_NE(btn("ruledChoiceOptionButton_-1"), nullptr);
+    ASSERT_NE(btn("ruledChoiceOptionButton_0"), nullptr);
+    EXPECT_EQ(btn("ruledChoiceOptionButton_-1")->text(), "Pay full Harmonize cost");
+    EXPECT_EQ(btn("ruledChoiceOptionButton_0")->text(), "Tap a creature");
+    btn("ruledChoiceOptionButton_0")->click();
+    ASSERT_EQ(optionSpy.count(), 1);
+    EXPECT_EQ(optionSpy.takeFirst().at(0).toInt(), 0);
+
+    state.mode = PromptMode::CastCostObject;
+    state.choiceOptions.clear();
+    widget->setRuledPromptState(state);
+    EXPECT_EQ(btn("declineClickChoiceButton")->text(), "Back");
+    btn("declineClickChoiceButton")->click();
+    EXPECT_EQ(backSpy.count(), 1);
+    btn("cancelTargetingButton")->click();
+    EXPECT_EQ(cancelSpy.count(), 1);
+}
+
 TEST_F(GamePromptWidgetTest, ZoneSelectionUsesCheckboxesAndConfirmsTheMatchingAuthoredBranch)
 {
     QSignalSpy optionSpy(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);

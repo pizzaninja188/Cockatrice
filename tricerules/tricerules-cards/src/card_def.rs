@@ -118,6 +118,9 @@ pub struct CardFace {
     /// CR 702.34: optional cost to cast this face from its owner's graveyard.
     #[serde(default)]
     pub flashback_cost: Option<ManaCost>,
+    /// CR 702.180: alternative cost to cast this face from its owner's graveyard.
+    #[serde(default)]
+    pub harmonize_cost: Option<ManaCost>,
     /// Mandatory nonmana costs paid in addition to this face's mana cost (CR 118.8).
     #[serde(default)]
     pub additional_costs: Vec<AdditionalCost>,
@@ -325,6 +328,9 @@ pub struct RawCardDefinition {
     /// CR 702.34: optional cost to cast this face from its owner's graveyard.
     #[serde(default)]
     pub flashback_cost: Option<ManaCost>,
+    /// CR 702.180: alternative cost to cast this face from its owner's graveyard.
+    #[serde(default)]
+    pub harmonize_cost: Option<ManaCost>,
     #[serde(default)]
     pub additional_costs: Vec<AdditionalCost>,
     #[serde(default)]
@@ -400,6 +406,7 @@ impl RawCardDefinition {
                 name: self.name.clone(),
                 mana_cost: self.mana_cost,
                 flashback_cost: self.flashback_cost,
+                harmonize_cost: self.harmonize_cost,
                 additional_costs: self.additional_costs,
                 cast_cost_groups: self.cast_cost_groups,
                 instant_speed_cast_cost: self.instant_speed_cast_cost,

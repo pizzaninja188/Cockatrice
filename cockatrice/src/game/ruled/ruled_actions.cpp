@@ -605,8 +605,11 @@ bool isSingleClickPlayLegal(const CardItem *card)
     }
     if (inPublicCastZone) {
         const quint32 objectId = resolvePublicZoneObjectId(state, card);
+        const RuledCastSource source = card->getZone()->getName() == ZoneNames::GRAVE
+                                           ? RuledCastSource::Graveyard
+                                           : RuledCastSource::Exile;
         return objectId != 0 &&
-               (state->isZoneActionLegal(objectId) || state->isZoneLandActionLegal(objectId));
+               (state->isZoneActionLegal(objectId, source) || state->isZoneLandActionLegal(objectId));
     }
     const bool isLand = card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive);
     const RuledHandActionKind kind =
@@ -622,6 +625,12 @@ bool isSelectedSpellTarget(const AbstractGame *game, quint32 oid)
 {
     PlayerActions *actions = localPlayerActions(game);
     return actions && actions->isTargetSelectedForPendingSpell(oid);
+}
+
+bool isSelectedCastCostPermanent(const AbstractGame *game, quint32 oid)
+{
+    PlayerActions *actions = localPlayerActions(game);
+    return actions && actions->isCastCostPermanentSelected(oid);
 }
 
 bool isSelectedGraveyardCostObject(const AbstractGame *game, quint32 oid)

@@ -101,6 +101,7 @@ public:
     [[nodiscard]] RuledTargetClickEligibility ruledCardTargetEligibility(CardItem *card) const;
     [[nodiscard]] RuledTargetClickEligibility ruledPlayerTargetEligibility(Player *targetPlayer) const;
     [[nodiscard]] bool isTargetSelectedForPendingSpell(quint32 oid) const;
+    [[nodiscard]] bool isCastCostPermanentSelected(quint32 oid) const;
     [[nodiscard]] bool isPlayerSelectedAsPendingSpellTarget(int playerId) const;
     void confirmMultiTargetSelection();
     /// True when the local player must pick a player (not permanent) for the pending ruled cast.
@@ -114,6 +115,7 @@ public:
     [[nodiscard]] bool isAwaitingRuledCastCostObject() const;
     [[nodiscard]] bool isAwaitingRuledCastCostOption() const;
     [[nodiscard]] bool pendingRuledCastCostGroupIsOptional() const;
+    [[nodiscard]] QString pendingRuledCastCostSkipLabel() const;
     [[nodiscard]] QVector<RuledCastCostOption> pendingRuledCastCostOptions() const;
     void selectPendingRuledCastCostOption(int optionIndex);
     void backPendingRuledCastCostObject();
@@ -337,7 +339,8 @@ private:
                              const QString &castName,
                              const QString &castCost,
                              int genericCostReduction,
-                             RuledCastSource source = RuledCastSource::Hand);
+                             RuledCastSource source = RuledCastSource::Hand,
+                             ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL);
     void finalizePendingSpellManaCost();
     bool storeCurrentModalTargetsAndAdvance();
     bool storeCurrentTargetGroupAndAdvance();

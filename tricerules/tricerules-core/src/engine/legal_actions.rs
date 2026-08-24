@@ -719,6 +719,7 @@ fn legal_spell_cost_choices(
                             valid_permanent_ids,
                             valid_permanent_generations,
                             selectable,
+                            ..Default::default()
                         }
                     }
                 })
@@ -732,6 +733,7 @@ fn legal_spell_cost_choices(
                 min: group.min,
                 max: group.max,
                 options,
+                skip_label: String::new(),
             }
         })
         .collect();
@@ -739,6 +741,60 @@ fn legal_spell_cost_choices(
         non_mana_costs_payable,
         choices,
         cast_cost_groups: legal_cast_cost_groups,
+    }
+}
+
+fn harmonize_cast_cost_group(
+    eng: &GameEngine,
+    player: PlayerId,
+    group_index: usize,
+) -> rv1::LegalCastCostGroup {
+    let candidates = eng
+        .state
+        .players
+        .iter()
+        .flat_map(|state| state.battlefield.iter().copied())
+        .filter_map(|oid| {
+            let object = eng.state.objects.get(&oid)?;
+            let characteristics = eng.characteristics(oid)?;
+            (object.zone == Zone::Battlefield
+                && !object.tapped
+                && characteristics.controller == player
+                && characteristics.is_creature())
+            .then_some((
+                oid,
+                eng.state
+                    .zone_change_generation
+                    .get(&oid)
+                    .copied()
+                    .unwrap_or(0),
+                characteristics.power.unwrap_or(0),
+            ))
+        })
+        .collect::<Vec<_>>();
+    rv1::LegalCastCostGroup {
+        group_index: group_index as u32,
+        prompt: "Harmonize: you may tap an untapped creature you control to reduce the generic cost by its power."
+            .to_string(),
+        min: 0,
+        max: 1,
+        options: vec![rv1::LegalCastCostOption {
+            option_index: 0,
+            label: "Tap a creature".to_string(),
+            kind: rv1::CastCostOptionKind::TapPermanentForGenericReduction as i32,
+            valid_permanent_ids: candidates.iter().map(|(oid, _, _)| *oid).collect(),
+            valid_permanent_generations: candidates
+                .iter()
+                .map(|(_, generation, _)| *generation)
+                .collect(),
+            valid_permanent_generic_reductions: candidates
+                .iter()
+                .map(|(_, _, power)| *power)
+                .collect(),
+            selectable: !candidates.is_empty(),
+            ..Default::default()
+        }],
+        skip_label: "Pay full Harmonize cost".to_string(),
     }
 }
 
@@ -1034,78 +1090,99 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             continue;
         };
         for (face_index, face) in definition.faces_iter().enumerate() {
-            if face.flashback_cost.is_none() || face.is_land {
+            if face.is_land {
                 continue;
             }
-            let cost_choices = legal_spell_cost_choices(
-                eng,
-                pid,
-                oid,
-                &face.additional_costs,
-                &face.cast_cost_groups,
-            );
-            let cast_ok = face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
-            if !cast_ok {
-                continue;
-            }
-            let mut action = rv1::LegalZoneCastAction {
-                source_zone: rv1::CastSourceZone::Graveyard as i32,
-                object_id: oid,
-                card_name: face.name.clone(),
-                face_index: face_index as u32,
-                needs_target: target_schema(&face.spell_effect, face.targeting.as_ref())
-                    .has_targets(),
-                min_modes: 0,
-                max_modes: 0,
-                modes: vec![],
-                cost: face
-                    .flashback_cost
-                    .as_ref()
-                    .map(ToString::to_string)
-                    .unwrap_or_default(),
-                cost_choices: None,
-                eligible_restricted_mana_group_ids: eng
-                    .eligible_restricted_mana_for_spell(player_index, face),
-                generic_cost_reduction: eng.spell_generic_reduction(pid, oid, &face.cost_modifiers),
-            };
-            if !cost_choices.non_mana_costs_payable {
-                continue;
-            }
-            action.cost_choices = Some(cost_choices);
-            if let Some(modal) = &face.modal_spell {
-                action.min_modes = modal.min_modes;
-                action.max_modes = modal.max_modes;
-                action.modes = modal
-                    .modes
-                    .iter()
-                    .enumerate()
-                    .map(|(mode_index, mode)| {
-                        let needs_target =
-                            target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
-                        let targets = compute_spell_targets(
+            let methods = [
+                (rv1::CastMethod::Flashback, face.flashback_cost.as_ref()),
+                (rv1::CastMethod::Harmonize, face.harmonize_cost.as_ref()),
+            ];
+            for (cast_method, method_cost) in methods {
+                let Some(method_cost) = method_cost else {
+                    continue;
+                };
+                let mut cost_choices = legal_spell_cost_choices(
+                    eng,
+                    pid,
+                    oid,
+                    &face.additional_costs,
+                    &face.cast_cost_groups,
+                );
+                if cast_method == rv1::CastMethod::Harmonize {
+                    cost_choices
+                        .cast_cost_groups
+                        .push(harmonize_cast_cost_group(
                             eng,
                             pid,
-                            TargetSourceIdentity::spell_face(eng, oid, face_index),
-                            &mode.effects,
-                            mode.targeting.as_ref(),
-                        );
-                        let selectable = !needs_target || spell_targets_have_candidate(&targets);
-                        rv1::LegalSpellMode {
-                            mode_index: mode_index as u32,
-                            label: mode.label.clone(),
-                            selectable,
-                            needs_target,
-                            targets: Some(targets),
-                        }
-                    })
-                    .collect();
-                if action.modes.iter().filter(|mode| mode.selectable).count()
-                    < modal.min_modes as usize
-                {
+                            face.cast_cost_groups.len(),
+                        ));
+                }
+                let cast_ok =
+                    face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
+                if !cast_ok {
                     continue;
                 }
+                let mut action = rv1::LegalZoneCastAction {
+                    source_zone: rv1::CastSourceZone::Graveyard as i32,
+                    object_id: oid,
+                    card_name: face.name.clone(),
+                    face_index: face_index as u32,
+                    needs_target: target_schema(&face.spell_effect, face.targeting.as_ref())
+                        .has_targets(),
+                    min_modes: 0,
+                    max_modes: 0,
+                    modes: vec![],
+                    cost: method_cost.to_string(),
+                    cost_choices: None,
+                    eligible_restricted_mana_group_ids: eng
+                        .eligible_restricted_mana_for_spell(player_index, face),
+                    generic_cost_reduction: eng.spell_generic_reduction(
+                        pid,
+                        oid,
+                        &face.cost_modifiers,
+                    ),
+                    cast_method: cast_method as i32,
+                };
+                if !cost_choices.non_mana_costs_payable {
+                    continue;
+                }
+                action.cost_choices = Some(cost_choices);
+                if let Some(modal) = &face.modal_spell {
+                    action.min_modes = modal.min_modes;
+                    action.max_modes = modal.max_modes;
+                    action.modes = modal
+                        .modes
+                        .iter()
+                        .enumerate()
+                        .map(|(mode_index, mode)| {
+                            let needs_target =
+                                target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
+                            let targets = compute_spell_targets(
+                                eng,
+                                pid,
+                                TargetSourceIdentity::spell_face(eng, oid, face_index),
+                                &mode.effects,
+                                mode.targeting.as_ref(),
+                            );
+                            let selectable =
+                                !needs_target || spell_targets_have_candidate(&targets);
+                            rv1::LegalSpellMode {
+                                mode_index: mode_index as u32,
+                                label: mode.label.clone(),
+                                selectable,
+                                needs_target,
+                                targets: Some(targets),
+                            }
+                        })
+                        .collect();
+                    if action.modes.iter().filter(|mode| mode.selectable).count()
+                        < modal.min_modes as usize
+                    {
+                        continue;
+                    }
+                }
+                actions.push(action);
             }
-            actions.push(action);
         }
     }
 
@@ -1175,6 +1252,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     object.id,
                     &face.cost_modifiers,
                 ),
+                cast_method: rv1::CastMethod::Normal as i32,
             };
             if !cost_choices.non_mana_costs_payable {
                 continue;

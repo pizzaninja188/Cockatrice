@@ -268,6 +268,15 @@ message CastSource {
   }
 }
 
+// CR 601.2b: the announced method whose alternative cost and stack-exit rules apply to this cast.
+// UNSPECIFIED is never legal; every coordinated client must state the method explicitly.
+enum CastMethod {
+  CAST_METHOD_UNSPECIFIED = 0;
+  CAST_METHOD_NORMAL = 1;
+  CAST_METHOD_FLASHBACK = 2;
+  CAST_METHOD_HARMONIZE = 3;
+}
+
 message CastSpell {
   reserved 1, 7;
   reserved "hand_card_index", "flashback";
@@ -298,6 +307,7 @@ message CastSpell {
   // option indices are authored rules identity; a behold option additionally names its chosen
   // hand slot or battlefield permanent.
   repeated CastCostGroupSelection cast_cost_group_selections = 11;
+  CastMethod cast_method = 12;
 }
 
 message CastCostGroupSelection {
@@ -539,6 +549,7 @@ message LegalZoneCastAction {
   LegalCostChoices cost_choices = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 eligible_restricted_mana_group_ids = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 generic_cost_reduction = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  CastMethod cast_method = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message ManaPaymentEligibility {
@@ -592,6 +603,7 @@ enum CastCostOptionKind {
   CAST_COST_OPTION_KIND_UNSPECIFIED = 0;
   CAST_COST_OPTION_KIND_MANA = 1;
   CAST_COST_OPTION_KIND_BEHOLD = 2;
+  CAST_COST_OPTION_KIND_TAP_PERMANENT_FOR_GENERIC_REDUCTION = 3;
 }
 
 message LegalCastCostOption {
@@ -605,6 +617,8 @@ message LegalCastCostOption {
   // Parallel to valid_permanent_ids. Hand choices use transient private hand slots and are
   // rebound from stable Server_Card ids by the client at submission time.
   repeated uint64 valid_permanent_generations = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Parallel to valid_permanent_ids; the engine-authored generic reduction for each candidate.
+  repeated uint32 valid_permanent_generic_reductions = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalCastCostGroup {
@@ -613,6 +627,8 @@ message LegalCastCostGroup {
   uint32 min = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 max = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated LegalCastCostOption options = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Label for declining an optional group. Empty on required groups.
+  string skip_label = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 enum PermanentActionKind {

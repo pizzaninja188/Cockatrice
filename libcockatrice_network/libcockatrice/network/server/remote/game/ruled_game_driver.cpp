@@ -2067,9 +2067,10 @@ void RuledGameDriver::appendServerObjectMaps(ruled::v1::IpcResponse &toSend)
                 entry->set_server_card_id(it.value());
             }
         }
-        if (gm->entries_size() > 0) {
-            *toSend.mutable_batch()->add_events() = graveyardEv;
-        }
+        // This is a full replacement, including when empty. Omitting the event after the last
+        // graveyard card leaves would retain the client's old Server_Card.id -> engine OID binding;
+        // that stale identity can later make a repeated public-zone cast appear on the wrong pile.
+        *toSend.mutable_batch()->add_events() = graveyardEv;
     }
     // Exile OID map: Adventure legal actions name an engine object, while clicks carry a
     // Server_Card id. Publish the binding for every public exile pile.

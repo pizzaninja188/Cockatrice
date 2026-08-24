@@ -605,11 +605,12 @@ impl GameEngine {
             // CR 702.34a: a spell cast with flashback is exiled instead of being put into its
             // owner's graveyard as it leaves the stack, regardless of whether it would normally
             // be a permanent spell.
-            let resolves_to_battlefield =
-                !top.flashback && resolves_to_battlefield_raw && aura_target_valid;
+            let resolves_to_battlefield = !top.cast_method.exiles_on_leave_stack()
+                && resolves_to_battlefield_raw
+                && aura_target_valid;
             let destination = if resolves_to_battlefield {
                 rv1::StackResolveDestination::Battlefield as i32
-            } else if top.flashback || adventure_resolves_to_exile {
+            } else if top.cast_method.exiles_on_leave_stack() || adventure_resolves_to_exile {
                 rv1::StackResolveDestination::Exile as i32
             } else {
                 rv1::StackResolveDestination::Graveyard as i32
@@ -662,7 +663,7 @@ impl GameEngine {
                     &mut self.state,
                     self.registry,
                     top.id,
-                    if top.flashback || adventure_resolves_to_exile {
+                    if top.cast_method.exiles_on_leave_stack() || adventure_resolves_to_exile {
                         Zone::Exile
                     } else {
                         Zone::Graveyard
@@ -800,7 +801,7 @@ impl GameEngine {
         let shuffle_player = physical_owner.unwrap_or(top.controller);
         let destination = if is_resolved_omen {
             rv1::StackResolveDestination::Library
-        } else if top.flashback {
+        } else if top.cast_method.exiles_on_leave_stack() {
             rv1::StackResolveDestination::Exile
         } else {
             rv1::StackResolveDestination::Graveyard
@@ -819,7 +820,7 @@ impl GameEngine {
                 top.id,
                 if is_resolved_omen {
                     Zone::Library
-                } else if top.flashback {
+                } else if top.cast_method.exiles_on_leave_stack() {
                     Zone::Exile
                 } else {
                     Zone::Graveyard
@@ -2215,7 +2216,7 @@ mod attached_subject_tests {
             is_triggered: true,
             is_copy: false,
             face_index: 0,
-            flashback: false,
+            cast_method: SpellCastMethod::Normal,
             chosen_x: 0,
             chosen_modes: vec![],
             cast_cost_receipts: vec![],
@@ -2676,7 +2677,7 @@ mod source_keyword_tests {
             is_triggered: false,
             is_copy: false,
             face_index: 0,
-            flashback: false,
+            cast_method: SpellCastMethod::Normal,
             chosen_x: 0,
             chosen_modes: vec![],
             cast_cost_receipts: vec![],
@@ -2701,7 +2702,7 @@ mod source_keyword_tests {
             is_triggered: false,
             is_copy: false,
             face_index: 0,
-            flashback: false,
+            cast_method: SpellCastMethod::Normal,
             chosen_x,
             chosen_modes: vec![],
             cast_cost_receipts: vec![],

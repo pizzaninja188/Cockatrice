@@ -1,0 +1,9 @@
+// 5/5 green Elephant creature token (Mammoth Bellow).
+(
+    id: "elephant_g_5_5",
+    name: "Elephant",
+    types: ["Creature", "Elephant"],
+    colors: [Green],
+    power: 5,
+    toughness: 5,
+)

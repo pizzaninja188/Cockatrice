@@ -386,7 +386,7 @@ mod damage_source_tests {
             is_triggered: source_permanent_id.is_some(),
             is_copy: false,
             face_index: 0,
-            flashback: false,
+            cast_method: SpellCastMethod::Normal,
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_cost_receipts: Vec::new(),

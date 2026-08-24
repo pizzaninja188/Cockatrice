@@ -642,6 +642,7 @@ fn bump_in_the_night_can_be_cast_from_graveyard_with_flashback() {
             0,
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(CastSpell {
+                    cast_method: tricerules_proto::ruled::v1::CastMethod::Flashback as i32,
                     targets: target,
                     source: Some(graveyard_cast_source(bump_oid)),
                     ..Default::default()

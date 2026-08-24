@@ -488,6 +488,57 @@ TEST(RuledPendingTargetTest, CastCostObjectEligibilityUsesThePublishedOptionCand
               RuledTargetClickEligibility::NotTargeting);
 }
 
+TEST(RuledPendingTargetTest, HarmonizeCastCostOnlyAcceptsPublishedPermanentCandidates)
+{
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.waitingForCastCostObject = true;
+    spell.nextCastCostGroup = 0;
+    spell.activeCastCostOption = 0;
+
+    RuledCastCostOption harmonize;
+    harmonize.optionIndex = 0;
+    harmonize.kind = RuledCastCostOptionKind::TapPermanentForGenericReduction;
+    harmonize.selectable = true;
+    harmonize.validHandIndices = {7};
+    harmonize.validPermanentIds = {900};
+    RuledCastCostGroup group;
+    group.options = {harmonize};
+    spell.castCostGroups = {group};
+
+    EXPECT_EQ(ruledCastCostObjectEligibility(spell, RuledCastCostCandidateKind::Hand, 7),
+              RuledTargetClickEligibility::Illegal);
+    EXPECT_EQ(ruledCastCostObjectEligibility(spell, RuledCastCostCandidateKind::Permanent, 900),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledCastCostObjectEligibility(spell, RuledCastCostCandidateKind::Permanent, 901),
+              RuledTargetClickEligibility::Illegal);
+}
+
+TEST(RuledPendingTargetTest, HarmonizeCostIsNotFinalizedWhileItsOptionChoiceIsPending)
+{
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.remainingCost[QLatin1Char('X')] = 5;
+    spell.nextCastCostGroup = 0;
+
+    RuledCastCostOption harmonize;
+    harmonize.optionIndex = 0;
+    harmonize.kind = RuledCastCostOptionKind::TapPermanentForGenericReduction;
+    harmonize.selectable = true;
+    RuledCastCostGroup group;
+    group.options = {harmonize};
+    spell.castCostGroups = {group};
+
+    EXPECT_FALSE(ruledCastCostGroupsComplete(spell));
+
+    spell.castCostGenericReduction = 2;
+    spell.nextCastCostGroup = 1;
+    EXPECT_TRUE(ruledCastCostGroupsComplete(spell));
+    EXPECT_EQ(ruledFinalGenericCost(spell.remainingCost.value(QLatin1Char('X')), 0,
+                                    spell.castCostGenericReduction),
+              3);
+}
+
 TEST(RuledPendingTargetTest, ReconcileDropsTargetsMissingFromLatestLegalSnapshot)
 {
     FakeHost host;
@@ -1819,6 +1870,7 @@ TEST_F(RuledClientTest, AppliesAndClearsObjectIdKeyedExileCastActions)
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     auto *cast = actions.add_zone_cast_actions();
     cast->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     cast->set_object_id(objectId);
     cast->set_face_index(0);
     cast->set_card_name("Bonecrusher Giant");
@@ -1833,15 +1885,16 @@ TEST_F(RuledClientTest, AppliesAndClearsObjectIdKeyedExileCastActions)
     zoneGroup->add_valid_permanent_ids(99);
     apply(batch);
 
-    ASSERT_TRUE(state->isZoneActionLegal(objectId));
+    ASSERT_TRUE(state->isZoneActionLegal(objectId, RuledCastSource::Exile));
     ASSERT_EQ(state->zoneActionSource(objectId), RuledCastSource::Exile);
-    ASSERT_EQ(state->zoneActionCost(objectId, 0), QStringLiteral("{2}{R}"));
-    ASSERT_EQ(state->zoneActionFaceOptions(objectId).size(), 1);
-    EXPECT_EQ(state->zoneActionFaceOptions(objectId).first().faceName, QStringLiteral("Bonecrusher Giant"));
+    ASSERT_EQ(state->zoneActionCost(objectId, 0, RuledCastSource::Exile), QStringLiteral("{2}{R}"));
+    ASSERT_EQ(state->zoneActionFaceOptions(objectId, RuledCastSource::Exile).size(), 1);
+    EXPECT_EQ(state->zoneActionFaceOptions(objectId, RuledCastSource::Exile).first().faceName,
+              QStringLiteral("Bonecrusher Giant"));
     EXPECT_TRUE(state->isValidSpellTarget(static_cast<int>(objectId), 0, 99, RuledCastSource::Exile));
 
     apply(phaseBatch(ruled::v1::PHASE_ID_MAIN1, kLocalPlayer));
-    EXPECT_FALSE(state->isZoneActionLegal(objectId));
+    EXPECT_FALSE(state->isZoneActionLegal(objectId, RuledCastSource::Exile));
     EXPECT_FALSE(state->isValidSpellTarget(static_cast<int>(objectId), 0, 99, RuledCastSource::Exile));
 }
 
@@ -2072,6 +2125,7 @@ TEST_F(RuledClientTest, ParsesSpellCostChoicesForHandAndPublicZoneCasts)
     discard->add_candidate_ids(1);
 
     auto *zone = actions.add_zone_cast_actions();
+    zone->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     zone->set_object_id(77);
     zone->set_face_index(1);
     auto *sacrifice = zone->mutable_cost_choices()->add_choices();
@@ -2652,6 +2706,84 @@ TEST_F(RuledClientTest, ResolutionBranchesSubmitOpaqueIndexWithoutOpeningADialog
     const auto &submission = host.sentCommands[0].submit_resolution_choice();
     EXPECT_EQ(submission.decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
     EXPECT_EQ(submission.selected_branch_index(), 0u);
+}
+
+TEST_F(RuledClientTest, ParsesMethodAwareHarmonizeActionAndAuthoritativeCreatureReductions)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *flashback = actions.add_zone_cast_actions();
+    flashback->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD);
+    flashback->set_object_id(77);
+    flashback->set_face_index(0);
+    flashback->set_card_name("Unending Whisper");
+    flashback->set_cost("{6}{U}");
+    flashback->set_cast_method(ruled::v1::CAST_METHOD_FLASHBACK);
+
+    auto *harmonize = actions.add_zone_cast_actions();
+    harmonize->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD);
+    harmonize->set_object_id(77);
+    harmonize->set_face_index(0);
+    harmonize->set_card_name("Unending Whisper");
+    harmonize->set_cost("{5}{U}");
+    harmonize->set_cast_method(ruled::v1::CAST_METHOD_HARMONIZE);
+    auto *group = harmonize->mutable_cost_choices()->add_cast_cost_groups();
+    group->set_group_index(0);
+    group->set_min(0);
+    group->set_max(1);
+    group->set_prompt("Choose a creature for Harmonize.");
+    group->set_skip_label("Pay full Harmonize cost");
+    auto *option = group->add_options();
+    option->set_option_index(0);
+    option->set_label("Tap a creature");
+    option->set_kind(ruled::v1::CAST_COST_OPTION_KIND_TAP_PERMANENT_FOR_GENERIC_REDUCTION);
+    option->set_selectable(true);
+    option->add_valid_permanent_ids(900);
+    option->add_valid_permanent_generations(12);
+    option->add_valid_permanent_generic_reductions(4);
+    apply(batch);
+
+    const auto faces = state->zoneActionFaceOptions(77, RuledCastSource::Graveyard);
+    ASSERT_EQ(faces.size(), 2);
+    EXPECT_EQ(faces.at(0).castMethod, ruled::v1::CAST_METHOD_FLASHBACK);
+    EXPECT_EQ(faces.at(1).castMethod, ruled::v1::CAST_METHOD_HARMONIZE);
+    EXPECT_EQ(state->zoneActionCost(77, 0, RuledCastSource::Graveyard, ruled::v1::CAST_METHOD_FLASHBACK),
+              QStringLiteral("{6}{U}"));
+    EXPECT_EQ(state->zoneActionCost(77, 0, RuledCastSource::Graveyard, ruled::v1::CAST_METHOD_HARMONIZE),
+              QStringLiteral("{5}{U}"));
+    const auto costs = state->spellCostData(77, 0, RuledCastSource::Graveyard,
+                                            ruled::v1::CAST_METHOD_HARMONIZE);
+    ASSERT_EQ(costs.castCostGroups.size(), 1);
+    EXPECT_EQ(costs.castCostGroups[0].skipLabel, QStringLiteral("Pay full Harmonize cost"));
+    ASSERT_EQ(costs.castCostGroups[0].options.size(), 1);
+    EXPECT_EQ(costs.castCostGroups[0].options[0].kind,
+              RuledCastCostOptionKind::TapPermanentForGenericReduction);
+    EXPECT_EQ(costs.castCostGroups[0].options[0].validPermanentGenerations.value(900), 12u);
+    EXPECT_EQ(costs.castCostGroups[0].options[0].validPermanentGenericReductions.value(900), 4);
+}
+
+TEST_F(RuledClientTest, PublicZoneCastActionsRequireTheClickedSourceZone)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *harmonize = actions.add_zone_cast_actions();
+    harmonize->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD);
+    harmonize->set_object_id(77);
+    harmonize->set_face_index(0);
+    harmonize->set_card_name("Unending Whisper");
+    harmonize->set_cost("{5}{U}");
+    harmonize->set_cast_method(ruled::v1::CAST_METHOD_HARMONIZE);
+    apply(batch);
+
+    EXPECT_TRUE(state->isZoneActionLegal(77, RuledCastSource::Graveyard));
+    EXPECT_FALSE(state->isZoneActionLegal(77, RuledCastSource::Exile));
+    EXPECT_EQ(state->zoneActionFaceOptions(77, RuledCastSource::Graveyard).size(), 1);
+    EXPECT_TRUE(state->zoneActionFaceOptions(77, RuledCastSource::Exile).isEmpty());
+    EXPECT_EQ(state->zoneActionCost(77, 0, RuledCastSource::Graveyard, ruled::v1::CAST_METHOD_HARMONIZE),
+              QStringLiteral("{5}{U}"));
+    EXPECT_TRUE(state->zoneActionCost(77, 0, RuledCastSource::Exile,
+                                      ruled::v1::CAST_METHOD_HARMONIZE)
+                    .isEmpty());
 }
 
 TEST_F(RuledClientTest, AppliesExileLandActionsAndStablePermissionGroupSnapshots)

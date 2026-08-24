@@ -40,6 +40,7 @@ fn fireball_single_target_all_damage() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
+                cast_method: tricerules_proto::ruled::v1::CastMethod::Normal as i32,
                 source: Some(hand_cast_source(idx)),
                 targets: vec![TargetRef {
                     object_id: 1,
@@ -81,6 +82,7 @@ fn fireball_split_between_two_targets() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
+                cast_method: tricerules_proto::ruled::v1::CastMethod::Normal as i32,
                 source: Some(hand_cast_source(idx)),
                 targets: vec![
                     TargetRef {
@@ -130,6 +132,7 @@ fn fireball_does_not_accept_cast_time_allocation() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
+                cast_method: tricerules_proto::ruled::v1::CastMethod::Normal as i32,
                 source: Some(hand_cast_source(idx)),
                 targets: vec![
                     TargetRef {
@@ -272,6 +275,7 @@ fn fireball_insufficient_mana_for_surcharge_rejected() {
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
+                cast_method: tricerules_proto::ruled::v1::CastMethod::Normal as i32,
                 source: Some(hand_cast_source(idx)),
                 targets: vec![
                     TargetRef {

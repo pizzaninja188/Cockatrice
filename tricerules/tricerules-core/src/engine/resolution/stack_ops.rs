@@ -372,7 +372,7 @@ pub(crate) fn counter_stack_spell(
         .unwrap_or("spell");
     if st.ability_text.is_none() && !st.is_copy {
         let owner = engine.state.objects.get(&st.id).map(|object| object.owner);
-        let destination = if st.flashback {
+        let destination = if st.cast_method.exiles_on_leave_stack() {
             Zone::Exile
         } else {
             Zone::Graveyard
@@ -383,7 +383,7 @@ pub(crate) fn counter_stack_spell(
                 &engine.state,
                 st.id,
                 owner,
-                if st.flashback {
+                if st.cast_method.exiles_on_leave_stack() {
                     rv1::permanent_moved::Destination::Exile
                 } else {
                     rv1::permanent_moved::Destination::Graveyard
@@ -478,7 +478,7 @@ pub(super) fn copy_target_spell(
                     // CR 707.2: the copy has the original's characteristics and choices. `None`
                     // for every spell today, but copying inherits it rather than dropping it.
                     trigger_context: src.trigger_context,
-                    flashback: false,
+                    cast_method: SpellCastMethod::Normal,
                 };
                 // CR 707.10c: prompt for new targets on the first copy; push any
                 // additional copies immediately with the original targets.

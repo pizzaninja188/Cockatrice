@@ -1,0 +1,8 @@
+(
+  id: "unending_whisper",
+  name: "Unending Whisper",
+  mana_cost: "{U}",
+  harmonize_cost: Some("{5}{U}"),
+  types: ["Sorcery"],
+  spell_effect: [Draw(count: 1)],
+)

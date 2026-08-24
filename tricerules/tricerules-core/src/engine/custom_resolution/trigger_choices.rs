@@ -163,7 +163,7 @@ impl GameEngine {
             cast_cost_receipts: vec![],
             resolution_branch_choices: Default::default(),
             trigger_context,
-            flashback: false,
+            cast_method: SpellCastMethod::Normal,
         });
         self.state.passes_since_stack_change = 0;
 

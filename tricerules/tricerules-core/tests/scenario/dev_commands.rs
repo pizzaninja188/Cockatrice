@@ -583,6 +583,41 @@ fn dev_conjure_then_move_reaches_the_graveyard() {
     assert_eq!(count_card_id_in_graveyard(&e, 0, "serra_angel"), 1);
 }
 
+/// The hand is the documented staging zone for a card that will be moved into a public zone.
+/// Prefer that visible copy when the deck already contains another card with the same name.
+#[test]
+fn dev_conjure_then_move_prefers_the_staged_hand_copy_over_the_library() {
+    let decks = Some(vec![
+        deck_with("mountain", &["lightning_bolt"]),
+        vec!["forest".into(); 12],
+    ]);
+    let mut e = GameEngine::new(9072, &[0, 1], 20, decks, true).expect("new");
+    e.enable_dev_commands();
+    advance_to_main1_from_game_start(&mut e);
+
+    let library_oid = *e.state.players[0]
+        .library
+        .iter()
+        .find(|oid| e.state.objects[oid].card_id == "lightning_bolt")
+        .expect("deck copy");
+    e.apply_command(0, &put(0, DevZone::Hand, "Lightning Bolt"))
+        .expect("conjure staged copy");
+    let staged_oid = *e.state.players[0]
+        .hand
+        .iter()
+        .find(|oid| e.state.objects[oid].card_id == "lightning_bolt")
+        .expect("staged hand copy");
+
+    e.apply_command(0, &mv(0, DevZone::Graveyard, "Lightning Bolt"))
+        .expect("move staged copy to graveyard");
+
+    assert!(e.state.players[0].graveyard.contains(&staged_oid));
+    assert!(
+        e.state.players[0].library.contains(&library_oid),
+        "the same-named deck copy must remain in the library"
+    );
+}
+
 // ---------------------------------------------------------------------------------------------
 // Battlefield entry: what put bf actually does
 // ---------------------------------------------------------------------------------------------

@@ -334,6 +334,16 @@ public:
     bool flashbackCast = false;
     bool sawFlashbackGraveToStack = false;
     bool sawFlashbackStackToExile = false;
+    bool harmonizeFlowActive = false;
+    bool normalWhisperFlowActive = false;
+    bool sawHarmonizeGraveToStack = false;
+    bool sawHarmonizeStackToExile = false;
+    bool sawHarmonizeStackReceipt = false;
+    bool sawNormalWhisperHandToStack = false;
+    bool sawNormalWhisperStackToGrave = false;
+    bool harmonizePhysicalIdentityContinuous = true;
+    int harmonizePhysicalCardId = -1;
+    quint32 harmonizeCreatureOid = 0;
     bool devTypecyclingConjureSent = false;
     bool devTypecyclingManaSent = false;
     bool typecyclingActivated = false;
@@ -841,6 +851,24 @@ public:
                         sawFlashbackStackToExile = true;
                         log(QStringLiteral("flashback: '%1' stack -> exile (mine)").arg(name));
                     }
+                } else if (name == QLatin1String("Unending Whisper")) {
+                    if (harmonizeFlowActive && from == grave && to == stack) {
+                        harmonizePhysicalIdentityContinuous =
+                            harmonizePhysicalCardId >= 0 && mc.card_id() == harmonizePhysicalCardId &&
+                            mc.new_card_id() == harmonizePhysicalCardId;
+                        harmonizePhysicalCardId = mc.new_card_id();
+                        sawHarmonizeGraveToStack = true;
+                    } else if (harmonizeFlowActive && from == stack && to == exile) {
+                        harmonizePhysicalIdentityContinuous =
+                            harmonizePhysicalIdentityContinuous && harmonizePhysicalCardId >= 0 &&
+                            mc.card_id() == harmonizePhysicalCardId && mc.new_card_id() == harmonizePhysicalCardId;
+                        harmonizePhysicalCardId = mc.new_card_id();
+                        sawHarmonizeStackToExile = true;
+                    } else if (normalWhisperFlowActive && from == hand && to == stack) {
+                        sawNormalWhisperHandToStack = true;
+                    } else if (normalWhisperFlowActive && from == stack && to == grave) {
+                        sawNormalWhisperStackToGrave = true;
+                    }
                 } else if ((from == grave || to == exile) && name != QLatin1String("Sagu Pummeler") &&
                            !(name == QLatin1String("Grizzly Bears") &&
                              (submittedAggressiveChoice || sawAggressivePublicReveal))) {
@@ -954,6 +982,16 @@ public:
                     sawBeholdStackReceipt =
                         std::any_of(sp.chosen_cast_cost_labels().begin(), sp.chosen_cast_cost_labels().end(),
                                     [](const std::string &label) { return label == "Behold a Dragon"; });
+                }
+                if (harmonizeFlowActive && cardId == QLatin1String("unending_whisper")) {
+                    sawHarmonizeStackReceipt =
+                        std::any_of(sp.chosen_cast_cost_labels().begin(), sp.chosen_cast_cost_labels().end(),
+                                    [](const std::string &label) {
+                                        const QString receipt = QString::fromStdString(label);
+                                        return receipt.contains(QStringLiteral("Harmonize")) &&
+                                               receipt.contains(QStringLiteral("reduce {2}"));
+                                    }) &&
+                        QString::fromStdString(sp.ability_annotation()).contains(QStringLiteral("Harmonize"));
                 }
                 const QString annotation = QString::fromStdString(sp.ability_annotation());
                 if (annotation == QLatin1String("Ward {2}")) {
@@ -1624,7 +1662,12 @@ public:
         CommandContainer cont;
         cont.set_game_id(gameId);
         std::string bytes;
-        cmd.SerializeToString(&bytes);
+        ruled::v1::RuledCommand explicitCommand = cmd;
+        if (explicitCommand.has_cast_spell() &&
+            explicitCommand.cast_spell().cast_method() == ruled::v1::CAST_METHOD_UNSPECIFIED) {
+            explicitCommand.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        }
+        explicitCommand.SerializeToString(&bytes);
         cont.add_game_command()->MutableExtension(Command_RuledPayload::ext)->set_payload(bytes);
         ruledCmdIds.insert(nextCmdId);
         sendContainer(cont);
@@ -1832,6 +1875,7 @@ public:
                 }
                 ruled::v1::RuledCommand cmd;
                 auto *cast = cmd.mutable_cast_spell();
+                cast->set_cast_method(ruled::v1::CAST_METHOD_FLASHBACK);
                 cast->mutable_source()->set_graveyard_object_id(ga.object_id());
                 cast->add_targets()->set_object_id(static_cast<quint32>(oppId));
                 flashbackCast = true;
@@ -4024,6 +4068,7 @@ TEST_F(RuledE2ESmokeTest, WardManaDeclineAndPrivateDiscardPayment)
     ASSERT_EQ(manaTargets.size(), 1u);
     const quint32 dirgurOid = manaTargets.front();
     ruled::v1::RuledCommand castManaWard;
+    castManaWard.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     castManaWard.mutable_cast_spell()->mutable_source()->set_hand_index(manaUnsummon->hand_index());
     auto *manaTarget = castManaWard.mutable_cast_spell()->add_targets();
     manaTarget->set_object_id(dirgurOid);
@@ -4066,6 +4111,7 @@ TEST_F(RuledE2ESmokeTest, WardManaDeclineAndPrivateDiscardPayment)
     p1.wardDiscardSourceOid = snatcherOid;
     p2.wardDiscardSourceOid = snatcherOid;
     ruled::v1::RuledCommand castDiscardWard;
+    castDiscardWard.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     castDiscardWard.mutable_cast_spell()->mutable_source()->set_hand_index(discardUnsummon->hand_index());
     auto *discardTarget = castDiscardWard.mutable_cast_spell()->add_targets();
     discardTarget->set_object_id(snatcherOid);
@@ -4200,6 +4246,7 @@ TEST_F(RuledE2ESmokeTest, BeholdCastCostIsPrivateUntilItsPublicStackReveal)
     ASSERT_EQ(targetGroups->second.groups(0).valid_permanent_ids_size(), 1);
 
     ruled::v1::RuledCommand cast;
+    cast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     cast.mutable_cast_spell()->mutable_source()->set_hand_index(caustic->hand_index());
     auto *selection = cast.mutable_cast_spell()->add_cast_cost_group_selections();
     selection->set_group_index(group.group_index());
@@ -4218,6 +4265,192 @@ TEST_F(RuledE2ESmokeTest, BeholdCastCostIsPrivateUntilItsPublicStackReveal)
     ASSERT_TRUE(passPriority(p2));
     EXPECT_TRUE(p1.sawActiveBeholdRevealClosed && p2.sawActiveBeholdRevealClosed);
     EXPECT_FALSE(p1.activeBeholdReveal || p2.activeBeholdReveal);
+}
+
+TEST_F(RuledE2ESmokeTest, HarmonizeUsesOwnerOnlyReductionAndPreservesPhysicalIdentity)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("harmonizep1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("harmonizep2"), &transcript);
+    p2.didMulligan = true;
+
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "Harmonize cohort game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "Harmonize cohort game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer openingDeadline;
+    openingDeadline.start();
+    while (openingDeadline.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command,
+                           const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 &&
+               (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto devPut = [&](const char *cardName, ruled::v1::DevZone zone, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(cardName);
+        put->set_zone(zone);
+        put->set_ready(ready);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1 for Harmonize cohort").arg(cardName));
+    };
+    auto devMove = [&](const char *cardName, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        auto *move = dev->mutable_move_card();
+        move->set_card_name(cardName);
+        move->set_zone(zone);
+        return sendAndPump(p1, command, QStringLiteral("dev: move %1 for Harmonize cohort").arg(cardName));
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority in Harmonize cohort"));
+    };
+    auto permanentTapped = [](const SmokeClient &client, int playerId, quint32 oid) {
+        const auto battlefield = client.battlefieldByPlayer.find(playerId);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return false;
+        }
+        const auto permanent = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                            [oid](const SmokeClient::Permanent &candidate) {
+                                                return candidate.oid == oid;
+                                            });
+        return permanent != battlefield->second.end() && permanent->tapped;
+    };
+
+    ASSERT_TRUE(devPut("Unending Whisper", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(devMove("Unending Whisper", ruled::v1::DEV_ZONE_GRAVEYARD));
+    ASSERT_TRUE(devPut("Grizzly Bears", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ruled::v1::RuledCommand addHarmonizeMana;
+    addHarmonizeMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addHarmonizeMana.mutable_dev_command()->mutable_add_mana()->set_u(1);
+    addHarmonizeMana.mutable_dev_command()->mutable_add_mana()->set_c(3);
+    ASSERT_TRUE(sendAndPump(p1, addHarmonizeMana, QStringLiteral("dev: add {3}{U} for Harmonize")));
+
+    const ruled::v1::LegalZoneCastAction *harmonize = nullptr;
+    for (const auto &action : p1.latestLegal.zone_cast_actions()) {
+        if (action.card_name() == "Unending Whisper" &&
+            action.cast_method() == ruled::v1::CAST_METHOD_HARMONIZE) {
+            harmonize = &action;
+            break;
+        }
+    }
+    ASSERT_NE(harmonize, nullptr);
+    EXPECT_TRUE(std::none_of(p2.latestLegal.zone_cast_actions().begin(), p2.latestLegal.zone_cast_actions().end(),
+                             [](const ruled::v1::LegalZoneCastAction &action) {
+                                 return action.card_name() == "Unending Whisper" &&
+                                        action.cast_method() == ruled::v1::CAST_METHOD_HARMONIZE;
+                             }));
+    ASSERT_EQ(harmonize->cost_choices().cast_cost_groups_size(), 1);
+    const auto &group = harmonize->cost_choices().cast_cost_groups(0);
+    ASSERT_EQ(group.skip_label(), "Pay full Harmonize cost");
+    ASSERT_EQ(group.options_size(), 1);
+    const auto &tapOption = group.options(0);
+    ASSERT_EQ(tapOption.kind(), ruled::v1::CAST_COST_OPTION_KIND_TAP_PERMANENT_FOR_GENERIC_REDUCTION);
+    ASSERT_EQ(tapOption.valid_permanent_ids_size(), 1);
+    ASSERT_EQ(tapOption.valid_permanent_generations_size(), 1);
+    ASSERT_EQ(tapOption.valid_permanent_generic_reductions_size(), 1);
+    EXPECT_EQ(tapOption.valid_permanent_generic_reductions(0), 2u);
+
+    const quint32 whisperOid = harmonize->object_id();
+    const quint32 creatureOid = tapOption.valid_permanent_ids(0);
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(whisperOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(whisperOid));
+    ASSERT_EQ(p1.serverCardByEngineOid[whisperOid], p2.serverCardByEngineOid[whisperOid]);
+    p1.harmonizePhysicalCardId = p1.serverCardByEngineOid[whisperOid];
+    p2.harmonizePhysicalCardId = p2.serverCardByEngineOid[whisperOid];
+    p1.harmonizeCreatureOid = creatureOid;
+    p2.harmonizeCreatureOid = creatureOid;
+    p1.harmonizeFlowActive = true;
+    p2.harmonizeFlowActive = true;
+
+    ruled::v1::RuledCommand castHarmonize;
+    auto *cast = castHarmonize.mutable_cast_spell();
+    cast->set_cast_method(ruled::v1::CAST_METHOD_HARMONIZE);
+    cast->mutable_source()->set_graveyard_object_id(whisperOid);
+    cast->set_face_index(harmonize->face_index());
+    auto *selection = cast->add_cast_cost_group_selections();
+    selection->set_group_index(group.group_index());
+    selection->set_option_index(tapOption.option_index());
+    selection->set_permanent_id(creatureOid);
+    selection->set_expected_zone_change_generation(tapOption.valid_permanent_generations(0));
+    ASSERT_TRUE(sendAndPump(p1, castHarmonize, QStringLiteral("cast Unending Whisper with Harmonize")));
+    EXPECT_TRUE(p1.sawHarmonizeStackReceipt && p2.sawHarmonizeStackReceipt);
+    EXPECT_TRUE(p1.sawHarmonizeGraveToStack && p2.sawHarmonizeGraveToStack);
+    EXPECT_TRUE(permanentTapped(p1, p1.myId, creatureOid));
+    EXPECT_TRUE(permanentTapped(p2, p1.myId, creatureOid));
+
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+    EXPECT_TRUE(p1.sawHarmonizeStackToExile && p2.sawHarmonizeStackToExile);
+    EXPECT_TRUE(p1.harmonizePhysicalIdentityContinuous && p2.harmonizePhysicalIdentityContinuous);
+    EXPECT_EQ(p1.harmonizePhysicalCardId, p2.harmonizePhysicalCardId);
+
+    p1.harmonizeFlowActive = false;
+    p2.harmonizeFlowActive = false;
+    p1.normalWhisperFlowActive = true;
+    p2.normalWhisperFlowActive = true;
+    ASSERT_TRUE(devPut("Unending Whisper", ruled::v1::DEV_ZONE_HAND, false));
+    ruled::v1::RuledCommand addNormalMana;
+    addNormalMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addNormalMana.mutable_dev_command()->mutable_add_mana()->set_u(1);
+    ASSERT_TRUE(sendAndPump(p1, addNormalMana, QStringLiteral("dev: add {U} for normal cast")));
+    const auto *normal = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Unending Whisper"));
+    ASSERT_NE(normal, nullptr);
+    ruled::v1::RuledCommand castNormal;
+    castNormal.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    castNormal.mutable_cast_spell()->mutable_source()->set_hand_index(normal->hand_index());
+    ASSERT_TRUE(sendAndPump(p1, castNormal, QStringLiteral("cast Unending Whisper normally")));
+    EXPECT_TRUE(p1.sawNormalWhisperHandToStack && p2.sawNormalWhisperHandToStack);
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+    EXPECT_TRUE(p1.sawNormalWhisperStackToGrave && p2.sawNormalWhisperStackToGrave);
 }
 
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can

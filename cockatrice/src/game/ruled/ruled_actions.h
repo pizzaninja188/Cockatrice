@@ -141,6 +141,7 @@ bool tryHandleCombatRightClick(CardItem *card);
 // Local player's pending-cast selection (owned by PlayerActions), read by the painters.
 // ---------------------------------------------------------------------------------------
 [[nodiscard]] bool isSelectedSpellTarget(const AbstractGame *game, quint32 oid);
+[[nodiscard]] bool isSelectedCastCostPermanent(const AbstractGame *game, quint32 oid);
 [[nodiscard]] bool isSelectedGraveyardCostObject(const AbstractGame *game, quint32 oid);
 [[nodiscard]] bool isPlayerSelectedAsSpellTarget(const AbstractGame *game, int playerId);
 [[nodiscard]] bool isSpellDamageAllocationMode(const AbstractGame *game);

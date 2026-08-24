@@ -112,6 +112,7 @@ impl GameEngine {
         cast_cost_group_selections: &[rv1::CastCostGroupSelection],
         restricted_mana: &[rv1::ManaSpendSelection],
         eligible_restricted_mana: &[u32],
+        cast_method: SpellCastMethod,
     ) -> Result<CostTransactionPlan, EngineError> {
         use rv1::cost_selection::Selection;
 
@@ -127,9 +128,12 @@ impl GameEngine {
         let mut combined_mana = mana_cost.clone();
         let mut cast_cost_receipts = Vec::new();
         let mut group_selections = HashMap::new();
+        let harmonize_group_index = cast_cost_groups.len();
         for selection in cast_cost_group_selections {
             let group_index = selection.group_index as usize;
-            if group_index >= cast_cost_groups.len()
+            let is_harmonize_group =
+                cast_method == SpellCastMethod::Harmonize && group_index == harmonize_group_index;
+            if (group_index >= cast_cost_groups.len() && !is_harmonize_group)
                 || group_selections.insert(group_index, selection).is_some()
             {
                 return Err(EngineError::Illegal(
@@ -263,6 +267,65 @@ impl GameEngine {
                 object,
             });
         }
+        let mut harmonize_reduction = 0;
+        if cast_method == SpellCastMethod::Harmonize {
+            if let Some(selection) = group_selections.get(&harmonize_group_index) {
+                use rv1::cast_cost_group_selection::SelectedObject;
+                if selection.option_index != 0 {
+                    return Err(EngineError::Illegal("invalid harmonize cost option"));
+                }
+                let Some(SelectedObject::PermanentId(object_id)) = selection.selected_object else {
+                    return Err(EngineError::Illegal(
+                        "harmonize requires a selected permanent",
+                    ));
+                };
+                let object = self
+                    .state
+                    .objects
+                    .get(&object_id)
+                    .ok_or(EngineError::Illegal("unknown harmonize permanent"))?;
+                let generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0);
+                let characteristics = self
+                    .characteristics(object_id)
+                    .ok_or(EngineError::Illegal("invalid harmonize permanent"))?;
+                if object.zone != Zone::Battlefield
+                    || object.tapped
+                    || characteristics.controller != player
+                    || !characteristics.is_creature()
+                {
+                    return Err(EngineError::Illegal(
+                        "harmonize requires an untapped creature you control",
+                    ));
+                }
+                if selection.expected_zone_change_generation != generation {
+                    return Err(EngineError::Illegal("stale harmonize permanent selection"));
+                }
+                harmonize_reduction = characteristics.power.unwrap_or(0);
+                debits.push(CostDebit::Tap {
+                    object_id,
+                    generation,
+                });
+                cast_cost_receipts.push(CastCostReceipt {
+                    group_index: harmonize_group_index as u32,
+                    option_index: 0,
+                    label: format!(
+                        "Harmonize — tap {} (reduce {{{harmonize_reduction}}})",
+                        object_display_name(&self.state, self.registry, object_id)
+                    ),
+                    object: Some(CastCostObjectReceipt::ChosenPermanent {
+                        object_id,
+                        zone_change_generation: generation,
+                        card_id: object.card_id.clone(),
+                        card_name: object_display_name(&self.state, self.registry, object_id),
+                    }),
+                });
+            }
+        }
         if group_selections.len() != cast_cost_group_selections.len() {
             return Err(EngineError::Illegal("unexpected cast cost group selection"));
         }
@@ -333,7 +396,7 @@ impl GameEngine {
                 &combined_mana,
                 x_value,
                 extra_generic,
-                generic_reduction,
+                generic_reduction.saturating_add(harmonize_reduction),
                 flex_payments,
                 restricted_mana,
                 eligible_restricted_mana,

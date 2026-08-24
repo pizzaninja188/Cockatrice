@@ -1,0 +1,8 @@
+(
+  id: "mammoth_bellow",
+  name: "Mammoth Bellow",
+  mana_cost: "{2}{G}{U}{R}",
+  harmonize_cost: Some("{5}{G}{U}{R}"),
+  types: ["Sorcery"],
+  spell_effect: [CreateTokens(token: "elephant_g_5_5", count: 1)],
+)

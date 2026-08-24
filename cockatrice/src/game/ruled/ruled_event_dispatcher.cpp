@@ -152,13 +152,22 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
         parsedGroup.prompt = QString::fromStdString(group.prompt());
         parsedGroup.min = static_cast<int>(group.min());
         parsedGroup.max = static_cast<int>(group.max());
+        parsedGroup.skipLabel = QString::fromStdString(group.skip_label());
         for (const auto &option : group.options()) {
             RuledCastCostOption parsedOption;
             parsedOption.optionIndex = static_cast<int>(option.option_index());
             parsedOption.label = QString::fromStdString(option.label());
-            parsedOption.kind = option.kind() == ruled::v1::CAST_COST_OPTION_KIND_BEHOLD
-                                    ? RuledCastCostOptionKind::Behold
-                                    : RuledCastCostOptionKind::Mana;
+            switch (option.kind()) {
+                case ruled::v1::CAST_COST_OPTION_KIND_BEHOLD:
+                    parsedOption.kind = RuledCastCostOptionKind::Behold;
+                    break;
+                case ruled::v1::CAST_COST_OPTION_KIND_TAP_PERMANENT_FOR_GENERIC_REDUCTION:
+                    parsedOption.kind = RuledCastCostOptionKind::TapPermanentForGenericReduction;
+                    break;
+                default:
+                    parsedOption.kind = RuledCastCostOptionKind::Mana;
+                    break;
+            }
             parsedOption.additionalManaCost = QString::fromStdString(option.additional_mana_cost());
             parsedOption.selectable = option.selectable();
             for (const quint32 candidate : option.valid_hand_indices()) {
@@ -172,6 +181,12 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
             for (int i = 0; i < generationCount; ++i) {
                 parsedOption.validPermanentGenerations.insert(option.valid_permanent_ids(i),
                                                                option.valid_permanent_generations(i));
+            }
+            const int reductionCount =
+                std::min(option.valid_permanent_ids_size(), option.valid_permanent_generic_reductions_size());
+            for (int i = 0; i < reductionCount; ++i) {
+                parsedOption.validPermanentGenericReductions.insert(
+                    option.valid_permanent_ids(i), static_cast<int>(option.valid_permanent_generic_reductions(i)));
             }
             parsedGroup.options.append(parsedOption);
         }
@@ -1333,16 +1348,25 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     for (const auto &action : actions.zone_cast_actions()) {
         const int objectId = static_cast<int>(action.object_id());
         const int faceIndex = static_cast<int>(action.face_index());
-        const int castKey = RuledClientState::spellTargetKey(objectId, faceIndex);
+        const auto castMethod = action.cast_method();
+        const RuledCastSource source = action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_EXILE
+                                           ? RuledCastSource::Exile
+                                           : RuledCastSource::Graveyard;
+        const quint64 castKey = RuledClientState::zoneCastActionKey(objectId, faceIndex, source, castMethod);
         state->zoneCastActions.handIndices.insert(objectId);
         const QString cardName = QString::fromStdString(action.card_name());
+        QString displayName = cardName;
+        if (castMethod == ruled::v1::CAST_METHOD_FLASHBACK) {
+            displayName += tr(" — Flashback");
+        } else if (castMethod == ruled::v1::CAST_METHOD_HARMONIZE) {
+            displayName += tr(" — Harmonize");
+        }
         state->zoneCastActions.indicesByCardName.insert(cardName, objectId);
-        state->zoneCastActions.faceOptionsByIndex[objectId].append({faceIndex, cardName,
+        state->zoneCastActions.faceOptionsByIndex[objectId].append({faceIndex, displayName,
                                                                     QString::fromStdString(action.cost()),
-                                                                    static_cast<int>(action.generic_cost_reduction())});
-        state->zoneCastSourceByOid.insert(objectId, action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_EXILE
-                                                        ? RuledCastSource::Exile
-                                                        : RuledCastSource::Graveyard);
+                                                                    static_cast<int>(action.generic_cost_reduction()),
+                                                                    castMethod});
+        state->zoneCastSourceByOid.insert(objectId, source);
         if (action.needs_target()) {
             state->zoneCastActions.needsTargetIndices.insert(objectId);
         }

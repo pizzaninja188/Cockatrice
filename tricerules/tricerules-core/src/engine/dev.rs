@@ -353,9 +353,10 @@ impl GameEngine {
         Ok(())
     }
 
-    /// First object owned by `player` with this `card_id`, searching library, graveyard, exile,
-    /// hand, then battlefield. Library first so the command prefers an unused copy over
-    /// cannibalising the board the caller is in the middle of setting up.
+    /// First object owned by `player` with this `card_id`, searching hand, library, graveyard,
+    /// exile, then battlefield. Hand comes first because it is the documented staging zone for
+    /// `put hand X` followed by `move gy X`; library still precedes battlefield so an unused deck
+    /// copy is preferred over cannibalising the board the caller is in the middle of setting up.
     ///
     /// `not_in` excludes copies already sitting in the destination. Without it the search happily
     /// returns a card that is already where it is being sent — a no-op that still logs success,
@@ -375,12 +376,12 @@ impl GameEngine {
                 .get(oid)
                 .is_some_and(|o| o.card_id == card_id && Some(o.zone) != not_in)
         };
-        p.library
+        p.hand
             .iter()
             .find(|o| matches(o))
+            .or_else(|| p.library.iter().find(|o| matches(o)))
             .or_else(|| p.graveyard.iter().find(|o| matches(o)))
             .or_else(|| p.exile.iter().find(|o| matches(o)))
-            .or_else(|| p.hand.iter().find(|o| matches(o)))
             .or_else(|| p.battlefield.iter().find(|o| matches(o)))
             .copied()
     }
@@ -446,7 +447,7 @@ fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> S
         is_triggered: false,
         is_copy: false,
         face_index: 0,
-        flashback: false,
+        cast_method: SpellCastMethod::Normal,
         chosen_x: 0,
         chosen_modes: Vec::new(),
         cast_cost_receipts: Vec::new(),

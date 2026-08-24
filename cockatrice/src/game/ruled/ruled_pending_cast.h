@@ -76,6 +76,7 @@ struct RuledPendingCastCostSelection
     /// Stable Server_Card.id for hand choices; engine ObjectId for battlefield choices.
     quint32 selectedId = 0;
     quint64 expectedZoneChangeGeneration = 0;
+    int genericCostReduction = 0;
 };
 
 struct PendingActivatedAbility
@@ -196,6 +197,7 @@ struct PendingRuledSpellCast
 
     int handIndex = -1;
     RuledCastSource source = RuledCastSource::Hand;
+    ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL;
     /// Fireball's "divided evenly, rounded down": the engine splits on resolution, so there is no
     /// allocation to collect, no one-damage-per-target cap, and zero targets is a legal cast.
     bool damageDividedEvenly = false;
@@ -220,6 +222,7 @@ struct PendingRuledSpellCast
     int xPips = 0;
     int xValue = 0;
     int genericCostReduction = 0;
+    int castCostGenericReduction = 0;
     bool manaCostFinalized = false;
     QVector<RuledFlexPip> flexPips;
     QVector<quint32> lifePipIndices;
@@ -305,12 +308,24 @@ ruledCastCostObjectEligibility(const PendingRuledSpellCast &spell, RuledCastCost
     const auto option = std::find_if(group.options.cbegin(), group.options.cend(), [&spell](const auto &entry) {
         return entry.optionIndex == spell.activeCastCostOption;
     });
-    if (option == group.options.cend() || !option->selectable || option->kind != RuledCastCostOptionKind::Behold) {
+    if (option == group.options.cend() || !option->selectable ||
+        (option->kind != RuledCastCostOptionKind::Behold &&
+         option->kind != RuledCastCostOptionKind::TapPermanentForGenericReduction)) {
         return RuledTargetClickEligibility::Illegal;
     }
-    const bool legal = kind == RuledCastCostCandidateKind::Hand ? option->validHandIndices.contains(id)
-                                                                : option->validPermanentIds.contains(id);
+    const bool legal = kind == RuledCastCostCandidateKind::Hand
+                           ? option->kind == RuledCastCostOptionKind::Behold && option->validHandIndices.contains(id)
+                           : option->validPermanentIds.contains(id);
     return legal ? RuledTargetClickEligibility::Legal : RuledTargetClickEligibility::Illegal;
+}
+
+/// Cast-cost groups are declarations made before targeting and mana payment. Merely displaying
+/// the current group's option buttons does not complete that declaration: finalizing mana there
+/// would freeze the unreduced cost before Harmonize can record the selected creature's power.
+[[nodiscard]] inline bool ruledCastCostGroupsComplete(const PendingRuledSpellCast &spell)
+{
+    return spell.valid && !spell.waitingForCastCostObject &&
+           spell.nextCastCostGroup >= spell.castCostGroups.size();
 }
 
 [[nodiscard]] inline bool ruledTargetDataContains(const RuledTargetGroupData &data,
@@ -420,7 +435,8 @@ currentRuledSpellTargetData(const PendingRuledSpellCast &spell, const RuledClien
     }
     if (spell.activeModePosition >= 0 && spell.activeModePosition < spell.selectedModes.size()) {
         return state.modalSpellTargetData(spell.handIndex, spell.faceIndex,
-                                          spell.selectedModes.at(spell.activeModePosition).modeIndex, spell.source);
+                                          spell.selectedModes.at(spell.activeModePosition).modeIndex, spell.source,
+                                          spell.castMethod);
     }
     return state.spellTargetData(spell.handIndex, spell.faceIndex, spell.source);
 }
@@ -554,7 +570,7 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
             for (int modePosition = 0; modePosition < spell.selectedModes.size(); ++modePosition) {
                 auto &mode = spell.selectedModes[modePosition];
                 const auto data = state.modalSpellTargetData(spell.handIndex, spell.faceIndex, mode.modeIndex,
-                                                             spell.source);
+                                                             spell.source, spell.castMethod);
                 if (!data.has_value()) {
                     continue;
                 }

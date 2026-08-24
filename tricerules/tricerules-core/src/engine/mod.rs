@@ -13,9 +13,9 @@ use crate::state::{
     PendingManaPayment, PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
     PendingResolutionPresentation, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
     PendingWardPaymentStage, PlayerId, PlayerState, ReplacementPriority, ResolutionContinuation,
-    RoomState, StackItem, StackObjectRef, StackTarget, StagedTrigger, StagedTriggerGroup,
-    TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TriggeredOnceKey, TurnHistory,
-    TurnStep, UndoableManaAbility, Zone,
+    RoomState, SpellCastMethod, StackItem, StackObjectRef, StackTarget, StagedTrigger,
+    StagedTriggerGroup, TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TriggeredOnceKey,
+    TurnHistory, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;

@@ -945,6 +945,32 @@ pub struct CastCostReceipt {
     pub object: Option<CastCostObjectReceipt>,
 }
 
+/// The announced procedure used to cast a spell. This is distinct from its source zone: more
+/// than one alternative method may legally cast the same physical graveyard object.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SpellCastMethod {
+    #[default]
+    Normal,
+    Flashback,
+    Harmonize,
+}
+
+impl SpellCastMethod {
+    /// CR 702.34a / 702.180a: these methods replace every destination as the spell leaves the
+    /// stack, including resolution into what would otherwise be a permanent.
+    pub fn exiles_on_leave_stack(self) -> bool {
+        matches!(self, Self::Flashback | Self::Harmonize)
+    }
+
+    pub fn label(self) -> Option<&'static str> {
+        match self {
+            Self::Normal => None,
+            Self::Flashback => Some("Flashback"),
+            Self::Harmonize => Some("Harmonize"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct StackItem {
     pub id: ObjectId,
@@ -980,9 +1006,8 @@ pub struct StackItem {
     /// adventure half on the stack). `0` for single-face cards and abilities; drives which face's
     /// effects, mana value, and permanence are used when this spell resolves.
     pub face_index: usize,
-    /// CR 702.34: this spell was cast from a graveyard using flashback and is exiled instead of
-    /// being put into its owner's graveyard when it leaves the stack.
-    pub flashback: bool,
+    /// CR 601.2b: the announced cast method, retained for method-specific stack-exit rules.
+    pub cast_method: SpellCastMethod,
     /// CR 107.3b: the value chosen for `{X}` as this spell was cast. `0` for spells without an
     /// `{X}` pip (and for abilities). On the stack the spell's mana value is `fixed_mv + chosen_x`;
     /// at resolution this feeds [`Amount::X`](tricerules_cards::Amount) effect amounts.

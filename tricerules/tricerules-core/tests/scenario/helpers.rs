@@ -10,13 +10,13 @@ use tricerules_proto::ruled::v1 as rv1;
 pub(crate) use tricerules_proto::ruled::v1::ruled_command::Cmd;
 pub(crate) use tricerules_proto::ruled::v1::ruled_event::Ev;
 pub(crate) use tricerules_proto::ruled::v1::{
-    ActivateAbility, AssignCombatDamage, BlockPair, CastCostGroupSelection, CastSource, CastSpell,
-    ChoiceKind, ChooseTriggerTarget, CostSelection, DamagePair, DeclareAttackers, DeclareBlockers,
-    DiscardToHandSize, ExecutePermanentAction, FlexPipPayment, LandSource, ManaSpendSelection,
-    PassPriority, PermanentActionKind, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers,
-    PrimitiveYieldStructured, ResolutionChoiceRequired, ResolutionRevealAudience, RuledCommand,
-    RuledEventBatch, SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef,
-    TargetRefKind, UndoManaAbility,
+    ActivateAbility, AssignCombatDamage, BlockPair, CastCostGroupSelection, CastMethod, CastSource,
+    CastSpell, ChoiceKind, ChooseTriggerTarget, CostSelection, DamagePair, DeclareAttackers,
+    DeclareBlockers, DiscardToHandSize, ExecutePermanentAction, FlexPipPayment, LandSource,
+    ManaSpendSelection, PassPriority, PermanentActionKind, PlayLand, PreviewDeclareAttackers,
+    PreviewDeclareBlockers, PrimitiveYieldStructured, ResolutionChoiceRequired,
+    ResolutionRevealAudience, RuledCommand, RuledEventBatch, SelectedSpellMode,
+    SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TargetRefKind, UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {
@@ -31,6 +31,7 @@ pub(crate) fn cast_modal_spell(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
+            cast_method: CastMethod::Normal as i32,
             source: Some(hand_cast_source(hand_card_index)),
             selected_modes: modes
                 .into_iter()
@@ -116,6 +117,7 @@ pub(crate) fn cast_spell_with_costs(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
+            cast_method: CastMethod::Normal as i32,
             source: Some(hand_cast_source(hand_card_index)),
             targets,
             cost_selections,
@@ -131,6 +133,7 @@ pub(crate) fn cast_spell_with_cast_cost_groups(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
+            cast_method: CastMethod::Normal as i32,
             source: Some(hand_cast_source(hand_card_index)),
             targets,
             cast_cost_group_selections,
@@ -146,6 +149,7 @@ pub(crate) fn cast_spell_x(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
+            cast_method: CastMethod::Normal as i32,
             source: Some(hand_cast_source(hand_card_index)),
             targets,
             x_value,
@@ -161,6 +165,7 @@ pub(crate) fn cast_spell_flex(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
+            cast_method: CastMethod::Normal as i32,
             source: Some(hand_cast_source(hand_card_index)),
             targets,
             x_value: 0,
@@ -178,6 +183,7 @@ pub(crate) fn cast_spell_face(
 ) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
+            cast_method: CastMethod::Normal as i32,
             source: Some(hand_cast_source(hand_card_index)),
             targets,
             face_index,

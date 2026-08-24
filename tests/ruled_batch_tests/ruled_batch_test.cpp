@@ -1187,6 +1187,40 @@ TEST_F(RuledBatchTest, ExileOidMapReversesEngineAndPhysicalPileOrder)
     EXPECT_EQ(binding.findExileCardByEngineOid(p1, 999u), nullptr);
 }
 
+TEST_F(RuledBatchTest, EmptyGraveyardSnapshotClearsTheLastPublishedPhysicalBinding)
+{
+    Server_Card *card = addCardToGraveyard(p1, "Grizzly Bears");
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    p1Seed.add_graveyard_object_ids(701u);
+    *seedView->add_per_player() = p1Seed;
+    callBatchApply(seed);
+    ASSERT_EQ(bindingFor(p1).findGraveyardCardByEngineOid(p1, 701u), card);
+
+    ruled::v1::IpcResponse moved;
+    moved.set_ok(true);
+    auto *permanentMoved = moved.mutable_batch()->add_events()->mutable_permanent_moved();
+    permanentMoved->set_object_id(701u);
+    permanentMoved->set_owner_player_id(p1->getPlayerId());
+    permanentMoved->set_controller_player_id(p1->getPlayerId());
+    permanentMoved->set_card_id("grizzly_bears");
+    permanentMoved->set_destination(ruled::v1::PermanentMoved::DESTINATION_EXILE);
+    auto *movedView = moved.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Moved = buildPerPlayerView(p1, {}, {});
+    p1Moved.add_exile_object_ids(701u);
+    *movedView->add_per_player() = p1Moved;
+    callBatchApply(moved);
+
+    const ruled::v1::RuledEventBatch maps = appendedServerMaps();
+    const auto graveyardMap = std::find_if(maps.events().begin(), maps.events().end(),
+                                           [](const auto &event) { return event.has_graveyard_object_map(); });
+    ASSERT_NE(graveyardMap, maps.events().end());
+    EXPECT_EQ(graveyardMap->graveyard_object_map().entries_size(), 0)
+        << "an empty full-replacement snapshot is required to clear the client's stale map";
+}
+
 // The engine omits hand + library while they are unchanged. Servatrice must then leave the
 // physical zones alone — and, crucially, must not treat the empty concealed fields as a real
 // (and wildly wrong) count, which is what the pre-guard code did: the reconcile bailed on a

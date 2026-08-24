@@ -52,6 +52,14 @@ impl GameEngine {
         let cost_selections = command.cost_selections.as_slice();
         let cast_cost_group_selections = command.cast_cost_group_selections.as_slice();
         let restricted_mana = command.restricted_mana.as_slice();
+        let cast_method = match rv1::CastMethod::try_from(command.cast_method) {
+            Ok(rv1::CastMethod::Normal) => SpellCastMethod::Normal,
+            Ok(rv1::CastMethod::Flashback) => SpellCastMethod::Flashback,
+            Ok(rv1::CastMethod::Harmonize) => SpellCastMethod::Harmonize,
+            Ok(rv1::CastMethod::Unspecified) | Err(_) => {
+                return Err(EngineError::Illegal("missing or invalid cast method"));
+            }
+        };
         if self.state.turn_step == TurnStep::Cleanup {
             return Err(EngineError::Illegal("no spells during cleanup"));
         }
@@ -65,22 +73,38 @@ impl GameEngine {
             .and_then(|source| source.location.as_ref())
             .ok_or(EngineError::Illegal("missing cast source"))?;
         let from_hand = matches!(source, rv1::cast_source::Location::HandIndex(_));
-        let (oid, flashback, exile_permission_scope) = match source {
-            rv1::cast_source::Location::HandIndex(hand_index) => (
-                *self.state.players[idx]
-                    .hand
-                    .get(*hand_index as usize)
-                    .ok_or(EngineError::Illegal("bad hand index"))?,
-                false,
-                None,
-            ),
+        let (oid, exile_permission_scope) = match source {
+            rv1::cast_source::Location::HandIndex(hand_index) => {
+                if cast_method != SpellCastMethod::Normal {
+                    return Err(EngineError::Illegal(
+                        "hand casts require the normal cast method",
+                    ));
+                }
+                (
+                    *self.state.players[idx]
+                        .hand
+                        .get(*hand_index as usize)
+                        .ok_or(EngineError::Illegal("bad hand index"))?,
+                    None,
+                )
+            }
             rv1::cast_source::Location::GraveyardObjectId(source_oid) => {
                 if !self.state.players[idx].graveyard.contains(source_oid) {
                     return Err(EngineError::Illegal("card is not in your graveyard"));
                 }
-                (*source_oid, true, None)
+                if cast_method == SpellCastMethod::Normal {
+                    return Err(EngineError::Illegal(
+                        "graveyard casts require an alternative cast method",
+                    ));
+                }
+                (*source_oid, None)
             }
             rv1::cast_source::Location::ExileObjectId(source_oid) => {
+                if cast_method != SpellCastMethod::Normal {
+                    return Err(EngineError::Illegal(
+                        "exile casts require the normal cast method",
+                    ));
+                }
                 let object = self
                     .state
                     .objects
@@ -113,7 +137,7 @@ impl GameEngine {
                 if object.zone != Zone::Exile {
                     return Err(EngineError::Illegal("illegal cast from exile"));
                 }
-                (*source_oid, false, Some(permission.scope))
+                (*source_oid, Some(permission.scope))
             }
         };
         let has_multiple_cast_options =
@@ -144,12 +168,16 @@ impl GameEngine {
         }
         let face_is_sorcery = face.is_sorcery;
         let face_instant_speed = castable_at_instant_speed(&face);
-        let face_mana = if flashback {
-            face.flashback_cost
+        let face_mana = match cast_method {
+            SpellCastMethod::Normal => face.mana_cost.clone(),
+            SpellCastMethod::Flashback => face
+                .flashback_cost
                 .clone()
-                .ok_or(EngineError::Illegal("card has no flashback cost"))?
-        } else {
-            face.mana_cost.clone()
+                .ok_or(EngineError::Illegal("card has no flashback cost"))?,
+            SpellCastMethod::Harmonize => face
+                .harmonize_cost
+                .clone()
+                .ok_or(EngineError::Illegal("card has no harmonize cost"))?,
         };
         let face_name = face.name.to_string();
         let face_effects: Vec<SpellEffectKind> = face.spell_effect.to_vec();
@@ -356,6 +384,7 @@ impl GameEngine {
             cast_cost_group_selections,
             restricted_mana,
             &eligible_restricted_mana,
+            cast_method,
         )?;
 
         let trefs: Vec<ObjectId> = public_targets
@@ -417,7 +446,7 @@ impl GameEngine {
             resolution_branch_choices: Default::default(),
             // A spell's effects always act on its controller.
             trigger_context: TriggerContext::default(),
-            flashback,
+            cast_method,
         });
         super::resolution::move_object_to_zone(
             &mut self.state,
@@ -463,16 +492,13 @@ impl GameEngine {
                 format!("{stack_annotation}\n{costs}")
             };
         }
-        // CR 702.34: nothing on the card face says a spell was cast for its flashback cost, and it
-        // is exiled instead of going to its owner's graveyard when it leaves the stack — so the
-        // annotation is the only warning an opponent gets while it is still resolvable. Prepended
-        // rather than appended: it changes what the spell *is*, so it reads before the X value or
-        // the chosen modes.
-        if flashback {
+        // Alternative cast methods are not necessarily printed on the displayed face. Prepend an
+        // authoritative annotation so every player can see the method that governs stack exit.
+        if let Some(method_label) = cast_method.label() {
             stack_annotation = if stack_annotation.is_empty() {
-                "Flashback".to_string()
+                method_label.to_string()
             } else {
-                format!("Flashback\n{stack_annotation}")
+                format!("{method_label}\n{stack_annotation}")
             };
         }
         if life_paid > 0 {
@@ -830,7 +856,7 @@ impl GameEngine {
             resolution_branch_choices: Default::default(),
             // An activated ability's effects act on the player who activated it.
             trigger_context: TriggerContext::default(),
-            flashback: false,
+            cast_method: SpellCastMethod::Normal,
         });
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;
@@ -1387,7 +1413,7 @@ impl GameEngine {
             is_triggered: false,
             is_copy: false,
             face_index,
-            flashback: false,
+            cast_method: SpellCastMethod::Normal,
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_cost_receipts: Vec::new(),
@@ -1763,6 +1789,7 @@ mod mana_payment_tests {
                 &[],
                 &[],
                 &[],
+                SpellCastMethod::Normal,
             )
             .expect("reduced mana and discard cost should validate together");
         let payment = e
@@ -1806,6 +1833,7 @@ mod mana_payment_tests {
                 &[],
                 &[],
                 &[],
+                SpellCastMethod::Normal,
             )
             .expect("costs initially validate");
         *e.state

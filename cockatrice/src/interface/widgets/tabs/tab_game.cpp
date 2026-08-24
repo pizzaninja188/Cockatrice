@@ -802,7 +802,8 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.mode = PromptMode::CastCostOptions;
         state.text = localActions->pendingRuledSpellPromptText();
         if (localActions->pendingRuledCastCostGroupIsOptional()) {
-            state.choiceOptions.append({-1, tr("Cast normally"), true});
+            const QString skipLabel = localActions->pendingRuledCastCostSkipLabel();
+            state.choiceOptions.append({-1, skipLabel.isEmpty() ? tr("Cast normally") : skipLabel, true});
         }
         for (const auto &option : localActions->pendingRuledCastCostOptions()) {
             state.choiceOptions.append({option.optionIndex, option.label, option.selectable});
