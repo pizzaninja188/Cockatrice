@@ -5479,27 +5479,11 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         if (targetOid == 0) {
             return false;
         }
-        const RuledTargetCandidateKind kind = triggerIsGraveyard             ? RuledTargetCandidateKind::Graveyard
-                                              : zoneName == ZoneNames::STACK ? RuledTargetCandidateKind::Stack
-                                                                             : RuledTargetCandidateKind::Battlefield;
-        const auto targetData = handler->abilityTargetData(handler->lastTriggerSourceOid,
-                                                           static_cast<int>(handler->lastTriggerAbilityIndex));
-        if (!ruledTargetDataContains(targetData, kind, targetOid, player->getPlayerInfo()->getId())) {
-            return true;
-        }
-        ruled::v1::RuledCommand cmd;
-        handler->appendPendingTriggerMode(cmd.mutable_choose_trigger_target());
-        auto *target = cmd.mutable_choose_trigger_target()->add_targets();
-        target->set_object_id(targetOid);
-        target->set_group_index(0);
-        target->set_kind(triggerIsGraveyard             ? ruled::v1::TARGET_REF_KIND_GRAVEYARD
-                         : zoneName == ZoneNames::STACK ? ruled::v1::TARGET_REF_KIND_STACK
-                                                        : ruled::v1::TARGET_REF_KIND_PERMANENT);
-        std::string payload;
-        if (cmd.SerializeToString(&payload)) {
-            Command_RuledPayload ruledPayload;
-            ruledPayload.set_payload(payload);
-            sendGameCommand(ruledPayload);
+        const auto kind = triggerIsGraveyard             ? ruled::v1::TARGET_REF_KIND_GRAVEYARD
+                          : zoneName == ZoneNames::STACK ? ruled::v1::TARGET_REF_KIND_STACK
+                                                         : ruled::v1::TARGET_REF_KIND_PERMANENT;
+        if (!handler->stagePendingTriggerTarget(kind, targetOid, ownerPlayerId)) {
+            handler->emitLocalLog(tr("That is not a legal target for the current target group."));
         }
         return true;
     }
@@ -5694,23 +5678,9 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
             return false;
         }
         const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
-        const auto targetData = handler->abilityTargetData(handler->lastTriggerSourceOid,
-                                                           static_cast<int>(handler->lastTriggerAbilityIndex));
-        if (!ruledTargetDataContains(targetData, RuledTargetCandidateKind::Player, targetOid,
-                                     player->getPlayerInfo()->getId())) {
-            return true;
-        }
-        ruled::v1::RuledCommand cmd;
-        handler->appendPendingTriggerMode(cmd.mutable_choose_trigger_target());
-        auto *target = cmd.mutable_choose_trigger_target()->add_targets();
-        target->set_object_id(targetOid);
-        target->set_group_index(0);
-        target->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
-        std::string payload;
-        if (cmd.SerializeToString(&payload)) {
-            Command_RuledPayload ruledPayload;
-            ruledPayload.set_payload(payload);
-            sendGameCommand(ruledPayload);
+        if (!handler->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PLAYER, targetOid,
+                                                targetPlayer->getPlayerInfo()->getId())) {
+            handler->emitLocalLog(tr("That player is not a legal target for the current target group."));
         }
         return true;
     }

@@ -474,6 +474,7 @@ message LegalTargetGroup {
   bool can_target_opponent = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 valid_graveyard_ids = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 distinct_from_group_indices = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool same_graveyard = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // How a DamageTargets spell assigns its damage among the targets that were chosen.

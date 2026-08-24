@@ -15,7 +15,7 @@
   activated_abilities: [(
     source_zone: Hand,
     costs: [Mana("{1}{G}"), DiscardSelf],
-    effect: [ReturnFromGraveyard(
+    effect: [MoveGraveyardCards(
       filter: (owner: Controller, card_type: Some(Land)),
       destination: Battlefield(tapped: true),
     )],

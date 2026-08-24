@@ -1,0 +1,21 @@
+// Oracle checked 2026-08-24.
+(
+  id: "ambush_wolf",
+  name: "Ambush Wolf",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Wolf"],
+  power: 4,
+  toughness: 2,
+  keywords: [Flash],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile)],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 1,
+      prompt: "Choose up to one target card from a graveyard",
+      effect_indices: [0],
+    )])),
+    text: "When this creature enters, exile up to one target card from a graveyard.",
+  )],
+)

@@ -2708,6 +2708,108 @@ TEST_F(RuledClientTest, ResolutionBranchesSubmitOpaqueIndexWithoutOpeningADialog
     EXPECT_EQ(submission.selected_branch_index(), 0u);
 }
 
+TEST_F(RuledClientTest, VariableTriggerTargetsStageOneGraveyardCohortAndRestoreOnRejection)
+{
+    QSignalSpy selectionChanged(state, &RuledClientState::triggerTargetSelectionChanged);
+    ruled::v1::RuledEventBatch batch;
+    auto *mapping = batch.add_events()->mutable_graveyard_object_map();
+    auto *mineOne = mapping->add_entries();
+    mineOne->set_player_id(kLocalPlayer);
+    mineOne->set_engine_object_id(501);
+    mineOne->set_server_card_id(11);
+    auto *mineTwo = mapping->add_entries();
+    mineTwo->set_player_id(kLocalPlayer);
+    mineTwo->set_engine_object_id(502);
+    mineTwo->set_server_card_id(12);
+    auto *theirs = mapping->add_entries();
+    theirs->set_player_id(kOpponent);
+    theirs->set_engine_object_id(601);
+    theirs->set_server_card_id(21);
+    auto *tnt = batch.add_events()->mutable_trigger_needs_target();
+    tnt->set_source_permanent_id(100);
+    tnt->set_ability_index(0);
+    tnt->set_ability_text("Exile up to two target cards from a single graveyard.");
+    tnt->set_controller_player_id(kLocalPlayer);
+    auto *group = tnt->mutable_targets()->add_groups();
+    group->set_group_index(0);
+    group->set_prompt_text("Choose up to two target cards from a single graveyard");
+    group->set_min(0);
+    group->set_max(2);
+    group->set_same_graveyard(true);
+    group->add_valid_graveyard_ids(501);
+    group->add_valid_graveyard_ids(502);
+    group->add_valid_graveyard_ids(601);
+    apply(batch);
+
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 501, kLocalPlayer));
+    EXPECT_EQ(selectionChanged.count(), 1);
+    EXPECT_FALSE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 601, kLocalPlayer));
+    EXPECT_EQ(selectionChanged.count(), 1);
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 502, kLocalPlayer));
+    EXPECT_EQ(selectionChanged.count(), 2);
+    EXPECT_EQ(state->pendingTriggerSelectedCount(), 2);
+    EXPECT_TRUE(state->isPendingTriggerTargetSelected(501));
+    EXPECT_TRUE(state->isPendingTriggerTargetSelected(502));
+
+    state->confirmPendingTriggerTargets();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    ASSERT_EQ(host.sentCommands[0].choose_trigger_target().targets_size(), 2);
+    EXPECT_TRUE(state->hasPendingTriggerTarget());
+    host.answerPendingAck(false);
+    EXPECT_TRUE(state->hasPendingTriggerTarget());
+    EXPECT_EQ(state->pendingTriggerSelectedCount(), 2);
+}
+
+TEST_F(RuledClientTest, ExactOneTriggerTargetSubmitsImmediately)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *tnt = batch.add_events()->mutable_trigger_needs_target();
+    tnt->set_source_permanent_id(100);
+    tnt->set_ability_index(0);
+    tnt->set_ability_text("Choose target creature.");
+    tnt->set_controller_player_id(kLocalPlayer);
+    auto *group = tnt->mutable_targets()->add_groups();
+    group->set_group_index(0);
+    group->set_min(1);
+    group->set_max(1);
+    group->add_valid_permanent_ids(701);
+    apply(batch);
+
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kLocalPlayer));
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].choose_trigger_target().targets(0).object_id(), 701u);
+}
+
+TEST_F(RuledClientTest, TriggerTargetGroupsAdvanceInOrderAndPreserveAuthoredIndices)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *tnt = batch.add_events()->mutable_trigger_needs_target();
+    tnt->set_source_permanent_id(100);
+    tnt->set_ability_index(0);
+    tnt->set_ability_text("Choose two targets.");
+    tnt->set_controller_player_id(kLocalPlayer);
+    auto *first = tnt->mutable_targets()->add_groups();
+    first->set_group_index(3);
+    first->set_min(1);
+    first->set_max(1);
+    first->add_valid_permanent_ids(701);
+    auto *second = tnt->mutable_targets()->add_groups();
+    second->set_group_index(7);
+    second->set_min(1);
+    second->set_max(1);
+    second->add_valid_permanent_ids(702);
+    apply(batch);
+
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kLocalPlayer));
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 702, kLocalPlayer));
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &targets = host.sentCommands[0].choose_trigger_target().targets();
+    ASSERT_EQ(targets.size(), 2);
+    EXPECT_EQ(targets.Get(0).group_index(), 3u);
+    EXPECT_EQ(targets.Get(1).group_index(), 7u);
+}
+
 TEST_F(RuledClientTest, ParsesMethodAwareHarmonizeActionAndAuthoritativeCreatureReductions)
 {
     ruled::v1::RuledEventBatch batch;

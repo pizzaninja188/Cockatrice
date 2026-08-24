@@ -231,6 +231,8 @@ public:
     // CR 603.3b: the engine blocks on this until it is answered, so the bot must handle it or the
     // whole game deadlocks — every simultaneous multi-trigger board reaches it.
     std::optional<ruled::v1::TriggerOrderRequired> pendingTriggerOrder;
+    std::optional<ruled::v1::TriggerNeedsTarget> pendingTriggerTarget;
+    std::map<quint32, int> graveyardOwnerByEngineOid;
 
     // Policy progress flags
     bool didMulligan = false;
@@ -344,6 +346,13 @@ public:
     bool harmonizePhysicalIdentityContinuous = true;
     int harmonizePhysicalCardId = -1;
     quint32 harmonizeCreatureOid = 0;
+    bool graveyardCohortFlowActive = false;
+    bool sawOtherTriggerTargetsRedacted = false;
+    bool graveyardCohortPhysicalIdentityContinuous = true;
+    std::set<int> graveyardCohortExpectedPhysicalIds;
+    std::set<int> graveyardCohortMovedPhysicalIds;
+    int graveyardLibraryExpectedPhysicalId = -1;
+    bool sawGraveyardToLibraryPhysicalMove = false;
     bool devTypecyclingConjureSent = false;
     bool devTypecyclingManaSent = false;
     bool typecyclingActivated = false;
@@ -869,6 +878,16 @@ public:
                     } else if (normalWhisperFlowActive && from == stack && to == grave) {
                         sawNormalWhisperStackToGrave = true;
                     }
+                } else if (graveyardCohortFlowActive && from == grave && to == exile &&
+                           graveyardCohortExpectedPhysicalIds.count(mc.card_id()) > 0) {
+                    graveyardCohortPhysicalIdentityContinuous =
+                        graveyardCohortPhysicalIdentityContinuous && mc.new_card_id() == mc.card_id();
+                    graveyardCohortMovedPhysicalIds.insert(mc.card_id());
+                } else if (graveyardCohortFlowActive && from == grave && to == deck &&
+                           mc.card_id() == graveyardLibraryExpectedPhysicalId) {
+                    graveyardCohortPhysicalIdentityContinuous =
+                        graveyardCohortPhysicalIdentityContinuous && mc.new_card_id() == mc.card_id();
+                    sawGraveyardToLibraryPhysicalMove = true;
                 } else if ((from == grave || to == exile) && name != QLatin1String("Sagu Pummeler") &&
                            !(name == QLatin1String("Grizzly Bears") &&
                              (submittedAggressiveChoice || sawAggressivePublicReveal))) {
@@ -1090,6 +1109,14 @@ public:
             } else if (ev.has_graveyard_object_map()) {
                 for (const auto &entry : ev.graveyard_object_map().entries()) {
                     serverCardByEngineOid[entry.engine_object_id()] = entry.server_card_id();
+                    graveyardOwnerByEngineOid[entry.engine_object_id()] = entry.player_id();
+                }
+            } else if (ev.has_trigger_needs_target()) {
+                const auto &trigger = ev.trigger_needs_target();
+                if (trigger.controller_player_id() == myId) {
+                    pendingTriggerTarget = trigger;
+                } else if (graveyardCohortFlowActive) {
+                    sawOtherTriggerTargetsRedacted = trigger.targets().groups_size() == 0;
                 }
             } else if (ev.has_face_down_object_map()) {
                 for (const auto &entry : ev.face_down_object_map().entries()) {
@@ -4451,6 +4478,177 @@ TEST_F(RuledE2ESmokeTest, HarmonizeUsesOwnerOnlyReductionAndPreservesPhysicalIde
     ASSERT_TRUE(passPriority(p1));
     ASSERT_TRUE(passPriority(p2));
     EXPECT_TRUE(p1.sawNormalWhisperStackToGrave && p2.sawNormalWhisperStackToGrave);
+}
+
+TEST_F(RuledE2ESmokeTest, GraveyardTargetCohortIsPrivateAndMovesExactPhysicalCards)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("graveyardp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("graveyardp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Plains")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "graveyard cohort game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "graveyard cohort game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer openingDeadline;
+    openingDeadline.start();
+    while (openingDeadline.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command,
+                           const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 &&
+               (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto devPut = [&](int targetPlayer, const char *cardName, ruled::v1::DevZone zone, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(targetPlayer);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(cardName);
+        put->set_zone(zone);
+        put->set_ready(ready);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1 for graveyard cohort").arg(cardName));
+    };
+    auto devMove = [&](int targetPlayer, const char *cardName, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(targetPlayer);
+        auto *move = dev->mutable_move_card();
+        move->set_card_name(cardName);
+        move->set_zone(zone);
+        return sendAndPump(p1, command, QStringLiteral("dev: move %1 for graveyard cohort").arg(cardName));
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority in graveyard cohort"));
+    };
+
+    ASSERT_TRUE(devPut(p1.myId, "Grizzly Bears", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(devMove(p1.myId, "Grizzly Bears", ruled::v1::DEV_ZONE_GRAVEYARD));
+    ASSERT_TRUE(devPut(p1.myId, "Storm Crow", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(devMove(p1.myId, "Storm Crow", ruled::v1::DEV_ZONE_GRAVEYARD));
+    ASSERT_TRUE(devPut(p2.myId, "Forest", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(devMove(p2.myId, "Forest", ruled::v1::DEV_ZONE_GRAVEYARD));
+    p1.graveyardCohortFlowActive = true;
+    p2.graveyardCohortFlowActive = true;
+    ASSERT_TRUE(devPut(p1.myId, "Arashin Sunshield", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+
+    ASSERT_TRUE(p1.pendingTriggerTarget.has_value());
+    ASSERT_EQ(p1.pendingTriggerTarget->targets().groups_size(), 1);
+    const auto &group = p1.pendingTriggerTarget->targets().groups(0);
+    EXPECT_TRUE(group.same_graveyard());
+    EXPECT_EQ(group.min(), 0u);
+    EXPECT_EQ(group.max(), 2u);
+    EXPECT_TRUE(p2.sawOtherTriggerTargetsRedacted);
+    std::vector<quint32> ownTargets;
+    for (const quint32 oid : group.valid_graveyard_ids()) {
+        if (p1.graveyardOwnerByEngineOid[oid] == p1.myId) {
+            ownTargets.push_back(oid);
+        }
+    }
+    ASSERT_EQ(ownTargets.size(), 2u);
+    for (const quint32 oid : ownTargets) {
+        ASSERT_TRUE(p1.serverCardByEngineOid.count(oid));
+        const int physicalId = p1.serverCardByEngineOid[oid];
+        p1.graveyardCohortExpectedPhysicalIds.insert(physicalId);
+        p2.graveyardCohortExpectedPhysicalIds.insert(physicalId);
+    }
+
+    ruled::v1::RuledCommand choose;
+    for (const quint32 oid : ownTargets) {
+        auto *target = choose.mutable_choose_trigger_target()->add_targets();
+        target->set_object_id(oid);
+        target->set_group_index(group.group_index());
+        target->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
+    }
+    ASSERT_TRUE(sendAndPump(p1, choose, QStringLiteral("choose two cards from one graveyard")));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+
+    EXPECT_EQ(p1.graveyardCohortMovedPhysicalIds, p1.graveyardCohortExpectedPhysicalIds);
+    EXPECT_EQ(p2.graveyardCohortMovedPhysicalIds, p2.graveyardCohortExpectedPhysicalIds);
+    EXPECT_TRUE(p1.graveyardCohortPhysicalIdentityContinuous);
+    EXPECT_TRUE(p2.graveyardCohortPhysicalIdentityContinuous);
+
+    ASSERT_TRUE(devPut(p1.myId, "Malevolent Chandelier", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ruled::v1::RuledCommand addMana;
+    addMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_c(2);
+    ASSERT_TRUE(sendAndPump(p1, addMana, QStringLiteral("dev: add {2} for Malevolent Chandelier")));
+    const auto chandelier = std::find_if(
+        p1.battlefieldByPlayer[p1.myId].begin(), p1.battlefieldByPlayer[p1.myId].end(),
+        [](const SmokeClient::Permanent &permanent) { return permanent.cardId == QStringLiteral("malevolent_chandelier"); });
+    ASSERT_NE(chandelier, p1.battlefieldByPlayer[p1.myId].end());
+    const quint64 abilityKey = (static_cast<quint64>(chandelier->oid) << 32);
+    const auto targets = p1.latestLegal.valid_targets_by_ability().find(abilityKey);
+    ASSERT_NE(targets, p1.latestLegal.valid_targets_by_ability().end());
+    ASSERT_EQ(targets->second.groups_size(), 1);
+    const auto &libraryGroup = targets->second.groups(0);
+    const auto opponentTarget = std::find_if(
+        libraryGroup.valid_graveyard_ids().begin(), libraryGroup.valid_graveyard_ids().end(),
+        [&](quint32 oid) { return p1.graveyardOwnerByEngineOid[oid] == p2.myId; });
+    ASSERT_NE(opponentTarget, libraryGroup.valid_graveyard_ids().end());
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(*opponentTarget));
+    const int libraryPhysicalId = p1.serverCardByEngineOid[*opponentTarget];
+    p1.graveyardLibraryExpectedPhysicalId = libraryPhysicalId;
+    p2.graveyardLibraryExpectedPhysicalId = libraryPhysicalId;
+    ruled::v1::RuledCommand activate;
+    auto *ability = activate.mutable_activate_ability();
+    ability->set_source_object_id(chandelier->oid);
+    ability->set_ability_index(0);
+    ability->set_expected_zone_change_generation(chandelier->generation);
+    auto *libraryTarget = ability->add_targets();
+    libraryTarget->set_object_id(*opponentTarget);
+    libraryTarget->set_group_index(libraryGroup.group_index());
+    libraryTarget->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
+    ASSERT_TRUE(sendAndPump(p1, activate, QStringLiteral("activate Malevolent Chandelier")));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+    EXPECT_TRUE(p1.sawGraveyardToLibraryPhysicalMove);
+    EXPECT_TRUE(p2.sawGraveyardToLibraryPhysicalMove);
+    EXPECT_TRUE(p1.graveyardCohortPhysicalIdentityContinuous);
+    EXPECT_TRUE(p2.graveyardCohortPhysicalIdentityContinuous);
 }
 
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can

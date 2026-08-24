@@ -1,0 +1,26 @@
+// Oracle checked 2026-08-24.
+(
+  id: "arashin_sunshield",
+  name: "Arashin Sunshield",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Human", "Warrior"],
+  power: 3,
+  toughness: 4,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile)],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 2,
+      prompt: "Choose up to two target cards from a single graveyard",
+      effect_indices: [0],
+      same_graveyard: true,
+    )])),
+    text: "When this creature enters, exile up to two target cards from a single graveyard.",
+  )],
+  activated_abilities: [(
+    costs: [Mana("{W}"), Tap],
+    effect: [Tap(subject: Chosen((kind: Creature)))],
+    text: "{W}, {T}: Tap target creature.",
+  )],
+)

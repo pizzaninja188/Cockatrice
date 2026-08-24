@@ -92,6 +92,7 @@ struct RuledTargetGroupData
     int maxTargets = 1;
     QString promptText;
     QVector<int> distinctFromGroupIndices;
+    bool sameGraveyard = false;
 };
 
 struct RuledTargetingCostCandidate
@@ -430,6 +431,10 @@ public:
         /// a resolving trigger's one-shot target set, so the dispatcher restores this after the
         /// batch's ordinary ability-target table is applied.
         RuledSpellTargetData triggerTargets;
+        /// Trigger targets staged in authored group order. They remain until an authoritative
+        /// follow-up retires the prompt, including when the submitted command is rejected.
+        QVector<QVector<ruled::v1::TargetRef>> selectedTriggerTargetsByGroup;
+        int activeTriggerTargetGroupPosition = 0;
 
         // --- TriggerOrder payload -----------------------------------------------------
         /// The still-unplaced triggers, in the engine's APNAP order as offered. Re-sent (shorter)
@@ -1354,6 +1359,17 @@ public:
     }
     void submitPendingChoiceOption(int optionIndex);
     void appendPendingTriggerMode(ruled::v1::ChooseTriggerTarget *command) const;
+    [[nodiscard]] bool isPendingTriggerTargetCandidate(ruled::v1::TargetRefKind kind,
+                                                       quint32 oid,
+                                                       int targetPlayerId) const;
+    [[nodiscard]] std::optional<RuledTargetGroupData> pendingTriggerTargetGroupData() const;
+    bool stagePendingTriggerTarget(ruled::v1::TargetRefKind kind, quint32 oid, int targetPlayerId);
+    void confirmPendingTriggerTargets();
+    [[nodiscard]] bool isPendingTriggerTargetSelected(quint32 oid) const;
+    [[nodiscard]] int pendingTriggerSelectedCount() const;
+    [[nodiscard]] int pendingTriggerMinTargets() const;
+    [[nodiscard]] int pendingTriggerMaxTargets() const;
+    [[nodiscard]] QString pendingTriggerTargetPrompt() const;
 
     [[nodiscard]] bool hasPendingTriggerTarget() const
     {
@@ -1613,6 +1629,9 @@ signals:
     /// next refreshPromptLabel() call overwrites it.
     void blockerRejected();
     void combatStateChanged();
+    /// Local trigger-target staging changed without an authoritative batch; refresh the prompt's
+    /// selected count and active target-group text immediately.
+    void triggerTargetSelectionChanged();
     /// Emitted once after each settled batch rebuilds the acting player's authoritative legal
     /// actions. Pending target UI uses it to discard selections that became stale mid-cast.
     void legalActionsChanged();

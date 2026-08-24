@@ -95,6 +95,7 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
         parsed.minTargets = static_cast<int>(group.min());
         parsed.maxTargets = static_cast<int>(group.max());
         parsed.promptText = QString::fromStdString(group.prompt_text());
+        parsed.sameGraveyard = group.same_graveyard();
         for (const quint32 other : group.distinct_from_group_indices()) {
             parsed.distinctFromGroupIndices.append(static_cast<int>(other));
         }

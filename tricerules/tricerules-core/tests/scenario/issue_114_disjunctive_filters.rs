@@ -27,7 +27,7 @@ fn graveyard_fixture_ability(filter: GraveyardFilter) -> TriggeredAbilityDef {
         .triggered_abilities[0]
         .clone();
     ability.trigger = TriggerCondition::WhenSelfEntersBattlefield;
-    let SpellEffectKind::ReturnFromGraveyard {
+    let SpellEffectKind::MoveGraveyardCards {
         filter: ability_filter,
         ..
     } = &mut ability.effect[0]

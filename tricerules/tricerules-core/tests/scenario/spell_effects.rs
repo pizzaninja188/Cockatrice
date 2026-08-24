@@ -1387,10 +1387,10 @@ fn disentomb_returns_creature_from_graveyard_to_hand() {
     );
 }
 
-/// ReturnFromGraveyard fizzles cleanly when the graveyard target is no longer legal at resolution
+/// MoveGraveyardCards fizzles cleanly when the graveyard target is no longer legal at resolution
 /// (e.g., the target was the only creature and the graveyard is now empty of valid targets).
 #[test]
-fn return_from_graveyard_fizzles_when_target_removed_before_resolution() {
+fn move_graveyard_cards_fizzles_when_target_removed_before_resolution() {
     let decks = Some(vec![vec!["swamp".into(); 10], vec!["forest".into(); 10]]);
     let mut e = GameEngine::new(1402, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
@@ -2497,7 +2497,7 @@ fn issue_58_rousing_read_draws_then_discards_and_buffs_attached_creature() {
     assert_eq!(e.state.players[0].library.len(), library_before - 2);
 }
 // ---------------------------------------------------------------------------
-// ReturnFromGraveyard -> Battlefield (Zombify)
+// MoveGraveyardCards -> Battlefield (Zombify)
 
 /// Zombify returns a creature card from its controller's own graveyard onto the battlefield.
 /// Owner == controller here, so this exercises the reanimation path without any control change:

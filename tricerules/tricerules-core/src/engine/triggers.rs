@@ -1,6 +1,9 @@
 use super::damage::{DamageClassification, DamageRecipient};
 use super::events::{ev_log, ev_trigger_order_required};
-use super::targeting::{compute_ability_targets_with_context, target_schema, TargetSourceIdentity};
+use super::targeting::{
+    compute_ability_targets_with_context, legal_target_group_has_minimum, target_schema,
+    TargetSourceIdentity,
+};
 use super::*;
 
 /// One triggered ability that matched an event and is about to go on the stack (or be parked for
@@ -1385,15 +1388,10 @@ impl GameEngine {
                         trigger_context,
                     );
                     let selectable = !mode_needs_target
-                        || targets.groups.iter().all(|group| {
-                            let players = u32::from(group.can_target_self)
-                                + u32::from(group.can_target_opponent);
-                            group.min
-                                <= group.valid_permanent_ids.len() as u32
-                                    + group.valid_stack_ids.len() as u32
-                                    + group.valid_graveyard_ids.len() as u32
-                                    + players
-                        });
+                        || targets
+                            .groups
+                            .iter()
+                            .all(|group| legal_target_group_has_minimum(&self.state, group));
                     rv1::LegalSpellMode {
                         mode_index: mode_index as u32,
                         label: mode.label.clone(),
@@ -1417,15 +1415,10 @@ impl GameEngine {
             None
         };
         let has_legal_target = legal_targets.as_ref().is_none_or(|targets| {
-            targets.groups.iter().all(|group| {
-                let player_count =
-                    u32::from(group.can_target_self) + u32::from(group.can_target_opponent);
-                group.min
-                    <= group.valid_permanent_ids.len() as u32
-                        + group.valid_stack_ids.len() as u32
-                        + group.valid_graveyard_ids.len() as u32
-                        + player_count
-            })
+            targets
+                .groups
+                .iter()
+                .all(|group| legal_target_group_has_minimum(&self.state, group))
         });
 
         let needs_choice = needs_target || modal_modes.is_some();

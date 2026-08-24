@@ -1303,7 +1303,7 @@ pub enum SpellEffectKind {
     /// Raise Dead / Disentomb (creature → hand); future reanimation (creature → battlefield).
     /// The `filter` selects which graveyard and which card types are legal targets; the engine
     /// validates this at cast time and again at resolution (fizzle if no longer legal).
-    ReturnFromGraveyard {
+    MoveGraveyardCards {
         filter: GraveyardFilter,
         destination: GraveyardDestination,
     },
@@ -1999,7 +1999,7 @@ impl SpellEffectKind {
             | SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
                 vec![TargetRole::StackSpell(*spell_filter)]
             }
-            SpellEffectKind::ReturnFromGraveyard { filter, .. } => {
+            SpellEffectKind::MoveGraveyardCards { filter, .. } => {
                 vec![TargetRole::GraveyardCard(filter)]
             }
             SpellEffectKind::DamagePlayer { .. }
@@ -2066,9 +2066,14 @@ impl SpellEffectKind {
                     effect,
                     SpellEffectKind::DiscardCards { .. } | SpellEffectKind::DrawDiscard { .. }
                 ),
-                CardResultAction::Exile => {
-                    matches!(effect, SpellEffectKind::ExileCardsFromHand { .. })
-                }
+                CardResultAction::Exile => matches!(
+                    effect,
+                    SpellEffectKind::ExileCardsFromHand { .. }
+                        | SpellEffectKind::MoveGraveyardCards {
+                            destination: GraveyardDestination::Exile,
+                            ..
+                        }
+                ),
                 CardResultAction::Sacrifice => {
                     matches!(effect, SpellEffectKind::TargetPlayerSacrifices { .. })
                 }
@@ -2088,7 +2093,7 @@ impl SpellEffectKind {
             return Err("an effect list may contain at most one resolution branch choice".into());
         }
         // `TargetManaValue` reads the mana value of the spell's target, so the list must contain
-        // an effect that declares an object target (Reanimate: `ReturnFromGraveyard`). Without
+        // an effect that declares an object target (Reanimate: `MoveGraveyardCards`). Without
         // one there is nothing to read and the amount would silently resolve to 0.
         if effects.iter().any(|e| {
             matches!(
@@ -2162,7 +2167,7 @@ impl SpellEffectKind {
         for filter in self.target_filters() {
             filter.validate_target_constraints()?;
         }
-        if let SpellEffectKind::ReturnFromGraveyard { filter, .. } = self {
+        if let SpellEffectKind::MoveGraveyardCards { filter, .. } = self {
             filter.validate()?;
         }
         if let SpellEffectKind::PutCounters { counter, .. } = self {

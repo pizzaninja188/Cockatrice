@@ -471,10 +471,15 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
                    : RuledTargetClickEligibility::Illegal;
     }
     if (state.hasPendingTriggerTarget()) {
-        const auto data = state.abilityTargetData(state.lastTriggerSourceOid,
-                                                  static_cast<int>(state.lastTriggerAbilityIndex));
-        return ruledTargetDataContains(data, kind, oid, localPlayerId) ? RuledTargetClickEligibility::Legal
-                                                                       : RuledTargetClickEligibility::Illegal;
+        const auto refKind = kind == RuledTargetCandidateKind::Graveyard
+                                 ? ruled::v1::TARGET_REF_KIND_GRAVEYARD
+                             : kind == RuledTargetCandidateKind::Stack ? ruled::v1::TARGET_REF_KIND_STACK
+                             : kind == RuledTargetCandidateKind::Player ? ruled::v1::TARGET_REF_KIND_PLAYER
+                                                                        : ruled::v1::TARGET_REF_KIND_PERMANENT;
+        const int targetPlayerId = kind == RuledTargetCandidateKind::Player ? static_cast<int>(oid) : localPlayerId;
+        return state.isPendingTriggerTargetCandidate(refKind, oid, targetPlayerId)
+                   ? RuledTargetClickEligibility::Legal
+                   : RuledTargetClickEligibility::Illegal;
     }
     if (ability.valid && ability.waitingForTarget) {
         const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);

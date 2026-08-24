@@ -301,6 +301,43 @@ impl GameEngine {
                     rv1::permanent_moved::Destination::Battlefield,
                 ));
             }
+            tricerules_cards::primitives::GraveyardDestination::Exile => {
+                move_object_to_zone(&mut self.state, self.registry, oid, Zone::Exile, None)?;
+                events.push(ev_log(format!(
+                    "{spell_label} exiles {card_label} from the graveyard."
+                )));
+                events.push(permanent_moved_event(
+                    &self.state,
+                    oid,
+                    controller,
+                    rv1::permanent_moved::Destination::Exile,
+                ));
+            }
+            tricerules_cards::primitives::GraveyardDestination::LibraryTop
+            | tricerules_cards::primitives::GraveyardDestination::LibraryBottom => {
+                let top =
+                    destination == tricerules_cards::primitives::GraveyardDestination::LibraryTop;
+                move_object_to_zone(&mut self.state, self.registry, oid, Zone::Library, None)?;
+                if top {
+                    let player_idx = self
+                        .state
+                        .player_idx(controller)
+                        .ok_or(EngineError::Illegal("graveyard card owner not found"))?;
+                    let library = &mut self.state.players[player_idx].library;
+                    library.retain(|object_id| *object_id != oid);
+                    library.push_front(oid);
+                }
+                let position = if top { "top" } else { "bottom" };
+                events.push(ev_log(format!(
+                    "{spell_label} puts {card_label} on the {position} of its owner's library."
+                )));
+                events.push(permanent_moved_event(
+                    &self.state,
+                    oid,
+                    controller,
+                    rv1::permanent_moved::Destination::Library,
+                ));
+            }
         }
         self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
     }

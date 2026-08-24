@@ -119,7 +119,7 @@ fn issue_110_say_its_name_and_altanak_are_complete() {
         altanak.primary_face().activated_abilities[0]
             .effect
             .as_slice(),
-        [SpellEffectKind::ReturnFromGraveyard {
+        [SpellEffectKind::MoveGraveyardCards {
             destination: GraveyardDestination::Battlefield { tapped: true },
             ..
         }]

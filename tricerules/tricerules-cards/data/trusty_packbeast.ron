@@ -8,7 +8,7 @@
   triggered_abilities: [
     (
       trigger: WhenSelfEntersBattlefield,
-      effect: [ReturnFromGraveyard(filter: (owner: Controller, card_type: Some(Artifact)), destination: Hand)],
+      effect: [MoveGraveyardCards(filter: (owner: Controller, card_type: Some(Artifact)), destination: Hand)],
       text: "When this creature enters, return target artifact card from your graveyard to your hand.",
     ),
   ],

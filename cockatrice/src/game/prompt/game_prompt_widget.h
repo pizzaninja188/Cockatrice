@@ -97,6 +97,8 @@ public:
         int genericManaCost = 0;
         bool paymentCurrentlyLegal = false;
         QVector<ChoiceOption> choiceOptions;
+        /// ClickChoice only: nonnegative for a staged target range that uses Confirm Targets.
+        int max = -1;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into

@@ -751,6 +751,9 @@ void GamePromptWidget::updateCombatButtonsVisibility()
             ((mode == PromptMode::ClickChoice || mode == PromptMode::ChoiceOptions) && promptState.canDecline));
         resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment);
         undoLandTapButton->setVisible(mode == PromptMode::ResolutionPayment && landTapUndoAvailable);
+        confirmTargetsButton->setVisible(mode == PromptMode::ClickChoice && promptState.max >= 0);
+        confirmTargetsButton->setEnabled(promptState.selected >= promptState.required &&
+                                         promptState.selected <= promptState.max);
         return;
     }
 

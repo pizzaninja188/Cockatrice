@@ -3,7 +3,7 @@
   name: "Soul Salvage",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
-  spell_effect: [ReturnFromGraveyard(
+  spell_effect: [MoveGraveyardCards(
     filter: (owner: Controller, card_type: Some(Creature)),
     destination: Hand,
   )],

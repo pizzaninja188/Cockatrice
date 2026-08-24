@@ -1,0 +1,16 @@
+// Oracle checked 2026-08-24.
+(
+  id: "malevolent_chandelier",
+  name: "Malevolent Chandelier",
+  mana_cost: "{6}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 4,
+  toughness: 4,
+  keywords: [Flying],
+  activated_abilities: [(
+    costs: [Mana("{2}")],
+    effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: LibraryBottom)],
+    timing: SorcerySpeed,
+    text: "{2}: Put target card from a graveyard on the bottom of its owner's library. Activate only as a sorcery.",
+  )],
+)

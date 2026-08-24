@@ -2019,7 +2019,7 @@ mod tests {
             mana_cost: "{B}",
             types: ["Sorcery"],
             spell_effect: [
-                ReturnFromGraveyard(
+                MoveGraveyardCards(
                     filter: (owner: AnyPlayer, card_type: Some(Creature)),
                     destination: Battlefield(tapped: false),
                 ),

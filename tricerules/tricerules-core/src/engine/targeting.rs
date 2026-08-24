@@ -1110,7 +1110,7 @@ fn validate_effect_targets(
                 return Err(EngineError::Illegal("illegal target for damage prevention"));
             }
         }
-        SpellEffectKind::ReturnFromGraveyard { filter, .. } => {
+        SpellEffectKind::MoveGraveyardCards { filter, .. } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one graveyard card target"));
             }
@@ -1308,6 +1308,7 @@ fn validate_grouped_targets(
             return Err(EngineError::Illegal("target group cardinality is invalid"));
         }
         let mut seen = std::collections::HashSet::new();
+        let mut graveyard_owner = None;
         for target in selected {
             if !target_ref_domain_exists(engine, target) {
                 return Err(EngineError::Illegal(
@@ -1316,6 +1317,22 @@ fn validate_grouped_targets(
             }
             if !seen.insert(target.object_id) {
                 return Err(EngineError::Illegal("duplicate target in target group"));
+            }
+            if group.same_graveyard {
+                let owner = engine
+                    .state
+                    .objects
+                    .get(&target.object_id)
+                    .ok_or(EngineError::Illegal("graveyard target does not exist"))?
+                    .owner;
+                if graveyard_owner
+                    .replace(owner)
+                    .is_some_and(|first| first != owner)
+                {
+                    return Err(EngineError::Illegal(
+                        "targets must be cards from the same graveyard",
+                    ));
+                }
             }
             for binding in &group.bindings {
                 target_legality_error_for_binding(
@@ -1374,6 +1391,27 @@ fn target_ref_domain_exists(engine: &GameEngine, target: &rv1::TargetRef) -> boo
             .iter()
             .any(|player| player.graveyard.contains(&target.object_id)),
     }
+}
+
+pub(super) fn legal_target_group_has_minimum(
+    state: &GameState,
+    group: &rv1::LegalTargetGroup,
+) -> bool {
+    if group.same_graveyard {
+        let mut counts = std::collections::HashMap::<PlayerId, u32>::new();
+        for object_id in &group.valid_graveyard_ids {
+            if let Some(owner) = state.objects.get(object_id).map(|object| object.owner) {
+                *counts.entry(owner).or_default() += 1;
+            }
+        }
+        return group.min == 0 || counts.values().any(|count| *count >= group.min);
+    }
+    let player_count = u32::from(group.can_target_self) + u32::from(group.can_target_opponent);
+    group.min
+        <= group.valid_permanent_ids.len() as u32
+            + group.valid_stack_ids.len() as u32
+            + group.valid_graveyard_ids.len() as u32
+            + player_count
 }
 
 /// Returns `Err` with a specific human-readable message when `tid` is not a legal target for `effect`.
@@ -1555,7 +1593,7 @@ fn spell_target_legality_error_with_context(
                 ));
             }
         }
-        SpellEffectKind::ReturnFromGraveyard { filter, .. } => {
+        SpellEffectKind::MoveGraveyardCards { filter, .. } => {
             if !graveyard_target_legal(engine, filter, tid, caster) {
                 return Err(EngineError::Illegal(
                     "target must be a matching card in the correct graveyard",
@@ -1751,6 +1789,7 @@ fn compute_targets_with_context(
                 can_target_opponent: opponent_legal,
                 valid_graveyard_ids: graveyard_ids,
                 distinct_from_group_indices: group.distinct_from.to_vec(),
+                same_graveyard: group.same_graveyard,
             }
         })
         .collect::<Vec<_>>();
@@ -1800,6 +1839,7 @@ mod tests {
                     prompt: "Choose any player".into(),
                     effect_indices: vec![0],
                     distinct_from: vec![],
+                    same_graveyard: false,
                 },
                 TargetGroupDef {
                     min: 1,
@@ -1807,6 +1847,7 @@ mod tests {
                     prompt: "Choose a different opponent".into(),
                     effect_indices: vec![1],
                     distinct_from: vec![0],
+                    same_graveyard: false,
                 },
             ],
         };

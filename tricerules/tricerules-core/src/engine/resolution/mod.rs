@@ -1237,8 +1237,8 @@ impl GameEngine {
                     effect @ SpellEffectKind::DamageCantBePreventedThisTurn => {
                         misc::damage_cant_be_prevented_this_turn(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::ReturnFromGraveyard { .. } => {
-                        zones::return_from_graveyard(&mut cx, effect)?
+                    effect @ SpellEffectKind::MoveGraveyardCards { .. } => {
+                        zones::move_graveyard_cards(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::ChooseGraveyardCard { .. } => {
                         zones::choose_graveyard_card(&mut cx, effect)?

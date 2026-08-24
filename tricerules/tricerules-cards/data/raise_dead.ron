@@ -3,5 +3,5 @@
   name: "Raise Dead",
   mana_cost: "{B}",
   types: ["Sorcery"],
-  spell_effect: [ReturnFromGraveyard(filter: (owner: Controller, card_type: Some(Creature)), destination: Hand)],
+  spell_effect: [MoveGraveyardCards(filter: (owner: Controller, card_type: Some(Creature)), destination: Hand)],
 )

@@ -340,6 +340,11 @@ void RuledClientState::teardownPendingChoice()
 void RuledClientState::setPendingChoice(RuledPendingChoice choice)
 {
     teardownPendingChoice();
+    if (choice.kind == ChoiceKind::TriggerTarget && choice.selectedTriggerTargetsByGroup.isEmpty()) {
+        const int groupCount = std::max(1, static_cast<int>(choice.triggerTargets.groups.size()));
+        choice.selectedTriggerTargetsByGroup.resize(groupCount);
+        choice.activeTriggerTargetGroupPosition = 0;
+    }
     pendingChoice = std::move(choice);
 }
 
@@ -490,6 +495,11 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
         if (it->needsTarget) {
             pendingChoice->kind = ChoiceKind::TriggerTarget;
             pendingChoice->selectedTriggerMode = optionIndex;
+            pendingChoice->triggerTargets = it->targets;
+            pendingChoice->selectedTriggerTargetsByGroup.clear();
+            pendingChoice->selectedTriggerTargetsByGroup.resize(
+                std::max(1, static_cast<int>(it->targets.groups.size())));
+            pendingChoice->activeTriggerTargetGroupPosition = 0;
             validTargetsByAbility.insert(
                 abilityTargetKey(lastTriggerSourceOid, static_cast<int>(lastTriggerAbilityIndex)), it->targets);
             emit combatStateChanged();
@@ -523,6 +533,207 @@ void RuledClientState::appendPendingTriggerMode(ruled::v1::ChooseTriggerTarget *
         return;
     }
     command->add_selected_modes()->set_mode_index(static_cast<quint32>(pendingChoice->selectedTriggerMode));
+}
+
+std::optional<RuledTargetGroupData> RuledClientState::pendingTriggerTargetGroupData() const
+{
+    if (!hasPendingTriggerTarget()) {
+        return std::nullopt;
+    }
+    if (!pendingChoice->triggerTargets.groups.isEmpty()) {
+        const int position = pendingChoice->activeTriggerTargetGroupPosition;
+        return position >= 0 && position < pendingChoice->triggerTargets.groups.size()
+                   ? std::optional<RuledTargetGroupData>{pendingChoice->triggerTargets.groups.at(position)}
+                   : std::nullopt;
+    }
+    const quint64 key = abilityTargetKey(lastTriggerSourceOid, static_cast<int>(lastTriggerAbilityIndex));
+    const auto published = validTargetsByAbility.constFind(key);
+    if (published != validTargetsByAbility.constEnd()) {
+        if (!published->groups.isEmpty()) {
+            const int position = pendingChoice->activeTriggerTargetGroupPosition;
+            return position >= 0 && position < published->groups.size()
+                       ? std::optional<RuledTargetGroupData>{published->groups.at(position)}
+                       : std::nullopt;
+        }
+        return static_cast<const RuledTargetGroupData &>(*published);
+    }
+    return static_cast<const RuledTargetGroupData &>(pendingChoice->triggerTargets);
+}
+
+bool RuledClientState::isPendingTriggerTargetCandidate(ruled::v1::TargetRefKind kind,
+                                                       quint32 oid,
+                                                       int targetPlayerId) const
+{
+    if (!hasPendingTriggerTarget() || pendingChoice->selectedTriggerTargetsByGroup.isEmpty()) {
+        return false;
+    }
+    const auto group = pendingTriggerTargetGroupData();
+    if (!group.has_value()) {
+        return false;
+    }
+    bool candidate = false;
+    switch (kind) {
+        case ruled::v1::TARGET_REF_KIND_PERMANENT:
+            candidate = group->validPermanentIds.contains(oid);
+            break;
+        case ruled::v1::TARGET_REF_KIND_STACK:
+            candidate = group->validStackIds.contains(oid);
+            break;
+        case ruled::v1::TARGET_REF_KIND_GRAVEYARD:
+            candidate = group->validGraveyardIds.contains(oid);
+            break;
+        case ruled::v1::TARGET_REF_KIND_PLAYER:
+            candidate = targetPlayerId == host->localPlayerId() ? group->canTargetSelf : group->canTargetOpponent;
+            break;
+        default:
+            break;
+    }
+    if (!candidate) {
+        return false;
+    }
+
+    const auto &selected = pendingChoice->selectedTriggerTargetsByGroup.at(
+        pendingChoice->activeTriggerTargetGroupPosition);
+    const auto existing = std::find_if(selected.cbegin(), selected.cend(),
+                                       [oid](const ruled::v1::TargetRef &target) { return target.object_id() == oid; });
+    if (existing != selected.cend()) {
+        return true;
+    }
+    if (selected.size() >= group->maxTargets) {
+        return false;
+    }
+    for (const int otherGroup : group->distinctFromGroupIndices) {
+        if (otherGroup < 0 || otherGroup >= pendingChoice->selectedTriggerTargetsByGroup.size()) {
+            continue;
+        }
+        const auto &other = pendingChoice->selectedTriggerTargetsByGroup.at(otherGroup);
+        if (std::any_of(other.cbegin(), other.cend(),
+                        [oid](const ruled::v1::TargetRef &target) { return target.object_id() == oid; })) {
+            return false;
+        }
+    }
+    if (group->sameGraveyard && !selected.isEmpty()) {
+        const int firstOwner = graveyardOidToPlayerId.value(selected.first().object_id(), -1);
+        const int candidateOwner = graveyardOidToPlayerId.value(oid, -1);
+        if (firstOwner < 0 || candidateOwner != firstOwner) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool RuledClientState::stagePendingTriggerTarget(ruled::v1::TargetRefKind kind, quint32 oid, int targetPlayerId)
+{
+    if (!isPendingTriggerTargetCandidate(kind, oid, targetPlayerId)) {
+        return false;
+    }
+    const auto group = pendingTriggerTargetGroupData();
+    auto &selected = pendingChoice->selectedTriggerTargetsByGroup[pendingChoice->activeTriggerTargetGroupPosition];
+    const auto existing = std::find_if(selected.cbegin(), selected.cend(),
+                                       [oid](const ruled::v1::TargetRef &target) { return target.object_id() == oid; });
+    if (existing != selected.cend()) {
+        selected.erase(existing);
+        emit combatStateChanged();
+        emit triggerTargetSelectionChanged();
+        return true;
+    }
+    ruled::v1::TargetRef target;
+    target.set_object_id(oid);
+    target.set_group_index(static_cast<quint32>(group->groupIndex));
+    target.set_kind(kind);
+    selected.append(target);
+    emit combatStateChanged();
+    emit triggerTargetSelectionChanged();
+    if (group->minTargets == 1 && group->maxTargets == 1) {
+        confirmPendingTriggerTargets();
+    }
+    return true;
+}
+
+void RuledClientState::confirmPendingTriggerTargets()
+{
+    if (!hasPendingTriggerTarget() || pendingChoice->selectedTriggerTargetsByGroup.isEmpty()) {
+        return;
+    }
+    const auto group = pendingTriggerTargetGroupData();
+    if (!group.has_value()) {
+        return;
+    }
+    const auto &selected = pendingChoice->selectedTriggerTargetsByGroup.at(
+        pendingChoice->activeTriggerTargetGroupPosition);
+    if (selected.size() < group->minTargets || selected.size() > group->maxTargets) {
+        return;
+    }
+    if (pendingChoice->activeTriggerTargetGroupPosition + 1 < pendingChoice->selectedTriggerTargetsByGroup.size()) {
+        ++pendingChoice->activeTriggerTargetGroupPosition;
+        emit combatStateChanged();
+        emit triggerTargetSelectionChanged();
+        return;
+    }
+
+    ruled::v1::RuledCommand command;
+    auto *choice = command.mutable_choose_trigger_target();
+    ruled::v1::SelectedSpellMode *mode = nullptr;
+    if (pendingChoice->selectedTriggerMode >= 0) {
+        mode = choice->add_selected_modes();
+        mode->set_mode_index(static_cast<quint32>(pendingChoice->selectedTriggerMode));
+    }
+    for (const auto &targets : pendingChoice->selectedTriggerTargetsByGroup) {
+        for (const auto &target : targets) {
+            if (mode) {
+                *mode->add_targets() = target;
+            } else {
+                *choice->add_targets() = target;
+            }
+        }
+    }
+    host->sendRuledCommandExpectingAck(command, [this](bool) {
+        emit combatStateChanged();
+        emit triggerTargetSelectionChanged();
+    });
+}
+
+bool RuledClientState::isPendingTriggerTargetSelected(quint32 oid) const
+{
+    if (!hasPendingTriggerTarget()) {
+        return false;
+    }
+    for (const auto &group : pendingChoice->selectedTriggerTargetsByGroup) {
+        if (std::any_of(group.cbegin(), group.cend(),
+                        [oid](const ruled::v1::TargetRef &target) { return target.object_id() == oid; })) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int RuledClientState::pendingTriggerSelectedCount() const
+{
+    if (!hasPendingTriggerTarget() || pendingChoice->selectedTriggerTargetsByGroup.isEmpty()) {
+        return 0;
+    }
+    return pendingChoice->selectedTriggerTargetsByGroup
+        .at(pendingChoice->activeTriggerTargetGroupPosition)
+        .size();
+}
+
+int RuledClientState::pendingTriggerMinTargets() const
+{
+    const auto group = pendingTriggerTargetGroupData();
+    return group.has_value() ? group->minTargets : 0;
+}
+
+int RuledClientState::pendingTriggerMaxTargets() const
+{
+    const auto group = pendingTriggerTargetGroupData();
+    return group.has_value() ? group->maxTargets : -1;
+}
+
+QString RuledClientState::pendingTriggerTargetPrompt() const
+{
+    const auto group = pendingTriggerTargetGroupData();
+    return group.has_value() && !group->promptText.isEmpty() ? group->promptText : pendingTriggerText();
 }
 
 // ---------------------------------------------------------------------------------------

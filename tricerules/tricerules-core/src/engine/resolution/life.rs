@@ -79,7 +79,7 @@ pub(super) fn gain_life(
 /// `LifeAmount::TargetManaValue` (CR 202.3) reads the mana value of the object the *spell*
 /// targets — a sibling effect declared it, this one only borrows it. Position relative to that
 /// sibling does not matter: the object keeps its `card_id` across a zone change, so Reanimate's
-/// `[ReturnFromGraveyard, LoseLife]` reads the same value before or after the creature moves.
+/// `[MoveGraveyardCards, LoseLife]` reads the same value before or after the creature moves.
 /// Position relative to a *suspending* effect does matter — see the `EffectOutcome::Suspended`
 /// early return in the caller, and Thoughtseize's RON for the one card that has to care.
 pub(super) fn lose_life(

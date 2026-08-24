@@ -624,7 +624,11 @@ bool isSingleClickPlayLegal(const CardItem *card)
 bool isSelectedSpellTarget(const AbstractGame *game, quint32 oid)
 {
     PlayerActions *actions = localPlayerActions(game);
-    return actions && actions->isTargetSelectedForPendingSpell(oid);
+    if (actions && actions->isTargetSelectedForPendingSpell(oid)) {
+        return true;
+    }
+    const RuledClientState *state = stateFor(game);
+    return state && state->isPendingTriggerTargetSelected(oid);
 }
 
 bool isSelectedCastCostPermanent(const AbstractGame *game, quint32 oid)

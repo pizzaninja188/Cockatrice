@@ -23,6 +23,9 @@ pub struct TargetGroupDef {
     /// Indices of other groups whose chosen objects must be distinct from this group.
     #[serde(default)]
     pub distinct_from: Vec<u32>,
+    /// All chosen cards must currently belong to the same player's graveyard.
+    #[serde(default)]
+    pub same_graveyard: bool,
 }
 
 /// One semantic target role declared by an effect. Runtime legality consumes this vocabulary for
@@ -71,6 +74,7 @@ pub struct TargetGroupSchema<'effects, 'targeting> {
     pub max: u32,
     pub prompt: Cow<'targeting, str>,
     pub distinct_from: Cow<'targeting, [u32]>,
+    pub same_graveyard: bool,
     pub bindings: Vec<TargetBinding<'effects>>,
 }
 
@@ -138,11 +142,19 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                         return Err("target group repeats a distinctness reference".into());
                     }
                 }
+                if group.same_graveyard
+                    && bindings
+                        .iter()
+                        .any(|binding| !matches!(binding.role, TargetRole::GraveyardCard(_)))
+                {
+                    return Err("same_graveyard requires a graveyard-card target group".into());
+                }
                 groups.push(TargetGroupSchema {
                     min: group.min,
                     max: group.max,
                     prompt: Cow::Borrowed(group.prompt.as_str()),
                     distinct_from: Cow::Borrowed(group.distinct_from.as_slice()),
+                    same_graveyard: group.same_graveyard,
                     bindings,
                 });
             }
@@ -178,6 +190,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     max: 1,
                     prompt: Cow::Borrowed("Choose a target"),
                     distinct_from: Cow::Borrowed(&[]),
+                    same_graveyard: false,
                     bindings,
                 });
             }
@@ -432,6 +445,12 @@ pub enum GraveyardDestination {
         #[serde(default)]
         tapped: bool,
     },
+    /// Exile the card.
+    Exile,
+    /// Put the card on top of its owner's library.
+    LibraryTop,
+    /// Put the card on the bottom of its owner's library.
+    LibraryBottom,
 }
 
 fn default_creature_filter() -> TargetFilter {
@@ -821,6 +840,7 @@ mod tests {
                     prompt: "Choose a creature".into(),
                     effect_indices: vec![0],
                     distinct_from: Vec::new(),
+                    same_graveyard: false,
                 }],
             };
             assert!(TargetingDef::validate_optional(Some(&targeting), &effects).is_err());
@@ -986,6 +1006,7 @@ mod tests {
                     prompt: "Choose a creature you control".into(),
                     effect_indices: vec![0],
                     distinct_from: vec![1],
+                    same_graveyard: false,
                 },
                 TargetGroupDef {
                     min: 1,
@@ -993,6 +1014,7 @@ mod tests {
                     prompt: "Choose a creature an opponent controls".into(),
                     effect_indices: vec![0],
                     distinct_from: vec![0],
+                    same_graveyard: false,
                 },
             ],
         };
@@ -1019,7 +1041,7 @@ mod tests {
             unless_controller_pays: None,
             unless_controller_pays_by_cast_cost: None,
         };
-        let graveyard = SpellEffectKind::ReturnFromGraveyard {
+        let graveyard = SpellEffectKind::MoveGraveyardCards {
             filter: GraveyardFilter::default(),
             destination: GraveyardDestination::Hand,
         };
@@ -1043,5 +1065,30 @@ mod tests {
         assert_eq!(implicit.groups[0].min, 1);
         assert_eq!(implicit.groups[0].max, 1);
         assert_eq!(implicit.groups[0].prompt, "Choose a target");
+    }
+
+    #[test]
+    fn issue_107_same_graveyard_is_only_valid_for_graveyard_target_groups() {
+        let graveyard_effects = vec![SpellEffectKind::MoveGraveyardCards {
+            filter: GraveyardFilter::default(),
+            destination: GraveyardDestination::Exile,
+        }];
+        let same_graveyard = TargetingDef {
+            groups: vec![TargetGroupDef {
+                min: 0,
+                max: 2,
+                prompt: "Choose up to two cards from a single graveyard".into(),
+                effect_indices: vec![0],
+                distinct_from: Vec::new(),
+                same_graveyard: true,
+            }],
+        };
+        assert!(TargetSchema::compile(&graveyard_effects, Some(&same_graveyard)).is_ok());
+
+        let permanent_effects = vec![SpellEffectKind::DamageTarget {
+            amount: Amount::Fixed(1),
+            target: TargetFilter::default_creature(),
+        }];
+        assert!(TargetSchema::compile(&permanent_effects, Some(&same_graveyard)).is_err());
     }
 }

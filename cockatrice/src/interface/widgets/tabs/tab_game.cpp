@@ -386,6 +386,8 @@ void TabGame::connectToGameEventHandler()
                 });
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::openingUiChanged, this,
                 [this]() { refreshRuledPromptState(); });
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerTargetSelectionChanged, this,
+                [this]() { refreshRuledPromptState(); });
         connect(gamePromptWidget, &GamePromptWidget::ruledOpeningPickSeatRequested,
                 game->getGameEventHandler()->ruled(), &RuledClientState::openingPickFirstSeat);
         connect(gamePromptWidget, &GamePromptWidget::ruledOpeningMulliganKeepRequested,
@@ -556,6 +558,8 @@ void TabGame::connectToGameEventHandler()
         });
         connect(gamePromptWidget, &GamePromptWidget::declineClickChoiceRequested, game->getGameEventHandler()->ruled(),
                 &RuledClientState::declinePendingClickChoice);
+        connect(gamePromptWidget, &GamePromptWidget::confirmTargetsRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::confirmPendingTriggerTargets);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::stackHasItemsChanged, gamePromptWidget,
                 &GamePromptWidget::setRuledStackHasItems);
         gamePromptWidget->setRuledStackHasItems(game->getGameEventHandler()->ruled()->hasStackItems());
@@ -794,7 +798,15 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
     } else if (h->hasPendingTriggerTarget()) {
         state.mode = PromptMode::ClickChoice;
         state.canDecline = h->pendingTriggerMayDecline();
-        state.text = tr("Choose a target for “%1”.").arg(h->pendingTriggerText());
+        state.required = h->pendingTriggerMinTargets();
+        state.selected = h->pendingTriggerSelectedCount();
+        const int maximum = h->pendingTriggerMaxTargets();
+        state.max = state.required == 1 && maximum == 1 ? -1 : maximum;
+        state.text = tr("%1\nSelected: %2 (%3–%4).")
+                         .arg(h->pendingTriggerTargetPrompt())
+                         .arg(state.selected)
+                         .arg(state.required)
+                         .arg(maximum);
     } else if (localActions && localActions->isAwaitingRuledCastCostObject()) {
         state.mode = PromptMode::CastCostObject;
         state.text = localActions->pendingRuledSpellPromptText();

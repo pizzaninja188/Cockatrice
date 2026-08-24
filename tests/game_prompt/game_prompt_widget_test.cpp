@@ -274,6 +274,26 @@ TEST_F(GamePromptWidgetTest, OptionalClickChoiceUsesTheGenericDeclineControl)
     EXPECT_EQ(spy.count(), 1);
 }
 
+TEST_F(GamePromptWidgetTest, VariableClickChoiceUsesConfirmTargetsIncludingZeroSelections)
+{
+    QSignalSpy spy(widget.get(), &GamePromptWidget::confirmTargetsRequested);
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::ClickChoice;
+    state.required = 0;
+    state.selected = 0;
+    state.text = "Choose up to two target cards from a single graveyard.";
+    state.max = 2;
+    widget->setRuledPromptState(state);
+
+    auto *confirm = btn("confirmTargetsButton");
+    ASSERT_NE(confirm, nullptr);
+    EXPECT_FALSE(confirm->isHidden());
+    EXPECT_TRUE(confirm->isEnabled());
+    confirm->click();
+    EXPECT_EQ(spy.count(), 1);
+    EXPECT_TRUE(btn("declineClickChoiceButton")->isHidden());
+}
+
 TEST_F(GamePromptWidgetTest, ResolutionPickShowsConfirmEnabledOnlyWhenSatisfied)
 {
     widget->setLocalPlayerHasPriority(true);

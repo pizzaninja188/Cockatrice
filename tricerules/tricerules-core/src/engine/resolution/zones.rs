@@ -1077,11 +1077,11 @@ pub(super) fn choose_graveyard_card(
     Ok(EffectOutcome::Suspended)
 }
 
-pub(super) fn return_from_graveyard(
+pub(super) fn move_graveyard_cards(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::ReturnFromGraveyard {
+    let SpellEffectKind::MoveGraveyardCards {
         filter,
         destination,
     } = effect
@@ -1095,27 +1095,7 @@ pub(super) fn return_from_graveyard(
     let controller = cx.controller;
     let spell_label = cx.spell_label;
 
-    if destination == tricerules_cards::primitives::GraveyardDestination::Hand {
-        for &tid in targets {
-            let target_name = object_display_name(&engine.state, engine.registry, tid);
-            let owner = engine.state.objects.get(&tid).map(|object| object.owner);
-            move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Hand, None)?;
-            events.push(ev_log(format!(
-                "{spell_label} returns {target_name} from graveyard to hand."
-            )));
-            if let Some(owner_id) = owner {
-                events.push(permanent_moved_event(
-                    &engine.state,
-                    tid,
-                    owner_id,
-                    rv1::permanent_moved::Destination::Hand,
-                ));
-            }
-        }
-        return Ok(EffectOutcome::Continue);
-    }
-
-    if let Some(&tid) = targets.first() {
+    for &tid in targets {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let is_legal = graveyard_target_legal(engine, &filter, tid, controller);
         if !is_legal {
@@ -1128,11 +1108,19 @@ pub(super) fn return_from_graveyard(
             let dest_zone = match destination {
                 GraveyardDestination::Hand => Zone::Hand,
                 GraveyardDestination::Battlefield { .. } => Zone::Battlefield,
+                GraveyardDestination::Exile => Zone::Exile,
+                GraveyardDestination::LibraryTop | GraveyardDestination::LibraryBottom => {
+                    Zone::Library
+                }
             };
             let dest_proto = match destination {
                 GraveyardDestination::Hand => rv1::permanent_moved::Destination::Hand,
                 GraveyardDestination::Battlefield { .. } => {
                     rv1::permanent_moved::Destination::Battlefield
+                }
+                GraveyardDestination::Exile => rv1::permanent_moved::Destination::Exile,
+                GraveyardDestination::LibraryTop | GraveyardDestination::LibraryBottom => {
+                    rv1::permanent_moved::Destination::Library
                 }
             };
             // CR 110.2: a card put onto the battlefield by an effect enters under the controller
@@ -1142,7 +1130,7 @@ pub(super) fn return_from_graveyard(
             if dest_zone == Zone::Battlefield {
                 let deciding_player = owner.unwrap_or(controller);
                 match engine.begin_battlefield_entry(
-                    item,
+                    item.clone(),
                     BattlefieldEntryEvent {
                         object_id: tid,
                         deciding_player,
@@ -1175,13 +1163,35 @@ pub(super) fn return_from_graveyard(
                 }
             } else {
                 move_object_to_zone(&mut engine.state, engine.registry, tid, dest_zone, None)?;
+                if destination == GraveyardDestination::LibraryTop {
+                    let owner_id = owner.unwrap_or(controller);
+                    let owner_idx = engine
+                        .state
+                        .player_idx(owner_id)
+                        .ok_or(EngineError::Illegal("graveyard target owner not found"))?;
+                    let library = &mut engine.state.players[owner_idx].library;
+                    library.retain(|object_id| *object_id != tid);
+                    library.push_front(tid);
+                }
+                if destination == GraveyardDestination::Exile {
+                    cx.effect_result.cards.push(payment::card_result_entry(
+                        &engine.state,
+                        engine.registry,
+                        CardResultAction::Exile,
+                        owner.unwrap_or(controller),
+                        tid,
+                    ));
+                }
             }
             let dest_name = match destination {
                 GraveyardDestination::Hand => "hand",
                 GraveyardDestination::Battlefield { .. } => "battlefield",
+                GraveyardDestination::Exile => "exile",
+                GraveyardDestination::LibraryTop => "the top of its owner's library",
+                GraveyardDestination::LibraryBottom => "the bottom of its owner's library",
             };
             events.push(ev_log(format!(
-                "{spell_label} returns {tgt} from graveyard to {dest_name}."
+                "{spell_label} moves {tgt} from graveyard to {dest_name}."
             )));
             if let Some(owner_id) = owner {
                 events.push(permanent_moved_event(
