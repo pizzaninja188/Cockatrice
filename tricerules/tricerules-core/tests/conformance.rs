@@ -17,8 +17,8 @@ use tricerules_cards::CardRegistry;
 use tricerules_core::{GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::{
-    ActivateAbility, CastSource, CastSpell, PassPriority, PlayLand, ResolutionChoiceDecision,
-    RuledCommand, SubmitResolutionChoice, TargetRef,
+    ActivateAbility, CastSource, CastSpell, LandSource, PassPriority, PlayLand,
+    ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice, TargetRef,
 };
 
 fn pass() -> RuledCommand {
@@ -34,7 +34,11 @@ fn play_land(hand_card_index: u32) -> RuledCommand {
 fn play_land_face(hand_card_index: u32, face_index: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::PlayLand(PlayLand {
-            hand_card_index,
+            source: Some(LandSource {
+                location: Some(
+                    tricerules_proto::ruled::v1::land_source::Location::HandIndex(hand_card_index),
+                ),
+            }),
             face_index,
         })),
     }

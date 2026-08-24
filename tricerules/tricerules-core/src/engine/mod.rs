@@ -3,14 +3,14 @@
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
     ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement, ActiveDelayedTrigger,
-    AdventureCastPermission, AffectedScope, AttachmentRecipient, BattlefieldEntryCompletion,
+    ActiveExilePlayPermission, AffectedScope, AttachmentRecipient, BattlefieldEntryCompletion,
     BattlefieldEntryEvent, BlockingChoice, CastCostObjectReceipt, CastCostReceipt, ChosenMode,
     CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
     DamagePreventionProhibition, DamagePreventionScope, EntryReplacementApplication,
-    EntryReplacementEffectId, GameObject, GameState, HandCardAction, ObjectId, OpeningSequence,
-    ParkedStackResolution, PendingBattlefieldEntry, PendingHandChoice, PendingLibraryLookStage,
-    PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
-    PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
+    EntryReplacementEffectId, ExilePlayPermissionScope, GameObject, GameState, HandCardAction,
+    ObjectId, OpeningSequence, ParkedStackResolution, PendingBattlefieldEntry, PendingHandChoice,
+    PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
+    PendingManaPayment, PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
     PendingResolutionPresentation, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
     PendingWardPaymentStage, PlayerId, PlayerState, ReplacementPriority, ResolutionContinuation,
     RoomState, StackItem, StackObjectRef, StackTarget, StagedTrigger, StagedTriggerGroup,
@@ -593,7 +593,6 @@ fn new_object_from_card(
         must_block_if_able: face.must_block_if_able,
         face_up_index: 0,
         face_down: false,
-        adventure_cast_permission: None,
     }
 }
 
@@ -718,12 +717,15 @@ impl GameEngine {
             },
             turn_step: TurnStep::Upkeep,
             turn: 1,
+            turn_instance: 1,
             next_object_id,
             command_index: 0,
             passes_since_stack_change: 0,
             lands_played_this_turn: 0,
             activation_uses_this_turn: HashMap::new(),
             triggered_once: HashSet::new(),
+            active_exile_play_permissions: Vec::new(),
+            next_exile_play_permission_group_id: 1,
             turn_history: TurnHistory::default(),
             combat: None,
             winner: None,
@@ -1608,9 +1610,7 @@ impl GameEngine {
             Some(Cmd::SubmitTriggerOrder(s)) => {
                 self.submit_trigger_order(player, s.trigger_object_id)
             }
-            Some(Cmd::PlayLand(pl)) => {
-                self.play_land(player, pl.hand_card_index as usize, pl.face_index as usize)
-            }
+            Some(Cmd::PlayLand(pl)) => self.play_land(player, pl),
             // Gated in `apply_command`; unreachable here unless the session enabled dev commands.
             Some(Cmd::DevCommand(dc)) => self.apply_dev_command(dc),
             Some(Cmd::DiscardToHandSize(d)) => self.discard_to_hand_size(player, d),

@@ -464,9 +464,29 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
         Server_CardZone *handZone = cmdPlayer->getZones().value(ZoneNames::HAND);
         if (ruledCmd.has_play_land()) {
             Server_CardZone *tableZone = cmdPlayer->getZones().value(ZoneNames::TABLE);
-            const int handIndex = static_cast<int>(ruledCmd.play_land().hand_card_index());
-            if (handZone && tableZone && handIndex >= 0 && handIndex < handZone->getCards().size()) {
-                Server_Card *card = handZone->getCards().at(handIndex);
+            const auto &source = ruledCmd.play_land().source();
+            Server_CardZone *sourceZone = nullptr;
+            Server_Card *card = nullptr;
+            if (source.location_case() == ruled::v1::LandSource::kHandIndex) {
+                const int handIndex = static_cast<int>(source.hand_index());
+                sourceZone = handZone;
+                card = playerBinding(playerId).findHandCardByEngineIndex(static_cast<Server_Player *>(cmdPlayer),
+                                                                        handIndex);
+            } else if (source.location_case() == ruled::v1::LandSource::kExileObjectId) {
+                const quint32 oid = static_cast<quint32>(source.exile_object_id());
+                for (Server_AbstractPlayer *candidate : game->getPlayers()) {
+                    auto *owner = dynamic_cast<Server_Player *>(candidate);
+                    if (!owner) {
+                        continue;
+                    }
+                    card = playerBinding(owner->getPlayerId()).findExileCardByEngineOid(owner, oid);
+                    if (card) {
+                        sourceZone = owner->getZones().value(ZoneNames::EXILE);
+                        break;
+                    }
+                }
+            }
+            if (sourceZone && tableZone && card) {
                 // CR 712: an MDFC land (a pathway) enters as the chosen face. Rename the physical
                 // card to that face's Oracle name before it moves to the battlefield, so the
                 // move event reveals the active face and the client shows its art (cards.xml has
@@ -484,7 +504,7 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
                 GameEventStorage moveGes;
                 // Cockatrice table uses 3 rows; lands belong on the bottom row (grid y = 2).
                 static constexpr int RULED_LAND_GRID_Y = 2;
-                if (ruledApplyMove(cmdPlayer, moveGes, handZone, tableZone, cardToMove, -1, RULED_LAND_GRID_Y,
+                if (ruledApplyMove(cmdPlayer, moveGes, sourceZone, tableZone, cardToMove, -1, RULED_LAND_GRID_Y,
                                    "playLand")) {
                     moveGes.sendToGame(game);
                 }

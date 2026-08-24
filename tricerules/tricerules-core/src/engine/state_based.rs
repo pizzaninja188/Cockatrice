@@ -556,7 +556,6 @@ mod sba_tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
-                adventure_cast_permission: None,
             },
         );
         let idx = e.state.player_idx(owner).unwrap();

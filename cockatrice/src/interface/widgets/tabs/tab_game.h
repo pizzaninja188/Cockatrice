@@ -115,6 +115,11 @@ private:
     /// from resolution reveals so the two lifecycles cannot close or overwrite each other.
     QPointer<ZoneViewWidget> activeCastRevealView;
     QList<ServerInfo_Card *> activeCastRevealCards;
+    /// One closeable, control-free mirror per active engine permission cohort. Closing a group
+    /// records a local dismissal until that group disappears from the authoritative snapshot.
+    QHash<quint64, QPointer<ZoneViewWidget>> exilePlayPermissionViews;
+    QHash<quint64, QList<ServerInfo_Card *>> exilePlayPermissionCards;
+    QSet<quint64> dismissedExilePlayPermissionGroups;
     // CR 603.3b: card-image popup for picking which trigger goes on the stack next. Alive only
     // while this client is the deciding player, and rebuilt after each pick with what remains.
     QPointer<ZoneViewWidget> triggerOrderView;
@@ -240,6 +245,7 @@ private slots:
                                     QStringList cardNames,
                                     QVector<int> serverCardIds);
     void onRuledActivePublicRevealsChanged(QStringList cardNames, QVector<int> revealingPlayerIds);
+    void onRuledExilePlayPermissionGroupsChanged();
     /// CR 603.3b: opens or closes the simultaneous-trigger ordering window. Only the deciding
     /// player is sent `active = true`, so at most one client shows it.
     void onRuledTriggerOrderUiChanged(bool active, QVector<RuledTriggerOrderCandidate> candidates);

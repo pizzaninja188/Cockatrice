@@ -571,7 +571,11 @@ fn bonecrusher_giant_casts_once_from_adventure_exile() {
         "the sole legal exile cast needs no face annotation"
     );
     assert_eq!(e.state.objects[&oid].zone, tricerules_core::Zone::Stack);
-    assert!(e.state.objects[&oid].adventure_cast_permission.is_none());
+    assert!(!e
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .any(|permission| permission.object_id == oid));
     e.apply_command(0, &pass()).unwrap();
     e.apply_command(1, &pass()).unwrap();
     assert_eq!(
@@ -609,7 +613,11 @@ fn adventure_exile_permission_rejects_wrong_source_player_face_and_unpaid_cost()
     e.apply_command(0, &cast_spell_face(slot, target_player(1), 1))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
-    assert!(e.state.objects[&oid].adventure_cast_permission.is_some());
+    assert!(e
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .any(|permission| permission.object_id == oid));
 
     let exile_cast = |object_id, face_index| RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
@@ -647,7 +655,10 @@ fn adventure_exile_permission_rejects_wrong_source_player_face_and_unpaid_cost()
     );
     assert_eq!(e.state.objects[&oid].zone, tricerules_core::Zone::Exile);
     assert!(
-        e.state.objects[&oid].adventure_cast_permission.is_some(),
+        e.state
+            .active_exile_play_permissions
+            .iter()
+            .any(|permission| permission.object_id == oid),
         "rejected casts do not consume permission"
     );
 }
@@ -690,10 +701,18 @@ fn adventure_permission_does_not_return_when_the_card_leaves_and_reenters_exile(
         })),
     };
     e.apply_command(0, &move_to(DevZone::Hand)).unwrap();
-    assert!(e.state.objects[&oid].adventure_cast_permission.is_none());
+    assert!(!e
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .any(|permission| permission.object_id == oid));
     e.apply_command(0, &move_to(DevZone::Exile)).unwrap();
     assert_eq!(e.state.objects[&oid].zone, tricerules_core::Zone::Exile);
-    assert!(e.state.objects[&oid].adventure_cast_permission.is_none());
+    assert!(!e
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .any(|permission| permission.object_id == oid));
     assert!(e.initial_response_batch().legal_by_player[&0]
         .zone_cast_actions
         .is_empty());
@@ -764,9 +783,11 @@ fn stomp_with_no_legal_target_goes_to_graveyard_without_permission() {
         e.state.objects[&adventure].zone,
         tricerules_core::Zone::Graveyard
     );
-    assert!(e.state.objects[&adventure]
-        .adventure_cast_permission
-        .is_none());
+    assert!(!e
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .any(|permission| permission.object_id == adventure));
     assert!(e.initial_response_batch().legal_by_player[&0]
         .zone_cast_actions
         .is_empty());
@@ -827,9 +848,11 @@ fn countered_stomp_goes_to_graveyard_without_permission() {
         e.state.objects[&adventure].zone,
         tricerules_core::Zone::Graveyard
     );
-    assert!(e.state.objects[&adventure]
-        .adventure_cast_permission
-        .is_none());
+    assert!(!e
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .any(|permission| permission.object_id == adventure));
 }
 
 /// CR 712.11 and CR 710.2: transforming double-faced cards and flip cards have only their

@@ -605,7 +605,8 @@ bool isSingleClickPlayLegal(const CardItem *card)
     }
     if (inPublicCastZone) {
         const quint32 objectId = resolvePublicZoneObjectId(state, card);
-        return objectId != 0 && state->isZoneActionLegal(objectId);
+        return objectId != 0 &&
+               (state->isZoneActionLegal(objectId) || state->isZoneLandActionLegal(objectId));
     }
     const bool isLand = card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive);
     const RuledHandActionKind kind =

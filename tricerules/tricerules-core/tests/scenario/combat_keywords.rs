@@ -672,7 +672,6 @@ fn haste_creature_can_attack_same_turn_it_enters() {
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
-            adventure_cast_permission: None,
         },
     );
     e.state.players[0].battlefield.push(goblin);
@@ -722,7 +721,6 @@ fn non_haste_summoning_sick_creature_cannot_attack() {
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
-            adventure_cast_permission: None,
         },
     );
     e.state.players[0].battlefield.push(bears);

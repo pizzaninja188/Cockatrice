@@ -2654,6 +2654,48 @@ TEST_F(RuledClientTest, ResolutionBranchesSubmitOpaqueIndexWithoutOpeningADialog
     EXPECT_EQ(submission.selected_branch_index(), 0u);
 }
 
+TEST_F(RuledClientTest, AppliesExileLandActionsAndStablePermissionGroupSnapshots)
+{
+    constexpr quint32 objectId = 700;
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *land = actions.add_zone_land_actions();
+    land->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    land->set_object_id(objectId);
+    land->set_face_index(1);
+    land->set_card_name("Timbercrown Pathway");
+    auto *group = actions.add_exile_play_permission_groups();
+    group->set_group_id(42);
+    group->set_source_label("Clockwork Percussionist");
+    group->add_object_ids(objectId);
+    auto *overlap = actions.add_exile_play_permission_groups();
+    overlap->set_group_id(43);
+    overlap->set_source_label("Second permission");
+    overlap->add_object_ids(objectId);
+
+    QSignalSpy changed(state, &RuledClientState::exilePlayPermissionGroupsChanged);
+    apply(batch);
+    ASSERT_TRUE(state->isZoneLandActionLegal(objectId));
+    ASSERT_EQ(state->zoneLandFaceOptions(objectId).size(), 1);
+    EXPECT_EQ(state->zoneLandFaceOptions(objectId).first().faceName, QStringLiteral("Timbercrown Pathway"));
+    ASSERT_EQ(state->exilePlayPermissionGroups.size(), 2);
+    EXPECT_EQ(state->exilePlayPermissionGroups.value(42).sourceLabel,
+              QStringLiteral("Clockwork Percussionist"));
+    EXPECT_EQ(state->exilePlayPermissionGroups.value(42).objectIds, QVector<quint32>{objectId});
+    EXPECT_EQ(state->exilePlayPermissionGroups.value(43).objectIds, QVector<quint32>{objectId});
+    EXPECT_EQ(changed.count(), 1);
+
+    apply(batch);
+    EXPECT_EQ(changed.count(), 1) << "an identical snapshot must not reopen a dismissed popup";
+
+    auto cleared = phaseBatch(ruled::v1::PHASE_ID_MAIN1, kLocalPlayer);
+    (*cleared.mutable_legal_by_player())[kLocalPlayer];
+    apply(cleared);
+    EXPECT_FALSE(state->isZoneLandActionLegal(objectId));
+    EXPECT_TRUE(state->exilePlayPermissionGroups.isEmpty());
+    EXPECT_EQ(changed.count(), 2);
+}
+
 TEST_F(RuledClientTest, ParsesEngineAuthoredOptionalCastCostGroups)
 {
     ruled::v1::RuledEventBatch batch;

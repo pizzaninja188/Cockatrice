@@ -504,6 +504,12 @@ void ZoneViewWidget::refreshContentLayout()
     resizeToZoneContents(false);
 }
 
+void ZoneViewWidget::setContentMinimumWidth(qreal width)
+{
+    contentMinimumWidth = qMax<qreal>(0, width);
+    resizeToZoneContents(false);
+}
+
 void ZoneViewWidget::resizeToZoneContents(bool forceInitialHeight)
 {
     QRectF zoneRect = zone->getOptimumRect();
@@ -515,6 +521,7 @@ void ZoneViewWidget::resizeToZoneContents(bool forceInitialHeight)
 
     qreal width = qMax(QGraphicsWidget::layout()->effectiveSizeHint(Qt::MinimumSize, QSizeF()).width(),
                        zoneRect.width() + scrollBar->width() + 10);
+    width = qMax(width, contentMinimumWidth);
     // Ruled stack window: a saved narrow width must not clip the horizontal fan (window frame clips children).
     if (zone->getForceStackFanLayout()) {
         setMinimumWidth(zoneRect.width() + scrollBar->width() + 24);

@@ -257,6 +257,7 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->zoneCastActions = {};
     state->zoneCastSourceByOid.clear();
     state->zoneCastCostsByCastKey.clear();
+    state->zoneLandFacesByOid.clear();
     state->validTargetsByHandSlot.clear();
     state->validTargetsByZoneObject.clear();
     state->validTargetsByAbility.clear();
@@ -1366,6 +1367,28 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
             }
             state->zoneCastActions.modalOptionsByCastKey.insert(castKey, modes);
         }
+    }
+
+    for (const auto &action : actions.zone_land_actions()) {
+        const quint32 objectId = static_cast<quint32>(action.object_id());
+        state->zoneLandFacesByOid[objectId].append(
+            {static_cast<int>(action.face_index()), QString::fromStdString(action.card_name()), QString(), 0});
+    }
+
+    QHash<quint64, RuledExilePlayPermissionGroup> permissionGroups;
+    for (const auto &group : actions.exile_play_permission_groups()) {
+        RuledExilePlayPermissionGroup parsed;
+        parsed.groupId = static_cast<quint64>(group.group_id());
+        parsed.sourceLabel = QString::fromStdString(group.source_label());
+        parsed.objectIds.reserve(group.object_ids_size());
+        for (const quint32 objectId : group.object_ids()) {
+            parsed.objectIds.append(objectId);
+        }
+        permissionGroups.insert(parsed.groupId, parsed);
+    }
+    if (permissionGroups != state->exilePlayPermissionGroups) {
+        state->exilePlayPermissionGroups = permissionGroups;
+        emit state->exilePlayPermissionGroupsChanged();
     }
 
     state->validTargetsByHandSlot.clear();

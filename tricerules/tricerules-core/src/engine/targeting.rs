@@ -1173,6 +1173,7 @@ fn validate_effect_targets(
         | SpellEffectKind::Scry { .. }
         | SpellEffectKind::LibraryPartition { .. }
         | SpellEffectKind::ManifestDread
+        | SpellEffectKind::ExileTopWithPlayPermission { .. }
         | SpellEffectKind::ChooseResolutionBranch { .. }
         | SpellEffectKind::CreateReflexiveTrigger { .. }
         | SpellEffectKind::ChangeSourceFace { .. }

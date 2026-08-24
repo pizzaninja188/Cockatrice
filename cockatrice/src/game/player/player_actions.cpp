@@ -1785,14 +1785,18 @@ void PlayerActions::resumePendingRuledPaymentAfterEngineCommand()
     }
 }
 
-bool PlayerActions::sendRuledPlayLand(int handIndex, int faceIndex)
+bool PlayerActions::sendRuledPlayLand(int sourceIndex, int faceIndex, RuledCastSource source)
 {
     if (RuledActions::gameplayInputLocked(player->getGame())) {
         return false;
     }
     ruled::v1::RuledCommand ruledCommand;
     auto *pl = ruledCommand.mutable_play_land();
-    pl->set_hand_card_index(handIndex);
+    if (source == RuledCastSource::Exile) {
+        pl->mutable_source()->set_exile_object_id(static_cast<quint32>(sourceIndex));
+    } else {
+        pl->mutable_source()->set_hand_index(static_cast<quint32>(sourceIndex));
+    }
     // CR 712: which face of an MDFC land enters the battlefield (0 = front; default for single-face).
     pl->set_face_index(static_cast<quint32>(faceIndex));
     std::string payload;
@@ -1815,7 +1819,9 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     if (RuledActions::gameplayInputLocked(player->getGame())) {
         return true;
     }
-    if (card->getZone()->getName() != ZoneNames::HAND) {
+    const bool fromHand = card->getZone()->getName() == ZoneNames::HAND;
+    const bool fromExile = card->getZone()->getName() == ZoneNames::EXILE;
+    if (!fromHand && !fromExile) {
         return false;
     }
     if (card->getZone()->getCards().indexOf(card) < 0) {
@@ -1823,8 +1829,12 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     }
 
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
-    const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_PLAY_LAND, card);
-    if (ruledHandIndex < 0) {
+    const int sourceIndex = fromHand
+                                ? RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_PLAY_LAND, card)
+                                : static_cast<int>(RuledActions::resolvePublicZoneObjectId(geh, card));
+    if (sourceIndex < 0 ||
+        (fromExile &&
+         (sourceIndex == 0 || !geh->isZoneLandActionLegal(static_cast<quint32>(sourceIndex))))) {
         return false; // engine does not offer this card as a land play right now
     }
 
@@ -1832,11 +1842,54 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
     // playable face for the same hand slot — front and back. Present a side-picker so the player
     // chooses which land to play; a single-face land plays its one face directly. The whole notion
     // of "which faces are lands and playable" comes from the engine (rules), not the Oracle DB.
-    const QVector<RuledFaceOption> faces = geh->handActionFaceOptions(ruled::v1::HAND_ACTION_PLAY_LAND, ruledHandIndex);
+    const QVector<RuledFaceOption> faces =
+        fromHand ? geh->handActionFaceOptions(ruled::v1::HAND_ACTION_PLAY_LAND, sourceIndex)
+                 : geh->zoneLandFaceOptions(static_cast<quint32>(sourceIndex));
+    if (fromExile) {
+        const QVector<RuledFaceOption> castFaces = geh->zoneActionFaceOptions(static_cast<quint32>(sourceIndex));
+        if (!castFaces.isEmpty()) {
+            struct ExileFaceChoice
+            {
+                RuledFaceOption face;
+                bool isLand;
+            };
+            QVector<ExileFaceChoice> choices;
+            choices.reserve(faces.size() + castFaces.size());
+            for (const auto &face : faces) {
+                choices.append({face, true});
+            }
+            for (const auto &face : castFaces) {
+                choices.append({face, false});
+            }
+            std::sort(choices.begin(), choices.end(), [](const ExileFaceChoice &left, const ExileFaceChoice &right) {
+                return left.face.faceIndex < right.face.faceIndex;
+            });
+            QMenu menu(player->getGame()->getTab());
+            menu.setTitle(card->getName());
+            QVector<QAction *> actions;
+            actions.reserve(choices.size());
+            for (const auto &choice : choices) {
+                actions.append(menu.addAction(choice.isLand ? tr("Play %1").arg(choice.face.faceName)
+                                                            : tr("Cast %1").arg(choice.face.faceName)));
+            }
+            const int selected = actions.indexOf(menu.exec(QCursor::pos()));
+            if (selected < 0) {
+                return true;
+            }
+            const ExileFaceChoice &choice = choices.at(selected);
+            if (choice.isLand) {
+                return sendRuledPlayLand(sourceIndex, choice.face.faceIndex, RuledCastSource::Exile);
+            }
+            return beginRuledSpellCast(card, sourceIndex, choice.face.faceIndex, choice.face.faceName,
+                                       choice.face.manaCost, choice.face.genericCostReduction,
+                                       RuledCastSource::Exile);
+        }
+    }
     if (faces.size() > 1) {
         return tryRuledLandPlayFaceMenu(card);
     }
-    return sendRuledPlayLand(ruledHandIndex, faces.isEmpty() ? 0 : faces.first().faceIndex);
+    return sendRuledPlayLand(sourceIndex, faces.isEmpty() ? 0 : faces.first().faceIndex,
+                             fromExile ? RuledCastSource::Exile : RuledCastSource::Hand);
 }
 
 bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
@@ -1850,7 +1903,9 @@ bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
     if (RuledActions::gameplayInputLocked(player->getGame())) {
         return false; // preserve the ordinary right-click inspection menu
     }
-    if (card->getZone()->getName() != ZoneNames::HAND) {
+    const bool fromHand = card->getZone()->getName() == ZoneNames::HAND;
+    const bool fromExile = card->getZone()->getName() == ZoneNames::EXILE;
+    if (!fromHand && !fromExile) {
         return false;
     }
     if (card->getZone()->getCards().indexOf(card) < 0) {
@@ -1860,14 +1915,20 @@ bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
     if (!geh) {
         return false;
     }
-    const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_PLAY_LAND, card);
-    if (ruledHandIndex < 0) {
+    const int sourceIndex = fromHand
+                                ? RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_PLAY_LAND, card)
+                                : static_cast<int>(RuledActions::resolvePublicZoneObjectId(geh, card));
+    if (sourceIndex < 0 ||
+        (fromExile &&
+         (sourceIndex == 0 || !geh->isZoneLandActionLegal(static_cast<quint32>(sourceIndex))))) {
         return false;
     }
     // CR 712: only offer the picker when the engine exposes more than one playable face for this
     // slot (an MDFC land). A single-face land keeps its direct click-to-play and falls through so a
     // right-click still opens the normal card menu.
-    const QVector<RuledFaceOption> faces = geh->handActionFaceOptions(ruled::v1::HAND_ACTION_PLAY_LAND, ruledHandIndex);
+    const QVector<RuledFaceOption> faces =
+        fromHand ? geh->handActionFaceOptions(ruled::v1::HAND_ACTION_PLAY_LAND, sourceIndex)
+                 : geh->zoneLandFaceOptions(static_cast<quint32>(sourceIndex));
     if (faces.size() < 2) {
         return false;
     }
@@ -1886,7 +1947,8 @@ bool PlayerActions::tryRuledLandPlayFaceMenu(CardItem *card)
     if (sel < 0) {
         return true;
     }
-    return sendRuledPlayLand(ruledHandIndex, faces.at(sel).faceIndex);
+    return sendRuledPlayLand(sourceIndex, faces.at(sel).faceIndex,
+                             fromExile ? RuledCastSource::Exile : RuledCastSource::Hand);
 }
 
 bool PlayerActions::tryRuledOpeningBottomCard(CardItem *card)
@@ -2044,10 +2106,6 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     if (!fromHand && !fromPublicZone) {
         return false;
     }
-    if (card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive)) {
-        return false;
-    }
-
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
     if (fromPublicZone) {
         const quint32 objectId = RuledActions::resolvePublicZoneObjectId(geh, card);
@@ -2055,10 +2113,17 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
             return false;
         }
         const QVector<RuledFaceOption> options = geh->zoneActionFaceOptions(objectId);
-        if (options.size() != 1) {
-            return false; // A future multi-face public-zone cast gets a side-picker before use.
+        if (options.isEmpty()) {
+            return false;
         }
-        const auto &option = options.first();
+        RuledFaceOption option = options.first();
+        if (options.size() > 1) {
+            const auto chosen = RuledPendingCast::chooseFace(player->getGame()->getTab(), card->getName(), options);
+            if (!chosen.has_value()) {
+                return true;
+            }
+            option = *chosen;
+        }
         const QString cost = geh->zoneActionCost(objectId, option.faceIndex);
         if (cost.isEmpty()) {
             return false;
@@ -2249,38 +2314,51 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
     if (RuledActions::gameplayInputLocked(player->getGame())) {
         return false; // preserve the ordinary right-click inspection menu
     }
-    if (card->getZone()->getName() != ZoneNames::HAND) {
+    const bool fromHand = card->getZone()->getName() == ZoneNames::HAND;
+    const bool fromPublicZone = card->getZone()->getName() == ZoneNames::GRAVE ||
+                                card->getZone()->getName() == ZoneNames::EXILE;
+    if (!fromHand && !fromPublicZone) {
         return false;
     }
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
     if (!geh) {
         return false;
     }
-    const int handIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
-    if (handIndex < 0) {
+    const int sourceIndex = fromHand
+                                ? RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card)
+                                : static_cast<int>(RuledActions::resolvePublicZoneObjectId(geh, card));
+    if (sourceIndex < 0 ||
+        (fromPublicZone && (sourceIndex == 0 || !geh->isZoneActionLegal(static_cast<quint32>(sourceIndex))))) {
         return false;
     }
-    const QVector<RuledFaceOption> faces = geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, handIndex);
+    const QVector<RuledFaceOption> faces =
+        fromHand ? geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, sourceIndex)
+                 : geh->zoneActionFaceOptions(static_cast<quint32>(sourceIndex));
     if (faces.isEmpty()) {
         return false;
     }
     if (faces.size() == 1) {
         const auto actionIt = geh->handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
         const int faceIndex = faces.first().faceIndex;
-        const int castKey = RuledClientState::spellTargetKey(handIndex, faceIndex);
-        if (actionIt == geh->handActions.constEnd() || !actionIt->modalOptionsByCastKey.contains(castKey)) {
+        const int castKey = RuledClientState::spellTargetKey(sourceIndex, faceIndex);
+        const RuledHandActionSet *actionSet = fromHand && actionIt != geh->handActions.constEnd()
+                                                  ? &actionIt.value()
+                                                  : fromPublicZone ? &geh->zoneCastActions : nullptr;
+        if (!actionSet || !actionSet->modalOptionsByCastKey.contains(castKey)) {
             return false;
         }
         const auto &face = faces.first();
-        return beginRuledSpellCast(card, handIndex, face.faceIndex, face.faceName, face.manaCost,
-                                   face.genericCostReduction);
+        return beginRuledSpellCast(card, sourceIndex, face.faceIndex, face.faceName, face.manaCost,
+                                   face.genericCostReduction,
+                                   fromHand ? RuledCastSource::Hand : geh->zoneActionSource(sourceIndex));
     }
     const auto chosen = RuledPendingCast::chooseFace(player->getGame()->getTab(), card->getName(), faces);
     if (!chosen.has_value()) {
         return true; // menu was shown, player cancelled
     }
-    beginRuledSpellCast(card, handIndex, chosen->faceIndex, chosen->faceName, chosen->manaCost,
-                        chosen->genericCostReduction);
+    beginRuledSpellCast(card, sourceIndex, chosen->faceIndex, chosen->faceName, chosen->manaCost,
+                        chosen->genericCostReduction,
+                        fromHand ? RuledCastSource::Hand : geh->zoneActionSource(sourceIndex));
     return true;
 }
 

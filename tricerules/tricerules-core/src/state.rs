@@ -74,12 +74,26 @@ pub enum AttachmentRecipient {
     Player(PlayerId),
 }
 
-/// CR 715.3d: the player who resolved this card as an Adventure may cast one specific permanent
-/// face for as long as this exact object remains exiled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AdventureCastPermission {
+pub enum ExilePlayPermissionScope {
+    /// Cast one named face, used by Adventure (CR 715.3d).
+    CastFace(usize),
+    /// Play any otherwise-available spell or land face of the card.
+    PlayCard,
+}
+
+/// One deterministic, generation-aware permission entry. Entries created by one resolving
+/// spell or ability share a group id and source label for the client presentation snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActiveExilePlayPermission {
+    pub group_id: u64,
     pub player_id: PlayerId,
-    pub face_index: usize,
+    pub source_label: String,
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub scope: ExilePlayPermissionScope,
+    /// Monotonic turn instance whose cleanup ends the permission. `None` means while exiled.
+    pub expires_at_cleanup_turn_instance: Option<u64>,
 }
 
 /// Turn structure for vanilla (no first-strike or trample substeps).
@@ -181,8 +195,6 @@ pub struct GameObject {
     /// the battlefield. Its physical identity remains in `card_id` and is private to its current
     /// controller until the object is turned face up or revealed as it leaves the battlefield.
     pub face_down: bool,
-    /// Present only while this exact object remains exiled after its Adventure face resolved.
-    pub adventure_cast_permission: Option<AdventureCastPermission>,
 }
 
 /// Owned CR 707.2 copiable values. Registry identity remains available for resolving copied
@@ -1234,6 +1246,8 @@ pub struct GameState {
     pub active_player_idx: usize,
     pub turn_step: TurnStep,
     pub turn: u32,
+    /// Monotonic across every player's turn; unlike `turn`, this never repeats across seats.
+    pub turn_instance: u64,
     pub next_object_id: ObjectId,
     pub command_index: u64,
     /// Consecutive priority passes; reset when a spell/ability is added to stack
@@ -1246,6 +1260,8 @@ pub struct GameState {
     /// Persistent "triggers only once" usage. Generation-aware keys make leave-and-return a
     /// fresh object without copying or resetting usage on control changes or turn boundaries.
     pub triggered_once: HashSet<TriggeredOnceKey>,
+    pub active_exile_play_permissions: Vec<ActiveExilePlayPermission>,
+    pub next_exile_play_permission_group_id: u64,
     pub turn_history: TurnHistory,
     /// Active combat, if in declare/damage
     pub combat: Option<CombatState>,

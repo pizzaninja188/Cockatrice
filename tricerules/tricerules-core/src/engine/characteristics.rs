@@ -959,7 +959,6 @@ mod tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
-                adventure_cast_permission: None,
             },
         );
         engine.state.players[0].battlefield.push(oid);
@@ -1064,7 +1063,6 @@ mod tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
-                adventure_cast_permission: None,
             },
         );
         engine.state.continuous_effects.extend([
@@ -1129,7 +1127,6 @@ mod tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
-                adventure_cast_permission: None,
             },
         );
         engine.state.continuous_effects.push(ContinuousEffect {
@@ -1178,7 +1175,6 @@ mod tests {
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
-            adventure_cast_permission: None,
         };
         let target = engine.state.next_object_id;
         let control_aura = target + 1;
@@ -1257,7 +1253,6 @@ mod tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
-                adventure_cast_permission: None,
             },
         );
         for (timestamp, controller) in [(1, 1), (2, 0)] {
@@ -1308,7 +1303,6 @@ mod tests {
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
-            adventure_cast_permission: None,
         };
         let source = engine.state.next_object_id;
         let mine = source + 1;

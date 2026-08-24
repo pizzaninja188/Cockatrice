@@ -53,6 +53,60 @@ struct EffectCx<'a> {
     effect_index: u32,
 }
 
+impl GameEngine {
+    fn grant_exile_play_permission(
+        &mut self,
+        player_id: PlayerId,
+        object_id: ObjectId,
+        source_label: &str,
+        scope: ExilePlayPermissionScope,
+        until_end_of_next_turn: bool,
+    ) -> Result<u64, EngineError> {
+        let object = self
+            .state
+            .objects
+            .get(&object_id)
+            .ok_or(EngineError::Illegal("unknown exile permission object"))?;
+        if object.zone != Zone::Exile {
+            return Err(EngineError::Illegal("permission object is not in exile"));
+        }
+        let player_index = self
+            .state
+            .player_idx(player_id)
+            .ok_or(EngineError::UnknownPlayer(player_id))?;
+        let expires_at_cleanup_turn_instance = until_end_of_next_turn.then(|| {
+            let player_count = self.state.players.len() as u64;
+            let active = self.state.active_player_idx;
+            let offset = if player_index == active {
+                player_count
+            } else {
+                ((player_index + self.state.players.len() - active) % self.state.players.len())
+                    as u64
+            };
+            self.state.turn_instance.saturating_add(offset)
+        });
+        let group_id = self.state.next_exile_play_permission_group_id;
+        self.state.next_exile_play_permission_group_id = group_id.saturating_add(1);
+        self.state
+            .active_exile_play_permissions
+            .push(ActiveExilePlayPermission {
+                group_id,
+                player_id,
+                source_label: source_label.to_string(),
+                object_id,
+                zone_change_generation: self
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0),
+                scope,
+                expires_at_cleanup_turn_instance,
+            });
+        Ok(group_id)
+    }
+}
+
 fn target_roles_by_group<'a>(
     effects: &'a [SpellEffectKind],
     targeting: Option<&TargetingDef>,
@@ -617,12 +671,18 @@ impl GameEngine {
                 )?;
             }
             if adventure_resolves_to_exile {
-                if let Some(object) = self.state.objects.get_mut(&top.id) {
-                    object.adventure_cast_permission = Some(AdventureCastPermission {
-                        player_id: top.controller,
-                        face_index: 0,
-                    });
-                }
+                let source_label = self
+                    .registry
+                    .get(&card_id)
+                    .map(|definition| definition.name.clone())
+                    .unwrap_or_else(|| "Adventure".to_string());
+                self.grant_exile_play_permission(
+                    top.controller,
+                    top.id,
+                    &source_label,
+                    ExilePlayPermissionScope::CastFace(0),
+                    false,
+                )?;
             }
             if !resolves_to_battlefield && is_aura {
                 let aura_name = self
@@ -1098,6 +1158,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::ExileTargetGainLifeEqualToPower => {
                         zones::exile_target_gain_life_equal_to_power(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::ExileTopWithPlayPermission { .. } => {
+                        zones::exile_top_with_play_permission(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::ReturnToOwnersHand { .. } => {
                         zones::return_to_owners_hand(&mut cx, effect)?
                     }
@@ -1313,7 +1376,6 @@ impl GameEngine {
                         must_block_if_able: false,
                         face_up_index: 0,
                         face_down: false,
-                        adventure_cast_permission: None,
                     },
                 );
                 let created = rv1::TokenCreated {
@@ -1614,11 +1676,14 @@ pub(crate) fn move_object_to_zone(
             state.stage_delayed_control_loss(&[(oid, old_controller, None)]);
         }
     }
-    if old_zone != Some(z) {
+    // A move to the same named zone is still a zone change and creates a new object (CR 400.7).
+    // This matters for exile permissions: exiling an already-exiled card cannot preserve an old
+    // Adventure or "play it" permission merely because the destination enum is unchanged.
+    if old_zone.is_some() {
         *state.zone_change_generation.entry(oid).or_insert(0) += 1;
-        if let Some(object) = state.objects.get_mut(&oid) {
-            object.adventure_cast_permission = None;
-        }
+        state
+            .active_exile_play_permissions
+            .retain(|permission| permission.object_id != oid);
     }
 
     // CR 400.7: a zone change creates a new game object. Remove any Single-target continuous
@@ -1899,6 +1964,51 @@ pub(super) fn library_card_matches_filter(
 }
 
 #[cfg(test)]
+mod exile_permission_generation_tests {
+    use super::*;
+
+    #[test]
+    fn exile_to_exile_creates_a_new_generation_and_invalidates_permission() {
+        let mut engine = GameEngine::new_with_default_decks(123_007, &[0, 1], 20).expect("engine");
+        let object_id = engine.state.players[0].library[0];
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            object_id,
+            Zone::Exile,
+            None,
+        )
+        .expect("initial exile move");
+        let generation = engine.state.zone_change_generation[&object_id];
+        engine
+            .state
+            .active_exile_play_permissions
+            .push(ActiveExilePlayPermission {
+                group_id: 1,
+                player_id: 0,
+                source_label: "generation test".to_string(),
+                object_id,
+                zone_change_generation: generation,
+                scope: ExilePlayPermissionScope::PlayCard,
+                expires_at_cleanup_turn_instance: None,
+            });
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            object_id,
+            Zone::Exile,
+            None,
+        )
+        .expect("exile-to-exile move");
+
+        assert_eq!(engine.state.objects[&object_id].zone, Zone::Exile);
+        assert!(engine.state.zone_change_generation[&object_id] > generation);
+        assert!(engine.state.active_exile_play_permissions.is_empty());
+    }
+}
+
+#[cfg(test)]
 mod zone_card_filter_tests {
     use super::*;
 
@@ -2015,7 +2125,6 @@ mod anthem_scope_tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
-                adventure_cast_permission: None,
             },
         );
         let player_index = engine.state.player_idx(controller).expect("controller");
@@ -2083,7 +2192,6 @@ mod attached_subject_tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
-                adventure_cast_permission: None,
             },
         );
         let player_index = engine.state.player_idx(controller).expect("controller");
@@ -2630,7 +2738,6 @@ mod source_keyword_tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
-                adventure_cast_permission: None,
             },
         );
         let player_index = engine.state.player_idx(controller).unwrap();
@@ -2668,7 +2775,6 @@ mod source_keyword_tests {
                 must_block_if_able: false,
                 face_up_index: 0,
                 face_down: false,
-                adventure_cast_permission: None,
             },
         );
         engine.state.players[0].battlefield.push(source);

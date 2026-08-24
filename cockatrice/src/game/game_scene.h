@@ -173,14 +173,10 @@ public:
     ZoneViewWidget *zoneViewWidgetFor(Player *player, const QString &zoneName, int numberCards = -1) const;
     /** Closes the matching zone view if it is open. Does nothing if not found. */
     void closeZoneView(Player *player, const QString &zoneName, int numberCards = -1);
-
-private:
     /** `preferred` unless a zone view already sits exactly there, in which case a cascaded offset.
         Zone-view placement keys off the zone *name*, so without this two players' graveyards open
         on top of each other with one completely hidden. */
     QPointF cascadedZoneViewPos(const QPointF &preferred, const ZoneViewWidget *newView) const;
-
-public:
 
 public slots:
     /** Toggles a zone view for a player. */

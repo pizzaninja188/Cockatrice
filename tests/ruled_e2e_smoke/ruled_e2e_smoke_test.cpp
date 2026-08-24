@@ -365,6 +365,7 @@ public:
     bool stompCast = false;
     bool giantCastFromExile = false;
     bool sawAdventureStackToExile = false;
+    bool sawAdventurePermissionGroup = false;
     bool sawAdventureExileToStack = false;
     bool sawAdventureStackToBattlefield = false;
     bool adventurePhysicalIdentityContinuous = true;
@@ -1454,6 +1455,12 @@ public:
                 labels.append(QString::fromStdString(l));
             }
             latestLegal = it->second;
+            for (const auto &group : latestLegal.exile_play_permission_groups()) {
+                if (QString::fromStdString(group.source_label()).contains(QLatin1String("Bonecrusher Giant")) &&
+                    group.object_ids_size() == 1) {
+                    sawAdventurePermissionGroup = true;
+                }
+            }
             if (optionalCastCostFlowActive && role == Role::Aggressor) {
                 const auto caustic = std::find_if(
                     latestLegal.hand_actions().begin(), latestLegal.hand_actions().end(), [](const auto &action) {
@@ -3251,7 +3258,7 @@ public:
 
             if (const auto *land = handAction(ruled::v1::HAND_ACTION_PLAY_LAND, QStringLiteral("Mountain"))) {
                 ruled::v1::RuledCommand cmd;
-                cmd.mutable_play_land()->set_hand_card_index(land->hand_index());
+                cmd.mutable_play_land()->mutable_source()->set_hand_index(land->hand_index());
                 sendRuled(cmd, QStringLiteral("play Mountain (idx %1)").arg(land->hand_index()));
                 return;
             }
@@ -3331,7 +3338,7 @@ public:
                                        ? handAction(ruled::v1::HAND_ACTION_PLAY_LAND, QStringLiteral("Island"))
                                        : nullptr) {
                 ruled::v1::RuledCommand cmd;
-                cmd.mutable_play_land()->set_hand_card_index(land->hand_index());
+                cmd.mutable_play_land()->mutable_source()->set_hand_index(land->hand_index());
                 sendRuled(cmd, QStringLiteral("play Island (idx %1)").arg(land->hand_index()));
                 return;
             }
@@ -3601,7 +3608,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p2.sawBrainstormResolved && p2.sentCleanupDiscard && p1.sawDevConjuredPermanent && p1.sawDevMana &&
                p1.sawWaifFaceChanged && p2.sawWaifFaceChanged && p1.sawWaifBackPt && p2.sawWaifBackPt &&
                p1.sawFlashbackGraveToStack && p1.sawFlashbackStackToExile && p1.sawAdventureStackToExile &&
-               p1.sawAdventureExileToStack && p1.sawAdventureStackToBattlefield && p1.sawEntryReplacementChoice &&
+               p1.sawAdventurePermissionGroup && p1.sawAdventureExileToStack &&
+               p1.sawAdventureStackToBattlefield && p1.sawEntryReplacementChoice &&
                p1.submittedEntryReplacementChoice && p1.sawDiregrafEnterTapped && p1.sawDamagePreventionChoice &&
                p1.submittedDamagePreventionChoice && p1.sawControlTransfer && p1.sawProtectionBranchChoice &&
                p1.submittedProtectionBranchChoice && p1.sawProtectionHandToStack &&
@@ -3791,6 +3799,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "seat 2's flashback card never physically moved stack -> exile (CR 702.34a)";
     EXPECT_TRUE(p1.stompCast) << "Stomp was never cast from hand";
     EXPECT_TRUE(p1.giantCastFromExile) << "Bonecrusher Giant was never cast from its exile permission";
+    EXPECT_TRUE(p1.sawAdventurePermissionGroup)
+        << "the grantee never received the persistent Adventure permission-group snapshot";
     EXPECT_TRUE(p1.sawAdventureStackToExile) << "Stomp never physically moved stack -> exile";
     EXPECT_TRUE(p1.sawAdventureExileToStack) << "Bonecrusher Giant never physically moved exile -> stack";
     EXPECT_TRUE(p1.sawAdventureStackToBattlefield) << "Bonecrusher Giant never entered the battlefield";

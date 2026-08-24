@@ -1247,6 +1247,12 @@ pub enum SpellEffectKind {
     },
     ExileTarget,
     ExileTargetGainLifeEqualToPower,
+    /// Exile the top card of the named player's library and let that player play the exact
+    /// resulting object until the end of their next turn. Clockwork Percussionist and Impossible
+    /// Inferno share this primitive; the engine owns physical identity, duration, and legality.
+    ExileTopWithPlayPermission {
+        player: PlayerRecipient,
+    },
     /// Return a battlefield permanent to its owner's hand. A chosen subject uses the normal
     /// targeting contract (Unsummon, Boomerang); a source-bound subject is untargeted and keeps
     /// CR 400.7 generation identity (Wingspan Stride).
@@ -1982,6 +1988,7 @@ impl SpellEffectKind {
             | SpellEffectKind::GainLife { .. }
             | SpellEffectKind::LoseLife { .. }
             | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. }
+            | SpellEffectKind::ExileTopWithPlayPermission { .. }
             | SpellEffectKind::Mill { .. }
             | SpellEffectKind::DestroyAll { .. }
             | SpellEffectKind::DamageAll { .. }

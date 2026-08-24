@@ -264,6 +264,15 @@ struct RuledFaceOption
     int genericCostReduction = 0;
 };
 
+struct RuledExilePlayPermissionGroup
+{
+    quint64 groupId = 0;
+    QString sourceLabel;
+    QVector<quint32> objectIds;
+
+    bool operator==(const RuledExilePlayPermissionGroup &) const = default;
+};
+
 /// Shared engine/client hand-action kind from ruled_v1.proto. Labels are display-only.
 using RuledHandActionKind = ruled::v1::HandActionKind;
 
@@ -461,6 +470,8 @@ public:
     RuledHandActionSet zoneCastActions;
     QHash<int, RuledCastSource> zoneCastSourceByOid;
     QHash<int, QString> zoneCastCostsByCastKey;
+    QHash<quint32, QVector<RuledFaceOption>> zoneLandFacesByOid;
+    QHash<quint64, RuledExilePlayPermissionGroup> exilePlayPermissionGroups;
     QSet<int> cleanupDiscardSelectedIndices;
     QList<int> openingBottomSelectedIndices;
     QVector<int> openingPickSeatIds;
@@ -1350,6 +1361,17 @@ public:
     {
         return isResolutionHandPickActive() ? pendingChoice->candidateNames : QStringList{};
     }
+    [[nodiscard]] bool isZoneLandActionLegal(quint32 objectId) const
+    {
+        return zoneLandFacesByOid.contains(objectId);
+    }
+    [[nodiscard]] QVector<RuledFaceOption> zoneLandFaceOptions(quint32 objectId) const
+    {
+        QVector<RuledFaceOption> options = zoneLandFacesByOid.value(objectId);
+        std::sort(options.begin(), options.end(),
+                  [](const RuledFaceOption &a, const RuledFaceOption &b) { return a.faceIndex < b.faceIndex; });
+        return options;
+    }
     [[nodiscard]] bool hasPendingZoneScopeChoice() const
     {
         if (!hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch) || pendingChoice->choiceOptions.isEmpty()) {
@@ -1542,6 +1564,7 @@ signals:
     /// Emitted once after each settled batch rebuilds the acting player's authoritative legal
     /// actions. Pending target UI uses it to discard selections that became stale mid-cast.
     void legalActionsChanged();
+    void exilePlayPermissionGroupsChanged();
     void spellTargetSelectionChanged();
     void spellDamageAllocationUiChanged();
     void combatDamageUiChanged();

@@ -28,6 +28,57 @@ pub(super) fn draw(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn exile_top_with_play_permission(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ExileTopWithPlayPermission { player } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let recipients = player_recipients(cx, player);
+    let spell_label = cx.spell_label.to_string();
+    for recipient in recipients {
+        let player_index = cx
+            .engine
+            .state
+            .player_idx(recipient)
+            .ok_or(EngineError::UnknownPlayer(recipient))?;
+        let Some(object_id) = cx.engine.state.players[player_index]
+            .library
+            .front()
+            .copied()
+        else {
+            continue;
+        };
+        let card_name = object_display_name(&cx.engine.state, cx.engine.registry, object_id);
+        move_object_to_zone(
+            &mut cx.engine.state,
+            cx.engine.registry,
+            object_id,
+            Zone::Exile,
+            None,
+        )?;
+        cx.events.push(permanent_moved_event_with_library_position(
+            &cx.engine.state,
+            object_id,
+            recipient,
+            rv1::permanent_moved::Destination::Exile,
+            0,
+        ));
+        cx.engine.grant_exile_play_permission(
+            recipient,
+            object_id,
+            &spell_label,
+            ExilePlayPermissionScope::PlayCard,
+            true,
+        )?;
+        cx.events.push(ev_log(format!(
+            "P{recipient} exiles {card_name} and may play it until the end of their next turn ({spell_label})."
+        )));
+    }
+    Ok(EffectOutcome::Continue)
+}
+
 pub(in crate::engine) fn draw_cards_for_player(
     engine: &mut GameEngine,
     events: &mut Vec<rv1::RuledEvent>,

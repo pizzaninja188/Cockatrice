@@ -66,6 +66,7 @@ private:
     bool canBeShuffled;
     bool closeable;
     int extraHeight;
+    qreal contentMinimumWidth = 0;
     Player *player;
 
     bool draggingWindow = false;
@@ -130,6 +131,8 @@ public:
     void retranslateUi();
     /** Re-run layout from zone optimum size (e.g. after restoring a saved window size narrower than content). */
     void refreshContentLayout();
+    /** Keep specialized compact views wide enough for presentation such as a descriptive title. */
+    void setContentMinimumWidth(qreal width);
 
 protected:
     void closeEvent(QCloseEvent *event) override;

@@ -524,6 +524,10 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     p1Ability->set_object_id(301);
     p1Ability->set_card_name("Shepherding Spirits");
     p1Ability->mutable_ability()->set_text("Plainscycling {2}");
+    auto *p1ExilePermission = p1Legal.add_exile_play_permission_groups();
+    p1ExilePermission->set_group_id(41);
+    p1ExilePermission->set_source_label("Clockwork Percussionist");
+    p1ExilePermission->add_object_ids(401);
     auto &p2Legal = (*batch.mutable_legal_by_player())[2];
     p2Legal.add_labels("P2 legal");
     auto *p2Cast = p2Legal.add_hand_actions();
@@ -537,6 +541,10 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     p2Ability->set_object_id(302);
     p2Ability->set_card_name("Daggermaw Megalodon");
     p2Ability->mutable_ability()->set_text("Islandcycling {2}");
+    auto *p2ExilePermission = p2Legal.add_exile_play_permission_groups();
+    p2ExilePermission->set_group_id(42);
+    p2ExilePermission->set_source_label("Impossible Inferno");
+    p2ExilePermission->add_object_ids(402);
     auto *handMap = batch.add_events()->mutable_hand_slot_map();
     handMap->add_entries()->set_player_id(1);
     handMap->add_entries()->set_player_id(2);
@@ -560,6 +568,8 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     EXPECT_EQ(forP1.legal_by_player().at(1).legal_block_pairs(0).blocker_id(), 101u);
     ASSERT_EQ(forP1.legal_by_player().at(1).zone_ability_actions_size(), 1);
     EXPECT_EQ(forP1.legal_by_player().at(1).zone_ability_actions(0).card_name(), "Shepherding Spirits");
+    ASSERT_EQ(forP1.legal_by_player().at(1).exile_play_permission_groups_size(), 1);
+    EXPECT_EQ(forP1.legal_by_player().at(1).exile_play_permission_groups(0).object_ids(0), 401u);
     const auto forP2 = redactFor(batch, p2);
     ASSERT_EQ(forP2.legal_by_player_size(), 1);
     EXPECT_TRUE(forP2.legal_by_player().contains(2));
@@ -568,6 +578,8 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     EXPECT_EQ(forP2.legal_by_player().at(2).legal_block_pairs(0).blocker_id(), 102u);
     ASSERT_EQ(forP2.legal_by_player().at(2).zone_ability_actions_size(), 1);
     EXPECT_EQ(forP2.legal_by_player().at(2).zone_ability_actions(0).card_name(), "Daggermaw Megalodon");
+    ASSERT_EQ(forP2.legal_by_player().at(2).exile_play_permission_groups_size(), 1);
+    EXPECT_EQ(forP2.legal_by_player().at(2).exile_play_permission_groups(0).object_ids(0), 402u);
 
     for (const auto *redacted : {&forP1, &forP2}) {
         EXPECT_TRUE(std::none_of(redacted->events().begin(), redacted->events().end(),

@@ -563,6 +563,12 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         self.state.cleanup_discard_player = None;
         self.cleanup_until_end_of_turn_effects();
+        let ending_turn_instance = self.state.turn_instance;
+        self.state
+            .active_exile_play_permissions
+            .retain(|permission| {
+                permission.expires_at_cleanup_turn_instance != Some(ending_turn_instance)
+            });
         self.reindex_battlefield_control(&mut ev);
         self.cleanup_marked_damage();
         self.clear_all_mana_pools();
@@ -589,6 +595,7 @@ impl GameEngine {
         if self.state.active_player_idx == 0 {
             self.state.turn = self.state.turn.saturating_add(1);
         }
+        self.state.turn_instance = self.state.turn_instance.saturating_add(1);
         let ap = self.state.active_player_id();
         self.state.turn_step = TurnStep::Untap;
         ev.push(ev_phase(self, rv1::PhaseId::Untap));

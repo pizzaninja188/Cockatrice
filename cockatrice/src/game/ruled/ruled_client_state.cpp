@@ -1305,6 +1305,8 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
         zoneCastActions = {};
         zoneCastSourceByOid.clear();
         zoneCastCostsByCastKey.clear();
+        zoneLandFacesByOid.clear();
+        exilePlayPermissionGroups.clear();
         validTargetsByHandSlot.clear();
         validTargetsByZoneObject.clear();
         openingUiKind = RuledOpeningUiKind::None;

@@ -355,8 +355,15 @@ message SelectedSpellMode {
   repeated TargetRef targets = 2;
 }
 
+message LandSource {
+  oneof location {
+    uint32 hand_index = 1;
+    uint32 exile_object_id = 2;
+  }
+}
+
 message PlayLand {
-  uint32 hand_card_index = 1;
+  LandSource source = 1;
   // CR 712: for MDFC land cards, which face to enter the battlefield as (0 = front face,
   // 1 = back face). 0 for single-face lands (field absent or default is always front).
   uint32 face_index = 2;
@@ -547,6 +554,24 @@ enum CostChoiceZone {
   COST_CHOICE_ZONE_GRAVEYARD = 3;
 }
 
+// A land face the player may currently play from a public zone. The permission group remains
+// published separately even when normal land timing or the per-turn land limit suppresses this
+// action.
+message LegalZoneLandAction {
+  CastSourceZone source_zone = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string card_name = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 face_index = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+// Persistent presentation snapshot for one effect-created permission cohort. Legal cast/land
+// actions remain the only authority for whether a card can be played at this instant.
+message ExilePlayPermissionGroup {
+  uint64 group_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string source_label = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated uint32 object_ids = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
 message LegalCostChoice {
   uint32 cost_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   CostChoiceZone zone = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -676,6 +701,10 @@ message LegalActions {
   map<uint64, ManaPaymentEligibility> mana_payment_by_ability = 17 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated LegalPermanentAction permanent_actions = 18 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated LegalZoneAbilityAction zone_ability_actions = 19
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated LegalZoneLandAction zone_land_actions = 20
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated ExilePlayPermissionGroup exile_play_permission_groups = 21
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 

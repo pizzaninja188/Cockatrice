@@ -1,0 +1,27 @@
+// Oracle checked 2026-08-23. Delirium is checked as the second instruction resolves; normal
+// timing rules and costs still apply to the exiled card.
+(
+  id: "impossible_inferno",
+  name: "Impossible Inferno",
+  mana_cost: "{4}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 6, target: (kind: Creature)),
+    ChooseResolutionBranch(
+      selection: FirstApplicable,
+      branches: [
+        (
+          label: "Exile the top card",
+          cost: None,
+          requirement: GameCondition(GraveyardAggregate(
+            owners: Controller,
+            aggregate: DistinctCardTypes,
+            min: Some(4),
+          )),
+          effects: [ExileTopWithPlayPermission(player: Controller)],
+        ),
+        (label: "No additional effect", cost: None, requirement: Always, effects: []),
+      ],
+    ),
+  ],
+)

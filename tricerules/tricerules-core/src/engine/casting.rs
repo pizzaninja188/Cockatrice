@@ -65,20 +65,20 @@ impl GameEngine {
             .and_then(|source| source.location.as_ref())
             .ok_or(EngineError::Illegal("missing cast source"))?;
         let from_hand = matches!(source, rv1::cast_source::Location::HandIndex(_));
-        let (oid, flashback, from_adventure) = match source {
+        let (oid, flashback, exile_permission_scope) = match source {
             rv1::cast_source::Location::HandIndex(hand_index) => (
                 *self.state.players[idx]
                     .hand
                     .get(*hand_index as usize)
                     .ok_or(EngineError::Illegal("bad hand index"))?,
                 false,
-                false,
+                None,
             ),
             rv1::cast_source::Location::GraveyardObjectId(source_oid) => {
                 if !self.state.players[idx].graveyard.contains(source_oid) {
                     return Err(EngineError::Illegal("card is not in your graveyard"));
                 }
-                (*source_oid, true, false)
+                (*source_oid, true, None)
             }
             rv1::cast_source::Location::ExileObjectId(source_oid) => {
                 let object = self
@@ -86,18 +86,34 @@ impl GameEngine {
                     .objects
                     .get(source_oid)
                     .ok_or(EngineError::Illegal("unknown exile object"))?;
-                let permission = object
-                    .adventure_cast_permission
+                let generation = self
+                    .state
+                    .zone_change_generation
+                    .get(source_oid)
+                    .copied()
+                    .unwrap_or(0);
+                let permission = self
+                    .state
+                    .active_exile_play_permissions
+                    .iter()
+                    .find(|permission| {
+                        permission.object_id == *source_oid
+                            && permission.player_id == player
+                            && permission.zone_change_generation == generation
+                            && match permission.scope {
+                                ExilePlayPermissionScope::CastFace(expected) => {
+                                    expected == face_index
+                                }
+                                ExilePlayPermissionScope::PlayCard => true,
+                            }
+                    })
                     .ok_or(EngineError::Illegal(
                         "card has no cast-from-exile permission",
                     ))?;
-                if object.zone != Zone::Exile || permission.player_id != player {
+                if object.zone != Zone::Exile {
                     return Err(EngineError::Illegal("illegal cast from exile"));
                 }
-                if permission.face_index != face_index {
-                    return Err(EngineError::Illegal("wrong Adventure face"));
-                }
-                (*source_oid, false, true)
+                (*source_oid, false, Some(permission.scope))
             }
         };
         let has_multiple_cast_options =
@@ -114,7 +130,11 @@ impl GameEngine {
         if from_hand && !def.face_available_from_hand(face_index) {
             return Err(EngineError::Illegal("face cannot be cast from hand"));
         }
-        if from_adventure && !face.is_permanent() {
+        if matches!(
+            exile_permission_scope,
+            Some(ExilePlayPermissionScope::CastFace(_))
+        ) && !face.is_permanent()
+        {
             return Err(EngineError::Illegal(
                 "Adventure permission requires a permanent face",
             ));
@@ -1265,9 +1285,9 @@ impl GameEngine {
     pub(super) fn play_land(
         &mut self,
         player: PlayerId,
-        hand_idx: usize,
-        face_index: usize,
+        command: &rv1::PlayLand,
     ) -> Result<RuledEventBatch, EngineError> {
+        let face_index = command.face_index as usize;
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
@@ -1284,10 +1304,47 @@ impl GameEngine {
             .state
             .player_idx(player)
             .ok_or(EngineError::UnknownPlayer(player))?;
-        let oid = *self.state.players[idx]
-            .hand
-            .get(hand_idx)
-            .ok_or(EngineError::Illegal("bad hand index"))?;
+        let source = command
+            .source
+            .as_ref()
+            .and_then(|source| source.location.as_ref())
+            .ok_or(EngineError::Illegal("missing land source"))?;
+        let (oid, from_hand) = match source {
+            rv1::land_source::Location::HandIndex(hand_index) => (
+                *self.state.players[idx]
+                    .hand
+                    .get(*hand_index as usize)
+                    .ok_or(EngineError::Illegal("bad hand index"))?,
+                true,
+            ),
+            rv1::land_source::Location::ExileObjectId(object_id) => {
+                let object = self
+                    .state
+                    .objects
+                    .get(object_id)
+                    .ok_or(EngineError::Illegal("unknown exile object"))?;
+                let generation = self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0);
+                let permitted = self
+                    .state
+                    .active_exile_play_permissions
+                    .iter()
+                    .any(|permission| {
+                        permission.player_id == player
+                            && permission.object_id == *object_id
+                            && permission.zone_change_generation == generation
+                            && permission.scope == ExilePlayPermissionScope::PlayCard
+                    });
+                if object.zone != Zone::Exile || !permitted {
+                    return Err(EngineError::Illegal("illegal land play from exile"));
+                }
+                (*object_id, false)
+            }
+        };
         let card_id = self.state.objects.get(&oid).unwrap().card_id.clone();
         let def = self
             .registry
@@ -1297,7 +1354,7 @@ impl GameEngine {
         let face = def
             .face(face_index)
             .ok_or(EngineError::Illegal("bad face index"))?;
-        if !def.face_available_from_hand(face_index) {
+        if from_hand && !def.face_available_from_hand(face_index) {
             return Err(EngineError::Illegal("face cannot be played from hand"));
         }
         if !face.is_land {

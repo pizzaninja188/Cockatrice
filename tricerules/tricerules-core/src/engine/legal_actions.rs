@@ -55,6 +55,8 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         let labels = legal_labels(eng, p.id);
         let hand_actions = legal_hand_actions(eng, p.id);
         let zone_cast_actions = legal_zone_cast_actions(eng, p.id);
+        let zone_land_actions = legal_zone_land_actions(eng, p.id);
+        let exile_play_permission_groups = exile_play_permission_groups(eng, p.id);
         let permanent_actions = legal_permanent_actions(eng, p.id);
         let zone_ability_actions = legal_zone_ability_actions(eng, p.id);
         let mut valid_targets_by_hand_slot = BTreeMap::new();
@@ -286,6 +288,8 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 mana_payment_by_ability,
                 permanent_actions,
                 zone_ability_actions,
+                zone_land_actions,
+                exile_play_permission_groups,
             },
         );
     }
@@ -1105,102 +1109,203 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
         }
     }
 
-    // CR 715.3d: the permission names the player and permanent face, and remains valid only while
-    // that exact object is still in exile. Walk all owners' public exile zones because the spell's
-    // controller and the physical card's owner need not be the same in future effects.
-    for &oid in eng
+    let mut emitted = BTreeSet::new();
+    for permission in eng
         .state
-        .players
+        .active_exile_play_permissions
         .iter()
-        .flat_map(|owner| owner.exile.iter())
+        .filter(|permission| permission.player_id == pid)
     {
-        let Some(object) = eng.state.objects.get(&oid) else {
+        let Some(object) = eng.state.objects.get(&permission.object_id) else {
             continue;
         };
-        let Some(permission) = object.adventure_cast_permission else {
+        let generation = eng
+            .state
+            .zone_change_generation
+            .get(&object.id)
+            .copied()
+            .unwrap_or(0);
+        if object.zone != Zone::Exile || generation != permission.zone_change_generation {
+            continue;
+        }
+        let Some(definition) = eng.registry.get(&object.card_id) else {
             continue;
         };
-        if permission.player_id != pid {
-            continue;
-        }
-        let Some(face) = eng
-            .registry
-            .get(&object.card_id)
-            .and_then(|definition| definition.face(permission.face_index))
-        else {
-            continue;
+        let face_indices: Vec<_> = match permission.scope {
+            ExilePlayPermissionScope::CastFace(face_index) => vec![face_index],
+            ExilePlayPermissionScope::PlayCard => (0..definition.faces_iter().count()).collect(),
         };
-        if face.is_land {
-            continue;
-        }
-        let cost_choices = legal_spell_cost_choices(
-            eng,
-            pid,
-            object.id,
-            &face.additional_costs,
-            &face.cast_cost_groups,
-        );
-        let cast_ok = face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
-        if !cast_ok {
-            continue;
-        }
-        let mut action = rv1::LegalZoneCastAction {
-            source_zone: rv1::CastSourceZone::Exile as i32,
-            object_id: object.id,
-            card_name: face.name.clone(),
-            face_index: permission.face_index as u32,
-            needs_target: target_schema(&face.spell_effect, face.targeting.as_ref()).has_targets(),
-            min_modes: 0,
-            max_modes: 0,
-            modes: vec![],
-            cost: face.mana_cost.to_string(),
-            cost_choices: None,
-            eligible_restricted_mana_group_ids: eng
-                .eligible_restricted_mana_for_spell(player_index, face),
-            generic_cost_reduction: eng.spell_generic_reduction(
-                pid,
-                object.id,
-                &face.cost_modifiers,
-            ),
-        };
-        if !cost_choices.non_mana_costs_payable {
-            continue;
-        }
-        action.cost_choices = Some(cost_choices);
-        if let Some(modal) = &face.modal_spell {
-            action.min_modes = modal.min_modes;
-            action.max_modes = modal.max_modes;
-            action.modes = modal
-                .modes
-                .iter()
-                .enumerate()
-                .map(|(mode_index, mode)| {
-                    let needs_target =
-                        target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
-                    let targets = compute_spell_targets(
-                        eng,
-                        pid,
-                        TargetSourceIdentity::current(eng, object.id),
-                        &mode.effects,
-                        mode.targeting.as_ref(),
-                    );
-                    rv1::LegalSpellMode {
-                        mode_index: mode_index as u32,
-                        label: mode.label.clone(),
-                        selectable: !needs_target || spell_targets_have_candidate(&targets),
-                        needs_target,
-                        targets: Some(targets),
-                    }
-                })
-                .collect();
-            if action.modes.iter().filter(|mode| mode.selectable).count() < modal.min_modes as usize
-            {
+        for face_index in face_indices {
+            if !emitted.insert((object.id, face_index)) {
                 continue;
             }
+            let Some(face) = definition.face(face_index) else {
+                continue;
+            };
+            if face.is_land {
+                continue;
+            }
+            let cost_choices = legal_spell_cost_choices(
+                eng,
+                pid,
+                object.id,
+                &face.additional_costs,
+                &face.cast_cost_groups,
+            );
+            let cast_ok = face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
+            if !cast_ok {
+                continue;
+            }
+            let mut action = rv1::LegalZoneCastAction {
+                source_zone: rv1::CastSourceZone::Exile as i32,
+                object_id: object.id,
+                card_name: face.name.clone(),
+                face_index: face_index as u32,
+                needs_target: target_schema(&face.spell_effect, face.targeting.as_ref())
+                    .has_targets(),
+                min_modes: 0,
+                max_modes: 0,
+                modes: vec![],
+                cost: face.mana_cost.to_string(),
+                cost_choices: None,
+                eligible_restricted_mana_group_ids: eng
+                    .eligible_restricted_mana_for_spell(player_index, face),
+                generic_cost_reduction: eng.spell_generic_reduction(
+                    pid,
+                    object.id,
+                    &face.cost_modifiers,
+                ),
+            };
+            if !cost_choices.non_mana_costs_payable {
+                continue;
+            }
+            action.cost_choices = Some(cost_choices);
+            if let Some(modal) = &face.modal_spell {
+                action.min_modes = modal.min_modes;
+                action.max_modes = modal.max_modes;
+                action.modes = modal
+                    .modes
+                    .iter()
+                    .enumerate()
+                    .map(|(mode_index, mode)| {
+                        let needs_target =
+                            target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
+                        let targets = compute_spell_targets(
+                            eng,
+                            pid,
+                            TargetSourceIdentity::current(eng, object.id),
+                            &mode.effects,
+                            mode.targeting.as_ref(),
+                        );
+                        rv1::LegalSpellMode {
+                            mode_index: mode_index as u32,
+                            label: mode.label.clone(),
+                            selectable: !needs_target || spell_targets_have_candidate(&targets),
+                            needs_target,
+                            targets: Some(targets),
+                        }
+                    })
+                    .collect();
+                if action.modes.iter().filter(|mode| mode.selectable).count()
+                    < modal.min_modes as usize
+                {
+                    continue;
+                }
+            }
+            actions.push(action);
         }
-        actions.push(action);
     }
     actions
+}
+
+fn legal_zone_land_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZoneLandAction> {
+    let max_lands = 1 + eng.extra_land_plays_for(pid);
+    if eng.state.opening.is_some()
+        || eng.state.blocking_choice().is_some()
+        || eng.state.lands_played_this_turn >= max_lands
+        || !sorcery_speed_available(&eng.state, pid)
+    {
+        return Vec::new();
+    }
+    let mut emitted = BTreeSet::new();
+    let mut actions = Vec::new();
+    for permission in eng
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .filter(|permission| {
+            permission.player_id == pid && permission.scope == ExilePlayPermissionScope::PlayCard
+        })
+    {
+        let Some(object) = eng.state.objects.get(&permission.object_id) else {
+            continue;
+        };
+        let generation = eng
+            .state
+            .zone_change_generation
+            .get(&object.id)
+            .copied()
+            .unwrap_or(0);
+        if object.zone != Zone::Exile || generation != permission.zone_change_generation {
+            continue;
+        }
+        let Some(definition) = eng.registry.get(&object.card_id) else {
+            continue;
+        };
+        for (face_index, face) in definition.faces_iter().enumerate() {
+            if !face.is_land || !emitted.insert((object.id, face_index)) {
+                continue;
+            }
+            actions.push(rv1::LegalZoneLandAction {
+                source_zone: rv1::CastSourceZone::Exile as i32,
+                object_id: object.id,
+                card_name: face.name.clone(),
+                face_index: face_index as u32,
+            });
+        }
+    }
+    actions
+}
+
+fn exile_play_permission_groups(
+    eng: &GameEngine,
+    pid: PlayerId,
+) -> Vec<rv1::ExilePlayPermissionGroup> {
+    let mut groups: BTreeMap<u64, (String, BTreeSet<ObjectId>)> = BTreeMap::new();
+    for permission in eng
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .filter(|permission| permission.player_id == pid)
+    {
+        let Some(object) = eng.state.objects.get(&permission.object_id) else {
+            continue;
+        };
+        let generation = eng
+            .state
+            .zone_change_generation
+            .get(&permission.object_id)
+            .copied()
+            .unwrap_or(0);
+        if object.zone != Zone::Exile || generation != permission.zone_change_generation {
+            continue;
+        }
+        groups
+            .entry(permission.group_id)
+            .or_insert_with(|| (permission.source_label.clone(), BTreeSet::new()))
+            .1
+            .insert(permission.object_id);
+    }
+    groups
+        .into_iter()
+        .map(
+            |(group_id, (source_label, object_ids))| rv1::ExilePlayPermissionGroup {
+                group_id,
+                source_label,
+                object_ids: object_ids.into_iter().collect(),
+            },
+        )
+        .collect()
 }
 
 fn opening_legal_labels(eng: &GameEngine, pid: PlayerId, op: &OpeningSequence) -> Vec<String> {

@@ -39,6 +39,7 @@
 #include <QDir>
 #include <QDockWidget>
 #include <QFile>
+#include <QFontMetrics>
 #include <QGraphicsSceneMouseEvent>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -248,6 +249,8 @@ void TabGame::connectToGameEventHandler()
             &MessageLogWidget::prepareForNewGame);
     connect(game->getGameEventHandler()->ruled(), &RuledClientState::sessionReset, this, [this] {
         publishRuledAutoPassPolicy();
+        dismissedExilePlayPermissionGroups.clear();
+        onRuledExilePlayPermissionGroupsChanged();
         if (gamePromptWidget) {
             gamePromptWidget->setRuledStackHasItems(false);
             gamePromptWidget->setSpellCastPending(false);
@@ -453,6 +456,8 @@ void TabGame::connectToGameEventHandler()
                 &TabGame::onRuledPublicRevealChanged);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::activePublicRevealsChanged, this,
                 &TabGame::onRuledActivePublicRevealsChanged);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::exilePlayPermissionGroupsChanged, this,
+                &TabGame::onRuledExilePlayPermissionGroupsChanged);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerOrderUiChanged, this,
                 &TabGame::onRuledTriggerOrderUiChanged);
         connect(game->getGameState(), &GameState::activePhaseChanged, gamePromptWidget,
@@ -657,6 +662,9 @@ void TabGame::emitUserEvent()
 TabGame::~TabGame()
 {
     clearRuledCombatArrows();
+    for (const auto &cards : std::as_const(exilePlayPermissionCards)) {
+        qDeleteAll(cards);
+    }
     if (replayManager) {
         delete replayManager->replay;
     }
@@ -2712,4 +2720,94 @@ void TabGame::onRuledActivePublicRevealsChanged(QStringList cardNames, QVector<i
     }
     activeCastRevealView->setWindowTitle(tr("Cards revealed for spells on the stack"));
     qDeleteAll(previousCards);
+}
+
+void TabGame::onRuledExilePlayPermissionGroupsChanged()
+{
+    if (!game || !scene || !RuledActions::isRuledGame(game)) {
+        return;
+    }
+    RuledClientState *state = game->getGameEventHandler()->ruled();
+    if (!state) {
+        return;
+    }
+
+    const QSet<quint64> activeGroups(state->exilePlayPermissionGroups.keyBegin(),
+                                     state->exilePlayPermissionGroups.keyEnd());
+    const auto openGroupIds = exilePlayPermissionViews.keys();
+    for (const quint64 groupId : openGroupIds) {
+        if (!activeGroups.contains(groupId)) {
+            if (exilePlayPermissionViews.value(groupId)) {
+                exilePlayPermissionViews.value(groupId)->close();
+            }
+            exilePlayPermissionViews.remove(groupId);
+            qDeleteAll(exilePlayPermissionCards.take(groupId));
+        }
+    }
+    for (auto it = dismissedExilePlayPermissionGroups.begin(); it != dismissedExilePlayPermissionGroups.end();) {
+        if (!activeGroups.contains(*it)) {
+            it = dismissedExilePlayPermissionGroups.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    for (const auto &group : state->exilePlayPermissionGroups) {
+        if (dismissedExilePlayPermissionGroups.contains(group.groupId)) {
+            continue;
+        }
+        QList<const ServerInfo_Card *> cardList;
+        QList<ServerInfo_Card *> newCards;
+        Player *scaffoldPlayer = nullptr;
+        CardZoneLogic *exileZone = nullptr;
+        for (const quint32 objectId : group.objectIds) {
+            const int ownerId = state->exileOidToPlayerId.value(objectId, -1);
+            const int serverCardId = state->exileOidToServerCardId.value(objectId, -1);
+            Player *owner = game->getPlayerManager()->getPlayers().value(ownerId, nullptr);
+            CardItem *physical = ownerId >= 0 && serverCardId >= 0
+                                     ? game->getCard(ownerId, QString::fromLatin1(ZoneNames::EXILE), serverCardId)
+                                     : nullptr;
+            if (!owner || !physical) {
+                continue;
+            }
+            if (!scaffoldPlayer) {
+                scaffoldPlayer = owner;
+                exileZone = owner->getZones().value(ZoneNames::EXILE);
+            }
+            auto *card = new ServerInfo_Card;
+            card->set_name(physical->getName().toStdString());
+            card->set_id(serverCardId);
+            card->set_face_down(false);
+            newCards.append(card);
+            cardList.append(card);
+        }
+        if (!scaffoldPlayer || !exileZone || cardList.isEmpty()) {
+            qDeleteAll(newCards);
+            continue;
+        }
+
+        QList<ServerInfo_Card *> previousCards = exilePlayPermissionCards.take(group.groupId);
+        exilePlayPermissionCards.insert(group.groupId, newCards);
+        QPointer<ZoneViewWidget> view = exilePlayPermissionViews.value(group.groupId);
+        if (view) {
+            view->getZone()->getLogic()->clearContents();
+            view->getZone()->initializeCards(cardList);
+        } else {
+            // Writable reveal registration keeps this exact physical exile mirror clickable;
+            // ruled-mode CardItem guards still prohibit freeform dragging.
+            view = new ZoneViewWidget(scaffoldPlayer, exileZone, -1, true, true, cardList, false, false, false, true);
+            exilePlayPermissionViews.insert(group.groupId, view);
+            scene->addItem(view);
+            view->setPos(scene->cascadedZoneViewPos(QPointF(680, 80), view));
+            connect(view, &ZoneViewWidget::closePressed, this, [this, groupId = group.groupId](ZoneViewWidget *) {
+                dismissedExilePlayPermissionGroups.insert(groupId);
+                exilePlayPermissionViews.remove(groupId);
+                qDeleteAll(exilePlayPermissionCards.take(groupId));
+            });
+        }
+        const QString title = tr("May play from exile — %1").arg(group.sourceLabel);
+        view->setWindowTitle(title);
+        view->setContentMinimumWidth(QFontMetricsF(view->font()).horizontalAdvance(title) + 80);
+        qDeleteAll(previousCards);
+    }
 }

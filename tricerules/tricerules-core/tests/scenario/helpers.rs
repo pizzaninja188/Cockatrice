@@ -12,8 +12,8 @@ pub(crate) use tricerules_proto::ruled::v1::ruled_event::Ev;
 pub(crate) use tricerules_proto::ruled::v1::{
     ActivateAbility, AssignCombatDamage, BlockPair, CastCostGroupSelection, CastSource, CastSpell,
     ChoiceKind, ChooseTriggerTarget, CostSelection, DamagePair, DeclareAttackers, DeclareBlockers,
-    DiscardToHandSize, ExecutePermanentAction, FlexPipPayment, ManaSpendSelection, PassPriority,
-    PermanentActionKind, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers,
+    DiscardToHandSize, ExecutePermanentAction, FlexPipPayment, LandSource, ManaSpendSelection,
+    PassPriority, PermanentActionKind, PlayLand, PreviewDeclareAttackers, PreviewDeclareBlockers,
     PrimitiveYieldStructured, ResolutionChoiceRequired, ResolutionRevealAudience, RuledCommand,
     RuledEventBatch, SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef,
     TargetRefKind, UndoManaAbility,
@@ -95,7 +95,11 @@ pub(crate) fn play_land(hand_card_index: usize) -> RuledCommand {
 pub(crate) fn play_land_face(hand_card_index: usize, face_index: usize) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::PlayLand(PlayLand {
-            hand_card_index: hand_card_index as u32,
+            source: Some(LandSource {
+                location: Some(rv1::land_source::Location::HandIndex(
+                    hand_card_index as u32,
+                )),
+            }),
             face_index: face_index as u32,
         })),
     }
@@ -594,7 +598,6 @@ pub(crate) fn inject_creature_on_battlefield(
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
-            adventure_cast_permission: None,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -636,7 +639,6 @@ pub(crate) fn inject_permanent_on_battlefield(
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
-            adventure_cast_permission: None,
         },
     );
     e.state.players[player].battlefield.push(id);
@@ -674,7 +676,6 @@ pub(crate) fn inject_card_into_hand(e: &mut GameEngine, player: usize, card_id: 
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
-            adventure_cast_permission: None,
         },
     );
     e.state.players[player].hand.push(id);
@@ -712,7 +713,6 @@ pub(crate) fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &s
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
-            adventure_cast_permission: None,
         },
     );
     e.state.players[player].library.push_back(id);
@@ -757,7 +757,6 @@ pub(crate) fn inject_creature_under_foreign_control(
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
-            adventure_cast_permission: None,
         },
     );
     // The battlefield list is the control index, so the permanent goes on the *controller's*.
@@ -797,7 +796,6 @@ pub(crate) fn inject_graveyard_card(e: &mut GameEngine, player: usize, card_id: 
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
-            adventure_cast_permission: None,
         },
     );
     e.state.players[player].graveyard.push(id);
@@ -1009,7 +1007,6 @@ pub(crate) fn inject_creature_with_stats(
             must_block_if_able: false,
             face_up_index: 0,
             face_down: false,
-            adventure_cast_permission: None,
         },
     );
     e.state.players[player].battlefield.push(id);

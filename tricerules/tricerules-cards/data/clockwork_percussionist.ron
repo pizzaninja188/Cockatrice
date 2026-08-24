@@ -1,0 +1,16 @@
+// Oracle checked 2026-08-23. The permission applies to the exact public object exiled by the
+// resolving trigger and lasts through the controller's next turn.
+(
+  id: "clockwork_percussionist",
+  name: "Clockwork Percussionist",
+  mana_cost: "{R}",
+  types: ["Artifact", "Creature", "Monkey", "Toy"],
+  power: 1,
+  toughness: 1,
+  keywords: [Haste],
+  triggered_abilities: [(
+    trigger: WhenSelfDies,
+    effect: [ExileTopWithPlayPermission(player: Controller)],
+    text: "When Clockwork Percussionist dies, exile the top card of your library. You may play it until the end of your next turn.",
+  )],
+)
