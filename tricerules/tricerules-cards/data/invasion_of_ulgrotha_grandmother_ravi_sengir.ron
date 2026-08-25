@@ -1,0 +1,38 @@
+(
+  id: "invasion_of_ulgrotha_grandmother_ravi_sengir",
+  name: "Invasion of Ulgrotha // Grandmother Ravi Sengir",
+  layout: Transform,
+  faces: [
+    (
+      name: "Invasion of Ulgrotha",
+      mana_cost: "{4}{B}",
+      types: ["Battle", "Siege"],
+      defense: 5,
+      triggered_abilities: [(
+        trigger: WhenSelfEntersBattlefield,
+        effect: [
+          DamageTarget(amount: 3, target: (kind: AnyTarget, exclude_source: true)),
+          GainLife(amount: 3, who: Controller),
+        ],
+        text: "When this permanent enters, it deals 3 damage to any other target and you gain 3 life.",
+      )],
+    ),
+    (
+      name: "Grandmother Ravi Sengir",
+      mana_cost: "",
+      supertypes: ["Legendary"],
+      types: ["Creature", "Human", "Wizard"],
+      power: 3,
+      toughness: 3,
+      keywords: [Flying],
+      triggered_abilities: [(
+        trigger: WheneverCreatureDies(controller: Opponent, exclude_self: false),
+        effect: [
+          PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source),
+          GainLife(amount: 1, who: Controller),
+        ],
+        text: "Whenever a creature an opponent controls dies, put a +1/+1 counter on this creature and you gain 1 life.",
+      )],
+    ),
+  ],
+)

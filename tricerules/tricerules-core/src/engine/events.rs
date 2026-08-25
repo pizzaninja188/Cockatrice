@@ -446,6 +446,10 @@ impl GameEngine {
                                     .iter()
                                     .map(|cost| match cost {
                                         AbilityCost::Tap => "{T}".to_string(),
+                                        AbilityCost::Loyalty(delta) if *delta >= 0 => {
+                                            format!("+{delta}")
+                                        }
+                                        AbilityCost::Loyalty(delta) => delta.to_string(),
                                         AbilityCost::Mana(cost) => cost.to_string(),
                                         AbilityCost::Discard => "Discard a card".to_string(),
                                         AbilityCost::DiscardSelf => "Discard this card".to_string(),
@@ -594,6 +598,20 @@ impl GameEngine {
                                 .unwrap_or(0),
                             room_doors,
                             is_land,
+                            is_planeswalker: characteristics
+                                .as_ref()
+                                .is_some_and(|value| value.has_type("Planeswalker")),
+                            is_battle: characteristics
+                                .as_ref()
+                                .is_some_and(|value| value.has_type("Battle")),
+                            loyalty: object.counter_count(CounterKind::Loyalty),
+                            defense: object.counter_count(CounterKind::Defense),
+                            battle_protector_player_id: self
+                                .state
+                                .battle_protectors
+                                .get(&oid)
+                                .copied(),
+                            controller_player_id: Some(object.controller),
                         }
                     })
                     .collect()
@@ -638,6 +656,7 @@ impl GameEngine {
                         face_up_index: object.face_up_index,
                         face_down: object.face_down,
                         room_state: self.state.room_states.get(&object.id).copied(),
+                        battle_protector: self.state.battle_protectors.get(&object.id).copied(),
                         zone_change_generation: self
                             .state
                             .zone_change_generation

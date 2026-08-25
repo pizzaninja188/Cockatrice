@@ -81,6 +81,10 @@ pub struct TriggerContext {
     pub targeting_stack_object: Option<StackObjectRef>,
     pub attacking_player: Option<PlayerId>,
     pub defending_player: Option<PlayerId>,
+    /// The player or planeswalker this source attacked. Battles deliberately populate neither:
+    /// effects such as Scorch Spitter name only a player or planeswalker.
+    pub attacked_player: Option<PlayerId>,
+    pub attacked_planeswalker: Option<TriggerObjectRef>,
 }
 
 /// The game entity an Aura or Equipment is attached to. Players are represented explicitly;
@@ -730,6 +734,14 @@ pub enum ResolutionContinuation {
         stack: Option<ParkedStackResolution>,
         exiled: TriggerObjectRef,
     },
+    BattleProtector {
+        stack: ParkedStackResolution,
+    },
+    SiegeCast {
+        stack: ParkedStackResolution,
+        exiled: TriggerObjectRef,
+        face_index: usize,
+    },
     LegendKeep,
 }
 
@@ -753,7 +765,9 @@ impl ResolutionContinuation {
             | Self::ManifestDread { stack, .. }
             | Self::EntryCopySource { stack }
             | Self::EntryReplacement { stack }
-            | Self::DamageReplacement { stack, .. } => Some(stack),
+            | Self::DamageReplacement { stack, .. }
+            | Self::BattleProtector { stack } => Some(stack),
+            Self::SiegeCast { stack, .. } => Some(stack),
             Self::AuraReturn { stack, .. } => stack.as_ref(),
             Self::LegendKeep => None,
         }
@@ -778,7 +792,9 @@ impl ResolutionContinuation {
             | Self::ManifestDread { stack, .. }
             | Self::EntryCopySource { stack }
             | Self::EntryReplacement { stack }
-            | Self::DamageReplacement { stack, .. } => Some(stack),
+            | Self::DamageReplacement { stack, .. }
+            | Self::BattleProtector { stack } => Some(stack),
+            Self::SiegeCast { stack, .. } => Some(stack),
             Self::AuraReturn { stack, .. } => stack.as_mut(),
             Self::LegendKeep => None,
         }
@@ -879,6 +895,9 @@ pub(crate) struct BattlefieldEntryEvent {
     /// CR 616.1 decider: current controller, or owner when the object has no controller.
     pub deciding_player: PlayerId,
     pub destination_controller: PlayerId,
+    /// CR 310.11a: a Siege's controller chooses an opponent as protector while it enters.
+    /// The choice is parked before zone commitment and installed atomically with entry.
+    pub battle_protector: Option<PlayerId>,
     pub face_index: usize,
     /// The door selected while casting a Room permanent spell. Other battlefield-entry paths
     /// carry `None`; entering as a copy suppresses the designation at commitment.
@@ -1015,6 +1034,7 @@ pub enum SpellCastMethod {
     Normal,
     Flashback,
     Harmonize,
+    SiegeDefeat,
 }
 
 impl SpellCastMethod {
@@ -1029,6 +1049,7 @@ impl SpellCastMethod {
             Self::Normal => None,
             Self::Flashback => Some("Flashback"),
             Self::Harmonize => Some("Harmonize"),
+            Self::SiegeDefeat => Some("Siege defeat"),
         }
     }
 }
@@ -1239,9 +1260,24 @@ pub(crate) enum ImmediateObserverAction {
 }
 
 /// During combat, after attack/block declarations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CombatDefenderTarget {
+    Player(PlayerId),
+    Permanent(TriggerObjectRef),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CombatAttackAssignment {
+    pub attacker: TriggerObjectRef,
+    pub defender: CombatDefenderTarget,
+    pub defending_player: PlayerId,
+}
+
 #[derive(Debug, Clone)]
 pub struct CombatState {
     pub attacking: Vec<ObjectId>,
+    /// One generation-bound defender designation for every attacking creature (CR 508.1b).
+    pub attack_assignments: HashMap<ObjectId, CombatAttackAssignment>,
     /// Maps each attacker to all creatures blocking it (may be multiple — CR 509.1h).
     pub blockers: HashMap<ObjectId, Vec<ObjectId>>,
     /// Explicit combat damage from each multiply-blocked (or trample) attacker to its blockers;
@@ -1372,6 +1408,9 @@ pub struct GameState {
     /// Public CR 709.5 designations for battlefield Rooms. Absence means the object is not a
     /// Room permanent; the zone-change funnel removes entries on departure under CR 400.7.
     pub room_states: HashMap<ObjectId, RoomState>,
+    /// CR 310.11a: public protector chosen for each battlefield Siege. The zone-change funnel
+    /// removes this mapping so a returned Battle must choose again.
+    pub battle_protectors: HashMap<ObjectId, PlayerId>,
     pub stack: Vec<StackItem>,
     /// Index into players for who holds priority
     pub priority_idx: usize,

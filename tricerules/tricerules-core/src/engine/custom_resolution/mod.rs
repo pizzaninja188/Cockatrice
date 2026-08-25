@@ -112,6 +112,12 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
+            ResolutionContinuation::SiegeCast { .. }
+        ) {
+            return self.finish_siege_cast_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::WardPayment {
                 ward: PendingWardPayment {
                     stage: PendingWardPaymentStage::Discard { .. },
@@ -233,6 +239,12 @@ impl GameEngine {
             ResolutionContinuation::LegendKeep => {
                 return self.finish_legend_sba_choice(pending, chosen);
             }
+            ResolutionContinuation::BattleProtector { .. } => {
+                return self.finish_battle_protector_choice(pending, chosen[0] as PlayerId);
+            }
+            ResolutionContinuation::SiegeCast { .. } => {
+                unreachable!("Siege-cast branch handled before object-choice validation")
+            }
             ResolutionContinuation::Custom { .. } => {}
             ResolutionContinuation::ManaPayment { .. } => unreachable!("handled above"),
         }
@@ -348,6 +360,7 @@ impl GameEngine {
             object_id: exiled.object_id,
             deciding_player: owner,
             destination_controller: owner,
+            battle_protector: None,
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
@@ -423,6 +436,113 @@ impl GameEngine {
         }
         events.push(ev_priority_changed(self));
         Ok(finish_with_events(self, events))
+    }
+
+    fn finish_battle_protector_choice(
+        &mut self,
+        pending: PendingResolution,
+        protector: PlayerId,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let ResolutionContinuation::BattleProtector { stack } = &pending.continuation else {
+            unreachable!("Battle protector continuation routed by caller")
+        };
+        let _stack = stack;
+        let Some(pending_event) = self.state.pending_replacement_event.take() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("Battle protector choice became stale"));
+        };
+        let mut entry = match pending_event {
+            super::replacement::PendingReplacementEvent::BattlefieldEntry(entry) => *entry,
+            other => {
+                self.state.pending_replacement_event = Some(other);
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("Battle protector choice became stale"));
+            }
+        };
+        let battle_id = entry.event.object_id;
+        if !self
+            .state
+            .are_opponents(entry.event.destination_controller, protector)
+            || !self
+                .characteristics(battle_id)
+                .is_some_and(|value| value.has_type("Battle"))
+        {
+            self.state.pending_replacement_event = Some(
+                super::replacement::PendingReplacementEvent::BattlefieldEntry(Box::new(entry)),
+            );
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("Battle protector choice became stale"));
+        }
+        entry.event.battle_protector = Some(protector);
+        let events = vec![ev_log(format!(
+            "P{} chooses P{protector} to protect Battle object {battle_id}.",
+            pending.deciding_player
+        ))];
+        self.complete_pending_battlefield_entry(pending, entry.event, entry.completion, events)
+    }
+
+    fn finish_siege_cast_choice(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let ResolutionContinuation::SiegeCast {
+            stack,
+            exiled,
+            face_index,
+        } = &pending.continuation
+        else {
+            unreachable!("Siege cast continuation routed by caller")
+        };
+        let stack = stack.clone();
+        let exiled = *exiled;
+        let face_index = *face_index;
+        let mut events = Vec::new();
+        match decision {
+            rv1::ResolutionChoiceDecision::Decline => {
+                if answer.cast_spell.is_some() || !answer.chosen_object_ids.is_empty() {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "declining a Siege cast cannot include an announcement",
+                    ));
+                }
+                events.push(ev_log(format!(
+                    "P{} declines to cast the defeated Siege.",
+                    pending.deciding_player
+                )));
+            }
+            rv1::ResolutionChoiceDecision::CastTransformed => {
+                let Some(cast) = answer.cast_spell.as_ref() else {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "accepting a Siege cast requires a spell announcement",
+                    ));
+                };
+                if let Err(error) = self.cast_siege_defeat_offer(
+                    pending.deciding_player,
+                    cast,
+                    exiled,
+                    face_index,
+                    &mut events,
+                ) {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(error);
+                }
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "Siege cast choice requires cast or decline",
+                ));
+            }
+        }
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            stack.previous_result,
+            events,
+        )
     }
 
     /// Display names for `oids`, in order (registry lookup, never Oracle).

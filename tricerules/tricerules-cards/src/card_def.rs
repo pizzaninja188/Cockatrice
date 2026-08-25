@@ -15,10 +15,10 @@
 
 use crate::mana::ManaCost;
 use crate::primitives::{
-    ActivatedAbilityDef, AdditionalCost, CardTypeFilter, CastCostGroupDef,
-    CastCostReceiptCondition, Color, EffectContext, Evasion, Keyword, PermanentTypeFilter,
-    ProtectionQuality, SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetingDef,
-    TriggeredAbilityDef,
+    ActivatedAbilityDef, AdditionalCost, Amount, CardTypeFilter, CastCostGroupDef,
+    CastCostReceiptCondition, Color, CounterKind, EffectContext, EntersWithCountersAffected,
+    Evasion, Keyword, PermanentTypeFilter, ProtectionQuality, SpellCostModifier, SpellEffectKind,
+    StaticAbilityDef, TargetingDef, TriggeredAbilityDef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -145,6 +145,12 @@ pub struct CardFace {
     pub power: Option<u32>,
     #[serde(default)]
     pub toughness: Option<u32>,
+    /// Printed starting loyalty for a planeswalker face (CR 306.5b).
+    #[serde(default)]
+    pub loyalty: Option<u32>,
+    /// Printed defense for a battle face (CR 310.4b).
+    #[serde(default)]
+    pub defense: Option<u32>,
     /// Data-driven spell effects resolved in order from the same target list
     /// (see [`SpellEffectKind`]). RON: `spell_effect: [DamageTarget(...), Draw(count: 1)]`.
     #[serde(default)]
@@ -238,6 +244,38 @@ impl CardFace {
         self.is_land = has(&self.types, "Land");
         self.is_legendary = has(&self.supertypes, "Legendary");
         self.is_aura = has(&self.types, "Aura");
+
+        // Printed loyalty and defense are intrinsic entry replacements. Materializing them in
+        // the shared static-ability vocabulary makes copy effects and replacement ordering use
+        // the same pipeline as every authored enters-with-counters ability (CR 122.6/614.12).
+        for (counter, amount) in [
+            (CounterKind::Loyalty, self.loyalty),
+            (CounterKind::Defense, self.defense),
+        ] {
+            let Some(amount) = amount else {
+                continue;
+            };
+            let already_materialized = self.static_abilities.iter().any(|ability| {
+                matches!(
+                    ability,
+                    StaticAbilityDef::EntersWithCounters {
+                        affected: EntersWithCountersAffected::Self_,
+                        counter: existing,
+                        amount: Amount::Fixed(existing_amount),
+                        cast_cost_condition: None,
+                    } if *existing == counter && *existing_amount == amount
+                )
+            });
+            if !already_materialized {
+                self.static_abilities
+                    .push(StaticAbilityDef::EntersWithCounters {
+                        affected: EntersWithCountersAffected::Self_,
+                        counter,
+                        amount: Amount::Fixed(amount),
+                        cast_cost_condition: None,
+                    });
+            }
+        }
     }
 
     /// True for permanent faces (CR 110.4): resolves to the battlefield, not the graveyard.
@@ -268,6 +306,10 @@ impl CardFace {
             PermanentTypeFilter::Artifact => self.is_artifact,
             PermanentTypeFilter::Enchantment => self.is_enchantment,
             PermanentTypeFilter::Land => self.is_land,
+            PermanentTypeFilter::Planeswalker => {
+                self.types.iter().any(|value| value == "Planeswalker")
+            }
+            PermanentTypeFilter::Battle => self.types.iter().any(|value| value == "Battle"),
         }
     }
 
@@ -287,6 +329,7 @@ impl CardFace {
             CardTypeFilter::Creature => self.is_creature,
             CardTypeFilter::Artifact => self.is_artifact,
             CardTypeFilter::Planeswalker => self.types.iter().any(|value| value == "Planeswalker"),
+            CardTypeFilter::Battle => self.types.iter().any(|value| value == "Battle"),
             CardTypeFilter::Nonland => !self.is_land,
             CardTypeFilter::Noncreature => !self.is_creature,
         }
@@ -347,6 +390,10 @@ pub struct RawCardDefinition {
     pub power: Option<u32>,
     #[serde(default)]
     pub toughness: Option<u32>,
+    #[serde(default)]
+    pub loyalty: Option<u32>,
+    #[serde(default)]
+    pub defense: Option<u32>,
     #[serde(default)]
     pub spell_effect: Vec<SpellEffectKind>,
     #[serde(default)]
@@ -415,6 +462,8 @@ impl RawCardDefinition {
                 supertypes: self.supertypes,
                 power: self.power,
                 toughness: self.toughness,
+                loyalty: self.loyalty,
+                defense: self.defense,
                 spell_effect: self.spell_effect,
                 targeting: self.targeting,
                 modal_spell: self.modal_spell,

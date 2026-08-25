@@ -166,7 +166,7 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
             AbilityCost::SacrificeSelf | AbilityCost::SacrificePermanent { .. } => {
                 Some(CardResultAction::Sacrifice)
             }
-            AbilityCost::Tap | AbilityCost::Mana(_) => None,
+            AbilityCost::Tap | AbilityCost::Mana(_) | AbilityCost::Loyalty(_) => None,
         })
         .collect()
 }
@@ -1310,36 +1310,44 @@ mod tests {
     #[test]
     fn issue_125_damage_spells_share_their_target_with_the_death_replacement() {
         let registry = CardRegistry::from_embedded().expect("embedded registry");
-        for (id, expected_damage, expected_partial) in [
-            ("lava_coil", 4, None),
-            (
-                "scorching_dragonfire",
-                3,
-                Some("planeswalkers are not modeled as damage targets"),
-            ),
-        ] {
+        for (id, expected_damage) in [("lava_coil", 4), ("scorching_dragonfire", 3)] {
             let card = registry.get(id).unwrap_or_else(|| panic!("missing {id}"));
             let face = card.primary_face();
-            assert!(matches!(
-                face.spell_effect.as_slice(),
-                [
-                    SpellEffectKind::DamageTarget {
-                        amount: Amount::Fixed(amount),
-                        target: damage_target,
-                    },
-                    SpellEffectKind::ExileIfWouldDieThisTurn {
-                        target: replacement_target,
-                    },
-                ] if *amount == expected_damage
-                    && damage_target.kind == TargetKind::Creature
-                    && replacement_target.kind == TargetKind::Creature
-            ));
+            let [SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(amount),
+                target: damage_target,
+            }, SpellEffectKind::ExileIfWouldDieThisTurn {
+                target: replacement_target,
+            }] = face.spell_effect.as_slice()
+            else {
+                panic!("{id} must damage and establish the matching death replacement")
+            };
+            assert_eq!(*amount, expected_damage);
+            assert_eq!(damage_target, replacement_target);
+            if id == "lava_coil" {
+                assert_eq!(damage_target.kind, TargetKind::Creature);
+            } else {
+                assert!(matches!(
+                    damage_target.any_of.as_deref(),
+                    Some([
+                        TargetFilter {
+                            kind: TargetKind::Creature,
+                            ..
+                        },
+                        TargetFilter {
+                            kind: TargetKind::AnyPermanent,
+                            permanent_types,
+                            ..
+                        },
+                    ]) if *permanent_types == [PermanentTypeFilter::Planeswalker]
+                ));
+            }
             let targeting = face.targeting.as_ref().expect("explicit grouped target");
             assert_eq!(targeting.groups.len(), 1);
             assert_eq!(targeting.groups[0].min, 1);
             assert_eq!(targeting.groups[0].max, 1);
             assert_eq!(targeting.groups[0].effect_indices, [0, 1]);
-            assert_eq!(card.partial.as_deref(), expected_partial);
+            assert_eq!(card.partial, None);
         }
     }
 

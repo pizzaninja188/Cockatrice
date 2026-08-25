@@ -5711,6 +5711,19 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
         return true;
     }
 
+    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::BattleProtector)) {
+        if (!targetPlayer) {
+            return false;
+        }
+        const quint32 playerId = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
+        if (!handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::BattleProtector, playerId)) {
+            handler->emitLocalLog(tr("That player cannot protect this Battle."));
+            return true;
+        }
+        handler->submitPendingChoiceObject(playerId);
+        return true;
+    }
+
     if (handler && handler->hasPendingTriggerTarget()) {
         if (!targetPlayer) {
             return false;

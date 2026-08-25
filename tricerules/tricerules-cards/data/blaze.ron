@@ -4,5 +4,4 @@
   mana_cost: "{X}{R}",
   types: ["Sorcery"],
   spell_effect: [DamageTarget(amount: "X", target: (kind: AnyTarget))],
-  partial: "planeswalkers and battles are not modeled as damage targets",
 )

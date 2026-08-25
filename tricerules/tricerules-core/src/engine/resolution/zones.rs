@@ -2,6 +2,122 @@ use super::super::events::ev_log_private;
 use super::candidate_identities;
 use super::*;
 
+pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let Some(source_id) = cx.top.source_permanent_id else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let current_generation = cx
+        .engine
+        .state
+        .zone_change_generation
+        .get(&source_id)
+        .copied()
+        .unwrap_or(0);
+    let Some(object) = cx.engine.state.objects.get(&source_id) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if object.zone != Zone::Battlefield
+        || current_generation != cx.top.source_zone_change
+        || object.counter_count(CounterKind::Defense) != 0
+        || !cx
+            .engine
+            .characteristics(source_id)
+            .is_some_and(|value| value.has_type("Battle") && value.has_type("Siege"))
+    {
+        return Ok(EffectOutcome::Continue);
+    }
+    let owner = object.owner;
+    let controller = cx.top.controller;
+    let card_id = object.card_id.clone();
+    let label = object_display_name(&cx.engine.state, cx.engine.registry, source_id);
+    move_object_to_zone(
+        &mut cx.engine.state,
+        cx.engine.registry,
+        source_id,
+        Zone::Exile,
+        None,
+    )?;
+    cx.events.push(permanent_moved_event(
+        &cx.engine.state,
+        source_id,
+        owner,
+        rv1::permanent_moved::Destination::Exile,
+    ));
+    cx.events
+        .push(ev_log(format!("{label} is defeated and exiled.")));
+
+    let Some(definition) = cx.engine.registry.get(&card_id) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let face_index = 1usize;
+    let Some(back) = definition.face(face_index) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let exiled = TriggerObjectRef {
+        object_id: source_id,
+        zone_change_generation: cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0),
+        controller_at_event: controller,
+    };
+    let prompt = format!(
+        "Cast {} transformed without paying its mana cost?",
+        back.name
+    );
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: controller,
+                source_object_id: source_id,
+                prompt_text: prompt.clone(),
+                choice_kind: rv1::ChoiceKind::SiegeCast as i32,
+                candidate_object_ids: vec![source_id],
+                candidate_card_ids: vec![card_id],
+                min: 0,
+                max: 1,
+                ordered: false,
+                candidate_names: vec![back.name.clone()],
+                candidate_server_card_ids: Vec::new(),
+                unique_names: false,
+                generic_mana_cost: 0,
+                payment_currently_legal: true,
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                candidate_selectable: vec![true],
+                reveal_audience: 0,
+                revealed_zone_owner_player_id: None,
+                candidate_source_zones: Vec::new(),
+            },
+        )),
+    });
+    cx.events.push(ev_log(prompt.clone()));
+    let mut stack = ParkedStackResolution::new(cx.top.clone());
+    stack.resume_effect_index = Some(cx.effect_index + 1);
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: source_id,
+            candidates: vec![source_id],
+            min: 0,
+            max: 1,
+            ordered: false,
+            prompt,
+            choice_kind: rv1::ChoiceKind::SiegeCast,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::SiegeCast {
+            stack,
+            exiled,
+            face_index,
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
 pub(super) fn exile_until_source_leaves(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -111,6 +227,22 @@ pub(super) fn draw(
         draw_cards_for_player(engine, events, drawer, count, spell_label)?;
     }
 
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn target_player_draws(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::TargetPlayerDraws { count, .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(player) = cx.targets.first().copied().map(|target| target as PlayerId) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if cx.engine.state.player_idx(player).is_some() {
+        draw_cards_for_player(cx.engine, cx.events, player, count, cx.spell_label)?;
+    }
     Ok(EffectOutcome::Continue)
 }
 
@@ -1339,6 +1471,7 @@ pub(super) fn move_graveyard_cards(
                         object_id: tid,
                         deciding_player,
                         destination_controller: controller,
+                        battle_protector: None,
                         face_index: 0,
                         unlock_room_door: None,
                         chosen_x: 0,
@@ -1468,6 +1601,7 @@ pub(super) fn return_triggered_card_from_graveyard(
             object_id: source_id,
             deciding_player: destination_controller,
             destination_controller,
+            battle_protector: None,
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
@@ -1707,6 +1841,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 object_id,
                 deciding_player: controller,
                 destination_controller: controller,
+                battle_protector: None,
                 face_index: 0,
                 unlock_room_door: None,
                 chosen_x: 0,

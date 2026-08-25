@@ -1,0 +1,25 @@
+(
+  id: "jace_beleren",
+  name: "Jace Beleren",
+  mana_cost: "{1}{U}{U}",
+  supertypes: ["Legendary"],
+  types: ["Planeswalker", "Jace"],
+  loyalty: 3,
+  activated_abilities: [
+    (
+      costs: [Loyalty(2)],
+      effect: [Draw(who: EachPlayer, count: 1)],
+      text: "+2: Each player draws a card.",
+    ),
+    (
+      costs: [Loyalty(-1)],
+      effect: [TargetPlayerDraws(count: 1, target: (kind: AnyPlayer))],
+      text: "-1: Target player draws a card.",
+    ),
+    (
+      costs: [Loyalty(-10)],
+      effect: [MillTargetPlayer(count: 20, target: (kind: AnyPlayer))],
+      text: "-10: Target player mills twenty cards.",
+    ),
+  ],
+)

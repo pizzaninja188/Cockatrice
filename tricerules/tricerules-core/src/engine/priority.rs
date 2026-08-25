@@ -282,6 +282,7 @@ impl GameEngine {
                     }
                     self.state.combat = Some(CombatState {
                         attacking: vec![],
+                        attack_assignments: HashMap::new(),
                         blockers: HashMap::new(),
                         damage_assignments: HashMap::new(),
                         trample_player_damage: HashMap::new(),

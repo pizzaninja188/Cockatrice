@@ -513,6 +513,30 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
         return;
     }
 
+    if (pendingChoice->kind == ChoiceKind::SiegeCast) {
+        const RuledPendingChoice restore = *pendingChoice;
+        const quint32 sourceOid = pendingChoice->candidateOids.constFirst();
+        clearPendingChoiceOfKind(ChoiceKind::SiegeCast);
+        ruled::v1::RuledCommand command;
+        auto *submission = command.mutable_submit_resolution_choice();
+        if (optionIndex == 0) {
+            submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+        } else {
+            submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_TRANSFORMED);
+            auto *cast = submission->mutable_cast_spell();
+            cast->set_cast_method(ruled::v1::CAST_METHOD_SIEGE_DEFEAT);
+            cast->set_face_index(1);
+            cast->mutable_source()->set_exile_object_id(sourceOid);
+        }
+        host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
+            if (!accepted && !pendingChoice.has_value()) {
+                setPendingChoice(restore);
+                emit combatStateChanged();
+            }
+        });
+        return;
+    }
+
     const RuledPendingChoice restore = *pendingChoice;
     clearPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
     ruled::v1::RuledCommand command;
@@ -905,6 +929,11 @@ bool RuledClientState::combatDeclarationSatisfied() const
                 return false;
             }
         }
+        for (const quint32 oid : pendingAttackerOids) {
+            if (!pendingAttackAssignments.contains(oid)) {
+                return false;
+            }
+        }
         return true;
     }
     // CR 509.1c: every must-block creature must be staged as a blocker of some attacker. The engine
@@ -931,8 +960,19 @@ void RuledClientState::togglePendingAttacker(quint32 engineOid)
     }
     if (pendingAttackerOids.contains(engineOid)) {
         pendingAttackerOids.remove(engineOid);
+        pendingAttackAssignments.remove(engineOid);
+        if (attackerAwaitingDefenderOid == engineOid) {
+            attackerAwaitingDefenderOid = 0;
+        }
     } else if (selectableAttackerOids.contains(engineOid)) {
         pendingAttackerOids.insert(engineOid);
+        const auto candidates = legalAttackAssignmentsByAttacker.value(engineOid);
+        if (candidates.size() == 1) {
+            pendingAttackAssignments.insert(engineOid, candidates.constFirst());
+        } else if (!candidates.isEmpty()) {
+            attackerAwaitingDefenderOid = engineOid;
+            emitLocalLog(tr("Choose what this creature attacks."));
+        }
     } else {
         return;
     }
@@ -946,8 +986,68 @@ void RuledClientState::clearPendingAttackers()
         return;
     }
     pendingAttackerOids.clear();
+    pendingAttackAssignments.clear();
+    attackerAwaitingDefenderOid = 0;
     syncAttackersPreviewToServer();
     emit combatStateChanged();
+}
+
+bool RuledClientState::isLegalAttackPlayerDefender(int playerId) const
+{
+    if (attackerAwaitingDefenderOid == 0) {
+        return false;
+    }
+    const auto candidates = legalAttackAssignmentsByAttacker.value(attackerAwaitingDefenderOid);
+    return std::any_of(candidates.cbegin(), candidates.cend(), [playerId](const auto &assignment) {
+        return assignment.has_defender() && assignment.defender().kind() == ruled::v1::TARGET_REF_KIND_PLAYER &&
+               static_cast<int>(assignment.defender().object_id()) == playerId;
+    });
+}
+
+bool RuledClientState::isLegalAttackPermanentDefender(quint32 engineOid) const
+{
+    if (attackerAwaitingDefenderOid == 0) {
+        return false;
+    }
+    const auto candidates = legalAttackAssignmentsByAttacker.value(attackerAwaitingDefenderOid);
+    return std::any_of(candidates.cbegin(), candidates.cend(), [engineOid](const auto &assignment) {
+        return assignment.has_defender() && assignment.defender().kind() == ruled::v1::TARGET_REF_KIND_PERMANENT &&
+               assignment.defender().object_id() == engineOid;
+    });
+}
+
+bool RuledClientState::chooseAttackPlayerDefender(int playerId)
+{
+    if (!isLegalAttackPlayerDefender(playerId)) {
+        return false;
+    }
+    const auto candidates = legalAttackAssignmentsByAttacker.value(attackerAwaitingDefenderOid);
+    const auto found = std::find_if(candidates.cbegin(), candidates.cend(), [playerId](const auto &assignment) {
+        return assignment.has_defender() && assignment.defender().kind() == ruled::v1::TARGET_REF_KIND_PLAYER &&
+               static_cast<int>(assignment.defender().object_id()) == playerId;
+    });
+    pendingAttackAssignments.insert(attackerAwaitingDefenderOid, *found);
+    attackerAwaitingDefenderOid = 0;
+    syncAttackersPreviewToServer();
+    emit combatStateChanged();
+    return true;
+}
+
+bool RuledClientState::chooseAttackPermanentDefender(quint32 engineOid)
+{
+    if (!isLegalAttackPermanentDefender(engineOid)) {
+        return false;
+    }
+    const auto candidates = legalAttackAssignmentsByAttacker.value(attackerAwaitingDefenderOid);
+    const auto found = std::find_if(candidates.cbegin(), candidates.cend(), [engineOid](const auto &assignment) {
+        return assignment.has_defender() && assignment.defender().kind() == ruled::v1::TARGET_REF_KIND_PERMANENT &&
+               assignment.defender().object_id() == engineOid;
+    });
+    pendingAttackAssignments.insert(attackerAwaitingDefenderOid, *found);
+    attackerAwaitingDefenderOid = 0;
+    syncAttackersPreviewToServer();
+    emit combatStateChanged();
+    return true;
 }
 
 void RuledClientState::toggleStagedBlocker(quint32 blockerOid)
@@ -1025,8 +1125,8 @@ void RuledClientState::syncAttackersPreviewToServer()
 
     ruled::v1::RuledCommand ruledCommand;
     auto *preview = ruledCommand.mutable_preview_declare_attackers();
-    for (const quint32 oid : pendingAttackerOids) {
-        preview->add_creature_ids(oid);
+    for (const auto &assignment : std::as_const(pendingAttackAssignments)) {
+        *preview->add_assignments() = assignment;
     }
     host->sendRuledCommand(ruledCommand);
 }
@@ -1061,12 +1161,14 @@ void RuledClientState::confirmAttackers()
 {
     ruled::v1::RuledCommand ruledCommand;
     auto *declare = ruledCommand.mutable_declare_attackers();
-    for (const quint32 oid : pendingAttackerOids) {
-        declare->add_creature_ids(oid);
+    for (const auto &assignment : std::as_const(pendingAttackAssignments)) {
+        *declare->add_assignments() = assignment;
     }
     host->sendRuledCommand(ruledCommand);
     attackersSubmittedThisStep = true;
     pendingAttackerOids.clear();
+    pendingAttackAssignments.clear();
+    attackerAwaitingDefenderOid = 0;
     emit combatStateChanged();
 }
 
@@ -1077,6 +1179,8 @@ void RuledClientState::skipAttackers()
     host->sendRuledCommand(ruledCommand);
     attackersSubmittedThisStep = true;
     pendingAttackerOids.clear();
+    pendingAttackAssignments.clear();
+    attackerAwaitingDefenderOid = 0;
     emit combatStateChanged();
 }
 
@@ -1498,6 +1602,36 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     restrictedManaByPlayer.clear();
     eligibleRestrictedManaByAbility.clear();
     battlefieldGenerationByOid.clear();
+    engineOidMarkedDamage.clear();
+    engineOidBattlefieldPower.clear();
+    engineOidBattlefieldToughness.clear();
+    engineOidLoyalty.clear();
+    engineOidDefense.clear();
+    engineOidBattleProtector.clear();
+
+    // Combat UI is entirely snapshot/preview derived.  None of it may survive a reconnect or a
+    // game transition: stale defender edges are generation-bound capabilities, not hints that can
+    // be revalidated client-side.
+    currentCombatPhase = RuledCombatPhase::None;
+    currentActivePlayerId = -1;
+    pendingAttackerOids.clear();
+    pendingAttackAssignments.clear();
+    currentAttackerOids.clear();
+    currentAttackAssignments.clear();
+    remoteAttackerPreviewOids.clear();
+    remoteAttackPreviewAssignments.clear();
+    legalAttackAssignmentsByAttacker.clear();
+    attackerAwaitingDefenderOid = 0;
+    pendingBlocks.clear();
+    committedBlocks.clear();
+    remoteBlockPreviewPairs.clear();
+    requiredAttackerOids.clear();
+    requiredBlockerOids.clear();
+    selectableAttackerOids.clear();
+    legalBlockAttackerOidsByBlocker.clear();
+    stagedBlockerOids.clear();
+    attackersSubmittedThisStep = false;
+    blockersSubmittedThisStep = false;
 
     // Legal actions + opening sequence. Skipped on the game-start transition: the incoming
     // session's first batch has already populated these (see SessionResetScope), and clearing

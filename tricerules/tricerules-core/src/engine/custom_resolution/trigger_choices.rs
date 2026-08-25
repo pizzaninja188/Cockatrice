@@ -42,7 +42,11 @@ impl GameEngine {
         let card_name = self
             .registry
             .get(&pending.card_id)
-            .map(|definition| definition.name.clone())
+            .and_then(|definition| {
+                definition
+                    .face_display_name(pending.source_face_index)
+                    .map(str::to_owned)
+            })
             .unwrap_or_else(|| pending.card_id.clone());
         let target_source =
             TargetSourceIdentity::captured(pending.source_permanent_id, pending.source_zone_change);

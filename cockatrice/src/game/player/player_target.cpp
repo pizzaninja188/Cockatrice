@@ -243,6 +243,11 @@ void PlayerTarget::mousePressEvent(QGraphicsSceneMouseEvent *event)
                     return;
                 }
                 if (event->button() == Qt::LeftButton) {
+                    if (RuledActions::isCombatDefenderPlayerCandidate(owner)) {
+                        setCursor(Qt::CrossCursor);
+                        event->accept();
+                        return;
+                    }
                     const auto eligibility = actions->ruledPlayerTargetEligibility(owner);
                     if (eligibility != RuledTargetClickEligibility::NotTargeting) {
                         setCursor(eligibility == RuledTargetClickEligibility::Legal ? Qt::CrossCursor
@@ -269,6 +274,10 @@ void PlayerTarget::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             Player *localPlayer = playerManager->getPlayers().value(playerManager->getLocalPlayerId(), nullptr);
             PlayerActions *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
             if (event->button() == Qt::LeftButton && actions) {
+                if (RuledActions::tryHandleCombatDefenderPlayerClick(owner)) {
+                    event->accept();
+                    return;
+                }
                 const auto eligibility = actions->ruledPlayerTargetEligibility(owner);
                 if (eligibility == RuledTargetClickEligibility::Illegal) {
                     setCursor(Qt::ArrowCursor);

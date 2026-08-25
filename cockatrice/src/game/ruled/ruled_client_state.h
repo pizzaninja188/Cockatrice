@@ -379,12 +379,16 @@ public:
             AuraPermanent,
             /// CR 303.4f: the returning Aura's owner chooses a player it can enchant.
             AuraPlayer,
+            /// CR 310.4a: choose which opponent protects an entering Battle.
+            BattleProtector,
             /// Tier-3 mid-resolution pick over cards in a zone (Brainstorm, Gifts Ungiven, …).
             ResolutionPick,
             /// CR 608.2g: a resolving effect offers a generic-mana payment.
             ResolutionPayment,
             /// An engine-authored resolution branch rendered as labeled prompt buttons.
             ResolutionBranch,
+            /// CR 310.11: cast a defeated Siege transformed without paying its mana cost or decline.
+            SiegeCast,
             /// CR 603.3b: the order this player's simultaneous triggers go on the stack.
             /// Answered with SubmitTriggerOrder; rendered in its own window, not on the board.
             TriggerOrder,
@@ -563,6 +567,9 @@ public:
     // From ZoneViewSync BattlefieldObject power / toughness (ruled creatures).
     QHash<quint32, int> engineOidBattlefieldPower;
     QHash<quint32, int> engineOidBattlefieldToughness;
+    QHash<quint32, int> engineOidLoyalty;
+    QHash<quint32, int> engineOidDefense;
+    QHash<quint32, int> engineOidBattleProtector;
 
     // -----------------------------------------------------------------------------------
     // Combat.
@@ -573,10 +580,18 @@ public:
     int currentActivePlayerId = -1;
     // Active player's local pending attacker selection (engine ObjectIds).
     QSet<quint32> pendingAttackerOids;
+    // One engine-published defender edge for each fully staged attacker. An attacker can remain in
+    // pendingAttackerOids without an entry while the UI waits for a multi-candidate destination.
+    QHash<quint32, ruled::v1::AttackAssignment> pendingAttackAssignments;
     // Engine-confirmed attackers from AttackersDeclared (defender uses these to choose blocks).
     QSet<quint32> currentAttackerOids;
+    QHash<quint32, ruled::v1::AttackAssignment> currentAttackAssignments;
     // Opponent's in-progress attacker picks from AttackersPreview (Servatrice).
     QSet<quint32> remoteAttackerPreviewOids;
+    QHash<quint32, ruled::v1::AttackAssignment> remoteAttackPreviewAssignments;
+    // Exact defender candidates keyed by attacker OID, rebuilt from each LegalActions snapshot.
+    QHash<quint32, QVector<ruled::v1::AttackAssignment>> legalAttackAssignmentsByAttacker;
+    quint32 attackerAwaitingDefenderOid = 0;
     // Defender's local pending block pairs: blockerOid -> attackerOid.
     QHash<quint32, quint32> pendingBlocks;
     // Defender's locally confirmed block pairs to keep combat arrows visible
@@ -1187,6 +1202,24 @@ public:
     {
         return remoteAttackerPreviewOids;
     }
+    [[nodiscard]] const QHash<quint32, ruled::v1::AttackAssignment> &getPendingAttackAssignments() const
+    {
+        return pendingAttackAssignments;
+    }
+    [[nodiscard]] const QHash<quint32, ruled::v1::AttackAssignment> &getCurrentAttackAssignments() const
+    {
+        return currentAttackAssignments;
+    }
+    [[nodiscard]] const QHash<quint32, ruled::v1::AttackAssignment> &getRemoteAttackPreviewAssignments() const
+    {
+        return remoteAttackPreviewAssignments;
+    }
+    [[nodiscard]] bool isChoosingAttackDefender() const
+    {
+        return attackerAwaitingDefenderOid != 0;
+    }
+    [[nodiscard]] bool isLegalAttackPlayerDefender(int playerId) const;
+    [[nodiscard]] bool isLegalAttackPermanentDefender(quint32 engineOid) const;
     [[nodiscard]] bool hasStagedBlocker() const
     {
         return !stagedBlockerOids.isEmpty();
@@ -1238,6 +1271,8 @@ public:
         return blockersSubmittedThisStep;
     }
     void togglePendingAttacker(quint32 engineOid);
+    bool chooseAttackPlayerDefender(int playerId);
+    bool chooseAttackPermanentDefender(quint32 engineOid);
     void clearPendingAttackers();
     void toggleStagedBlocker(quint32 blockerOid);
     void clearStagedBlockers();
@@ -1263,6 +1298,18 @@ public:
     /// ZoneView is stripped on client broadcasts; falls back to the host's CardItem P/T.
     [[nodiscard]] int combatPowerForCreatureOid(quint32 engineOid) const;
     [[nodiscard]] int combatToughnessForCreatureOid(quint32 engineOid) const;
+    [[nodiscard]] int loyaltyForPermanentOid(quint32 engineOid) const
+    {
+        return engineOidLoyalty.value(engineOid, -1);
+    }
+    [[nodiscard]] int defenseForPermanentOid(quint32 engineOid) const
+    {
+        return engineOidDefense.value(engineOid, -1);
+    }
+    [[nodiscard]] int battleProtectorForPermanentOid(quint32 engineOid) const
+    {
+        return engineOidBattleProtector.value(engineOid, -1);
+    }
     /// Greedy lethal-first split in `committedBlockerGroups` order (convenience default; any
     /// sum==power split is allowed).
     void seedDefaultCombatDamageForCurrentAttacker();
@@ -1339,7 +1386,9 @@ public:
     void declinePendingClickChoice();
     [[nodiscard]] bool hasPendingChoiceOptions() const
     {
-        return hasPendingChoiceOfKind(ChoiceKind::TriggerMode) || hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
+        return hasPendingChoiceOfKind(ChoiceKind::TriggerMode) ||
+               hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch) ||
+               hasPendingChoiceOfKind(ChoiceKind::SiegeCast);
     }
     [[nodiscard]] QVector<RuledPermanentAction> permanentActionsForOid(quint32 oid) const
     {

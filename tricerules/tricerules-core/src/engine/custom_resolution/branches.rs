@@ -157,6 +157,12 @@ impl GameEngine {
                     "mana payment choice cannot select a branch",
                 ));
             }
+            rv1::ResolutionChoiceDecision::CastTransformed => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "mana payment choice cannot cast a transformed card",
+                ));
+            }
         }
         let stack = pending
             .continuation

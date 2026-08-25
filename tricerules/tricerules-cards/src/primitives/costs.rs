@@ -10,6 +10,9 @@ use serde::{Deserialize, Serialize};
 /// `{1}, {T}` filter land, and a sacrifice-for-mana rock all use these same cost kinds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AbilityCost {
+    /// CR 606.4: add (positive), remove (negative), or leave unchanged (zero) loyalty counters
+    /// as the cost of activating a planeswalker's loyalty ability.
+    Loyalty(i32),
     /// {T}: tap the source permanent.
     Tap,
     /// Pay mana (e.g. `"{4}"`, `"{2}{R}"`). Same brace syntax as `CardDefinition.mana_cost`.

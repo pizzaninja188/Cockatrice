@@ -118,6 +118,9 @@ impl ActivatedAbilityDef {
     /// mana alongside another effect would not use the fast no-stack path, and deliberately
     /// answers `false` here rather than being silently mis-resolved.
     pub fn mana_options(&self) -> Option<&Vec<ManaAmount>> {
+        if self.is_loyalty_ability() {
+            return None;
+        }
         match self.effect.as_slice() {
             [SpellEffectKind::ProduceMana { options, .. }] => Some(options),
             _ => None,
@@ -145,10 +148,18 @@ impl ActivatedAbilityDef {
             .any(|e| matches!(e, SpellEffectKind::Equip { .. }))
     }
 
+    pub fn is_loyalty_ability(&self) -> bool {
+        self.costs
+            .iter()
+            .any(|cost| matches!(cost, AbilityCost::Loyalty(_)))
+    }
+
     /// Equip carries the same timing instruction intrinsically (CR 702.6a), so callers use this
     /// one query instead of maintaining separate explicit/keyword timing paths.
     pub fn requires_sorcery_speed(&self) -> bool {
-        self.timing == ActivationTiming::SorcerySpeed || self.is_equip()
+        self.timing == ActivationTiming::SorcerySpeed
+            || self.is_equip()
+            || self.is_loyalty_ability()
     }
 
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
@@ -157,6 +168,18 @@ impl ActivatedAbilityDef {
         }
         if self.effect.is_empty() {
             return Err("activated ability must contain at least one effect".into());
+        }
+        if self
+            .costs
+            .iter()
+            .filter(|cost| matches!(cost, AbilityCost::Loyalty(_)))
+            .count()
+            > 1
+        {
+            return Err("activated ability may have only one loyalty cost".into());
+        }
+        if self.is_loyalty_ability() && self.source_zone != AbilitySourceZone::Battlefield {
+            return Err("loyalty abilities require a battlefield source".into());
         }
         if self
             .effect
@@ -611,6 +634,8 @@ pub enum PermanentTypeFilter {
     Artifact,
     Enchantment,
     Land,
+    Planeswalker,
+    Battle,
 }
 
 impl PermanentTypeFilter {
@@ -620,6 +645,8 @@ impl PermanentTypeFilter {
             Self::Artifact => "Artifact",
             Self::Enchantment => "Enchantment",
             Self::Land => "Land",
+            Self::Planeswalker => "Planeswalker",
+            Self::Battle => "Battle",
         }
     }
 }

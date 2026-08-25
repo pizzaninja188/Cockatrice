@@ -65,6 +65,9 @@ impl GameEngine {
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         let mut changed = self.reindex_battlefield_control(out);
+        if self.state.pending_resolution.is_some() {
+            return Ok(changed);
+        }
         let mut dies: Vec<(TriggerSourceSnapshot, bool)> = Vec::new();
         // CR 122.3: counter annihilation (+1/+1 and -1/-1 pairs cancel).
         for o in self.state.objects.values_mut() {
@@ -85,16 +88,13 @@ impl GameEngine {
             .state
             .objects
             .iter()
-            .filter(|(id, object)| {
-                object.zone == Zone::Battlefield
-                    && self
-                        .characteristics(**id)
-                        .is_some_and(|value| value.toughness.is_some())
-            })
+            .filter(|(_, object)| object.zone == Zone::Battlefield)
             .map(|(id, _)| *id)
             .collect();
 
-        // CR 704.5f: toughness-0 deaths — not regeneratable (this is a different SBA from destroy).
+        // CR 704.5f/704.5i: toughness-0 creatures and zero-loyalty planeswalkers are put into
+        // their owners' graveyards. Neither action is destruction, so regeneration and
+        // indestructible do not apply.
         let mut to_destroy_t0 = Vec::new();
         // CR 704.5g/704.5h: lethal-damage deaths — regeneration shields apply here.
         let mut to_destroy_lethal = Vec::new();
@@ -102,13 +102,31 @@ impl GameEngine {
             let Some(characteristics) = self.characteristics(id) else {
                 continue;
             };
+            let Some(o) = self.state.objects.get(&id) else {
+                continue;
+            };
+            if characteristics.has_type("Planeswalker")
+                && o.counter_count(CounterKind::Loyalty) == 0
+            {
+                to_destroy_t0.push(id);
+                continue;
+            }
+            if characteristics.has_type("Battle") && o.counter_count(CounterKind::Defense) == 0 {
+                let generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&id)
+                    .copied()
+                    .unwrap_or(0);
+                if !self.siege_defeat_trigger_active(id, generation) {
+                    to_destroy_t0.push(id);
+                }
+                continue;
+            }
             let Some(eff_t) = characteristics.toughness else {
                 continue;
             };
             let indestructible = characteristics.has_keyword(Keyword::Indestructible);
-            let Some(o) = self.state.objects.get(&id) else {
-                continue;
-            };
             // CR 704.5f: toughness 0 — still dies even with indestructible.
             if eff_t == 0 {
                 to_destroy_t0.push(id);
@@ -665,6 +683,7 @@ mod sba_tests {
         let target = add_creature(&mut e, 0, 2, 0);
         e.state.combat = Some(CombatState {
             attacking: vec![target],
+            attack_assignments: HashMap::new(),
             blockers: HashMap::new(),
             damage_assignments: HashMap::new(),
             trample_player_damage: HashMap::new(),

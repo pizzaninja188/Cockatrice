@@ -9,6 +9,7 @@ fn select_branch(index: u32) -> RuledCommand {
             chosen_object_ids: Vec::new(),
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
+            cast_spell: None,
         })),
     }
 }

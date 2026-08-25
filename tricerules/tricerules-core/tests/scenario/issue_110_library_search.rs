@@ -11,6 +11,7 @@ fn select_branch(index: u32) -> RuledCommand {
             chosen_object_ids: Vec::new(),
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
+            cast_spell: None,
         })),
     }
 }
@@ -21,6 +22,7 @@ fn decline_resolution_choice() -> RuledCommand {
             chosen_object_ids: Vec::new(),
             decision: ResolutionChoiceDecision::Decline as i32,
             selected_branch_index: 0,
+            cast_spell: None,
         })),
     }
 }

@@ -1469,7 +1469,7 @@ fn an_outstanding_trigger_order_blocks_every_other_command() {
             0,
             &RuledCommand {
                 cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
-                    creature_ids: vec![],
+                    assignments: vec![],
                 })),
             },
         )

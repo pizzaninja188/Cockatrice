@@ -39,6 +39,168 @@ fn command_satisfies_cast_cost_condition(
 }
 
 impl GameEngine {
+    pub(super) fn cast_siege_defeat_offer(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::CastSpell,
+        exiled: TriggerObjectRef,
+        expected_face_index: usize,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        use rv1::cast_source::Location;
+        if command.cast_method != rv1::CastMethod::SiegeDefeat as i32
+            || command.face_index as usize != expected_face_index
+            || command.x_value != 0
+            || !command.flex_payments.is_empty()
+            || !command.cost_selections.is_empty()
+            || !command.restricted_mana.is_empty()
+            || !command.cast_cost_group_selections.is_empty()
+        {
+            return Err(EngineError::Illegal(
+                "invalid Siege defeat cast announcement",
+            ));
+        }
+        let source_oid = command
+            .source
+            .as_ref()
+            .and_then(|source| source.location.as_ref())
+            .and_then(|location| match location {
+                Location::ExileObjectId(oid) => Some(*oid),
+                _ => None,
+            })
+            .ok_or(EngineError::Illegal(
+                "Siege defeat cast requires the offered exile object",
+            ))?;
+        let generation = self
+            .state
+            .zone_change_generation
+            .get(&source_oid)
+            .copied()
+            .unwrap_or(0);
+        let object = self
+            .state
+            .objects
+            .get(&source_oid)
+            .ok_or(EngineError::Illegal("offered Siege no longer exists"))?;
+        if source_oid != exiled.object_id
+            || generation != exiled.zone_change_generation
+            || object.zone != Zone::Exile
+            || exiled.controller_at_event != player
+        {
+            return Err(EngineError::Illegal("Siege defeat cast offer became stale"));
+        }
+        let card_id = object.card_id.clone();
+        let definition = self
+            .registry
+            .get(&card_id)
+            .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
+        if definition.layout != Layout::Transform {
+            return Err(EngineError::Illegal(
+                "offered Siege has no transformed face",
+            ));
+        }
+        let face = definition
+            .face(expected_face_index)
+            .ok_or(EngineError::Illegal("offered Siege face is missing"))?
+            .clone();
+        if face.modal_spell.is_some() || !command.selected_modes.is_empty() {
+            return Err(EngineError::Illegal(
+                "modal Siege back faces are not supported by this offer",
+            ));
+        }
+        let source = TargetSourceIdentity::spell_face(self, source_oid, expected_face_index);
+        validate_spell_targets(
+            self,
+            player,
+            source,
+            &face.spell_effect,
+            face.targeting.as_ref(),
+            &command.targets,
+        )?;
+        let public_targets = command.targets.clone();
+        let trefs: Vec<_> = public_targets
+            .iter()
+            .map(|target| target.object_id)
+            .collect();
+        let stack_generation = generation.saturating_add(1);
+        let mut triggers = self.collect_event_triggers(&[GameEvent::TargetsChosen {
+            controller: player,
+            source: TargetingSourceKind::SpellCast,
+            stack_object: StackObjectRef {
+                object_id: source_oid,
+                zone_change_generation: Some(stack_generation),
+            },
+            targets: trefs.clone(),
+        }]);
+        let stack_targets = public_targets
+            .iter()
+            .map(|target| capture_stack_target(self, target))
+            .collect();
+        self.state.stack.push(StackItem {
+            id: source_oid,
+            controller: player,
+            card_id: card_id.clone(),
+            targets: stack_targets,
+            ability_text: None,
+            source_permanent_id: None,
+            source_zone_change: 0,
+            source_face_change: 0,
+            ability_index: None,
+            activated_ability: None,
+            triggered_ability: None,
+            is_triggered: false,
+            is_copy: false,
+            face_index: expected_face_index,
+            cast_method: SpellCastMethod::SiegeDefeat,
+            chosen_x: 0,
+            chosen_modes: vec![],
+            cast_cost_receipts: vec![],
+            payment_result: CardResultCohort::default(),
+            resolution_branch_choices: Default::default(),
+            trigger_context: TriggerContext::default(),
+        });
+        super::resolution::move_object_to_zone(
+            &mut self.state,
+            self.registry,
+            source_oid,
+            Zone::Stack,
+            None,
+        )?;
+        self.state.passes_since_stack_change = 0;
+        if let Some(index) = self.state.player_idx(player) {
+            self.state.priority_idx = index;
+        }
+        let target_line = format_spell_targets_log(&self.state, self.registry, &trefs);
+        events.push(ev_log(format!(
+            "P{player} casts {} transformed without paying its mana cost{target_line}",
+            face.name
+        )));
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
+                object_id: source_oid,
+                description: face.name.clone(),
+                targets: public_targets,
+                ability_annotation: "Siege defeat".into(),
+                card_id: card_id.clone(),
+                is_copy: false,
+                is_triggered: false,
+                copy_source_object_id: 0,
+                chosen_mode_indices: vec![],
+                chosen_mode_labels: vec![],
+                chosen_cast_cost_labels: vec!["Siege defeat".into()],
+            })),
+        });
+        let ordinal = self.record_spell_cast(player);
+        triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
+            caster: player,
+            card_id,
+            ordinal,
+            face_index: expected_face_index,
+        }]));
+        self.stage_triggers(triggers);
+        Ok(())
+    }
+
     pub(super) fn cast_spell(
         &mut self,
         player: PlayerId,
@@ -56,6 +218,11 @@ impl GameEngine {
             Ok(rv1::CastMethod::Normal) => SpellCastMethod::Normal,
             Ok(rv1::CastMethod::Flashback) => SpellCastMethod::Flashback,
             Ok(rv1::CastMethod::Harmonize) => SpellCastMethod::Harmonize,
+            Ok(rv1::CastMethod::SiegeDefeat) => {
+                return Err(EngineError::Illegal(
+                    "Siege defeat casts require an active engine offer",
+                ));
+            }
             Ok(rv1::CastMethod::Unspecified) | Err(_) => {
                 return Err(EngineError::Illegal("missing or invalid cast method"));
             }
@@ -178,6 +345,11 @@ impl GameEngine {
                 .harmonize_cost
                 .clone()
                 .ok_or(EngineError::Illegal("card has no harmonize cost"))?,
+            SpellCastMethod::SiegeDefeat => {
+                return Err(EngineError::Illegal(
+                    "Siege defeat casts require the offered resolution choice",
+                ));
+            }
         };
         let face_name = face.name.to_string();
         let face_effects: Vec<SpellEffectKind> = face.spell_effect.to_vec();
@@ -823,9 +995,17 @@ impl GameEngine {
             .unwrap_or(0);
         let targeting_cost =
             self.targeting_cost_increase(player, TargetingCostAction::ActivatedAbilities, targets);
-        let activation_use_key = ability
-            .activation_limit
-            .map(|_| self.activation_use_key(permanent_id, ability_index));
+        let activation_use_key =
+            (ability.activation_limit.is_some() || ability.is_loyalty_ability()).then(|| {
+                self.activation_use_key(
+                    permanent_id,
+                    if ability.is_loyalty_ability() {
+                        usize::MAX
+                    } else {
+                        ability_index
+                    },
+                )
+            });
         let cost_plan = self.plan_ability_costs(
             player,
             idx,
@@ -1006,6 +1186,20 @@ impl GameEngine {
         {
             return false;
         }
+        if let Some(delta) = ability.costs.iter().find_map(|cost| match cost {
+            AbilityCost::Loyalty(delta) => Some(*delta),
+            _ => None,
+        }) {
+            if !self
+                .characteristics(permanent_id)
+                .is_some_and(|value| value.has_type("Planeswalker"))
+            {
+                return false;
+            }
+            if delta < 0 && object.counter_count(CounterKind::Loyalty) < delta.unsigned_abs() {
+                return false;
+            }
+        }
         true
     }
 
@@ -1034,16 +1228,28 @@ impl GameEngine {
         ability_index: usize,
         ability: &tricerules_cards::ActivatedAbilityDef,
     ) -> bool {
-        let Some(limit) = ability.activation_limit else {
+        let is_loyalty = ability.is_loyalty_ability();
+        let Some(limit) = ability
+            .activation_limit
+            .map(|limit| limit.max_activations())
+            .or(is_loyalty.then_some(1))
+        else {
             return true;
         };
-        let key = self.activation_use_key(permanent_id, ability_index);
+        let key = self.activation_use_key(
+            permanent_id,
+            if is_loyalty {
+                usize::MAX
+            } else {
+                ability_index
+            },
+        );
         self.state
             .activation_uses_this_turn
             .get(&key)
             .copied()
             .unwrap_or(0)
-            < limit.max_activations()
+            < limit
     }
 
     fn record_limited_activation(&mut self, key: Option<ActivationUseKey>) {
@@ -1148,9 +1354,17 @@ impl GameEngine {
             .get(mana_option_index as usize)
             .copied()
             .ok_or(EngineError::Illegal("invalid mana option"))?;
-        let activation_use_key = ability
-            .activation_limit
-            .map(|_| self.activation_use_key(permanent_id, ability_index));
+        let activation_use_key =
+            (ability.activation_limit.is_some() || ability.is_loyalty_ability()).then(|| {
+                self.activation_use_key(
+                    permanent_id,
+                    if ability.is_loyalty_ability() {
+                        usize::MAX
+                    } else {
+                        ability_index
+                    },
+                )
+            });
 
         let cost_plan = self.plan_ability_costs(
             player,
@@ -1450,6 +1664,7 @@ impl GameEngine {
                 object_id: oid,
                 deciding_player: player,
                 destination_controller: player,
+                battle_protector: None,
                 face_index,
                 unlock_room_door: None,
                 chosen_x: 0,

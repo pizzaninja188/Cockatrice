@@ -50,6 +50,7 @@ impl GameEngine {
             object_id: chosen,
             deciding_player: controller,
             destination_controller: controller,
+            battle_protector: None,
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,

@@ -27,6 +27,83 @@ pub(super) struct CollectedTrigger {
 }
 
 impl GameEngine {
+    pub(super) fn siege_defeat_trigger_active(
+        &self,
+        source_id: ObjectId,
+        source_generation: u64,
+    ) -> bool {
+        let is_siege = |ability: &TriggeredAbilityDef| {
+            ability
+                .effect
+                .iter()
+                .any(|effect| matches!(effect, SpellEffectKind::SiegeDefeat))
+        };
+        self.state.stack.iter().any(|item| {
+            item.source_permanent_id == Some(source_id)
+                && item.source_zone_change == source_generation
+                && item.triggered_ability.as_ref().is_some_and(&is_siege)
+        }) || self.state.pending_triggers.iter().any(|trigger| {
+            trigger.source_permanent_id == source_id
+                && trigger.source_zone_change == source_generation
+                && is_siege(&trigger.ability)
+        }) || self.state.staged_trigger_groups.iter().any(|group| {
+            group.triggers.iter().any(|trigger| {
+                trigger.source_permanent_id == source_id
+                    && trigger.source_zone_change == source_generation
+                    && is_siege(&trigger.ability)
+            })
+        })
+    }
+
+    pub(super) fn stage_siege_defeat_trigger(&mut self, source_id: ObjectId) {
+        let Some(object) = self.state.objects.get(&source_id) else {
+            return;
+        };
+        if object.zone != Zone::Battlefield {
+            return;
+        }
+        let source_generation = self
+            .state
+            .zone_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0);
+        if self.siege_defeat_trigger_active(source_id, source_generation) {
+            return;
+        }
+        let ability = TriggeredAbilityDef {
+            trigger: TriggerCondition::WhenSelfDies,
+            effect: vec![SpellEffectKind::SiegeDefeat],
+            modal: None,
+            targeting: None,
+            text: "When the last defense counter is removed from this Siege, exile it, then you may cast it transformed without paying its mana cost.".into(),
+            may: false,
+            intervening_if: None,
+            triggers_only_once: false,
+        };
+        let face_index = object.face_up_index;
+        let card_id = object.card_id.clone();
+        let controller = object.controller;
+        let source_face_change = self
+            .state
+            .face_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0);
+        self.stage_triggers(vec![CollectedTrigger {
+            source_id,
+            card_id,
+            face_index,
+            source_zone_change: source_generation,
+            source_face_change,
+            controller,
+            ability_index: usize::MAX,
+            ability: ability.clone(),
+            ability_text: ability.text.clone(),
+            trigger_context: TriggerContext::default(),
+        }]);
+    }
+
     /// Collect one simultaneous event set and enqueue all matching triggered abilities as one
     /// CR 603.3b group.
     pub(super) fn fire_triggers(&mut self, events: &[GameEvent]) {
@@ -349,6 +426,12 @@ impl GameEngine {
                             Some(tricerules_cards::PermanentTypeFilter::Land) => {
                                 entering_characteristics.has_type("Land")
                             }
+                            Some(tricerules_cards::PermanentTypeFilter::Planeswalker) => {
+                                entering_characteristics.has_type("Planeswalker")
+                            }
+                            Some(tricerules_cards::PermanentTypeFilter::Battle) => {
+                                entering_characteristics.has_type("Battle")
+                            }
                             None => true,
                         };
                         type_matches
@@ -510,6 +593,19 @@ impl GameEngine {
                     for trigger in &mut matching {
                         trigger.trigger_context.attacking_player = Some(*attacking_player);
                         trigger.trigger_context.defending_player = Some(attack.defending_player);
+                        match attack.defender {
+                            CombatDefenderTarget::Player(player) => {
+                                trigger.trigger_context.attacked_player = Some(player);
+                            }
+                            CombatDefenderTarget::Permanent(permanent)
+                                if self.characteristics(permanent.object_id).is_some_and(
+                                    |characteristics| characteristics.has_type("Planeswalker"),
+                                ) =>
+                            {
+                                trigger.trigger_context.attacked_planeswalker = Some(permanent);
+                            }
+                            CombatDefenderTarget::Permanent(_) => {}
+                        }
                     }
                     out.extend(matching);
 
@@ -873,6 +969,12 @@ impl GameEngine {
                                 }
                                 Some(PermanentTypeFilter::Land) => {
                                     target_characteristics.has_type("Land")
+                                }
+                                Some(PermanentTypeFilter::Planeswalker) => {
+                                    target_characteristics.has_type("Planeswalker")
+                                }
+                                Some(PermanentTypeFilter::Battle) => {
+                                    target_characteristics.has_type("Battle")
                                 }
                                 None => true,
                             }
@@ -1719,10 +1821,12 @@ mod tests {
             attacks: vec![
                 AttackEdgeSnapshot {
                     attacker: attacker(200),
+                    defender: CombatDefenderTarget::Player(1),
                     defending_player: 1,
                 },
                 AttackEdgeSnapshot {
                     attacker: attacker(201),
+                    defender: CombatDefenderTarget::Player(1),
                     defending_player: 1,
                 },
             ],
@@ -1741,6 +1845,7 @@ mod tests {
             attacking_player: 0,
             attacks: vec![AttackEdgeSnapshot {
                 attacker: attacker(202),
+                defender: CombatDefenderTarget::Player(2),
                 defending_player: 2,
             }],
         };

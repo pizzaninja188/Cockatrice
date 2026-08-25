@@ -10,13 +10,14 @@ use tricerules_proto::ruled::v1 as rv1;
 pub(crate) use tricerules_proto::ruled::v1::ruled_command::Cmd;
 pub(crate) use tricerules_proto::ruled::v1::ruled_event::Ev;
 pub(crate) use tricerules_proto::ruled::v1::{
-    ActivateAbility, AssignCombatDamage, BlockPair, CastCostGroupSelection, CastMethod, CastSource,
-    CastSpell, ChoiceKind, ChooseTriggerTarget, CostSelection, DamagePair, DeclareAttackers,
-    DeclareBlockers, DiscardToHandSize, ExecutePermanentAction, FlexPipPayment, LandSource,
-    ManaSpendSelection, PassPriority, PermanentActionKind, PlayLand, PreviewDeclareAttackers,
-    PreviewDeclareBlockers, PrimitiveYieldStructured, ResolutionChoiceRequired,
-    ResolutionRevealAudience, RuledCommand, RuledEventBatch, SelectedSpellMode,
-    SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TargetRefKind, UndoManaAbility,
+    ActivateAbility, AssignCombatDamage, AttackAssignment, BlockPair, CastCostGroupSelection,
+    CastMethod, CastSource, CastSpell, ChoiceKind, ChooseTriggerTarget, CostSelection, DamagePair,
+    DeclareAttackers, DeclareBlockers, DiscardToHandSize, ExecutePermanentAction, FlexPipPayment,
+    LandSource, ManaSpendSelection, PassPriority, PermanentActionKind, PlayLand,
+    PreviewDeclareAttackers, PreviewDeclareBlockers, PrimitiveYieldStructured,
+    ResolutionChoiceRequired, ResolutionRevealAudience, RuledCommand, RuledEventBatch,
+    SelectedSpellMode, SubmitResolutionChoice, SubmitTriggerOrder, TargetRef, TargetRefKind,
+    UndoManaAbility,
 };
 
 pub(crate) fn pass() -> RuledCommand {
@@ -366,7 +367,15 @@ pub(crate) fn targets_with_damage(pairs: Vec<(u32, u32)>) -> Vec<TargetRef> {
 
 pub(crate) fn declare_attackers(creature_ids: Vec<u32>) -> RuledCommand {
     RuledCommand {
-        cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { creature_ids })),
+        cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
+            assignments: creature_ids
+                .into_iter()
+                .map(|attacker_object_id| AttackAssignment {
+                    attacker_object_id,
+                    ..Default::default()
+                })
+                .collect(),
+        })),
     }
 }
 
@@ -1194,6 +1203,7 @@ pub(crate) fn submit_resolution_choice(chosen: Vec<u32>) -> RuledCommand {
             chosen_object_ids: chosen,
             decision: 0,
             selected_branch_index: 0,
+            cast_spell: None,
         })),
     }
 }
@@ -1204,6 +1214,7 @@ pub(crate) fn submit_resolution_decision(decision: rv1::ResolutionChoiceDecision
             chosen_object_ids: Vec::new(),
             decision: decision as i32,
             selected_branch_index: 0,
+            cast_spell: None,
         })),
     }
 }

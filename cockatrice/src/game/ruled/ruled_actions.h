@@ -53,6 +53,9 @@ namespace RuledActions
 /// True only while a server-authoritative gameplay command is awaiting completion. UI-only policy
 /// and combat-preview messages do not enter this state.
 [[nodiscard]] bool gameplayInputLocked(const AbstractGame *game);
+/// CR 508.1b destination selection after an attacker with multiple published defenders is staged.
+[[nodiscard]] bool isCombatDefenderPlayerCandidate(const Player *player);
+bool tryHandleCombatDefenderPlayerClick(Player *player);
 
 /// Tell the view model which graveyard OIDs the pending cast of `handSlot`/`faceIndex` may target,
 /// so `TabGame` can open the right players' graveyard views. Pass `handSlot < 0` to retract the

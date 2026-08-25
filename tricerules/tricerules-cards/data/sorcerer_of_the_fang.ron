@@ -1,0 +1,16 @@
+(
+  id: "sorcerer_of_the_fang",
+  name: "Sorcerer of the Fang",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 1,
+  toughness: 3,
+  activated_abilities: [(
+    costs: [Mana("{5}{B}")],
+    effect: [DamageTarget(amount: 2, target: (any_of: Some([
+      (kind: OpponentPlayer),
+      (kind: AnyPermanent, controller: Opponent, permanent_types: [Planeswalker]),
+    ])))],
+    text: "{5}{B}: This creature deals 2 damage to target opponent or planeswalker.",
+  )],
+)

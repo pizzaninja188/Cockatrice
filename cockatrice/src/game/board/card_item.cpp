@@ -272,6 +272,14 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                     paintNumberEllipse(alloc, 14, QColor(255, 120, 0), 0, 1, painter);
                 }
             }
+            const int loyalty = ruledHandler->loyaltyForPermanentOid(ruledOid);
+            if (loyalty >= 0) {
+                paintNumberEllipse(loyalty, 14, QColor(70, 110, 220), 0, 1, painter);
+            }
+            const int defense = ruledHandler->defenseForPermanentOid(ruledOid);
+            if (defense >= 0) {
+                paintNumberEllipse(defense, 14, QColor(205, 125, 35), 0, 1, painter);
+            }
             if (ruledPhase == RuledPhase::AssignCombatDamage) {
                 const quint32 curAtt = ruledHandler->currentCombatDamageAttackerOid();
                 if (curAtt != 0 && ruledHandler->getCommittedBlocks().value(ruledOid, 0) == curAtt) {

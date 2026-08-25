@@ -725,10 +725,6 @@ impl GameEngine {
         pass: super::combat::DamagePass,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
-        let defender = self
-            .state
-            .sole_defending_player_id()
-            .ok_or(EngineError::Illegal("defender missing"))?;
         let active = self.state.active_player_id();
         let mut damage = Vec::new();
 
@@ -780,12 +776,9 @@ impl GameEngine {
                 .unwrap_or(&[]);
             if blockers.is_empty() {
                 if attacker_participates {
-                    push(
-                        self,
-                        attacker,
-                        DamageRecipient::Player(defender),
-                        attacker_power,
-                    );
+                    if let Some(recipient) = self.combat_defender_recipient(combat, attacker) {
+                        push(self, attacker, recipient, attacker_power);
+                    }
                 }
                 continue;
             }
@@ -831,12 +824,9 @@ impl GameEngine {
                     .get(&attacker)
                     .copied()
                     .unwrap_or(0);
-                push(
-                    self,
-                    attacker,
-                    DamageRecipient::Player(defender),
-                    player_damage,
-                );
+                if let Some(recipient) = self.combat_defender_recipient(combat, attacker) {
+                    push(self, attacker, recipient, player_damage);
+                }
             }
         }
 
@@ -986,24 +976,52 @@ impl GameEngine {
             }
             DamageRecipient::Permanent(permanent) => {
                 let label = object_display_name(&self.state, self.registry, permanent);
-                let is_creature = self
-                    .characteristics(permanent)
-                    .is_some_and(|characteristics| characteristics.is_creature());
+                let Some(characteristics) = self.characteristics(permanent) else {
+                    return 0;
+                };
+                let is_creature = characteristics.is_creature();
+                let is_planeswalker = characteristics.has_type("Planeswalker");
+                let is_battle = characteristics.has_type("Battle");
+                let was_defended = self
+                    .state
+                    .objects
+                    .get(&permanent)
+                    .is_some_and(|object| object.counter_count(CounterKind::Defense) > 0);
                 let Some(object) = self.state.objects.get_mut(&permanent) else {
                     return 0;
                 };
-                if object.zone != Zone::Battlefield || !is_creature {
+                if object.zone != Zone::Battlefield
+                    || !(is_creature || is_planeswalker || is_battle)
+                {
                     return 0;
                 }
-                object.damage += result.dealt;
-                if source_has_deathtouch && result.dealt > 0 {
-                    object.deathtouch_damage = true;
+                if is_creature {
+                    object.damage = object.damage.saturating_add(result.dealt);
+                    if source_has_deathtouch && result.dealt > 0 {
+                        object.deathtouch_damage = true;
+                    }
+                }
+                if is_planeswalker {
+                    let loyalty = object.counter_count(CounterKind::Loyalty);
+                    object.set_counter(CounterKind::Loyalty, loyalty.saturating_sub(result.dealt));
+                }
+                if is_battle {
+                    let defense = object.counter_count(CounterKind::Defense);
+                    object.set_counter(CounterKind::Defense, defense.saturating_sub(result.dealt));
                 }
                 if result.dealt > 0 {
                     events.push(ev_log(format!(
                         "{} deals {} damage to {label}",
                         event.source.label, result.dealt
                     )));
+                }
+                let defeated_siege = is_battle
+                    && was_defended
+                    && object.counter_count(CounterKind::Defense) == 0
+                    && characteristics.has_type("Siege");
+                let _ = object;
+                if defeated_siege {
+                    self.stage_siege_defeat_trigger(permanent);
                 }
                 result.dealt
             }

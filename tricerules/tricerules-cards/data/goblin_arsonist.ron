@@ -1,0 +1,14 @@
+(
+  id: "goblin_arsonist",
+  name: "Goblin Arsonist",
+  mana_cost: "{R}",
+  types: ["Creature", "Goblin", "Shaman"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    trigger: WhenSelfDies,
+    effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))],
+    text: "When this creature dies, you may have it deal 1 damage to any target.",
+    may: true,
+  )],
+)

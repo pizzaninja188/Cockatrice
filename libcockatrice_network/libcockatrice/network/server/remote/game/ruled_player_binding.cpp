@@ -111,6 +111,23 @@ QString mergeRuledOwnerIntoAnnotation(const QString &baseAnn, const QString &own
     return without + QLatin1Char('\n') + ownerLine;
 }
 
+QString mergeRuledBattleControllerIntoAnnotation(const QString &baseAnn, const QString &controllerName)
+{
+    const QString marker = QStringLiteral("Battle controller: ");
+    QStringList kept;
+    for (const QString &line : baseAnn.split(QLatin1Char('\n'))) {
+        if (!line.trimmed().startsWith(marker)) {
+            kept.append(line);
+        }
+    }
+    const QString without = kept.join(QLatin1Char('\n')).trimmed();
+    if (controllerName.isEmpty()) {
+        return without;
+    }
+    const QString controllerLine = marker + controllerName;
+    return without.isEmpty() ? controllerLine : without + QLatin1Char('\n') + controllerLine;
+}
+
 // Engine-authored labels for nonintrinsic rules state. Keep them on one replaceable line so every
 // authoritative battlefield sync can remove expired effects without disturbing user text or the
 // other ruled annotation lines above. Strip the legacy marker during the transition as well.
@@ -610,11 +627,11 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                     }
 
                     const QString counterAnn = QString::fromStdString(battlefieldObject.counters_annotation());
-                    // The permanent is listed in *this* seat's view, so this seat controls it
-                    // (the engine battlefield list is the control index). Name the owner only
-                    // when the two differ; an empty name strips any stale line.
+                    const int controllerPlayerId = battlefieldObject.has_controller_player_id()
+                                                       ? battlefieldObject.controller_player_id()
+                                                       : playerId;
                     QString ownerName;
-                    if (battlefieldObject.owner_player_id() != playerId) {
+                    if (battlefieldObject.owner_player_id() != controllerPlayerId) {
                         if (Server_Game *g = player->getGame()) {
                             if (Server_AbstractPlayer *ownerPlayer =
                                     g->getPlayer(battlefieldObject.owner_player_id())) {
@@ -625,6 +642,20 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                     QString mergedAnn = mergeRuledDamageIntoAnnotation(card->getAnnotation(), isCreature ? dmg : 0);
                     mergedAnn = mergeRuledCountersIntoAnnotation(mergedAnn, counterAnn);
                     mergedAnn = mergeRuledOwnerIntoAnnotation(mergedAnn, ownerName);
+                    QString battleControllerName;
+                    if (battlefieldObject.has_battle_protector_player_id() && controllerPlayerId != playerId) {
+                        battleControllerName = QStringLiteral("P%1").arg(controllerPlayerId);
+                        if (Server_Game *g = player->getGame()) {
+                            if (Server_AbstractPlayer *controllerPlayer = g->getPlayer(controllerPlayerId)) {
+                                const QString resolvedName =
+                                    QString::fromStdString(controllerPlayer->getUserInfo()->name());
+                                if (!resolvedName.isEmpty()) {
+                                    battleControllerName = resolvedName;
+                                }
+                            }
+                        }
+                    }
+                    mergedAnn = mergeRuledBattleControllerIntoAnnotation(mergedAnn, battleControllerName);
                     mergedAnn = mergeRuledCopyIntoAnnotation(
                         mergedAnn, QString::fromStdString(battlefieldObject.copy_annotation()));
                     QString enchantedPlayerName;

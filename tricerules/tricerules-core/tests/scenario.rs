@@ -121,6 +121,8 @@ mod issue_64_granted_delayed_triggers;
 mod issue_65_granted_activated_abilities;
 #[path = "scenario/issue_71_filters.rs"]
 mod issue_71_filters;
+#[path = "scenario/issue_72_planeswalkers_battles.rs"]
+mod issue_72_planeswalkers_battles;
 #[path = "scenario/issue_73_grouped_targets.rs"]
 mod issue_73_grouped_targets;
 #[path = "scenario/issue_80_protection.rs"]

@@ -57,6 +57,64 @@ QHash<quint32, int> authoritativeBattlefieldGridRows(const ruled::v1::RuledEvent
     return rows;
 }
 
+QHash<quint32, int> authoritativeBattlefieldDisplayPlayers(const ruled::v1::RuledEventBatch &batch)
+{
+    QHash<quint32, int> players;
+    for (const auto &event : batch.events()) {
+        if (!event.has_zone_view() || event.zone_view().battlefields_unchanged()) {
+            continue;
+        }
+        for (const auto &view : event.zone_view().per_player()) {
+            for (const auto &object : view.battlefield_objects()) {
+                const int displayPlayer = object.has_battle_protector_player_id()
+                                              ? object.battle_protector_player_id()
+                                              : view.player_id();
+                players.insert(static_cast<quint32>(object.object_id()), displayPlayer);
+            }
+        }
+    }
+    return players;
+}
+
+// The engine's per-player battlefield is its authoritative CR 110.2 control index. Cockatrice's
+// table layout is also a multiplayer spatial affordance, so a Battle is rendered on the table of
+// the opponent chosen to protect it (CR 310.11a). This relay-only projection moves no rules state:
+// every object retains its public controller/owner/protector fields and clients receive the
+// unmodified engine ZoneViewSync.
+ruled::v1::ZoneViewSync physicalBattlefieldZoneView(const ruled::v1::ZoneViewSync &engineView)
+{
+    ruled::v1::ZoneViewSync physicalView = engineView;
+    for (auto &view : *physicalView.mutable_per_player()) {
+        view.clear_battlefield_objects();
+    }
+    for (const auto &sourceView : engineView.per_player()) {
+        for (const auto &object : sourceView.battlefield_objects()) {
+            const int targetPlayer = object.has_battle_protector_player_id()
+                                         ? object.battle_protector_player_id()
+                                         : sourceView.player_id();
+            ruled::v1::RuledPerPlayerView *targetView = nullptr;
+            for (auto &candidate : *physicalView.mutable_per_player()) {
+                if (candidate.player_id() == targetPlayer) {
+                    targetView = &candidate;
+                    break;
+                }
+            }
+            if (!targetView) {
+                for (auto &candidate : *physicalView.mutable_per_player()) {
+                    if (candidate.player_id() == sourceView.player_id()) {
+                        targetView = &candidate;
+                        break;
+                    }
+                }
+            }
+            if (targetView) {
+                *targetView->add_battlefield_objects() = object;
+            }
+        }
+    }
+    return physicalView;
+}
+
 QString withoutRuledCopyAnnotation(const QString &annotation)
 {
     QStringList kept;
@@ -435,9 +493,9 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
         previewResp.set_ok(true);
         auto *apMsg = previewResp.mutable_batch()->add_events()->mutable_attackers_preview();
         apMsg->set_declaring_player_id(playerId);
-        const auto &ids = ruledCmd.preview_declare_attackers();
-        for (int ai = 0; ai < ids.creature_ids_size(); ++ai) {
-            apMsg->add_attacker_object_ids(static_cast<uint32_t>(ids.creature_ids(ai)));
+        const auto &preview = ruledCmd.preview_declare_attackers();
+        for (const auto &assignment : preview.assignments()) {
+            *apMsg->add_assignments() = assignment;
         }
         broadcastRuledResponse(previewResp, false);
         return Response::RespOk;
@@ -509,7 +567,12 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
                     moveGes.sendToGame(game);
                 }
             }
-        } else if (ruledCmd.has_cast_spell()) {
+        } else if (ruledCmd.has_cast_spell() ||
+                   (ruledCmd.has_submit_resolution_choice() &&
+                    ruledCmd.submit_resolution_choice().has_cast_spell())) {
+            const auto &acceptedCast = ruledCmd.has_cast_spell()
+                                           ? ruledCmd.cast_spell()
+                                           : ruledCmd.submit_resolution_choice().cast_spell();
             // Route all spells to the canonical (lowest player-id) stack zone so every
             // client's stack window shows the complete stack without a split view.
             // Resolution uses ruledStackObjectIdToCasterPlayerId to send the card to the
@@ -523,7 +586,7 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
             // The index cannot be used against the physical graveyard pile directly: the
             // engine's graveyard is oldest-first while the Cockatrice pile is newest-first, so
             // the binding resolves the engine slot to the real card.
-            const auto &source = ruledCmd.cast_spell().source();
+            const auto &source = acceptedCast.source();
             Server_CardZone *sourceZone = nullptr;
             Server_Card *card = nullptr;
             QString sourceLabel = QStringLiteral("missing");
@@ -560,16 +623,24 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
                                  << " resolvedCard=" << (card ? card->getName() : QStringLiteral("<none>"))
                                  << " serverCardId=" << (card ? card->getId() : -1);
             if (sourceZone && stackZone && card) {
+                const int faceIndex = static_cast<int>(acceptedCast.face_index());
+                if (faceIndex > 0) {
+                    const QString cardId = ruledCardIdForName(card->getName());
+                    const QString activeName = ruledFaceDisplayName(cardId, faceIndex);
+                    if (!activeName.isEmpty() && activeName != card->getName()) {
+                        card->setCardRef(CardRef{activeName});
+                    }
+                }
                 PendingRuledCastVisual pending;
                 pending.cardName = card ? card->getName() : QString();
                 pending.serverCardId = card ? card->getId() : -1;
                 pending.casterPlayerId = playerId;
-                for (int ti = 0; ti < ruledCmd.cast_spell().targets_size(); ++ti) {
-                    pending.targetOids.append(static_cast<quint32>(ruledCmd.cast_spell().targets(ti).object_id()));
+                for (int ti = 0; ti < acceptedCast.targets_size(); ++ti) {
+                    pending.targetOids.append(static_cast<quint32>(acceptedCast.targets(ti).object_id()));
                 }
                 // Modal targets are grouped on the atomic command for rules resolution, but
                 // Cockatrice's visual arrow/binding layer consumes one flat target list.
-                for (const auto &mode : ruledCmd.cast_spell().selected_modes()) {
+                for (const auto &mode : acceptedCast.selected_modes()) {
                     for (const auto &target : mode.targets()) {
                         pending.targetOids.append(static_cast<quint32>(target.object_id()));
                     }
@@ -634,7 +705,8 @@ void RuledGameDriver::relayRuledPayloadAndBroadcast(int playerId, const QByteArr
 }
 
 void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved,
-                                                   const QHash<quint32, int> &battlefieldGridRows)
+                                                   const QHash<quint32, int> &battlefieldGridRows,
+                                                   const QHash<quint32, int> &battlefieldDisplayPlayers)
 {
     const quint32 resolvedOid = static_cast<quint32>(stackResolved.object_id());
     // CR 707.10d: a spell copy ceases to exist on resolution and has no physical card to move.
@@ -646,9 +718,8 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
     }
     const QString engineStackDescription = ruledEngineStackPushDescriptionsByObjectId.value(resolvedOid);
 
-    auto tryResolveCardOnStack = [this, &stackResolved, &battlefieldGridRows](Server_AbstractPlayer *ab,
-                                                                             Server_CardZone *stackZone,
-                                                                             Server_Card *card) -> bool {
+    auto tryResolveCardOnStack = [this, &stackResolved, &battlefieldGridRows, &battlefieldDisplayPlayers](
+                                     Server_AbstractPlayer *ab, Server_CardZone *stackZone, Server_Card *card) -> bool {
         if (!ab || !stackZone || !card) {
             return false;
         }
@@ -669,7 +740,12 @@ void RuledGameDriver::applyRuledStackResolvedEvent(const ruled::v1::StackResolve
         const quint32 resolvedOidLocal = static_cast<quint32>(stackResolved.object_id());
         const int casterPid = ruledStackObjectIdToCasterPlayerId.value(resolvedOidLocal, -1);
         Server_AbstractPlayer *destPlayer = ab;
-        if (casterPid >= 0) {
+        const auto displayPlayerIt = battlefieldDisplayPlayers.constFind(resolvedOidLocal);
+        if (goesToBattlefield && displayPlayerIt != battlefieldDisplayPlayers.constEnd()) {
+            if (Server_AbstractPlayer *displayPlayer = game->getPlayer(*displayPlayerIt)) {
+                destPlayer = displayPlayer;
+            }
+        } else if (casterPid >= 0) {
             if (Server_AbstractPlayer *cp = game->getPlayer(casterPid)) {
                 destPlayer = cp;
             }
@@ -797,6 +873,7 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     }
     const ruled::v1::RuledEventBatch &batch = resp.batch();
     const QHash<quint32, int> battlefieldGridRows = authoritativeBattlefieldGridRows(batch);
+    const QHash<quint32, int> battlefieldDisplayPlayers = authoritativeBattlefieldDisplayPlayers(batch);
 
     // One named method per pass. The pass order is load-bearing — never merge or reorder:
     // the catalog must be indexed before anything resolves a card name through it, the
@@ -808,7 +885,7 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     // Mid-game catalog refresh. Almost every batch carries no CardCatalog and leaves the index
     // untouched; a batch that does carries the whole catalog and replaces it.
     indexCardCatalogEvents(batch);
-    applyDevCardConjures(batch, battlefieldGridRows, result);
+    applyDevCardConjures(batch, battlefieldGridRows, battlefieldDisplayPlayers, result);
 
     // Capture the pre-batch engine_oid -> Server_Card map per player. The engine has
     // already removed dead permanents from its battlefield, so the upcoming zone-view
@@ -823,8 +900,8 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
     }
 
     applyTokenCreations(batch, battlefieldGridRows);
-    applyPermanentMoves(batch, preBatchOidMaps, battlefieldGridRows);
-    applyPhaseStackAndZoneViews(batch, battlefieldGridRows, result);
+    applyPermanentMoves(batch, preBatchOidMaps, battlefieldGridRows, battlefieldDisplayPlayers);
+    applyPhaseStackAndZoneViews(batch, battlefieldGridRows, battlefieldDisplayPlayers, result);
     applyFaceDisplays(batch, result);
     applyAttachmentRestores(batch);
     applyLifeManaAndCombatEvents(batch);
@@ -840,6 +917,7 @@ RuledGameDriver::RuledBatchApplyResult RuledGameDriver::applyRuledBatch(const ru
 // may also be moved by it.
 void RuledGameDriver::applyDevCardConjures(const ruled::v1::RuledEventBatch &batch,
                                            const QHash<quint32, int> &battlefieldGridRows,
+                                           const QHash<quint32, int> &battlefieldDisplayPlayers,
                                            RuledBatchApplyResult &result)
 {
     GameEventStorage conjureGes;
@@ -864,8 +942,17 @@ void RuledGameDriver::applyDevCardConjures(const ruled::v1::RuledEventBatch &bat
                 qWarning() << "ruled dev battlefield conjure missing authoritative row for oid" << dc.object_id();
             }
         }
-        const bool created = playerBinding(dc.owner_player_id())
-                                 .createRuledDevCard(static_cast<Server_Player *>(owner), dc.object_id(),
+        Server_AbstractPlayer *physicalHolder = owner;
+        if (toBattlefield) {
+            const auto holderIt = battlefieldDisplayPlayers.constFind(static_cast<quint32>(dc.object_id()));
+            if (holderIt != battlefieldDisplayPlayers.constEnd()) {
+                if (Server_AbstractPlayer *candidate = game->getPlayer(*holderIt)) {
+                    physicalHolder = candidate;
+                }
+            }
+        }
+        const bool created = playerBinding(physicalHolder->getPlayerId())
+                                 .createRuledDevCard(static_cast<Server_Player *>(physicalHolder), dc.object_id(),
                                                      QString::fromStdString(dc.card_name()), battlefieldGridY,
                                                      toBattlefield, conjureGes);
         if (!created) {
@@ -932,7 +1019,8 @@ void RuledGameDriver::applyTokenCreations(const ruled::v1::RuledEventBatch &batc
 // first or applyRuledEngineZoneView's deck+hand pool counts disagree with the engine.
 void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batch,
                                           const QHash<int, QHash<quint32, int>> &preBatchOidMaps,
-                                          const QHash<quint32, int> &battlefieldGridRows)
+                                          const QHash<quint32, int> &battlefieldGridRows,
+                                          const QHash<quint32, int> &battlefieldDisplayPlayers)
 {
     GameEventStorage permanentMoveGes;
     bool permanentMoveGesHasEvents = false;
@@ -1111,8 +1199,12 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
         // presence and player id 0 is valid), and it equals the owner when control is unchanged.
         Server_AbstractPlayer *destPlayer = owner;
         if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD) {
-            if (Server_AbstractPlayer *controller = game->getPlayer(pm.controller_player_id())) {
-                destPlayer = controller;
+            const auto displayPlayerIt = battlefieldDisplayPlayers.constFind(oid);
+            const int destinationPlayerId = displayPlayerIt != battlefieldDisplayPlayers.constEnd()
+                                                ? *displayPlayerIt
+                                                : pm.controller_player_id();
+            if (Server_AbstractPlayer *displayPlayer = game->getPlayer(destinationPlayerId)) {
+                destPlayer = displayPlayer;
             }
         }
         Server_CardZone *targetZone = destPlayer->getZones().value(destZone);
@@ -1259,6 +1351,7 @@ void RuledGameDriver::applyBattlefieldControllerTransfers(const ruled::v1::ZoneV
 // payment, and untap all use this path (no longer gated on an explicit untap event).
 void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBatch &batch,
                                                   const QHash<quint32, int> &battlefieldGridRows,
+                                                  const QHash<quint32, int> &battlefieldDisplayPlayers,
                                                   RuledBatchApplyResult &result)
 {
     GameEventStorage tapSyncGes;
@@ -1406,15 +1499,16 @@ void RuledGameDriver::applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBat
                 }
             }
             if (e.has_stack_resolved()) {
-                applyRuledStackResolvedEvent(e.stack_resolved(), battlefieldGridRows);
+                applyRuledStackResolvedEvent(e.stack_resolved(), battlefieldGridRows, battlefieldDisplayPlayers);
             }
             if (e.has_stack_object_countered()) {
                 applyRuledStackObjectCounteredEvent(e.stack_object_countered());
             }
             continue;
         }
-        applyBattlefieldControllerTransfers(e.zone_view(), result);
-        for (const auto &p : e.zone_view().per_player()) {
+        const ruled::v1::ZoneViewSync physicalView = physicalBattlefieldZoneView(e.zone_view());
+        applyBattlefieldControllerTransfers(physicalView, result);
+        for (const auto &p : physicalView.per_player()) {
             // Untap-step "reset" applies only to the active player's view; NAP may stay tapped.
             // Every other legitimate mid-turn untap arrives as an explicit PermanentsUntapped oid
             // (CR 605 mana undo, untap effects), which the binding honors per-object.
@@ -1713,8 +1807,8 @@ void RuledGameDriver::applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBa
                     combatGesHasEvents = true;
                 }
             }
-            for (int i = 0; i < ad.attacker_object_ids_size(); ++i) {
-                const quint32 oid = static_cast<quint32>(ad.attacker_object_ids(i));
+            for (const auto &assignment : ad.assignments()) {
+                const quint32 oid = static_cast<quint32>(assignment.attacker_object_id());
                 Server_Card *card = playerBinding(ad.attacking_player_id()).findCardByEngineOid(attackerPlayer, oid);
                 if (!card) {
                     continue;
@@ -2643,7 +2737,10 @@ void RuledGameDriver::applyRuledStartupBatch(const ruled::v1::IpcResponse &resp,
                     return;
                 }
             }
-            for (const auto &p : e.zone_view().per_player()) {
+            const ruled::v1::ZoneViewSync physicalView = physicalBattlefieldZoneView(e.zone_view());
+            RuledBatchApplyResult startupResult;
+            applyBattlefieldControllerTransfers(physicalView, startupResult);
+            for (const auto &p : physicalView.per_player()) {
                 if (Server_AbstractPlayer *ab = game->getPlayer(p.player_id())) {
                     playerBinding(p.player_id())
                         .applyRuledEngineZoneView(static_cast<Server_Player *>(ab), p, nullptr, true, nullptr,

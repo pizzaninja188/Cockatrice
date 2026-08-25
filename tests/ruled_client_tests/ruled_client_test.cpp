@@ -226,6 +226,35 @@ protected:
         pair->set_blocker_id(blockerOid);
         pair->set_attacker_id(attackerOid);
     }
+
+    static ruled::v1::AttackAssignment playerAttackAssignment(quint32 attackerOid, int playerId = kOpponent)
+    {
+        ruled::v1::AttackAssignment assignment;
+        assignment.set_attacker_object_id(attackerOid);
+        assignment.set_defending_player_id(playerId);
+        assignment.mutable_defender()->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+        assignment.mutable_defender()->set_object_id(static_cast<quint32>(playerId));
+        return assignment;
+    }
+
+    static void addLegalPlayerAttack(ruled::v1::LegalActions &actions, quint32 attackerOid)
+    {
+        *actions.add_legal_attack_assignments() = playerAttackAssignment(attackerOid);
+    }
+
+    static ruled::v1::AttackAssignment permanentAttackAssignment(quint32 attackerOid,
+                                                                  quint32 defenderOid,
+                                                                  quint64 defenderGeneration)
+    {
+        ruled::v1::AttackAssignment assignment;
+        assignment.set_attacker_object_id(attackerOid);
+        assignment.set_attacker_zone_change_generation(7);
+        assignment.set_defending_player_id(kOpponent);
+        assignment.mutable_defender()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        assignment.mutable_defender()->set_object_id(defenderOid);
+        assignment.set_defender_zone_change_generation(defenderGeneration);
+        return assignment;
+    }
 };
 
 // ---------------------------------------------------------------------------------------
@@ -1080,6 +1109,7 @@ TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
     actions.add_required_attacker_ids(100); // CR 508.1d
     actions.add_required_blocker_ids(200);  // CR 509.1c
     actions.add_selectable_attacker_ids(100);
+    addLegalPlayerAttack(actions, 100);
     addLegalBlockPair(actions, 200, 300);
     apply(withActions);
     ASSERT_EQ(state->requiredAttackerOids.size(), 1);
@@ -1089,7 +1119,7 @@ TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
     ruled::v1::RuledEventBatch preview;
     auto *ap = preview.add_events()->mutable_attackers_preview();
     ap->set_declaring_player_id(kOpponent);
-    ap->add_attacker_object_ids(100);
+    *ap->add_assignments() = playerAttackAssignment(100);
     apply(preview);
 
     EXPECT_FALSE(state->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, 0));
@@ -1794,7 +1824,9 @@ TEST_F(RuledClientTest, OpeningPhaseSlugIsRecognised)
 TEST_F(RuledClientTest, AttackerStagingSyncsAPreviewAndClearsOnDeclaration)
 {
     auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
-    (*batch.mutable_legal_by_player())[kLocalPlayer].add_selectable_attacker_ids(100);
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    actions.add_selectable_attacker_ids(100);
+    addLegalPlayerAttack(actions, 100);
     apply(batch);
     ASSERT_TRUE(state->localPlayerIsActive());
     host.sentCommands.clear();
@@ -1803,17 +1835,17 @@ TEST_F(RuledClientTest, AttackerStagingSyncsAPreviewAndClearsOnDeclaration)
     EXPECT_TRUE(state->isPendingAttacker(100));
     ASSERT_EQ(host.sentCommands.size(), 1);
     ASSERT_TRUE(host.sentCommands[0].has_preview_declare_attackers());
-    EXPECT_EQ(host.sentCommands[0].preview_declare_attackers().creature_ids_size(), 1);
+    EXPECT_EQ(host.sentCommands[0].preview_declare_attackers().assignments_size(), 1);
 
     state->togglePendingAttacker(100);
     EXPECT_FALSE(state->isPendingAttacker(100));
     ASSERT_EQ(host.sentCommands.size(), 2);
-    EXPECT_EQ(host.sentCommands[1].preview_declare_attackers().creature_ids_size(), 0);
+    EXPECT_EQ(host.sentCommands[1].preview_declare_attackers().assignments_size(), 0);
 
     ruled::v1::RuledEventBatch declared;
     auto *ad = declared.add_events()->mutable_attackers_declared();
     ad->set_attacking_player_id(kLocalPlayer);
-    ad->add_attacker_object_ids(100);
+    *ad->add_assignments() = playerAttackAssignment(100);
     apply(declared);
     EXPECT_TRUE(state->isCurrentAttacker(100));
     EXPECT_TRUE(state->getPendingAttackerOids().isEmpty());
@@ -1828,6 +1860,7 @@ TEST_F(RuledClientTest, ConfirmAttackersIsGatedOnMustAttackRequirements)
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     actions.add_required_attacker_ids(100); // CR 508.1d "attacks if able"
     actions.add_selectable_attacker_ids(100);
+    addLegalPlayerAttack(actions, 100);
     apply(batch);
 
     EXPECT_FALSE(state->combatDeclarationSatisfied());
@@ -1835,13 +1868,46 @@ TEST_F(RuledClientTest, ConfirmAttackersIsGatedOnMustAttackRequirements)
     EXPECT_TRUE(state->combatDeclarationSatisfied());
 }
 
+TEST_F(RuledClientTest, MultipleAttackDefendersRequireAnAuthoritativeDestinationBeforeConfirm)
+{
+    auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    actions.add_selectable_attacker_ids(100);
+    *actions.add_legal_attack_assignments() = playerAttackAssignment(100);
+    *actions.add_legal_attack_assignments() = permanentAttackAssignment(100, 500, 9);
+    apply(batch);
+    host.sentCommands.clear();
+
+    state->togglePendingAttacker(100);
+    EXPECT_TRUE(state->isPendingAttacker(100));
+    EXPECT_TRUE(state->isChoosingAttackDefender());
+    EXPECT_FALSE(state->combatDeclarationSatisfied());
+    EXPECT_TRUE(state->isLegalAttackPlayerDefender(kOpponent));
+    EXPECT_TRUE(state->isLegalAttackPermanentDefender(500));
+
+    ASSERT_TRUE(state->chooseAttackPermanentDefender(500));
+    EXPECT_FALSE(state->isChoosingAttackDefender());
+    EXPECT_TRUE(state->combatDeclarationSatisfied());
+    ASSERT_FALSE(host.sentCommands.isEmpty());
+    const auto &preview = host.sentCommands.constLast().preview_declare_attackers();
+    ASSERT_EQ(preview.assignments_size(), 1);
+    EXPECT_EQ(preview.assignments(0).defender().object_id(), 500u);
+    EXPECT_EQ(preview.assignments(0).defender_zone_change_generation(), 9u);
+
+    host.sentCommands.clear();
+    state->confirmAttackers();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    ASSERT_EQ(host.sentCommands[0].declare_attackers().assignments_size(), 1);
+    EXPECT_EQ(host.sentCommands[0].declare_attackers().assignments(0).defender().object_id(), 500u);
+}
+
 TEST_F(RuledClientTest, BlockerStagingPairsToAnAttackerAndSyncsAPreview)
 {
     ruled::v1::RuledEventBatch declared;
     auto *ad = declared.add_events()->mutable_attackers_declared();
-    ad->add_attacker_object_ids(100);
-    ad->add_attacker_object_ids(101); // Only blocker 200 can block this attacker.
-    ad->add_attacker_object_ids(102); // Unblockable: no legal pair targets this attacker.
+    *ad->add_assignments() = playerAttackAssignment(100);
+    *ad->add_assignments() = playerAttackAssignment(101); // Only blocker 200 can block this attacker.
+    *ad->add_assignments() = playerAttackAssignment(102); // Unblockable: no legal pair targets this attacker.
     apply(declared);
     // The opponent is the active player during our declare-blockers step.
     auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
@@ -1896,7 +1962,7 @@ TEST_F(RuledClientTest, BlockerStagingPairsToAnAttackerAndSyncsAPreview)
 TEST_F(RuledClientTest, RejectedBlockDeclarationRollsBackTheLocalGuard)
 {
     ruled::v1::RuledEventBatch declared;
-    declared.add_events()->mutable_attackers_declared()->add_attacker_object_ids(100);
+    *declared.add_events()->mutable_attackers_declared()->add_assignments() = playerAttackAssignment(100);
     apply(declared);
     auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
     addLegalBlockPair((*batch.mutable_legal_by_player())[kLocalPlayer], 200, 100);
@@ -1959,7 +2025,9 @@ TEST_F(RuledClientTest, AppliesAndClearsObjectIdKeyedExileCastActions)
 TEST_F(RuledClientTest, CombatStagingIgnoresCreaturesOutsideEngineSelectableSets)
 {
     auto attackers = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
-    (*attackers.mutable_legal_by_player())[kLocalPlayer].add_selectable_attacker_ids(100);
+    auto &attackerActions = (*attackers.mutable_legal_by_player())[kLocalPlayer];
+    attackerActions.add_selectable_attacker_ids(100);
+    addLegalPlayerAttack(attackerActions, 100);
     apply(attackers);
     host.sentCommands.clear();
 
@@ -1970,7 +2038,7 @@ TEST_F(RuledClientTest, CombatStagingIgnoresCreaturesOutsideEngineSelectableSets
     EXPECT_TRUE(state->isPendingAttacker(100));
 
     ruled::v1::RuledEventBatch declared;
-    declared.add_events()->mutable_attackers_declared()->add_attacker_object_ids(300);
+    *declared.add_events()->mutable_attackers_declared()->add_assignments() = playerAttackAssignment(300);
     apply(declared);
     auto blockers = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
     addLegalBlockPair((*blockers.mutable_legal_by_player())[kLocalPlayer], 400, 300);
@@ -1986,8 +2054,8 @@ TEST_F(RuledClientTest, RemovedFromCombatPrunesAttackersAndBlockPairs)
 {
     ruled::v1::RuledEventBatch setup;
     auto *ad = setup.add_events()->mutable_attackers_declared();
-    ad->add_attacker_object_ids(100);
-    ad->add_attacker_object_ids(101);
+    *ad->add_assignments() = playerAttackAssignment(100);
+    *ad->add_assignments() = playerAttackAssignment(101);
     auto *bd = setup.add_events()->mutable_blockers_declared();
     auto *pair = bd->add_block_pairs();
     pair->set_attacker_id(100);
@@ -2130,6 +2198,35 @@ TEST_F(RuledClientTest, CombatPowerFallsBackToTheHostWhenZoneViewIsAbsent)
 // ---------------------------------------------------------------------------------------
 // Zone view: marked damage, activated abilities, first-strike flag
 // ---------------------------------------------------------------------------------------
+
+TEST_F(RuledClientTest, ZoneViewProjectsLoyaltyDefenseAndBattleProtector)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(kLocalPlayer);
+    auto *planeswalker = view->add_battlefield_objects();
+    planeswalker->set_object_id(100);
+    planeswalker->set_is_planeswalker(true);
+    planeswalker->set_loyalty(4);
+    auto *battle = view->add_battlefield_objects();
+    battle->set_object_id(200);
+    battle->set_is_battle(true);
+    battle->set_defense(5);
+    battle->set_battle_protector_player_id(kOpponent);
+    apply(batch);
+
+    EXPECT_EQ(state->loyaltyForPermanentOid(100), 4);
+    EXPECT_EQ(state->defenseForPermanentOid(200), 5);
+    EXPECT_EQ(state->battleProtectorForPermanentOid(200), kOpponent);
+    EXPECT_EQ(state->defenseForPermanentOid(100), -1);
+
+    ruled::v1::RuledEventBatch replacement;
+    replacement.add_events()->mutable_zone_view()->add_per_player()->set_player_id(kLocalPlayer);
+    apply(replacement);
+    EXPECT_EQ(state->loyaltyForPermanentOid(100), -1);
+    EXPECT_EQ(state->defenseForPermanentOid(200), -1);
+    EXPECT_EQ(state->battleProtectorForPermanentOid(200), -1);
+}
 
 TEST_F(RuledClientTest, ZoneViewParsesDamageAndPipeDelimitedAbilities)
 {
@@ -2764,6 +2861,37 @@ TEST_F(RuledClientTest, ResolutionBranchesSubmitOpaqueIndexWithoutOpeningADialog
     const auto &submission = host.sentCommands[0].submit_resolution_choice();
     EXPECT_EQ(submission.decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
     EXPECT_EQ(submission.selected_branch_index(), 0u);
+}
+
+TEST_F(RuledClientTest, SiegeCastPromptSubmitsTransformedAnnouncementOrDecline)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SIEGE_CAST);
+    choice->set_prompt_text("Cast Grandmother Ravi Sengir transformed?");
+    choice->add_candidate_object_ids(700);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SiegeCast));
+    ASSERT_EQ(state->pendingChoiceOptions().size(), 2);
+    host.sentCommands.clear();
+    state->submitPendingChoiceOption(1);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &submission = host.sentCommands[0].submit_resolution_choice();
+    EXPECT_EQ(submission.decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_TRANSFORMED);
+    ASSERT_TRUE(submission.has_cast_spell());
+    EXPECT_EQ(submission.cast_spell().cast_method(), ruled::v1::CAST_METHOD_SIEGE_DEFEAT);
+    EXPECT_EQ(submission.cast_spell().face_index(), 1u);
+    EXPECT_EQ(submission.cast_spell().source().exile_object_id(), 700u);
+
+    apply(batch);
+    host.sentCommands.clear();
+    state->submitPendingChoiceOption(0);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().decision(),
+              ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+    EXPECT_FALSE(host.sentCommands[0].submit_resolution_choice().has_cast_spell());
 }
 
 TEST_F(RuledClientTest, VariableTriggerTargetsStageOneGraveyardCohortAndRestoreOnRejection)

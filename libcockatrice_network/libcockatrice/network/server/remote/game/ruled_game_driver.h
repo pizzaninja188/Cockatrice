@@ -170,22 +170,26 @@ private:
     /// by the redacted full-state resync rather than by a broadcast creation event.
     void applyDevCardConjures(const ruled::v1::RuledEventBatch &batch,
                               const QHash<quint32, int> &battlefieldGridRows,
+                              const QHash<quint32, int> &battlefieldDisplayPlayers,
                               RuledBatchApplyResult &result);
     void applyTokenCreations(const ruled::v1::RuledEventBatch &batch,
                              const QHash<quint32, int> &battlefieldGridRows);
     void applyPermanentMoves(const ruled::v1::RuledEventBatch &batch,
                              const QHash<int, QHash<quint32, int>> &preBatchOidMaps,
-                             const QHash<quint32, int> &battlefieldGridRows);
+                             const QHash<quint32, int> &battlefieldGridRows,
+                             const QHash<quint32, int> &battlefieldDisplayPlayers);
     void applyBattlefieldControllerTransfers(const ruled::v1::ZoneViewSync &zoneView, RuledBatchApplyResult &result);
     void applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBatch &batch,
                                      const QHash<quint32, int> &battlefieldGridRows,
+                                     const QHash<quint32, int> &battlefieldDisplayPlayers,
                                      RuledBatchApplyResult &result);
     void applyFaceDisplays(const ruled::v1::RuledEventBatch &batch, RuledBatchApplyResult &result);
     Server_Card *findBattlefieldCardByEngineOid(quint32 oid, int preferredControllerId = -1);
     void applyAttachmentRestores(const ruled::v1::RuledEventBatch &batch);
     void applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBatch &batch);
     void applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved,
-                                      const QHash<quint32, int> &battlefieldGridRows);
+                                      const QHash<quint32, int> &battlefieldGridRows,
+                                      const QHash<quint32, int> &battlefieldDisplayPlayers);
     void applyRuledStackObjectCounteredEvent(const ruled::v1::StackObjectCountered &countered);
     // broadcastRuledResponse stages: server-built identity-map injection, then per-participant
     // hidden-info redaction.

@@ -1,0 +1,16 @@
+(
+  id: "chandras_magmutt",
+  name: "Chandra's Magmutt",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Elemental", "Dog"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [(
+    costs: [Tap],
+    effect: [DamageTarget(amount: 1, target: (any_of: Some([
+      (kind: AnyPlayer),
+      (kind: AnyPermanent, permanent_types: [Planeswalker]),
+    ])))],
+    text: "{T}: This creature deals 1 damage to target player or planeswalker.",
+  )],
+)

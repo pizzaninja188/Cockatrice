@@ -259,6 +259,11 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         } else {
             Vec::new()
         };
+        let legal_attack_assignments = if attackers_open && p.id == eng.state.active_player_id() {
+            eng.legal_attack_assignments(p.id)
+        } else {
+            Vec::new()
+        };
         let blocks_open = eng.state.turn_step == TurnStep::DeclareBlockers
             && !combat.map(|c| c.blockers_declared).unwrap_or(false);
         let required_blocker_ids = if blocks_open && eng.state.is_defending_player(p.id) {
@@ -292,6 +297,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 zone_ability_actions,
                 zone_land_actions,
                 exile_play_permission_groups,
+                legal_attack_assignments,
             },
         );
     }
@@ -326,6 +332,8 @@ fn activated_ability_info(
         .iter()
         .map(|cost| match cost {
             AbilityCost::Tap => "{T}".to_string(),
+            AbilityCost::Loyalty(delta) if *delta >= 0 => format!("+{delta}"),
+            AbilityCost::Loyalty(delta) => delta.to_string(),
             AbilityCost::Mana(cost) => cost.to_string(),
             AbilityCost::Discard => "Discard a card".to_string(),
             AbilityCost::DiscardSelf => "Discard this card".to_string(),
@@ -584,7 +592,7 @@ fn legal_ability_cost_choices(
                     max: *count,
                 });
             }
-            AbilityCost::Tap | AbilityCost::Mana(_) => {}
+            AbilityCost::Tap | AbilityCost::Mana(_) | AbilityCost::Loyalty(_) => {}
         }
     }
     structurally_payable &= distinct_assignment_exists(&assignment_candidates, 0, &mut consumed);

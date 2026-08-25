@@ -537,6 +537,12 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
     }
+    if (state.hasPendingChoiceOfKind(RuledClientState::ChoiceKind::BattleProtector)) {
+        return kind == RuledTargetCandidateKind::Player &&
+                       state.isPendingChoiceCandidate(RuledClientState::ChoiceKind::BattleProtector, oid)
+                   ? RuledTargetClickEligibility::Legal
+                   : RuledTargetClickEligibility::Illegal;
+    }
     if (state.hasPendingTriggerTarget()) {
         const auto refKind = kind == RuledTargetCandidateKind::Graveyard
                                  ? ruled::v1::TARGET_REF_KIND_GRAVEYARD

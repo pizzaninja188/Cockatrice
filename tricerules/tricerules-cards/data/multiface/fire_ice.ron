@@ -32,5 +32,4 @@
             spell_effect: [Tap(subject: Chosen((kind: AnyPermanent))), Draw(count: 1)],
         ),
     ],
-    partial: "Fire cannot target planeswalkers or battles because those object types are not modeled",
 )

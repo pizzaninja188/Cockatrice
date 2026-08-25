@@ -603,6 +603,10 @@ pub enum CounterKind {
     Keyword(Keyword),
     /// CR 122.1d: replaces an untap event by removing one stun counter.
     Stun,
+    /// CR 306.5: loyalty counters on planeswalkers.
+    Loyalty,
+    /// CR 310.4: defense counters on battles.
+    Defense,
 }
 
 impl CounterKind {
@@ -614,6 +618,8 @@ impl CounterKind {
             CounterKind::MinusOneMinusOne => "-1/-1".into(),
             CounterKind::Keyword(keyword) => keyword.as_str().to_ascii_lowercase(),
             CounterKind::Stun => "stun".into(),
+            CounterKind::Loyalty => "loyalty".into(),
+            CounterKind::Defense => "defense".into(),
         }
     }
 
@@ -970,6 +976,12 @@ pub enum SpellEffectKind {
         #[serde(default)]
         who: PlayerRecipient,
     },
+    /// Untargeted damage to the player or planeswalker this source attacked. The attacked
+    /// recipient is captured by the declaration trigger context; attacking a Battle yields no
+    /// recipient. Cards: Scorch Spitter and Tectonic Giant-style attack-recipient effects.
+    DamageAttackedPlayerOrPlaneswalker {
+        amount: Amount,
+    },
     /// Divide `amount` damage among any number of targets (CR 601.2d). Costs
     /// `extra_mana_per_target` additional generic mana per target beyond the first (Fireball = 1,
     /// Fire = 0). Target cardinality is declared by the sibling [`TargetingDef`](crate::TargetingDef).
@@ -989,6 +1001,12 @@ pub enum SpellEffectKind {
         #[serde(default)]
         who: PlayerRecipient,
         count: Amount,
+    },
+    /// CR 121.2: the chosen player draws `count` cards. Jace Beleren and Ancestral Recall share
+    /// this targeted form; untargeted draws continue to use [`Self::Draw`].
+    TargetPlayerDraws {
+        count: u32,
+        target: TargetFilter,
     },
     /// CR 701.9: each affected player chooses and discards `count` cards without targeting.
     /// Player-set recipients make their hidden choices in APNAP order before the complete discard
@@ -1547,6 +1565,9 @@ pub enum SpellEffectKind {
     ChangeSourceFace {
         action: FaceChangeAction,
     },
+    /// Intrinsic CR 310.11b Siege defeat trigger. Engine-synthesized only; it moves the exact
+    /// defeated Battle to exile and offers its controller the transformed free cast.
+    SiegeDefeat,
     None,
 }
 
@@ -1996,6 +2017,7 @@ impl SpellEffectKind {
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
+            | SpellEffectKind::TargetPlayerDraws { target, .. }
             | SpellEffectKind::DrainTarget { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
             | SpellEffectKind::DiscardCards { target, .. }
@@ -2019,6 +2041,7 @@ impl SpellEffectKind {
                 vec![TargetRole::GraveyardCard(filter)]
             }
             SpellEffectKind::DamagePlayer { .. }
+            | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
             | SpellEffectKind::Draw { .. }
             | SpellEffectKind::Discard { .. }
             | SpellEffectKind::DrawDiscard { .. }
@@ -2049,6 +2072,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PreventAllCombatDamageTurn
             | SpellEffectKind::DamageCantBePreventedThisTurn
             | SpellEffectKind::ChangeSourceFace { .. }
+            | SpellEffectKind::SiegeDefeat
             | SpellEffectKind::None => Vec::new(),
         }
     }

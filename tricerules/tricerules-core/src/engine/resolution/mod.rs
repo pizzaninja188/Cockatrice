@@ -668,6 +668,7 @@ impl GameEngine {
                         object_id: top.id,
                         deciding_player: top.controller,
                         destination_controller: top.controller,
+                        battle_protector: None,
                         face_index: top.face_index,
                         unlock_room_door: Some(top.face_index),
                         chosen_x: top.chosen_x,
@@ -1149,7 +1150,13 @@ impl GameEngine {
                     effect @ SpellEffectKind::DamagePlayer { .. } => {
                         damage::damage_player(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. } => {
+                        damage::damage_attacked_player_or_planeswalker(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::Draw { .. } => zones::draw(&mut cx, effect)?,
+                    effect @ SpellEffectKind::TargetPlayerDraws { .. } => {
+                        zones::target_player_draws(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::Discard { .. } => zones::discard(&mut cx, effect)?,
                     effect @ SpellEffectKind::DrawDiscard { .. } => {
                         zones::draw_discard(&mut cx, effect)?
@@ -1306,6 +1313,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::ChangeSourceFace { .. } => {
                         misc::change_source_face(&mut cx, effect)?
                     }
+                    SpellEffectKind::SiegeDefeat => zones::siege_defeat(&mut cx)?,
                     effect @ SpellEffectKind::None => misc::none(&mut cx, effect)?,
                     effect @ SpellEffectKind::AuraAttach { .. } => {
                         misc::aura_attach(&mut cx, effect)?
@@ -1530,6 +1538,7 @@ impl GameEngine {
                 object_id: exiled.object_id,
                 deciding_player: owner,
                 destination_controller: owner,
+                battle_protector: None,
                 face_index: 0,
                 unlock_room_door: None,
                 chosen_x: 0,
@@ -1746,6 +1755,7 @@ impl GameEngine {
                         object_id: oid,
                         deciding_player: pid,
                         destination_controller: pid,
+                        battle_protector: None,
                         face_index: 0,
                         unlock_room_door: None,
                         chosen_x: 0,
@@ -2021,6 +2031,7 @@ pub(crate) fn move_object_to_zone(
         .flatten();
     if leaving_battlefield {
         state.room_states.remove(&oid);
+        state.battle_protectors.remove(&oid);
         if let Some(old_controller) = state.objects.get(&oid).map(|object| object.controller) {
             let object = TriggerObjectRef {
                 object_id: oid,
@@ -2967,6 +2978,7 @@ mod attached_subject_tests {
         let attacker = add_battlefield_object(&mut engine, 30, "grizzly_bears");
         engine.state.combat = Some(CombatState {
             attacking: vec![attacker],
+            attack_assignments: HashMap::new(),
             blockers: HashMap::new(),
             damage_assignments: HashMap::new(),
             trample_player_damage: HashMap::new(),

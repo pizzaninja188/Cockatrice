@@ -205,6 +205,8 @@ public:
         quint32 oid = 0;
         bool tapped = false;
         bool creature = false;
+        bool planeswalker = false;
+        bool battle = false;
         bool sick = false;
         bool haste = false;
         bool reach = false;
@@ -213,11 +215,17 @@ public:
         int faceIndex = 0;
         bool faceDown = false;
         quint64 generation = 0;
+        int loyalty = -1;
+        int defense = -1;
+        int battleProtector = -1;
+        bool firstAbilityActivatable = false;
         int attachmentPlayerId = -1;
         std::array<bool, 2> roomDoors{false, false};
         int roomDoorCount = 0;
     };
     std::map<int, std::vector<Permanent>> battlefieldByPlayer;
+    std::vector<ruled::v1::AttackAssignment> latestAttackPreviewAssignments;
+    std::vector<ruled::v1::AttackAssignment> latestDeclaredAttackAssignments;
     struct Pool
     {
         int w = 0, u = 0, b = 0, r = 0, g = 0, c = 0;
@@ -908,7 +916,8 @@ public:
                     graveyardCohortPhysicalIdentityContinuous =
                         graveyardCohortPhysicalIdentityContinuous && mc.new_card_id() == mc.card_id();
                     sawGraveyardToLibraryPhysicalMove = true;
-                } else if ((from == grave || to == exile) && name != QLatin1String("Sagu Pummeler") &&
+                } else if (flashbackCast && (from == grave || to == exile) &&
+                           name != QLatin1String("Sagu Pummeler") &&
                            !(name == QLatin1String("Grizzly Bears") &&
                              (submittedAggressiveChoice || sawAggressivePublicReveal))) {
                     // Any *other* card taking the flashback path is the wrong-card bug.
@@ -1101,12 +1110,17 @@ public:
                     sawCombatLifeLoss = true;
                 }
             } else if (ev.has_attackers_declared()) {
-                if (ev.attackers_declared().attacker_object_ids_size() > 0) {
+                if (ev.attackers_declared().assignments_size() > 0) {
                     batchDeclaredAttackers = true;
                     sawAttackersDeclared = true;
+                    latestDeclaredAttackAssignments.assign(ev.attackers_declared().assignments().begin(),
+                                                           ev.attackers_declared().assignments().end());
                     log(QStringLiteral("attackers declared: %1 creature(s)")
-                            .arg(ev.attackers_declared().attacker_object_ids_size()));
+                            .arg(ev.attackers_declared().assignments_size()));
                 }
+            } else if (ev.has_attackers_preview()) {
+                latestAttackPreviewAssignments.assign(ev.attackers_preview().assignments().begin(),
+                                                       ev.attackers_preview().assignments().end());
             } else if (ev.has_face_changed()) {
                 const auto &face = ev.face_changed();
                 if (waifOid != 0 && face.object_id() == waifOid && face.face_up_index() == 1) {
@@ -1413,12 +1427,25 @@ public:
                             perm.oid = battlefieldObject.object_id();
                             perm.tapped = battlefieldObject.tapped();
                             perm.creature = battlefieldObject.is_creature();
+                            perm.planeswalker = battlefieldObject.is_planeswalker();
+                            perm.battle = battlefieldObject.is_battle();
                             perm.sick = battlefieldObject.summoning_sick();
                             perm.power = static_cast<int>(battlefieldObject.power());
                             perm.toughness = static_cast<int>(battlefieldObject.toughness());
                             perm.faceIndex = static_cast<int>(battlefieldObject.face_up_index());
                             perm.faceDown = battlefieldObject.face_down();
                             perm.generation = battlefieldObject.zone_change_generation();
+                            perm.loyalty = battlefieldObject.is_planeswalker()
+                                               ? static_cast<int>(battlefieldObject.loyalty())
+                                               : -1;
+                            perm.defense = battlefieldObject.is_battle()
+                                               ? static_cast<int>(battlefieldObject.defense())
+                                               : -1;
+                            perm.battleProtector = battlefieldObject.has_battle_protector_player_id()
+                                                       ? battlefieldObject.battle_protector_player_id()
+                                                       : -1;
+                            perm.firstAbilityActivatable = battlefieldObject.activated_abilities_size() > 0 &&
+                                                           battlefieldObject.activated_abilities(0).activatable();
                             perm.roomDoorCount = std::min(2, battlefieldObject.room_doors_size());
                             for (int door = 0; door < perm.roomDoorCount; ++door) {
                                 const auto &publishedDoor = battlefieldObject.room_doors(door);
@@ -2367,15 +2394,22 @@ public:
             // Stop attacking once the combat-damage milestone is in: the smoke game must not
             // kill the opponent before the later milestones (Brainstorm, cleanup discard) land.
             if (it != battlefieldByPlayer.end() && !sawCombatLifeLoss) {
-                for (const Permanent &perm : it->second) {
-                    if (perm.cardId != QStringLiteral("anti-venom,_horrifying_healer") && perm.creature &&
-                        !perm.tapped && (!perm.sick || perm.haste)) {
-                        att->add_creature_ids(perm.oid);
+                QSet<quint32> selectedAttackers;
+                for (const auto &assignment : latestLegal.legal_attack_assignments()) {
+                    const auto permanent = std::find_if(
+                        it->second.cbegin(), it->second.cend(), [&assignment](const Permanent &candidate) {
+                            return candidate.oid == assignment.attacker_object_id();
+                        });
+                    if (permanent != it->second.cend() &&
+                        permanent->cardId != QStringLiteral("anti-venom,_horrifying_healer") &&
+                        !selectedAttackers.contains(assignment.attacker_object_id())) {
+                        *att->add_assignments() = assignment;
+                        selectedAttackers.insert(assignment.attacker_object_id());
                     }
                 }
             }
             attackersSentThisCombat = true;
-            sendRuled(cmd, QStringLiteral("declare attackers (%1)").arg(att->creature_ids_size()));
+            sendRuled(cmd, QStringLiteral("declare attackers (%1)").arg(att->assignments_size()));
             return;
         }
         if (phase == ruled::v1::PHASE_ID_DECLARE_BLOCKERS && activePlayer != myId && !blockersSentThisCombat) {
@@ -5089,6 +5123,295 @@ TEST_F(RuledE2ESmokeTest, GraveyardTargetCohortIsPrivateAndMovesExactPhysicalCar
     EXPECT_TRUE(p2.sawGraveyardToLibraryPhysicalMove);
     EXPECT_TRUE(p1.graveyardCohortPhysicalIdentityContinuous);
     EXPECT_TRUE(p2.graveyardCohortPhysicalIdentityContinuous);
+}
+
+TEST_F(RuledE2ESmokeTest, PlaneswalkerBattleTargetsSplitCombatAndSiegeCastReachBothClients)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("battlep1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("battlep2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Mountain")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "issue 72 game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "issue 72 game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto put = [&](int player, const char *name, ruled::v1::DevZone zone, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(player);
+        auto *placement = dev->mutable_put_card_in_zone();
+        placement->set_card_name(name);
+        placement->set_zone(zone);
+        placement->set_ready(ready);
+        return send(p1, command, QStringLiteral("issue 72 put %1").arg(name));
+    };
+    auto mana = [&](int blue, int black, int red) {
+        ruled::v1::RuledCommand command;
+        command.mutable_dev_command()->set_target_player_id(p1.myId);
+        auto *gift = command.mutable_dev_command()->mutable_add_mana();
+        gift->set_u(blue);
+        gift->set_b(black);
+        gift->set_r(red);
+        return send(p1, command, QStringLiteral("issue 72 add mana"));
+    };
+    auto pass = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(client, command, QStringLiteral("issue 72 pass"));
+    };
+    auto find = [](const SmokeClient &client, int controller, const QString &id)
+        -> std::optional<SmokeClient::Permanent> {
+        const auto battlefield = client.battlefieldByPlayer.find(controller);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return std::nullopt;
+        }
+        const auto card = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                       [&](const SmokeClient::Permanent &permanent) {
+                                           return permanent.cardId == id;
+                                       });
+        return card == battlefield->second.end() ? std::nullopt : std::optional(*card);
+    };
+    auto findMatching = [](const SmokeClient &client, int controller, const auto &predicate)
+        -> std::optional<SmokeClient::Permanent> {
+        const auto battlefield = client.battlefieldByPlayer.find(controller);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return std::nullopt;
+        }
+        const auto card = std::find_if(battlefield->second.begin(), battlefield->second.end(), predicate);
+        return card == battlefield->second.end() ? std::nullopt : std::optional(*card);
+    };
+    auto castAt = [&](const QString &name, quint32 oid) {
+        const auto *action = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, name);
+        if (!action) {
+            return false;
+        }
+        const auto published = p1.latestLegal.valid_targets_by_hand_slot().find(action->hand_index() << 8);
+        if (published == p1.latestLegal.valid_targets_by_hand_slot().end() ||
+            published->second.groups_size() != 1) {
+            return false;
+        }
+        const auto &group = published->second.groups(0);
+        if (std::find(group.valid_permanent_ids().begin(), group.valid_permanent_ids().end(), oid) ==
+            group.valid_permanent_ids().end()) {
+            return false;
+        }
+        ruled::v1::RuledCommand command;
+        auto *cast = command.mutable_cast_spell();
+        cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        cast->mutable_source()->set_hand_index(action->hand_index());
+        auto *target = cast->add_targets();
+        target->set_object_id(oid);
+        target->set_group_index(group.group_index());
+        target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        return send(p1, command, QStringLiteral("issue 72 cast %1").arg(name));
+    };
+
+    ASSERT_TRUE(put(p1.myId, "Jace Beleren", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    auto ownJace = find(p1, p1.myId, QStringLiteral("jace_beleren"));
+    ASSERT_TRUE(ownJace.has_value());
+    ASSERT_TRUE(put(p1.myId, "Shock", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(mana(0, 0, 1));
+    ASSERT_TRUE(castAt(QStringLiteral("Shock"), ownJace->oid));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    ownJace = find(p1, p1.myId, QStringLiteral("jace_beleren"));
+    ASSERT_TRUE(ownJace.has_value());
+    EXPECT_TRUE(ownJace->planeswalker);
+    EXPECT_EQ(ownJace->loyalty, 1);
+    ASSERT_TRUE(find(p2, p1.myId, QStringLiteral("jace_beleren")).has_value());
+    EXPECT_EQ(find(p2, p1.myId, QStringLiteral("jace_beleren"))->loyalty, 1);
+
+    ruled::v1::RuledCommand activate;
+    p1.setBattlefieldAbilitySource(activate.mutable_activate_ability(), ownJace->oid);
+    activate.mutable_activate_ability()->set_ability_index(0);
+    ASSERT_TRUE(send(p1, activate, QStringLiteral("issue 72 activate Jace +2")));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    EXPECT_EQ(find(p1, p1.myId, QStringLiteral("jace_beleren"))->loyalty, 3);
+    EXPECT_FALSE(find(p1, p1.myId, QStringLiteral("jace_beleren"))->firstAbilityActivatable);
+
+    ASSERT_TRUE(put(p2.myId, "Jace Beleren", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    auto opposingJace = find(p1, p2.myId, QStringLiteral("jace_beleren"));
+    ASSERT_TRUE(opposingJace.has_value());
+    ASSERT_TRUE(put(p1.myId, "Finishing Blow", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(mana(0, 5, 0));
+    ASSERT_TRUE(castAt(QStringLiteral("Finishing Blow"), opposingJace->oid));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    EXPECT_FALSE(find(p1, p2.myId, QStringLiteral("jace_beleren")).has_value());
+
+    ASSERT_TRUE(put(p2.myId, "Jace Beleren", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(put(p1.myId, "Invasion of Ulgrotha // Grandmother Ravi Sengir",
+                    ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(p1.pendingChoice.has_value());
+    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_BATTLE_PROTECTOR);
+    EXPECT_FALSE(p2.pendingChoice.has_value());
+    EXPECT_FALSE(findMatching(p1, p1.myId,
+                              [](const SmokeClient::Permanent &permanent) { return permanent.battle; })
+                     .has_value());
+    ruled::v1::RuledCommand chooseProtector;
+    chooseProtector.mutable_submit_resolution_choice()->add_chosen_object_ids(p2.myId);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, chooseProtector, QStringLiteral("issue 72 choose Battle protector")));
+    ASSERT_TRUE(p1.pendingTriggerTarget.has_value());
+    ruled::v1::RuledCommand targetEtb;
+    auto *playerTarget = targetEtb.mutable_choose_trigger_target()->add_targets();
+    playerTarget->set_object_id(p2.myId);
+    playerTarget->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    p1.pendingTriggerTarget.reset();
+    ASSERT_TRUE(send(p1, targetEtb, QStringLiteral("issue 72 choose Battle ETB target")));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+
+    auto battle = findMatching(p1, p1.myId,
+                               [](const SmokeClient::Permanent &permanent) { return permanent.battle; });
+    opposingJace = find(p1, p2.myId, QStringLiteral("jace_beleren"));
+    ASSERT_TRUE(battle.has_value() && opposingJace.has_value());
+    EXPECT_TRUE(battle->battle);
+    EXPECT_EQ(battle->defense, 5);
+    EXPECT_EQ(battle->battleProtector, p2.myId);
+    ASSERT_TRUE(findMatching(p2, p1.myId,
+                             [](const SmokeClient::Permanent &permanent) { return permanent.battle; })
+                    .has_value());
+    EXPECT_EQ(findMatching(p2, p1.myId,
+                           [](const SmokeClient::Permanent &permanent) { return permanent.battle; })
+                  ->defense,
+              5);
+    const quint32 battleOid = battle->oid;
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(battleOid));
+    const int physicalId = p1.serverCardByEngineOid[battleOid];
+    EXPECT_EQ(p2.serverCardByEngineOid[battleOid], physicalId);
+
+    ASSERT_TRUE(put(p1.myId, "Hill Giant", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(put(p1.myId, "Serra Angel", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(put(p1.myId, "Craw Wurm", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    QElapsedTimer toAttack;
+    toAttack.start();
+    while (p1.phase != ruled::v1::PHASE_ID_DECLARE_ATTACKERS && toAttack.elapsed() < 20000) {
+        ASSERT_TRUE(pass(p1.priorityPlayer == p1.myId ? p1 : p2));
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_DECLARE_ATTACKERS);
+    const auto hill = find(p1, p1.myId, QStringLiteral("hill_giant"));
+    const auto angel = find(p1, p1.myId, QStringLiteral("serra_angel"));
+    const auto wurm = find(p1, p1.myId, QStringLiteral("craw_wurm"));
+    ASSERT_TRUE(hill.has_value() && angel.has_value() && wurm.has_value());
+    std::map<quint32, ruled::v1::AttackAssignment> selected;
+    for (const auto &assignment : p1.latestLegal.legal_attack_assignments()) {
+        const auto &defender = assignment.defender();
+        if ((assignment.attacker_object_id() == hill->oid && defender.kind() == ruled::v1::TARGET_REF_KIND_PLAYER &&
+             defender.object_id() == static_cast<quint32>(p2.myId)) ||
+            (assignment.attacker_object_id() == angel->oid && defender.object_id() == opposingJace->oid) ||
+            (assignment.attacker_object_id() == wurm->oid && defender.object_id() == battleOid)) {
+            selected[assignment.attacker_object_id()] = assignment;
+        }
+    }
+    ASSERT_EQ(selected.size(), 3u);
+    ruled::v1::RuledCommand preview;
+    ruled::v1::RuledCommand declare;
+    for (const auto &[_, assignment] : selected) {
+        *preview.mutable_preview_declare_attackers()->add_assignments() = assignment;
+        *declare.mutable_declare_attackers()->add_assignments() = assignment;
+    }
+    ASSERT_TRUE(send(p1, preview, QStringLiteral("issue 72 preview split attackers")));
+    EXPECT_EQ(p1.latestAttackPreviewAssignments.size(), 3u);
+    EXPECT_EQ(p2.latestAttackPreviewAssignments.size(), 3u);
+    ASSERT_TRUE(send(p1, declare, QStringLiteral("issue 72 declare split attackers")));
+    EXPECT_EQ(p1.latestDeclaredAttackAssignments.size(), 3u);
+    EXPECT_EQ(p2.latestDeclaredAttackAssignments.size(), 3u);
+
+    // With no eligible blockers, the authoritative engine auto-commits an empty declaration and
+    // advances directly into combat damage.
+    QElapsedTimer siege;
+    siege.start();
+    while ((!p1.pendingChoice.has_value() ||
+            p1.pendingChoice->choice_kind() != ruled::v1::CHOICE_KIND_SIEGE_CAST) &&
+           siege.elapsed() < 30000) {
+        if (p1.priorityPlayer == p1.myId) {
+            ASSERT_TRUE(pass(p1));
+        } else if (p1.priorityPlayer == p2.myId) {
+            ASSERT_TRUE(pass(p2));
+        } else {
+            p1.pump(25);
+            p2.pump(25);
+        }
+    }
+    ASSERT_TRUE(p1.pendingChoice.has_value());
+    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_SIEGE_CAST);
+    EXPECT_FALSE(p2.pendingChoice.has_value());
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(battleOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(battleOid));
+    const int exiledPhysicalId = p1.serverCardByEngineOid[battleOid];
+    EXPECT_EQ(p2.serverCardByEngineOid[battleOid], exiledPhysicalId);
+
+    ruled::v1::RuledCommand castBack;
+    auto *submission = castBack.mutable_submit_resolution_choice();
+    submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_TRANSFORMED);
+    auto *cast = submission->mutable_cast_spell();
+    cast->set_cast_method(ruled::v1::CAST_METHOD_SIEGE_DEFEAT);
+    cast->set_face_index(1);
+    cast->mutable_source()->set_exile_object_id(battleOid);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, castBack, QStringLiteral("issue 72 cast Siege transformed")));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    battle = findMatching(p1, p1.myId,
+                          [battleOid](const SmokeClient::Permanent &permanent) { return permanent.oid == battleOid; });
+    const auto observer = findMatching(
+        p2, p1.myId, [battleOid](const SmokeClient::Permanent &permanent) { return permanent.oid == battleOid; });
+    ASSERT_TRUE(battle.has_value() && observer.has_value());
+    EXPECT_EQ(battle->oid, battleOid);
+    EXPECT_EQ(observer->oid, battleOid);
+    EXPECT_EQ(battle->faceIndex, 1);
+    EXPECT_EQ(observer->faceIndex, 1);
+    EXPECT_TRUE(battle->creature && observer->creature);
+    EXPECT_EQ(battle->defense, -1);
+    EXPECT_EQ(observer->defense, -1);
+    EXPECT_EQ(p1.serverCardByEngineOid[battleOid], exiledPhysicalId);
+    EXPECT_EQ(p2.serverCardByEngineOid[battleOid], exiledPhysicalId);
 }
 
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can

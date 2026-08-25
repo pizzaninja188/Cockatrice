@@ -14,6 +14,11 @@ pub(in crate::engine) struct SacrificeSnapshot {
 }
 
 enum CostDebit {
+    Loyalty {
+        object_id: ObjectId,
+        generation: u64,
+        delta: i32,
+    },
     Tap {
         object_id: ObjectId,
         generation: u64,
@@ -488,6 +493,38 @@ impl GameEngine {
         let eligible_restricted_mana = self.eligible_restricted_mana_for_ability(idx, permanent_id);
         for (cost_index, cost) in costs.iter().enumerate() {
             match cost {
+                AbilityCost::Loyalty(delta) => {
+                    let object = self
+                        .state
+                        .objects
+                        .get(&permanent_id)
+                        .ok_or(EngineError::Illegal("planeswalker missing"))?;
+                    if object.zone != Zone::Battlefield
+                        || object.controller != player
+                        || !self
+                            .characteristics(permanent_id)
+                            .is_some_and(|value| value.has_type("Planeswalker"))
+                    {
+                        return Err(EngineError::Illegal(
+                            "loyalty cost requires a planeswalker you control",
+                        ));
+                    }
+                    if *delta < 0
+                        && object.counter_count(CounterKind::Loyalty) < delta.unsigned_abs()
+                    {
+                        return Err(EngineError::Illegal("not enough loyalty counters"));
+                    }
+                    debits.push(CostDebit::Loyalty {
+                        object_id: permanent_id,
+                        generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&permanent_id)
+                            .copied()
+                            .unwrap_or(0),
+                        delta: *delta,
+                    });
+                }
                 AbilityCost::Tap => {
                     if saw_tap {
                         return Err(EngineError::Illegal("duplicate tap cost"));
@@ -719,6 +756,25 @@ impl GameEngine {
         };
         for debit in plan.debits {
             match debit {
+                CostDebit::Loyalty {
+                    object_id, delta, ..
+                } => {
+                    let timestamp = self.state.command_index;
+                    let object = self
+                        .state
+                        .objects
+                        .get_mut(&object_id)
+                        .expect("prevalidated loyalty source must commit");
+                    if delta >= 0 {
+                        object.add_counters(CounterKind::Loyalty, delta as u32, timestamp);
+                    } else {
+                        let current = object.counter_count(CounterKind::Loyalty);
+                        object.set_counter(
+                            CounterKind::Loyalty,
+                            current.saturating_sub(delta.unsigned_abs()),
+                        );
+                    }
+                }
                 CostDebit::Tap { object_id, .. } => {
                     crate::engine::set_tapped(&mut self.state, object_id, true);
                 }
@@ -831,6 +887,28 @@ impl GameEngine {
         for debit in &plan.debits {
             let valid =
                 match debit {
+                    CostDebit::Loyalty {
+                        object_id,
+                        generation,
+                        delta,
+                    } => {
+                        self.state.objects.get(object_id).is_some_and(|object| {
+                            object.zone == Zone::Battlefield
+                                && object.controller == plan.player
+                                && (*delta >= 0
+                                    || object.counter_count(CounterKind::Loyalty)
+                                        >= delta.unsigned_abs())
+                        }) && self
+                            .characteristics(*object_id)
+                            .is_some_and(|value| value.has_type("Planeswalker"))
+                            && self
+                                .state
+                                .zone_change_generation
+                                .get(object_id)
+                                .copied()
+                                .unwrap_or(0)
+                                == *generation
+                    }
                     CostDebit::Mana(mana) => {
                         mana_payment_still_valid(&self.state, plan.player_idx, mana)
                     }

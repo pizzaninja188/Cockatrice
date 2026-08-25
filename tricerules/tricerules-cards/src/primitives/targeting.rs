@@ -273,7 +273,7 @@ impl TargetingDef {
 /// Base kind for a [`TargetFilter`] — what category of object is targeted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TargetKind {
-    /// Creature or player (later expands to planeswalker/battle).
+    /// Player, creature, planeswalker, or battle (CR 115.4).
     #[default]
     AnyTarget,
     /// A creature on the battlefield.
@@ -305,6 +305,8 @@ pub enum CardTypeFilter {
     /// capability; this vocabulary is also needed by mana restrictions such as Chandra's
     /// Embercat.
     Planeswalker,
+    /// Matches battle spells and permanents (CR 310).
+    Battle,
     /// Matches any card that does not have the land card type (Coercion, Thoughtseize, and
     /// Cracked Skull).
     Nonland,
@@ -314,7 +316,7 @@ pub enum CardTypeFilter {
 
 impl CardTypeFilter {
     /// Exhaustive list used when an action snapshots the card types it matched at that moment.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::BasicLand,
         Self::Land,
         Self::Enchantment,
@@ -324,6 +326,7 @@ impl CardTypeFilter {
         Self::Creature,
         Self::Artifact,
         Self::Planeswalker,
+        Self::Battle,
         Self::Nonland,
         Self::Noncreature,
     ];

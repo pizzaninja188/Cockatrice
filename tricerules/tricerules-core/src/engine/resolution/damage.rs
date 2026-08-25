@@ -366,6 +366,67 @@ pub(super) fn damage_player(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn damage_attacked_player_or_planeswalker(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { amount } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let recipient = if let Some(player) = cx.top.trigger_context.attacked_player {
+        Some(DamageRecipient::Player(player))
+    } else if let Some(permanent) = cx.top.trigger_context.attacked_planeswalker {
+        let generation = cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&permanent.object_id)
+            .copied()
+            .unwrap_or(0);
+        cx.engine
+            .state
+            .objects
+            .get(&permanent.object_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield)
+            .then_some(())
+            .filter(|_| generation == permanent.zone_change_generation)
+            .map(|_| DamageRecipient::Permanent(permanent.object_id))
+    } else {
+        None
+    };
+    let Some(recipient) = recipient else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let amount = cx.engine.resolve_amount(
+        &amount,
+        AmountContext::for_stack_item(cx.top, cx.controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
+    let source_has_lifelink = cx
+        .engine
+        .resolving_source_has_keyword(cx.top, Keyword::Lifelink);
+    let damage = vec![DamageSpec {
+        event: DamageEvent::noncombat(
+            resolving_damage_source_id(cx.top),
+            cx.controller,
+            cx.spell_label,
+            recipient,
+            amount,
+        ),
+        source_has_deathtouch: false,
+        source_has_lifelink,
+    }];
+    let Some(completed) = cx
+        .engine
+        .process_or_park_damage_batch(cx.top, damage, cx.events)
+    else {
+        return Ok(EffectOutcome::Suspended);
+    };
+    cx.engine
+        .commit_completed_damage_batch(&completed, cx.events);
+    Ok(EffectOutcome::Continue)
+}
+
 #[cfg(test)]
 mod damage_source_tests {
     use super::*;

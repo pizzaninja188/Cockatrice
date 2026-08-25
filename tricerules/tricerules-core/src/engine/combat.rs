@@ -4,6 +4,36 @@ use super::legal_actions::fill_legal;
 use super::*;
 
 impl GameEngine {
+    pub(super) fn combat_defender_recipient(
+        &self,
+        combat: &CombatState,
+        attacker: ObjectId,
+    ) -> Option<DamageRecipient> {
+        let assignment = combat.attack_assignments.get(&attacker)?;
+        match assignment.defender {
+            CombatDefenderTarget::Player(player) => self
+                .state
+                .player_idx(player)
+                .is_some()
+                .then_some(DamageRecipient::Player(player)),
+            CombatDefenderTarget::Permanent(permanent) => {
+                let generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&permanent.object_id)
+                    .copied()
+                    .unwrap_or(0);
+                self.state
+                    .objects
+                    .get(&permanent.object_id)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+                    .then_some(())
+                    .filter(|_| generation == permanent.zone_change_generation)
+                    .map(|_| DamageRecipient::Permanent(permanent.object_id))
+            }
+        }
+    }
+
     /// Returns whether an attacker needs an explicit combat-damage assignment: either it has
     /// multiple blockers, or it has one blocker and trample can carry excess damage to the player.
     pub(super) fn attacker_needs_explicit_damage_assignment(
@@ -171,6 +201,160 @@ impl GameEngine {
                         .any(|attacker_id| self.can_block(*attacker_id, *oid))
             })
             .collect()
+    }
+
+    fn attack_defenders(&self) -> Vec<(CombatDefenderTarget, PlayerId)> {
+        let defending_players = self.state.defending_player_ids();
+        let mut defenders: Vec<_> = defending_players
+            .iter()
+            .copied()
+            .map(|player| (CombatDefenderTarget::Player(player), player))
+            .collect();
+        for object in self.state.objects.values() {
+            if object.zone != Zone::Battlefield {
+                continue;
+            }
+            let Some(characteristics) = self.characteristics(object.id) else {
+                continue;
+            };
+            let defending_player = if characteristics.has_type("Planeswalker")
+                && defending_players.contains(&characteristics.controller)
+            {
+                Some(characteristics.controller)
+            } else if characteristics.has_type("Battle") {
+                self.state
+                    .battle_protectors
+                    .get(&object.id)
+                    .copied()
+                    .filter(|player| defending_players.contains(player))
+            } else {
+                None
+            };
+            let Some(defending_player) = defending_player else {
+                continue;
+            };
+            defenders.push((
+                CombatDefenderTarget::Permanent(TriggerObjectRef {
+                    object_id: object.id,
+                    zone_change_generation: self
+                        .state
+                        .zone_change_generation
+                        .get(&object.id)
+                        .copied()
+                        .unwrap_or(0),
+                    controller_at_event: characteristics.controller,
+                }),
+                defending_player,
+            ));
+        }
+        defenders
+    }
+
+    fn wire_attack_assignment(
+        &self,
+        attacker: ObjectId,
+        defender: CombatDefenderTarget,
+        defending_player: PlayerId,
+    ) -> rv1::AttackAssignment {
+        let (defender, defender_zone_change_generation) = match defender {
+            CombatDefenderTarget::Player(player) => (
+                rv1::TargetRef {
+                    object_id: player as u32,
+                    kind: rv1::TargetRefKind::Player as i32,
+                    ..Default::default()
+                },
+                0,
+            ),
+            CombatDefenderTarget::Permanent(permanent) => (
+                rv1::TargetRef {
+                    object_id: permanent.object_id,
+                    kind: rv1::TargetRefKind::Permanent as i32,
+                    ..Default::default()
+                },
+                permanent.zone_change_generation,
+            ),
+        };
+        rv1::AttackAssignment {
+            attacker_object_id: attacker,
+            attacker_zone_change_generation: self
+                .state
+                .zone_change_generation
+                .get(&attacker)
+                .copied()
+                .unwrap_or(0),
+            defender: Some(defender),
+            defender_zone_change_generation,
+            defending_player_id: defending_player,
+        }
+    }
+
+    /// CR 508.1b candidates. The same generation-bound edges are published to the client and
+    /// accepted by declaration, so neither Battle protection nor planeswalker control is inferred
+    /// outside the engine.
+    pub(super) fn legal_attack_assignments(&self, player: PlayerId) -> Vec<rv1::AttackAssignment> {
+        let defenders = self.attack_defenders();
+        self.eligible_attacker_ids(player)
+            .into_iter()
+            .flat_map(|attacker| {
+                defenders.iter().map(move |(defender, defending_player)| {
+                    self.wire_attack_assignment(attacker, *defender, *defending_player)
+                })
+            })
+            .collect()
+    }
+
+    fn parse_attack_assignment(
+        &self,
+        assignment: &rv1::AttackAssignment,
+        active_player: PlayerId,
+    ) -> Result<CombatAttackAssignment, EngineError> {
+        let candidates: Vec<_> = self
+            .legal_attack_assignments(active_player)
+            .into_iter()
+            .filter(|candidate| candidate.attacker_object_id == assignment.attacker_object_id)
+            .collect();
+        let legal = if assignment.defender.is_none()
+            && assignment.attacker_zone_change_generation == 0
+            && assignment.defender_zone_change_generation == 0
+            && assignment.defending_player_id == 0
+            && candidates.len() == 1
+        {
+            candidates[0]
+        } else {
+            candidates
+                .into_iter()
+                .find(|candidate| candidate == assignment)
+                .ok_or(EngineError::Illegal(
+                    "illegal or stale attack defender assignment",
+                ))?
+        };
+        let attacker = self
+            .trigger_object_ref(legal.attacker_object_id)
+            .ok_or(EngineError::Illegal("stale attacker"))?;
+        let defender_ref = legal
+            .defender
+            .as_ref()
+            .ok_or(EngineError::Illegal("missing attack defender"))?;
+        let defender = match rv1::TargetRefKind::try_from(defender_ref.kind) {
+            Ok(rv1::TargetRefKind::Player) => {
+                CombatDefenderTarget::Player(defender_ref.object_id as PlayerId)
+            }
+            Ok(rv1::TargetRefKind::Permanent) => {
+                CombatDefenderTarget::Permanent(TriggerObjectRef {
+                    object_id: defender_ref.object_id,
+                    zone_change_generation: legal.defender_zone_change_generation,
+                    controller_at_event: self
+                        .controller_of(defender_ref.object_id)
+                        .ok_or(EngineError::Illegal("attack defender disappeared"))?,
+                })
+            }
+            _ => return Err(EngineError::Illegal("invalid attack defender kind")),
+        };
+        Ok(CombatAttackAssignment {
+            attacker,
+            defender,
+            defending_player: legal.defending_player_id,
+        })
     }
 
     /// Exact blocker-to-attacker assignments currently permitted by CR 509.1a-b. This is the
@@ -421,7 +605,7 @@ impl GameEngine {
 
     pub(super) fn set_attackers(
         &mut self,
-        ids: &[u32],
+        assignments: &[rv1::AttackAssignment],
         _player: PlayerId,
     ) -> Result<RuledEventBatch, EngineError> {
         if self.state.priority_player_id() != _player {
@@ -433,14 +617,17 @@ impl GameEngine {
         // as an attacker whenever it is a legal attacker. Same set the client is given via
         // LegalActions.required_attacker_ids, so the UI can gate its confirm control identically.
         for oid in self.required_attacker_ids() {
-            if !ids.contains(&oid) {
+            if !assignments
+                .iter()
+                .any(|assignment| assignment.attacker_object_id == oid)
+            {
                 return Err(EngineError::Illegal(
                     "must-attack creature not declared as attacker",
                 ));
             }
         }
 
-        if ids.is_empty() {
+        if assignments.is_empty() {
             self.clear_all_mana_pools();
             self.state.combat = None;
             self.state.turn_step = TurnStep::EndCombat;
@@ -456,19 +643,19 @@ impl GameEngine {
             fill_legal(&mut b2, self);
             return Ok(b2);
         }
-        let defending_player = self
-            .state
-            .sole_defending_player_id()
-            .ok_or(EngineError::Illegal("combat requires one defending player"))?;
         let mut list = Vec::new();
+        let mut parsed_assignments = HashMap::new();
         let mut seen_attackers = HashSet::new();
-        for &oid in ids {
+        for assignment in assignments {
+            let oid = assignment.attacker_object_id;
             if !seen_attackers.insert(oid) {
                 return Err(EngineError::Illegal("duplicate attacker"));
             }
             if let Some(reason) = self.attacker_illegality(oid, ap) {
                 return Err(EngineError::Illegal(reason));
             }
+            let parsed = self.parse_attack_assignment(assignment, ap)?;
+            parsed_assignments.insert(oid, parsed);
             list.push(oid);
         }
         for &oid in &list {
@@ -482,6 +669,7 @@ impl GameEngine {
         let attackers_for_event = list.clone();
         if let Some(c) = self.state.combat.as_mut() {
             c.attacking = list;
+            c.attack_assignments = parsed_assignments;
             c.blockers.clear();
             c.damage_assignments.clear();
             c.trample_player_damage.clear();
@@ -495,6 +683,7 @@ impl GameEngine {
         } else {
             self.state.combat = Some(CombatState {
                 attacking: list,
+                attack_assignments: parsed_assignments,
                 blockers: HashMap::new(),
                 damage_assignments: HashMap::new(),
                 trample_player_damage: HashMap::new(),
@@ -520,7 +709,7 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::AttackersDeclared(
                 rv1::AttackersDeclared {
                     attacking_player_id: ap,
-                    attacker_object_ids: attackers_for_event.clone(),
+                    assignments: assignments.to_vec(),
                 },
             )),
         });
@@ -536,11 +725,17 @@ impl GameEngine {
         let attacks = attackers_for_event
             .into_iter()
             .filter_map(|attacker_id| {
-                self.trigger_object_ref(attacker_id)
-                    .map(|attacker| AttackEdgeSnapshot {
-                        attacker,
-                        defending_player,
-                    })
+                let assignment = self
+                    .state
+                    .combat
+                    .as_ref()?
+                    .attack_assignments
+                    .get(&attacker_id)?;
+                Some(AttackEdgeSnapshot {
+                    attacker: assignment.attacker,
+                    defender: assignment.defender,
+                    defending_player: assignment.defending_player,
+                })
             })
             .collect();
         self.fire_triggers(&[GameEvent::AttackersDeclared {
@@ -979,16 +1174,8 @@ impl GameEngine {
         if self.try_park_ordered_combat_damage(c, pass, events)? {
             return Ok(());
         }
-        // CR 614.1a: Fog-style global prevention — skip all combat damage this step.
-        // Combat damage needs to name the player being attacked, so it fails closed rather than
-        // panicking if the defender is gone — an engine error is a rejected command, an unwrap here
-        // would take the sidecar task and the game down with it.
-        let dfd = self
-            .state
-            .sole_defending_player_id()
-            .ok_or(EngineError::Illegal("defender missing"))?;
         let ap = self.state.active_player_id();
-        let mut total_life_lost: i32 = 0;
+        let mut life_lost: BTreeMap<PlayerId, i32> = BTreeMap::new();
         // (controller_id, amount) pairs — collected during damage assignment, applied after.
         let mut lifelink_gains: Vec<(PlayerId, u32)> = Vec::new();
         // Finalized source-recipient occurrences, collected for damage triggers after the
@@ -1024,6 +1211,11 @@ impl GameEngine {
                 .map(|o| o.controller)
                 .unwrap_or(ap);
             let att_has_trample = self.effective_has_keyword(att, Keyword::Trample);
+            let defending_player = c
+                .attack_assignments
+                .get(&att)
+                .map(|assignment| assignment.defending_player)
+                .unwrap_or(ap);
 
             let blockers = c.blockers.get(&att).map(|v| v.as_slice()).unwrap_or(&[]);
 
@@ -1031,33 +1223,45 @@ impl GameEngine {
                 // Unblocked: deal full power to defending player — only if the attacker assigns
                 // damage this pass (CR 510.4).
                 if attacker_participates {
+                    let Some(recipient) = self.combat_defender_recipient(c, att) else {
+                        continue;
+                    };
+                    let damage_event = DamageEvent::combat(
+                        att,
+                        att_controller,
+                        object_display_name(&self.state, self.registry, att),
+                        recipient,
+                        att_power,
+                    );
                     let Some(result) = self.process_or_park_combat_damage(
-                        DamageEvent::combat(
-                            att,
-                            att_controller,
-                            object_display_name(&self.state, self.registry, att),
-                            DamageRecipient::Player(dfd),
-                            att_power,
-                        ),
+                        damage_event.clone(),
                         att_has_deathtouch,
                         att_has_lifelink,
                         events,
                     ) else {
                         return Ok(());
                     };
-                    let p = result.dealt;
-                    if let Some(di) = self.state.player_idx(dfd) {
-                        self.state.players[di].life -= p as i32;
-                        total_life_lost += p as i32;
-                    }
+                    let p = match recipient {
+                        DamageRecipient::Player(player) => {
+                            if let Some(index) = self.state.player_idx(player) {
+                                self.state.players[index].life -= result.dealt as i32;
+                                *life_lost.entry(player).or_default() += result.dealt as i32;
+                                result.dealt
+                            } else {
+                                0
+                            }
+                        }
+                        DamageRecipient::Permanent(_) => self.commit_damage_result(
+                            &damage_event,
+                            result,
+                            att_has_deathtouch,
+                            events,
+                        ),
+                    };
                     if p > 0 {
-                        damage_dealt_events.push(DamageEvent::combat(
-                            att,
-                            att_controller,
-                            object_display_name(&self.state, self.registry, att),
-                            DamageRecipient::Player(dfd),
-                            p,
-                        ));
+                        let mut dealt_event = damage_event;
+                        dealt_event.amount = p;
+                        damage_dealt_events.push(dealt_event);
                     }
                     // CR 702.15b: attacker with lifelink causes its controller to gain that much life.
                     if att_has_lifelink && p > 0 {
@@ -1079,7 +1283,7 @@ impl GameEngine {
                     .objects
                     .get(&blk)
                     .map(|o| o.controller)
-                    .unwrap_or(dfd);
+                    .unwrap_or(defending_player);
                 if blocker_participates {
                     let Some(result) = self.process_or_park_combat_damage(
                         DamageEvent::combat(
@@ -1171,7 +1375,7 @@ impl GameEngine {
                             .objects
                             .get(&blk)
                             .map(|o| o.controller)
-                            .unwrap_or(dfd);
+                            .unwrap_or(defending_player);
                         let participates = object_participates_in_pass(self, c, pass, blk, false)
                             && self.state.objects.get(&blk).map(|o| o.zone)
                                 == Some(Zone::Battlefield);
@@ -1273,42 +1477,51 @@ impl GameEngine {
                         }
                         total_att_lifelink += dmg_to_blk;
                     }
-                    // CR 702.19: deal trample excess damage to the defending player.
+                    // CR 702.19: deal trample excess damage to the attacked recipient.
                     let player_trample_dmg =
                         c.trample_player_damage.get(&att).copied().unwrap_or(0);
                     if player_trample_dmg > 0 {
-                        let Some(result) = self.process_or_park_combat_damage(
-                            DamageEvent::combat(
+                        if let Some(recipient) = self.combat_defender_recipient(c, att) {
+                            let damage_event = DamageEvent::combat(
                                 att,
                                 att_controller,
                                 object_display_name(&self.state, self.registry, att),
-                                DamageRecipient::Player(dfd),
+                                recipient,
                                 player_trample_dmg,
-                            ),
-                            att_has_deathtouch,
-                            att_has_lifelink,
-                            events,
-                        ) else {
-                            return Ok(());
-                        };
-                        let trample_after = result.dealt;
-                        if let Some(di) = self.state.player_idx(dfd) {
-                            self.state.players[di].life -= trample_after as i32;
-                            total_life_lost += trample_after as i32;
+                            );
+                            let Some(result) = self.process_or_park_combat_damage(
+                                damage_event.clone(),
+                                att_has_deathtouch,
+                                att_has_lifelink,
+                                events,
+                            ) else {
+                                return Ok(());
+                            };
+                            let trample_after = match recipient {
+                                DamageRecipient::Player(player) => {
+                                    if let Some(index) = self.state.player_idx(player) {
+                                        self.state.players[index].life -= result.dealt as i32;
+                                        *life_lost.entry(player).or_default() +=
+                                            result.dealt as i32;
+                                        result.dealt
+                                    } else {
+                                        0
+                                    }
+                                }
+                                DamageRecipient::Permanent(_) => self.commit_damage_result(
+                                    &damage_event,
+                                    result,
+                                    att_has_deathtouch,
+                                    events,
+                                ),
+                            };
+                            if trample_after > 0 {
+                                let mut dealt_event = damage_event;
+                                dealt_event.amount = trample_after;
+                                damage_dealt_events.push(dealt_event);
+                            }
+                            total_att_lifelink += trample_after;
                         }
-                        if trample_after > 0 {
-                            // CR 510: trample excess is combat damage the attacker deals to the
-                            // defending player, so it fires "deals combat damage to a player" triggers
-                            // exactly like an unblocked hit.
-                            damage_dealt_events.push(DamageEvent::combat(
-                                att,
-                                att_controller,
-                                object_display_name(&self.state, self.registry, att),
-                                DamageRecipient::Player(dfd),
-                                trample_after,
-                            ));
-                        }
-                        total_att_lifelink += trample_after;
                     }
                     // CR 702.15b: attacker with lifelink gains life = damage dealt to all blockers.
                     if att_has_lifelink && total_att_lifelink > 0 {
@@ -1324,14 +1537,16 @@ impl GameEngine {
                 }
             }
         }
-        if total_life_lost > 0 {
-            if let Some(di) = self.state.player_idx(dfd) {
-                let new_total = self.state.players[di].life;
+        for (player, lost) in life_lost {
+            if lost == 0 {
+                continue;
+            }
+            if let Some(index) = self.state.player_idx(player) {
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
-                        player_id: dfd,
-                        new_total,
-                        delta: -total_life_lost,
+                        player_id: player,
+                        new_total: self.state.players[index].life,
+                        delta: -lost,
                     })),
                 });
             }

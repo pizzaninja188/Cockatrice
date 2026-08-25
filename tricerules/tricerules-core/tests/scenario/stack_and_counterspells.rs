@@ -270,6 +270,7 @@ fn convolute_rejects_stale_or_malformed_payment_atomically() {
             chosen_object_ids: vec![bolt_oid],
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline as i32,
             selected_branch_index: 0,
+            cast_spell: None,
         })),
     };
     assert!(e.apply_command(0, &malformed).is_err());

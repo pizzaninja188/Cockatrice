@@ -444,9 +444,12 @@ void RuledEventDispatcher::applyPhaseChanged(const ruled::v1::PhaseChanged &pc, 
     state->currentActivePlayerId = static_cast<int>(pc.active_player_id());
     // Phase transitions reset any local pending selections.
     state->pendingAttackerOids.clear();
+    state->pendingAttackAssignments.clear();
+    state->attackerAwaitingDefenderOid = 0;
     state->pendingBlocks.clear();
     state->remoteBlockPreviewPairs.clear();
     state->remoteAttackerPreviewOids.clear();
+    state->remoteAttackPreviewAssignments.clear();
     state->stagedBlockerOids.clear();
     // Keep committed block assignments visible/interactive while progressing from declare
     // blockers -> assign combat damage -> combat damage. Clear only when leaving combat.
@@ -463,6 +466,7 @@ void RuledEventDispatcher::applyPhaseChanged(const ruled::v1::PhaseChanged &pc, 
     }
     if (combatPhase == RuledCombatPhase::None) {
         state->currentAttackerOids.clear();
+        state->currentAttackAssignments.clear();
         state->remoteAttackerPreviewOids.clear();
         state->clearCombatDamageAssignmentState();
         state->committedBlockerGroups.clear();
@@ -720,6 +724,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPick);
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
+    state->clearPendingChoiceOfKind(ChoiceKind::SiegeCast);
     if (isPublicReveal) {
         const int count = rcr.candidate_names_size();
         const bool selectableShapeValid =
@@ -816,7 +821,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_COPY_SOURCE ||
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP ||
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_AURA_PERMANENT ||
-        rcr.choice_kind() == ruled::v1::CHOICE_KIND_AURA_PLAYER) {
+        rcr.choice_kind() == ruled::v1::CHOICE_KIND_AURA_PLAYER ||
+        rcr.choice_kind() == ruled::v1::CHOICE_KIND_BATTLE_PROTECTOR) {
         // Click-to-select on the battlefield rather than a modal list:
         //   TARGET_OBJECTS — CR 707.10c, the controller of a spell copy may redirect its targets.
         //   LEGEND_KEEP    — CR 704.5j, the controller clicks the legend to KEEP; the rest are
@@ -830,6 +836,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             choice.kind = ChoiceKind::AuraPermanent;
         } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_AURA_PLAYER) {
             choice.kind = ChoiceKind::AuraPlayer;
+        } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_BATTLE_PROTECTOR) {
+            choice.kind = ChoiceKind::BattleProtector;
         } else {
             choice.kind = ChoiceKind::CopyTarget;
         }
@@ -881,6 +889,22 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
                           rcr.candidate_server_card_ids_size() != rcr.candidate_names_size() ||
                           rcr.candidate_selectable_size() != rcr.candidate_names_size())) {
         qWarning() << "Rejecting malformed ruled library-look choice";
+        return;
+    }
+
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_SIEGE_CAST) {
+        if (rcr.candidate_object_ids_size() != 1) {
+            qWarning() << "Rejecting malformed Siege cast offer";
+            return;
+        }
+        PendingChoice choice;
+        choice.kind = ChoiceKind::SiegeCast;
+        choice.promptText = QString::fromStdString(rcr.prompt_text());
+        choice.candidateOids.append(rcr.candidate_object_ids(0));
+        choice.choiceOptions.append({0, tr("Decline"), true});
+        choice.choiceOptions.append({1, tr("Cast transformed"), true});
+        state->setPendingChoice(std::move(choice));
+        emit state->combatStateChanged();
         return;
     }
     if ((isZoneSearch || isGraveyardCards) &&
@@ -1173,6 +1197,9 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
         state->engineOidMarkedDamage.clear();
         state->engineOidBattlefieldPower.clear();
         state->engineOidBattlefieldToughness.clear();
+        state->engineOidLoyalty.clear();
+        state->engineOidDefense.clear();
+        state->engineOidBattleProtector.clear();
         state->engineOidToActivatedAbilityTexts.clear();
         state->engineOidToActivatedAbilityManaCosts.clear();
         state->engineOidToActivatedAbilityManaProduced.clear();
@@ -1219,6 +1246,15 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
             }
             state->engineOidBattlefieldPower.insert(oid, static_cast<int>(battlefieldObject.power()));
             state->engineOidBattlefieldToughness.insert(oid, static_cast<int>(battlefieldObject.toughness()));
+            if (battlefieldObject.is_planeswalker()) {
+                state->engineOidLoyalty.insert(oid, static_cast<int>(battlefieldObject.loyalty()));
+            }
+            if (battlefieldObject.is_battle()) {
+                state->engineOidDefense.insert(oid, static_cast<int>(battlefieldObject.defense()));
+                if (battlefieldObject.has_battle_protector_player_id()) {
+                    state->engineOidBattleProtector.insert(oid, battlefieldObject.battle_protector_player_id());
+                }
+            }
         }
     }
     if (anyFirstStrikePending != state->firstStrikeStepPending) {
@@ -1231,12 +1267,18 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
 void RuledEventDispatcher::applyAttackersDeclared(const ruled::v1::AttackersDeclared &ad, BatchContext &ctx)
 {
     state->currentAttackerOids.clear();
-    for (const auto oid : ad.attacker_object_ids()) {
+    state->currentAttackAssignments.clear();
+    for (const auto &assignment : ad.assignments()) {
+        const auto oid = static_cast<quint32>(assignment.attacker_object_id());
         state->currentAttackerOids.insert(oid);
+        state->currentAttackAssignments.insert(oid, assignment);
     }
     // Active player's pending picks are now committed; clear them.
     state->pendingAttackerOids.clear();
+    state->pendingAttackAssignments.clear();
+    state->attackerAwaitingDefenderOid = 0;
     state->remoteAttackerPreviewOids.clear();
+    state->remoteAttackPreviewAssignments.clear();
     state->attackersSubmittedThisStep = true;
     ctx.combatStateDirty = true;
 }
@@ -1245,8 +1287,11 @@ void RuledEventDispatcher::applyAttackersPreview(const ruled::v1::AttackersPrevi
 {
     if (static_cast<int>(ap.declaring_player_id()) != host->localPlayerId()) {
         state->remoteAttackerPreviewOids.clear();
-        for (int ai = 0; ai < ap.attacker_object_ids_size(); ++ai) {
-            state->remoteAttackerPreviewOids.insert(static_cast<quint32>(ap.attacker_object_ids(ai)));
+        state->remoteAttackPreviewAssignments.clear();
+        for (const auto &assignment : ap.assignments()) {
+            const auto oid = static_cast<quint32>(assignment.attacker_object_id());
+            state->remoteAttackerPreviewOids.insert(oid);
+            state->remoteAttackPreviewAssignments.insert(oid, assignment);
         }
     }
     ctx.combatStateDirty = true;
@@ -1550,6 +1595,10 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     state->selectableAttackerOids.clear();
     for (const quint32 oid : actions.selectable_attacker_ids()) {
         state->selectableAttackerOids.insert(oid);
+    }
+    state->legalAttackAssignmentsByAttacker.clear();
+    for (const auto &assignment : actions.legal_attack_assignments()) {
+        state->legalAttackAssignmentsByAttacker[assignment.attacker_object_id()].append(assignment);
     }
     state->legalBlockAttackerOidsByBlocker.clear();
     for (const auto &pair : actions.legal_block_pairs()) {

@@ -493,6 +493,7 @@ fn battlefield_card_type_matches(
         CardTypeFilter::Creature => characteristics.is_creature(),
         CardTypeFilter::Artifact => characteristics.is_artifact(),
         CardTypeFilter::Planeswalker => characteristics.has_type("Planeswalker"),
+        CardTypeFilter::Battle => characteristics.has_type("Battle"),
         CardTypeFilter::Nonland => !characteristics.has_type("Land"),
         CardTypeFilter::Noncreature => !characteristics.is_creature(),
     })
@@ -659,6 +660,8 @@ pub(super) fn permanent_matches_filter_characteristics(
             PermanentTypeFilter::Artifact => characteristics.is_artifact(),
             PermanentTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
             PermanentTypeFilter::Land => characteristics.has_type("Land"),
+            PermanentTypeFilter::Planeswalker => characteristics.has_type("Planeswalker"),
+            PermanentTypeFilter::Battle => characteristics.has_type("Battle"),
         })
     {
         return false;

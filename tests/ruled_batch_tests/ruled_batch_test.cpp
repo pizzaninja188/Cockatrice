@@ -2553,6 +2553,49 @@ TEST_F(RuledBatchTest, ApplyRuledBatchCreatesTokenOnControllerTable)
     EXPECT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().size(), 0);
 }
 
+TEST_F(RuledBatchTest, BattleIsDisplayedOnProtectorsTableWithControllerAnnotation)
+{
+    seedMultifaceCatalog(QStringLiteral("invasion_of_ulgrotha_grandmother_ravi_sengir"),
+                         QStringLiteral("Invasion of Ulgrotha // Grandmother Ravi Sengir"),
+                         {QStringLiteral("Invasion of Ulgrotha"), QStringLiteral("Grandmother Ravi Sengir")},
+                         {QStringLiteral("Invasion of Ulgrotha"), QStringLiteral("Grandmother Ravi Sengir")});
+    Server_Card *battle = addCardToTable(p1, "Invasion of Ulgrotha");
+    ruled::v1::RuledPerPlayerView initialView;
+    initialView.set_player_id(p1->getPlayerId());
+    initialView.set_private_zones_unchanged(true);
+    auto *initialObject = initialView.add_battlefield_objects();
+    initialObject->set_object_id(701u);
+    initialObject->set_card_id("invasion_of_ulgrotha_grandmother_ravi_sengir");
+    initialObject->set_owner_player_id(p1->getPlayerId());
+    applyZoneView(p1, initialView, nullptr);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *zone = response.mutable_batch()->add_events()->mutable_zone_view();
+    auto *controllerView = zone->add_per_player();
+    controllerView->set_player_id(p1->getPlayerId());
+    controllerView->set_private_zones_unchanged(true);
+    auto *object = controllerView->add_battlefield_objects();
+    object->set_object_id(701u);
+    object->set_card_id("invasion_of_ulgrotha_grandmother_ravi_sengir");
+    object->set_owner_player_id(p1->getPlayerId());
+    object->set_is_battle(true);
+    object->set_defense(5);
+    object->set_battle_protector_player_id(p2->getPlayerId());
+    object->set_controller_player_id(p1->getPlayerId());
+    auto *protectorView = zone->add_per_player();
+    protectorView->set_player_id(p2->getPlayerId());
+    protectorView->set_private_zones_unchanged(true);
+
+    callBatchApply(response);
+
+    EXPECT_TRUE(p1->getZones().value(ZoneNames::TABLE)->getCards().isEmpty());
+    ASSERT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().size(), 1);
+    EXPECT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().first(), battle);
+    EXPECT_EQ(findCardByEngineOid(p2, 701u), battle);
+    EXPECT_TRUE(battle->getAnnotation().contains(QStringLiteral("Battle controller: alice")));
+}
+
 TEST_F(RuledBatchTest, ApplyRuledBatchIndexesAMidGameCardCatalog)
 {
     // The catalog used to be indexed only from the startup batch, which meant a card that was in
@@ -2772,8 +2815,8 @@ TEST_F(RuledBatchTest, ApplyRuledBatchMarksAttackers)
         auto *batch = atkResp.mutable_batch();
         auto *ad = batch->add_events()->mutable_attackers_declared();
         ad->set_attacking_player_id(1);
-        ad->add_attacker_object_ids(401u);
-        ad->add_attacker_object_ids(402u);
+        ad->add_assignments()->set_attacker_object_id(401u);
+        ad->add_assignments()->set_attacker_object_id(402u);
         callBatchApply(atkResp);
     }
 
@@ -2807,7 +2850,7 @@ TEST_F(RuledBatchTest, ApplyRuledBatchClearsStaleAttackersBeforeMarkingNewOnes)
         auto *batch = atkResp.mutable_batch();
         auto *ad = batch->add_events()->mutable_attackers_declared();
         ad->set_attacking_player_id(1);
-        ad->add_attacker_object_ids(502u);
+        ad->add_assignments()->set_attacker_object_id(502u);
         callBatchApply(atkResp);
     }
 

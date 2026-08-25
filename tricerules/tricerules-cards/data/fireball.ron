@@ -18,5 +18,4 @@
     prompt: "Choose any number of targets",
     effect_indices: [0],
   )])),
-  partial: "planeswalkers and battles are not modeled as damage targets",
 )

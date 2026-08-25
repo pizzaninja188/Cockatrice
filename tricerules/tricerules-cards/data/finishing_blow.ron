@@ -1,0 +1,10 @@
+(
+  id: "finishing_blow",
+  name: "Finishing Blow",
+  mana_cost: "{4}{B}",
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((any_of: Some([
+    (kind: Creature),
+    (kind: AnyPermanent, permanent_types: [Planeswalker]),
+  ]))))],
+)

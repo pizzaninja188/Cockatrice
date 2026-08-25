@@ -5,12 +5,13 @@ use crate::state::{
     ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement, ActiveEventObserver,
     ActiveExilePlayPermission, AffectedScope, AttachmentRecipient, BattlefieldEntryCompletion,
     BattlefieldEntryEvent, BlockingChoice, CardResultCohort, CardResultEntry,
-    CastCostObjectReceipt, CastCostReceipt, ChosenMode, CombatState, ContinuousEffect,
-    CopiableValues, DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
-    DelayedTriggerPayload, EntryReplacementApplication, EntryReplacementEffectId,
-    EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState,
-    HandCardAction, ImmediateObserverAction, ObjectId, ObservedGameEvent, OpeningSequence,
-    ParkedStackResolution, PendingBattlefieldEntry, PendingHandChoice, PendingLibraryLookStage,
+    CastCostObjectReceipt, CastCostReceipt, ChosenMode, CombatAttackAssignment,
+    CombatDefenderTarget, CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
+    DamagePreventionProhibition, DamagePreventionScope, DelayedTriggerPayload,
+    EntryReplacementApplication, EntryReplacementEffectId, EventObserverMatcher,
+    EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState, HandCardAction,
+    ImmediateObserverAction, ObjectId, ObservedGameEvent, OpeningSequence, ParkedStackResolution,
+    PendingBattlefieldEntry, PendingHandChoice, PendingLibraryLookStage,
     PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
     PendingPlayerDiscardChoice, PendingPlayerSetDiscard, PendingResolution,
     PendingResolutionBranch, PendingResolutionBranchStage, PendingResolutionPresentation,
@@ -287,12 +288,11 @@ enum AttachmentSnapshot {
     Player(PlayerId),
 }
 
-/// One declared attacker and its defending player. The current command model supplies one shared
-/// player defender in two-player games; the per-attacker shape avoids baking that limitation into
-/// trigger semantics.
+/// One declared attacker, attacked recipient, and derived defending player (CR 508.1b).
 #[derive(Clone, Copy, Debug)]
 struct AttackEdgeSnapshot {
     attacker: TriggerObjectRef,
+    defender: CombatDefenderTarget,
     defending_player: PlayerId,
 }
 
@@ -480,6 +480,7 @@ struct BattlefieldObjectSnapshot {
     face_up_index: usize,
     face_down: bool,
     room_state: Option<RoomState>,
+    battle_protector: Option<PlayerId>,
     zone_change_generation: u64,
     copy_revision: u64,
 }
@@ -704,6 +705,7 @@ impl GameEngine {
             zone_change_generation: HashMap::new(),
             face_change_generation: HashMap::new(),
             room_states: HashMap::new(),
+            battle_protectors: HashMap::new(),
             stack: Vec::new(),
             priority_idx: if skip_opening_sequence {
                 0
@@ -1562,7 +1564,7 @@ impl GameEngine {
                 {
                     return Err(EngineError::Illegal("declare attackers not legal"));
                 }
-                self.set_attackers(&a.creature_ids, player)
+                self.set_attackers(&a.assignments, player)
             }
             Some(Cmd::DeclareBlockers(b)) => {
                 if self.state.turn_step != TurnStep::DeclareBlockers

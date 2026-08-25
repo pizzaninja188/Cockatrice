@@ -271,7 +271,7 @@ impl TargetSourceIdentity {
     }
 }
 
-/// Player or creature permanent on the battlefield (matches cast validation for `bolt`).
+/// Player, creature, planeswalker, or battle on the battlefield (CR 115.4).
 fn damage_spell_target_legal(engine: &GameEngine, tid: ObjectId) -> bool {
     if engine.state.player_idx(tid as i32).is_some() {
         return true;
@@ -281,9 +281,9 @@ fn damage_spell_target_legal(engine: &GameEngine, tid: ObjectId) -> bool {
         .objects
         .get(&tid)
         .is_some_and(|o| o.zone == Zone::Battlefield)
-        && engine
-            .characteristics(tid)
-            .is_some_and(|value| value.is_creature())
+        && engine.characteristics(tid).is_some_and(|value| {
+            value.is_creature() || value.has_type("Planeswalker") || value.has_type("Battle")
+        })
 }
 
 fn destroy_spell_target_legal(engine: &GameEngine, tid: ObjectId) -> bool {
@@ -464,7 +464,9 @@ fn target_role_legality_error(
                 .map_or_else(
                     || {
                         let message = match filter.kind {
-                            TargetKind::AnyTarget => "target must be a creature or player",
+                            TargetKind::AnyTarget => {
+                                "target must be a player, creature, planeswalker, or battle"
+                            }
                             TargetKind::Creature => "target must be a creature on the battlefield",
                             TargetKind::AnyPlayer => "target must be a player in the game",
                             TargetKind::OpponentPlayer => {
@@ -1043,6 +1045,7 @@ fn validate_effect_targets(
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target: filter, .. }
+        | SpellEffectKind::TargetPlayerDraws { target: filter, .. }
         | SpellEffectKind::DrainTarget { target: filter, .. }
         | SpellEffectKind::MillTargetPlayer { target: filter, .. }
         | SpellEffectKind::DiscardCards { target: filter, .. }
@@ -1170,6 +1173,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ProduceMana { .. }
         // CR 115.1: "deals N damage to that player / to you" names a player, it does not target.
         | SpellEffectKind::DamagePlayer { .. }
+        | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
         // CR 701.18: library search is untargeted; the library card is chosen via a pending
         // interrupt, not a target declared at cast time. Scry is the same shape — the cards it
         // acts on are the top of the controller's own library, decided at resolution.
@@ -1184,6 +1188,7 @@ fn validate_effect_targets(
         | SpellEffectKind::CreateReflexiveTrigger { .. }
         | SpellEffectKind::ChangeSourceFace { .. }
         | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
+        | SpellEffectKind::SiegeDefeat
         | SpellEffectKind::None => {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("this effect takes no targets"));
@@ -1554,6 +1559,7 @@ fn spell_target_legality_error_with_context(
         }
         SpellEffectKind::TargetPlayerGainsLife { target: filter, .. }
         | SpellEffectKind::TargetPlayerLosesLife { target: filter, .. }
+        | SpellEffectKind::TargetPlayerDraws { target: filter, .. }
         | SpellEffectKind::DrainTarget { target: filter, .. }
         | SpellEffectKind::MillTargetPlayer { target: filter, .. }
         | SpellEffectKind::DiscardCards { target: filter, .. }

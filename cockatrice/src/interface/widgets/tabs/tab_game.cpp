@@ -116,19 +116,27 @@ CardItem *findTableCardForEngineOid(AbstractGame *game, const RuledClientState *
     return findOwnedTableCard(game, handler->playerIdForEngineOid(oid), handler->cardIdForEngineOid(oid));
 }
 
-ArrowTarget *findDefendingPlayerTarget(AbstractGame *game, int activePlayerId)
+ArrowTarget *findPlayerTarget(AbstractGame *game, int playerId)
 {
     if (!game) {
         return nullptr;
     }
+    Player *player = game->getPlayerManager()->getPlayers().value(playerId, nullptr);
+    return player ? player->getGraphicsItem()->getPlayerTarget() : nullptr;
+}
 
-    const QMap<int, Player *> &players = game->getPlayerManager()->getPlayers();
-    for (auto it = players.constBegin(); it != players.constEnd(); ++it) {
-        Player *player = it.value();
-        if (!player || player->getPlayerInfo()->getId() == activePlayerId || player->getConceded()) {
-            continue;
-        }
-        return player->getGraphicsItem()->getPlayerTarget();
+ArrowTarget *findAttackAssignmentTarget(AbstractGame *game,
+                                        const RuledClientState *handler,
+                                        const ruled::v1::AttackAssignment &assignment)
+{
+    if (!assignment.has_defender()) {
+        return nullptr;
+    }
+    if (assignment.defender().kind() == ruled::v1::TARGET_REF_KIND_PLAYER) {
+        return findPlayerTarget(game, static_cast<int>(assignment.defender().object_id()));
+    }
+    if (assignment.defender().kind() == ruled::v1::TARGET_REF_KIND_PERMANENT) {
+        return findTableCardForEngineOid(game, handler, assignment.defender().object_id());
     }
     return nullptr;
 }
@@ -738,8 +746,10 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         }
     } else if (h->hasPendingChoiceOptions()) {
         state.mode = PromptMode::ChoiceOptions;
-        const ChoiceKind kind =
-            h->hasPendingChoiceOfKind(ChoiceKind::TriggerMode) ? ChoiceKind::TriggerMode : ChoiceKind::ResolutionBranch;
+        const ChoiceKind kind = h->hasPendingChoiceOfKind(ChoiceKind::TriggerMode)
+                                    ? ChoiceKind::TriggerMode
+                                    : (h->hasPendingChoiceOfKind(ChoiceKind::SiegeCast) ? ChoiceKind::SiegeCast
+                                                                                       : ChoiceKind::ResolutionBranch);
         state.text = h->pendingChoicePromptText(kind);
         state.canDecline = h->pendingClickChoiceMayDecline();
         for (const auto &option : h->pendingChoiceOptions()) {
@@ -915,28 +925,25 @@ void TabGame::refreshRuledCombatArrows()
         scene->addItem(arrow);
     }
 
-    QSet<quint32> attackersToDraw = handler->getCurrentAttackerOids();
-    const QSet<quint32> &pendingAttackers = handler->getPendingAttackerOids();
-    for (const quint32 oid : pendingAttackers) {
-        attackersToDraw.insert(oid);
+    QHash<quint32, ruled::v1::AttackAssignment> attackersToDraw = handler->getCurrentAttackAssignments();
+    const auto &pendingAttackers = handler->getPendingAttackAssignments();
+    for (auto it = pendingAttackers.constBegin(); it != pendingAttackers.constEnd(); ++it) {
+        attackersToDraw.insert(it.key(), it.value());
     }
-    const QSet<quint32> &remoteAtk = handler->getRemoteAttackerPreviewOids();
-    for (const quint32 oid : remoteAtk) {
-        attackersToDraw.insert(oid);
-    }
-
-    ArrowTarget *defendingPlayerTarget = findDefendingPlayerTarget(game, handler->getActivePlayerId());
-    if (!defendingPlayerTarget) {
-        return;
+    const auto &remoteAtk = handler->getRemoteAttackPreviewAssignments();
+    for (auto it = remoteAtk.constBegin(); it != remoteAtk.constEnd(); ++it) {
+        attackersToDraw.insert(it.key(), it.value());
     }
 
-    for (const quint32 attackerOid : attackersToDraw) {
+    for (auto it = attackersToDraw.constBegin(); it != attackersToDraw.constEnd(); ++it) {
+        const quint32 attackerOid = it.key();
         CardItem *attackerCard = findTableCardForEngineOid(game, handler, attackerOid);
-        if (!attackerCard) {
+        ArrowTarget *defenderTarget = findAttackAssignmentTarget(game, handler, it.value());
+        if (!attackerCard || !defenderTarget) {
             continue;
         }
 
-        auto *arrow = new RuledCombatArrowItem(arrowOwner, attackerCard, defendingPlayerTarget, QColor(Qt::red));
+        auto *arrow = new RuledCombatArrowItem(arrowOwner, attackerCard, defenderTarget, QColor(Qt::red));
         ruledCombatArrows.append(arrow);
         scene->addItem(arrow);
     }

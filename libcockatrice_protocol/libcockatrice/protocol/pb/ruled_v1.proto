@@ -204,6 +204,7 @@ enum ResolutionChoiceDecision {
   RESOLUTION_CHOICE_DECISION_DECLINE = 1;
   RESOLUTION_CHOICE_DECISION_PAY_MANA = 2;
   RESOLUTION_CHOICE_DECISION_SELECT_BRANCH = 3;
+  RESOLUTION_CHOICE_DECISION_CAST_TRANSFORMED = 4;
 }
 
 // A player's answer to a ResolutionChoiceRequired. Object choices use chosen_object_ids (in
@@ -215,6 +216,9 @@ message SubmitResolutionChoice {
   // Zero-based index into ResolutionChoiceRequired.resolution_branches. Used only with
   // RESOLUTION_CHOICE_DECISION_SELECT_BRANCH.
   uint32 selected_branch_index = 3;
+  // Present only when accepting a SPECIAL_CAST offer. The source, method, face, modes, and
+  // targets are validated against the generation-bound engine offer before any movement.
+  CastSpell cast_spell = 4;
 }
 
 // A player's answer to a TriggerOrderRequired (CR 603.3b): put THIS trigger on the stack next.
@@ -275,6 +279,7 @@ enum CastMethod {
   CAST_METHOD_NORMAL = 1;
   CAST_METHOD_FLASHBACK = 2;
   CAST_METHOD_HARMONIZE = 3;
+  CAST_METHOD_SIEGE_DEFEAT = 4;
 }
 
 message CastSpell {
@@ -372,6 +377,19 @@ message LandSource {
   }
 }
 
+// One CR 508.1b attacker/defender designation. Both permanent endpoints carry their current
+// zone-change generation so a leave-and-return object cannot inherit a staged or committed edge.
+// For player defenders, defender_zone_change_generation is zero. defending_player_id is the
+// engine-derived player who may block for this edge (the attacked player, planeswalker controller,
+// or Battle protector); commands must submit the published value unchanged.
+message AttackAssignment {
+  uint32 attacker_object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint64 attacker_zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  TargetRef defender = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint64 defender_zone_change_generation = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  int32 defending_player_id = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
 message PlayLand {
   LandSource source = 1;
   // CR 712: for MDFC land cards, which face to enter the battlefield as (0 = front face,
@@ -396,7 +414,9 @@ message Concede {}
 
 // Active player names creatures on their battlefield to attack. Empty = no attack.
 message DeclareAttackers {
-  repeated uint32 creature_ids = 1;
+  reserved 1;
+  reserved "creature_ids";
+  repeated AttackAssignment assignments = 2;
 }
 
 message BlockPair {
@@ -417,7 +437,9 @@ message PreviewDeclareBlockers {
 }
 
 message PreviewDeclareAttackers {
-  repeated uint32 creature_ids = 1;
+  reserved 1;
+  reserved "creature_ids";
+  repeated AttackAssignment assignments = 2;
 }
 
 // Engine output batch; carried inside GameEvent Event_RuledPayload.payload
@@ -735,6 +757,10 @@ message LegalActions {
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated ExilePlayPermissionGroup exile_play_permission_groups = 21
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Exact attacker/defender edges the active player may stage. A client selects one published
+  // edge per staged attacker and never infers Battle protection or planeswalker control.
+  repeated AttackAssignment legal_attack_assignments = 22
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,
@@ -1002,6 +1028,10 @@ enum ChoiceKind {
   // The player-recipient counterpart (Curses and other "enchant player" Auras). Candidate ids are
   // PlayerIds in the public player-click domain, kept distinct from battlefield ObjectIds.
   CHOICE_KIND_AURA_PLAYER = 16;
+  // CR 310.11a / 704.5w-x: choose an opponent to protect a Siege.
+  CHOICE_KIND_BATTLE_PROTECTOR = 17;
+  // CR 310.11b: optionally cast the defeated Siege transformed from exile.
+  CHOICE_KIND_SIEGE_CAST = 18;
 }
 
 enum ChoiceCandidateSourceZone {
@@ -1362,11 +1392,9 @@ message BattlefieldObject {
   reserved 12;
   reserved "attached_to_oid";
   uint32 face_up_index = 13 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  // CR 108.3 owner. The per-player view this object appears in already identifies its CR 110.2
-  // *controller* (the engine's battlefield list is the control index), so this is the other half
-  // of the identity — the two differ only for a permanent controlled by someone who does not own
-  // it (reanimation). The relay uses it to annotate such a permanent with "Owner: <name>" and to
-  // route the card home when it leaves the battlefield (CR 400.3).
+  // CR 108.3 owner. The engine-authored per-player view is the control index; Servatrice may
+  // project a Battle onto its protector's physical table, so controller_player_id below preserves
+  // that distinct rules identity through the display projection.
   int32 owner_player_id = 14 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Canonical engine-authored display labels for nonintrinsic rules state on this permanent
   // (e.g. ["Deathtouch", "Can't be blocked"]). The relay renders these as one replaceable
@@ -1384,6 +1412,12 @@ message BattlefieldObject {
   // Effective land type after CR 613 characteristics. Servatrice consumes this to place the
   // physical card in Cockatrice's land row; clients receive the resulting table coordinates.
   bool is_land = 22 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  bool is_planeswalker = 23 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  bool is_battle = 24 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 loyalty = 25 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 defense = 26 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  optional int32 battle_protector_player_id = 27 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  optional int32 controller_player_id = 28 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message RoomDoorState {
@@ -1570,7 +1604,9 @@ message FaceDownObjectMap {
 // (AttrAttacking) translation server-side).
 message AttackersDeclared {
   int32 attacking_player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  repeated uint32 attacker_object_ids = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  reserved 2;
+  reserved "attacker_object_ids";
+  repeated AttackAssignment assignments = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message BlockersDeclared {
@@ -1584,7 +1620,9 @@ message BlockersPreview {
 
 message AttackersPreview {
   int32 declaring_player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  repeated uint32 attacker_object_ids = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  reserved 2;
+  reserved "attacker_object_ids";
+  repeated AttackAssignment assignments = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Engine-emitted when one or more creatures are removed from combat mid-step (CR 701.19a).

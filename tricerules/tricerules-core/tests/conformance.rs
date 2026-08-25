@@ -187,6 +187,7 @@ fn try_drain_stack(e: &mut GameEngine) {
                         ResolutionChoiceDecision::Unspecified as i32
                     },
                     selected_branch_index: 0,
+                    cast_spell: None,
                 })),
             };
             if e.apply_command(deciding_player, &answer).is_err() {

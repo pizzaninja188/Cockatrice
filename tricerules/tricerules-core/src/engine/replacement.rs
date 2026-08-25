@@ -34,6 +34,28 @@ pub(super) enum BattlefieldEntryProgress {
 }
 
 impl GameEngine {
+    /// The face proposed by this entry event. Objects outside the battlefield normally expose
+    /// their front face through `effective_face`, but a transformed Siege spell is entering on
+    /// its back face and its intrinsic entry replacements must come from that face instead.
+    fn battlefield_entry_face<'a>(
+        &'a self,
+        event: &BattlefieldEntryEvent,
+    ) -> Option<Cow<'a, CardFace>> {
+        let object = self.state.objects.get(&event.object_id)?;
+        if let Some(values) = &object.copiable_values {
+            return Some(Cow::Borrowed(&values.face));
+        }
+        self.registry
+            .get(&object.card_id)?
+            .face(event.face_index)
+            .map(Cow::Borrowed)
+    }
+
+    fn battlefield_entry_is_battle(&self, event: &BattlefieldEntryEvent) -> bool {
+        let face = self.battlefield_entry_face(event);
+        face.is_some_and(|face| face.types.iter().any(|card_type| card_type == "Battle"))
+    }
+
     pub(super) fn player_life_snapshot(&self) -> BTreeMap<PlayerId, i32> {
         self.state
             .players
@@ -117,7 +139,7 @@ impl GameEngine {
         };
         let mut candidates = Vec::new();
         if !entering.face_down {
-            if let Some(face) = self.effective_face(event.object_id) {
+            if let Some(face) = self.battlefield_entry_face(event) {
                 for (ability_index, ability) in face.static_abilities.iter().enumerate() {
                     let (priority, label) = match ability {
                         StaticAbilityDef::EntersAsCopy { .. } => (
@@ -380,7 +402,7 @@ impl GameEngine {
                     .objects
                     .get(object_id)
                     .filter(|object| object.copy_revision == *copy_revision)
-                    .and_then(|_| self.effective_face(*object_id));
+                    .and_then(|_| self.battlefield_entry_face(event));
                 let ability = effective_face
                     .as_deref()
                     .and_then(|face| face.static_abilities.get(*ability_index));
@@ -497,7 +519,91 @@ impl GameEngine {
         loop {
             let candidates = self.battlefield_entry_candidates(&event);
             match candidates.as_slice() {
-                [] => return BattlefieldEntryProgress::Ready(event),
+                [] => {
+                    let is_battle = self.battlefield_entry_is_battle(&event);
+                    if is_battle && event.battle_protector.is_none() {
+                        let protectors: Vec<_> = self
+                            .state
+                            .players
+                            .iter()
+                            .filter(|player| {
+                                self.state
+                                    .are_opponents(event.destination_controller, player.id)
+                            })
+                            .map(|player| player.id)
+                            .collect();
+                        if !protectors.is_empty() {
+                            let name = self
+                                .state
+                                .objects
+                                .get(&event.object_id)
+                                .and_then(|object| self.registry.get(&object.card_id))
+                                .map(|definition| definition.name.as_str())
+                                .unwrap_or("this Battle");
+                            let prompt = format!("Choose a player to protect {name}.");
+                            let candidate_ids: Vec<_> =
+                                protectors.iter().map(|player| *player as u32).collect();
+                            events.push(rv1::RuledEvent {
+                                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                                    rv1::ResolutionChoiceRequired {
+                                        deciding_player_id: event.deciding_player,
+                                        source_object_id: event.object_id,
+                                        prompt_text: prompt.clone(),
+                                        choice_kind: rv1::ChoiceKind::BattleProtector as i32,
+                                        candidate_object_ids: candidate_ids.clone(),
+                                        candidate_card_ids: vec![String::new(); protectors.len()],
+                                        min: 1,
+                                        max: 1,
+                                        ordered: false,
+                                        candidate_names: protectors
+                                            .iter()
+                                            .map(|player| format!("P{player}"))
+                                            .collect(),
+                                        candidate_server_card_ids: Vec::new(),
+                                        unique_names: false,
+                                        generic_mana_cost: 0,
+                                        payment_currently_legal: false,
+                                        resolution_branches: Vec::new(),
+                                        mana_cost: String::new(),
+                                        candidate_selectable: Vec::new(),
+                                        reveal_audience: 0,
+                                        revealed_zone_owner_player_id: None,
+                                        candidate_source_zones: Vec::new(),
+                                    },
+                                )),
+                            });
+                            events.push(ev_log(prompt.clone()));
+                            let deciding_player = event.deciding_player;
+                            self.state.pending_replacement_event =
+                                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(
+                                    PendingBattlefieldEntry {
+                                        event,
+                                        applications: Vec::new(),
+                                        copy_source_effect: None,
+                                        completion,
+                                    },
+                                )));
+                            self.state.pending_resolution = Some(PendingResolution {
+                                deciding_player,
+                                presentation: PendingResolutionPresentation {
+                                    source_object_id: item.id,
+                                    candidates: candidate_ids,
+                                    min: 1,
+                                    max: 1,
+                                    ordered: false,
+                                    prompt,
+                                    choice_kind: rv1::ChoiceKind::BattleProtector,
+                                    unique_names: false,
+                                },
+                                continuation: ResolutionContinuation::BattleProtector {
+                                    stack: ParkedStackResolution::new(item),
+                                },
+                            });
+                            return BattlefieldEntryProgress::Parked;
+                        }
+                    }
+                    return BattlefieldEntryProgress::Ready(event);
+                }
                 [(effect_id, _, _)] => {
                     if let Some(filter) = self.entry_copy_filter(&event, effect_id) {
                         let sources = self.copy_source_candidates(&event, &filter);
@@ -618,6 +724,23 @@ impl GameEngine {
         event: BattlefieldEntryEvent,
         attached_to: Option<AttachmentRecipient>,
     ) -> Result<Option<GameEvent>, EngineError> {
+        let is_battle = self.battlefield_entry_is_battle(&event);
+        if is_battle
+            && !event.battle_protector.is_some_and(|protector| {
+                self.state
+                    .are_opponents(event.destination_controller, protector)
+            })
+        {
+            return Err(EngineError::Illegal(
+                "Battle entry requires a valid protector",
+            ));
+        }
+        if !is_battle && event.battle_protector.is_some() {
+            return Err(EngineError::Illegal(
+                "non-Battle entry cannot carry a protector",
+            ));
+        }
+        let battle_protector = event.battle_protector;
         let (is_room, enters_as_copy) = self
             .state
             .objects
@@ -654,6 +777,11 @@ impl GameEngine {
                 object.add_counters(counter, count, timestamp);
             }
             object.attached_to = attached_to;
+        }
+        if let Some(protector) = battle_protector {
+            self.state
+                .battle_protectors
+                .insert(event.object_id, protector);
         }
         if !is_room {
             return Ok(None);
@@ -767,7 +895,7 @@ impl GameEngine {
         Ok(())
     }
 
-    fn complete_pending_battlefield_entry(
+    pub(super) fn complete_pending_battlefield_entry(
         &mut self,
         pending: PendingResolution,
         event: BattlefieldEntryEvent,
@@ -1147,6 +1275,7 @@ mod tests {
             object_id: 999,
             deciding_player: 0,
             destination_controller: 0,
+            battle_protector: None,
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
@@ -1210,6 +1339,7 @@ mod tests {
             object_id: dragon,
             deciding_player: 0,
             destination_controller: 0,
+            battle_protector: None,
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,

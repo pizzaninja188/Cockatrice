@@ -343,7 +343,14 @@ fn declare_attackers_emits_attackers_declared_event() {
     let evs = attackers_declared_in(&b);
     assert_eq!(evs.len(), 1, "exactly one AttackersDeclared event");
     assert_eq!(evs[0].attacking_player_id, 0);
-    assert_eq!(evs[0].attacker_object_ids, vec![bears]);
+    assert_eq!(
+        evs[0]
+            .assignments
+            .iter()
+            .map(|assignment| assignment.attacker_object_id)
+            .collect::<Vec<_>>(),
+        vec![bears]
+    );
 }
 
 #[test]
@@ -353,7 +360,7 @@ fn preview_declare_attackers_is_rejected_by_engine() {
     let idx_before = e.state.command_index;
     let cmd = RuledCommand {
         cmd: Some(Cmd::PreviewDeclareAttackers(PreviewDeclareAttackers {
-            creature_ids: vec![],
+            assignments: vec![],
         })),
     };
     let err = e
@@ -586,7 +593,11 @@ fn full_combat_2v1_trade_and_life_loss() {
     let ad = attackers_declared_in(&attack_batch);
     assert_eq!(ad.len(), 1);
     assert_eq!(ad[0].attacking_player_id, 0);
-    let mut declared_ids = ad[0].attacker_object_ids.clone();
+    let mut declared_ids = ad[0]
+        .assignments
+        .iter()
+        .map(|assignment| assignment.attacker_object_id)
+        .collect::<Vec<_>>();
     declared_ids.sort();
     let mut expected = vec![attacker_a, attacker_b];
     expected.sort();

@@ -485,12 +485,14 @@ bool isCombatEligibleCreature(const CardItem *card)
 
 namespace
 {
-/// Shared preamble for the two combat click handlers: ruled game, combat-eligible creature on the
-/// battlefield, with a known engine ObjectId. Returns 0 when the click is not ours to interpret.
-quint32 combatClickOid(const CardItem *card, RuledClientState **outState)
+/// Resolve any ruled battlefield card to its engine ObjectId. Defender selection deliberately
+/// accepts noncreatures (planeswalkers and Battles); the attacker/blocker branches apply the
+/// creature gate after this lookup.
+quint32 combatObjectOid(const CardItem *card, RuledClientState **outState)
 {
     RuledClientState *state = stateForCard(card);
-    if (!state || state->isEngineCommandPending() || !isCombatEligibleCreature(card)) {
+    if (!state || state->isEngineCommandPending() || !card->getZone() ||
+        card->getZone()->getName() != ZoneNames::TABLE) {
         return 0;
     }
     Player *owner = card->getOwner();
@@ -507,8 +509,8 @@ quint32 combatClickOid(const CardItem *card, RuledClientState **outState)
 bool tryHandleCombatRightClick(CardItem *card)
 {
     RuledClientState *state = nullptr;
-    const quint32 oid = combatClickOid(card, &state);
-    if (oid == 0) {
+    const quint32 oid = combatObjectOid(card, &state);
+    if (oid == 0 || !isCombatEligibleCreature(card)) {
         return false;
     }
     using Phase = RuledClientState::RuledCombatPhase;
@@ -529,14 +531,21 @@ bool tryHandleCombatRightClick(CardItem *card)
 bool tryHandleCombatClick(CardItem *card)
 {
     RuledClientState *state = nullptr;
-    const quint32 oid = combatClickOid(card, &state);
+    const quint32 oid = combatObjectOid(card, &state);
     if (oid == 0) {
         return false;
     }
     using Phase = RuledClientState::RuledCombatPhase;
     const Phase phase = state->getCombatPhase();
     Player *owner = card->getOwner();
-    const bool ownCreature = owner && owner->getPlayerInfo()->getLocal();
+    const bool creature = isCombatEligibleCreature(card);
+    const bool ownCreature = creature && owner && owner->getPlayerInfo()->getLocal();
+
+    if (phase == Phase::DeclareAttackers && state->localPlayerIsActive() && state->isChoosingAttackDefender() &&
+        state->isLegalAttackPermanentDefender(oid)) {
+        state->chooseAttackPermanentDefender(oid);
+        return true;
+    }
 
     if (phase == Phase::DeclareAttackers && state->localPlayerIsActive() && ownCreature) {
         // The engine's set already accounts for tapping, summoning sickness, haste, and effects
@@ -568,7 +577,7 @@ bool tryHandleCombatClick(CardItem *card)
         }
     }
 
-    if (phase == Phase::AssignCombatDamage && state->localPlayerIsActive()) {
+    if (phase == Phase::AssignCombatDamage && state->localPlayerIsActive() && creature) {
         const quint32 curAtt = state->currentCombatDamageAttackerOid();
         if (curAtt == 0) {
             return false;
@@ -629,6 +638,24 @@ bool isSelectedSpellTarget(const AbstractGame *game, quint32 oid)
     }
     const RuledClientState *state = stateFor(game);
     return state && state->isPendingTriggerTargetSelected(oid);
+}
+
+bool isCombatDefenderPlayerCandidate(const Player *player)
+{
+    if (!player || !player->getGame()) {
+        return false;
+    }
+    RuledClientState *state = stateFor(player->getGame());
+    return state && state->isLegalAttackPlayerDefender(player->getPlayerInfo()->getId());
+}
+
+bool tryHandleCombatDefenderPlayerClick(Player *player)
+{
+    if (!isCombatDefenderPlayerCandidate(player)) {
+        return false;
+    }
+    RuledClientState *state = stateFor(player->getGame());
+    return state && state->chooseAttackPlayerDefender(player->getPlayerInfo()->getId());
 }
 
 bool isSelectedCastCostPermanent(const AbstractGame *game, quint32 oid)
