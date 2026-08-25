@@ -4,7 +4,7 @@ use tricerules_cards::primitives::{
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect, EffectDuration,
     GameCondition, Keyword, LibraryBottomOrder, ManaAmount, ManaSpendingRestriction,
-    SearchDestination, TargetFilter, TriggerCondition, TriggeredAbilityDef, ZoneCardFilter,
+    SearchDestination, TargetFilter, TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{CardFace, ManaCost};
@@ -722,6 +722,10 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         effect_ids: Vec<u32>,
     },
+    AuraReturn {
+        stack: Option<ParkedStackResolution>,
+        exiled: TriggerObjectRef,
+    },
     LegendKeep,
 }
 
@@ -745,6 +749,7 @@ impl ResolutionContinuation {
             | Self::EntryCopySource { stack }
             | Self::EntryReplacement { stack }
             | Self::DamageReplacement { stack, .. } => Some(stack),
+            Self::AuraReturn { stack, .. } => stack.as_ref(),
             Self::LegendKeep => None,
         }
     }
@@ -768,6 +773,7 @@ impl ResolutionContinuation {
             | Self::EntryCopySource { stack }
             | Self::EntryReplacement { stack }
             | Self::DamageReplacement { stack, .. } => Some(stack),
+            Self::AuraReturn { stack, .. } => stack.as_mut(),
             Self::LegendKeep => None,
         }
     }
@@ -891,6 +897,12 @@ pub(crate) enum BattlefieldEntryCompletion {
         owner: PlayerId,
         spell_label: String,
         object_label: String,
+    },
+    ObserverReturn {
+        owner: PlayerId,
+        object_label: String,
+        attached_to: Option<AttachmentRecipient>,
+        resume_original_stack: bool,
     },
     LibrarySearch {
         owner: PlayerId,
@@ -1150,15 +1162,57 @@ pub struct ContinuousEffect {
     pub timestamp: u64,
 }
 
-/// A one-shot delayed triggered ability created by a resolving effect (CR 603.7).
+/// The stack-bound payload of a one-shot delayed triggered ability (CR 603.7).
 #[derive(Debug, Clone)]
-pub struct ActiveDelayedTrigger {
+pub struct DelayedTriggerPayload {
     pub controller: PlayerId,
     pub card_id: String,
     pub card_name: String,
     pub source_face_index: usize,
-    pub watched: TriggerObjectRef,
     pub ability: TriggeredAbilityDef,
+}
+
+/// A closed set of event patterns observed after their underlying state transition commits.
+/// Object events compare both ObjectId and zone-change generation (CR 400.7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventObserverMatcher {
+    AtBeginningOfNextEndStep,
+    WhenWatchedObjectDiesThisTurn,
+    WhenWatchedObjectLeavesBattlefield,
+    WhenControllerLosesControlOf,
+}
+
+/// Work performed by a matching one-shot observer. Delayed triggers use the normal trigger/APNAP
+/// queue; paired one-shot effects (CR 610.3) enqueue immediate work that is completed before the
+/// engine advances to the next resolving instruction or grants priority.
+#[derive(Debug, Clone)]
+pub enum EventObserverPayload {
+    StageDelayedTrigger(Box<DelayedTriggerPayload>),
+    ReturnExiledObject { exiled: TriggerObjectRef },
+}
+
+#[derive(Debug, Clone)]
+pub struct ActiveEventObserver {
+    pub watched: TriggerObjectRef,
+    pub matcher: EventObserverMatcher,
+    pub payload: EventObserverPayload,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ObservedGameEvent {
+    BeginningOfEndStep,
+    Dies(TriggerObjectRef),
+    LeavesBattlefield(TriggerObjectRef),
+    ControllerChanged {
+        object: TriggerObjectRef,
+        old_controller: PlayerId,
+        new_controller: Option<PlayerId>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ImmediateObserverAction {
+    ReturnExiledObject { exiled: TriggerObjectRef },
 }
 
 /// During combat, after attack/block declarations.
@@ -1341,8 +1395,12 @@ pub struct GameState {
     /// independently. Drained by `flush_staged_triggers` at the two points where the engine is
     /// between actions.
     pub staged_trigger_groups: VecDeque<StagedTriggerGroup>,
-    /// One-shot delayed triggers waiting for their event boundary.
-    pub active_delayed_triggers: Vec<ActiveDelayedTrigger>,
+    /// Generation-bound one-shot event observers. Both delayed triggers and paired one-shot
+    /// effects use this closed dispatcher so object identity and event matching cannot drift.
+    pub active_event_observers: Vec<ActiveEventObserver>,
+    /// Immediate observer work discovered by low-level state transitions. The engine drains this
+    /// before the next resolving instruction or priority boundary.
+    pub(crate) pending_immediate_observer_actions: Vec<ImmediateObserverAction>,
     /// The outstanding CR 603.3b ordering prompt, or `None`. At most one at a time; while set it
     /// blocks every command but `SubmitTriggerOrder`.
     pub pending_trigger_order: Option<PendingTriggerOrder>,
@@ -1483,60 +1541,75 @@ impl GameState {
         (idx + seats - self.active_player_idx) % seats
     }
 
-    pub(crate) fn stage_delayed_control_loss(
+    pub(crate) fn dispatch_event_observers(
         &mut self,
-        transitions: &[(ObjectId, PlayerId, Option<PlayerId>)],
+        event: ObservedGameEvent,
+    ) -> Vec<(TriggerObjectRef, DelayedTriggerPayload)> {
+        let mut waiting = std::mem::take(&mut self.active_event_observers);
+        let mut delayed = Vec::new();
+        for observer in waiting.drain(..) {
+            let identity_matches = |observed: TriggerObjectRef| {
+                observed.object_id == observer.watched.object_id
+                    && observed.zone_change_generation == observer.watched.zone_change_generation
+            };
+            let matched = match (observer.matcher, event) {
+                (
+                    EventObserverMatcher::AtBeginningOfNextEndStep,
+                    ObservedGameEvent::BeginningOfEndStep,
+                ) => true,
+                (
+                    EventObserverMatcher::WhenWatchedObjectDiesThisTurn,
+                    ObservedGameEvent::Dies(observed),
+                )
+                | (
+                    EventObserverMatcher::WhenWatchedObjectLeavesBattlefield,
+                    ObservedGameEvent::LeavesBattlefield(observed),
+                ) => identity_matches(observed),
+                (
+                    EventObserverMatcher::WhenControllerLosesControlOf,
+                    ObservedGameEvent::ControllerChanged {
+                        object,
+                        old_controller,
+                        new_controller,
+                    },
+                ) => {
+                    identity_matches(object)
+                        && old_controller == observer.watched.controller_at_event
+                        && new_controller != Some(observer.watched.controller_at_event)
+                }
+                _ => false,
+            };
+            if !matched {
+                self.active_event_observers.push(observer);
+                continue;
+            }
+            match observer.payload {
+                EventObserverPayload::StageDelayedTrigger(payload) => {
+                    delayed.push((observer.watched, *payload));
+                }
+                EventObserverPayload::ReturnExiledObject { exiled } => {
+                    self.pending_immediate_observer_actions
+                        .push(ImmediateObserverAction::ReturnExiledObject { exiled });
+                }
+            }
+        }
+        delayed
+    }
+
+    pub(crate) fn stage_delayed_batch(
+        &mut self,
+        delayed: Vec<(TriggerObjectRef, DelayedTriggerPayload)>,
     ) {
-        let mut waiting = std::mem::take(&mut self.active_delayed_triggers);
-        let mut fired = Vec::new();
-        for delayed in waiting.drain(..) {
-            let matches = delayed.ability.trigger == TriggerCondition::WhenControllerLosesControlOf
-                && transitions
-                    .iter()
-                    .any(|&(object_id, old_controller, new_controller)| {
-                        object_id == delayed.watched.object_id
-                            && self
-                                .zone_change_generation
-                                .get(&object_id)
-                                .copied()
-                                .unwrap_or(0)
-                                == delayed.watched.zone_change_generation
-                            && old_controller == delayed.controller
-                            && new_controller != Some(delayed.controller)
-                    });
-            if matches {
-                fired.push(delayed);
-            } else {
-                self.active_delayed_triggers.push(delayed);
-            }
-        }
-        self.stage_delayed_batch(fired);
-    }
-
-    pub(crate) fn take_next_end_step_delayed(&mut self) -> Vec<ActiveDelayedTrigger> {
-        let mut waiting = std::mem::take(&mut self.active_delayed_triggers);
-        let mut fired = Vec::new();
-        for delayed in waiting.drain(..) {
-            if delayed.ability.trigger == TriggerCondition::AtBeginningOfNextEndStep {
-                fired.push(delayed);
-            } else {
-                self.active_delayed_triggers.push(delayed);
-            }
-        }
-        fired
-    }
-
-    fn stage_delayed_batch(&mut self, delayed: Vec<ActiveDelayedTrigger>) {
         let mut triggers = delayed
             .into_iter()
-            .map(|delayed| {
+            .map(|(watched, delayed)| {
                 let object_id = self.next_object_id;
                 self.next_object_id += 1;
                 StagedTrigger {
                     object_id,
-                    source_permanent_id: delayed.watched.object_id,
+                    source_permanent_id: watched.object_id,
                     source_face_index: delayed.source_face_index,
-                    source_zone_change: delayed.watched.zone_change_generation,
+                    source_zone_change: watched.zone_change_generation,
                     source_face_change: 0,
                     card_id: delayed.card_id,
                     card_name: delayed.card_name,
@@ -1544,7 +1617,7 @@ impl GameState {
                     ability_index: 0,
                     ability_text: delayed.ability.text.clone(),
                     trigger_context: TriggerContext {
-                        observed_object: Some(delayed.watched),
+                        observed_object: Some(watched),
                         ..TriggerContext::default()
                     },
                     may: delayed.ability.may,

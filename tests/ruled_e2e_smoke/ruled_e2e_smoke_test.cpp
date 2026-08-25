@@ -336,6 +336,10 @@ public:
     bool flashbackCast = false;
     bool sawFlashbackGraveToStack = false;
     bool sawFlashbackStackToExile = false;
+    bool temporaryExileFlowActive = false;
+    bool sawTemporaryExilePhysicalMove = false;
+    bool sawTemporaryReturnPhysicalMove = false;
+    int temporaryExilePhysicalCardId = -1;
     bool harmonizeFlowActive = false;
     bool normalWhisperFlowActive = false;
     bool sawHarmonizeGraveToStack = false;
@@ -878,6 +882,17 @@ public:
                     } else if (normalWhisperFlowActive && from == stack && to == grave) {
                         sawNormalWhisperStackToGrave = true;
                     }
+                } else if (temporaryExileFlowActive && name == QLatin1String("Grizzly Bears") &&
+                           ((from == table && to == exile) || (from == exile && to == table))) {
+                    const bool identityContinuous = temporaryExilePhysicalCardId >= 0 &&
+                                                    mc.card_id() == temporaryExilePhysicalCardId &&
+                                                    mc.new_card_id() == temporaryExilePhysicalCardId;
+                    EXPECT_TRUE(identityContinuous)
+                        << "temporary exile moved a different physical Grizzly Bears card";
+                    sawTemporaryExilePhysicalMove =
+                        sawTemporaryExilePhysicalMove || (from == table && to == exile);
+                    sawTemporaryReturnPhysicalMove =
+                        sawTemporaryReturnPhysicalMove || (from == exile && to == table);
                 } else if (graveyardCohortFlowActive && from == grave && to == exile &&
                            graveyardCohortExpectedPhysicalIds.count(mc.card_id()) > 0) {
                     graveyardCohortPhysicalIdentityContinuous =
@@ -1110,6 +1125,10 @@ public:
                 for (const auto &entry : ev.graveyard_object_map().entries()) {
                     serverCardByEngineOid[entry.engine_object_id()] = entry.server_card_id();
                     graveyardOwnerByEngineOid[entry.engine_object_id()] = entry.player_id();
+                }
+            } else if (ev.has_exile_object_map()) {
+                for (const auto &entry : ev.exile_object_map().entries()) {
+                    serverCardByEngineOid[entry.engine_object_id()] = entry.server_card_id();
                 }
             } else if (ev.has_trigger_needs_target()) {
                 const auto &trigger = ev.trigger_needs_target();
@@ -4165,6 +4184,142 @@ TEST_F(RuledE2ESmokeTest, WardManaDeclineAndPrivateDiscardPayment)
     EXPECT_TRUE(p1.sawWardDiscardSpellResolved && p2.sawWardDiscardSpellResolved);
     EXPECT_TRUE(p1.sawWardDiscardSourceToHand && p2.sawWardDiscardSourceToHand);
     EXPECT_EQ(p1.wardDiscardSpellOid, p2.wardDiscardSpellOid);
+}
+
+TEST_F(RuledE2ESmokeTest, TemporaryExileReturnsTheExactPhysicalCardToBothClients)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("exilep1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("exilep2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Plains")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "temporary-exile game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "temporary-exile game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer openingDeadline;
+    openingDeadline.start();
+    while (openingDeadline.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command,
+                           const QString &description) {
+        const quint64 v1 = p1.stateVersion;
+        const quint64 v2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 && (p1.stateVersion <= v1 || p2.stateVersion <= v2)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > v1 && p2.stateVersion > v2;
+    };
+    auto devPut = [&](int playerId, const char *name) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(playerId);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(name);
+        put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        put->set_ready(true);
+        return sendAndPump(p1, command, QStringLiteral("dev put %1").arg(name));
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("temporary-exile pass"));
+    };
+    auto findPermanent = [](const SmokeClient &client, const QString &cardId) -> quint32 {
+        for (const auto &[playerId, permanents] : client.battlefieldByPlayer) {
+            Q_UNUSED(playerId);
+            for (const auto &permanent : permanents) {
+                if (permanent.cardId == cardId) {
+                    return permanent.oid;
+                }
+            }
+        }
+        return 0;
+    };
+
+    ASSERT_TRUE(devPut(p2.myId, "Grizzly Bears"));
+    const quint32 bearOid = findPermanent(p1, QStringLiteral("grizzly_bears"));
+    ASSERT_NE(bearOid, 0u);
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(bearOid));
+    const int physicalBearId = p1.serverCardByEngineOid[bearOid];
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(bearOid));
+    ASSERT_EQ(p2.serverCardByEngineOid[bearOid], physicalBearId);
+    p1.temporaryExileFlowActive = true;
+    p2.temporaryExileFlowActive = true;
+    p1.temporaryExilePhysicalCardId = physicalBearId;
+    p2.temporaryExilePhysicalCardId = physicalBearId;
+    ASSERT_TRUE(devPut(p1.myId, "Banishing Light"));
+    const quint32 lightOid = findPermanent(p1, QStringLiteral("banishing_light"));
+    ASSERT_NE(lightOid, 0u);
+    ASSERT_TRUE(p1.pendingTriggerTarget.has_value());
+    ruled::v1::RuledCommand chooseTarget;
+    auto *choice = chooseTarget.mutable_choose_trigger_target();
+    auto *target = choice->add_targets();
+    target->set_object_id(bearOid);
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    p1.pendingTriggerTarget.reset();
+    ASSERT_TRUE(sendAndPump(p1, chooseTarget, QStringLiteral("choose Banishing Light target")));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+    EXPECT_EQ(findPermanent(p1, QStringLiteral("grizzly_bears")), 0u);
+    EXPECT_EQ(findPermanent(p2, QStringLiteral("grizzly_bears")), 0u);
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(bearOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(bearOid));
+    EXPECT_EQ(p1.serverCardByEngineOid[bearOid], physicalBearId);
+    EXPECT_EQ(p2.serverCardByEngineOid[bearOid], physicalBearId);
+
+    ruled::v1::RuledCommand removeLight;
+    auto *dev = removeLight.mutable_dev_command();
+    dev->set_target_player_id(p1.myId);
+    auto *move = dev->mutable_move_card();
+    move->set_card_name("Banishing Light");
+    move->set_zone(ruled::v1::DEV_ZONE_GRAVEYARD);
+    ASSERT_TRUE(sendAndPump(p1, removeLight, QStringLiteral("remove Banishing Light")));
+
+    EXPECT_EQ(findPermanent(p1, QStringLiteral("grizzly_bears")), bearOid);
+    EXPECT_EQ(findPermanent(p2, QStringLiteral("grizzly_bears")), bearOid);
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(bearOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(bearOid));
+    EXPECT_EQ(p1.serverCardByEngineOid[bearOid], physicalBearId);
+    EXPECT_EQ(p2.serverCardByEngineOid[bearOid], physicalBearId);
+    EXPECT_TRUE(p1.sawTemporaryExilePhysicalMove);
+    EXPECT_TRUE(p2.sawTemporaryExilePhysicalMove);
+    EXPECT_TRUE(p1.sawTemporaryReturnPhysicalMove);
+    EXPECT_TRUE(p2.sawTemporaryReturnPhysicalMove);
 }
 
 TEST_F(RuledE2ESmokeTest, BeholdCastCostIsPrivateUntilItsPublicStackReveal)

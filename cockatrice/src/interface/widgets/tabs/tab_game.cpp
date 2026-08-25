@@ -795,6 +795,14 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.mode = PromptMode::ClickChoice;
         state.text = h->pendingChoicePromptText(ChoiceKind::LegendKeep) +
                      tr("\nClick the permanent to keep on the battlefield.");
+    } else if (h->hasPendingChoiceOfKind(ChoiceKind::AuraPermanent)) {
+        state.mode = PromptMode::ClickChoice;
+        state.text = h->pendingChoicePromptText(ChoiceKind::AuraPermanent) +
+                     tr("\nClick a legal permanent for the Aura to enchant.");
+    } else if (h->hasPendingChoiceOfKind(ChoiceKind::AuraPlayer)) {
+        state.mode = PromptMode::ClickChoice;
+        state.text = h->pendingChoicePromptText(ChoiceKind::AuraPlayer) +
+                     tr("\nClick a legal player for the Aura to enchant.");
     } else if (h->hasPendingTriggerTarget()) {
         state.mode = PromptMode::ClickChoice;
         state.canDecline = h->pendingTriggerMayDecline();

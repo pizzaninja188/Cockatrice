@@ -417,7 +417,26 @@ impl GameEngine {
                 });
             }
         }
-        self.state.stage_delayed_control_loss(&control_transitions);
+        for (object_id, old_controller, new_controller) in control_transitions {
+            let object = TriggerObjectRef {
+                object_id,
+                zone_change_generation: self
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0),
+                controller_at_event: old_controller,
+            };
+            let delayed =
+                self.state
+                    .dispatch_event_observers(ObservedGameEvent::ControllerChanged {
+                        object,
+                        old_controller,
+                        new_controller,
+                    });
+            self.state.stage_delayed_batch(delayed);
+        }
         true
     }
 

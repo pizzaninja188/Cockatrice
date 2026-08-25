@@ -3859,6 +3859,33 @@ TEST_F(RuledClientTest, CopySourceChoiceUsesBoardSelectionAndEmptyResolutionChoi
     EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource));
 }
 
+TEST_F(RuledClientTest, AuraReturnChoicesUseTypedPermanentAndPlayerClickSurfaces)
+{
+    for (const auto &[protoKind, stateKind] :
+         std::initializer_list<std::pair<ruled::v1::ChoiceKind, RuledClientState::ChoiceKind>>{
+             {ruled::v1::CHOICE_KIND_AURA_PERMANENT, RuledClientState::ChoiceKind::AuraPermanent},
+             {ruled::v1::CHOICE_KIND_AURA_PLAYER, RuledClientState::ChoiceKind::AuraPlayer}}) {
+        ruled::v1::RuledEventBatch batch;
+        auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+        rcr->set_deciding_player_id(kLocalPlayer);
+        rcr->set_choice_kind(protoKind);
+        rcr->set_min(1);
+        rcr->set_max(1);
+        rcr->set_prompt_text("Choose what the Aura will enchant.");
+        rcr->add_candidate_object_ids(100);
+        apply(batch);
+
+        ASSERT_TRUE(state->hasPendingChoiceOfKind(stateKind));
+        EXPECT_TRUE(state->isPendingChoiceCandidate(stateKind, 100));
+        EXPECT_FALSE(state->pendingClickChoiceMayDecline());
+
+        host.sentCommands.clear();
+        state->submitPendingChoiceObject(100);
+        ASSERT_EQ(host.sentCommands.size(), 1);
+        EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids(0), 100u);
+    }
+}
+
 TEST_F(RuledClientTest, CopySourceChoiceIsInteractiveOnlyForTheDecidingPlayer)
 {
     QSignalSpy promptFeed(state, &RuledClientState::enginePromptFeed);

@@ -1,7 +1,7 @@
 //! Shared CR 614/616 replacement ordering and battlefield-entry preprocessing.
 
 use super::characteristics::{apply_face_down_values, creature_matches_scope};
-use super::events::{ev_log, finish_with_events};
+use super::events::{ev_log, ev_priority_changed, finish_with_events};
 use super::history::player_life_aggregate_value;
 use super::resolution::{
     move_object_to_zone, permanent_moved_event, permanent_moved_event_with_library_position,
@@ -820,6 +820,51 @@ impl GameEngine {
                     rv1::permanent_moved::Destination::Battlefield,
                 ));
                 self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+            }
+            BattlefieldEntryCompletion::ObserverReturn {
+                owner,
+                object_label,
+                attached_to,
+                resume_original_stack,
+            } => {
+                let object_id = event.object_id;
+                self.commit_battlefield_entry(event, attached_to)?;
+                events.push(permanent_moved_event(
+                    &self.state,
+                    object_id,
+                    owner,
+                    rv1::permanent_moved::Destination::Battlefield,
+                ));
+                if let Some(recipient) = attached_to {
+                    events.push(rv1::RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::AuraAttached(rv1::AuraAttached {
+                            aura_object_id: object_id,
+                            attachment_recipient: Some(attachment_recipient_proto(recipient)),
+                        })),
+                    });
+                }
+                events.push(ev_log(format!(
+                    "{object_label} returns to the battlefield under its owner's control."
+                )));
+                let observer_stack = resume_original_stack.then_some(stack.clone());
+                if self.drain_immediate_observer_actions(observer_stack, &mut events)? {
+                    return Ok(finish_with_events(self, events));
+                }
+                if resume_original_stack {
+                    self.complete_parked_resolution_with_previous(
+                        stack.item,
+                        stack.resume_effect_index,
+                        stack.previous_result,
+                        events,
+                    )
+                } else {
+                    self.apply_sbas(&mut events)?;
+                    if let Some(index) = self.state.player_idx(self.state.active_player_id()) {
+                        self.state.priority_idx = index;
+                    }
+                    events.push(ev_priority_changed(self));
+                    Ok(finish_with_events(self, events))
+                }
             }
             BattlefieldEntryCompletion::LibrarySearch {
                 owner,

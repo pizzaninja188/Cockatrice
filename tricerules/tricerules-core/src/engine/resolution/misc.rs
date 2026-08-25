@@ -285,16 +285,35 @@ pub(super) fn create_delayed_trigger(
         .get(&cx.top.card_id)
         .map(|definition| definition.name.clone())
         .unwrap_or_else(|| cx.spell_label.to_string());
+    let matcher = match ability.trigger {
+        TriggerCondition::AtBeginningOfNextEndStep => {
+            EventObserverMatcher::AtBeginningOfNextEndStep
+        }
+        TriggerCondition::WhenControllerLosesControlOf => {
+            EventObserverMatcher::WhenControllerLosesControlOf
+        }
+        TriggerCondition::WhenWatchedObjectDiesThisTurn => {
+            EventObserverMatcher::WhenWatchedObjectDiesThisTurn
+        }
+        _ => {
+            return Err(EngineError::Illegal(
+                "delayed trigger has a non-delayed condition",
+            ))
+        }
+    };
     cx.engine
         .state
-        .active_delayed_triggers
-        .push(ActiveDelayedTrigger {
-            controller: cx.controller,
-            card_id: cx.top.card_id.clone(),
-            card_name,
-            source_face_index: cx.top.face_index,
+        .active_event_observers
+        .push(ActiveEventObserver {
             watched,
-            ability: *ability,
+            matcher,
+            payload: EventObserverPayload::StageDelayedTrigger(Box::new(DelayedTriggerPayload {
+                controller: cx.controller,
+                card_id: cx.top.card_id.clone(),
+                card_name,
+                source_face_index: cx.top.face_index,
+                ability: *ability,
+            })),
         });
     Ok(EffectOutcome::Continue)
 }

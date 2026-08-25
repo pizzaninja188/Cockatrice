@@ -260,7 +260,7 @@ pub struct BattlefieldPermanentFilter {
 }
 
 impl BattlefieldPermanentFilter {
-    fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         if self
             .name
             .as_ref()
@@ -1230,6 +1230,13 @@ pub enum SpellEffectKind {
         subject: EffectSubject,
         ability: Box<TriggeredAbilityDef>,
     },
+    /// CR 610.3 paired one-shot effects: exile the chosen permanent, then return that exact card
+    /// under its owner's control immediately after the exact source generation leaves the
+    /// battlefield. Banishing Light and Stormplain Detainment share the nonland form; Trapped in
+    /// the Screen narrows it to artifact, creature, or enchantment.
+    ExileUntilSourceLeaves {
+        target: TargetFilter,
+    },
     /// CR 205.1b / 613.1d: add card types or creature subtypes until end of turn without
     /// replacing the permanent's existing type line. Liquimetal Coating uses a chosen permanent;
     /// source- and event-bound ability effects reuse the same subject vocabulary.
@@ -1985,6 +1992,7 @@ impl SpellEffectKind {
             | SpellEffectKind::MillTargetPlayer { target, .. }
             | SpellEffectKind::DiscardCards { target, .. }
             | SpellEffectKind::ExileCardsFromHand { target, .. }
+            | SpellEffectKind::ExileUntilSourceLeaves { target }
             | SpellEffectKind::AuraAttach { target }
             | SpellEffectKind::Equip { target }
             | SpellEffectKind::TargetPlayerSacrifices { target, .. }

@@ -179,6 +179,9 @@ impl GameEngine {
         }
 
         match &pending.continuation {
+            ResolutionContinuation::AuraReturn { .. } => {
+                return self.finish_aura_return(pending, chosen[0]);
+            }
             ResolutionContinuation::CopyTargets { .. } => {
                 return self.finish_copy_target_choice(pending, chosen);
             }
@@ -283,6 +286,140 @@ impl GameEngine {
             ev.push(ev_priority_changed(self));
         }
         Ok(finish_with_events(self, ev))
+    }
+
+    fn finish_aura_return(
+        &mut self,
+        pending: PendingResolution,
+        chosen: ObjectId,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let ResolutionContinuation::AuraReturn { stack, exiled } = &pending.continuation else {
+            unreachable!("Aura return continuation routed by caller")
+        };
+        let stack = stack.clone();
+        let exiled = *exiled;
+        let generation = self
+            .state
+            .zone_change_generation
+            .get(&exiled.object_id)
+            .copied()
+            .unwrap_or(0);
+        let Some(object) = self.state.objects.get(&exiled.object_id) else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("returning Aura no longer exists"));
+        };
+        if object.zone != Zone::Exile || generation != exiled.zone_change_generation {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("returning Aura choice became stale"));
+        }
+        let owner = object.owner;
+        let Some(filter) = self.effective_face(exiled.object_id).and_then(|face| {
+            face.spell_effect.iter().find_map(|effect| match effect {
+                SpellEffectKind::AuraAttach { target } => Some(target.clone()),
+                _ => None,
+            })
+        }) else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "returning object is no longer an Aura",
+            ));
+        };
+        let recipient = match pending.presentation.choice_kind {
+            rv1::ChoiceKind::AuraPermanent => AttachmentRecipient::Object(chosen),
+            rv1::ChoiceKind::AuraPlayer => AttachmentRecipient::Player(chosen as PlayerId),
+            _ => unreachable!("Aura return uses a typed choice kind"),
+        };
+        if !super::targeting::attachment_filter_legal(
+            self,
+            &filter,
+            recipient,
+            exiled.object_id,
+            owner,
+        ) {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("Aura recipient is no longer legal"));
+        }
+
+        let label = object_display_name(&self.state, self.registry, exiled.object_id);
+        let entry = BattlefieldEntryEvent {
+            object_id: exiled.object_id,
+            deciding_player: owner,
+            destination_controller: owner,
+            face_index: 0,
+            unlock_room_door: None,
+            chosen_x: 0,
+            cast_cost_receipts: Vec::new(),
+            player_life_snapshot: self.player_life_snapshot(),
+            tapped: false,
+            entry_counters: BTreeMap::new(),
+            applied_effects: Vec::new(),
+        };
+        let resume_original_stack = stack.is_some();
+        let item = stack
+            .as_ref()
+            .map(|parked| parked.item.clone())
+            .unwrap_or_else(|| self.observer_return_item(exiled.object_id, owner));
+        let mut events = Vec::new();
+        let entry = match self.begin_battlefield_entry(
+            item,
+            entry,
+            BattlefieldEntryCompletion::ObserverReturn {
+                owner,
+                object_label: label.clone(),
+                attached_to: Some(recipient),
+                resume_original_stack,
+            },
+            &mut events,
+        ) {
+            super::replacement::BattlefieldEntryProgress::Parked => {
+                if let (Some(resume), Some(next_pending)) =
+                    (stack.as_ref(), self.state.pending_resolution.as_mut())
+                {
+                    if let Some(parked) = next_pending.continuation.stack_mut() {
+                        parked.resume_effect_index = resume.resume_effect_index;
+                        parked.previous_result = resume.previous_result.clone();
+                    }
+                }
+                return Ok(finish_with_events(self, events));
+            }
+            super::replacement::BattlefieldEntryProgress::Ready(entry) => entry,
+        };
+        self.commit_battlefield_entry_state(entry, Some(recipient))?;
+        self.fire_triggers(&[GameEvent::EntersBattlefield {
+            object_id: exiled.object_id,
+        }]);
+        events.extend([
+            permanent_moved_event(
+                &self.state,
+                exiled.object_id,
+                owner,
+                rv1::permanent_moved::Destination::Battlefield,
+            ),
+            rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::AuraAttached(rv1::AuraAttached {
+                    aura_object_id: exiled.object_id,
+                    attachment_recipient: Some(attachment_recipient_proto(recipient)),
+                })),
+            },
+            ev_log(format!("{label} returns attached to its chosen recipient.")),
+        ]);
+        if self.drain_immediate_observer_actions(stack.clone(), &mut events)? {
+            return Ok(finish_with_events(self, events));
+        }
+        if let Some(stack) = stack {
+            return self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                stack.previous_result,
+                events,
+            );
+        }
+        self.apply_sbas(&mut events)?;
+        if let Some(index) = self.state.player_idx(self.state.active_player_id()) {
+            self.state.priority_idx = index;
+        }
+        events.push(ev_priority_changed(self));
+        Ok(finish_with_events(self, events))
     }
 
     /// Display names for `oids`, in order (registry lookup, never Oracle).

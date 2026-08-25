@@ -5426,6 +5426,25 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         return true;
     }
 
+    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AuraPermanent)) {
+        if (!card || !card->getZone()) {
+            return false;
+        }
+        if (card->getZone()->getName() != ZoneNames::TABLE) {
+            handler->emitLocalLog(tr("Choose a permanent on the battlefield for the Aura to enchant."));
+            return true;
+        }
+        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+        const quint32 recipientOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        if (recipientOid == 0 ||
+            !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::AuraPermanent, recipientOid)) {
+            handler->emitLocalLog(tr("That permanent cannot be enchanted by the returning Aura."));
+            return true;
+        }
+        handler->submitPendingChoiceObject(recipientOid);
+        return true;
+    }
+
     // Check pending copy target choice first (CR 707.10c: redirect targets for a spell copy).
     if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget)) {
         if (!card || !card->getZone()) {
@@ -5676,6 +5695,19 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
             return true;
         }
         handler->submitPendingChoiceObject(targetOid);
+        return true;
+    }
+
+    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AuraPlayer)) {
+        if (!targetPlayer) {
+            return false;
+        }
+        const quint32 playerId = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
+        if (!handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::AuraPlayer, playerId)) {
+            handler->emitLocalLog(tr("That player cannot be enchanted by the returning Aura."));
+            return true;
+        }
+        handler->submitPendingChoiceObject(playerId);
         return true;
     }
 

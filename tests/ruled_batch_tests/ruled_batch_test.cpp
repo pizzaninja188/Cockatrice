@@ -516,6 +516,10 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     auto *p1Cast = p1Legal.add_hand_actions();
     p1Cast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
     p1Cast->mutable_cost_choices()->add_choices()->add_candidate_ids(7);
+    auto *p1Reduction = (*p1Legal.mutable_valid_targets_by_hand_slot())[0].add_targeted_cost_reduction_applications();
+    p1Reduction->set_application_id(701);
+    p1Reduction->set_generic_mana(3);
+    p1Reduction->add_qualifying_targets()->set_object_id(101);
     auto *p1Block = p1Legal.add_legal_block_pairs();
     p1Block->set_blocker_id(101);
     p1Block->set_attacker_id(201);
@@ -533,6 +537,10 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     auto *p2Cast = p2Legal.add_hand_actions();
     p2Cast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
     p2Cast->mutable_cost_choices()->add_choices()->add_candidate_ids(9);
+    auto *p2Reduction = (*p2Legal.mutable_valid_targets_by_hand_slot())[0].add_targeted_cost_reduction_applications();
+    p2Reduction->set_application_id(702);
+    p2Reduction->set_generic_mana(4);
+    p2Reduction->add_qualifying_targets()->set_object_id(102);
     auto *p2Block = p2Legal.add_legal_block_pairs();
     p2Block->set_blocker_id(102);
     p2Block->set_attacker_id(202);
@@ -564,6 +572,13 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     ASSERT_EQ(forP1.legal_by_player_size(), 1);
     EXPECT_TRUE(forP1.legal_by_player().contains(1));
     EXPECT_EQ(forP1.legal_by_player().at(1).hand_actions(0).cost_choices().choices(0).candidate_ids(0), 7u);
+    EXPECT_EQ(forP1.legal_by_player()
+                  .at(1)
+                  .valid_targets_by_hand_slot()
+                  .at(0)
+                  .targeted_cost_reduction_applications(0)
+                  .application_id(),
+              701u);
     ASSERT_EQ(forP1.legal_by_player().at(1).legal_block_pairs_size(), 1);
     EXPECT_EQ(forP1.legal_by_player().at(1).legal_block_pairs(0).blocker_id(), 101u);
     ASSERT_EQ(forP1.legal_by_player().at(1).zone_ability_actions_size(), 1);
@@ -574,6 +589,13 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     ASSERT_EQ(forP2.legal_by_player_size(), 1);
     EXPECT_TRUE(forP2.legal_by_player().contains(2));
     EXPECT_EQ(forP2.legal_by_player().at(2).hand_actions(0).cost_choices().choices(0).candidate_ids(0), 9u);
+    EXPECT_EQ(forP2.legal_by_player()
+                  .at(2)
+                  .valid_targets_by_hand_slot()
+                  .at(0)
+                  .targeted_cost_reduction_applications(0)
+                  .application_id(),
+              702u);
     ASSERT_EQ(forP2.legal_by_player().at(2).legal_block_pairs_size(), 1);
     EXPECT_EQ(forP2.legal_by_player().at(2).legal_block_pairs(0).blocker_id(), 102u);
     ASSERT_EQ(forP2.legal_by_player().at(2).zone_ability_actions_size(), 1);
@@ -1185,6 +1207,40 @@ TEST_F(RuledBatchTest, ExileOidMapReversesEngineAndPhysicalPileOrder)
     EXPECT_EQ(binding.findExileCardByEngineOid(p1, 701u), oldest);
     EXPECT_EQ(binding.findExileCardByEngineOid(p1, 702u), newest);
     EXPECT_EQ(binding.findExileCardByEngineOid(p1, 999u), nullptr);
+}
+
+TEST_F(RuledBatchTest, PermanentMovedFromExileUsesTheExactBoundPhysicalCard)
+{
+    Server_Card *oldest = addCardToExile(p1, "Grizzly Bears");
+    Server_Card *newest = addCardToExile(p1, "Grizzly Bears");
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    p1Seed.add_exile_object_ids(701u);
+    p1Seed.add_exile_object_ids(702u);
+    *seedView->add_per_player() = p1Seed;
+    callBatchApply(seed);
+
+    ruled::v1::IpcResponse returned;
+    returned.set_ok(true);
+    auto *moved = returned.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(702u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_controller_player_id(p1->getPlayerId());
+    moved->set_card_id("grizzly_bears");
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+    auto *returnedView = returned.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Returned = buildPerPlayerView(p1, {702u}, {false});
+    p1Returned.add_exile_object_ids(701u);
+    *returnedView->add_per_player() = p1Returned;
+
+    callBatchApply(returned);
+
+    ASSERT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards().size(), 1);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards().first(), newest);
+    ASSERT_EQ(p1->getZones().value(ZoneNames::EXILE)->getCards().size(), 1);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::EXILE)->getCards().first(), oldest);
 }
 
 TEST_F(RuledBatchTest, EmptyGraveyardSnapshotClearsTheLastPublishedPhysicalBinding)

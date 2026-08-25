@@ -2,6 +2,92 @@ use super::super::events::ev_log_private;
 use super::candidate_identities;
 use super::*;
 
+pub(super) fn exile_until_source_leaves(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ExileUntilSourceLeaves { target } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(source_id) = cx.top.source_permanent_id else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let source_generation = cx
+        .engine
+        .state
+        .zone_change_generation
+        .get(&source_id)
+        .copied()
+        .unwrap_or(0);
+    let Some(source) = cx.engine.state.objects.get(&source_id) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    // CR 610.3b: if the source left before its ETB trigger resolved, nothing is exiled.
+    if source.zone != Zone::Battlefield || source_generation != cx.top.source_zone_change {
+        return Ok(EffectOutcome::Continue);
+    }
+    let source_ref = TriggerObjectRef {
+        object_id: source_id,
+        zone_change_generation: source_generation,
+        controller_at_event: source.controller,
+    };
+    let Some(target_id) = cx.targets.first().copied().filter(|object_id| {
+        target_filter_legal_at_resolution(
+            cx.engine,
+            &target,
+            *object_id,
+            cx.controller,
+            TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+            cx.top.trigger_context,
+        )
+    }) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some((owner, target_label)) = cx.engine.state.objects.get(&target_id).map(|object| {
+        (
+            object.owner,
+            object_display_name(&cx.engine.state, cx.engine.registry, target_id),
+        )
+    }) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    move_object_to_zone(
+        &mut cx.engine.state,
+        cx.engine.registry,
+        target_id,
+        Zone::Exile,
+        None,
+    )?;
+    let exiled = TriggerObjectRef {
+        object_id: target_id,
+        zone_change_generation: cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&target_id)
+            .copied()
+            .unwrap_or(0),
+        controller_at_event: owner,
+    };
+    cx.engine
+        .state
+        .active_event_observers
+        .push(ActiveEventObserver {
+            watched: source_ref,
+            matcher: EventObserverMatcher::WhenWatchedObjectLeavesBattlefield,
+            payload: EventObserverPayload::ReturnExiledObject { exiled },
+        });
+    cx.events
+        .push(ev_log(format!("{} exiles {target_label}.", cx.spell_label)));
+    cx.events.push(permanent_moved_event(
+        &cx.engine.state,
+        target_id,
+        owner,
+        rv1::permanent_moved::Destination::Exile,
+    ));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn draw(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

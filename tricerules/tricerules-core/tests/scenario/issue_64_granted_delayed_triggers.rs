@@ -2,7 +2,10 @@ use crate::helpers::*;
 use tricerules_cards::primitives::{
     EffectSubject, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
-use tricerules_core::state::{ActiveDelayedTrigger, TriggerObjectRef};
+use tricerules_core::state::{
+    ActiveEventObserver, DelayedTriggerPayload, EventObserverMatcher, EventObserverPayload,
+    TriggerObjectRef,
+};
 
 #[test]
 fn infernal_scarring_grants_the_creature_controller_a_dies_trigger() {
@@ -364,7 +367,7 @@ fn ray_of_command_triggers_once_on_an_earlier_control_change() {
     resolve_entire_stack_two_player(&mut e);
     assert!(e.state.objects[&creature].tapped);
     assert_eq!(
-        e.state.active_delayed_triggers.len(),
+        e.state.active_event_observers.len(),
         1,
         "the consumed first delayed trigger is gone; only the second Ray remains"
     );
@@ -382,28 +385,31 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
         .get(&creature)
         .copied()
         .unwrap_or(0);
-    e.state.active_delayed_triggers.push(ActiveDelayedTrigger {
-        controller: 0,
-        card_id: "grizzly_bears".into(),
-        card_name: "Grizzly Bears".into(),
-        source_face_index: 0,
+    e.state.active_event_observers.push(ActiveEventObserver {
         watched: TriggerObjectRef {
             object_id: creature,
             zone_change_generation: generation,
             controller_at_event: 0,
         },
-        ability: TriggeredAbilityDef {
-            trigger: TriggerCondition::AtBeginningOfNextEndStep,
-            effect: vec![SpellEffectKind::Tap {
-                subject: EffectSubject::TriggerObject,
-            }],
-            modal: None,
-            targeting: None,
-            text: "At the beginning of the next end step, tap it.".into(),
-            may: false,
-            intervening_if: None,
-            triggers_only_once: false,
-        },
+        matcher: EventObserverMatcher::AtBeginningOfNextEndStep,
+        payload: EventObserverPayload::StageDelayedTrigger(Box::new(DelayedTriggerPayload {
+            controller: 0,
+            card_id: "grizzly_bears".into(),
+            card_name: "Grizzly Bears".into(),
+            source_face_index: 0,
+            ability: TriggeredAbilityDef {
+                trigger: TriggerCondition::AtBeginningOfNextEndStep,
+                effect: vec![SpellEffectKind::Tap {
+                    subject: EffectSubject::TriggerObject,
+                }],
+                modal: None,
+                targeting: None,
+                text: "At the beginning of the next end step, tap it.".into(),
+                may: false,
+                intervening_if: None,
+                triggers_only_once: false,
+            },
+        })),
     });
 
     e.apply_command(0, &primitive_yield())
@@ -420,7 +426,7 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
         .expect("main2 to end step");
 
     assert_eq!(e.state.stack.len(), 1);
-    assert!(e.state.active_delayed_triggers.is_empty());
+    assert!(e.state.active_event_observers.is_empty());
     resolve_entire_stack_two_player(&mut e);
     assert!(e.state.objects[&creature].tapped);
 }

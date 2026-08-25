@@ -2,14 +2,15 @@
 
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
-    ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement, ActiveDelayedTrigger,
+    ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement, ActiveEventObserver,
     ActiveExilePlayPermission, AffectedScope, AttachmentRecipient, BattlefieldEntryCompletion,
     BattlefieldEntryEvent, BlockingChoice, CardResultCohort, CardResultEntry,
     CastCostObjectReceipt, CastCostReceipt, ChosenMode, CombatState, ContinuousEffect,
     CopiableValues, DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
-    EntryReplacementApplication, EntryReplacementEffectId, ExilePlayPermissionScope, GameObject,
-    GameState, HandCardAction, ObjectId, OpeningSequence, ParkedStackResolution,
-    PendingBattlefieldEntry, PendingHandChoice, PendingLibraryLookStage,
+    DelayedTriggerPayload, EntryReplacementApplication, EntryReplacementEffectId,
+    EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState,
+    HandCardAction, ImmediateObserverAction, ObjectId, ObservedGameEvent, OpeningSequence,
+    ParkedStackResolution, PendingBattlefieldEntry, PendingHandChoice, PendingLibraryLookStage,
     PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
     PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
     PendingResolutionPresentation, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
@@ -733,7 +734,8 @@ impl GameEngine {
             starting_player_idx: 0,
             pending_triggers: VecDeque::new(),
             staged_trigger_groups: VecDeque::new(),
-            active_delayed_triggers: Vec::new(),
+            active_event_observers: Vec::new(),
+            pending_immediate_observer_actions: Vec::new(),
             pending_trigger_order: None,
             pending_resolution: None,
             pending_replacement_event: None,
@@ -1625,6 +1627,7 @@ impl GameEngine {
             }
         };
         let mut b = res?;
+        self.drain_immediate_observer_actions(None, &mut b.events)?;
         self.sweep_life();
         // SBAs are not checked while a tier-3 resolution is parked mid-resolution (CR 608/704);
         // they run when it completes. Zone view + legal actions still refresh so the deciding

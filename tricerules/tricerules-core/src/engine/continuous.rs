@@ -439,8 +439,8 @@ impl GameEngine {
         self.state
             .continuous_effects
             .retain(|effect| effect.duration != EffectDuration::UntilEndOfTurn);
-        self.state.active_delayed_triggers.retain(|delayed| {
-            delayed.ability.trigger != TriggerCondition::WhenWatchedObjectDiesThisTurn
+        self.state.active_event_observers.retain(|observer| {
+            observer.matcher != EventObserverMatcher::WhenWatchedObjectDiesThisTurn
         });
     }
 

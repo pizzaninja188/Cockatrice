@@ -996,6 +996,12 @@ enum ChoiceKind {
   // Cards selected from the deciding player's public graveyard during resolution. Kept private
   // while pending so only the deciding participant receives selectable metadata.
   CHOICE_KIND_GRAVEYARD_CARDS = 14;
+  // CR 303.4f: an Aura entering from a zone other than the stack needs its owner to choose a
+  // legal permanent to enchant. Public battlefield object ids; answered by clicking the board.
+  CHOICE_KIND_AURA_PERMANENT = 15;
+  // The player-recipient counterpart (Curses and other "enchant player" Auras). Candidate ids are
+  // PlayerIds in the public player-click domain, kept distinct from battlefield ObjectIds.
+  CHOICE_KIND_AURA_PLAYER = 16;
 }
 
 enum ChoiceCandidateSourceZone {

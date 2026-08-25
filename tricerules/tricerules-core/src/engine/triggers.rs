@@ -46,53 +46,48 @@ impl GameEngine {
             }
         }
 
-        let mut delayed = if events.iter().any(|event| {
-            matches!(
-                event,
+        let mut delayed = Vec::new();
+        for event in events {
+            match event {
                 GameEvent::PhaseBegan {
                     phase: rv1::PhaseId::EndStep,
                     ..
+                } => delayed.extend(
+                    self.state
+                        .dispatch_event_observers(ObservedGameEvent::BeginningOfEndStep),
+                ),
+                GameEvent::Dies { source, .. } => {
+                    delayed.extend(self.state.dispatch_event_observers(ObservedGameEvent::Dies(
+                        TriggerObjectRef {
+                            object_id: source.object_id,
+                            zone_change_generation: source.zone_change_generation,
+                            controller_at_event: source.controller,
+                        },
+                    )))
                 }
-            )
-        }) {
-            self.state.take_next_end_step_delayed()
-        } else {
-            Vec::new()
-        };
-        let mut waiting = std::mem::take(&mut self.state.active_delayed_triggers);
-        for candidate in waiting.drain(..) {
-            let matched = candidate.ability.trigger
-                == TriggerCondition::WhenWatchedObjectDiesThisTurn
-                && events.iter().any(|event| match event {
-                    GameEvent::Dies { source, .. } => {
-                        source.object_id == candidate.watched.object_id
-                            && source.zone_change_generation
-                                == candidate.watched.zone_change_generation
-                    }
-                    _ => false,
-                });
-            if matched {
-                delayed.push(candidate);
-            } else {
-                self.state.active_delayed_triggers.push(candidate);
+                _ => {}
             }
         }
         let mut collected = self.collect_event_triggers(events);
-        collected.extend(delayed.into_iter().map(|delayed| CollectedTrigger {
-            source_id: delayed.watched.object_id,
-            card_id: delayed.card_id,
-            face_index: delayed.source_face_index,
-            source_zone_change: delayed.watched.zone_change_generation,
-            source_face_change: 0,
-            controller: delayed.controller,
-            ability_index: 0,
-            ability_text: delayed.ability.text.clone(),
-            trigger_context: TriggerContext {
-                observed_object: Some(delayed.watched),
-                ..TriggerContext::default()
-            },
-            ability: delayed.ability,
-        }));
+        collected.extend(
+            delayed
+                .into_iter()
+                .map(|(watched, delayed)| CollectedTrigger {
+                    source_id: watched.object_id,
+                    card_id: delayed.card_id,
+                    face_index: delayed.source_face_index,
+                    source_zone_change: watched.zone_change_generation,
+                    source_face_change: 0,
+                    controller: delayed.controller,
+                    ability_index: 0,
+                    ability_text: delayed.ability.text.clone(),
+                    trigger_context: TriggerContext {
+                        observed_object: Some(watched),
+                        ..TriggerContext::default()
+                    },
+                    ability: delayed.ability,
+                }),
+        );
         self.stage_triggers(collected);
     }
 

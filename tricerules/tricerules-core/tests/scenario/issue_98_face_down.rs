@@ -482,7 +482,7 @@ fn turn_inside_out_watches_the_exact_generation_once() {
         .expect("cast Turn Inside Out");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.effective_power(bear), Some(5));
-    assert_eq!(engine.state.active_delayed_triggers.len(), 1);
+    assert_eq!(engine.state.active_event_observers.len(), 1);
 
     let top = seat_on_top(&mut engine, 0, &["serra_angel", "lightning_bolt"]);
     ensure_card_in_hand(&mut engine, 0, "murder");
@@ -501,7 +501,7 @@ fn turn_inside_out_watches_the_exact_generation_once() {
         .expect("cast Murder");
     pass_both_players(&mut engine);
     assert_eq!(
-        engine.state.active_delayed_triggers.len(),
+        engine.state.active_event_observers.len(),
         0,
         "consumed once"
     );

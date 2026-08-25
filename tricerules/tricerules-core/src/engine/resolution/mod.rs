@@ -1211,6 +1211,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::CreateDelayedTrigger { .. } => {
                         misc::create_delayed_trigger(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::ExileUntilSourceLeaves { .. } => {
+                        zones::exile_until_source_leaves(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::TapAllCreatures { .. } => {
                         misc::tap_all_creatures(&mut cx, effect)?
                     }
@@ -1270,6 +1273,12 @@ impl GameEngine {
                     }
                 }
             };
+            let mut observer_stack = ParkedStackResolution::new(top.clone());
+            observer_stack.resume_effect_index = Some(index as u32 + 1);
+            observer_stack.previous_result = effect_result.clone();
+            if self.drain_immediate_observer_actions(Some(observer_stack), events)? {
+                return Ok(());
+            }
             match outcome {
                 EffectOutcome::Suspended => {
                     // The handler parked a `PendingResolution` for a player choice; stamp where to
@@ -1312,6 +1321,273 @@ impl GameEngine {
         // beneath anything those effects put there (e.g. a self-targeted Tome Scour's five cards).
         seat_resolved_spell_last_in_graveyard(&mut self.state, top.id);
         Ok(())
+    }
+
+    /// Complete CR 610.3 paired one-shot work discovered by a committed zone transition. This is
+    /// called between effect instructions and again at the command boundary, so the return is
+    /// immediate rather than a trigger that uses the stack. All currently-ready objects enter as
+    /// one event cohort, preserving simultaneous returns when several sources leave together.
+    pub(super) fn drain_immediate_observer_actions(
+        &mut self,
+        resume_stack: Option<ParkedStackResolution>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        let mut actions = VecDeque::from(std::mem::take(
+            &mut self.state.pending_immediate_observer_actions,
+        ));
+        let mut entries = Vec::new();
+        while let Some(action) = actions.pop_front() {
+            let ImmediateObserverAction::ReturnExiledObject { exiled } = action;
+            let generation = self
+                .state
+                .zone_change_generation
+                .get(&exiled.object_id)
+                .copied()
+                .unwrap_or(0);
+            let Some(object) = self.state.objects.get(&exiled.object_id) else {
+                continue;
+            };
+            if object.zone != Zone::Exile || generation != exiled.zone_change_generation {
+                continue;
+            }
+            // CR 111.7: a token that left the battlefield has ceased to exist at the preceding
+            // SBA check. Do not recreate one if a synthetic test reaches this boundary earlier.
+            if object.is_token(self.registry) {
+                continue;
+            }
+            let owner = object.owner;
+            let label = object_display_name(&self.state, self.registry, exiled.object_id);
+            let aura_filter = self.effective_face(exiled.object_id).and_then(|face| {
+                face.spell_effect.iter().find_map(|effect| match effect {
+                    SpellEffectKind::AuraAttach { target } => Some(target.clone()),
+                    _ => None,
+                })
+            });
+            if let Some(filter) = aura_filter {
+                let (choice_kind, candidates) = if filter.is_player() {
+                    (
+                        rv1::ChoiceKind::AuraPlayer,
+                        self.state
+                            .players
+                            .iter()
+                            .filter(|player| !player.has_lost)
+                            .map(|player| player.id as ObjectId)
+                            .filter(|player_id| {
+                                super::targeting::attachment_filter_legal(
+                                    self,
+                                    &filter,
+                                    AttachmentRecipient::Player(*player_id as PlayerId),
+                                    exiled.object_id,
+                                    owner,
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                } else {
+                    let mut candidates = self
+                        .state
+                        .objects
+                        .keys()
+                        .copied()
+                        .filter(|object_id| {
+                            super::targeting::attachment_filter_legal(
+                                self,
+                                &filter,
+                                AttachmentRecipient::Object(*object_id),
+                                exiled.object_id,
+                                owner,
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    candidates.sort_unstable();
+                    (rv1::ChoiceKind::AuraPermanent, candidates)
+                };
+                if candidates.is_empty() {
+                    continue;
+                }
+                // Preserve the rest of a simultaneous return cohort. The accepted choice drains
+                // it before resuming the original stack instruction.
+                self.state
+                    .pending_immediate_observer_actions
+                    .extend(actions);
+                let prompt = format!("Choose what {label} will enchant as it returns.");
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                        rv1::ResolutionChoiceRequired {
+                            deciding_player_id: owner,
+                            source_object_id: exiled.object_id,
+                            prompt_text: prompt.clone(),
+                            choice_kind: choice_kind as i32,
+                            candidate_object_ids: candidates.clone(),
+                            candidate_card_ids: candidates
+                                .iter()
+                                .map(|candidate| {
+                                    self.state
+                                        .objects
+                                        .get(candidate)
+                                        .map(|object| object.card_id.clone())
+                                        .unwrap_or_default()
+                                })
+                                .collect(),
+                            min: 1,
+                            max: 1,
+                            ordered: false,
+                            candidate_names: candidates
+                                .iter()
+                                .map(|candidate| {
+                                    self.state
+                                        .objects
+                                        .get(candidate)
+                                        .map(|_| {
+                                            object_display_name(
+                                                &self.state,
+                                                self.registry,
+                                                *candidate,
+                                            )
+                                        })
+                                        .unwrap_or_else(|| format!("P{candidate}"))
+                                })
+                                .collect(),
+                            candidate_server_card_ids: Vec::new(),
+                            unique_names: false,
+                            generic_mana_cost: 0,
+                            payment_currently_legal: false,
+                            resolution_branches: Vec::new(),
+                            mana_cost: String::new(),
+                            candidate_selectable: Vec::new(),
+                            reveal_audience: 0,
+                            revealed_zone_owner_player_id: None,
+                            candidate_source_zones: Vec::new(),
+                        },
+                    )),
+                });
+                events.push(ev_log(prompt.clone()));
+                self.state.pending_resolution = Some(PendingResolution {
+                    deciding_player: owner,
+                    presentation: PendingResolutionPresentation {
+                        source_object_id: exiled.object_id,
+                        candidates,
+                        min: 1,
+                        max: 1,
+                        ordered: false,
+                        prompt,
+                        choice_kind,
+                        unique_names: false,
+                    },
+                    continuation: ResolutionContinuation::AuraReturn {
+                        stack: resume_stack,
+                        exiled,
+                    },
+                });
+                return Ok(true);
+            }
+            let entry = BattlefieldEntryEvent {
+                object_id: exiled.object_id,
+                deciding_player: owner,
+                destination_controller: owner,
+                face_index: 0,
+                unlock_room_door: None,
+                chosen_x: 0,
+                cast_cost_receipts: Vec::new(),
+                player_life_snapshot: self.player_life_snapshot(),
+                tapped: false,
+                entry_counters: BTreeMap::new(),
+                applied_effects: Vec::new(),
+            };
+            let resume_original_stack = resume_stack.is_some();
+            let item = resume_stack
+                .as_ref()
+                .map(|stack| stack.item.clone())
+                .unwrap_or_else(|| self.observer_return_item(exiled.object_id, owner));
+            match self.begin_battlefield_entry(
+                item,
+                entry,
+                BattlefieldEntryCompletion::ObserverReturn {
+                    owner,
+                    object_label: label.clone(),
+                    attached_to: None,
+                    resume_original_stack,
+                },
+                events,
+            ) {
+                super::replacement::BattlefieldEntryProgress::Parked => {
+                    if let (Some(resume), Some(pending)) = (
+                        resume_stack.as_ref(),
+                        self.state.pending_resolution.as_mut(),
+                    ) {
+                        if let Some(parked) = pending.continuation.stack_mut() {
+                            parked.resume_effect_index = resume.resume_effect_index;
+                            parked.previous_result = resume.previous_result.clone();
+                        }
+                    }
+                    self.state
+                        .pending_immediate_observer_actions
+                        .extend(actions);
+                    return Ok(true);
+                }
+                super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                    entries.push((entry, owner, label));
+                }
+            }
+        }
+
+        let mut trigger_events = Vec::new();
+        for (entry, owner, label) in entries {
+            let object_id = entry.object_id;
+            // Observer returns are independent one-shot effects. Entry replacement ordering is
+            // added in the Aura/choice increment; the base path still uses the canonical commit
+            // reset and static-registration machinery.
+            let door_event = self.commit_battlefield_entry_state(entry, None)?;
+            trigger_events.push(GameEvent::EntersBattlefield { object_id });
+            trigger_events.extend(door_event);
+            events.push(permanent_moved_event(
+                &self.state,
+                object_id,
+                owner,
+                rv1::permanent_moved::Destination::Battlefield,
+            ));
+            events.push(ev_log(format!(
+                "{label} returns to the battlefield under its owner's control."
+            )));
+        }
+        self.fire_triggers(&trigger_events);
+        Ok(false)
+    }
+
+    pub(super) fn observer_return_item(
+        &self,
+        object_id: ObjectId,
+        controller: PlayerId,
+    ) -> StackItem {
+        let card_id = self
+            .state
+            .objects
+            .get(&object_id)
+            .map(|object| object.card_id.clone())
+            .unwrap_or_default();
+        StackItem {
+            id: object_id,
+            controller,
+            card_id,
+            targets: Vec::new(),
+            ability_text: Some("paired one-shot return".into()),
+            source_permanent_id: None,
+            source_zone_change: 0,
+            source_face_change: 0,
+            ability_index: None,
+            activated_ability: None,
+            triggered_ability: None,
+            is_triggered: false,
+            is_copy: true,
+            face_index: 0,
+            cast_method: SpellCastMethod::Normal,
+            chosen_x: 0,
+            chosen_modes: Vec::new(),
+            cast_cost_receipts: Vec::new(),
+            payment_result: CardResultCohort::default(),
+            resolution_branch_choices: BTreeMap::new(),
+            trigger_context: TriggerContext::default(),
+        }
     }
 
     /// CR 111: mint `count` tokens of `token_id` for each recipient and put them onto the
@@ -1701,7 +1977,20 @@ pub(crate) fn move_object_to_zone(
     if leaving_battlefield {
         state.room_states.remove(&oid);
         if let Some(old_controller) = state.objects.get(&oid).map(|object| object.controller) {
-            state.stage_delayed_control_loss(&[(oid, old_controller, None)]);
+            let object = TriggerObjectRef {
+                object_id: oid,
+                zone_change_generation: prior_generation,
+                controller_at_event: old_controller,
+            };
+            let delayed = state.dispatch_event_observers(ObservedGameEvent::ControllerChanged {
+                object,
+                old_controller,
+                new_controller: None,
+            });
+            state.stage_delayed_batch(delayed);
+            let delayed =
+                state.dispatch_event_observers(ObservedGameEvent::LeavesBattlefield(object));
+            state.stage_delayed_batch(delayed);
         }
     }
     // A move to the same named zone is still a zone change and creates a new object (CR 400.7).

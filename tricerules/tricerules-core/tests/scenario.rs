@@ -71,6 +71,8 @@ mod issue_105_harmonize;
 mod issue_107_graveyard_actions;
 #[path = "scenario/issue_108_graveyard_aggregates.rs"]
 mod issue_108_graveyard_aggregates;
+#[path = "scenario/issue_109_temporary_exile.rs"]
+mod issue_109_temporary_exile;
 #[path = "scenario/issue_110_library_search.rs"]
 mod issue_110_library_search;
 #[path = "scenario/issue_111_turn_history.rs"]

@@ -375,6 +375,10 @@ public:
             CopySource,
             /// CR 704.5j: which of two-or-more same-name legends the controller keeps.
             LegendKeep,
+            /// CR 303.4f: the returning Aura's owner chooses a permanent it can enchant.
+            AuraPermanent,
+            /// CR 303.4f: the returning Aura's owner chooses a player it can enchant.
+            AuraPlayer,
             /// Tier-3 mid-resolution pick over cards in a zone (Brainstorm, Gifts Ungiven, …).
             ResolutionPick,
             /// CR 608.2g: a resolving effect offers a generic-mana payment.
@@ -389,7 +393,7 @@ public:
         Kind kind = Kind::TriggerTarget;
         QString promptText;
         bool mayDecline = false;
-        /// Click-to-select candidates on the battlefield (CopyTarget, CopySource, LegendKeep).
+        /// Click-to-select candidates on the battlefield or player surface.
         QVector<quint32> candidateOids;
 
         // --- ResolutionPick payload ---------------------------------------------------
@@ -1321,7 +1325,7 @@ public:
     {
         return hasPendingChoiceOfKind(kind) && pendingChoice->candidateOids.contains(oid);
     }
-    /// Answer a click-to-select choice (CopyTarget, CopySource, LegendKeep) with the clicked permanent.
+    /// Answer a click-to-select choice with the clicked permanent or player.
     /// For LegendKeep the chosen permanent is the one KEPT (CR 704.5j); the engine sacrifices
     /// the rest. Clears the choice and sends SubmitResolutionChoice.
     void submitPendingChoiceObject(quint32 oid);

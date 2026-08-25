@@ -851,6 +851,7 @@ fn validate_effect_targets(
         SpellEffectKind::Destroy {
             subject: EffectSubject::Chosen(filter),
         }
+        | SpellEffectKind::ExileUntilSourceLeaves { target: filter }
         | SpellEffectKind::DestroyAttached { target: filter, .. }
         | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: filter, .. } => {
             if targets.len() != 1 {

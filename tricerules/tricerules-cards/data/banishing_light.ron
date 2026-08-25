@@ -1,0 +1,13 @@
+(
+  id: "banishing_light",
+  name: "Banishing Light",
+  mana_cost: "{2}{W}",
+  // Oracle: When Banishing Light enters the battlefield, exile target nonland permanent an
+  // opponent controls until Banishing Light leaves the battlefield. CR 610.3.
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ExileUntilSourceLeaves(target: (kind: AnyPermanent, controller: Opponent, not_land: true))],
+    text: "When Banishing Light enters, exile target nonland permanent an opponent controls until Banishing Light leaves the battlefield.",
+  )],
+)

@@ -995,6 +995,16 @@ void RuledGameDriver::applyPermanentMoves(const ruled::v1::RuledEventBatch &batc
                     }
                 }
             }
+            // CR 610.3 temporary-exile returns originate in the public exile pile. Resolve the
+            // exact engine oid before any card-name fallback: two same-name cards may be exiled at
+            // once and only the generation linked to this source is allowed to return.
+            if (!card) {
+                if (auto *sp = qobject_cast<Server_Player *>(holder)) {
+                    if (Server_Card *c = playerBinding(pid).findExileCardByEngineOid(sp, oid)) {
+                        card = c;
+                    }
+                }
+            }
         }
         if (!card) {
             // A spell leaving the stack (e.g. countered) physically lives on the single shared

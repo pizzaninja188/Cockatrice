@@ -253,6 +253,9 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             if (ruledHandler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopySource, ruledOid)) {
                 outlineColor = QColor(80, 200, 255); // cyan for an eligible untargeted copy source
             }
+            if (ruledHandler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::AuraPermanent, ruledOid)) {
+                outlineColor = QColor(180, 100, 255); // violet for a legal returning-Aura recipient
+            }
             if (outlineColor.isValid()) {
                 painter->save();
                 painter->setRenderHint(QPainter::Antialiasing, true);

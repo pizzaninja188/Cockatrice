@@ -814,7 +814,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
 
     if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_TARGET_OBJECTS ||
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_COPY_SOURCE ||
-        rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP) {
+        rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP ||
+        rcr.choice_kind() == ruled::v1::CHOICE_KIND_AURA_PERMANENT ||
+        rcr.choice_kind() == ruled::v1::CHOICE_KIND_AURA_PLAYER) {
         // Click-to-select on the battlefield rather than a modal list:
         //   TARGET_OBJECTS — CR 707.10c, the controller of a spell copy may redirect its targets.
         //   LEGEND_KEEP    — CR 704.5j, the controller clicks the legend to KEEP; the rest are
@@ -824,6 +826,10 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             choice.kind = ChoiceKind::LegendKeep;
         } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_COPY_SOURCE) {
             choice.kind = ChoiceKind::CopySource;
+        } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_AURA_PERMANENT) {
+            choice.kind = ChoiceKind::AuraPermanent;
+        } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_AURA_PLAYER) {
+            choice.kind = ChoiceKind::AuraPlayer;
         } else {
             choice.kind = ChoiceKind::CopyTarget;
         }
