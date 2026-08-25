@@ -990,6 +990,14 @@ pub enum SpellEffectKind {
         who: PlayerRecipient,
         count: Amount,
     },
+    /// CR 701.9: each affected player chooses and discards `count` cards without targeting.
+    /// Player-set recipients make their hidden choices in APNAP order before the complete discard
+    /// action is applied. Cards: Fanatic of the Harrowing, Burglar Rat, and Macabre Waltz.
+    Discard {
+        #[serde(default)]
+        who: PlayerRecipient,
+        count: u32,
+    },
     /// Draw and discard as one resumable instruction. This is intentionally untargeted: `who`
     /// identifies the affected player and that player chooses from their private hand.
     ///
@@ -2012,6 +2020,7 @@ impl SpellEffectKind {
             }
             SpellEffectKind::DamagePlayer { .. }
             | SpellEffectKind::Draw { .. }
+            | SpellEffectKind::Discard { .. }
             | SpellEffectKind::DrawDiscard { .. }
             | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
             | SpellEffectKind::ChooseResolutionBranch { .. }
@@ -2072,7 +2081,9 @@ impl SpellEffectKind {
             match action {
                 CardResultAction::Discard => matches!(
                     effect,
-                    SpellEffectKind::DiscardCards { .. } | SpellEffectKind::DrawDiscard { .. }
+                    SpellEffectKind::Discard { .. }
+                        | SpellEffectKind::DiscardCards { .. }
+                        | SpellEffectKind::DrawDiscard { .. }
                 ),
                 CardResultAction::Exile => matches!(
                     effect,
@@ -2429,6 +2440,10 @@ impl SpellEffectKind {
             ) {
                 return Err("DrawDiscard requires a single player recipient".into());
             }
+        }
+
+        if let SpellEffectKind::Discard { count: 0, .. } = self {
+            return Err("Discard count must be at least 1".into());
         }
 
         // CR 115: a source-bound ability effect is not targeting and only exists where there is

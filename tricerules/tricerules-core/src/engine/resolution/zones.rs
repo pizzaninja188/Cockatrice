@@ -114,6 +114,124 @@ pub(super) fn draw(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn discard(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::Discard { who, count } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let recipients = player_recipients(cx, who);
+    let mut choices = Vec::new();
+    for player in recipients {
+        let Some(player_index) = cx.engine.state.player_idx(player) else {
+            continue;
+        };
+        let hand = cx.engine.state.players[player_index].hand.clone();
+        let required = count.min(hand.len() as u32);
+        if required == 0 {
+            cx.events.push(ev_log(format!(
+                "P{player} has no cards to discard ({}).",
+                cx.spell_label
+            )));
+            continue;
+        }
+        choices.push(PendingPlayerDiscardChoice {
+            player,
+            candidate_generations: hand
+                .into_iter()
+                .map(|object_id| {
+                    (
+                        object_id,
+                        cx.engine
+                            .state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0),
+                    )
+                })
+                .collect(),
+            required,
+        });
+    }
+    if choices.is_empty() {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    park_player_set_discard_choice(
+        cx.engine,
+        cx.events,
+        ParkedStackResolution::new(cx.top.clone()),
+        PendingPlayerSetDiscard {
+            choices,
+            current: 0,
+            selections: Vec::new(),
+        },
+    );
+    Ok(EffectOutcome::Suspended)
+}
+
+pub(in crate::engine) fn park_player_set_discard_choice(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    stack: ParkedStackResolution,
+    discard: PendingPlayerSetDiscard,
+) {
+    let choice = &discard.choices[discard.current];
+    let candidates = choice
+        .candidate_generations
+        .iter()
+        .map(|(object_id, _)| *object_id)
+        .collect::<Vec<_>>();
+    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
+    let prompt = format!(
+        "P{}: choose {} card(s) to discard.",
+        choice.player, choice.required
+    );
+    events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: choice.player,
+                source_object_id: stack.item.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::HandCards as i32,
+                candidate_object_ids: candidates.clone(),
+                candidate_card_ids,
+                candidate_names,
+                min: choice.required,
+                max: choice.required,
+                ordered: false,
+                unique_names: false,
+                candidate_server_card_ids: Vec::new(),
+                candidate_selectable: vec![true; candidates.len()],
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                reveal_audience: rv1::ResolutionRevealAudience::None as i32,
+                revealed_zone_owner_player_id: None,
+                candidate_source_zones: Vec::new(),
+            },
+        )),
+    });
+    events.push(ev_log(prompt.clone()));
+    engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: choice.player,
+        presentation: PendingResolutionPresentation {
+            source_object_id: stack.item.id,
+            candidates,
+            min: choice.required,
+            max: choice.required,
+            ordered: false,
+            unique_names: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::HandCards,
+        },
+        continuation: ResolutionContinuation::PlayerSetDiscard { stack, discard },
+    });
+}
+
 pub(super) fn exile_top_with_play_permission(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

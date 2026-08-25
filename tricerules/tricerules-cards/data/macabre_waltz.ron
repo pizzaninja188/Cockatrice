@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-08-24. Zero targets are legal and the controller still
+// discards; a creature returned by the first instruction is eligible for the second (CR 608.2c).
+(
+  id: "macabre_waltz",
+  name: "Macabre Waltz",
+  mana_cost: "{1}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    MoveGraveyardCards(
+      filter: (owner: Controller, card_type: Some(Creature)),
+      destination: Hand,
+    ),
+    Discard(who: Controller, count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 0,
+    max: 2,
+    prompt: "Choose up to two target creature cards from your graveyard",
+    effect_indices: [0],
+  )])),
+)

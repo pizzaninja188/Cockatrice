@@ -162,18 +162,62 @@ fn simple_player_recipients(
         PlayerRecipient::ControllerOfTargetGroup { .. }
         | PlayerRecipient::DefendingPlayer
         | PlayerRecipient::AttackingOpponentsOfDefendingPlayer => Vec::new(),
-        PlayerRecipient::EachOpponent => state
-            .players
-            .iter()
-            .filter(|player| state.are_opponents(player.id, controller) && !player.has_lost)
-            .map(|player| player.id)
-            .collect(),
-        PlayerRecipient::EachPlayer => state
-            .players
-            .iter()
-            .filter(|player| !player.has_lost)
-            .map(|player| player.id)
-            .collect(),
+        PlayerRecipient::EachOpponent => {
+            let mut players = state
+                .players
+                .iter()
+                .filter(|player| state.are_opponents(player.id, controller) && !player.has_lost)
+                .map(|player| player.id)
+                .collect::<Vec<_>>();
+            players.sort_by_key(|player| state.apnap_rank(*player));
+            players
+        }
+        PlayerRecipient::EachPlayer => {
+            let mut players = state
+                .players
+                .iter()
+                .filter(|player| !player.has_lost)
+                .map(|player| player.id)
+                .collect::<Vec<_>>();
+            players.sort_by_key(|player| state.apnap_rank(*player));
+            players
+        }
+    }
+}
+
+#[cfg(test)]
+mod player_recipient_order_tests {
+    use super::*;
+
+    #[test]
+    fn player_sets_follow_apnap_order_instead_of_storage_order() {
+        let mut engine =
+            GameEngine::new(121_001, &[10, 20], 20, None, true).expect("two-player engine");
+        engine.state.players.push(PlayerState::new(30, 20));
+        engine.state.active_player_idx = 1;
+
+        assert_eq!(
+            simple_player_recipients(
+                &engine.state,
+                10,
+                10,
+                None,
+                None,
+                PlayerRecipient::EachPlayer,
+            ),
+            [20, 30, 10]
+        );
+        assert_eq!(
+            simple_player_recipients(
+                &engine.state,
+                20,
+                20,
+                None,
+                None,
+                PlayerRecipient::EachOpponent,
+            ),
+            [30, 10]
+        );
     }
 }
 
@@ -1106,6 +1150,7 @@ impl GameEngine {
                         damage::damage_player(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Draw { .. } => zones::draw(&mut cx, effect)?,
+                    effect @ SpellEffectKind::Discard { .. } => zones::discard(&mut cx, effect)?,
                     effect @ SpellEffectKind::DrawDiscard { .. } => {
                         zones::draw_discard(&mut cx, effect)?
                     }

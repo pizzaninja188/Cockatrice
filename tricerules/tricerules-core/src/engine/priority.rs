@@ -50,6 +50,9 @@ impl GameEngine {
         &mut self,
         player: PlayerId,
     ) -> Result<RuledEventBatch, EngineError> {
+        // CR 104.3a ends this two-player game immediately. Drop any parked resolution so hidden
+        // choices staged before the concession can neither be published nor committed afterward.
+        self.state.pending_resolution = None;
         for p in &mut self.state.players {
             if p.id == player {
                 p.has_lost = true;

@@ -1,0 +1,14 @@
+// Oracle and CR 121.2c checked 2026-08-24. Multiple players draw in active-player turn order.
+(
+  id: "friendly_teddy",
+  name: "Friendly Teddy",
+  mana_cost: "{2}",
+  types: ["Artifact", "Creature", "Bear", "Toy"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WhenSelfDies,
+    effect: [Draw(who: EachPlayer, count: 1)],
+    text: "When this creature dies, each player draws a card.",
+  )],
+)

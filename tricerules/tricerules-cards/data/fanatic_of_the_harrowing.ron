@@ -1,0 +1,41 @@
+// Oracle and CR 101.4/701.9 checked 2026-08-24. Hidden hand choices are collected in APNAP
+// order, the complete discard action is applied, then the exact resulting cohort is inspected.
+(
+  id: "fanatic_of_the_harrowing",
+  name: "Fanatic of the Harrowing",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      Discard(who: EachPlayer, count: 1),
+      ChooseResolutionBranch(
+        selection: FirstApplicable,
+        branches: [
+          (
+            label: "Draw a card",
+            cost: None,
+            requirement: CardResultCount(
+              filter: (
+                source: PreviousEffect,
+                action: Discard,
+                players: Controller,
+              ),
+              min: Some(1),
+            ),
+            effects: [Draw(count: 1)],
+          ),
+          (
+            label: "Do not draw",
+            cost: None,
+            requirement: Always,
+            effects: [],
+          ),
+        ],
+      ),
+    ],
+    text: "When this creature enters, each player discards a card. If you discarded a card this way, draw a card.",
+  )],
+)

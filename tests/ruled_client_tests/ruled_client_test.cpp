@@ -3166,6 +3166,56 @@ TEST_F(RuledClientTest, PrivateHandChoiceMakesTheNonDecidingPlayerWait)
     EXPECT_FALSE(state->isWaitingForResolutionChoice());
 }
 
+TEST_F(RuledClientTest, SequentialPlayerSetDiscardReplacesPickWithWaitAndNextPrivatePick)
+{
+    ruled::v1::RuledEventBatch first;
+    auto *firstChoice = first.add_events()->mutable_resolution_choice_required();
+    firstChoice->set_deciding_player_id(kLocalPlayer);
+    firstChoice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    firstChoice->set_prompt_text("Choose one card to discard.");
+    firstChoice->set_min(1);
+    firstChoice->set_max(1);
+    firstChoice->add_candidate_object_ids(501u);
+    firstChoice->add_candidate_server_card_ids(1);
+    apply(first);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    state->toggleResolutionHandPickCard(1);
+    EXPECT_EQ(state->resolutionHandPickSelected(), 1);
+
+    ruled::v1::RuledEventBatch waiting;
+    auto *waitChoice = waiting.add_events()->mutable_resolution_choice_required();
+    waitChoice->set_deciding_player_id(kOpponent);
+    waitChoice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    waitChoice->set_prompt_text("Opponent is making a resolution choice.");
+    apply(waiting);
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickSelected(), 0);
+    EXPECT_TRUE(state->isWaitingForResolutionChoice());
+    EXPECT_EQ(state->resolutionChoiceWaitingPlayer(), kOpponent);
+
+    ruled::v1::RuledEventBatch nextPrivate;
+    auto *nextChoice = nextPrivate.add_events()->mutable_resolution_choice_required();
+    nextChoice->set_deciding_player_id(kLocalPlayer);
+    nextChoice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    nextChoice->set_prompt_text("Choose one card to discard.");
+    nextChoice->set_min(1);
+    nextChoice->set_max(1);
+    nextChoice->add_candidate_object_ids(601u);
+    nextChoice->add_candidate_server_card_ids(2);
+    apply(nextPrivate);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_FALSE(state->isWaitingForResolutionChoice());
+    EXPECT_FALSE(state->isResolutionHandPickCardSelectable(1));
+    EXPECT_TRUE(state->isResolutionHandPickCardSelectable(2));
+
+    state->toggleResolutionHandPickCard(2);
+    host.sentCommands.clear();
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    ASSERT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 1);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids(0), 601u);
+}
+
 TEST(RuledManaPoolTrackerTest, OptimisticStagingDoesNotTurnOldManaIntoNewProduction)
 {
     RuledManaPoolTracker tracker;

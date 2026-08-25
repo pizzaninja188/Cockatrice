@@ -270,6 +270,11 @@ public:
     bool sawWardDiscardPhysicalHandToGrave = false;
     bool sawWardDiscardSpellResolved = false;
     bool sawWardDiscardSourceToHand = false;
+    bool playerSetDiscardFlowActive = false;
+    bool sawPlayerSetDiscardPrivateCandidates = false;
+    bool sawPlayerSetDiscardObserverRedaction = false;
+    quint32 playerSetDiscardChosenOid = 0;
+    int playerSetDiscardChosenServerCardId = -1;
     bool optionalCastCostFlowActive = false;
     bool sawPrivateBeholdCandidates = false;
     bool sawBeholdCandidateRedaction = false;
@@ -1177,6 +1182,35 @@ public:
                         sawWardDiscardObserverRedaction =
                             rcr.candidate_object_ids_size() == 0 && rcr.candidate_card_ids_size() == 0 &&
                             rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0 &&
+                            rcr.prompt_text() == "Opponent is making a resolution choice.";
+                    }
+                }
+                if (playerSetDiscardFlowActive &&
+                    rcr.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS) {
+                    if (rcr.deciding_player_id() == myId) {
+                        int bearIndex = -1;
+                        for (int i = 0; i < rcr.candidate_names_size(); ++i) {
+                            if (rcr.candidate_names(i) == "Grizzly Bears") {
+                                bearIndex = i;
+                                break;
+                            }
+                        }
+                        const bool aligned = rcr.candidate_object_ids_size() == rcr.candidate_card_ids_size() &&
+                                             rcr.candidate_object_ids_size() == rcr.candidate_names_size() &&
+                                             rcr.candidate_object_ids_size() == rcr.candidate_server_card_ids_size() &&
+                                             rcr.candidate_object_ids_size() == rcr.candidate_selectable_size();
+                        sawPlayerSetDiscardPrivateCandidates =
+                            aligned && rcr.min() == 1 && rcr.max() == 1 && bearIndex >= 0 &&
+                            rcr.candidate_selectable(bearIndex);
+                        if (sawPlayerSetDiscardPrivateCandidates) {
+                            playerSetDiscardChosenOid = rcr.candidate_object_ids(bearIndex);
+                            playerSetDiscardChosenServerCardId = rcr.candidate_server_card_ids(bearIndex);
+                        }
+                    } else {
+                        sawPlayerSetDiscardObserverRedaction =
+                            rcr.candidate_object_ids_size() == 0 && rcr.candidate_card_ids_size() == 0 &&
+                            rcr.candidate_names_size() == 0 && rcr.candidate_server_card_ids_size() == 0 &&
+                            rcr.candidate_selectable_size() == 0 &&
                             rcr.prompt_text() == "Opponent is making a resolution choice.";
                     }
                 }
@@ -4320,6 +4354,143 @@ TEST_F(RuledE2ESmokeTest, TemporaryExileReturnsTheExactPhysicalCardToBothClients
     EXPECT_TRUE(p2.sawTemporaryExilePhysicalMove);
     EXPECT_TRUE(p1.sawTemporaryReturnPhysicalMove);
     EXPECT_TRUE(p2.sawTemporaryReturnPhysicalMove);
+}
+
+TEST_F(RuledE2ESmokeTest, PlayerSetDiscardCollectsPrivateChoicesBeforeOnePhysicalCommit)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("playersetp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("playersetp2"), &transcript);
+    p2.didMulligan = true;
+
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Swamp")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "player-set discard game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "player-set discard game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer openingDeadline;
+    openingDeadline.start();
+    while (openingDeadline.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command,
+                           const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 &&
+               (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto devPut = [&](int targetPlayer, const char *cardName, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(targetPlayer);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(cardName);
+        put->set_zone(zone);
+        put->set_ready(false);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1 for player-set discard").arg(cardName));
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority in player-set discard"));
+    };
+
+    ASSERT_TRUE(devPut(p1.myId, "Grizzly Bears", ruled::v1::DEV_ZONE_HAND));
+    ASSERT_TRUE(devPut(p2.myId, "Grizzly Bears", ruled::v1::DEV_ZONE_HAND));
+    ASSERT_TRUE(devPut(p1.myId, "Fanatic of the Harrowing", ruled::v1::DEV_ZONE_HAND));
+    ruled::v1::RuledCommand mana;
+    mana.mutable_dev_command()->set_target_player_id(p1.myId);
+    mana.mutable_dev_command()->mutable_add_mana()->set_b(1);
+    mana.mutable_dev_command()->mutable_add_mana()->set_c(3);
+    ASSERT_TRUE(sendAndPump(p1, mana, QStringLiteral("dev: add Fanatic mana")));
+
+    const auto *fanatic = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL,
+                                       QStringLiteral("Fanatic of the Harrowing"));
+    ASSERT_NE(fanatic, nullptr);
+    ruled::v1::RuledCommand cast;
+    cast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    cast.mutable_cast_spell()->mutable_source()->set_hand_index(fanatic->hand_index());
+    ASSERT_TRUE(sendAndPump(p1, cast, QStringLiteral("cast Fanatic of the Harrowing")));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+
+    p1.playerSetDiscardFlowActive = true;
+    p2.playerSetDiscardFlowActive = true;
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+    ASSERT_TRUE(p1.pendingChoice.has_value());
+    EXPECT_FALSE(p2.pendingChoice.has_value());
+    EXPECT_TRUE(p1.sawPlayerSetDiscardPrivateCandidates);
+    EXPECT_TRUE(p2.sawPlayerSetDiscardObserverRedaction);
+    ASSERT_NE(p1.playerSetDiscardChosenOid, 0u);
+    const int p1HandBefore = p1.handSizeByPlayer[p1.myId];
+    const int p2HandBefore = p2.handSizeByPlayer[p2.myId];
+
+    ruled::v1::RuledCommand firstChoice;
+    firstChoice.mutable_submit_resolution_choice()->add_chosen_object_ids(p1.playerSetDiscardChosenOid);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(sendAndPump(p1, firstChoice, QStringLiteral("stage first APNAP discard")));
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], p1HandBefore);
+    EXPECT_EQ(p2.handSizeByPlayer[p2.myId], p2HandBefore);
+    EXPECT_EQ(p1.graveyardOwnerByEngineOid.count(p1.playerSetDiscardChosenOid), 0u);
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    EXPECT_FALSE(p1.pendingChoice.has_value());
+    EXPECT_TRUE(p2.sawPlayerSetDiscardPrivateCandidates);
+    EXPECT_TRUE(p1.sawPlayerSetDiscardObserverRedaction);
+    ASSERT_NE(p2.playerSetDiscardChosenOid, 0u);
+
+    ruled::v1::RuledCommand secondChoice;
+    secondChoice.mutable_submit_resolution_choice()->add_chosen_object_ids(p2.playerSetDiscardChosenOid);
+    p2.pendingChoice.reset();
+    ASSERT_TRUE(sendAndPump(p2, secondChoice, QStringLiteral("commit complete APNAP discard")));
+    ASSERT_EQ(p1.graveyardOwnerByEngineOid[p1.playerSetDiscardChosenOid], p1.myId);
+    ASSERT_EQ(p1.graveyardOwnerByEngineOid[p2.playerSetDiscardChosenOid], p2.myId);
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(p1.playerSetDiscardChosenOid));
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(p2.playerSetDiscardChosenOid));
+    EXPECT_EQ(p1.serverCardByEngineOid[p1.playerSetDiscardChosenOid],
+              p1.playerSetDiscardChosenServerCardId);
+    EXPECT_EQ(p1.serverCardByEngineOid[p2.playerSetDiscardChosenOid],
+              p2.playerSetDiscardChosenServerCardId);
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], p1HandBefore);
+    EXPECT_EQ(p2.handSizeByPlayer[p2.myId], p2HandBefore - 1);
 }
 
 TEST_F(RuledE2ESmokeTest, BeholdCastCostIsPrivateUntilItsPublicStackReveal)

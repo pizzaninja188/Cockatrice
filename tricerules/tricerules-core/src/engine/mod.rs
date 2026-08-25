@@ -12,12 +12,13 @@ use crate::state::{
     HandCardAction, ImmediateObserverAction, ObjectId, ObservedGameEvent, OpeningSequence,
     ParkedStackResolution, PendingBattlefieldEntry, PendingHandChoice, PendingLibraryLookStage,
     PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
-    PendingResolution, PendingResolutionBranch, PendingResolutionBranchStage,
-    PendingResolutionPresentation, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
-    PendingWardPaymentStage, PlayerId, PlayerState, ReplacementPriority, ResolutionContinuation,
-    RoomState, SpellCastMethod, StackItem, StackObjectRef, StackTarget, StagedTrigger,
-    StagedTriggerGroup, TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TriggeredOnceKey,
-    TurnHistory, TurnStep, UndoableManaAbility, Zone,
+    PendingPlayerDiscardChoice, PendingPlayerSetDiscard, PendingResolution,
+    PendingResolutionBranch, PendingResolutionBranchStage, PendingResolutionPresentation,
+    PendingTrigger, PendingTriggerOrder, PendingWardPayment, PendingWardPaymentStage, PlayerId,
+    PlayerState, ReplacementPriority, ResolutionContinuation, RoomState, SpellCastMethod,
+    StackItem, StackObjectRef, StackTarget, StagedTrigger, StagedTriggerGroup,
+    TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TriggeredOnceKey, TurnHistory,
+    TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;

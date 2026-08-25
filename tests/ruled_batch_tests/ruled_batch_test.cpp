@@ -706,6 +706,72 @@ TEST_F(RuledBatchTest, LibraryTopChoiceIsPrivateToTheScryingPlayerWithSequential
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+// CR 101.4: a player-set hidden choice advances from one decider to the next. Every replacement
+// prompt must bind only that player's physical hand ids and reduce to an identity-free wait prompt
+// for the other participant.
+TEST_F(RuledBatchTest, SequentialPrivateHandChoicesSwitchPhysicalBindingAndRedaction)
+{
+    Server_Card *p1Card = addCardToHand(p1, QStringLiteral("Grizzly Bears"));
+    Server_Card *p2Card = addCardToHand(p2, QStringLiteral("Hill Giant"));
+    ruled::v1::RuledPerPlayerView p1View;
+    p1View.set_player_id(p1->getPlayerId());
+    auto *p1Hand = p1View.add_hand_cards();
+    p1Hand->set_object_id(501u);
+    p1Hand->set_card_id("grizzly_bears");
+    applyZoneView(p1, p1View, nullptr);
+    ruled::v1::RuledPerPlayerView p2View;
+    p2View.set_player_id(p2->getPlayerId());
+    auto *p2Hand = p2View.add_hand_cards();
+    p2Hand->set_object_id(601u);
+    p2Hand->set_card_id("hill_giant");
+    applyZoneView(p2, p2View, nullptr);
+
+    auto makeChoice = [](int decider, quint32 objectId, const char *cardId, const char *name) {
+        ruled::v1::RuledEventBatch batch;
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(decider);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+        choice->set_prompt_text("Choose one card to discard.");
+        choice->set_min(1);
+        choice->set_max(1);
+        choice->add_candidate_object_ids(objectId);
+        choice->add_candidate_card_ids(cardId);
+        choice->add_candidate_names(name);
+        choice->add_candidate_selectable(true);
+        return batch;
+    };
+    auto findChoice = [](const ruled::v1::RuledEventBatch &batch) -> const ruled::v1::ResolutionChoiceRequired * {
+        const auto it = std::find_if(batch.events().begin(), batch.events().end(),
+                                     [](const auto &event) { return event.has_resolution_choice_required(); });
+        return it == batch.events().end() ? nullptr : &it->resolution_choice_required();
+    };
+
+    const auto first = makeChoice(p1->getPlayerId(), 501u, "grizzly_bears", "Grizzly Bears");
+    const auto firstForP1 = redactFor(first, p1);
+    const auto firstForP2 = redactFor(first, p2);
+    const auto *firstP1Choice = findChoice(firstForP1);
+    const auto *firstP2Choice = findChoice(firstForP2);
+    ASSERT_NE(firstP1Choice, nullptr);
+    ASSERT_NE(firstP2Choice, nullptr);
+    ASSERT_EQ(firstP1Choice->candidate_server_card_ids_size(), 1);
+    EXPECT_EQ(firstP1Choice->candidate_server_card_ids(0), p1Card->getId());
+    EXPECT_EQ(firstP2Choice->candidate_object_ids_size(), 0);
+    EXPECT_EQ(firstP2Choice->prompt_text(), "Opponent is making a resolution choice.");
+
+    const auto second = makeChoice(p2->getPlayerId(), 601u, "hill_giant", "Hill Giant");
+    const auto secondForP1 = redactFor(second, p1);
+    const auto secondForP2 = redactFor(second, p2);
+    const auto *secondP1Choice = findChoice(secondForP1);
+    const auto *secondP2Choice = findChoice(secondForP2);
+    ASSERT_NE(secondP1Choice, nullptr);
+    ASSERT_NE(secondP2Choice, nullptr);
+    EXPECT_EQ(secondP1Choice->candidate_object_ids_size(), 0);
+    EXPECT_EQ(secondP1Choice->prompt_text(), "Opponent is making a resolution choice.");
+    ASSERT_EQ(secondP2Choice->candidate_server_card_ids_size(), 1);
+    EXPECT_EQ(secondP2Choice->candidate_server_card_ids(0), p2Card->getId());
+    EXPECT_EQ(secondP2Choice->candidate_object_ids(0), 601u);
+}
+
 TEST_F(RuledBatchTest, ManifestDreadChoiceIsPrivateAndGetsDistinctPhysicalCandidateIds)
 {
     ruled::v1::RuledEventBatch batch;

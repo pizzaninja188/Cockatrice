@@ -206,6 +206,9 @@ impl GameEngine {
             ResolutionContinuation::HandChoice { .. } => {
                 return self.finish_hand_choice(pending, chosen);
             }
+            ResolutionContinuation::PlayerSetDiscard { .. } => {
+                return self.finish_player_set_discard_choice(pending, chosen);
+            }
             ResolutionContinuation::GraveyardChoice { .. } => {
                 return self.finish_graveyard_choice(pending, chosen);
             }

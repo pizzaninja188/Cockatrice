@@ -660,6 +660,10 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         hand_choice: PendingHandChoice,
     },
+    PlayerSetDiscard {
+        stack: ParkedStackResolution,
+        discard: PendingPlayerSetDiscard,
+    },
     GraveyardChoice {
         stack: ParkedStackResolution,
         destination: tricerules_cards::primitives::GraveyardDestination,
@@ -737,6 +741,7 @@ impl ResolutionContinuation {
             | Self::AuthoredBranch { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
+            | Self::PlayerSetDiscard { stack, .. }
             | Self::GraveyardChoice { stack, .. }
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
@@ -761,6 +766,7 @@ impl ResolutionContinuation {
             | Self::AuthoredBranch { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
+            | Self::PlayerSetDiscard { stack, .. }
             | Self::GraveyardChoice { stack, .. }
             | Self::Sacrifice { stack }
             | Self::CopyTargets { stack, .. }
@@ -822,6 +828,23 @@ pub struct PendingHandChoice {
     pub candidate_generations: Vec<(ObjectId, u64)>,
     pub draw_after: u32,
     pub draw_only_if_discarded: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingPlayerDiscardChoice {
+    pub player: PlayerId,
+    pub candidate_generations: Vec<(ObjectId, u64)>,
+    pub required: u32,
+}
+
+/// Frozen hidden-hand choices for one simultaneous player-set discard action (CR 101.4).
+/// `selections` is index-aligned with the completed prefix of `choices`; no selected identity is
+/// published or moved until every required player has answered.
+#[derive(Debug, Clone)]
+pub struct PendingPlayerSetDiscard {
+    pub choices: Vec<PendingPlayerDiscardChoice>,
+    pub current: usize,
+    pub selections: Vec<Vec<ObjectId>>,
 }
 
 /// CR 616.1 priority groups. The current card set exercises `Other`; the complete ordering
