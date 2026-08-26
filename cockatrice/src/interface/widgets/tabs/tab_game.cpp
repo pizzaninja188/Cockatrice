@@ -791,6 +791,10 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.mode = PromptMode::CleanupDiscard;
         state.required = h->cleanupDiscardRequiredCount();
         state.selected = h->cleanupDiscardSelectedCount();
+    } else if (h->hasPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender)) {
+        state.mode = PromptMode::ClickChoice;
+        state.text = h->pendingChoicePromptText(ChoiceKind::AttackingTokenDefender) +
+                     tr("\nClick the opponent, planeswalker, or Battle the token should attack.");
     } else if (h->hasPendingChoiceOfKind(ChoiceKind::CopyTarget)) {
         // CR 707.10c: a spell copy is waiting for the local player to choose new targets.
         state.mode = PromptMode::ClickChoice;

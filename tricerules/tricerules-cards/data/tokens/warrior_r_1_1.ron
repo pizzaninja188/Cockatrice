@@ -1,0 +1,9 @@
+// 1/1 red Warrior creature token created by Mobilize.
+(
+  id: "warrior_r_1_1",
+  name: "Warrior",
+  types: ["Creature", "Warrior"],
+  colors: [Red],
+  power: 1,
+  toughness: 1,
+)

@@ -364,6 +364,9 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         if (e.has_attackers_declared()) {
             applyAttackersDeclared(e.attackers_declared(), ctx);
         }
+        if (e.has_attackers_added()) {
+            applyAttackersAdded(e.attackers_added(), ctx);
+        }
         if (e.has_attackers_preview()) {
             applyAttackersPreview(e.attackers_preview(), ctx);
         }
@@ -725,6 +728,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
     state->clearPendingChoiceOfKind(ChoiceKind::SiegeCast);
+    state->clearPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender);
     if (isPublicReveal) {
         const int count = rcr.candidate_names_size();
         const bool selectableShapeValid =
@@ -807,6 +811,28 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         payment.manaCost = QString::fromStdString(rcr.mana_cost());
         state->setPendingChoice(std::move(payment));
         emit state->resolutionPaymentUiChanged(true);
+        emit state->combatStateChanged();
+        return;
+    }
+
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_ATTACKING_TOKEN_DEFENDER) {
+        if (rcr.min() != 1 || rcr.max() != 1 || rcr.combat_defender_options_size() <= 0) {
+            qWarning() << "Rejecting malformed attacking-token defender choice";
+            return;
+        }
+        PendingChoice choice;
+        choice.kind = ChoiceKind::AttackingTokenDefender;
+        choice.promptText = QString::fromStdString(rcr.prompt_text());
+        for (const auto &option : rcr.combat_defender_options()) {
+            if (!option.has_defender() ||
+                (option.defender().kind() != ruled::v1::TARGET_REF_KIND_PLAYER &&
+                 option.defender().kind() != ruled::v1::TARGET_REF_KIND_PERMANENT)) {
+                qWarning() << "Rejecting malformed attacking-token defender option";
+                return;
+            }
+            choice.combatDefenderOptions.append(option);
+        }
+        state->setPendingChoice(std::move(choice));
         emit state->combatStateChanged();
         return;
     }
@@ -1280,6 +1306,16 @@ void RuledEventDispatcher::applyAttackersDeclared(const ruled::v1::AttackersDecl
     state->remoteAttackerPreviewOids.clear();
     state->remoteAttackPreviewAssignments.clear();
     state->attackersSubmittedThisStep = true;
+    ctx.combatStateDirty = true;
+}
+
+void RuledEventDispatcher::applyAttackersAdded(const ruled::v1::AttackersAdded &added, BatchContext &ctx)
+{
+    for (const auto &assignment : added.assignments()) {
+        const auto oid = static_cast<quint32>(assignment.attacker_object_id());
+        state->currentAttackerOids.insert(oid);
+        state->currentAttackAssignments.insert(oid, assignment);
+    }
     ctx.combatStateDirty = true;
 }
 

@@ -1005,7 +1005,7 @@ void RuledGameDriver::applyTokenCreations(const ruled::v1::RuledEventBatch &batc
         if (Server_AbstractPlayer *controller = game->getPlayer(tc.controller_player_id())) {
             playerBinding(tc.controller_player_id())
                 .createRuledToken(static_cast<Server_Player *>(controller), objectId, tc.identity(), battlefieldGridY,
-                                  tokenCreateGes);
+                                  tc.enters_tapped(), tokenCreateGes);
             tokenCreateGesHasEvents = true;
         }
     }
@@ -1823,6 +1823,31 @@ void RuledGameDriver::applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBa
                 combatGesHasEvents = true;
             }
         }
+        if (e.has_attackers_added()) {
+            for (const auto &assignment : e.attackers_added().assignments()) {
+                const quint32 oid = static_cast<quint32>(assignment.attacker_object_id());
+                for (Server_AbstractPlayer *candidate : game->getPlayers().values()) {
+                    if (!candidate) {
+                        continue;
+                    }
+                    auto *candidatePlayer = static_cast<Server_Player *>(candidate);
+                    Server_Card *card =
+                        playerBinding(candidatePlayer->getPlayerId()).findCardByEngineOid(candidatePlayer, oid);
+                    if (!card) {
+                        continue;
+                    }
+                    card->setAttacking(true);
+                    Event_SetCardAttr attackingEvent;
+                    attackingEvent.set_zone_name(std::string(ZoneNames::TABLE));
+                    attackingEvent.set_card_id(card->getId());
+                    attackingEvent.set_attribute(AttrAttacking);
+                    attackingEvent.set_attr_value("1");
+                    combatGes.enqueueGameEvent(attackingEvent, candidatePlayer->getPlayerId());
+                    combatGesHasEvents = true;
+                    break;
+                }
+            }
+        }
         if (e.has_stack_resolved()) {
             const quint32 resolvedOid = static_cast<quint32>(e.stack_resolved().object_id());
             // A countered spell leaves the stack for its owner's graveyard via a PermanentMoved
@@ -2394,6 +2419,7 @@ ruled::v1::RuledEventBatch RuledGameDriver::redactBatchForParticipant(const rule
         choice->mutable_candidate_source_zones()->CopyFrom(choiceIt.value().candidate_source_zones());
         if (choiceIt.value().deciding_player_id() == participant->getPlayerId()) {
             choice->mutable_resolution_branches()->CopyFrom(choiceIt.value().resolution_branches());
+            choice->mutable_combat_defender_options()->CopyFrom(choiceIt.value().combat_defender_options());
         }
     }
     for (auto triggerIt = routedTriggerChoices.constBegin(); triggerIt != routedTriggerChoices.constEnd();

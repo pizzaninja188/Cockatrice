@@ -118,7 +118,8 @@ fn validate_effect_payment_results(
         | SpellEffectKind::Draw { count: amount, .. }
         | SpellEffectKind::GainLife { amount }
         | SpellEffectKind::Mill { count: amount, .. }
-        | SpellEffectKind::CreateTokens { count: amount, .. } => Some(amount),
+        | SpellEffectKind::CreateTokens { count: amount, .. }
+        | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
         SpellEffectKind::PumpTarget {
             scale: Some(scale), ..
         } => Some(&scale.amount),
@@ -214,7 +215,9 @@ impl CardRegistry {
                         reason,
                     })?;
                 for effect in &ability.effect {
-                    if let SpellEffectKind::CreateTokens { token, .. } = effect {
+                    if let SpellEffectKind::CreateTokens { token, .. }
+                    | SpellEffectKind::CreateAttackingTokens { token, .. } = effect
+                    {
                         if !reg.tokens.contains_key(token) {
                             return Err(RegistryError::InvalidCard {
                                 id: id.clone(),
@@ -315,7 +318,9 @@ impl CardRegistry {
                             reason,
                         }
                     })?;
-                    if let SpellEffectKind::CreateTokens { token, .. } = effect {
+                    if let SpellEffectKind::CreateTokens { token, .. }
+                    | SpellEffectKind::CreateAttackingTokens { token, .. } = effect
+                    {
                         if !reg.tokens.contains_key(token) {
                             return Err(RegistryError::InvalidCard {
                                 id: id.clone(),
@@ -1127,7 +1132,9 @@ impl CardRegistry {
                             });
                         }
                     }
-                    if let SpellEffectKind::CreateTokens { token, .. } = effect {
+                    if let SpellEffectKind::CreateTokens { token, .. }
+                    | SpellEffectKind::CreateAttackingTokens { token, .. } = effect
+                    {
                         if !reg.tokens.contains_key(token) {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
@@ -1138,7 +1145,9 @@ impl CardRegistry {
                 }
                 if let Some(modal) = &face.modal_spell {
                     for effect in modal.modes.iter().flat_map(|mode| &mode.effects) {
-                        if let SpellEffectKind::CreateTokens { token, .. } = effect {
+                        if let SpellEffectKind::CreateTokens { token, .. }
+                        | SpellEffectKind::CreateAttackingTokens { token, .. } = effect
+                        {
                             if !reg.tokens.contains_key(token) {
                                 return Err(RegistryError::InvalidCard {
                                     id: card.id.clone(),

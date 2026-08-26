@@ -414,6 +414,7 @@ fn defeated_siege_casts_back_face_with_exact_physical_identity() {
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::CastTransformed as i32,
             selected_branch_index: 0,
             cast_spell: Some(announcement),
+            chosen_combat_defender: None,
         })),
     };
     engine

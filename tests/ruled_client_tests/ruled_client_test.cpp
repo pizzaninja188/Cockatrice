@@ -1901,6 +1901,67 @@ TEST_F(RuledClientTest, MultipleAttackDefendersRequireAnAuthoritativeDestination
     EXPECT_EQ(host.sentCommands[0].declare_attackers().assignments(0).defender().object_id(), 500u);
 }
 
+TEST_F(RuledClientTest, MobilizeDefenderChoiceUsesStructuredEngineOptionsAndRestoresAfterRejection)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_ATTACKING_TOKEN_DEFENDER);
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->set_prompt_text("Choose what the Warrior token attacks.");
+
+    auto *player = choice->add_combat_defender_options();
+    player->mutable_defender()->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    player->mutable_defender()->set_object_id(kOpponent);
+    player->set_defending_player_id(kOpponent);
+
+    auto *planeswalker = choice->add_combat_defender_options();
+    planeswalker->mutable_defender()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    planeswalker->mutable_defender()->set_object_id(500);
+    planeswalker->set_defender_zone_change_generation(9);
+    planeswalker->set_defending_player_id(kOpponent);
+
+    apply(batch);
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AttackingTokenDefender));
+    EXPECT_TRUE(state->isLegalAttackPlayerDefender(kOpponent));
+    EXPECT_TRUE(state->isLegalAttackPermanentDefender(500));
+    EXPECT_FALSE(state->isLegalAttackPermanentDefender(501));
+
+    host.sentCommands.clear();
+    ASSERT_TRUE(state->chooseAttackPermanentDefender(500));
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &submission = host.sentCommands.constFirst().submit_resolution_choice();
+    ASSERT_TRUE(submission.has_chosen_combat_defender());
+    EXPECT_EQ(submission.chosen_combat_defender().defender().kind(), ruled::v1::TARGET_REF_KIND_PERMANENT);
+    EXPECT_EQ(submission.chosen_combat_defender().defender().object_id(), 500u);
+    EXPECT_EQ(submission.chosen_combat_defender().defender_zone_change_generation(), 9u);
+    EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AttackingTokenDefender));
+
+    host.answerPendingAck(false);
+    EXPECT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AttackingTokenDefender));
+    EXPECT_TRUE(state->isLegalAttackPlayerDefender(kOpponent));
+}
+
+TEST_F(RuledClientTest, MobilizeAttackersAppendToTheDeclaredCombatCohort)
+{
+    ruled::v1::RuledEventBatch declared;
+    auto *attackers = declared.add_events()->mutable_attackers_declared();
+    attackers->set_attacking_player_id(kLocalPlayer);
+    *attackers->add_assignments() = playerAttackAssignment(100);
+    apply(declared);
+
+    ruled::v1::RuledEventBatch mobilized;
+    auto *added = mobilized.add_events()->mutable_attackers_added();
+    *added->add_assignments() = permanentAttackAssignment(200, 500, 9);
+    apply(mobilized);
+
+    EXPECT_EQ(state->getCurrentAttackerOids(), QSet<quint32>({100u, 200u}));
+    ASSERT_TRUE(state->getCurrentAttackAssignments().contains(200));
+    EXPECT_EQ(state->getCurrentAttackAssignments().value(200).defender().object_id(), 500u);
+    EXPECT_EQ(state->getCurrentAttackAssignments().value(200).defender_zone_change_generation(), 9u);
+}
+
 TEST_F(RuledClientTest, BlockerStagingPairsToAnAttackerAndSyncsAPreview)
 {
     ruled::v1::RuledEventBatch declared;

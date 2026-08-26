@@ -67,6 +67,8 @@ mod issue_103_ward;
 mod issue_104_optional_cast_costs;
 #[path = "scenario/issue_105_harmonize.rs"]
 mod issue_105_harmonize;
+#[path = "scenario/issue_106_mobilize.rs"]
+mod issue_106_mobilize;
 #[path = "scenario/issue_107_graveyard_actions.rs"]
 mod issue_107_graveyard_actions;
 #[path = "scenario/issue_108_graveyard_aggregates.rs"]

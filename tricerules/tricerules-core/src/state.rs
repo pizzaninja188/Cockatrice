@@ -737,6 +737,14 @@ pub enum ResolutionContinuation {
     BattleProtector {
         stack: ParkedStackResolution,
     },
+    AttackingTokenDefenders {
+        stack: ParkedStackResolution,
+        entries: Vec<TokenBattlefieldEntry>,
+        logs: Vec<String>,
+        chosen_defenders: Vec<tricerules_proto::ruled::v1::CombatDefenderOption>,
+        current_options: Vec<tricerules_proto::ruled::v1::CombatDefenderOption>,
+        sacrifice_at_next_end_step: bool,
+    },
     SiegeCast {
         stack: ParkedStackResolution,
         exiled: TriggerObjectRef,
@@ -766,7 +774,8 @@ impl ResolutionContinuation {
             | Self::EntryCopySource { stack }
             | Self::EntryReplacement { stack }
             | Self::DamageReplacement { stack, .. }
-            | Self::BattleProtector { stack } => Some(stack),
+            | Self::BattleProtector { stack }
+            | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::SiegeCast { stack, .. } => Some(stack),
             Self::AuraReturn { stack, .. } => stack.as_ref(),
             Self::LegendKeep => None,
@@ -793,7 +802,8 @@ impl ResolutionContinuation {
             | Self::EntryCopySource { stack }
             | Self::EntryReplacement { stack }
             | Self::DamageReplacement { stack, .. }
-            | Self::BattleProtector { stack } => Some(stack),
+            | Self::BattleProtector { stack }
+            | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::SiegeCast { stack, .. } => Some(stack),
             Self::AuraReturn { stack, .. } => stack.as_mut(),
             Self::LegendKeep => None,
@@ -876,7 +886,7 @@ pub(crate) enum ReplacementPriority {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum EntryReplacementEffectId {
+pub enum EntryReplacementEffectId {
     Intrinsic {
         object_id: ObjectId,
         copy_revision: u64,
@@ -890,7 +900,7 @@ pub(crate) enum EntryReplacementEffectId {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct BattlefieldEntryEvent {
+pub struct BattlefieldEntryEvent {
     pub object_id: ObjectId,
     /// CR 616.1 decider: current controller, or owner when the object has no controller.
     pub deciding_player: PlayerId,
@@ -921,9 +931,24 @@ pub(crate) struct EntryReplacementApplication {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TokenBattlefieldEntry {
+pub struct TokenBattlefieldEntry {
     pub event: BattlefieldEntryEvent,
     pub created: TokenCreated,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct AttackingTokenBatch {
+    pub defenders: Vec<tricerules_proto::ruled::v1::CombatDefenderOption>,
+    pub sacrifice_at_next_end_step: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PendingTokenEntryBatch {
+    pub current_created: TokenCreated,
+    pub ready: Vec<TokenBattlefieldEntry>,
+    pub remaining: Vec<TokenBattlefieldEntry>,
+    pub logs: Vec<String>,
+    pub attacking: Option<AttackingTokenBatch>,
 }
 
 #[derive(Debug, Clone)]
@@ -958,12 +983,7 @@ pub(crate) enum BattlefieldEntryCompletion {
         other_object_id: Option<ObjectId>,
         chosen_library_position: u32,
     },
-    TokenBatch {
-        current_created: TokenCreated,
-        ready: Vec<TokenBattlefieldEntry>,
-        remaining: Vec<TokenBattlefieldEntry>,
-        logs: Vec<String>,
-    },
+    TokenBatch(Box<PendingTokenEntryBatch>),
     DevPlacement {
         target: PlayerId,
         ready: bool,
@@ -1460,6 +1480,10 @@ pub struct GameState {
     /// Generation-bound one-shot event observers. Both delayed triggers and paired one-shot
     /// effects use this closed dispatcher so object identity and event matching cannot drift.
     pub active_event_observers: Vec<ActiveEventObserver>,
+    /// Exact multi-object contexts keyed by the delayed trigger's primary observed object.
+    /// Mobilize keeps its whole token cohort here without making ubiquitous TriggerContext
+    /// values heap-owning or reconstructing identity from card names.
+    pub observed_object_cohorts: HashMap<(ObjectId, u64), Vec<TriggerObjectRef>>,
     /// Immediate observer work discovered by low-level state transitions. The engine drains this
     /// before the next resolving instruction or priority boundary.
     pub(crate) pending_immediate_observer_actions: Vec<ImmediateObserverAction>,

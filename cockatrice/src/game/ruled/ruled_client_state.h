@@ -381,6 +381,8 @@ public:
             AuraPlayer,
             /// CR 310.4a: choose which opponent protects an entering Battle.
             BattleProtector,
+            /// CR 508.4: choose what a token enters the battlefield attacking.
+            AttackingTokenDefender,
             /// Tier-3 mid-resolution pick over cards in a zone (Brainstorm, Gifts Ungiven, …).
             ResolutionPick,
             /// CR 608.2g: a resolving effect offers a generic-mana payment.
@@ -399,6 +401,9 @@ public:
         bool mayDecline = false;
         /// Click-to-select candidates on the battlefield or player surface.
         QVector<quint32> candidateOids;
+        /// Exact generation-bound defender options for an entering attacking token. These are
+        /// submitted verbatim; Qt never derives the defending player from display ownership.
+        QVector<ruled::v1::CombatDefenderOption> combatDefenderOptions;
 
         // --- ResolutionPick payload ---------------------------------------------------
         /// PickZone::Hand = Brainstorm (cards in hand zone).
@@ -1273,6 +1278,7 @@ public:
     void togglePendingAttacker(quint32 engineOid);
     bool chooseAttackPlayerDefender(int playerId);
     bool chooseAttackPermanentDefender(quint32 engineOid);
+    void submitAttackingTokenDefender(const ruled::v1::CombatDefenderOption &option);
     void clearPendingAttackers();
     void toggleStagedBlocker(quint32 blockerOid);
     void clearStagedBlockers();

@@ -91,6 +91,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
                 reveal_audience: 0,
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
+                combat_defender_options: Vec::new(),
             },
         )),
     });
@@ -344,6 +345,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
                 reveal_audience: rv1::ResolutionRevealAudience::None as i32,
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
+                combat_defender_options: Vec::new(),
             },
         )),
     });
@@ -715,6 +717,7 @@ pub(super) fn put_target_permanent_in_owners_library(
                         reveal_audience: 0,
                         revealed_zone_owner_player_id: None,
                         candidate_source_zones: Vec::new(),
+                        combat_defender_options: Vec::new(),
                     },
                 )),
             });
@@ -1000,6 +1003,7 @@ fn choose_hand_cards_for_player(
                 revealed_zone_owner_player_id: (visibility == HandChoiceVisibility::PublicReveal)
                     .then_some(affected_player),
                 candidate_source_zones: Vec::new(),
+                combat_defender_options: Vec::new(),
             },
         )),
     });
@@ -1282,6 +1286,7 @@ pub(super) fn target_player_sacrifices(
                             reveal_audience: 0,
                             revealed_zone_owner_player_id: None,
                             candidate_source_zones: Vec::new(),
+                            combat_defender_options: Vec::new(),
                         },
                     )),
                 });
@@ -1374,6 +1379,7 @@ pub(super) fn choose_graveyard_card(
                     rv1::ChoiceCandidateSourceZone::Graveyard as i32;
                     candidates.len()
                 ],
+                combat_defender_options: Vec::new(),
             },
         )),
     });
@@ -1769,6 +1775,7 @@ fn begin_library_partition(
                 reveal_audience: 0,
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
+                combat_defender_options: Vec::new(),
             },
         )),
     });
@@ -1904,6 +1911,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 reveal_audience: 0,
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
+                combat_defender_options: Vec::new(),
             },
         )),
     });
@@ -2007,6 +2015,7 @@ pub(super) fn look_choose_to_hand(
                 reveal_audience: 0,
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
+                combat_defender_options: Vec::new(),
             },
         )),
     });
@@ -2171,6 +2180,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                 } else {
                     Vec::new()
                 },
+                combat_defender_options: Vec::new(),
             },
         )),
     });
@@ -2283,6 +2293,7 @@ pub(super) fn search_library(
                         reveal_audience: 0,
                         revealed_zone_owner_player_id: None,
                         candidate_source_zones: Vec::new(),
+                        combat_defender_options: Vec::new(),
                     },
                 )),
             });

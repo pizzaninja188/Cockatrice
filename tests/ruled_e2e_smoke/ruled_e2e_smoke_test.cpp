@@ -226,6 +226,14 @@ public:
     std::map<int, std::vector<Permanent>> battlefieldByPlayer;
     std::vector<ruled::v1::AttackAssignment> latestAttackPreviewAssignments;
     std::vector<ruled::v1::AttackAssignment> latestDeclaredAttackAssignments;
+    std::vector<ruled::v1::AttackAssignment> latestAddedAttackAssignments;
+    bool sawMobilizeDefenderChoice = false;
+    bool sawMobilizeObserverWait = false;
+    bool sawMobilizeTokenCreated = false;
+    bool sawMobilizeTokenSacrificed = false;
+    quint32 mobilizeTokenOid = 0;
+    std::set<int> physicallyTappedCardIds;
+    std::set<int> physicallyAttackingCardIds;
     struct Pool
     {
         int w = 0, u = 0, b = 0, r = 0, g = 0, c = 0;
@@ -930,6 +938,17 @@ public:
                 if (attr.attribute() == AttrTapped) {
                     sawPhysicalTap = sawPhysicalTap || attr.attr_value() == "1";
                     sawPhysicalUntap = sawPhysicalUntap || attr.attr_value() == "0";
+                    if (attr.attr_value() == "1") {
+                        physicallyTappedCardIds.insert(attr.card_id());
+                    } else {
+                        physicallyTappedCardIds.erase(attr.card_id());
+                    }
+                } else if (attr.attribute() == AttrAttacking) {
+                    if (attr.attr_value() == "1") {
+                        physicallyAttackingCardIds.insert(attr.card_id());
+                    } else {
+                        physicallyAttackingCardIds.erase(attr.card_id());
+                    }
                 } else if (attr.attribute() == AttrAnnotation) {
                     annotationByServerCardId[attr.card_id()] = QString::fromStdString(attr.attr_value());
                     sawRoomPhysicalAnnotation =
@@ -1118,6 +1137,9 @@ public:
                     log(QStringLiteral("attackers declared: %1 creature(s)")
                             .arg(ev.attackers_declared().assignments_size()));
                 }
+            } else if (ev.has_attackers_added()) {
+                latestAddedAttackAssignments.assign(ev.attackers_added().assignments().begin(),
+                                                     ev.attackers_added().assignments().end());
             } else if (ev.has_attackers_preview()) {
                 latestAttackPreviewAssignments.assign(ev.attackers_preview().assignments().begin(),
                                                        ev.attackers_preview().assignments().end());
@@ -1336,11 +1358,20 @@ public:
                         }
                     }
                 }
+                if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_ATTACKING_TOKEN_DEFENDER) {
+                    if (rcr.deciding_player_id() == myId) {
+                        sawMobilizeDefenderChoice = rcr.min() == 1 && rcr.max() == 1 &&
+                                                    rcr.combat_defender_options_size() >= 2;
+                    } else {
+                        sawMobilizeObserverWait = rcr.combat_defender_options_size() == 0;
+                    }
+                }
                 if (rcr.deciding_player_id() == myId &&
                     (rcr.candidate_object_ids_size() > 0 ||
                      (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH && rcr.min() == 0) ||
                      rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT ||
-                     rcr.choice_kind() == ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH)) {
+                     rcr.choice_kind() == ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH ||
+                     rcr.choice_kind() == ruled::v1::CHOICE_KIND_ATTACKING_TOKEN_DEFENDER)) {
                     pendingChoice = rcr;
                     log(QStringLiteral("resolution choice: kind %1 min %2 max %3 ordered %4 candidates %5")
                             .arg(QString::fromStdString(ruled::v1::ChoiceKind_Name(rcr.choice_kind())))
@@ -1363,8 +1394,19 @@ public:
                     activeBeholdReveal = false;
                     sawActiveBeholdRevealClosed = true;
                 }
+            } else if (ev.has_token_created()) {
+                const auto &token = ev.token_created();
+                if (token.card_id() == "warrior_r_1_1") {
+                    sawMobilizeTokenCreated = token.enters_tapped() && token.identity().name() == "Warrior" &&
+                                              token.identity().pt() == "1/1";
+                    mobilizeTokenOid = token.object_id();
+                }
             } else if (ev.has_permanent_moved()) {
                 const auto &moved = ev.permanent_moved();
+                if (mobilizeTokenOid != 0 && moved.object_id() == mobilizeTokenOid &&
+                    moved.destination() == ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD) {
+                    sawMobilizeTokenSacrificed = true;
+                }
                 if (wardDiscardFlowActive && moved.card_id() == "grizzly_bears" &&
                     moved.destination() == ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD &&
                     (wardDiscardChosenOid == 0 || moved.object_id() == wardDiscardChosenOid)) {
@@ -5412,6 +5454,170 @@ TEST_F(RuledE2ESmokeTest, PlaneswalkerBattleTargetsSplitCombatAndSiegeCastReachB
     EXPECT_EQ(observer->defense, -1);
     EXPECT_EQ(p1.serverCardByEngineOid[battleOid], exiledPhysicalId);
     EXPECT_EQ(p2.serverCardByEngineOid[battleOid], exiledPhysicalId);
+}
+
+TEST_F(RuledE2ESmokeTest, MobilizeDefenderChoiceAndTokenLifecycleReachBothClients)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("mobilizep1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("mobilizep2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Mountain")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "issue 106 game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "issue 106 game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto put = [&](int player, const char *name) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(player);
+        auto *placement = dev->mutable_put_card_in_zone();
+        placement->set_card_name(name);
+        placement->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        placement->set_ready(true);
+        return send(p1, command, QStringLiteral("issue 106 put %1").arg(name));
+    };
+    auto pass = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(client, command, QStringLiteral("issue 106 pass"));
+    };
+    auto find = [](const SmokeClient &client, int controller, const QString &id)
+        -> std::optional<SmokeClient::Permanent> {
+        const auto battlefield = client.battlefieldByPlayer.find(controller);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return std::nullopt;
+        }
+        const auto card = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                       [&](const SmokeClient::Permanent &permanent) {
+                                           return permanent.cardId == id;
+                                       });
+        return card == battlefield->second.end() ? std::nullopt : std::optional(*card);
+    };
+
+    ASSERT_TRUE(put(p2.myId, "Jace Beleren"));
+    ASSERT_TRUE(put(p1.myId, "Dragonback Lancer"));
+    const auto lancer = find(p1, p1.myId, QStringLiteral("dragonback_lancer"));
+    const auto jace = find(p1, p2.myId, QStringLiteral("jace_beleren"));
+    ASSERT_TRUE(lancer.has_value() && jace.has_value());
+
+    QElapsedTimer toAttack;
+    toAttack.start();
+    while (p1.phase != ruled::v1::PHASE_ID_DECLARE_ATTACKERS && toAttack.elapsed() < 20000) {
+        ASSERT_TRUE(pass(p1.priorityPlayer == p1.myId ? p1 : p2));
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_DECLARE_ATTACKERS);
+
+    const auto assignment = std::find_if(
+        p1.latestLegal.legal_attack_assignments().begin(), p1.latestLegal.legal_attack_assignments().end(),
+        [&](const ruled::v1::AttackAssignment &candidate) {
+            return candidate.attacker_object_id() == lancer->oid && candidate.has_defender() &&
+                   candidate.defender().kind() == ruled::v1::TARGET_REF_KIND_PLAYER &&
+                   candidate.defender().object_id() == static_cast<quint32>(p2.myId);
+        });
+    ASSERT_NE(assignment, p1.latestLegal.legal_attack_assignments().end());
+    ruled::v1::RuledCommand declare;
+    *declare.mutable_declare_attackers()->add_assignments() = *assignment;
+    ASSERT_TRUE(send(p1, declare, QStringLiteral("issue 106 declare Dragonback Lancer")));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+
+    ASSERT_TRUE(p1.pendingChoice.has_value());
+    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_ATTACKING_TOKEN_DEFENDER);
+    EXPECT_TRUE(p1.sawMobilizeDefenderChoice);
+    EXPECT_TRUE(p2.sawMobilizeObserverWait);
+    EXPECT_FALSE(p2.pendingChoice.has_value());
+    const auto defender = std::find_if(
+        p1.pendingChoice->combat_defender_options().begin(), p1.pendingChoice->combat_defender_options().end(),
+        [&](const ruled::v1::CombatDefenderOption &option) {
+            return option.has_defender() && option.defender().kind() == ruled::v1::TARGET_REF_KIND_PERMANENT &&
+                   option.defender().object_id() == jace->oid &&
+                   option.defender_zone_change_generation() == jace->generation;
+        });
+    ASSERT_NE(defender, p1.pendingChoice->combat_defender_options().end());
+
+    ruled::v1::RuledCommand chooseDefender;
+    *chooseDefender.mutable_submit_resolution_choice()->mutable_chosen_combat_defender() = *defender;
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, chooseDefender, QStringLiteral("issue 106 choose Jace defender")));
+
+    ASSERT_TRUE(p1.sawMobilizeTokenCreated && p2.sawMobilizeTokenCreated);
+    ASSERT_NE(p1.mobilizeTokenOid, 0u);
+    ASSERT_EQ(p1.mobilizeTokenOid, p2.mobilizeTokenOid);
+    const quint32 tokenOid = p1.mobilizeTokenOid;
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(tokenOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(tokenOid));
+    const int physicalTokenId = p1.serverCardByEngineOid[tokenOid];
+    EXPECT_EQ(p2.serverCardByEngineOid[tokenOid], physicalTokenId);
+    EXPECT_TRUE(p1.physicallyTappedCardIds.count(physicalTokenId));
+    EXPECT_TRUE(p2.physicallyTappedCardIds.count(physicalTokenId));
+    EXPECT_TRUE(p1.physicallyAttackingCardIds.count(physicalTokenId));
+    EXPECT_TRUE(p2.physicallyAttackingCardIds.count(physicalTokenId));
+    ASSERT_EQ(p1.latestAddedAttackAssignments.size(), 1u);
+    ASSERT_EQ(p2.latestAddedAttackAssignments.size(), 1u);
+    EXPECT_EQ(p1.latestAddedAttackAssignments.front().attacker_object_id(), tokenOid);
+    EXPECT_EQ(p1.latestAddedAttackAssignments.front().defender().object_id(), jace->oid);
+    EXPECT_EQ(p2.latestAddedAttackAssignments.front().defender().object_id(), jace->oid);
+
+    QElapsedTimer toEndStep;
+    toEndStep.start();
+    while (!(p1.phase == ruled::v1::PHASE_ID_END_STEP && p1.stackDepth > 0) && toEndStep.elapsed() < 30000) {
+        if (p1.priorityPlayer == p1.myId) {
+            ASSERT_TRUE(pass(p1));
+        } else if (p1.priorityPlayer == p2.myId) {
+            ASSERT_TRUE(pass(p2));
+        } else {
+            p1.pump(25);
+            p2.pump(25);
+        }
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_END_STEP);
+    ASSERT_GT(p1.stackDepth, 0);
+    ASSERT_TRUE(pass(p1.priorityPlayer == p1.myId ? p1 : p2));
+    ASSERT_TRUE(pass(p1.priorityPlayer == p1.myId ? p1 : p2));
+    EXPECT_TRUE(p1.sawMobilizeTokenSacrificed && p2.sawMobilizeTokenSacrificed);
 }
 
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can

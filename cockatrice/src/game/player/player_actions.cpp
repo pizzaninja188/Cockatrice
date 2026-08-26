@@ -5684,6 +5684,19 @@ bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
         return true;
     }
 
+    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AttackingTokenDefender)) {
+        if (!targetPlayer) {
+            return false;
+        }
+        const int playerId = targetPlayer->getPlayerInfo()->getId();
+        if (!handler->isLegalAttackPlayerDefender(playerId)) {
+            handler->emitLocalLog(tr("That player is not a legal defender for the entering token."));
+            return true;
+        }
+        handler->chooseAttackPlayerDefender(playerId);
+        return true;
+    }
+
     // Check pending copy target choice first (CR 707.10c: redirect targets for a spell copy).
     if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget)) {
         if (!targetPlayer) {

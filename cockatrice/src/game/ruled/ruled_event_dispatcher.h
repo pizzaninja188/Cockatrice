@@ -23,6 +23,7 @@
 namespace ruled::v1
 {
 class AttackersDeclared;
+class AttackersAdded;
 class AttackersPreview;
 class ActivePublicRevealSnapshot;
 class BattlefieldObjectMap;
@@ -105,6 +106,7 @@ private:
     void applyExileObjectMap(const ruled::v1::ExileObjectMap &map);
     void applyZoneView(const ruled::v1::ZoneViewSync &view, BatchContext &ctx);
     void applyAttackersDeclared(const ruled::v1::AttackersDeclared &ad, BatchContext &ctx);
+    void applyAttackersAdded(const ruled::v1::AttackersAdded &added, BatchContext &ctx);
     void applyAttackersPreview(const ruled::v1::AttackersPreview &ap, BatchContext &ctx);
     void applyBlockersDeclared(const ruled::v1::BlockersDeclared &bd, BatchContext &ctx);
     void applyBlockersPreview(const ruled::v1::BlockersPreview &bp, BatchContext &ctx);

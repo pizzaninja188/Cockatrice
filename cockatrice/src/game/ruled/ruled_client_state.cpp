@@ -994,6 +994,14 @@ void RuledClientState::clearPendingAttackers()
 
 bool RuledClientState::isLegalAttackPlayerDefender(int playerId) const
 {
+    if (hasPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender)) {
+        return std::any_of(pendingChoice->combatDefenderOptions.cbegin(), pendingChoice->combatDefenderOptions.cend(),
+                           [playerId](const auto &option) {
+                               return option.has_defender() &&
+                                      option.defender().kind() == ruled::v1::TARGET_REF_KIND_PLAYER &&
+                                      static_cast<int>(option.defender().object_id()) == playerId;
+                           });
+    }
     if (attackerAwaitingDefenderOid == 0) {
         return false;
     }
@@ -1006,6 +1014,14 @@ bool RuledClientState::isLegalAttackPlayerDefender(int playerId) const
 
 bool RuledClientState::isLegalAttackPermanentDefender(quint32 engineOid) const
 {
+    if (hasPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender)) {
+        return std::any_of(pendingChoice->combatDefenderOptions.cbegin(), pendingChoice->combatDefenderOptions.cend(),
+                           [engineOid](const auto &option) {
+                               return option.has_defender() &&
+                                      option.defender().kind() == ruled::v1::TARGET_REF_KIND_PERMANENT &&
+                                      option.defender().object_id() == engineOid;
+                           });
+    }
     if (attackerAwaitingDefenderOid == 0) {
         return false;
     }
@@ -1020,6 +1036,16 @@ bool RuledClientState::chooseAttackPlayerDefender(int playerId)
 {
     if (!isLegalAttackPlayerDefender(playerId)) {
         return false;
+    }
+    if (hasPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender)) {
+        const auto found = std::find_if(
+            pendingChoice->combatDefenderOptions.cbegin(), pendingChoice->combatDefenderOptions.cend(),
+            [playerId](const auto &option) {
+                return option.has_defender() && option.defender().kind() == ruled::v1::TARGET_REF_KIND_PLAYER &&
+                       static_cast<int>(option.defender().object_id()) == playerId;
+            });
+        submitAttackingTokenDefender(*found);
+        return true;
     }
     const auto candidates = legalAttackAssignmentsByAttacker.value(attackerAwaitingDefenderOid);
     const auto found = std::find_if(candidates.cbegin(), candidates.cend(), [playerId](const auto &assignment) {
@@ -1038,6 +1064,16 @@ bool RuledClientState::chooseAttackPermanentDefender(quint32 engineOid)
     if (!isLegalAttackPermanentDefender(engineOid)) {
         return false;
     }
+    if (hasPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender)) {
+        const auto found = std::find_if(
+            pendingChoice->combatDefenderOptions.cbegin(), pendingChoice->combatDefenderOptions.cend(),
+            [engineOid](const auto &option) {
+                return option.has_defender() && option.defender().kind() == ruled::v1::TARGET_REF_KIND_PERMANENT &&
+                       option.defender().object_id() == engineOid;
+            });
+        submitAttackingTokenDefender(*found);
+        return true;
+    }
     const auto candidates = legalAttackAssignmentsByAttacker.value(attackerAwaitingDefenderOid);
     const auto found = std::find_if(candidates.cbegin(), candidates.cend(), [engineOid](const auto &assignment) {
         return assignment.has_defender() && assignment.defender().kind() == ruled::v1::TARGET_REF_KIND_PERMANENT &&
@@ -1048,6 +1084,24 @@ bool RuledClientState::chooseAttackPermanentDefender(quint32 engineOid)
     syncAttackersPreviewToServer();
     emit combatStateChanged();
     return true;
+}
+
+void RuledClientState::submitAttackingTokenDefender(const ruled::v1::CombatDefenderOption &option)
+{
+    if (!hasPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender)) {
+        return;
+    }
+    const RuledPendingChoice restore = *pendingChoice;
+    clearPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender);
+    emit combatStateChanged();
+    ruled::v1::RuledCommand command;
+    *command.mutable_submit_resolution_choice()->mutable_chosen_combat_defender() = option;
+    host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
+        if (!accepted && !pendingChoice.has_value()) {
+            setPendingChoice(restore);
+            emit combatStateChanged();
+        }
+    });
 }
 
 void RuledClientState::toggleStagedBlocker(quint32 blockerOid)

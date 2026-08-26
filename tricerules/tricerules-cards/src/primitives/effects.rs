@@ -1256,6 +1256,10 @@ pub enum SpellEffectKind {
         subject: EffectSubject,
         ability: Box<TriggeredAbilityDef>,
     },
+    /// Sacrifice the exact generation-bound cohort captured by an engine-created delayed
+    /// trigger. Mobilize uses this runtime context effect so one delayed ability handles all
+    /// tokens made by one resolution without re-querying the battlefield by name.
+    SacrificeObservedObjects,
     /// CR 610.3 paired one-shot effects: exile the chosen permanent, then return that exact card
     /// under its owner's control immediately after the exact source generation leaves the
     /// battlefield. Banishing Light and Stormplain Detainment share the nonland form; Trapped in
@@ -1439,6 +1443,18 @@ pub enum SpellEffectKind {
         count: Amount,
         #[serde(default)]
         who: PlayerRecipient,
+    },
+    /// CR 508.4 / 603.7: create a cohort under the resolving object's controller, tapped and
+    /// attacking engine-chosen defending recipients. Each token's recipient is chosen separately;
+    /// the complete cohort enters simultaneously and may create one delayed next-end-step
+    /// sacrifice trigger. Mobilize cards such as Shock Brigade and Reigning Victor share this
+    /// primitive. These creatures enter attacking but were never declared as attackers.
+    CreateAttackingTokens {
+        /// Token id in the registry's token namespace.
+        token: String,
+        count: Amount,
+        #[serde(default)]
+        sacrifice_at_next_end_step: bool,
     },
     /// CR 122/121.6: put `count` counters of `counter` on `subject` (default: a chosen creature
     /// target). The `counter` kind covers both +1/+1 counter spells
@@ -2057,6 +2073,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PumpAll { .. }
             | SpellEffectKind::GrantKeywordsAll { .. }
             | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
+            | SpellEffectKind::SacrificeObservedObjects
             | SpellEffectKind::ChooseGraveyardCard { .. }
             | SpellEffectKind::GrantKeywordsAllPermanents { .. }
             | SpellEffectKind::GainLife { .. }
@@ -2067,6 +2084,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DestroyAll { .. }
             | SpellEffectKind::DamageAll { .. }
             | SpellEffectKind::CreateTokens { .. }
+            | SpellEffectKind::CreateAttackingTokens { .. }
             | SpellEffectKind::ProduceMana { .. }
             | SpellEffectKind::SearchLibrary { .. }
             | SpellEffectKind::PreventAllCombatDamageTurn
@@ -2162,7 +2180,8 @@ impl SpellEffectKind {
                 | SpellEffectKind::Draw { count: amount, .. }
                 | SpellEffectKind::GainLife { amount }
                 | SpellEffectKind::Mill { count: amount, .. }
-                | SpellEffectKind::CreateTokens { count: amount, .. } => Some(amount),
+                | SpellEffectKind::CreateTokens { count: amount, .. }
+                | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
                 SpellEffectKind::PumpTarget {
                     scale: Some(scale), ..
                 } => Some(&scale.amount),
@@ -2223,7 +2242,8 @@ impl SpellEffectKind {
             | SpellEffectKind::Draw { count: amount, .. }
             | SpellEffectKind::GainLife { amount }
             | SpellEffectKind::Mill { count: amount, .. }
-            | SpellEffectKind::CreateTokens { count: amount, .. } => amount.validate()?,
+            | SpellEffectKind::CreateTokens { count: amount, .. }
+            | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => amount.validate()?,
             SpellEffectKind::PumpTarget {
                 scale: Some(scale), ..
             } => scale.amount.validate()?,

@@ -1,0 +1,22 @@
+// Oracle and Mobilize rulings checked against Scryfall on 2026-08-25.
+(
+  id: "nightblade_brigade",
+  name: "Nightblade Brigade",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Goblin", "Soldier"],
+  power: 1,
+  toughness: 3,
+  keywords: [Deathtouch],
+  triggered_abilities: [
+    (
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+      effect: [CreateAttackingTokens(token: "warrior_r_1_1", count: 1, sacrifice_at_next_end_step: true)],
+      text: "Mobilize 1",
+    ),
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
+      text: "When this creature enters, surveil 1.",
+    ),
+  ],
+)

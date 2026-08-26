@@ -3,9 +3,9 @@
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
     ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement, ActiveEventObserver,
-    ActiveExilePlayPermission, AffectedScope, AttachmentRecipient, BattlefieldEntryCompletion,
-    BattlefieldEntryEvent, BlockingChoice, CardResultCohort, CardResultEntry,
-    CastCostObjectReceipt, CastCostReceipt, ChosenMode, CombatAttackAssignment,
+    ActiveExilePlayPermission, AffectedScope, AttachmentRecipient, AttackingTokenBatch,
+    BattlefieldEntryCompletion, BattlefieldEntryEvent, BlockingChoice, CardResultCohort,
+    CardResultEntry, CastCostObjectReceipt, CastCostReceipt, ChosenMode, CombatAttackAssignment,
     CombatDefenderTarget, CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
     DamagePreventionProhibition, DamagePreventionScope, DelayedTriggerPayload,
     EntryReplacementApplication, EntryReplacementEffectId, EventObserverMatcher,
@@ -15,11 +15,11 @@ use crate::state::{
     PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
     PendingPlayerDiscardChoice, PendingPlayerSetDiscard, PendingResolution,
     PendingResolutionBranch, PendingResolutionBranchStage, PendingResolutionPresentation,
-    PendingTrigger, PendingTriggerOrder, PendingWardPayment, PendingWardPaymentStage, PlayerId,
-    PlayerState, ReplacementPriority, ResolutionContinuation, RoomState, SpellCastMethod,
-    StackItem, StackObjectRef, StackTarget, StagedTrigger, StagedTriggerGroup,
-    TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TriggeredOnceKey, TurnHistory,
-    TurnStep, UndoableManaAbility, Zone,
+    PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
+    PendingWardPaymentStage, PlayerId, PlayerState, ReplacementPriority, ResolutionContinuation,
+    RoomState, SpellCastMethod, StackItem, StackObjectRef, StackTarget, StagedTrigger,
+    StagedTriggerGroup, TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TriggeredOnceKey,
+    TurnHistory, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -738,6 +738,7 @@ impl GameEngine {
             pending_triggers: VecDeque::new(),
             staged_trigger_groups: VecDeque::new(),
             active_event_observers: Vec::new(),
+            observed_object_cohorts: HashMap::new(),
             pending_immediate_observer_actions: Vec::new(),
             pending_trigger_order: None,
             pending_resolution: None,

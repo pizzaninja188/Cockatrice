@@ -219,6 +219,10 @@ message SubmitResolutionChoice {
   // Present only when accepting a SPECIAL_CAST offer. The source, method, face, modes, and
   // targets are validated against the generation-bound engine offer before any movement.
   CastSpell cast_spell = 4;
+  // Present only for CHOICE_KIND_ATTACKING_TOKEN_DEFENDER. The engine validates the complete
+  // generation-bound option against the current prompt snapshot; clients must not reconstruct
+  // defending-player ownership from battlefield display state.
+  CombatDefenderOption chosen_combat_defender = 5;
 }
 
 // A player's answer to a TriggerOrderRequired (CR 603.3b): put THIS trigger on the stack next.
@@ -388,6 +392,15 @@ message AttackAssignment {
   TargetRef defender = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint64 defender_zone_change_generation = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   int32 defending_player_id = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+// One engine-authored recipient option for a creature entering the battlefield attacking
+// (CR 508.4). The attacker does not exist on the battlefield yet, so unlike AttackAssignment this
+// carries only the defender edge. `defending_player_id` is the player entitled to block it.
+message CombatDefenderOption {
+  TargetRef defender = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 defender_zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  int32 defending_player_id = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message PlayLand {
@@ -855,6 +868,9 @@ message RuledEvent {
     // this on every authoritative batch, including an empty snapshot.
     ActivePublicRevealSnapshot active_public_reveal_snapshot = 35
         [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    // One or more creatures entered the battlefield attacking after attackers were declared.
+    // Clients append these generation-bound edges; they must not replace the declared cohort.
+    AttackersAdded attackers_added = 36 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   }
 }
 
@@ -1032,6 +1048,9 @@ enum ChoiceKind {
   CHOICE_KIND_BATTLE_PROTECTOR = 17;
   // CR 310.11b: optionally cast the defeated Siege transformed from exile.
   CHOICE_KIND_SIEGE_CAST = 18;
+  // CR 508.4: choose the player, planeswalker, or Battle a token enters attacking. Public domain,
+  // but the exact candidate snapshot is routed only to the deciding player.
+  CHOICE_KIND_ATTACKING_TOKEN_DEFENDER = 19;
 }
 
 enum ChoiceCandidateSourceZone {
@@ -1127,6 +1146,8 @@ message ResolutionChoiceRequired {
   // Parallel to candidate_object_ids for multi-zone cohorts. Empty remains valid for legacy
   // single-zone kinds; malformed nonempty vectors fail closed in relay and client consumers.
   repeated ChoiceCandidateSourceZone candidate_source_zones = 20 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated CombatDefenderOption combat_defender_options = 21
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no
@@ -1138,6 +1159,8 @@ message TokenCreated {
   // Engine token id (e.g. "soldier_w_1_1"); intentionally absent from the deck CardCatalog.
   string card_id = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   TokenIdentity identity = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // True when the creation instruction puts this token onto the battlefield tapped.
+  bool enters_tapped = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Self-describing token characteristics for the relay and client (tokens are absent from the
@@ -1623,6 +1646,13 @@ message AttackersPreview {
   reserved 2;
   reserved "attacker_object_ids";
   repeated AttackAssignment assignments = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+// Engine-emitted for attackers that entered combat without being declared as attackers (CR
+// 508.4). This is intentionally additive so the declared-attacker snapshot and previews remain
+// intact while clients add arrows and blocker eligibility for the new objects.
+message AttackersAdded {
+  repeated AttackAssignment assignments = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Engine-emitted when one or more creatures are removed from combat mid-step (CR 701.19a).

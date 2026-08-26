@@ -20,6 +20,7 @@ use super::targeting::{
 };
 use super::*;
 
+mod attacking_tokens;
 mod branches;
 mod copy_choices;
 mod hand_choice;
@@ -115,6 +116,12 @@ impl GameEngine {
             ResolutionContinuation::SiegeCast { .. }
         ) {
             return self.finish_siege_cast_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::AttackingTokenDefenders { .. }
+        ) {
+            return self.finish_attacking_token_defender_choice(pending, answer, decision);
         }
         if matches!(
             pending.continuation,
@@ -244,6 +251,9 @@ impl GameEngine {
             }
             ResolutionContinuation::SiegeCast { .. } => {
                 unreachable!("Siege-cast branch handled before object-choice validation")
+            }
+            ResolutionContinuation::AttackingTokenDefenders { .. } => {
+                unreachable!("attacking-token branch handled before object-choice validation")
             }
             ResolutionContinuation::Custom { .. } => {}
             ResolutionContinuation::ManaPayment { .. } => unreachable!("handled above"),
@@ -672,6 +682,7 @@ impl GameEngine {
                     reveal_audience: 0,
                     revealed_zone_owner_player_id: None,
                     candidate_source_zones: Vec::new(),
+                    combat_defender_options: Vec::new(),
                 },
             )),
         });

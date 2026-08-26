@@ -146,6 +146,7 @@ struct RuledPlayerBinding
                           quint32 engineOid,
                           const ruled::v1::TokenIdentity &identity,
                           int battlefieldGridY,
+                          bool entersTapped,
                           GameEventStorage &ges);
     // Mint a physical Server_Card for a dev-conjured card (see DevCardConjured) into the hand or
     // the table, binding it to `engineOid` the same way createRuledToken does — the zone-view sync

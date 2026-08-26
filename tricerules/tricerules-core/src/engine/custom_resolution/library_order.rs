@@ -197,6 +197,7 @@ impl GameEngine {
                     reveal_audience: 0,
                     revealed_zone_owner_player_id: None,
                     candidate_source_zones: Vec::new(),
+                    combat_defender_options: Vec::new(),
                 },
             )),
         });
@@ -357,6 +358,7 @@ impl GameEngine {
                     reveal_audience: 0,
                     revealed_zone_owner_player_id: None,
                     candidate_source_zones: Vec::new(),
+                    combat_defender_options: Vec::new(),
                 },
             )),
         });

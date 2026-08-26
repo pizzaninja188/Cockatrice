@@ -12,6 +12,7 @@ fn select_branch(index: u32) -> RuledCommand {
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             cast_spell: None,
+            chosen_combat_defender: None,
         })),
     }
 }
@@ -23,6 +24,7 @@ fn decline_resolution_choice() -> RuledCommand {
             decision: ResolutionChoiceDecision::Decline as i32,
             selected_branch_index: 0,
             cast_spell: None,
+            chosen_combat_defender: None,
         })),
     }
 }

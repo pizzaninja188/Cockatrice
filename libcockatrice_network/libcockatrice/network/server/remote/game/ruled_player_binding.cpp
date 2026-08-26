@@ -847,6 +847,7 @@ void RuledPlayerBinding::createRuledToken(Server_Player *player,
                                           quint32 engineOid,
                                           const ruled::v1::TokenIdentity &identity,
                                           int battlefieldGridY,
+                                          bool entersTapped,
                                           GameEventStorage &ges)
 {
     Server_CardZone *table = player->getZones().value(ZoneNames::TABLE);
@@ -881,11 +882,20 @@ void RuledPlayerBinding::createRuledToken(Server_Player *player,
     }
     card->setTokenTriggeredAbilityTexts(triggeredAbilityTexts);
     card->setAnnotation(QStringLiteral("Token"));
+    card->setTapped(entersTapped);
     // CR 111.7: when the engine later moves the token off the battlefield it ceases to exist;
     // destroy-on-zone-change makes the client drop the card the moment that move arrives.
     card->setDestroyOnZoneChange(true);
     table->insertCard(card, x, y);
     player->sendCreateTokenEvents(table, card, x, y, ges);
+    if (entersTapped) {
+        Event_SetCardAttr tapEvent;
+        tapEvent.set_zone_name(std::string(ZoneNames::TABLE));
+        tapEvent.set_card_id(card->getId());
+        tapEvent.set_attribute(AttrTapped);
+        tapEvent.set_attr_value("1");
+        ges.enqueueGameEvent(tapEvent, player->getPlayerId());
+    }
 
     // Pre-register the engine ObjectId <-> Server_Card binding so the zone-view sync that follows
     // in the same batch matches this engine battlefield slot to the freshly minted card (rather

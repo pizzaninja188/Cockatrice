@@ -125,7 +125,7 @@ fn target_roles_by_group<'a>(
         .collect()
 }
 
-struct TokenCreationRequest<'a> {
+pub(super) struct TokenCreationRequest<'a> {
     token_id: &'a str,
     count: u32,
     recipients: Vec<PlayerId>,
@@ -1279,6 +1279,12 @@ impl GameEngine {
                     effect @ SpellEffectKind::CreateTokens { .. } => {
                         tokens::create_tokens(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::CreateAttackingTokens { .. } => {
+                        tokens::create_attacking_tokens(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::SacrificeObservedObjects => {
+                        tokens::sacrifice_observed_objects(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::Equip { .. } => misc::equip(&mut cx, effect)?,
                     effect @ SpellEffectKind::PreventNextDamage { .. } => {
                         misc::prevent_next_damage(&mut cx, effect)?
@@ -1511,6 +1517,7 @@ impl GameEngine {
                             reveal_audience: 0,
                             revealed_zone_owner_player_id: None,
                             candidate_source_zones: Vec::new(),
+                            combat_defender_options: Vec::new(),
                         },
                     )),
                 });
@@ -1656,21 +1663,28 @@ impl GameEngine {
         request: TokenCreationRequest<'_>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
+        let item = request.item.clone();
+        let (entries, logs) = self.prepare_token_entries(request, false)?;
+        // CR 603.6: one token-making instruction puts all of its tokens onto the battlefield
+        // simultaneously, so every entrant exists before their ETB triggers are collected.
+        self.begin_token_entry_batch(item, entries, logs, None, events)
+    }
+
+    pub(super) fn prepare_token_entries(
+        &mut self,
+        request: TokenCreationRequest<'_>,
+        enters_tapped: bool,
+    ) -> Result<(Vec<TokenBattlefieldEntry>, Vec<String>), EngineError> {
         let TokenCreationRequest {
             token_id,
             count,
             recipients,
             spell_label,
-            item,
+            item: _,
         } = request;
         let registry = self.registry;
         let Some(def) = registry.get(token_id) else {
-            // Registry load validates every CreateTokens reference, so this is unreachable;
-            // fail safe by doing nothing rather than panicking (server-authoritative).
-            events.push(ev_log(format!(
-                "{spell_label} could not create unknown token '{token_id}'."
-            )));
-            return Ok(false);
+            return Err(EngineError::MissingCard(token_id.to_string()));
         };
         let name = def.name.clone();
         // A token definition is always single-face (CR 111.4 identity is one characteristic tuple).
@@ -1720,7 +1734,7 @@ impl GameEngine {
                         copy_revision: 0,
                         // Proposed tokens live in no player's zone until entry replacements finish.
                         zone: Zone::Stack,
-                        tapped: false,
+                        tapped: enters_tapped,
                         summoning_sick: is_creature,
                         power,
                         toughness,
@@ -1749,6 +1763,7 @@ impl GameEngine {
                         keywords: keywords.clone(),
                         triggered_ability_texts: triggered_ability_texts.clone(),
                     }),
+                    enters_tapped,
                 };
                 entries.push(TokenBattlefieldEntry {
                     event: BattlefieldEntryEvent {
@@ -1761,7 +1776,7 @@ impl GameEngine {
                         chosen_x: 0,
                         cast_cost_receipts: Vec::new(),
                         player_life_snapshot: player_life_snapshot.clone(),
-                        tapped: false,
+                        tapped: enters_tapped,
                         entry_counters: BTreeMap::new(),
                         applied_effects: Vec::new(),
                     },
@@ -1773,9 +1788,7 @@ impl GameEngine {
                 "P{pid} creates {count} {name} {noun} ({spell_label})."
             ));
         }
-        // CR 603.6: one token-making instruction puts all of its tokens onto the battlefield
-        // simultaneously, so every entrant exists before their ETB triggers are collected.
-        self.begin_token_entry_batch(item.clone(), entries, logs, events)
+        Ok((entries, logs))
     }
 }
 

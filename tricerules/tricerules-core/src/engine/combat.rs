@@ -203,7 +203,7 @@ impl GameEngine {
             .collect()
     }
 
-    fn attack_defenders(&self) -> Vec<(CombatDefenderTarget, PlayerId)> {
+    pub(super) fn attack_defenders(&self) -> Vec<(CombatDefenderTarget, PlayerId)> {
         let defending_players = self.state.defending_player_ids();
         let mut defenders: Vec<_> = defending_players
             .iter()
@@ -250,7 +250,7 @@ impl GameEngine {
         defenders
     }
 
-    fn wire_attack_assignment(
+    pub(super) fn wire_attack_assignment(
         &self,
         attacker: ObjectId,
         defender: CombatDefenderTarget,
@@ -286,6 +286,112 @@ impl GameEngine {
             defender_zone_change_generation,
             defending_player_id: defending_player,
         }
+    }
+
+    pub(super) fn legal_combat_defender_options(&self) -> Vec<rv1::CombatDefenderOption> {
+        self.attack_defenders()
+            .into_iter()
+            .map(|(defender, defending_player)| {
+                let assignment = self.wire_attack_assignment(0, defender, defending_player);
+                rv1::CombatDefenderOption {
+                    defender: assignment.defender,
+                    defender_zone_change_generation: assignment.defender_zone_change_generation,
+                    defending_player_id: assignment.defending_player_id,
+                }
+            })
+            .collect()
+    }
+
+    pub(super) fn add_attacking_objects(
+        &mut self,
+        object_ids: &[ObjectId],
+        options: &[rv1::CombatDefenderOption],
+    ) -> Result<Vec<rv1::AttackAssignment>, EngineError> {
+        if object_ids.len() != options.len() {
+            return Err(EngineError::Illegal(
+                "attacking-token defender count mismatch",
+            ));
+        }
+        let legal_options = self.legal_combat_defender_options();
+        let mut parsed = Vec::with_capacity(object_ids.len());
+        for (&object_id, option) in object_ids.iter().zip(options) {
+            if !legal_options.contains(option) {
+                return Err(EngineError::Illegal(
+                    "illegal or stale attacking-token defender",
+                ));
+            }
+            let defender_ref = option
+                .defender
+                .as_ref()
+                .ok_or(EngineError::Illegal("attacking-token defender missing"))?;
+            let defender = match rv1::TargetRefKind::try_from(defender_ref.kind) {
+                Ok(rv1::TargetRefKind::Player) => {
+                    CombatDefenderTarget::Player(defender_ref.object_id as PlayerId)
+                }
+                Ok(rv1::TargetRefKind::Permanent) => {
+                    CombatDefenderTarget::Permanent(TriggerObjectRef {
+                        object_id: defender_ref.object_id,
+                        zone_change_generation: option.defender_zone_change_generation,
+                        controller_at_event: self
+                            .state
+                            .objects
+                            .get(&defender_ref.object_id)
+                            .map(|object| object.controller)
+                            .ok_or(EngineError::Illegal("attacking-token defender missing"))?,
+                    })
+                }
+                _ => {
+                    return Err(EngineError::Illegal(
+                        "invalid attacking-token defender kind",
+                    ))
+                }
+            };
+            let attacker = TriggerObjectRef {
+                object_id,
+                zone_change_generation: self
+                    .state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0),
+                controller_at_event: self
+                    .state
+                    .objects
+                    .get(&object_id)
+                    .map(|object| object.controller)
+                    .ok_or(EngineError::Illegal("attacking token missing"))?,
+            };
+            parsed.push((
+                object_id,
+                CombatAttackAssignment {
+                    attacker,
+                    defender,
+                    defending_player: option.defending_player_id,
+                },
+            ));
+        }
+        let combat = self
+            .state
+            .combat
+            .as_mut()
+            .filter(|combat| combat.attackers_declared)
+            .ok_or(EngineError::Illegal(
+                "no declared-attacker combat for attacking tokens",
+            ))?;
+        for (object_id, assignment) in &parsed {
+            combat.attacking.push(*object_id);
+            combat.attack_assignments.insert(*object_id, *assignment);
+        }
+        Ok(parsed
+            .into_iter()
+            .map(|(object_id, assignment)| {
+                self.wire_attack_assignment(
+                    object_id,
+                    assignment.defender,
+                    assignment.defending_player,
+                )
+            })
+            .collect())
     }
 
     /// CR 508.1b candidates. The same generation-bound edges are published to the client and

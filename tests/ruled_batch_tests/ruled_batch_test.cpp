@@ -1695,6 +1695,33 @@ TEST_F(RuledBatchTest, ResolutionBranchMetadataReachesOnlyTheDecidingPlayer)
     EXPECT_EQ(forOpponent.events(0).resolution_choice_required().resolution_branches_size(), 0);
 }
 
+TEST_F(RuledBatchTest, MobilizeDefenderOptionsReachOnlyTheDecidingPlayer)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_ATTACKING_TOKEN_DEFENDER);
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->set_prompt_text("Choose what the Warrior token attacks.");
+    auto *option = choice->add_combat_defender_options();
+    option->mutable_defender()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    option->mutable_defender()->set_object_id(501u);
+    option->set_defender_zone_change_generation(9u);
+    option->set_defending_player_id(2);
+
+    const auto forController = redactFor(batch, p1);
+    const auto &controllerChoice = forController.events(0).resolution_choice_required();
+    ASSERT_EQ(controllerChoice.combat_defender_options_size(), 1);
+    EXPECT_EQ(controllerChoice.combat_defender_options(0).defender().object_id(), 501u);
+    EXPECT_EQ(controllerChoice.combat_defender_options(0).defender_zone_change_generation(), 9u);
+
+    const auto forOpponent = redactFor(batch, p2);
+    const auto &opponentChoice = forOpponent.events(0).resolution_choice_required();
+    EXPECT_EQ(opponentChoice.combat_defender_options_size(), 0);
+    EXPECT_EQ(opponentChoice.deciding_player_id(), 1);
+}
+
 TEST_F(RuledBatchTest, PermanentMovedToLibraryReordersTheOwnersPrivateDeckWithoutLeakingIds)
 {
     Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
@@ -2551,6 +2578,46 @@ TEST_F(RuledBatchTest, ApplyRuledBatchCreatesTokenOnControllerTable)
     EXPECT_EQ(findCardByEngineOid(p1, 501u), token);
     // The opponent received no token (controller-only effect).
     EXPECT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().size(), 0);
+}
+
+TEST_F(RuledBatchTest, MobilizeTokenEntersTappedAndJoinsExistingAttackers)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    {
+        ruled::v1::IpcResponse seed;
+        seed.set_ok(true);
+        auto *zoneView = seed.mutable_batch()->add_events()->mutable_zone_view();
+        *zoneView->add_per_player() = buildPerPlayerView(p1, {401u}, {false});
+        *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+        callBatchApply(seed);
+    }
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *batch = response.mutable_batch();
+    auto *declared = batch->add_events()->mutable_attackers_declared();
+    declared->set_attacking_player_id(1);
+    declared->add_assignments()->set_attacker_object_id(401u);
+
+    auto *created = batch->add_events()->mutable_token_created();
+    created->set_object_id(501u);
+    created->set_controller_player_id(1);
+    created->set_card_id("warrior_r_1_1");
+    created->set_enters_tapped(true);
+    created->mutable_identity()->set_name("Warrior");
+    created->mutable_identity()->set_pt("1/1");
+    created->mutable_identity()->set_color("r");
+    created->mutable_identity()->set_is_creature(true);
+
+    auto *added = batch->add_events()->mutable_attackers_added();
+    added->add_assignments()->set_attacker_object_id(501u);
+    callBatchApply(response);
+
+    Server_Card *token = findCardByEngineOid(p1, 501u);
+    ASSERT_NE(token, nullptr);
+    EXPECT_TRUE(token->getTapped());
+    EXPECT_TRUE(token->getAttacking());
+    EXPECT_TRUE(bear->getAttacking()) << "Mobilize must append instead of clearing declared attackers";
 }
 
 TEST_F(RuledBatchTest, BattleIsDisplayedOnProtectorsTableWithControllerAnnotation)

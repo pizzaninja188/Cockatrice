@@ -188,6 +188,7 @@ fn try_drain_stack(e: &mut GameEngine) {
                     },
                     selected_branch_index: 0,
                     cast_spell: None,
+                    chosen_combat_defender: None,
                 })),
             };
             if e.apply_command(deciding_player, &answer).is_err() {

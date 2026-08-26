@@ -354,6 +354,7 @@ impl GameEngine {
                     reveal_audience: 0,
                     revealed_zone_owner_player_id: None,
                     candidate_source_zones: Vec::new(),
+                    combat_defender_options: Vec::new(),
                 },
             )),
         });
@@ -569,6 +570,7 @@ impl GameEngine {
                                         reveal_audience: 0,
                                         revealed_zone_owner_player_id: None,
                                         candidate_source_zones: Vec::new(),
+                                        combat_defender_options: Vec::new(),
                                     },
                                 )),
                             });
@@ -670,6 +672,7 @@ impl GameEngine {
                                 reveal_audience: 0,
                                 revealed_zone_owner_player_id: None,
                                 candidate_source_zones: Vec::new(),
+                                combat_defender_options: Vec::new(),
                             },
                         )),
                     });
@@ -802,6 +805,7 @@ impl GameEngine {
         item: StackItem,
         mut entries: Vec<TokenBattlefieldEntry>,
         logs: Vec<String>,
+        attacking: Option<AttackingTokenBatch>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         // CR 616.1: when one simultaneous event requires choices from multiple players, those
@@ -810,12 +814,14 @@ impl GameEngine {
         let mut ready = Vec::new();
         while !entries.is_empty() {
             let current = entries.remove(0);
-            let completion = BattlefieldEntryCompletion::TokenBatch {
-                current_created: current.created.clone(),
-                ready: ready.clone(),
-                remaining: entries.clone(),
-                logs: logs.clone(),
-            };
+            let completion =
+                BattlefieldEntryCompletion::TokenBatch(Box::new(PendingTokenEntryBatch {
+                    current_created: current.created.clone(),
+                    ready: ready.clone(),
+                    remaining: entries.clone(),
+                    logs: logs.clone(),
+                    attacking: attacking.clone(),
+                }));
             match self.advance_or_park_battlefield_entry(
                 item.clone(),
                 current.event,
@@ -829,7 +835,7 @@ impl GameEngine {
                 }),
             }
         }
-        self.commit_token_entry_batch(ready, logs, events)?;
+        self.commit_token_entry_batch(&item, ready, logs, attacking, events)?;
         Ok(false)
     }
 
@@ -837,20 +843,20 @@ impl GameEngine {
         &mut self,
         item: StackItem,
         current: TokenBattlefieldEntry,
-        mut ready: Vec<TokenBattlefieldEntry>,
-        mut remaining: Vec<TokenBattlefieldEntry>,
-        logs: Vec<String>,
+        mut batch: PendingTokenEntryBatch,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
-        ready.push(current);
-        while !remaining.is_empty() {
-            let next = remaining.remove(0);
-            let completion = BattlefieldEntryCompletion::TokenBatch {
-                current_created: next.created.clone(),
-                ready: ready.clone(),
-                remaining: remaining.clone(),
-                logs: logs.clone(),
-            };
+        batch.ready.push(current);
+        while !batch.remaining.is_empty() {
+            let next = batch.remaining.remove(0);
+            let completion =
+                BattlefieldEntryCompletion::TokenBatch(Box::new(PendingTokenEntryBatch {
+                    current_created: next.created.clone(),
+                    ready: batch.ready.clone(),
+                    remaining: batch.remaining.clone(),
+                    logs: batch.logs.clone(),
+                    attacking: batch.attacking.clone(),
+                }));
             match self.advance_or_park_battlefield_entry(
                 item.clone(),
                 next.event,
@@ -858,22 +864,28 @@ impl GameEngine {
                 events,
             ) {
                 BattlefieldEntryProgress::Parked => return Ok(true),
-                BattlefieldEntryProgress::Ready(event) => ready.push(TokenBattlefieldEntry {
+                BattlefieldEntryProgress::Ready(event) => batch.ready.push(TokenBattlefieldEntry {
                     event,
                     created: next.created,
                 }),
             }
         }
-        self.commit_token_entry_batch(ready, logs, events)?;
+        self.commit_token_entry_batch(&item, batch.ready, batch.logs, batch.attacking, events)?;
         Ok(false)
     }
 
     fn commit_token_entry_batch(
         &mut self,
+        item: &StackItem,
         entries: Vec<TokenBattlefieldEntry>,
         logs: Vec<String>,
+        attacking: Option<AttackingTokenBatch>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
+        let object_ids = entries
+            .iter()
+            .map(|entry| entry.event.object_id)
+            .collect::<Vec<_>>();
         let mut trigger_events = Vec::new();
         for entry in &entries {
             trigger_events.push(GameEvent::EntersBattlefield {
@@ -885,10 +897,78 @@ impl GameEngine {
                 trigger_events.push(door_event);
             }
         }
+        let added_assignments = if let Some(attacking) = &attacking {
+            self.add_attacking_objects(&object_ids, &attacking.defenders)?
+        } else {
+            Vec::new()
+        };
         for entry in entries {
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::TokenCreated(entry.created)),
             });
+        }
+        if !added_assignments.is_empty() {
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::AttackersAdded(rv1::AttackersAdded {
+                    assignments: added_assignments,
+                })),
+            });
+        }
+        if attacking.is_some_and(|batch| batch.sacrifice_at_next_end_step) && !object_ids.is_empty()
+        {
+            let observed_objects = object_ids
+                .iter()
+                .filter_map(|object_id| {
+                    self.state
+                        .objects
+                        .get(object_id)
+                        .map(|object| TriggerObjectRef {
+                            object_id: *object_id,
+                            zone_change_generation: self
+                                .state
+                                .zone_change_generation
+                                .get(object_id)
+                                .copied()
+                                .unwrap_or(0),
+                            controller_at_event: object.controller,
+                        })
+                })
+                .collect::<Vec<_>>();
+            if let Some(&watched) = observed_objects.first() {
+                self.state.observed_object_cohorts.insert(
+                    (watched.object_id, watched.zone_change_generation),
+                    observed_objects.clone(),
+                );
+                let card_name = self
+                    .registry
+                    .get(&item.card_id)
+                    .map(|definition| definition.name.clone())
+                    .unwrap_or_else(|| item.card_id.clone());
+                self.state.active_event_observers.push(ActiveEventObserver {
+                    watched,
+                    matcher: EventObserverMatcher::AtBeginningOfNextEndStep,
+                    payload: EventObserverPayload::StageDelayedTrigger(Box::new(
+                        DelayedTriggerPayload {
+                            controller: item.controller,
+                            card_id: item.card_id.clone(),
+                            card_name,
+                            source_face_index: item.face_index,
+                            ability: TriggeredAbilityDef {
+                                trigger: TriggerCondition::AtBeginningOfNextEndStep,
+                                effect: vec![SpellEffectKind::SacrificeObservedObjects],
+                                modal: None,
+                                targeting: None,
+                                text:
+                                    "At the beginning of the next end step, sacrifice those tokens."
+                                        .to_string(),
+                                may: false,
+                                intervening_if: None,
+                                triggers_only_once: false,
+                            },
+                        },
+                    )),
+                });
+            }
         }
         self.fire_triggers(&trigger_events);
         events.extend(logs.into_iter().map(ev_log));
@@ -1054,22 +1134,15 @@ impl GameEngine {
                 events.push(ev_log(format!("P{owner} manifests dread.")));
                 self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
             }
-            BattlefieldEntryCompletion::TokenBatch {
-                current_created,
-                ready,
-                remaining,
-                logs,
-            } => {
+            BattlefieldEntryCompletion::TokenBatch(batch) => {
                 let current = TokenBattlefieldEntry {
                     event,
-                    created: current_created,
+                    created: batch.current_created.clone(),
                 };
                 if self.continue_token_entry_batch(
                     stack.item.clone(),
                     current,
-                    ready,
-                    remaining,
-                    logs,
+                    *batch,
                     &mut events,
                 )? {
                     return Ok(finish_with_events(self, events));

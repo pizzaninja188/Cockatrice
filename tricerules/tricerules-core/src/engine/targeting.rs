@@ -1167,6 +1167,8 @@ fn validate_effect_targets(
         | SpellEffectKind::GrantKeywordsAll { .. }
         | SpellEffectKind::GrantKeywordsAllPermanents { .. }
         | SpellEffectKind::CreateTokens { .. }
+        | SpellEffectKind::CreateAttackingTokens { .. }
+        | SpellEffectKind::SacrificeObservedObjects
         | SpellEffectKind::PreventAllCombatDamageTurn
         | SpellEffectKind::DamageCantBePreventedThisTurn
         // CR 605.1a: a mana ability is untargeted by definition.

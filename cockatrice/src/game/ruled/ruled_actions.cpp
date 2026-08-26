@@ -541,6 +541,15 @@ bool tryHandleCombatClick(CardItem *card)
     const bool creature = isCombatEligibleCreature(card);
     const bool ownCreature = creature && owner && owner->getPlayerInfo()->getLocal();
 
+    if (state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AttackingTokenDefender)) {
+        if (state->isLegalAttackPermanentDefender(oid)) {
+            state->chooseAttackPermanentDefender(oid);
+        }
+        // Consume every battlefield click while the engine is waiting for this mandatory choice;
+        // an invalid click must never fall through to freeform movement or selection.
+        return true;
+    }
+
     if (phase == Phase::DeclareAttackers && state->localPlayerIsActive() && state->isChoosingAttackDefender() &&
         state->isLegalAttackPermanentDefender(oid)) {
         state->chooseAttackPermanentDefender(oid);
