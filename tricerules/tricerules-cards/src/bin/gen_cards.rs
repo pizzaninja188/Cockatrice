@@ -1,9 +1,9 @@
-//! Batch generator for vanilla and french-vanilla cards (Phase 6).
+//! Fail-closed batch generator for exactly supported card recipes.
 //!
-//! Vanilla creatures (no rules text) and french-vanilla creatures (text consists solely of
-//! keyword abilities the engine already supports) are fully expressible with existing
-//! primitives. Supported multi-face layouts use the same rule independently for every face.
-//! This binary turns the Scryfall **bulk** `oracle_cards`
+//! Each functional Oracle-text clause must match one typed recipe exactly once. Vanilla and
+//! french-vanilla creatures remain supported, alongside a deliberately narrow set of spell,
+//! triggered, and activated-ability recipes. Supported multi-face layouts apply the same
+//! fail-closed rule independently to every face. This binary turns the Scryfall **bulk** `oracle_cards`
 //! dump into one RON file per qualifying card under `data/generated/<first-letter>/`, which
 //! `build.rs` then embeds automatically.
 //!
@@ -14,23 +14,33 @@
 //!
 //! ```text
 //! cargo run -p tricerules-cards --features gencards --bin gen-cards -- \
-//!     --input oracle-cards.json --dry-run
+//!     --input oracle-cards.jsonl.gz --dry-run
 //! ```
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
-use std::io::BufReader;
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader, Read};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use flate2::read::GzDecoder;
+use serde::Deserialize;
 use serde_json::Value;
-use tricerules_cards::{slugify, CardRegistry, Color, ManaCost};
+use sha2::{Digest, Sha256};
+use tricerules_cards::primitives::{EffectSubject, PlayerRecipient, TargetFilter};
+use tricerules_cards::{
+    slugify, AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivationTiming, Amount,
+    CardRegistry, Color, Keyword, ManaAmount, ManaCost, SpellEffectKind, TriggerCondition,
+    TriggeredAbilityDef,
+};
 
 /// MTG supertypes (CR 205.4). Everything else on the left of the em dash is a card type.
 const SUPERTYPES: &[&str] = &["Basic", "Legendary", "Snow", "World", "Ongoing", "Host"];
 
 struct Args {
     input: String,
+    metadata: PathBuf,
+    oracle_tags: Option<String>,
     out_dir: PathBuf,
     dry_run: bool,
     limit: Option<usize>,
@@ -38,9 +48,11 @@ struct Args {
 
 fn print_usage() {
     eprintln!(
-        "gen-cards — batch vanilla/french-vanilla card generator\n\n\
+        "gen-cards — fail-closed exact-recipe card generator\n\n\
          Options:\n  \
-         --input <path>     Scryfall bulk `oracle_cards` JSON (required)\n  \
+         --input <path>     Scryfall `oracle_cards` .jsonl.gz (required)\n  \
+         --metadata <path>  bulk metadata sidecar (default: <input>.meta.json)\n  \
+         --oracle-tags <path> optional `oracle_tags` .jsonl.gz advisory report\n  \
          --out-dir <path>   output root (default: data/generated, relative to this crate)\n  \
          --dry-run          report counts + skip reasons, write nothing\n  \
          --limit <N>        emit at most N cards (for spot checks)\n  \
@@ -50,6 +62,8 @@ fn print_usage() {
 
 fn parse_args() -> Result<Args, String> {
     let mut input: Option<String> = None;
+    let mut metadata: Option<PathBuf> = None;
+    let mut oracle_tags: Option<String> = None;
     let mut out_dir: Option<PathBuf> = None;
     let mut dry_run = false;
     let mut limit: Option<usize> = None;
@@ -58,6 +72,10 @@ fn parse_args() -> Result<Args, String> {
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--input" => input = Some(it.next().ok_or("--input needs a value")?),
+            "--metadata" => {
+                metadata = Some(PathBuf::from(it.next().ok_or("--metadata needs a value")?))
+            }
+            "--oracle-tags" => oracle_tags = Some(it.next().ok_or("--oracle-tags needs a value")?),
             "--out-dir" => {
                 out_dir = Some(PathBuf::from(it.next().ok_or("--out-dir needs a value")?))
             }
@@ -79,6 +97,7 @@ fn parse_args() -> Result<Args, String> {
     }
 
     let input = input.ok_or("--input <path> is required")?;
+    let metadata = metadata.unwrap_or_else(|| PathBuf::from(format!("{input}.meta.json")));
     let out_dir = out_dir.unwrap_or_else(|| {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("data")
@@ -86,15 +105,235 @@ fn parse_args() -> Result<Args, String> {
     });
     Ok(Args {
         input,
+        metadata,
+        oracle_tags,
         out_dir,
         dry_run,
         limit,
     })
 }
 
+#[derive(Debug, Deserialize)]
+struct BulkMetadata {
+    #[serde(rename = "type")]
+    kind: String,
+    id: String,
+    updated_at: String,
+    jsonl_download_uri: String,
+    sha256: String,
+}
+
+fn hash_file(path: &Path) -> Result<String, String> {
+    let mut file = fs::File::open(path)
+        .map_err(|error| format!("cannot open {} for hashing: {error}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|error| format!("cannot hash {}: {error}", path.display()))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn provenance_from_metadata(
+    metadata: &BulkMetadata,
+    actual_sha256: &str,
+) -> Result<String, String> {
+    if metadata.kind != "oracle_cards" {
+        return Err(format!(
+            "metadata describes {:?}, expected oracle_cards",
+            metadata.kind
+        ));
+    }
+    if !metadata.sha256.eq_ignore_ascii_case(actual_sha256) {
+        return Err(format!(
+            "bulk SHA-256 mismatch: metadata has {}, input is {actual_sha256}",
+            metadata.sha256
+        ));
+    }
+    if metadata.id.trim().is_empty()
+        || metadata.updated_at.trim().is_empty()
+        || metadata.jsonl_download_uri.trim().is_empty()
+    {
+        return Err("bulk metadata is missing id, updated_at, or jsonl_download_uri".into());
+    }
+    Ok(format!(
+        "generated by gen-cards from Scryfall {} {} updated {} sha256:{}",
+        metadata.kind, metadata.id, metadata.updated_at, actual_sha256
+    ))
+}
+
+fn load_provenance(input: &Path, metadata_path: &Path) -> Result<String, String> {
+    let actual_sha256 = hash_file(input)?;
+    let metadata_file = fs::File::open(metadata_path).map_err(|error| {
+        format!(
+            "cannot open bulk metadata {}: {error}; fetch the input with fetch-scryfall-bulk",
+            metadata_path.display()
+        )
+    })?;
+    let metadata: BulkMetadata = serde_json::from_reader(BufReader::new(metadata_file))
+        .map_err(|error| format!("cannot parse {}: {error}", metadata_path.display()))?;
+    provenance_from_metadata(&metadata, &actual_sha256)
+}
+
+fn for_each_jsonl<R: BufRead>(
+    mut reader: R,
+    mut visit: impl FnMut(Value) -> bool,
+) -> Result<usize, String> {
+    let mut line = String::new();
+    let mut line_number = 0usize;
+    loop {
+        line.clear();
+        let bytes = reader
+            .read_line(&mut line)
+            .map_err(|error| format!("failed to read JSONL line {}: {error}", line_number + 1))?;
+        if bytes == 0 {
+            break;
+        }
+        line_number += 1;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let value = serde_json::from_str(&line)
+            .map_err(|error| format!("invalid JSONL record on line {line_number}: {error}"))?;
+        if !visit(value) {
+            break;
+        }
+    }
+    Ok(line_number)
+}
+
+fn for_each_gzipped_jsonl(path: &Path, visit: impl FnMut(Value) -> bool) -> Result<usize, String> {
+    let file =
+        fs::File::open(path).map_err(|error| format!("cannot open {}: {error}", path.display()))?;
+    let decoder = GzDecoder::new(file);
+    for_each_jsonl(BufReader::new(decoder), visit)
+}
+
+#[cfg(test)]
+fn read_gzipped_jsonl(reader: impl Read) -> Result<Vec<Value>, String> {
+    let decoder = GzDecoder::new(reader);
+    let mut values = Vec::new();
+    for_each_jsonl(BufReader::new(decoder), |value| {
+        values.push(value);
+        true
+    })?;
+    Ok(values)
+}
+
+#[derive(Debug, Deserialize)]
+struct OracleTagRecord {
+    id: String,
+    label: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    taggings: Vec<OracleTagging>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OracleTagging {
+    oracle_id: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct OracleTagReportEntry {
+    id: String,
+    label: String,
+    description: Option<String>,
+    count: usize,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct OracleTagReport {
+    entries: Vec<OracleTagReportEntry>,
+}
+
+impl OracleTagReport {
+    fn render(&self) -> String {
+        let mut output =
+            String::from("\nOracle Tags among unsupported-rules cards (advisory only):\n");
+        if self.entries.is_empty() {
+            output.push_str("  (no matching taggings)\n");
+            return output;
+        }
+        for entry in self.entries.iter().take(25) {
+            output.push_str(&format!(
+                "  {:>7}  {}  {}",
+                entry.count, entry.id, entry.label
+            ));
+            if let Some(description) = entry
+                .description
+                .as_deref()
+                .filter(|value| !value.is_empty())
+            {
+                output.push_str(&format!(" - {description}"));
+            }
+            output.push('\n');
+        }
+        output
+    }
+}
+
+fn oracle_tag_report_from_reader(
+    reader: impl Read,
+    unsupported_oracle_ids: &HashSet<String>,
+) -> Result<OracleTagReport, String> {
+    let decoder = GzDecoder::new(reader);
+    let mut entries = Vec::new();
+    for_each_jsonl(BufReader::new(decoder), |value| {
+        let record: OracleTagRecord = match serde_json::from_value(value) {
+            Ok(record) => record,
+            Err(error) => {
+                entries.push(Err(format!("invalid oracle tag record: {error}")));
+                return false;
+            }
+        };
+        let count = record
+            .taggings
+            .iter()
+            .filter(|tagging| unsupported_oracle_ids.contains(&tagging.oracle_id))
+            .map(|tagging| tagging.oracle_id.as_str())
+            .collect::<HashSet<_>>()
+            .len();
+        if count > 0 {
+            entries.push(Ok(OracleTagReportEntry {
+                id: record.id,
+                label: record.label,
+                description: record.description,
+                count,
+            }));
+        }
+        true
+    })?;
+
+    let mut resolved = entries.into_iter().collect::<Result<Vec<_>, _>>()?;
+    resolved.sort_by(|left, right| {
+        right
+            .count
+            .cmp(&left.count)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    Ok(OracleTagReport { entries: resolved })
+}
+
+fn oracle_tag_report(
+    path: &Path,
+    unsupported_oracle_ids: &HashSet<String>,
+) -> Result<OracleTagReport, String> {
+    let file =
+        fs::File::open(path).map_err(|error| format!("cannot open {}: {error}", path.display()))?;
+    oracle_tag_report_from_reader(file, unsupported_oracle_ids)
+}
+
 /// Maps an Oracle keyword string (case-insensitive) to the RON `Keyword` variant ident.
 /// `None` means the keyword isn't in the supported set, so the card isn't french-vanilla.
-fn keyword_ident(token: &str) -> Option<&'static str> {
+fn keyword_ident(token: &str) -> Option<Keyword> {
     match token
         .trim()
         .trim_end_matches('.')
@@ -102,20 +341,22 @@ fn keyword_ident(token: &str) -> Option<&'static str> {
         .to_lowercase()
         .as_str()
     {
-        "flying" => Some("Flying"),
-        "reach" => Some("Reach"),
-        "intimidate" => Some("Intimidate"),
-        "vigilance" => Some("Vigilance"),
-        "lifelink" => Some("Lifelink"),
-        "haste" => Some("Haste"),
-        "deathtouch" => Some("Deathtouch"),
-        "menace" => Some("Menace"),
-        "trample" => Some("Trample"),
-        "first strike" => Some("FirstStrike"),
-        "double strike" => Some("DoubleStrike"),
-        "indestructible" => Some("Indestructible"),
-        "hexproof" => Some("Hexproof"),
-        "shroud" => Some("Shroud"),
+        "flying" => Some(Keyword::Flying),
+        "reach" => Some(Keyword::Reach),
+        "intimidate" => Some(Keyword::Intimidate),
+        "vigilance" => Some(Keyword::Vigilance),
+        "lifelink" => Some(Keyword::Lifelink),
+        "haste" => Some(Keyword::Haste),
+        "deathtouch" => Some(Keyword::Deathtouch),
+        "menace" => Some(Keyword::Menace),
+        "trample" => Some(Keyword::Trample),
+        "first strike" => Some(Keyword::FirstStrike),
+        "double strike" => Some(Keyword::DoubleStrike),
+        "indestructible" => Some(Keyword::Indestructible),
+        "hexproof" => Some(Keyword::Hexproof),
+        "shroud" => Some(Keyword::Shroud),
+        "defender" => Some(Keyword::Defender),
+        "flash" => Some(Keyword::Flash),
         _ => None,
     }
 }
@@ -138,9 +379,9 @@ fn strip_reminder(text: &str) -> String {
 /// If `oracle_text` is empty or consists solely of supported keyword abilities, returns the
 /// ordered, de-duplicated list of RON keyword idents (empty for a vanilla creature).
 /// Returns `None` if any token isn't a supported keyword (not french-vanilla).
-fn french_vanilla_keywords(oracle_text: &str) -> Option<Vec<&'static str>> {
+fn french_vanilla_keywords(oracle_text: &str) -> Option<Vec<Keyword>> {
     let cleaned = strip_reminder(oracle_text);
-    let mut keywords: Vec<&'static str> = Vec::new();
+    let mut keywords: Vec<Keyword> = Vec::new();
     for token in cleaned
         .split(['\n', ',', ';'])
         .map(str::trim)
@@ -152,6 +393,218 @@ fn french_vanilla_keywords(oracle_text: &str) -> Option<Vec<&'static str>> {
         }
     }
     Some(keywords)
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct ParsedRules {
+    keywords: Vec<Keyword>,
+    spell_effect: Vec<SpellEffectKind>,
+    activated_abilities: Vec<ActivatedAbilityDef>,
+    triggered_abilities: Vec<TriggeredAbilityDef>,
+    recipe_labels: Vec<&'static str>,
+}
+
+fn parse_count_word(value: &str) -> Option<u32> {
+    match value {
+        "a" | "one" => Some(1),
+        "two" => Some(2),
+        "three" => Some(3),
+        "four" => Some(4),
+        _ => value.parse().ok(),
+    }
+}
+
+fn parse_draw_effect(text: &str) -> Option<SpellEffectKind> {
+    let count = text
+        .strip_prefix("Draw ")?
+        .strip_suffix('.')?
+        .strip_suffix(" card")
+        .or_else(|| text.strip_prefix("Draw ")?.strip_suffix(" cards."))?;
+    Some(SpellEffectKind::Draw {
+        who: PlayerRecipient::Controller,
+        count: Amount::Fixed(parse_count_word(count)?),
+    })
+}
+
+fn parse_gain_life_effect(text: &str) -> Option<SpellEffectKind> {
+    let amount = text
+        .strip_prefix("You gain ")?
+        .strip_suffix(" life.")?
+        .parse()
+        .ok()?;
+    Some(SpellEffectKind::GainLife {
+        amount: Amount::Fixed(amount),
+    })
+}
+
+fn parse_pump_effect(text: &str) -> Option<SpellEffectKind> {
+    let deltas = text
+        .strip_prefix("Target creature gets +")?
+        .strip_suffix(" until end of turn.")?;
+    let (power, toughness) = deltas.split_once("/+")?;
+    Some(SpellEffectKind::PumpTarget {
+        power: power.parse().ok()?,
+        toughness: toughness.parse().ok()?,
+        scale: None,
+        subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+    })
+}
+
+fn parse_spell_recipe(text: &str) -> Option<(SpellEffectKind, &'static str)> {
+    if let Some(effect) = parse_draw_effect(text) {
+        return Some((effect, "draw spell"));
+    }
+    if let Some(effect) = parse_gain_life_effect(text) {
+        return Some((effect, "gain-life spell"));
+    }
+    if text == "Destroy target creature." {
+        return Some((
+            SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+            },
+            "destroy target creature",
+        ));
+    }
+    if text == "Return target creature to its owner's hand." {
+        return Some((
+            SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+            },
+            "return target creature",
+        ));
+    }
+    if text == "Counter target spell." {
+        return Some((
+            SpellEffectKind::CounterTargetSpell {
+                spell_filter: None,
+                unless_controller_pays: None,
+                unless_controller_pays_by_cast_cost: None,
+            },
+            "counter target spell",
+        ));
+    }
+    parse_pump_effect(text).map(|effect| (effect, "fixed creature pump"))
+}
+
+fn parse_etb_recipe(text: &str) -> Option<(TriggeredAbilityDef, &'static str)> {
+    let instruction = text.strip_prefix("When this creature enters, ")?;
+    let (effect, label) = if let Some(effect) = parse_draw_effect(&capitalize(instruction)) {
+        (effect, "ETB draw")
+    } else if let Some(effect) = parse_gain_life_effect(&capitalize(instruction)) {
+        (effect, "ETB gain life")
+    } else if instruction == "each opponent discards a card." {
+        (
+            SpellEffectKind::Discard {
+                who: PlayerRecipient::EachOpponent,
+                count: 1,
+            },
+            "ETB opponent discard",
+        )
+    } else {
+        return None;
+    };
+    Some((
+        TriggeredAbilityDef {
+            trigger: TriggerCondition::WhenSelfEntersBattlefield,
+            effect: vec![effect],
+            modal: None,
+            targeting: None,
+            text: text.to_string(),
+            may: false,
+            intervening_if: None,
+            triggers_only_once: false,
+        },
+        label,
+    ))
+}
+
+fn capitalize(value: &str) -> String {
+    let mut chars = value.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+
+fn parse_mana_amount(symbol: char) -> Option<ManaAmount> {
+    let mut amount = ManaAmount::default();
+    match symbol {
+        'W' => amount.w = 1,
+        'U' => amount.u = 1,
+        'B' => amount.b = 1,
+        'R' => amount.r = 1,
+        'G' => amount.g = 1,
+        'C' => amount.c = 1,
+        _ => return None,
+    }
+    Some(amount)
+}
+
+fn parse_mana_ability_recipe(text: &str) -> Option<(ActivatedAbilityDef, &'static str)> {
+    let symbol = text.strip_prefix("{T}: Add {")?.strip_suffix("}.")?;
+    let mut chars = symbol.chars();
+    let amount = parse_mana_amount(chars.next()?)?;
+    if chars.next().is_some() {
+        return None;
+    }
+    Some((
+        ActivatedAbilityDef {
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::Tap],
+            effect: vec![SpellEffectKind::ProduceMana {
+                options: vec![amount],
+                restriction: None,
+                conditional: None,
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+            text: text.to_string(),
+        },
+        "tap for one mana",
+    ))
+}
+
+fn parse_rules_text(oracle_text: &str, is_spell: bool) -> Option<ParsedRules> {
+    let cleaned = strip_reminder(oracle_text);
+    let mut parsed = ParsedRules::default();
+    for clause in cleaned
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        if let Some(keywords) = french_vanilla_keywords(clause).filter(|values| !values.is_empty())
+        {
+            for keyword in keywords {
+                if !parsed.keywords.contains(&keyword) {
+                    parsed.keywords.push(keyword);
+                }
+            }
+            continue;
+        }
+        if is_spell {
+            let (effect, label) = parse_spell_recipe(clause)?;
+            if !parsed.spell_effect.is_empty() {
+                return None;
+            }
+            parsed.spell_effect.push(effect);
+            parsed.recipe_labels.push(label);
+            continue;
+        }
+        if let Some((ability, label)) = parse_etb_recipe(clause) {
+            parsed.triggered_abilities.push(ability);
+            parsed.recipe_labels.push(label);
+            continue;
+        }
+        if let Some((ability, label)) = parse_mana_ability_recipe(clause) {
+            parsed.activated_abilities.push(ability);
+            parsed.recipe_labels.push(label);
+            continue;
+        }
+        return None;
+    }
+    Some(parsed)
 }
 
 /// Splits an MTG type line into (supertypes, card types, subtypes).
@@ -220,7 +673,11 @@ struct GenFace {
     power: Option<u32>,
     toughness: Option<u32>,
     color_indicator: Option<Vec<Color>>,
-    keywords: Vec<&'static str>,
+    keywords: Vec<Keyword>,
+    spell_effect: Vec<SpellEffectKind>,
+    activated_abilities: Vec<ActivatedAbilityDef>,
+    triggered_abilities: Vec<TriggeredAbilityDef>,
+    recipe_labels: Vec<&'static str>,
 }
 
 /// A card that passed every filter and is ready to emit.
@@ -267,11 +724,151 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
         s.push_str(&format!("{indent}color_indicator: Some([{colors}]),\n"));
     }
     if !face.keywords.is_empty() {
+        let keywords = face
+            .keywords
+            .iter()
+            .map(|keyword| format!("{keyword:?}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        s.push_str(&format!("{indent}keywords: [{}],\n", keywords));
+    }
+    if !face.spell_effect.is_empty() {
         s.push_str(&format!(
-            "{indent}keywords: [{}],\n",
-            face.keywords.join(", ")
+            "{indent}spell_effect: [{}],\n",
+            face.spell_effect
+                .iter()
+                .map(render_generated_effect)
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
+    if !face.activated_abilities.is_empty() {
+        s.push_str(&format!(
+            "{indent}activated_abilities: [{}],\n",
+            face.activated_abilities
+                .iter()
+                .map(render_generated_activated_ability)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if !face.triggered_abilities.is_empty() {
+        s.push_str(&format!(
+            "{indent}triggered_abilities: [{}],\n",
+            face.triggered_abilities
+                .iter()
+                .map(render_generated_triggered_ability)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+}
+
+fn render_generated_effect(effect: &SpellEffectKind) -> String {
+    match effect {
+        SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(count),
+        } => format!("Draw(count: {count})"),
+        SpellEffectKind::GainLife {
+            amount: Amount::Fixed(amount),
+        } => format!("GainLife(amount: {amount})"),
+        SpellEffectKind::Destroy { subject }
+            if *subject == EffectSubject::Chosen(TargetFilter::default_creature()) =>
+        {
+            "Destroy()".into()
+        }
+        SpellEffectKind::ReturnToOwnersHand { subject }
+            if *subject == EffectSubject::Chosen(TargetFilter::default_creature()) =>
+        {
+            "ReturnToOwnersHand(subject: Chosen((kind: Creature)))".into()
+        }
+        SpellEffectKind::CounterTargetSpell {
+            spell_filter: None,
+            unless_controller_pays: None,
+            unless_controller_pays_by_cast_cost: None,
+        } => "CounterTargetSpell(spell_filter: None, unless_controller_pays: None)".into(),
+        SpellEffectKind::PumpTarget {
+            power,
+            toughness,
+            scale: None,
+            subject,
+        } if *subject == EffectSubject::Chosen(TargetFilter::default_creature()) => {
+            format!("PumpTarget(power: {power}, toughness: {toughness})")
+        }
+        SpellEffectKind::Discard {
+            who: PlayerRecipient::EachOpponent,
+            count,
+        } => format!("Discard(who: EachOpponent, count: {count})"),
+        SpellEffectKind::ProduceMana {
+            options,
+            restriction: None,
+            conditional: None,
+        } if options.len() == 1 => {
+            format!("ProduceMana(options: [{}])", render_mana_amount(options[0]))
+        }
+        _ => ron::ser::to_string(effect).expect("generated effect should serialize"),
+    }
+}
+
+fn render_mana_amount(amount: ManaAmount) -> String {
+    for (name, value) in [
+        ("w", amount.w),
+        ("u", amount.u),
+        ("b", amount.b),
+        ("r", amount.r),
+        ("g", amount.g),
+        ("c", amount.c),
+    ] {
+        if value != 0 {
+            return format!("({name}: {value})");
+        }
+    }
+    ron::ser::to_string(&amount).expect("generated mana amount should serialize")
+}
+
+fn render_generated_activated_ability(ability: &ActivatedAbilityDef) -> String {
+    if ability.source_zone == AbilitySourceZone::Battlefield
+        && ability.costs == [AbilityCost::Tap]
+        && ability.targeting.is_none()
+        && ability.timing == ActivationTiming::Normal
+        && ability.conditions.is_empty()
+        && ability.activation_limit.is_none()
+    {
+        return format!(
+            "(costs: [Tap], effect: [{}], text: {:?})",
+            ability
+                .effect
+                .iter()
+                .map(render_generated_effect)
+                .collect::<Vec<_>>()
+                .join(", "),
+            ability.text
+        );
+    }
+    ron::ser::to_string(ability).expect("generated activated ability should serialize")
+}
+
+fn render_generated_triggered_ability(ability: &TriggeredAbilityDef) -> String {
+    if ability.trigger == TriggerCondition::WhenSelfEntersBattlefield
+        && ability.modal.is_none()
+        && ability.targeting.is_none()
+        && !ability.may
+        && ability.intervening_if.is_none()
+        && !ability.triggers_only_once
+    {
+        return format!(
+            "(trigger: WhenSelfEntersBattlefield, effect: [{}], text: {:?})",
+            ability
+                .effect
+                .iter()
+                .map(render_generated_effect)
+                .collect::<Vec<_>>()
+                .join(", "),
+            ability.text
+        );
+    }
+    ron::ser::to_string(ability).expect("generated triggered ability should serialize")
 }
 
 impl GenCard {
@@ -281,6 +878,12 @@ impl GenCard {
             names.extend(self.faces.iter().map(|face| face.name.as_str()));
         }
         names
+    }
+
+    fn recipe_labels(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.faces
+            .iter()
+            .flat_map(|face| face.recipe_labels.iter().copied())
     }
 
     /// Renders canonical RON. Normal cards deliberately retain the pre-multiface flat form.
@@ -331,25 +934,30 @@ impl Skip {
         match self {
             Skip::Layout => "unsupported layout",
             Skip::MalformedFaces => "missing or malformed two-face data",
-            Skip::NotCreature => "not a creature",
+            Skip::NotCreature => "unsupported noncreature card",
             Skip::DigitalOrFunny => "digital-only / funny / token",
             Skip::BadPowerToughness => "power/toughness not a plain integer",
             Skip::BadManaCost => "mana cost has unsupported/X symbols",
-            Skip::NonKeywordText => "rules text beyond supported keywords",
+            Skip::NonKeywordText => "rules text has no exact supported recipe",
             Skip::FacePowerToughness => "face power/toughness not paired plain integers",
             Skip::FaceManaCost => "face mana cost has unsupported/X symbols",
-            Skip::FaceText => "face rules text beyond supported keywords",
+            Skip::FaceText => "face rules text has no exact supported recipe",
             Skip::FaceColors => "face colors are invalid or inconsistent",
             Skip::SlugCollision => "slug collides with another generated card",
             Skip::NameCollision => "whole-card or face name collision",
             Skip::AlreadyImplemented => "already present in data/",
         }
     }
+
+    fn is_rules_text(self) -> bool {
+        matches!(self, Skip::NonKeywordText | Skip::FaceText)
+    }
 }
 
 #[derive(Default)]
 struct GenerationStats {
     skips: BTreeMap<&'static str, usize>,
+    recipes: BTreeMap<&'static str, usize>,
     normal: usize,
     split: usize,
     modal_dfc: usize,
@@ -371,6 +979,12 @@ impl GenerationStats {
             GenLayout::Transform => self.transform += 1,
             GenLayout::Adventure => self.adventure += 1,
             GenLayout::Omen => self.omen += 1,
+        }
+    }
+
+    fn record_recipes(&mut self, card: &GenCard) {
+        for label in card.recipe_labels() {
+            *self.recipes.entry(label).or_default() += 1;
         }
     }
 
@@ -403,6 +1017,12 @@ impl GenerationStats {
             "\n{} card(s) qualify for generation.\n",
             self.total()
         ));
+        if !self.recipes.is_empty() {
+            report.push_str("\nExact recipe matches:\n");
+            for (label, count) in &self.recipes {
+                report.push_str(&format!("  {count:>7}  {label}\n"));
+            }
+        }
         report
     }
 }
@@ -501,7 +1121,10 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, Skip> {
         None | Some(Value::Null) => "",
         Some(value) => value.as_str().ok_or(Skip::MalformedFaces)?,
     };
-    let keywords = french_vanilla_keywords(oracle_text).ok_or(Skip::FaceText)?;
+    let is_spell = types
+        .iter()
+        .any(|card_type| matches!(card_type.as_str(), "Instant" | "Sorcery"));
+    let rules = parse_rules_text(oracle_text, is_spell).ok_or(Skip::FaceText)?;
 
     let source_colors = face
         .get("colors")
@@ -526,25 +1149,26 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, Skip> {
         power,
         toughness,
         color_indicator,
-        keywords,
+        keywords: rules.keywords,
+        spell_effect: rules.spell_effect,
+        activated_abilities: rules.activated_abilities,
+        triggered_abilities: rules.triggered_abilities,
+        recipe_labels: rules.recipe_labels,
     })
 }
 
 fn evaluate_normal(card: &Value) -> Result<GenCard, Skip> {
     let type_line = str_field(card, "type_line");
-    if !type_line
-        .split_whitespace()
-        .any(|token| token == "Creature")
-    {
-        return Err(Skip::NotCreature);
+    let (supertypes, card_types, subtypes) = parse_type_line(type_line);
+    let is_creature = card_types.iter().any(|value| value == "Creature");
+    let is_spell = card_types
+        .iter()
+        .any(|value| matches!(value.as_str(), "Instant" | "Sorcery"));
+    let (power, toughness) =
+        parse_optional_power_toughness(card).map_err(|_| Skip::BadPowerToughness)?;
+    if is_creature && (power.is_none() || toughness.is_none()) {
+        return Err(Skip::BadPowerToughness);
     }
-
-    let power = str_field(card, "power")
-        .parse::<u32>()
-        .map_err(|_| Skip::BadPowerToughness)?;
-    let toughness = str_field(card, "toughness")
-        .parse::<u32>()
-        .map_err(|_| Skip::BadPowerToughness)?;
 
     let mana_cost = str_field(card, "mana_cost").to_string();
     let parsed = ManaCost::parse(&mana_cost).map_err(|_| Skip::BadManaCost)?;
@@ -552,10 +1176,15 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, Skip> {
         return Err(Skip::BadManaCost);
     }
 
-    let keywords =
-        french_vanilla_keywords(str_field(card, "oracle_text")).ok_or(Skip::NonKeywordText)?;
+    let rules =
+        parse_rules_text(str_field(card, "oracle_text"), is_spell).ok_or(Skip::NonKeywordText)?;
+    if !is_creature && !is_spell && rules.recipe_labels.is_empty() {
+        return Err(Skip::NotCreature);
+    }
+    if is_spell && rules.spell_effect.is_empty() {
+        return Err(Skip::NonKeywordText);
+    }
     let name = str_field(card, "name").to_string();
-    let (supertypes, card_types, subtypes) = parse_type_line(type_line);
     let mut types = card_types;
     types.extend(subtypes);
 
@@ -568,10 +1197,14 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, Skip> {
             mana_cost,
             supertypes,
             types,
-            power: Some(power),
-            toughness: Some(toughness),
+            power,
+            toughness,
             color_indicator: None,
-            keywords,
+            keywords: rules.keywords,
+            spell_effect: rules.spell_effect,
+            activated_abilities: rules.activated_abilities,
+            triggered_abilities: rules.triggered_abilities,
+            recipe_labels: rules.recipe_labels,
         }],
     })
 }
@@ -711,38 +1344,24 @@ fn main() -> ExitCode {
         }
     }
 
-    let file = match fs::File::open(&args.input) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("error: cannot open {}: {e}", args.input);
+    let input_path = Path::new(&args.input);
+    let provenance = match load_provenance(input_path, &args.metadata) {
+        Ok(provenance) => provenance,
+        Err(error) => {
+            eprintln!("error: {error}");
             return ExitCode::FAILURE;
         }
     };
-    let cards: Vec<Value> = match serde_json::from_reader(BufReader::new(file)) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!(
-                "error: failed to parse {} as a Scryfall JSON array: {e}",
-                args.input
-            );
-            return ExitCode::FAILURE;
-        }
-    };
-    eprintln!("Read {} cards from {}.", cards.len(), args.input);
-
-    let provenance = format!(
-        "generated by gen-cards from Scryfall bulk {}",
-        chrono_date()
-    );
 
     let mut generated_ids: HashSet<String> = HashSet::new();
     let mut generated_names: HashSet<String> = HashSet::new();
     let mut to_emit: Vec<GenCard> = Vec::new();
     let mut stats = GenerationStats::default();
+    let mut unsupported_oracle_ids = HashSet::new();
 
-    for card in &cards {
+    let read_count = match for_each_gzipped_jsonl(input_path, |card| {
         match evaluate(
-            card,
+            &card,
             &existing_ids,
             &existing_names,
             &generated_ids,
@@ -752,18 +1371,44 @@ fn main() -> ExitCode {
                 generated_ids.insert(gen.id.clone());
                 generated_names.extend(gen.names().into_iter().map(normalize_name));
                 stats.record_qualified(gen.layout);
+                stats.record_recipes(&gen);
                 to_emit.push(gen);
                 if let Some(limit) = args.limit {
                     if to_emit.len() >= limit {
-                        break;
+                        return false;
                     }
                 }
             }
-            Err(reason) => stats.record_skip(reason),
+            Err(reason) => {
+                if reason.is_rules_text() {
+                    let oracle_id = str_field(&card, "oracle_id");
+                    if !oracle_id.is_empty() {
+                        unsupported_oracle_ids.insert(oracle_id.to_string());
+                    }
+                }
+                stats.record_skip(reason);
+            }
         }
-    }
+        true
+    }) {
+        Ok(count) => count,
+        Err(error) => {
+            eprintln!("error: failed to read {}: {error}", args.input);
+            return ExitCode::FAILURE;
+        }
+    };
+    eprintln!("Read {read_count} cards from {}.", args.input);
 
     eprint!("{}", stats.render());
+    if let Some(tag_input) = &args.oracle_tags {
+        match oracle_tag_report(Path::new(tag_input), &unsupported_oracle_ids) {
+            Ok(report) => eprint!("{}", report.render()),
+            Err(error) => {
+                eprintln!("error: failed to read advisory Oracle Tags {tag_input}: {error}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
 
     if args.dry_run {
         eprintln!("(dry run — nothing written)");
@@ -793,42 +1438,20 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Best-effort current date `YYYY-MM-DD` for the provenance comment, derived from
-/// `SOURCE_DATE_EPOCH` if set (reproducible builds) else the system clock. No chrono dep.
-fn chrono_date() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = std::env::var("SOURCE_DATE_EPOCH")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or_else(|| {
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0)
-        });
-    // Civil date from days-since-epoch (Howard Hinnant's algorithm).
-    let days = (secs / 86_400) as i64;
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    format!("{y:04}-{m:02}-{d:02}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
     use ron::extensions::Extensions;
     use ron::Options;
     use serde_json::json;
+    use std::io::{Cursor, Write};
     use tricerules_cards::card_def::RawCardDefinition;
-    use tricerules_cards::{Color, Keyword, Layout};
+    use tricerules_cards::primitives::{EffectSubject, PlayerRecipient, TargetFilter};
+    use tricerules_cards::{
+        AbilityCost, Amount, Color, Keyword, Layout, SpellEffectKind, TriggerCondition,
+    };
 
     fn face(
         name: &str,
@@ -867,6 +1490,32 @@ mod tests {
         })
     }
 
+    fn normal_card(
+        name: &str,
+        mana_cost: &str,
+        type_line: &str,
+        oracle_text: &str,
+        power_toughness: Option<(&str, &str)>,
+    ) -> Value {
+        let mut value = json!({
+            "layout": "normal",
+            "oracle_id": format!("oracle-{name}"),
+            "name": name,
+            "set_type": "expansion",
+            "digital": false,
+            "border_color": "black",
+            "mana_cost": mana_cost,
+            "type_line": type_line,
+            "oracle_text": oracle_text,
+            "colors": [],
+        });
+        if let Some((power, toughness)) = power_toughness {
+            value["power"] = json!(power);
+            value["toughness"] = json!(toughness);
+        }
+        value
+    }
+
     fn evaluate_fresh(card: &Value) -> Result<GenCard, Skip> {
         evaluate(
             card,
@@ -882,6 +1531,82 @@ mod tests {
             .with_default_extension(Extensions::IMPLICIT_SOME)
             .from_str(ron)
             .expect("generated RON should deserialize")
+    }
+
+    #[test]
+    fn gzipped_jsonl_records_are_streamed_in_order() {
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        writeln!(encoder, "{}", json!({"name": "First"})).unwrap();
+        writeln!(encoder, "{}", json!({"name": "Second"})).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        let values = read_gzipped_jsonl(Cursor::new(compressed)).unwrap();
+        assert_eq!(values.len(), 2);
+        assert_eq!(str_field(&values[0], "name"), "First");
+        assert_eq!(str_field(&values[1], "name"), "Second");
+    }
+
+    #[test]
+    fn provenance_uses_verified_bulk_metadata_instead_of_wall_clock() {
+        let metadata = BulkMetadata {
+            kind: "oracle_cards".into(),
+            id: "bulk-id".into(),
+            updated_at: "2026-08-25T16:01:52.435-05:00".into(),
+            jsonl_download_uri: "https://data.scryfall.io/oracle-cards/example.jsonl.gz".into(),
+            sha256: "abc123".into(),
+        };
+
+        assert_eq!(
+            provenance_from_metadata(&metadata, "abc123").unwrap(),
+            "generated by gen-cards from Scryfall oracle_cards bulk-id updated 2026-08-25T16:01:52.435-05:00 sha256:abc123"
+        );
+        assert!(provenance_from_metadata(&metadata, "different").is_err());
+    }
+
+    #[test]
+    fn oracle_tags_report_by_stable_id_without_affecting_generated_ron() {
+        let card = json!({
+            "layout": "normal",
+            "oracle_id": "card-oracle-id",
+            "name": "Test Bear",
+            "set_type": "expansion",
+            "digital": false,
+            "border_color": "black",
+            "mana_cost": "{1}{G}",
+            "type_line": "Creature — Bear",
+            "oracle_text": "Vigilance",
+            "power": "2",
+            "toughness": "2",
+            "colors": ["G"],
+        });
+        let generated = evaluate_fresh(&card).unwrap();
+        let before = generated.to_ron("fixture");
+
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        writeln!(
+            encoder,
+            "{}",
+            json!({
+                "object": "tag",
+                "id": "stable-tag-id",
+                "label": "Mutable Label",
+                "slug": "mutable-slug",
+                "type": "oracle",
+                "description": "Advisory only.",
+                "taggings": [{"oracle_id": "card-oracle-id", "weight": "median"}],
+            })
+        )
+        .unwrap();
+        let report = oracle_tag_report_from_reader(
+            Cursor::new(encoder.finish().unwrap()),
+            &HashSet::from(["card-oracle-id".to_string()]),
+        )
+        .unwrap();
+
+        assert_eq!(generated.to_ron("fixture"), before);
+        assert_eq!(report.entries[0].id, "stable-tag-id");
+        assert_eq!(report.entries[0].label, "Mutable Label");
+        assert_eq!(report.entries[0].count, 1);
     }
 
     #[test]
@@ -905,6 +1630,340 @@ mod tests {
             generated.to_ron("fixture"),
             "// fixture\n(\n  id: \"test_bear\",\n  name: \"Test Bear\",\n  mana_cost: \"{1}{G}\",\n  types: [\"Creature\", \"Bear\"],\n  power: 2,\n  toughness: 2,\n  keywords: [Vigilance],\n)\n"
         );
+    }
+
+    #[test]
+    fn exact_spell_recipes_emit_typed_existing_primitives() {
+        let cases = [
+            (
+                normal_card(
+                    "Counsel of the Soratami",
+                    "{2}{U}",
+                    "Sorcery",
+                    "Draw two cards.",
+                    None,
+                ),
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(2),
+                },
+            ),
+            (
+                normal_card(
+                    "Sacred Nectar",
+                    "{1}{W}",
+                    "Sorcery",
+                    "You gain 4 life.",
+                    None,
+                ),
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(4),
+                },
+            ),
+            (
+                normal_card(
+                    "Impale",
+                    "{2}{B}{B}",
+                    "Sorcery",
+                    "Destroy target creature.",
+                    None,
+                ),
+                SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+                },
+            ),
+            (
+                normal_card(
+                    "Drown in Shapelessness",
+                    "{1}{U}",
+                    "Instant",
+                    "Return target creature to its owner's hand.",
+                    None,
+                ),
+                SpellEffectKind::ReturnToOwnersHand {
+                    subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+                },
+            ),
+            (
+                normal_card(
+                    "Cancel",
+                    "{1}{U}{U}",
+                    "Instant",
+                    "Counter target spell.",
+                    None,
+                ),
+                SpellEffectKind::CounterTargetSpell {
+                    spell_filter: None,
+                    unless_controller_pays: None,
+                    unless_controller_pays_by_cast_cost: None,
+                },
+            ),
+            (
+                normal_card(
+                    "Titanic Growth",
+                    "{1}{G}",
+                    "Instant",
+                    "Target creature gets +4/+4 until end of turn.",
+                    None,
+                ),
+                SpellEffectKind::PumpTarget {
+                    power: 4,
+                    toughness: 4,
+                    scale: None,
+                    subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+                },
+            ),
+        ];
+
+        for (card, expected) in cases {
+            let generated = evaluate_fresh(&card).expect("exact spell recipe should qualify");
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.spell_effect, [expected]);
+        }
+    }
+
+    #[test]
+    fn generated_recipe_ron_keeps_default_fields_compact() {
+        let card = normal_card(
+            "Titanic Growth",
+            "{1}{G}",
+            "Instant",
+            "Target creature gets +4/+4 until end of turn.",
+            None,
+        );
+        let ron = evaluate_fresh(&card).unwrap().to_ron("fixture");
+        assert!(ron.contains("spell_effect: [PumpTarget(power: 4, toughness: 4)],"));
+        assert!(!ron.contains("targeting:None"));
+        assert!(!ron.contains("required_subtypes"));
+    }
+
+    #[test]
+    fn exact_permanent_ability_recipes_compose_with_keywords() {
+        let card = normal_card(
+            "Recipe Visionary",
+            "{2}{G}",
+            "Creature — Elf Druid",
+            "Defender\nFlash\nWhen this creature enters, draw two cards.\nWhen this creature enters, you gain 3 life.\nWhen this creature enters, each opponent discards a card.\n{T}: Add {G}.",
+            Some(("2", "2")),
+        );
+
+        let generated = evaluate_fresh(&card).expect("all exact clauses should compose");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Defender, Keyword::Flash]);
+        assert_eq!(raw.triggered_abilities.len(), 3);
+        assert!(raw
+            .triggered_abilities
+            .iter()
+            .all(|ability| ability.trigger == TriggerCondition::WhenSelfEntersBattlefield));
+        assert_eq!(raw.activated_abilities.len(), 1);
+        assert_eq!(raw.activated_abilities[0].costs, [AbilityCost::Tap]);
+        assert!(raw.activated_abilities[0].mana_options().is_some());
+    }
+
+    #[test]
+    fn recipes_fail_closed_on_near_misses_or_unconsumed_clauses() {
+        for text in [
+            "You may draw a card.",
+            "Destroy up to one target creature.",
+            "Target creature gets +X/+X until end of turn.",
+            "Draw two cards. You lose 2 life.",
+            "Choose one —\n• Draw two cards.\n• You gain 4 life.",
+        ] {
+            let card = normal_card("Near Miss", "{2}{U}", "Sorcery", text, None);
+            assert_eq!(evaluate_fresh(&card), Err(Skip::NonKeywordText), "{text}");
+        }
+    }
+
+    #[test]
+    fn every_recipe_has_two_named_calibration_cards() {
+        let cases = [
+            (
+                "Divination",
+                "{2}{U}",
+                "Sorcery",
+                "Draw two cards.",
+                None,
+                "draw spell",
+            ),
+            (
+                "Counsel of the Soratami",
+                "{2}{U}",
+                "Sorcery",
+                "Draw two cards.",
+                None,
+                "draw spell",
+            ),
+            (
+                "Angel's Mercy",
+                "{2}{W}{W}",
+                "Instant",
+                "You gain 7 life.",
+                None,
+                "gain-life spell",
+            ),
+            (
+                "Sacred Nectar",
+                "{1}{W}",
+                "Sorcery",
+                "You gain 4 life.",
+                None,
+                "gain-life spell",
+            ),
+            (
+                "Murder",
+                "{1}{B}{B}",
+                "Instant",
+                "Destroy target creature.",
+                None,
+                "destroy target creature",
+            ),
+            (
+                "Impale",
+                "{2}{B}{B}",
+                "Sorcery",
+                "Destroy target creature.",
+                None,
+                "destroy target creature",
+            ),
+            (
+                "Unsummon",
+                "{U}",
+                "Instant",
+                "Return target creature to its owner's hand.",
+                None,
+                "return target creature",
+            ),
+            (
+                "Drown in Shapelessness",
+                "{1}{U}",
+                "Instant",
+                "Return target creature to its owner's hand.",
+                None,
+                "return target creature",
+            ),
+            (
+                "Counterspell",
+                "{U}{U}",
+                "Instant",
+                "Counter target spell.",
+                None,
+                "counter target spell",
+            ),
+            (
+                "Cancel",
+                "{1}{U}{U}",
+                "Instant",
+                "Counter target spell.",
+                None,
+                "counter target spell",
+            ),
+            (
+                "Giant Growth",
+                "{G}",
+                "Instant",
+                "Target creature gets +3/+3 until end of turn.",
+                None,
+                "fixed creature pump",
+            ),
+            (
+                "Titanic Growth",
+                "{1}{G}",
+                "Instant",
+                "Target creature gets +4/+4 until end of turn.",
+                None,
+                "fixed creature pump",
+            ),
+            (
+                "Cloudkin Seer",
+                "{2}{U}",
+                "Creature — Elemental Wizard",
+                "When this creature enters, draw a card.",
+                Some(("2", "1")),
+                "ETB draw",
+            ),
+            (
+                "Elvish Visionary",
+                "{1}{G}",
+                "Creature — Elf Shaman",
+                "When this creature enters, draw a card.",
+                Some(("1", "1")),
+                "ETB draw",
+            ),
+            (
+                "Dawning Angel",
+                "{4}{W}",
+                "Creature — Angel",
+                "Flying\nWhen this creature enters, you gain 4 life.",
+                Some(("3", "2")),
+                "ETB gain life",
+            ),
+            (
+                "Hill Giant Herdgorger",
+                "{4}{G}{G}",
+                "Creature — Giant",
+                "When this creature enters, you gain 5 life.",
+                Some(("7", "6")),
+                "ETB gain life",
+            ),
+            (
+                "Burglar Rat",
+                "{1}{B}",
+                "Creature — Rat",
+                "When this creature enters, each opponent discards a card.",
+                Some(("1", "1")),
+                "ETB opponent discard",
+            ),
+            (
+                "Virus Beetle",
+                "{1}{B}",
+                "Artifact Creature — Insect",
+                "When this creature enters, each opponent discards a card.",
+                Some(("1", "1")),
+                "ETB opponent discard",
+            ),
+            (
+                "Llanowar Elves",
+                "{G}",
+                "Creature — Elf Druid",
+                "{T}: Add {G}.",
+                Some(("1", "1")),
+                "tap for one mana",
+            ),
+            (
+                "Elvish Mystic",
+                "{G}",
+                "Creature — Elf Druid",
+                "{T}: Add {G}.",
+                Some(("1", "1")),
+                "tap for one mana",
+            ),
+        ];
+
+        for (name, mana_cost, type_line, oracle_text, power_toughness, expected_recipe) in cases {
+            let card = normal_card(name, mana_cost, type_line, oracle_text, power_toughness);
+            let generated = evaluate_fresh(&card).unwrap_or_else(|reason| {
+                panic!("{name} should match {expected_recipe}, got {reason:?}")
+            });
+            assert!(
+                generated.faces[0].recipe_labels.contains(&expected_recipe),
+                "{name} did not record {expected_recipe}"
+            );
+            parse_generated(&generated.to_ron("fixture"));
+        }
+    }
+
+    #[test]
+    fn identical_input_and_provenance_produce_byte_identical_ron() {
+        let card = normal_card(
+            "Deterministic Visionary",
+            "{1}{G}",
+            "Creature — Elf Shaman",
+            "When this creature enters, draw a card.",
+            Some(("1", "1")),
+        );
+        let first = evaluate_fresh(&card).unwrap().to_ron("stable provenance");
+        let second = evaluate_fresh(&card).unwrap().to_ron("stable provenance");
+        assert_eq!(first.as_bytes(), second.as_bytes());
     }
 
     #[test]
@@ -1077,7 +2136,7 @@ mod tests {
                     "Busy Back",
                     "{2}{U}",
                     "Creature — Wizard",
-                    "When this creature enters, draw a card.",
+                    "When this creature enters, you may draw a card.",
                     Some(("2", "3")),
                     &["U"],
                     None,
@@ -1221,7 +2280,7 @@ mod tests {
         assert!(report.contains("transform              0"));
         assert!(report.contains("adventure              1"));
         assert!(report.contains("omen                   1"));
-        assert!(report.contains("face rules text beyond supported keywords"));
+        assert!(report.contains("face rules text has no exact supported recipe"));
     }
 
     #[test]
@@ -1236,5 +2295,30 @@ mod tests {
             bytes.is_ascii(),
             "PowerShell 5 treats BOM-less scripts as ANSI"
         );
+    }
+
+    #[test]
+    fn windows_fetch_wrapper_uses_current_jsonl_contract_and_writes_metadata() {
+        let wrapper = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("scripts")
+            .join("fetch-scryfall-bulk.ps1");
+        let source = fs::read_to_string(wrapper).expect("read PowerShell fetch wrapper");
+        assert!(source.contains("jsonl_download_uri"));
+        assert!(source.contains("sha256"));
+        assert!(source.contains(".meta.json"));
+        assert!(!source.contains("$entry.download_uri"));
+    }
+
+    #[test]
+    fn windows_generator_wrapper_defaults_to_gzipped_jsonl() {
+        let wrapper = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("scripts")
+            .join("gen-cards.ps1");
+        let source = fs::read_to_string(wrapper).expect("read PowerShell generator wrapper");
+        assert!(source.contains("oracle-cards.jsonl.gz"));
     }
 }

@@ -1,21 +1,21 @@
 <#
 .SYNOPSIS
-    Generates vanilla / french-vanilla card RON from a Scryfall bulk dump (Phase 6).
+    Generates exact-recipe card RON from a Scryfall bulk dump.
 .DESCRIPTION
     Writes one RON file per qualifying card under tricerules-cards\data\generated\<letter>\;
-    build.rs embeds them automatically. Normal creatures and supported two-face layouts are
-    eligible. Cards already present in data\ (by id or name) and cards with rules text beyond
-    the supported keyword set are skipped.
+    build.rs embeds them automatically. Every functional Oracle-text clause must match a typed
+    recipe exactly; unsupported or ambiguous cards and faces are skipped without partial output.
+    Cards already present in data\ (by id or name) are also skipped.
 
     Workflow:
-        ./scripts/fetch-scryfall-bulk.ps1            # download oracle-cards.json
+        ./scripts/fetch-scryfall-bulk.ps1            # download oracle-cards.jsonl.gz
         ./scripts/gen-cards.ps1 --dry-run            # preview counts + skip reasons
         ./scripts/gen-cards.ps1                      # write the RON files
         cd tricerules; cargo test                    # registry + conformance validate every card
         ./scripts/gen-card-checklist.ps1 --check     # name gate, then review + commit
 
     Any extra args pass through to gen-cards (e.g. --limit 50, --out-dir <path>). The default
-    --input is oracle-cards.json in the repo root; override with --input <path>.
+    --input is oracle-cards.jsonl.gz in the repo root; override with --input <path>.
 .EXAMPLE
     ./scripts/gen-cards.ps1 --dry-run
 #>
@@ -23,7 +23,7 @@
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $manifest = Join-Path $repoRoot "tricerules\Cargo.toml"
-$defaultInput = Join-Path $repoRoot "oracle-cards.json"
+$defaultInput = Join-Path $repoRoot "oracle-cards.jsonl.gz"
 
 $extra = @()
 if ($args -notcontains "--input") {

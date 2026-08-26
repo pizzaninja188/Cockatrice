@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
-# Generates vanilla / french-vanilla card RON from a Scryfall bulk dump (Phase 6).
+# Generates exact-recipe card RON from a Scryfall bulk dump.
 #
 # Writes one RON file per qualifying card under tricerules-cards/data/generated/<letter>/;
-# build.rs embeds them automatically. Normal creatures and supported two-face layouts are
-# eligible. Cards already present in data/ (by id or name) and cards with rules text beyond
-# the supported keyword set are skipped.
+# build.rs embeds them automatically. Every functional Oracle-text clause must match a typed
+# recipe exactly; unsupported or ambiguous cards and faces are skipped without partial output.
+# Cards already present in data/ (by id or name) are also skipped.
 #
 # Workflow:
-#   ./scripts/fetch-scryfall-bulk.sh                 # download oracle-cards.json
+#   ./scripts/fetch-scryfall-bulk.sh                 # download oracle-cards.jsonl.gz
 #   ./scripts/gen-cards.sh --dry-run                 # preview counts + skip reasons
 #   ./scripts/gen-cards.sh                           # write the RON files
 #   (cd tricerules && cargo test)                    # registry + conformance validate every card
 #   ./scripts/gen-card-checklist.sh --check          # name gate, then review + commit
 #
 # Any extra args pass through to gen-cards (e.g. --limit 50, --out-dir <path>).
-# The default --input is oracle-cards.json in the repo root; override with --input <path>.
+# The default --input is oracle-cards.jsonl.gz in the repo root; override with --input <path>.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST="$REPO_ROOT/tricerules/Cargo.toml"
-DEFAULT_INPUT="$REPO_ROOT/oracle-cards.json"
+DEFAULT_INPUT="$REPO_ROOT/oracle-cards.jsonl.gz"
 
 # Inject a default --input if the caller didn't supply one.
 has_input=0

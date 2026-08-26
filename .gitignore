@@ -30,5 +30,9 @@ server.log
 Tools/
 aqtinstall.log
 
-# Scryfall bulk dump downloaded by scripts/fetch-scryfall-bulk (gen-cards input)
+# Scryfall bulk dumps and provenance downloaded by scripts/fetch-scryfall-bulk.
 oracle-cards.json
+oracle-cards.jsonl.gz
+oracle-cards.jsonl.gz.meta.json
+oracle-tags.jsonl.gz
+oracle-tags.jsonl.gz.meta.json
