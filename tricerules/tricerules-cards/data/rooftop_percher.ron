@@ -1,0 +1,26 @@
+// Oracle checked 2026-08-26. The targeted graveyard cards share one graveyard (CR 115.9c).
+(
+  id: "rooftop_percher",
+  name: "Rooftop Percher",
+  mana_cost: "{5}",
+  types: ["Creature", "Shapeshifter"],
+  power: 3,
+  toughness: 3,
+  characteristic_defining_abilities: [Changeling],
+  keywords: [Flying],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile),
+      GainLife(amount: 3),
+    ],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 2,
+      prompt: "Choose up to two target cards from a single graveyard",
+      effect_indices: [0],
+      same_graveyard: true,
+    )])),
+    text: "When this creature enters, exile up to two target cards from a single graveyard. You gain 3 life.",
+  )],
+)

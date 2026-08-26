@@ -8,7 +8,7 @@ use tricerules_cards::primitives::{
     ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
-use tricerules_cards::{CardFace, ManaCost};
+use tricerules_cards::{is_creature_type, CardFace, ManaCost};
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
 pub type PlayerId = i32;
@@ -1396,8 +1396,16 @@ pub struct TurnObjectFact {
     pub zone_change_generation: u64,
     pub controller: PlayerId,
     pub types: Vec<String>,
+    pub all_creature_types: bool,
     pub keywords: Vec<Keyword>,
     pub power: Option<u32>,
+}
+
+impl TurnObjectFact {
+    pub fn has_type(&self, card_type: &str) -> bool {
+        self.types.iter().any(|value| value == card_type)
+            || (self.all_creature_types && is_creature_type(card_type))
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

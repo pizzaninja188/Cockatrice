@@ -115,6 +115,8 @@ mod issue_142_endure;
 mod issue_151_firebending;
 #[path = "scenario/issue_152_exhaust.rs"]
 mod issue_152_exhaust;
+#[path = "scenario/issue_154_changeling.rs"]
+mod issue_154_changeling;
 #[path = "scenario/issue_156_event_observers.rs"]
 mod issue_156_event_observers;
 #[path = "scenario/issue_158_predicates.rs"]

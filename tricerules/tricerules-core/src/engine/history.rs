@@ -77,7 +77,7 @@ pub(super) fn creature_event_fact_matches(
     filter
         .required_subtypes
         .iter()
-        .all(|subtype| fact.types.contains(subtype))
+        .all(|subtype| fact.has_type(subtype))
         && filter
             .required_keywords
             .iter()
@@ -101,12 +101,12 @@ pub(super) fn permanent_event_fact_matches(
 ) -> bool {
     let type_matches = filter
         .permanent_type
-        .is_none_or(|permanent_type| fact.types.contains(&permanent_type.as_str().to_string()));
+        .is_none_or(|permanent_type| fact.has_type(permanent_type.as_str()));
     type_matches
         && filter
             .required_subtypes
             .iter()
-            .all(|subtype| fact.types.contains(subtype))
+            .all(|subtype| fact.has_type(subtype))
         && (!filter.exclude_source
             || fact.object_id != context.source_object_id
             || fact.zone_change_generation != context.source_zone_change)
@@ -154,6 +154,7 @@ impl GameEngine {
                                     .unwrap_or(0),
                                 controller: characteristics.controller,
                                 types: characteristics.types,
+                                all_creature_types: characteristics.all_creature_types,
                                 keywords: characteristics.keywords,
                                 power: characteristics.power,
                             });
@@ -182,6 +183,7 @@ impl GameEngine {
                                 zone_change_generation: attack.attacker.zone_change_generation,
                                 controller: *attacking_player,
                                 types: characteristics.types,
+                                all_creature_types: characteristics.all_creature_types,
                                 keywords: characteristics.keywords,
                                 power: characteristics.power,
                             })

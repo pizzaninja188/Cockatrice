@@ -103,6 +103,350 @@ pub enum Layout {
     Flip,
 }
 
+/// Static abilities whose effects define an object's characteristics in every zone (CR 604.3).
+/// Keep these separate from ordinary battlefield static abilities: copy and face selection copy
+/// the authored value, while the characteristics evaluator applies its effect in the appropriate
+/// layer. Chitinous Graspling and Firdoch Core exercise Changeling on creature and noncreature
+/// Kindred faces respectively.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CharacteristicDefiningAbility {
+    /// CR 702.73: this object is every creature type in every zone.
+    Changeling,
+}
+
+/// Current CR 205.3m creature-type vocabulary. Changeling queries this shared rules vocabulary
+/// instead of expanding every card definition into a hundreds-entry subtype snapshot.
+pub fn is_creature_type(subtype: &str) -> bool {
+    const CREATURE_TYPES: &[&str] = &[
+        "Advisor",
+        "Aetherborn",
+        "Alien",
+        "Ally",
+        "Angel",
+        "Antelope",
+        "Ape",
+        "Archer",
+        "Archon",
+        "Armadillo",
+        "Army",
+        "Artificer",
+        "Assassin",
+        "Assembly-Worker",
+        "Astartes",
+        "Atog",
+        "Aurochs",
+        "Avatar",
+        "Azra",
+        "Badger",
+        "Balloon",
+        "Barbarian",
+        "Bard",
+        "Basilisk",
+        "Bat",
+        "Bear",
+        "Beast",
+        "Beaver",
+        "Beeble",
+        "Beholder",
+        "Berserker",
+        "Bird",
+        "Bison",
+        "Blinkmoth",
+        "Boar",
+        "Bringer",
+        "Brushwagg",
+        "Camarid",
+        "Camel",
+        "Capybara",
+        "Caribou",
+        "Carrier",
+        "Cat",
+        "Centaur",
+        "Child",
+        "Chimera",
+        "Citizen",
+        "Cleric",
+        "Clown",
+        "Cockatrice",
+        "Construct",
+        "Coward",
+        "Coyote",
+        "Crab",
+        "Crocodile",
+        "C’tan",
+        "Custodes",
+        "Cyberman",
+        "Cyclops",
+        "Dalek",
+        "Dauthi",
+        "Demigod",
+        "Demon",
+        "Deserter",
+        "Detective",
+        "Devil",
+        "Dinosaur",
+        "Djinn",
+        "Doctor",
+        "Dog",
+        "Dragon",
+        "Drake",
+        "Dreadnought",
+        "Drix",
+        "Drone",
+        "Druid",
+        "Dryad",
+        "Dwarf",
+        "Echidna",
+        "Efreet",
+        "Egg",
+        "Elder",
+        "Eldrazi",
+        "Elemental",
+        "Elephant",
+        "Elf",
+        "Elk",
+        "Employee",
+        "Eternal",
+        "Eye",
+        "Faerie",
+        "Ferret",
+        "Fish",
+        "Flagbearer",
+        "Fox",
+        "Fractal",
+        "Frog",
+        "Fungus",
+        "Gamer",
+        "Gamma",
+        "Gargoyle",
+        "Germ",
+        "Giant",
+        "Giraffe",
+        "Gith",
+        "Glimmer",
+        "Gnoll",
+        "Gnome",
+        "Goat",
+        "Goblin",
+        "God",
+        "Golem",
+        "Gorgon",
+        "Graveborn",
+        "Gremlin",
+        "Griffin",
+        "Guest",
+        "Hag",
+        "Halfling",
+        "Hamster",
+        "Harpy",
+        "Hedgehog",
+        "Hellion",
+        "Hero",
+        "Hippo",
+        "Hippogriff",
+        "Homarid",
+        "Homunculus",
+        "Horror",
+        "Horse",
+        "Human",
+        "Hydra",
+        "Hyena",
+        "Illusion",
+        "Imp",
+        "Incarnation",
+        "Inhuman",
+        "Inkling",
+        "Inquisitor",
+        "Insect",
+        "Jackal",
+        "Jellyfish",
+        "Juggernaut",
+        "Kangaroo",
+        "Kavu",
+        "Kirin",
+        "Kithkin",
+        "Knight",
+        "Kobold",
+        "Kor",
+        "Kraken",
+        "Kree",
+        "Lamia",
+        "Lammasu",
+        "Leech",
+        "Lemur",
+        "Leviathan",
+        "Lhurgoyf",
+        "Licid",
+        "Lizard",
+        "Llama",
+        "Lobster",
+        "Manticore",
+        "Masticore",
+        "Mercenary",
+        "Merfolk",
+        "Metathran",
+        "Minion",
+        "Minotaur",
+        "Mite",
+        "Mole",
+        "Monger",
+        "Mongoose",
+        "Monk",
+        "Monkey",
+        "Moogle",
+        "Moonfolk",
+        "Mount",
+        "Mouse",
+        "Mutant",
+        "Myr",
+        "Mystic",
+        "Nautilus",
+        "Necron",
+        "Nephilim",
+        "Nightmare",
+        "Nightstalker",
+        "Ninja",
+        "Noble",
+        "Noggle",
+        "Nomad",
+        "Nymph",
+        "Octopus",
+        "Ogre",
+        "Ooze",
+        "Orb",
+        "Orc",
+        "Orgg",
+        "Otter",
+        "Ouphe",
+        "Ox",
+        "Oyster",
+        "Pangolin",
+        "Peasant",
+        "Pegasus",
+        "Pentavite",
+        "Performer",
+        "Pest",
+        "Phelddagrif",
+        "Phoenix",
+        "Phyrexian",
+        "Pilot",
+        "Pincher",
+        "Pirate",
+        "Plant",
+        "Platypus",
+        "Porcupine",
+        "Possum",
+        "Praetor",
+        "Primarch",
+        "Prism",
+        "Processor",
+        "Qu",
+        "Rabbit",
+        "Raccoon",
+        "Ranger",
+        "Rat",
+        "Rebel",
+        "Reflection",
+        "Rhino",
+        "Rigger",
+        "Robot",
+        "Rogue",
+        "Sable",
+        "Salamander",
+        "Samurai",
+        "Sand",
+        "Saproling",
+        "Satyr",
+        "Scarecrow",
+        "Scientist",
+        "Scion",
+        "Scorpion",
+        "Scout",
+        "Sculpture",
+        "Seal",
+        "Serf",
+        "Serpent",
+        "Servo",
+        "Shade",
+        "Shaman",
+        "Shapeshifter",
+        "Shark",
+        "Sheep",
+        "Shi’ar",
+        "Siren",
+        "Skeleton",
+        "Skrull",
+        "Skunk",
+        "Slith",
+        "Sliver",
+        "Sloth",
+        "Slug",
+        "Snail",
+        "Snake",
+        "Soldier",
+        "Soltari",
+        "Sorcerer",
+        "Spawn",
+        "Specter",
+        "Spellshaper",
+        "Sphinx",
+        "Spider",
+        "Spike",
+        "Spirit",
+        "Splinter",
+        "Sponge",
+        "Spy",
+        "Squid",
+        "Squirrel",
+        "Starfish",
+        "Surrakar",
+        "Survivor",
+        "Symbiote",
+        "Synth",
+        "Tentacle",
+        "Tetravite",
+        "Thalakos",
+        "Thopter",
+        "Thrull",
+        "Tiefling",
+        "Time Lord",
+        "Toy",
+        "Treefolk",
+        "Trilobite",
+        "Triskelavite",
+        "Troll",
+        "Turtle",
+        "Tyranid",
+        "Unicorn",
+        "Utrom",
+        "Vampire",
+        "Varmint",
+        "Vedalken",
+        "Villain",
+        "Volver",
+        "Wall",
+        "Walrus",
+        "Warlock",
+        "Warrior",
+        "Weasel",
+        "Weird",
+        "Werewolf",
+        "Whale",
+        "Wizard",
+        "Wolf",
+        "Wolverine",
+        "Wombat",
+        "Worm",
+        "Wraith",
+        "Wurm",
+        "Yeti",
+        "Zombie",
+        "Zubera",
+    ];
+
+    CREATURE_TYPES.contains(&subtype)
+}
+
 /// One face of a card (CR 712.4: a card has the characteristics of its current face only) — the
 /// single home for every per-card characteristic. The whole-card fields (`id`, `name`, `layout`,
 /// `partial`) live on [`CardDefinition`].
@@ -189,6 +533,9 @@ pub struct CardFace {
     /// leave empty for faces with none. Emitted as a continuous effect on ETB, drained at LTB.
     #[serde(default)]
     pub static_abilities: Vec<StaticAbilityDef>,
+    /// Characteristic-defining abilities operate in every zone and feed their own CR 613 layer.
+    #[serde(default)]
+    pub characteristic_defining_abilities: Vec<CharacteristicDefiningAbility>,
     /// CR 508.1d: "attacks each combat if able". This creature must be declared as an attacker
     /// whenever it is a legal attacker. Cards: Crazed Goblin, Goblin Brigand, Juggernaut.
     #[serde(default)]
@@ -334,6 +681,15 @@ impl CardFace {
             CardTypeFilter::Noncreature => !self.is_creature,
         }
     }
+
+    /// Whether this face has `subtype`, including Changeling's every-creature-type CDA.
+    pub fn has_subtype(&self, subtype: &str) -> bool {
+        self.types.iter().any(|value| value == subtype)
+            || (is_creature_type(subtype)
+                && self
+                    .characteristic_defining_abilities
+                    .contains(&CharacteristicDefiningAbility::Changeling))
+    }
 }
 
 /// A read-only view of one face. Kept as a named alias because the engine reads faces constantly
@@ -415,6 +771,8 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub static_abilities: Vec<StaticAbilityDef>,
     #[serde(default)]
+    pub characteristic_defining_abilities: Vec<CharacteristicDefiningAbility>,
+    #[serde(default)]
     pub must_attack_if_able: bool,
     #[serde(default)]
     pub must_block_if_able: bool,
@@ -474,6 +832,7 @@ impl RawCardDefinition {
                 activated_abilities: self.activated_abilities,
                 triggered_abilities: self.triggered_abilities,
                 static_abilities: self.static_abilities,
+                characteristic_defining_abilities: self.characteristic_defining_abilities,
                 must_attack_if_able: self.must_attack_if_able,
                 must_block_if_able: self.must_block_if_able,
                 color_indicator: self.color_indicator,
@@ -607,6 +966,11 @@ impl CardDefinition {
             result
                 .static_abilities
                 .extend(door.static_abilities.clone());
+            for ability in &door.characteristic_defining_abilities {
+                if !result.characteristic_defining_abilities.contains(ability) {
+                    result.characteristic_defining_abilities.push(*ability);
+                }
+            }
             result.must_attack_if_able |= door.must_attack_if_able;
             result.must_block_if_able |= door.must_block_if_able;
             if let Some(indicator) = &door.color_indicator {
@@ -701,13 +1065,9 @@ impl CardDefinition {
     /// combine both halves; other multiface layouts use only their normal/front face.
     pub fn has_subtype_outside_stack(&self, subtype: &str) -> bool {
         if matches!(self.layout, Layout::Split | Layout::Room) {
-            self.faces_iter()
-                .any(|face| face.types.iter().any(|value| value == subtype))
+            self.faces_iter().any(|face| face.has_subtype(subtype))
         } else {
-            self.primary_face()
-                .types
-                .iter()
-                .any(|value| value == subtype)
+            self.primary_face().has_subtype(subtype)
         }
     }
 
@@ -837,5 +1197,34 @@ mod tests {
         let both = room.room_permanent_face(&[0, 1]).unwrap();
         assert_eq!(both.name, "Left // Right");
         assert_eq!(both.keywords, vec![Keyword::Flying, Keyword::Vigilance]);
+    }
+
+    #[test]
+    fn changeling_matches_only_canonical_creature_types() {
+        assert!(is_creature_type("Elf"));
+        assert!(is_creature_type("Time Lord"));
+        for non_creature_subtype in ["Aura", "Equipment", "Forest", "Lesson"] {
+            assert!(!is_creature_type(non_creature_subtype));
+        }
+
+        let mut changeling = face(&["Kindred", "Artifact", "Shapeshifter"]);
+        changeling.characteristic_defining_abilities =
+            vec![CharacteristicDefiningAbility::Changeling];
+        assert!(changeling.has_subtype("Elf"));
+        assert!(changeling.has_subtype("Time Lord"));
+        assert!(!changeling.has_subtype("Forest"));
+        assert!(!changeling.matches_card_type(CardTypeFilter::Creature));
+    }
+
+    #[test]
+    fn nonstack_layout_queries_preserve_changeling() {
+        let mut front = face(&["Creature", "Shapeshifter"]);
+        front.characteristic_defining_abilities = vec![CharacteristicDefiningAbility::Changeling];
+        let mut back = face(&["Instant", "Omen"]);
+        back.name = "Back".into();
+        let card = definition(Layout::Omen, vec![front, back]);
+
+        assert!(card.has_subtype_outside_stack("Goblin"));
+        assert!(!card.has_subtype_outside_stack("Island"));
     }
 }

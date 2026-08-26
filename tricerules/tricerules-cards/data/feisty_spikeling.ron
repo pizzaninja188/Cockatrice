@@ -1,0 +1,14 @@
+// Oracle checked 2026-08-26. Changeling is a characteristic-defining ability (CR 702.73).
+(
+  id: "feisty_spikeling",
+  name: "Feisty Spikeling",
+  mana_cost: "{1}{R/W}",
+  types: ["Creature", "Shapeshifter"],
+  power: 2,
+  toughness: 1,
+  characteristic_defining_abilities: [Changeling],
+  static_abilities: [ConditionalSelfModifier(
+    condition: ActivePlayer(players: Controller),
+    keywords: [FirstStrike],
+  )],
+)

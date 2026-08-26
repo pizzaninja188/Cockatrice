@@ -31,6 +31,8 @@ use super::*;
 pub struct Characteristics {
     pub controller: PlayerId,
     pub types: Vec<String>,
+    /// CR 702.73 Changeling without materializing the entire CR 205.3m list per snapshot.
+    pub all_creature_types: bool,
     pub supertypes: Vec<String>,
     pub colors: Vec<Color>,
     pub keywords: Vec<Keyword>,
@@ -43,6 +45,7 @@ pub struct Characteristics {
 impl Characteristics {
     pub fn has_type(&self, card_type: &str) -> bool {
         self.types.iter().any(|t| t == card_type)
+            || (self.all_creature_types && is_creature_type(card_type))
     }
 
     pub fn is_creature(&self) -> bool {
@@ -103,6 +106,9 @@ impl CharacteristicsEvaluator<'_> {
             // Layer 2 below applies control-changing continuous effects on top.
             controller: object.base_controller,
             types: face.types.to_vec(),
+            all_creature_types: face
+                .characteristic_defining_abilities
+                .contains(&CharacteristicDefiningAbility::Changeling),
             supertypes: face.supertypes.to_vec(),
             colors: if copied.is_none()
                 && definition.layout == Layout::Flip
@@ -227,28 +233,47 @@ impl CharacteristicsEvaluator<'_> {
             .continuous_effects
             .iter()
             .enumerate()
-            .filter(|(_, effect)| matches!(effect.kind, ContinuousEffectKind::Layer4AddTypes(_)))
+            .filter(|(_, effect)| {
+                matches!(
+                    effect.kind,
+                    ContinuousEffectKind::Layer4AddTypes(_)
+                        | ContinuousEffectKind::Layer4SetCreatureTypes(_)
+                )
+            })
             .filter(|(_, effect)| effect_affects(self.state, self.registry, effect, oid, result))
             .filter(|(_, effect)| self.characteristic_effect_condition_holds(effect, oid, result))
             .collect();
         effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
 
         for (_, effect) in effects {
-            let ContinuousEffectKind::Layer4AddTypes(addition) = &effect.kind else {
-                continue;
-            };
-            for card_type in &addition.card_types {
-                let card_type = card_type.as_str();
-                if !result.types.iter().any(|existing| existing == card_type) {
-                    result.types.push(card_type.to_string());
-                }
-            }
-            if result.is_creature() {
-                for creature_type in &addition.creature_types {
-                    if !result.types.contains(creature_type) {
-                        result.types.push(creature_type.clone());
+            match &effect.kind {
+                ContinuousEffectKind::Layer4AddTypes(addition) => {
+                    for card_type in &addition.card_types {
+                        let card_type = card_type.as_str();
+                        if !result.types.iter().any(|existing| existing == card_type) {
+                            result.types.push(card_type.to_string());
+                        }
+                    }
+                    if result.is_creature() || result.has_type("Kindred") {
+                        for creature_type in &addition.creature_types {
+                            if !result.types.contains(creature_type) {
+                                result.types.push(creature_type.clone());
+                            }
+                        }
                     }
                 }
+                ContinuousEffectKind::Layer4SetCreatureTypes(creature_types) => {
+                    result.all_creature_types = false;
+                    result.types.retain(|value| !is_creature_type(value));
+                    if result.is_creature() || result.has_type("Kindred") {
+                        for creature_type in creature_types {
+                            if !result.types.contains(creature_type) {
+                                result.types.push(creature_type.clone());
+                            }
+                        }
+                    }
+                }
+                _ => unreachable!("filtered to layer-4 type effects"),
             }
         }
     }
@@ -576,6 +601,7 @@ impl CharacteristicsEvaluator<'_> {
 /// been designated to enter face down.
 pub(super) fn apply_face_down_values(result: &mut Characteristics) {
     result.types = vec!["Creature".to_string()];
+    result.all_creature_types = false;
     result.supertypes.clear();
     result.colors.clear();
     result.keywords.clear();
@@ -899,7 +925,7 @@ pub(super) fn creature_matches_scope(
         && filter
             .subtype
             .as_ref()
-            .is_none_or(|value| characteristics.types.contains(value))
+            .is_none_or(|value| characteristics.has_type(value))
         && filter
             .color
             .is_none_or(|value| characteristics.colors.contains(&value))
@@ -1110,7 +1136,102 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tricerules_cards::TypeLineAddition;
+    use tricerules_cards::{CharacteristicDefiningAbility, TypeLineAddition};
+
+    fn install_changeling_face(engine: &mut GameEngine, face_down: bool) -> ObjectId {
+        let oid = engine.state.players[0].library[0];
+        let mut face = engine
+            .registry
+            .get("cavalry_drillmaster")
+            .expect("Cavalry Drillmaster definition")
+            .primary_face()
+            .clone();
+        face.characteristic_defining_abilities = vec![CharacteristicDefiningAbility::Changeling];
+        let object = engine.state.objects.get_mut(&oid).expect("library object");
+        object.zone = Zone::Battlefield;
+        object.face_down = face_down;
+        object.copiable_values = Some(CopiableValues {
+            source_card_id: "cavalry_drillmaster".into(),
+            source_face_index: 0,
+            face,
+            room_faces: None,
+            display_name: "Cavalry Drillmaster".into(),
+        });
+        engine.state.players[0].battlefield.push(oid);
+        oid
+    }
+
+    #[test]
+    fn changeling_is_a_layer_4_cda_and_type_setting_overwrites_it() {
+        let mut engine =
+            GameEngine::new_with_default_decks(154_001, &[0, 1], 20).expect("new engine");
+        let oid = install_changeling_face(&mut engine, false);
+
+        let characteristics = engine.characteristics(oid).expect("changeling");
+        assert!(characteristics.all_creature_types);
+        assert!(characteristics.has_type("Goblin"));
+        assert!(!characteristics.has_type("Forest"));
+
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(oid),
+            kind: ContinuousEffectKind::Layer4SetCreatureTypes(vec!["Frog".into()]),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+        });
+
+        let characteristics = engine.characteristics(oid).expect("type-set changeling");
+        assert!(!characteristics.all_creature_types);
+        assert!(characteristics.has_type("Frog"));
+        assert!(!characteristics.has_type("Goblin"));
+        assert!(characteristics.has_type("Creature"));
+
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(oid),
+            kind: ContinuousEffectKind::Layer4SetCreatureTypes(Vec::new()),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 2,
+        });
+        let characteristics = engine
+            .characteristics(oid)
+            .expect("Changeling with no creature types");
+        assert!(!characteristics.all_creature_types);
+        assert!(!characteristics.has_type("Frog"));
+        assert!(!characteristics.has_type("Goblin"));
+        assert!(characteristics.has_type("Creature"));
+    }
+
+    #[test]
+    fn ability_removal_keeps_changeling_types_but_face_down_values_do_not() {
+        let mut engine =
+            GameEngine::new_with_default_decks(154_002, &[0, 1], 20).expect("new engine");
+        let oid = install_changeling_face(&mut engine, false);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(oid),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+        });
+        assert!(engine
+            .characteristics(oid)
+            .expect("ability-removed changeling")
+            .has_type("Elf"));
+
+        engine
+            .state
+            .objects
+            .get_mut(&oid)
+            .expect("changeling")
+            .face_down = true;
+        let face_down = engine.characteristics(oid).expect("face-down changeling");
+        assert!(!face_down.all_creature_types);
+        assert!(!face_down.has_type("Elf"));
+    }
 
     #[test]
     fn layer_4_additions_are_ordered_deduplicated_and_feed_later_scopes() {

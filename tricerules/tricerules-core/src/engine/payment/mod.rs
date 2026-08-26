@@ -21,7 +21,7 @@ fn mana_filter_matches_face(filter: &ManaSpendFilter, face: &CardFace) -> bool {
         && filter
             .subtype
             .as_ref()
-            .is_none_or(|subtype| face.types.iter().any(|value| value == subtype))
+            .is_none_or(|subtype| face.has_subtype(subtype))
 }
 
 fn mana_filter_matches_characteristics(

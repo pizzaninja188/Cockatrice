@@ -50,7 +50,10 @@ use tricerules_cards::primitives::{
     TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected, TargetingSourceFilter,
     TriggerCondition, TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
 };
-use tricerules_cards::{CardDefinition, CardFace, CardRegistry, FaceRef, Layout};
+use tricerules_cards::{
+    is_creature_type, CardDefinition, CardFace, CardRegistry, CharacteristicDefiningAbility,
+    FaceRef, Layout,
+};
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::{
     IpcResponse, LegalActions, RuledCommand, RuledEvent, RuledEventBatch,

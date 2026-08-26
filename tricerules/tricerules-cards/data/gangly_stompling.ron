@@ -1,0 +1,11 @@
+// Oracle checked 2026-08-26. Changeling is a characteristic-defining ability (CR 702.73).
+(
+  id: "gangly_stompling",
+  name: "Gangly Stompling",
+  mana_cost: "{2}{R/G}",
+  types: ["Creature", "Shapeshifter"],
+  power: 4,
+  toughness: 2,
+  characteristic_defining_abilities: [Changeling],
+  keywords: [Trample],
+)

@@ -1,0 +1,11 @@
+// Oracle checked 2026-08-26. Changeling is a characteristic-defining ability (CR 702.73).
+(
+  id: "chitinous_graspling",
+  name: "Chitinous Graspling",
+  mana_cost: "{3}{G/U}",
+  types: ["Creature", "Shapeshifter"],
+  power: 3,
+  toughness: 4,
+  characteristic_defining_abilities: [Changeling],
+  keywords: [Reach],
+)

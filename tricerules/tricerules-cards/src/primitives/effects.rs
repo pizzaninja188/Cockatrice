@@ -3281,6 +3281,10 @@ pub enum ContinuousEffectKind {
     },
     /// CR 205.1b / 613.1d layer 4 — retain the existing type line and append these values.
     Layer4AddTypes(TypeLineAddition),
+    /// CR 205.1b / 613.1d layer 4 — replace every creature type while retaining card types and
+    /// unrelated subtypes. An empty list means the object loses all creature types. Frogify and
+    /// Witness Protection exercise the nonempty form; Amoeboid Changeling exercises empty.
+    Layer4SetCreatureTypes(Vec<String>),
     /// CR 613 layer 6 — remove every ability with timestamp precedence. Unable to Scream,
     /// Kenrith's Transformation, and Darksteel Mutation share this layer operation.
     Layer6RemoveAllAbilities,

@@ -1,0 +1,15 @@
+// Oracle checked 2026-08-26. The temporary animation is deliberately deferred until the
+// continuous-effect vocabulary can set type, base power, and base toughness for one duration.
+(
+  id: "firdoch_core",
+  name: "Firdoch Core",
+  mana_cost: "{3}",
+  types: ["Kindred", "Artifact", "Shapeshifter"],
+  characteristic_defining_abilities: [Changeling],
+  activated_abilities: [(
+    costs: [Tap],
+    effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    text: "{T}: Add one mana of any color.",
+  )],
+  partial: "{4}: Firdoch Core becomes a 4/4 Shapeshifter artifact creature until end of turn is unsupported",
+)

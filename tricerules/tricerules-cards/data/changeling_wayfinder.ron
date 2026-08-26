@@ -1,0 +1,22 @@
+// Oracle checked 2026-08-26. Changeling is a characteristic-defining ability (CR 702.73).
+(
+  id: "changeling_wayfinder",
+  name: "Changeling Wayfinder",
+  mana_cost: "{3}",
+  types: ["Creature", "Shapeshifter"],
+  power: 1,
+  toughness: 2,
+  characteristic_defining_abilities: [Changeling],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      SearchLibrary(
+        filter: Some((card_type: Some(BasicLand))),
+        destination: Hand,
+        shuffle: true,
+        reveal: true,
+      ),
+    ],
+    text: "When this creature enters, search your library for a basic land card, reveal it, put it into your hand, then shuffle.",
+  )],
+)

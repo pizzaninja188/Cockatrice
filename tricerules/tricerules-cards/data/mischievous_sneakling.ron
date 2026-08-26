@@ -1,0 +1,11 @@
+// Oracle checked 2026-08-26. Changeling is a characteristic-defining ability (CR 702.73).
+(
+  id: "mischievous_sneakling",
+  name: "Mischievous Sneakling",
+  mana_cost: "{1}{U/B}",
+  types: ["Creature", "Shapeshifter"],
+  power: 2,
+  toughness: 2,
+  characteristic_defining_abilities: [Changeling],
+  keywords: [Flash],
+)
