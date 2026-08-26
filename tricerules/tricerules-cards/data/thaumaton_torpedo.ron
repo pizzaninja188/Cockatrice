@@ -1,0 +1,20 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26.
+(
+  id: "thaumaton_torpedo",
+  name: "Thaumaton Torpedo",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  activated_abilities: [(
+    costs: [Mana("{6}"), Tap, SacrificeSelf],
+    cost_modifiers: [ConditionalGenericReduction(
+      amount: 3,
+      condition: AttackersDeclaredThisTurn(
+        players: Controller,
+        filter: (required_subtypes: ["Spacecraft"]),
+        min: Some(1),
+      ),
+    )],
+    effect: [Destroy(subject: Chosen((kind: AnyPermanent, not_land: true)))],
+    text: "{6}, {T}, Sacrifice this artifact: Destroy target nonland permanent. This ability costs {3} less to activate if you attacked with a Spacecraft this turn.",
+  )],
+)

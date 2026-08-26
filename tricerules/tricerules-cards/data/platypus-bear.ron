@@ -1,0 +1,24 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26.
+(
+  id: "platypus-bear",
+  name: "Platypus-Bear",
+  mana_cost: "{1}{G/U}",
+  types: ["Creature", "Platypus", "Bear"],
+  power: 2,
+  toughness: 3,
+  keywords: [Defender],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Mill(count: 2, player: Controller)],
+    text: "When this creature enters, mill two cards.",
+  )],
+  static_abilities: [ConditionalSelfModifier(
+    condition: GraveyardAggregate(
+      owners: Controller,
+      aggregate: CardCount,
+      filter: Some((subtype: Some("Lesson"))),
+      min: Some(1),
+    ),
+    can_attack_as_though_without_defender: true,
+  )],
+)

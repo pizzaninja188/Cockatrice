@@ -49,6 +49,7 @@ fn issue_123_cards_use_the_generic_exile_play_effect() {
             aggregate: GraveyardAggregate::DistinctCardTypes,
             min: Some(4),
             max: None,
+            ..
         })
     ));
     assert!(matches!(

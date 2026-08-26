@@ -92,6 +92,7 @@ impl GameEngine {
                         .copied()
                         .unwrap_or(0),
                     resolving_spell_id: None,
+                    stack_item: None,
                 },
             ),
         }
@@ -1397,6 +1398,7 @@ mod tests {
                 source_object_id: 999,
                 source_zone_change: 0,
                 resolving_spell_id: None,
+                stack_item: None,
             }
         ));
     }

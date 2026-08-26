@@ -288,6 +288,8 @@ fn issue_49_cast_trigger_cards_use_existing_filters_and_source_effects() {
             caster: CastTriggerPlayer::Controller,
             spell_type: Some(CardTypeFilter::Noncreature),
             ordinal: None,
+            min_mana_value: None,
+            max_mana_value: None,
         }
     );
     assert_eq!(
@@ -312,6 +314,8 @@ fn issue_49_cast_trigger_cards_use_existing_filters_and_source_effects() {
                 caster: CastTriggerPlayer::Controller,
                 spell_type: Some(spell_type),
                 ordinal: None,
+                min_mana_value: None,
+                max_mana_value: None,
             },
             "{id}"
         );

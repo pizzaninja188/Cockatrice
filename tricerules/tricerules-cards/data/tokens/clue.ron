@@ -1,0 +1,11 @@
+// CR 111.10f colorless Clue artifact token.
+(
+  id: "clue",
+  name: "Clue",
+  types: ["Artifact", "Clue"],
+  activated_abilities: [(
+    costs: [Mana("{2}"), SacrificeSelf],
+    effect: [Draw(count: 1)],
+    text: "{2}, Sacrifice this token: Draw a card.",
+  )],
+)

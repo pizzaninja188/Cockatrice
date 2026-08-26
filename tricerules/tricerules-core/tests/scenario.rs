@@ -115,6 +115,8 @@ mod issue_142_endure;
 mod issue_152_exhaust;
 #[path = "scenario/issue_156_event_observers.rs"]
 mod issue_156_event_observers;
+#[path = "scenario/issue_158_predicates.rs"]
+mod issue_158_predicates;
 #[path = "scenario/issue_160_blocker_constraints.rs"]
 mod issue_160_blocker_constraints;
 #[path = "scenario/issue_161_turn_boundaries.rs"]

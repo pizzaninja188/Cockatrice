@@ -604,14 +604,15 @@ impl CardRegistry {
                             if matches!(
                                 condition,
                                 GameCondition::BattlefieldAggregate {
-                                    aggregate: BattlefieldAggregate::TotalPower
+                                    aggregate: BattlefieldAggregate::DistinctNames
+                                        | BattlefieldAggregate::TotalPower
                                         | BattlefieldAggregate::MaximumPower,
                                     ..
                                 }
                             ) {
                                 return Err(RegistryError::InvalidCard {
                                     id: card.id.clone(),
-                                    reason: "conditional layer-6/7 anthems cannot depend on battlefield power until CR 613.8 dependency ordering is implemented".into(),
+                                    reason: "conditional layer-6/7 anthems support only simple battlefield counts until CR 613.8 dependency ordering is implemented".into(),
                                 });
                             }
                             if matches!(condition, GameCondition::BattlefieldCreatureCount { .. }) {
@@ -670,7 +671,8 @@ impl CardRegistry {
                             && matches!(
                                 condition,
                                 crate::primitives::GameCondition::BattlefieldAggregate {
-                                    aggregate: BattlefieldAggregate::TotalPower
+                                    aggregate: BattlefieldAggregate::DistinctNames
+                                        | BattlefieldAggregate::TotalPower
                                         | BattlefieldAggregate::MaximumPower,
                                     ..
                                 }
@@ -678,13 +680,38 @@ impl CardRegistry {
                         {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
-                                reason: "conditional layer-6/7 modifiers cannot depend on battlefield power until CR 613.8 dependency ordering is implemented".into(),
+                                reason: "conditional layer-6/7 modifiers support only simple battlefield counts until CR 613.8 dependency ordering is implemented".into(),
                             });
                         }
                         if matches!(condition, GameCondition::BattlefieldCreatureCount { .. }) {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
                                 reason: "conditional self modifiers cannot depend on derived creature counts until CR 613.8 dependency ordering is implemented".into(),
+                            });
+                        }
+                    }
+                    if let StaticAbilityDef::CountScaledSelfPt {
+                        filter,
+                        power_per_match,
+                        toughness_per_match,
+                    } = ability
+                    {
+                        filter
+                            .validate()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
+                        if *power_per_match == 0 && *toughness_per_match == 0 {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "CountScaledSelfPt must modify power or toughness".into(),
+                            });
+                        }
+                        if !filter.required_keywords.is_empty() {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "CountScaledSelfPt keyword filters require CR 613.8 dependency ordering".into(),
                             });
                         }
                     }
@@ -3037,7 +3064,9 @@ mod tests {
                 controllers: RelativePlayerSet::Controller,
                 subtype: None,
                 required_keywords: vec![],
+                tapped: None,
                 requires_any_counter: false,
+                required_counter: None,
                 exclude_source: false,
             },
         });
@@ -3065,7 +3094,9 @@ mod tests {
                     controllers: RelativePlayerSet::Controller,
                     subtype: None,
                     required_keywords: vec![],
+                    tapped: None,
                     requires_any_counter: false,
+                    required_counter: None,
                     exclude_source: true,
                 },
             })

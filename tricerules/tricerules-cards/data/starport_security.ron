@@ -1,0 +1,21 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26.
+(
+  id: "starport_security",
+  name: "Starport Security",
+  mana_cost: "{W}",
+  types: ["Artifact", "Creature", "Robot", "Soldier"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [(
+    costs: [Mana("{3}{W}"), Tap],
+    cost_modifiers: [ConditionalGenericReduction(
+      amount: 2,
+      condition: BattlefieldCreatureCount(
+        filter: (controllers: Controller, required_counter: Some(PlusOnePlusOne)),
+        min: Some(1),
+      ),
+    )],
+    effect: [Tap(subject: Chosen((kind: Creature, exclude_source: true)))],
+    text: "{3}{W}, {T}: Tap another target creature. This ability costs {2} less to activate if you control a creature with a +1/+1 counter on it.",
+  )],
+)

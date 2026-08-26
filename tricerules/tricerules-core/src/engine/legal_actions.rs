@@ -309,14 +309,13 @@ fn activated_ability_info(
     ability_index: usize,
     ability: &ActivatedAbilityDef,
 ) -> rv1::AbilityInfo {
-    let mana_cost = ability
-        .costs
-        .iter()
-        .find_map(|cost| match cost {
-            AbilityCost::Mana(cost) => Some(cost.to_string()),
-            _ => None,
-        })
+    let controller = eng
+        .state
+        .objects
+        .get(&source_id)
+        .map(|object| object.controller)
         .unwrap_or_default();
+    let mana_cost = eng.effective_ability_mana_cost(controller, source_id, ability);
     let mana_produced = eng
         .active_mana_options(source_id, ability)
         .map(|options| {

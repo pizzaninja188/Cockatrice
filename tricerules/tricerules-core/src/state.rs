@@ -1384,11 +1384,25 @@ pub struct PlayerTurnRecord {
     pub attacked: bool,
 }
 
+/// Event-time public characteristics for one committed attacker or battlefield entrant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TurnObjectFact {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub controller: PlayerId,
+    pub types: Vec<String>,
+    pub keywords: Vec<Keyword>,
+    pub power: Option<u32>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TurnRecord {
     pub spells_cast: u32,
     pub creatures_died: u32,
     pub by_player: BTreeMap<PlayerId, PlayerTurnRecord>,
+    pub declared_attackers: Vec<TurnObjectFact>,
+    pub permanents_entered: Vec<TurnObjectFact>,
+    pub damaged_objects: Vec<(ObjectId, u64)>,
 }
 
 impl TurnRecord {

@@ -79,6 +79,65 @@ pub(super) fn pay_mana(
 }
 
 impl GameEngine {
+    pub(in crate::engine) fn activated_generic_reduction(
+        &self,
+        controller: PlayerId,
+        source_id: ObjectId,
+        ability: &ActivatedAbilityDef,
+    ) -> u32 {
+        let context = ConditionContext {
+            controller,
+            source_object_id: source_id,
+            source_zone_change: self
+                .state
+                .zone_change_generation
+                .get(&source_id)
+                .copied()
+                .unwrap_or(0),
+            resolving_spell_id: None,
+            stack_item: None,
+        };
+        ability
+            .cost_modifiers
+            .iter()
+            .fold(0u32, |total, modifier| match modifier {
+                ActivatedCostModifier::ConditionalGenericReduction { amount, condition }
+                    if self.condition_holds(condition, context) =>
+                {
+                    total.saturating_add(*amount)
+                }
+                ActivatedCostModifier::ConditionalGenericReduction { .. } => total,
+            })
+    }
+
+    pub(in crate::engine) fn effective_ability_mana_cost(
+        &self,
+        controller: PlayerId,
+        source_id: ObjectId,
+        ability: &ActivatedAbilityDef,
+    ) -> String {
+        let reduction = self.activated_generic_reduction(controller, source_id, ability);
+        let Some(cost) = ability.costs.iter().find_map(|cost| match cost {
+            AbilityCost::Mana(cost) => Some(cost),
+            _ => None,
+        }) else {
+            return String::new();
+        };
+        let mut remaining = reduction;
+        let mut reduced = cost.clone();
+        for pip in &mut reduced.pips {
+            if let ManaSymbol::Generic(amount) = pip {
+                let applied = (*amount).min(remaining);
+                *amount -= applied;
+                remaining -= applied;
+            }
+        }
+        reduced
+            .pips
+            .retain(|pip| !matches!(pip, ManaSymbol::Generic(0)));
+        reduced.to_string()
+    }
+
     pub(super) fn pay_permanent_action_mana(
         &mut self,
         player_idx: usize,
@@ -439,6 +498,7 @@ impl GameEngine {
                 .copied()
                 .unwrap_or(0),
             resolving_spell_id: None,
+            stack_item: None,
         };
         let intrinsic = modifiers
             .iter()
@@ -452,8 +512,9 @@ impl GameEngine {
                 SpellCostModifier::BattlefieldCountGenericReduction {
                     amount_per_match,
                     filter,
+                    aggregate,
                 } => total.saturating_add(
-                    self.battlefield_aggregate_value(filter, BattlefieldAggregate::Count, context)
+                    self.battlefield_aggregate_value(filter, *aggregate, context)
                         .saturating_mul(*amount_per_match),
                 ),
                 SpellCostModifier::TargetMatchGenericReduction { .. } => total,
@@ -508,6 +569,7 @@ impl GameEngine {
                             .copied()
                             .unwrap_or(0),
                         resolving_spell_id: None,
+                        stack_item: None,
                     };
                     if condition
                         .as_ref()

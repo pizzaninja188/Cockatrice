@@ -276,6 +276,7 @@ impl CharacteristicsEvaluator<'_> {
                         | ContinuousEffectKind::Layer6AddProtection(_)
                         | ContinuousEffectKind::Layer7bSetPt { .. }
                         | ContinuousEffectKind::PtModify { .. }
+                        | ContinuousEffectKind::PtModifyByCreatureCount { .. }
                 )
             })
             .filter(|(_, effect)| {
@@ -347,6 +348,25 @@ impl CharacteristicsEvaluator<'_> {
                     });
                 condition.matches_value(count)
             }
+            GameCondition::CardsDrawnThisTurn { players, .. } => {
+                let count = self
+                    .state
+                    .players
+                    .iter()
+                    .filter(|player| {
+                        relative_player_set_contains(self.state, *players, controller, player.id)
+                    })
+                    .fold(0u32, |total, player| {
+                        total.saturating_add(
+                            self.state
+                                .turn_history
+                                .current
+                                .player(player.id)
+                                .cards_drawn,
+                        )
+                    });
+                condition.matches_value(count)
+            }
             GameCondition::AttackedThisTurn { players } => self
                 .state
                 .players
@@ -355,6 +375,72 @@ impl CharacteristicsEvaluator<'_> {
                     relative_player_set_contains(self.state, *players, controller, player.id)
                 })
                 .any(|player| self.state.turn_history.current.player(player.id).attacked),
+            GameCondition::AttackersDeclaredThisTurn {
+                players, filter, ..
+            } => {
+                let count = self
+                    .state
+                    .turn_history
+                    .current
+                    .declared_attackers
+                    .iter()
+                    .filter(|fact| {
+                        relative_player_set_contains(
+                            self.state,
+                            *players,
+                            controller,
+                            fact.controller,
+                        ) && super::history::creature_event_fact_matches(filter, fact)
+                    })
+                    .count();
+                condition.matches_value(u32::try_from(count).unwrap_or(u32::MAX))
+            }
+            GameCondition::PermanentsEnteredThisTurn {
+                controllers,
+                filter,
+                ..
+            } => {
+                let source_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&source_oid)
+                    .copied()
+                    .unwrap_or(0);
+                let context = ConditionContext {
+                    controller,
+                    source_object_id: source_oid,
+                    source_zone_change: source_generation,
+                    resolving_spell_id: None,
+                    stack_item: None,
+                };
+                let count = self
+                    .state
+                    .turn_history
+                    .current
+                    .permanents_entered
+                    .iter()
+                    .filter(|fact| {
+                        relative_player_set_contains(
+                            self.state,
+                            *controllers,
+                            controller,
+                            fact.controller,
+                        ) && super::history::permanent_event_fact_matches(filter, fact, context)
+                    })
+                    .count();
+                condition.matches_value(u32::try_from(count).unwrap_or(u32::MAX))
+            }
+            GameCondition::SourceCounterCount { counter, .. } => {
+                let count = self
+                    .state
+                    .objects
+                    .get(&source_oid)
+                    .filter(|object| object.zone == Zone::Battlefield)
+                    .map(|object| object.counter_count(*counter))
+                    .unwrap_or(0);
+                condition.matches_value(count)
+            }
+            GameCondition::ObjectWasDealtDamageThisTurn { .. } => false,
             // Registry validation rejects this dependency-sensitive condition for the only
             // current producer of conditional characteristic effects. Normal condition users
             // evaluate it through `GameEngine::condition_holds` instead.
@@ -364,6 +450,44 @@ impl CharacteristicsEvaluator<'_> {
                 aggregate: BattlefieldAggregate::Count,
                 ..
             } => {
+                fn filter_matches(
+                    evaluator: &CharacteristicsEvaluator<'_>,
+                    filter: &BattlefieldPermanentFilter,
+                    candidate_oid: ObjectId,
+                    characteristics: &Characteristics,
+                    controller: PlayerId,
+                ) -> bool {
+                    relative_player_set_contains(
+                        evaluator.state,
+                        filter.controllers,
+                        controller,
+                        characteristics.controller,
+                    ) && battlefield_card_type_matches(filter.card_type, characteristics)
+                        && filter
+                            .color
+                            .is_none_or(|color| characteristics.colors.contains(&color))
+                        && filter
+                            .required_subtypes
+                            .iter()
+                            .all(|subtype| characteristics.has_type(subtype))
+                        && filter.name.as_ref().is_none_or(|name| {
+                            evaluator
+                                .effective_face(candidate_oid)
+                                .is_some_and(|face| face.name == *name)
+                        })
+                        && filter.any_of.as_ref().is_none_or(|branches| {
+                            branches.iter().any(|branch| {
+                                filter_matches(
+                                    evaluator,
+                                    branch,
+                                    candidate_oid,
+                                    characteristics,
+                                    controller,
+                                )
+                            })
+                        })
+                }
+
                 let source_generation = self
                     .state
                     .zone_change_generation
@@ -394,22 +518,8 @@ impl CharacteristicsEvaluator<'_> {
                         };
                         Some((candidate_oid, characteristics))
                     })
-                    .filter(|(_, characteristics)| {
-                        relative_player_set_contains(
-                            self.state,
-                            filter.controllers,
-                            controller,
-                            characteristics.controller,
-                        ) && battlefield_card_type_matches(filter.card_type, characteristics)
-                            && filter
-                                .color
-                                .is_none_or(|color| characteristics.colors.contains(&color))
-                    })
-                    .filter(|(candidate_oid, _)| {
-                        filter.name.as_ref().is_none_or(|name| {
-                            self.effective_face(*candidate_oid)
-                                .is_some_and(|face| face.name == *name)
-                        })
+                    .filter(|(candidate_oid, characteristics)| {
+                        filter_matches(self, filter, *candidate_oid, characteristics, controller)
                     })
                     .count();
                 condition.matches_value(u32::try_from(count).unwrap_or(u32::MAX))
@@ -440,12 +550,16 @@ impl CharacteristicsEvaluator<'_> {
                 condition.matches_value(u32::try_from(count).unwrap_or(u32::MAX))
             }
             GameCondition::GraveyardAggregate {
-                owners, aggregate, ..
+                owners,
+                aggregate,
+                filter,
+                ..
             } => condition.matches_value(graveyard_aggregate_value(
                 self.state,
                 self.registry,
                 *owners,
                 *aggregate,
+                filter.as_ref(),
                 controller,
                 None,
             )),
@@ -871,6 +985,65 @@ impl CharacteristicsEvaluator<'_> {
                 }
                 if let Some(value) = &mut toughness {
                     *value += delta_toughness;
+                }
+            }
+            if let ContinuousEffectKind::PtModifyByCreatureCount {
+                ref filter,
+                power_per_match,
+                toughness_per_match,
+            } = effect.kind
+            {
+                let Some(source_id) = effect.source_id else {
+                    continue;
+                };
+                let source_controller = self.layer_2_controller(source_id, &mut Vec::new());
+                let count = self
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|player| player.battlefield.iter().copied())
+                    .filter(|candidate| !filter.exclude_source || *candidate != source_id)
+                    .filter_map(|candidate| {
+                        let characteristics = self.characteristics_through_layer_5(candidate)?;
+                        Some((candidate, characteristics))
+                    })
+                    .filter(|(candidate, characteristics)| {
+                        relative_player_set_contains(
+                            self.state,
+                            filter.controllers,
+                            source_controller,
+                            characteristics.controller,
+                        ) && characteristics.is_creature()
+                            && filter
+                                .subtype
+                                .as_ref()
+                                .is_none_or(|subtype| characteristics.has_type(subtype))
+                            && filter.tapped.is_none_or(|tapped| {
+                                self.state
+                                    .objects
+                                    .get(candidate)
+                                    .is_some_and(|object| object.tapped == tapped)
+                            })
+                            && (!filter.requires_any_counter
+                                || self
+                                    .state
+                                    .objects
+                                    .get(candidate)
+                                    .is_some_and(GameObject::has_any_counter))
+                            && filter.required_counter.is_none_or(|counter| {
+                                self.state
+                                    .objects
+                                    .get(candidate)
+                                    .is_some_and(|object| object.counter_count(counter) > 0)
+                            })
+                    })
+                    .count();
+                let count = i32::try_from(count).unwrap_or(i32::MAX);
+                if let Some(value) = &mut power {
+                    *value = value.saturating_add(power_per_match.saturating_mul(count));
+                }
+                if let Some(value) = &mut toughness {
+                    *value = value.saturating_add(toughness_per_match.saturating_mul(count));
                 }
             }
         }

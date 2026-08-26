@@ -121,10 +121,9 @@ impl GameEngine {
             return;
         }
 
-        self.record_committed_events(events);
-
-        // All permanents in a simultaneous ETB set exist before any trigger check. Register every
-        // static ability first so characteristics and trigger conditions see the completed event.
+        // All permanents in a simultaneous ETB set exist before history or trigger checks.
+        // Register every static ability first so event-time facts and trigger conditions see the
+        // completed event's derived characteristics.
         for event in events {
             if let GameEvent::EntersBattlefield { object_id } = event {
                 if !self.state.room_states.contains_key(object_id) {
@@ -132,6 +131,8 @@ impl GameEngine {
                 }
             }
         }
+
+        self.record_committed_events(events);
 
         let mut delayed = Vec::new();
         for event in events {
@@ -1077,6 +1078,7 @@ impl GameEngine {
                 card_id: cast_card_id,
                 ordinal,
                 face_index,
+                mana_value,
             } => {
                 // CR 709.4/712.4: a spell on the stack has the characteristics of the cast face.
                 let cast_face = self
@@ -1092,6 +1094,8 @@ impl GameEngine {
                                 caster: caster_filter,
                                 spell_type,
                                 ordinal: trigger_ordinal,
+                                min_mana_value,
+                                max_mana_value,
                             } = tc
                             else {
                                 return false;
@@ -1105,6 +1109,11 @@ impl GameEngine {
                                 return false;
                             }
                             if trigger_ordinal.is_some_and(|expected| expected != *ordinal) {
+                                return false;
+                            }
+                            if min_mana_value.is_some_and(|minimum| *mana_value < minimum)
+                                || max_mana_value.is_some_and(|maximum| *mana_value > maximum)
+                            {
                                 return false;
                             }
                             match spell_type {
@@ -1417,6 +1426,10 @@ impl GameEngine {
     ) -> bool {
         characteristics.is_creature()
             && filter
+                .required_subtypes
+                .iter()
+                .all(|subtype| characteristics.has_type(subtype))
+            && filter
                 .required_keywords
                 .iter()
                 .all(|keyword| characteristics.has_keyword(*keyword))
@@ -1502,6 +1515,7 @@ impl GameEngine {
                             .unwrap_or(0)
                     }),
                     resolving_spell_id: None,
+                    stack_item: None,
                 },
             ),
         }

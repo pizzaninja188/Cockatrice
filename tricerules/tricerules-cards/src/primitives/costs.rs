@@ -172,7 +172,31 @@ pub enum SpellCostModifier {
     BattlefieldCountGenericReduction {
         amount_per_match: u32,
         filter: BattlefieldPermanentFilter,
+        #[serde(default)]
+        aggregate: super::BattlefieldAggregate,
     },
+}
+
+/// One modifier applied while determining an activated ability's mana cost (CR 602.2b).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ActivatedCostModifier {
+    ConditionalGenericReduction {
+        amount: u32,
+        condition: GameCondition,
+    },
+}
+
+impl ActivatedCostModifier {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::ConditionalGenericReduction { amount, condition } => {
+                if *amount == 0 {
+                    return Err("activated generic cost reduction must be nonzero".into());
+                }
+                condition.validate()
+            }
+        }
+    }
 }
 
 impl SpellCostModifier {
@@ -201,6 +225,7 @@ impl SpellCostModifier {
             Self::BattlefieldCountGenericReduction {
                 amount_per_match,
                 filter,
+                ..
             } => {
                 if *amount_per_match == 0 {
                     return Err("battlefield-count generic cost reduction must be nonzero".into());

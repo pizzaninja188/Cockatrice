@@ -1,10 +1,10 @@
 //! Spell and continuous-effect vocabulary plus shared effect parameters.
 
 use super::{
-    ActivatedAbilityDef, CardTypeFilter, CastCostReceiptCondition, Color, CreatureScopeFilter,
-    GraveyardDestination, GraveyardFilter, Keyword, PowerComparison, ProtectionQuality,
-    ReflexiveTriggeredAbilityDef, SpecialActionKind, TargetController, TargetFilter, TargetKind,
-    TargetRole, TriggeredAbilityDef, TypeLineAddition,
+    ActivatedAbilityDef, CardTypeFilter, CastCostReceiptCondition, Color, CreatureEventFilter,
+    CreatureScopeFilter, GraveyardDestination, GraveyardFilter, Keyword, PermanentTypeFilter,
+    PowerComparison, ProtectionQuality, ReflexiveTriggeredAbilityDef, SpecialActionKind,
+    TargetController, TargetFilter, TargetKind, TargetRole, TriggeredAbilityDef, TypeLineAddition,
 };
 use crate::ManaCost;
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
@@ -55,9 +55,47 @@ pub enum GameCondition {
         #[serde(default)]
         max: Option<u32>,
     },
+    /// Compare committed successful draws by the selected players this turn.
+    CardsDrawnThisTurn {
+        players: RelativePlayerSet,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
     /// Whether any selected player committed a nonempty attacker declaration this turn.
     /// Raid cards and "if you attacked this turn" abilities share this fact.
     AttackedThisTurn { players: RelativePlayerSet },
+    /// Count declared attackers whose event-time creature characteristics match `filter`.
+    AttackersDeclaredThisTurn {
+        players: RelativePlayerSet,
+        #[serde(default)]
+        filter: CreatureEventFilter,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
+    /// Count permanent-entry facts captured with event-time characteristics.
+    PermanentsEnteredThisTurn {
+        controllers: RelativePlayerSet,
+        #[serde(default)]
+        filter: PermanentEventFilter,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
+    /// Compare one counter kind on the exact source object generation.
+    SourceCounterCount {
+        counter: CounterKind,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
+    /// Whether the referenced object generation was actually dealt positive damage this turn.
+    ObjectWasDealtDamageThisTurn { object: ConditionObjectRef },
     /// Compare the number of battlefield creatures matching derived characteristics against
     /// inclusive bounds. Winged Words uses `min: 1` plus Flying; subtype-based cost reductions
     /// and public activation/trigger conditions reuse the same filter.
@@ -94,6 +132,9 @@ pub enum GameCondition {
     GraveyardAggregate {
         owners: RelativePlayerSet,
         aggregate: GraveyardAggregate,
+        /// Optional printed-characteristic filter for the public graveyard cohort.
+        #[serde(default)]
+        filter: Option<ZoneCardFilter>,
         #[serde(default)]
         min: Option<u32>,
         #[serde(default)]
@@ -131,20 +172,34 @@ impl GameCondition {
                 }
                 Ok(())
             }
-            GameCondition::SpellsCastThisTurn { min, max, .. } => {
+            GameCondition::SpellsCastThisTurn { min, max, .. }
+            | GameCondition::CardsDrawnThisTurn { min, max, .. }
+            | GameCondition::AttackersDeclaredThisTurn { min, max, .. }
+            | GameCondition::PermanentsEnteredThisTurn { min, max, .. }
+            | GameCondition::SourceCounterCount { min, max, .. } => {
                 if min.is_none() && max.is_none() {
-                    return Err("SpellsCastThisTurn requires at least one of min or max".into());
+                    return Err("bounded game condition requires at least one of min or max".into());
                 }
                 if min
                     .as_ref()
                     .zip(max.as_ref())
                     .is_some_and(|(minimum, maximum)| minimum > maximum)
                 {
-                    return Err("SpellsCastThisTurn min cannot exceed max".into());
+                    return Err("bounded game condition min cannot exceed max".into());
+                }
+                if let GameCondition::AttackersDeclaredThisTurn { filter, .. } = self {
+                    filter.validate()?;
+                }
+                if let GameCondition::PermanentsEnteredThisTurn { filter, .. } = self {
+                    filter.validate()?;
+                }
+                if let GameCondition::SourceCounterCount { counter, .. } = self {
+                    counter.validate()?;
                 }
                 Ok(())
             }
             GameCondition::AttackedThisTurn { .. } => Ok(()),
+            GameCondition::ObjectWasDealtDamageThisTurn { .. } => Ok(()),
             GameCondition::BattlefieldCreatureCount { filter, min, max } => {
                 filter.validate()?;
                 if min.is_none() && max.is_none() {
@@ -210,9 +265,14 @@ impl GameCondition {
         match self {
             GameCondition::ActivePlayer { .. }
             | GameCondition::PlayerLifeAggregate { .. }
-            | GameCondition::AttackedThisTurn { .. } => false,
+            | GameCondition::AttackedThisTurn { .. }
+            | GameCondition::ObjectWasDealtDamageThisTurn { .. } => false,
             GameCondition::CreatureDeathsThisTurn { min, max }
             | GameCondition::SpellsCastThisTurn { min, max, .. }
+            | GameCondition::CardsDrawnThisTurn { min, max, .. }
+            | GameCondition::AttackersDeclaredThisTurn { min, max, .. }
+            | GameCondition::PermanentsEnteredThisTurn { min, max, .. }
+            | GameCondition::SourceCounterCount { min, max, .. }
             | GameCondition::BattlefieldCreatureCount { min, max, .. }
             | GameCondition::BattlefieldAggregate { min, max, .. }
             | GameCondition::UnlockedRoomDoorCount { min, max, .. }
@@ -246,6 +306,10 @@ pub enum PlayerLifeAggregate {
 /// uses the effective copiable face name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BattlefieldPermanentFilter {
+    /// Optional recursive disjunction. The leaf predicates on this node still apply to every
+    /// branch; a permanent that matches more than one branch is returned only once.
+    #[serde(default)]
+    pub any_of: Option<Vec<Self>>,
     pub controllers: RelativePlayerSet,
     #[serde(default)]
     pub card_type: Option<CardTypeFilter>,
@@ -254,6 +318,9 @@ pub struct BattlefieldPermanentFilter {
     pub color: Option<Color>,
     #[serde(default)]
     pub name: Option<String>,
+    /// Every listed derived subtype must be present.
+    #[serde(default)]
+    pub required_subtypes: Vec<String>,
     /// "Another" excludes only the source object generation that created the condition.
     #[serde(default)]
     pub exclude_source: bool,
@@ -261,6 +328,16 @@ pub struct BattlefieldPermanentFilter {
 
 impl BattlefieldPermanentFilter {
     pub(crate) fn validate(&self) -> Result<(), String> {
+        if let Some(branches) = &self.any_of {
+            if branches.len() < 2 {
+                return Err(
+                    "battlefield permanent filter any_of requires at least two branches".into(),
+                );
+            }
+            for branch in branches {
+                branch.validate()?;
+            }
+        }
         if self
             .name
             .as_ref()
@@ -268,14 +345,23 @@ impl BattlefieldPermanentFilter {
         {
             return Err("battlefield permanent filter name cannot be empty".into());
         }
+        if self
+            .required_subtypes
+            .iter()
+            .any(|subtype| subtype.trim().is_empty())
+        {
+            return Err("battlefield permanent filter subtype cannot be empty".into());
+        }
         Ok(())
     }
 }
 
 /// Which public number a battlefield condition observes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum BattlefieldAggregate {
+    #[default]
     Count,
+    DistinctNames,
     TotalPower,
     MaximumPower,
 }
@@ -285,6 +371,38 @@ pub enum BattlefieldAggregate {
 pub enum GraveyardAggregate {
     CardCount,
     DistinctCardTypes,
+}
+
+/// Event-time permanent characteristics retained in turn history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct PermanentEventFilter {
+    #[serde(default)]
+    pub permanent_type: Option<PermanentTypeFilter>,
+    #[serde(default)]
+    pub required_subtypes: Vec<String>,
+    /// Exclude the exact source object generation ("another").
+    #[serde(default)]
+    pub exclude_source: bool,
+}
+
+impl PermanentEventFilter {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if self
+            .required_subtypes
+            .iter()
+            .any(|subtype| subtype.trim().is_empty())
+        {
+            return Err("permanent event subtype cannot be empty".into());
+        }
+        Ok(())
+    }
+}
+
+/// Stable object reference available while evaluating a stack-bound condition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConditionObjectRef {
+    Source,
+    ChosenTarget { group_index: u32, target_index: u32 },
 }
 
 /// Which battlefield creatures contribute to a [`CountExpression`]. This is deliberately separate
@@ -300,14 +418,34 @@ pub struct BattlefieldCreatureCountFilter {
     /// Every listed keyword must be present in the creature's derived characteristics.
     #[serde(default)]
     pub required_keywords: Vec<Keyword>,
+    /// If present, the creature must have the matching current tapped status.
+    #[serde(default)]
+    pub tapped: Option<bool>,
     /// If true, the creature must currently have at least one counter of any kind. This is a
     /// live physical-object predicate used by mechanics such as Delta Bloodflies, rather than a
     /// derived-characteristic inference from a specific counter vocabulary.
     #[serde(default)]
     pub requires_any_counter: bool,
+    /// If present, the creature must currently have at least one counter of this kind.
+    #[serde(default)]
+    pub required_counter: Option<CounterKind>,
     /// Exclude the resolving spell or ability's physical source object.
     #[serde(default)]
     pub exclude_source: bool,
+}
+
+impl Default for BattlefieldCreatureCountFilter {
+    fn default() -> Self {
+        Self {
+            controllers: RelativePlayerSet::Controller,
+            subtype: None,
+            required_keywords: Vec::new(),
+            tapped: None,
+            requires_any_counter: false,
+            required_counter: None,
+            exclude_source: false,
+        }
+    }
 }
 
 impl BattlefieldCreatureCountFilter {
@@ -318,6 +456,12 @@ impl BattlefieldCreatureCountFilter {
             .is_some_and(|value| value.trim().is_empty())
         {
             return Err("battlefield creature count subtype cannot be empty".into());
+        }
+        if self.requires_any_counter && self.required_counter.is_some() {
+            return Err(
+                "battlefield creature count filter cannot combine any-counter and specific-counter requirements"
+                    .into(),
+            );
         }
         Ok(())
     }
@@ -3129,6 +3273,12 @@ pub enum ContinuousEffectKind {
         delta_power: i32,
         delta_toughness: i32,
     },
+    /// CR 613 layer 7c dynamic self modifier from a battlefield-creature count.
+    PtModifyByCreatureCount {
+        filter: BattlefieldCreatureCountFilter,
+        power_per_match: i32,
+        toughness_per_match: i32,
+    },
     /// CR 613 layer 6 — grant a keyword ability to affected permanents. Covers lords
     /// (Goblin Chieftain → Haste), pump sorceries (Overrun → Trample), and any
     /// "creatures you control gain [keyword] until end of turn" effect.
@@ -3150,4 +3300,114 @@ pub enum ContinuousEffectKind {
     /// Covers Exploration, Oracle of Mul Daya, and similar enchantments/permanents.
     ExtraLandPlays(u32),
     // Future: Layer7bSetPt { power: i32, toughness: i32 }, …
+}
+
+#[cfg(test)]
+mod issue_158_predicate_tests {
+    use super::*;
+
+    #[test]
+    fn richer_public_predicates_validate_composable_filters() {
+        let union = GameCondition::BattlefieldAggregate {
+            filter: BattlefieldPermanentFilter {
+                any_of: Some(vec![
+                    BattlefieldPermanentFilter {
+                        any_of: None,
+                        controllers: RelativePlayerSet::Controller,
+                        card_type: Some(CardTypeFilter::Land),
+                        color: None,
+                        name: None,
+                        required_subtypes: vec![],
+                        exclude_source: false,
+                    },
+                    BattlefieldPermanentFilter {
+                        any_of: None,
+                        controllers: RelativePlayerSet::Controller,
+                        card_type: None,
+                        color: None,
+                        name: None,
+                        required_subtypes: vec!["Treefolk".into()],
+                        exclude_source: false,
+                    },
+                ]),
+                controllers: RelativePlayerSet::Controller,
+                card_type: None,
+                color: None,
+                name: None,
+                required_subtypes: vec![],
+                exclude_source: false,
+            },
+            aggregate: BattlefieldAggregate::DistinctNames,
+            min: Some(7),
+            max: None,
+        };
+        assert!(union.validate().is_ok());
+
+        let graveyard = GameCondition::GraveyardAggregate {
+            owners: RelativePlayerSet::Controller,
+            aggregate: GraveyardAggregate::CardCount,
+            filter: Some(ZoneCardFilter {
+                subtype: Some("Lesson".into()),
+                ..Default::default()
+            }),
+            min: Some(1),
+            max: None,
+        };
+        assert!(graveyard.validate().is_ok());
+
+        let tapped = GameCondition::BattlefieldCreatureCount {
+            filter: BattlefieldCreatureCountFilter {
+                controllers: RelativePlayerSet::Controller,
+                tapped: Some(true),
+                ..Default::default()
+            },
+            min: Some(2),
+            max: None,
+        };
+        assert!(tapped.validate().is_ok());
+    }
+
+    #[test]
+    fn committed_turn_predicates_validate_typed_bounds_and_identity() {
+        let conditions = [
+            GameCondition::CardsDrawnThisTurn {
+                players: RelativePlayerSet::Controller,
+                min: Some(2),
+                max: None,
+            },
+            GameCondition::AttackersDeclaredThisTurn {
+                players: RelativePlayerSet::Controller,
+                filter: CreatureEventFilter {
+                    required_subtypes: vec!["Spacecraft".into()],
+                    ..Default::default()
+                },
+                min: Some(1),
+                max: None,
+            },
+            GameCondition::PermanentsEnteredThisTurn {
+                controllers: RelativePlayerSet::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Artifact),
+                    required_subtypes: vec![],
+                    exclude_source: false,
+                },
+                min: Some(1),
+                max: None,
+            },
+            GameCondition::SourceCounterCount {
+                counter: CounterKind::MinusOneMinusOne,
+                min: Some(1),
+                max: None,
+            },
+            GameCondition::ObjectWasDealtDamageThisTurn {
+                object: ConditionObjectRef::ChosenTarget {
+                    group_index: 0,
+                    target_index: 0,
+                },
+            },
+        ];
+        for condition in conditions {
+            condition.validate().expect("valid issue #158 condition");
+        }
+    }
 }

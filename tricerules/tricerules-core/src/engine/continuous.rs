@@ -363,6 +363,24 @@ impl GameEngine {
                         });
                     }
                 }
+                StaticAbilityDef::CountScaledSelfPt {
+                    filter,
+                    power_per_match,
+                    toughness_per_match,
+                } => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        source_id: Some(object_id),
+                        affected: AffectedScope::Single(object_id),
+                        kind: ContinuousEffectKind::PtModifyByCreatureCount {
+                            filter,
+                            power_per_match,
+                            toughness_per_match,
+                        },
+                        condition: None,
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
                 StaticAbilityDef::ExtraLandPlays { count } => {
                     self.state.continuous_effects.push(ContinuousEffect {
                         source_id: Some(object_id),
@@ -489,6 +507,7 @@ impl GameEngine {
                         .copied()
                         .unwrap_or(0),
                     resolving_spell_id: None,
+                    stack_item: None,
                 },
             )
         })

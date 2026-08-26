@@ -1,9 +1,10 @@
 //! Activated, triggered, and static ability definitions.
 
 use super::{
-    AbilityCost, Amount, BattlefieldCreatureCountFilter, CardTypeFilter, CastCostReceiptCondition,
-    Color, CounterKind, EffectContext, GameCondition, Keyword, PowerComparison, RelativePlayerSet,
-    SpellEffectKind, TargetController, TargetFilter, TargetKind, TargetingDef,
+    AbilityCost, ActivatedCostModifier, Amount, BattlefieldCreatureCountFilter, CardTypeFilter,
+    CastCostReceiptCondition, Color, CounterKind, EffectContext, GameCondition, Keyword,
+    PowerComparison, RelativePlayerSet, SpellEffectKind, TargetController, TargetFilter,
+    TargetKind, TargetingDef,
 };
 use crate::{ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
@@ -16,6 +17,9 @@ pub struct ActivatedAbilityDef {
     pub source_zone: AbilitySourceZone,
     /// Costs in authored order. Every component is validated before any component is paid.
     pub costs: Vec<AbilityCost>,
+    /// Cost modifiers evaluated from live public state during activation preflight.
+    #[serde(default)]
+    pub cost_modifiers: Vec<ActivatedCostModifier>,
     /// CR 608.2: the ability's effects, resolved in the order written — the same shape and the
     /// same semantics as a spell's `spell_effect`. A single-effect ability is a one-element list.
     pub effect: Vec<SpellEffectKind>,
@@ -202,6 +206,9 @@ impl ActivatedAbilityDef {
         }
         for condition in &self.conditions {
             condition.validate()?;
+        }
+        for modifier in &self.cost_modifiers {
+            modifier.validate()?;
         }
         if let Some(limit) = self.activation_limit {
             limit.validate()?;
@@ -421,6 +428,11 @@ pub enum TriggerCondition {
         /// shared flurry vocabulary used by Poised Practitioner and Jeskai Devotee.
         #[serde(default)]
         ordinal: Option<u32>,
+        /// Inclusive mana-value bounds for the spell as cast, including announced X.
+        #[serde(default)]
+        min_mana_value: Option<u32>,
+        #[serde(default)]
+        max_mana_value: Option<u32>,
     },
     /// Whenever a selected player draws their Nth card in a turn. Each successfully drawn card
     /// is a distinct CR 121.2 event; opening hands and mulligans are not draws.
@@ -572,6 +584,16 @@ impl TriggerCondition {
             | Self::WheneverPlayerDrawsNthCard { ordinal: 0, .. } => {
                 Err("turn-history trigger ordinal must be at least one".into())
             }
+            Self::WheneverPlayerCastsSpell {
+                min_mana_value,
+                max_mana_value,
+                ..
+            } if min_mana_value
+                .zip(*max_mana_value)
+                .is_some_and(|(minimum, maximum)| minimum > maximum) =>
+            {
+                Err("cast trigger mana-value minimum cannot exceed maximum".into())
+            }
             _ => Ok(()),
         }
     }
@@ -625,6 +647,9 @@ impl TriggerCondition {
 /// Vicious Clown, and Mentor of the Meek without putting card-specific rules into the engine.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct CreatureEventFilter {
+    /// Every listed event-time subtype must be present.
+    #[serde(default)]
+    pub required_subtypes: Vec<String>,
     #[serde(default)]
     pub required_keywords: Vec<Keyword>,
     #[serde(default)]
@@ -636,11 +661,19 @@ pub struct CreatureEventFilter {
 impl CreatureEventFilter {
     pub(crate) fn is_empty(&self) -> bool {
         self.required_keywords.is_empty()
+            && self.required_subtypes.is_empty()
             && self.excluded_keywords.is_empty()
             && self.power.is_none()
     }
 
     pub(crate) fn validate(&self) -> Result<(), String> {
+        if self
+            .required_subtypes
+            .iter()
+            .any(|subtype| subtype.trim().is_empty())
+        {
+            return Err("creature event subtype cannot be empty".into());
+        }
         if self
             .required_keywords
             .iter()
@@ -1235,6 +1268,13 @@ pub enum StaticAbilityDef {
         keywords: Vec<Keyword>,
         #[serde(default)]
         can_attack_as_though_without_defender: bool,
+    },
+    /// CR 613 layer 7c: this permanent gets a signed amount for each matching battlefield
+    /// creature. The count uses pre-layer-7 type/subtype and physical-state facts.
+    CountScaledSelfPt {
+        filter: BattlefieldCreatureCountFilter,
+        power_per_match: i32,
+        toughness_per_match: i32,
     },
     /// CR 305.2b / layer 5: controller may play `count` additional lands per turn while this
     /// permanent is on the battlefield. Exploration, Oracle of Mul Daya.

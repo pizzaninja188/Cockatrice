@@ -1,0 +1,25 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26. Damage history follows the chosen
+// target's captured zone-change generation after the first instruction exiles it.
+(
+  id: "sold_out",
+  name: "Sold Out",
+  mana_cost: "{3}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    ExileTarget,
+    ChooseResolutionBranch(
+      selection: FirstApplicable,
+      branches: [
+        (
+          label: "Create a Clue",
+          cost: None,
+          requirement: GameCondition(ObjectWasDealtDamageThisTurn(
+            object: ChosenTarget(group_index: 0, target_index: 0),
+          )),
+          effects: [CreateTokens(token: "clue", count: 1)],
+        ),
+        (label: "No additional effect", cost: None, requirement: Always, effects: []),
+      ],
+    ),
+  ],
+)

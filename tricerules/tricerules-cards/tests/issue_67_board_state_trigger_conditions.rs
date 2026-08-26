@@ -40,6 +40,7 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
                 color: None,
                 name: None,
                 exclude_source: false,
+                ..
             },
             aggregate: BattlefieldAggregate::Count,
             min: Some(1),
@@ -129,10 +130,12 @@ fn issue_67_card_characteristics_and_effects_match_oracle() {
 fn battlefield_aggregate_conditions_reject_invalid_bounds_and_names() {
     let condition = |name: Option<&str>, min, max| GameCondition::BattlefieldAggregate {
         filter: BattlefieldPermanentFilter {
+            any_of: None,
             controllers: RelativePlayerSet::Controller,
             card_type: None,
             color: None,
             name: name.map(str::to_string),
+            required_subtypes: vec![],
             exclude_source: false,
         },
         aggregate: BattlefieldAggregate::TotalPower,

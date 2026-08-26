@@ -43,6 +43,8 @@ fn second_event_cards_use_shared_ordinal_triggers() {
             caster: CastTriggerPlayer::Controller,
             spell_type: None,
             ordinal: Some(2),
+            min_mana_value: None,
+            max_mana_value: None,
         }
     );
     assert!(matches!(
@@ -66,6 +68,8 @@ fn second_event_cards_use_shared_ordinal_triggers() {
             caster: CastTriggerPlayer::Controller,
             spell_type: None,
             ordinal: Some(2),
+            min_mana_value: None,
+            max_mana_value: None,
         }
     );
     assert!(matches!(

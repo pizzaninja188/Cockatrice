@@ -1,0 +1,19 @@
+// Oracle and ruling checked against Scryfall on 2026-08-26. The entry fact remains true even if
+// the entering object later stops being an artifact or leaves the battlefield.
+(
+  id: "mechan_shieldmate",
+  name: "Mechan Shieldmate",
+  mana_cost: "{1}{U}",
+  types: ["Artifact", "Creature", "Robot", "Soldier"],
+  power: 3,
+  toughness: 2,
+  keywords: [Defender],
+  static_abilities: [ConditionalSelfModifier(
+    condition: PermanentsEnteredThisTurn(
+      controllers: Controller,
+      filter: (permanent_type: Some(Artifact)),
+      min: Some(1),
+    ),
+    can_attack_as_though_without_defender: true,
+  )],
+)

@@ -1,0 +1,36 @@
+// Oracle and ruling checked against Scryfall on 2026-08-26. A cast spell's mana value includes
+// announced X; copied spells are not cast and do not trigger this ability.
+(
+  id: "flaring_cinder",
+  name: "Flaring Cinder",
+  mana_cost: "{1}{U/R}{U/R}",
+  types: ["Creature", "Elemental", "Sorcerer"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ChooseResolutionBranch(
+        optional: true,
+        branches: [(
+          label: "Discard a card",
+          cost: DiscardCard(filter: None),
+          effects: [Draw(count: 1)],
+        )],
+      )],
+      text: "When this creature enters, you may discard a card. If you do, draw a card.",
+    ),
+    (
+      trigger: WheneverPlayerCastsSpell(caster: Controller, min_mana_value: Some(4)),
+      effect: [ChooseResolutionBranch(
+        optional: true,
+        branches: [(
+          label: "Discard a card",
+          cost: DiscardCard(filter: None),
+          effects: [Draw(count: 1)],
+        )],
+      )],
+      text: "Whenever you cast a spell with mana value 4 or greater, you may discard a card. If you do, draw a card.",
+    ),
+  ],
+)

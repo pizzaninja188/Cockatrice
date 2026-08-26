@@ -423,14 +423,11 @@ impl GameEngine {
                             .effective_activated_abilities(oid)
                             .into_iter()
                             .map(|(ability_index, ability, _)| {
-                                let mana_cost = ability
-                                    .costs
-                                    .iter()
-                                    .find_map(|cost| match cost {
-                                        AbilityCost::Mana(cost) => Some(cost.to_string()),
-                                        _ => None,
-                                    })
-                                    .unwrap_or_default();
+                                let mana_cost = self.effective_ability_mana_cost(
+                                    object.controller,
+                                    oid,
+                                    &ability,
+                                );
                                 let mana_produced = self
                                     .active_mana_options(oid, &ability)
                                     .map(|options| {

@@ -1,0 +1,13 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26.
+(
+  id: "foggy_swamp_hunters",
+  name: "Foggy Swamp Hunters",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Human", "Ranger", "Ally"],
+  power: 3,
+  toughness: 4,
+  static_abilities: [ConditionalSelfModifier(
+    condition: CardsDrawnThisTurn(players: Controller, min: Some(2)),
+    keywords: [Lifelink, Menace],
+  )],
+)

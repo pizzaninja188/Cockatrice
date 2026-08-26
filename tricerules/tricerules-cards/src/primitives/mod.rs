@@ -185,7 +185,9 @@ mod tests {
                     controllers: RelativePlayerSet::Controller,
                     subtype: None,
                     required_keywords: vec![],
+                    tapped: None,
                     requires_any_counter: false,
+                    required_counter: None,
                     exclude_source: false,
                 },
             }),
@@ -215,7 +217,9 @@ mod tests {
                 controllers: RelativePlayerSet::Controller,
                 subtype: Some(" ".into()),
                 required_keywords: vec![],
+                tapped: None,
                 requires_any_counter: false,
+                required_counter: None,
                 exclude_source: false,
             },
         })
@@ -363,6 +367,8 @@ mod tests {
             caster: CastTriggerPlayer::Controller,
             spell_type: None,
             ordinal: Some(0),
+            min_mana_value: None,
+            max_mana_value: None,
         }
         .validate()
         .is_err());
@@ -385,6 +391,7 @@ mod tests {
         let condition = |min, max| GameCondition::GraveyardAggregate {
             owners: RelativePlayerSet::Controller,
             aggregate: GraveyardAggregate::DistinctCardTypes,
+            filter: None,
             min,
             max,
         };
@@ -406,7 +413,9 @@ mod tests {
                 controllers: RelativePlayerSet::Controller,
                 subtype: None,
                 required_keywords: vec![Keyword::Flying],
+                tapped: None,
                 requires_any_counter: false,
+                required_counter: None,
                 exclude_source: false,
             },
             min,
@@ -424,7 +433,9 @@ mod tests {
                 controllers: RelativePlayerSet::Controller,
                 subtype: None,
                 required_keywords: vec![Keyword::Flying],
+                tapped: None,
                 requires_any_counter: false,
+                required_counter: None,
                 exclude_source: false,
             },
             min,
@@ -450,6 +461,7 @@ mod tests {
         let explicit = ActivatedAbilityDef {
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![],
+            cost_modifiers: vec![],
             effect: vec![],
             targeting: None,
             timing: ActivationTiming::SorcerySpeed,
@@ -462,6 +474,7 @@ mod tests {
         let equip = ActivatedAbilityDef {
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![],
+            cost_modifiers: vec![],
             effect: vec![SpellEffectKind::Equip {
                 target: TargetFilter::default(),
             }],
@@ -484,6 +497,7 @@ mod tests {
         let ability_with = |activation_limit| ActivatedAbilityDef {
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![],
+            cost_modifiers: vec![],
             effect: vec![SpellEffectKind::ProduceMana {
                 options: vec![ManaAmount {
                     g: 1,

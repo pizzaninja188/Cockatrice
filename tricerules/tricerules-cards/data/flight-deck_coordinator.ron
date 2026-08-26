@@ -1,0 +1,19 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26.
+// CR 603.4: the tapped-creature condition is checked at trigger creation and resolution.
+(
+  id: "flight-deck_coordinator",
+  name: "Flight-Deck Coordinator",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    trigger: AtBeginningOfEndStep(player: Controller),
+    effect: [GainLife(amount: 2)],
+    intervening_if: Some(GameCondition(BattlefieldCreatureCount(
+      filter: (controllers: Controller, tapped: Some(true)),
+      min: Some(2),
+    ))),
+    text: "At the beginning of your end step, if you control two or more tapped creatures, you gain 2 life.",
+  )],
+)

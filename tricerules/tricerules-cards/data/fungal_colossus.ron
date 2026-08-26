@@ -1,0 +1,14 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26.
+(
+  id: "fungal_colossus",
+  name: "Fungal Colossus",
+  mana_cost: "{6}{G}",
+  types: ["Creature", "Fungus", "Beast"],
+  power: 5,
+  toughness: 5,
+  cost_modifiers: [BattlefieldCountGenericReduction(
+    amount_per_match: 1,
+    filter: (controllers: Controller, card_type: Some(Land)),
+    aggregate: DistinctNames,
+  )],
+)

@@ -1,0 +1,9 @@
+(
+  id: "treefolk_g_3_4_reach",
+  name: "Treefolk",
+  types: ["Creature", "Treefolk"],
+  power: 3,
+  toughness: 4,
+  colors: [Green],
+  keywords: [Reach],
+)

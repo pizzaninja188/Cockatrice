@@ -1,0 +1,19 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26.
+(
+  id: "avatar_enthusiasts",
+  name: "Avatar Enthusiasts",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Peasant", "Ally"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      permanent_type: Some(Creature),
+      exclude_self: true,
+      creature_filter: Some((required_subtypes: ["Ally"])),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    text: "Whenever another Ally you control enters, put a +1/+1 counter on this creature.",
+  )],
+)

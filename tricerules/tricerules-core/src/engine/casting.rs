@@ -202,6 +202,7 @@ impl GameEngine {
             card_id,
             ordinal,
             face_index: expected_face_index,
+            mana_value: face.mana_cost.mana_value(),
         }]));
         self.stage_triggers(triggers);
         Ok(())
@@ -728,12 +729,24 @@ impl GameEngine {
         let ordinal = self.record_spell_cast(player);
         target_triggers
             .extend(self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed));
-        target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
-            caster: player,
-            card_id: cast_card_id,
-            ordinal,
-            face_index,
-        }]));
+        target_triggers.extend(
+            self.collect_event_triggers(&[GameEvent::SpellCast {
+                caster: player,
+                card_id: cast_card_id,
+                ordinal,
+                face_index,
+                mana_value: face.mana_cost.mana_value().saturating_add(
+                    face.mana_cost
+                        .pips
+                        .iter()
+                        .filter(|pip| matches!(pip, ManaSymbol::X))
+                        .count()
+                        .try_into()
+                        .unwrap_or(u32::MAX)
+                        .saturating_mul(x_value),
+                ),
+            }]),
+        );
         // Both kinds of triggers are waiting when the cast completes, so they form one CR 603.3b
         // ordering group rather than forcing an artificial target-trigger/cast-trigger order.
         self.stage_triggers(target_triggers);
@@ -765,6 +778,7 @@ impl GameEngine {
                                 .copied()
                                 .unwrap_or(0),
                             resolving_spell_id: None,
+                            stack_item: None,
                         },
                     )
                 })
@@ -1002,6 +1016,7 @@ impl GameEngine {
             .unwrap_or(0);
         let targeting_cost =
             self.targeting_cost_increase(player, TargetingCostAction::ActivatedAbilities, targets);
+        let generic_reduction = self.activated_generic_reduction(player, permanent_id, &ability);
         let activation_uses = self.limited_activation_uses(permanent_id, ability_index, &ability);
         let cost_plan = self.plan_ability_costs(
             player,
@@ -1012,6 +1027,7 @@ impl GameEngine {
             cost_selections,
             restricted_mana,
             targeting_cost,
+            generic_reduction,
         )?;
         let payment = self.commit_cost_transaction(cost_plan)?;
         self.record_limited_activations(activation_uses);
@@ -1346,6 +1362,7 @@ impl GameEngine {
                             .copied()
                             .unwrap_or(0),
                         resolving_spell_id: None,
+                        stack_item: None,
                     },
                 ),
             tricerules_cards::ActivationCondition::BattlefieldCreatureCount {
@@ -1423,6 +1440,7 @@ impl GameEngine {
             cost_selections,
             restricted_mana,
             0,
+            self.activated_generic_reduction(player, permanent_id, ability),
         )?;
         let payment = self.commit_cost_transaction(cost_plan)?;
         self.record_limited_activations(activation_uses);
@@ -1911,7 +1929,7 @@ mod mana_payment_tests {
         ];
 
         let err = e
-            .plan_ability_costs(0, 0, oid, &costs, &[], &selections, &[], 0)
+            .plan_ability_costs(0, 0, oid, &costs, &[], &selections, &[], 0, 0)
             .err()
             .expect("one object cannot be sacrificed twice");
         assert!(format!("{err:?}").contains("one object cannot pay two costs"));
@@ -1968,7 +1986,7 @@ mod mana_payment_tests {
 
         let duplicate = [select(vec![cards[1], cards[1]])];
         assert!(e
-            .plan_ability_costs(0, 0, source, &costs, &[], &duplicate, &[], 0)
+            .plan_ability_costs(0, 0, source, &costs, &[], &duplicate, &[], 0, 0)
             .is_err());
         assert!(cards
             .iter()
@@ -1976,7 +1994,7 @@ mod mana_payment_tests {
 
         let selected = [select(vec![cards[1], cards[2]])];
         let plan = e
-            .plan_ability_costs(0, 0, source, &costs, &[], &selected, &[], 0)
+            .plan_ability_costs(0, 0, source, &costs, &[], &selected, &[], 0, 0)
             .expect("three distinct graveyard objects validate together");
         e.commit_cost_transaction(plan)
             .expect("costs commit atomically");

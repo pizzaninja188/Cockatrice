@@ -19,8 +19,8 @@ use crate::state::{
     PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
     ReplacementPriority, ResolutionContinuation, RoomState, SpellCastMethod, StackItem,
     StackObjectRef, StackTarget, StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry,
-    TriggerContext, TriggerObjectRef, TriggeredOnceKey, TurnHistory, TurnStep, UndoableManaAbility,
-    Zone,
+    TriggerContext, TriggerObjectRef, TriggeredOnceKey, TurnHistory, TurnObjectFact, TurnStep,
+    UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -31,24 +31,24 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
-    AbilityCost, AbilitySourceZone, ActivatedAbilityDef, AdditionalCost, Amount, AttachmentFilter,
-    AttachmentKind, BattlefieldAggregate, BattlefieldPermanentFilter, CardResultAction,
-    CardSearchZone, CardTypeFilter, CastCostGroupDef, CastCostOptionDef, CastCostReceiptCondition,
-    CastTriggerPlayer, Color, CombatRestriction, CombatRestrictionScope,
-    ConditionalSearchDestination, ContinuousEffectKind, ControllerReference, CountExpression,
-    CounterKind, CreatureEventFilter, CreatureScopeController, CreatureScopeFilter, DamageDivision,
-    DamagePreventionAdditionalEffect, DamagePreventionSubject, DelayedTokenSacrificeTiming,
-    DiscardChooser, DrawDiscardOrder, EffectDuration, EffectSubject, EntersTappedAffected,
-    EntersWithCountersAffected, Evasion, FaceChangeAction, GameCondition, GraveyardAggregate,
-    HandChoiceVisibility, InterveningIf, Keyword, LibraryBottomOrder, LibraryPartitionKind,
-    LibraryPlacement, LifeAmount, ManaAmount, ManaSpendFilter, PermanentTypeFilter,
-    PlayerLifeAggregate, PlayerRecipient, PowerComparison, PreventionAmountBasis,
-    ProtectionCardType, ProtectionGrant, ProtectionQuality, RelativePlayerSet, ResolutionBranchDef,
-    ResolutionCost, ReturnController, SearchDestination, SearchZoneSelection,
-    SpecialActionAffected, SpecialActionKind, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
-    StaticDamagePreventionAmount, TargetController, TargetFilter, TargetKind, TargetingCostAction,
-    TargetingCostProtected, TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef,
-    TriggeredCardReference, ZoneCardFilter,
+    AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivatedCostModifier, AdditionalCost,
+    Amount, AttachmentFilter, AttachmentKind, BattlefieldAggregate, BattlefieldPermanentFilter,
+    CardResultAction, CardSearchZone, CardTypeFilter, CastCostGroupDef, CastCostOptionDef,
+    CastCostReceiptCondition, CastTriggerPlayer, Color, CombatRestriction, CombatRestrictionScope,
+    ConditionObjectRef, ConditionalSearchDestination, ContinuousEffectKind, ControllerReference,
+    CountExpression, CounterKind, CreatureEventFilter, CreatureScopeController,
+    CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect, DamagePreventionSubject,
+    DelayedTokenSacrificeTiming, DiscardChooser, DrawDiscardOrder, EffectDuration, EffectSubject,
+    EntersTappedAffected, EntersWithCountersAffected, Evasion, FaceChangeAction, GameCondition,
+    GraveyardAggregate, HandChoiceVisibility, InterveningIf, Keyword, LibraryBottomOrder,
+    LibraryPartitionKind, LibraryPlacement, LifeAmount, ManaAmount, ManaSpendFilter,
+    PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
+    PowerComparison, PreventionAmountBasis, ProtectionCardType, ProtectionGrant, ProtectionQuality,
+    RelativePlayerSet, ResolutionBranchDef, ResolutionCost, ReturnController, SearchDestination,
+    SearchZoneSelection, SpecialActionAffected, SpecialActionKind, SpellCostModifier,
+    SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount, TargetController,
+    TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected, TargetingSourceFilter,
+    TriggerCondition, TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
 };
 use tricerules_cards::{CardDefinition, CardFace, CardRegistry, FaceRef, Layout};
 use tricerules_proto::ruled::v1 as rv1;
@@ -112,20 +112,22 @@ impl<'a> AmountContext<'a> {
 }
 
 #[derive(Clone, Copy)]
-struct ConditionContext {
+struct ConditionContext<'a> {
     controller: PlayerId,
     source_object_id: ObjectId,
     source_zone_change: u64,
     resolving_spell_id: Option<ObjectId>,
+    stack_item: Option<&'a StackItem>,
 }
 
-impl ConditionContext {
-    fn for_stack_item(item: &StackItem) -> Self {
+impl<'a> ConditionContext<'a> {
+    fn for_stack_item(item: &'a StackItem) -> Self {
         Self {
             controller: item.controller,
             source_object_id: item.source_permanent_id.unwrap_or(item.id),
             source_zone_change: item.source_zone_change,
             resolving_spell_id: item.ability_text.is_none().then_some(item.id),
+            stack_item: Some(item),
         }
     }
 }
@@ -404,6 +406,8 @@ enum GameEvent {
         /// CR 709/712: the half/face that was cast. On the stack a multi-face spell has only that
         /// face's characteristics, so cast triggers filter on it rather than on the whole card.
         face_index: usize,
+        /// Mana value of the cast face on the stack, including the announced value of X.
+        mana_value: u32,
     },
     /// A spell or ability has legally acquired its final targets. `targets` intentionally keeps
     /// duplicates for the stack object's own semantics; trigger collection deduplicates watched

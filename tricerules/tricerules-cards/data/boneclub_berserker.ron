@@ -1,0 +1,14 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26.
+(
+  id: "boneclub_berserker",
+  name: "Boneclub Berserker",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Goblin", "Berserker"],
+  power: 2,
+  toughness: 4,
+  static_abilities: [CountScaledSelfPt(
+    filter: (controllers: Controller, subtype: Some("Goblin"), exclude_source: true),
+    power_per_match: 2,
+    toughness_per_match: 0,
+  )],
+)

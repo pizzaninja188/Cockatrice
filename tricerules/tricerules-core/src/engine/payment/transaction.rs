@@ -470,6 +470,7 @@ impl GameEngine {
         selections: &[rv1::CostSelection],
         restricted_mana: &[rv1::ManaSpendSelection],
         extra_generic: u32,
+        generic_reduction: u32,
     ) -> Result<CostTransactionPlan, EngineError> {
         use rv1::cost_selection::Selection;
 
@@ -555,7 +556,7 @@ impl GameEngine {
                             cost,
                             0,
                             extra_generic,
-                            0,
+                            generic_reduction,
                             flex_payments,
                             restricted_mana,
                             &eligible_restricted_mana,
@@ -718,7 +719,7 @@ impl GameEngine {
                     &ManaCost::default(),
                     0,
                     extra_generic,
-                    0,
+                    generic_reduction,
                     flex_payments,
                     restricted_mana,
                     &eligible_restricted_mana,

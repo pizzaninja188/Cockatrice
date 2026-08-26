@@ -1,0 +1,38 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26. A Land Treefolk matches both
+// branches of the public union but contributes only one permanent.
+(
+  id: "tend_the_sprigs",
+  name: "Tend the Sprigs",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    SearchLibrary(
+      filter: Some((card_type: Some(BasicLand))),
+      destination: Battlefield(tapped: true),
+      shuffle: true,
+      reveal: false,
+    ),
+    ChooseResolutionBranch(
+      selection: FirstApplicable,
+      branches: [
+        (
+          label: "Create a Treefolk",
+          cost: None,
+          requirement: GameCondition(BattlefieldAggregate(
+            filter: (
+              controllers: Controller,
+              any_of: Some([
+                (controllers: Controller, card_type: Some(Land)),
+                (controllers: Controller, required_subtypes: ["Treefolk"]),
+              ]),
+            ),
+            aggregate: Count,
+            min: Some(7),
+          )),
+          effects: [CreateTokens(token: "treefolk_g_3_4_reach", count: 1)],
+        ),
+        (label: "No additional effect", cost: None, requirement: Always, effects: []),
+      ],
+    ),
+  ],
+)
