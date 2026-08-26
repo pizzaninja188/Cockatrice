@@ -232,6 +232,8 @@ public:
     bool sawMobilizeTokenCreated = false;
     bool sawMobilizeTokenSacrificed = false;
     quint32 mobilizeTokenOid = 0;
+    bool sawTappedOrdinaryTokenCreated = false;
+    quint32 tappedOrdinaryTokenOid = 0;
     std::set<int> physicallyTappedCardIds;
     std::set<int> physicallyAttackingCardIds;
     struct Pool
@@ -1400,6 +1402,10 @@ public:
                     sawMobilizeTokenCreated = token.enters_tapped() && token.identity().name() == "Warrior" &&
                                               token.identity().pt() == "1/1";
                     mobilizeTokenOid = token.object_id();
+                } else if (token.card_id() == "robot_c_2_2") {
+                    sawTappedOrdinaryTokenCreated = token.enters_tapped() && token.identity().name() == "Robot" &&
+                                                     token.identity().pt() == "2/2";
+                    tappedOrdinaryTokenOid = token.object_id();
                 }
             } else if (ev.has_permanent_moved()) {
                 const auto &moved = ev.permanent_moved();
@@ -5618,6 +5624,124 @@ TEST_F(RuledE2ESmokeTest, MobilizeDefenderChoiceAndTokenLifecycleReachBothClient
     ASSERT_TRUE(pass(p1.priorityPlayer == p1.myId ? p1 : p2));
     ASSERT_TRUE(pass(p1.priorityPlayer == p1.myId ? p1 : p2));
     EXPECT_TRUE(p1.sawMobilizeTokenSacrificed && p2.sawMobilizeTokenSacrificed);
+}
+
+TEST_F(RuledE2ESmokeTest, TappedOrdinaryTokenReachesBothClientsWithoutCombatState)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("tappedtokenp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("tappedtokenp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Mountain")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "issue 162 game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "issue 162 game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto pass = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(client, command, QStringLiteral("issue 162 pass"));
+    };
+    auto findToken = [](const SmokeClient &client, int controller,
+                        quint32 objectId) -> std::optional<SmokeClient::Permanent> {
+        const auto battlefield = client.battlefieldByPlayer.find(controller);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return std::nullopt;
+        }
+        const auto token = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                        [objectId](const SmokeClient::Permanent &permanent) {
+                                            return permanent.oid == objectId;
+                                        });
+        return token == battlefield->second.end() ? std::nullopt : std::optional(*token);
+    };
+
+    ruled::v1::RuledCommand putMoxite;
+    putMoxite.mutable_dev_command()->set_target_player_id(p1.myId);
+    auto *placement = putMoxite.mutable_dev_command()->mutable_put_card_in_zone();
+    placement->set_card_name("Melded Moxite");
+    placement->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+    placement->set_ready(true);
+    ASSERT_TRUE(send(p1, putMoxite, QStringLiteral("issue 162 put Melded Moxite")));
+
+    ruled::v1::RuledCommand addMana;
+    addMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_c(3);
+    ASSERT_TRUE(send(p1, addMana, QStringLiteral("issue 162 add {3}")));
+
+    const auto moxite = std::find_if(
+        p1.battlefieldByPlayer[p1.myId].begin(), p1.battlefieldByPlayer[p1.myId].end(),
+        [](const SmokeClient::Permanent &permanent) {
+            return permanent.cardId == QStringLiteral("melded_moxite");
+        });
+    ASSERT_NE(moxite, p1.battlefieldByPlayer[p1.myId].end());
+    ruled::v1::RuledCommand activate;
+    p1.setBattlefieldAbilitySource(activate.mutable_activate_ability(), moxite->oid);
+    activate.mutable_activate_ability()->set_ability_index(0);
+    ASSERT_TRUE(send(p1, activate, QStringLiteral("issue 162 activate Melded Moxite")));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+
+    ASSERT_TRUE(p1.sawTappedOrdinaryTokenCreated && p2.sawTappedOrdinaryTokenCreated);
+    ASSERT_NE(p1.tappedOrdinaryTokenOid, 0u);
+    ASSERT_EQ(p1.tappedOrdinaryTokenOid, p2.tappedOrdinaryTokenOid);
+    const quint32 tokenOid = p1.tappedOrdinaryTokenOid;
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(tokenOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(tokenOid));
+    const int physicalTokenId = p1.serverCardByEngineOid[tokenOid];
+    EXPECT_EQ(p2.serverCardByEngineOid[tokenOid], physicalTokenId);
+    EXPECT_TRUE(p1.physicallyTappedCardIds.count(physicalTokenId));
+    EXPECT_TRUE(p2.physicallyTappedCardIds.count(physicalTokenId));
+    EXPECT_FALSE(p1.physicallyAttackingCardIds.count(physicalTokenId));
+    EXPECT_FALSE(p2.physicallyAttackingCardIds.count(physicalTokenId));
+    const auto p1Robot = findToken(p1, p1.myId, tokenOid);
+    const auto p2Robot = findToken(p2, p1.myId, tokenOid);
+    ASSERT_TRUE(p1Robot.has_value() && p2Robot.has_value());
+    EXPECT_EQ(p1Robot->oid, tokenOid);
+    EXPECT_EQ(p2Robot->oid, tokenOid);
+    EXPECT_TRUE(p1Robot->tapped && p2Robot->tapped);
 }
 
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can

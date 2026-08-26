@@ -8,6 +8,7 @@ pub(super) fn create_tokens(
         token,
         count,
         who,
+        tapped,
         sacrifice_timing,
     } = effect
     else {
@@ -32,6 +33,7 @@ pub(super) fn create_tokens(
             spell_label,
             item: &item,
         },
+        tapped,
         sacrifice_timing,
         events,
     )? {

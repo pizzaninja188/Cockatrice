@@ -1,0 +1,8 @@
+// 2/2 colorless Robot artifact creature token (Gravpack Monoist, Melded Moxite).
+(
+  id: "robot_c_2_2",
+  name: "Robot",
+  types: ["Artifact", "Creature", "Robot"],
+  power: 2,
+  toughness: 2,
+)

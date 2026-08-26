@@ -1,0 +1,14 @@
+(
+  id: "gravpack_monoist",
+  name: "Gravpack Monoist",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Human", "Scout"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    trigger: WhenSelfDies,
+    effect: [CreateTokens(token: "robot_c_2_2", count: 1, tapped: true)],
+    text: "When this creature dies, create a tapped 2/2 colorless Robot artifact creature token.",
+  )],
+)

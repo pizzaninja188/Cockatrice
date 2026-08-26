@@ -125,6 +125,8 @@ mod issue_158_predicates;
 mod issue_160_blocker_constraints;
 #[path = "scenario/issue_161_turn_boundaries.rs"]
 mod issue_161_turn_boundaries;
+#[path = "scenario/issue_162_tapped_tokens.rs"]
+mod issue_162_tapped_tokens;
 #[path = "scenario/issue_163_calibration_cards.rs"]
 mod issue_163_calibration_cards;
 #[path = "scenario/issue_57_targeting_costs.rs"]

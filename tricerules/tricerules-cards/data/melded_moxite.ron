@@ -1,0 +1,21 @@
+(
+  id: "melded_moxite",
+  name: "Melded Moxite",
+  mana_cost: "{1}{R}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [DrawDiscard(
+      draw_count: 2,
+      discard_count: 1,
+      order: DiscardThenDraw,
+      optional: true,
+    )],
+    text: "When this artifact enters, you may discard a card. If you do, draw two cards.",
+  )],
+  activated_abilities: [(
+    costs: [Mana("{3}"), SacrificeSelf],
+    effect: [CreateTokens(token: "robot_c_2_2", count: 1, tapped: true)],
+    text: "{3}, Sacrifice this artifact: Create a tapped 2/2 colorless Robot artifact creature token.",
+  )],
+)

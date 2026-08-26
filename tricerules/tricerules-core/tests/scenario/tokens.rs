@@ -34,6 +34,7 @@ fn raise_the_alarm_creates_two_soldier_tokens() {
         assert_eq!(o.zone, tricerules_core::Zone::Battlefield);
         assert_eq!((o.power, o.toughness), (Some(1), Some(1)), "1/1");
         assert!(o.summoning_sick, "entering token is summoning sick");
+        assert!(!o.tapped, "ordinary tokens remain untapped by default");
     }
     // P1 received no tokens (Controller, not EachPlayer).
     assert!(battlefield_token_oids(&e, 1, "soldier_w_1_1").is_empty());
@@ -48,6 +49,7 @@ fn raise_the_alarm_creates_two_soldier_tokens() {
         assert_eq!(id.pt, "1/1");
         assert_eq!(id.color, "w");
         assert!(id.is_creature);
+        assert!(!tc.enters_tapped, "default token event remains untapped");
         // Vanilla token: no keyword abilities feed to the client art matcher.
         assert!(id.keywords.is_empty());
     }

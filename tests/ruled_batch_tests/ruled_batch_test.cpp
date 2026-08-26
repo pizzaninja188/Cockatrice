@@ -2620,6 +2620,30 @@ TEST_F(RuledBatchTest, MobilizeTokenEntersTappedAndJoinsExistingAttackers)
     EXPECT_TRUE(bear->getAttacking()) << "Mobilize must append instead of clearing declared attackers";
 }
 
+TEST_F(RuledBatchTest, OrdinaryTokenEntersTappedWithoutJoiningCombat)
+{
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *created = response.mutable_batch()->add_events()->mutable_token_created();
+    created->set_object_id(502u);
+    created->set_controller_player_id(1);
+    created->set_card_id("robot_c_2_2");
+    created->set_enters_tapped(true);
+    created->mutable_identity()->set_name("Robot");
+    created->mutable_identity()->set_pt("2/2");
+    created->mutable_identity()->set_is_creature(true);
+
+    callBatchApply(response);
+
+    Server_Card *token = findCardByEngineOid(p1, 502u);
+    ASSERT_NE(token, nullptr);
+    EXPECT_EQ(token->getName(), QStringLiteral("Robot"));
+    EXPECT_EQ(token->getPT(), QStringLiteral("2/2"));
+    EXPECT_TRUE(token->getDestroyOnZoneChange());
+    EXPECT_TRUE(token->getTapped());
+    EXPECT_FALSE(token->getAttacking()) << "ordinary tapped entry must not imply attacking";
+}
+
 TEST_F(RuledBatchTest, BattleIsDisplayedOnProtectorsTableWithControllerAnnotation)
 {
     seedMultifaceCatalog(QStringLiteral("invasion_of_ulgrotha_grandmother_ravi_sengir"),

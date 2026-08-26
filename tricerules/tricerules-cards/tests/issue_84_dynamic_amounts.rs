@@ -158,6 +158,7 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
                 name: "Undead Servant".into(),
             }),
             who: PlayerRecipient::Controller,
+            tapped: false,
             sacrifice_timing: None,
         }]
     );

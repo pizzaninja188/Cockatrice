@@ -1596,6 +1596,10 @@ pub enum SpellEffectKind {
         count: Amount,
         #[serde(default)]
         who: PlayerRecipient,
+        /// Whether the complete ordinary token cohort enters the battlefield tapped. This is
+        /// initial entry status, not a later tap action (CR 110.5b).
+        #[serde(default)]
+        tapped: bool,
         #[serde(default)]
         sacrifice_timing: Option<DelayedTokenSacrificeTiming>,
     },

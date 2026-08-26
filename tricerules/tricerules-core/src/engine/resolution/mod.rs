@@ -1662,11 +1662,12 @@ impl GameEngine {
     fn create_tokens(
         &mut self,
         request: TokenCreationRequest<'_>,
+        enters_tapped: bool,
         delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         let item = request.item.clone();
-        let (entries, logs) = self.prepare_token_entries(request, false)?;
+        let (entries, logs) = self.prepare_token_entries(request, enters_tapped)?;
         // CR 603.6: one token-making instruction puts all of its tokens onto the battlefield
         // simultaneously, so every entrant exists before their ETB triggers are collected.
         self.begin_token_entry_batch(item, entries, logs, None, delayed_sacrifice, events)

@@ -1370,6 +1370,40 @@ mod tests {
     }
 
     #[test]
+    fn issue_162_tapped_ordinary_token_vocabulary_deserializes() {
+        let card = r#"(
+            id: "issue_162_tapped_token_maker",
+            name: "Issue 162 Tapped Token Maker",
+            mana_cost: "{2}",
+            types: ["Sorcery"],
+            spell_effect: [CreateTokens(
+                token: "issue_162_robot",
+                count: 2,
+                tapped: true,
+            )],
+        )"#;
+        let token = r#"(
+            id: "issue_162_robot",
+            name: "Issue 162 Robot",
+            types: ["Artifact", "Creature", "Robot"],
+            power: 2,
+            toughness: 2,
+        )"#;
+
+        let registry = CardRegistry::from_chunks_and_tokens(&[card], &[token])
+            .expect("ordinary token creation must accept an authored tapped flag");
+        let effect = &registry
+            .get("issue_162_tapped_token_maker")
+            .expect("test card")
+            .primary_face()
+            .spell_effect[0];
+        assert!(matches!(
+            effect,
+            SpellEffectKind::CreateTokens { tapped: true, .. }
+        ));
+    }
+
+    #[test]
     fn previous_card_result_rejects_an_incompatible_preceding_effect() {
         let card = r#"(
             id: "bad_previous_result",
