@@ -1564,7 +1564,7 @@ impl GameEngine {
             .rfind(|(index, entry)| *index >= first_allowed_index && entry.player == player)
             .map(|(index, _)| index)
             .ok_or(EngineError::Illegal("no mana ability to undo"))?;
-        let entry = self.state.undoable_mana_abilities.remove(pos);
+        let entry = self.state.undoable_mana_abilities[pos].clone();
 
         let p = &entry.produced;
         if let Some(group_id) = entry.restriction_group_id {
@@ -1581,13 +1581,15 @@ impl GameEngine {
                 .restricted_mana
                 .remove(contribution_pos);
         } else {
-            let pool = &mut self.state.players[idx].mana_pool;
-            if pool.white < p.w
-                || pool.blue < p.u
-                || pool.black < p.b
-                || pool.red < p.r
-                || pool.green < p.g
-                || pool.colorless < p.c
+            let player_state = &mut self.state.players[idx];
+            let retained = player_state.retained_combat_mana;
+            let pool = &mut player_state.mana_pool;
+            if pool.white.saturating_sub(retained.white) < p.w
+                || pool.blue.saturating_sub(retained.blue) < p.u
+                || pool.black.saturating_sub(retained.black) < p.b
+                || pool.red.saturating_sub(retained.red) < p.r
+                || pool.green.saturating_sub(retained.green) < p.g
+                || pool.colorless.saturating_sub(retained.colorless) < p.c
             {
                 return Err(EngineError::Illegal("floated mana already spent"));
             }
@@ -1598,6 +1600,8 @@ impl GameEngine {
             pool.green -= p.g;
             pool.colorless -= p.c;
         }
+
+        self.state.undoable_mana_abilities.remove(pos);
 
         super::set_tapped(&mut self.state, entry.source, false);
 
@@ -1873,6 +1877,55 @@ mod mana_payment_tests {
         engine.record_limited_activations(vec![LimitedActivationUse::PerTurn(key)]);
         assert!(!engine.activation_limit_allows(object_id, 0, &ability));
         assert!(engine.activation_limit_allows(object_id, 1, &ability));
+    }
+
+    #[test]
+    fn combat_retained_mana_is_spent_after_ordinary_mana_of_the_same_type() {
+        let mut engine = engine_with_priority();
+        engine.state.players[0].mana_pool.red = 3;
+        engine.state.players[0].retained_combat_mana.red = 2;
+
+        engine.pay_generic_mana(0, 1).expect("spend ordinary red");
+        assert_eq!(engine.state.players[0].mana_pool.red, 2);
+        assert_eq!(engine.state.players[0].retained_combat_mana.red, 2);
+
+        engine.pay_generic_mana(0, 1).expect("spend retained red");
+        assert_eq!(engine.state.players[0].mana_pool.red, 1);
+        assert_eq!(engine.state.players[0].retained_combat_mana.red, 1);
+    }
+
+    #[test]
+    fn mana_ability_undo_cannot_remove_combat_retained_mana() {
+        let mut engine = engine_with_priority();
+        let source = engine.state.players[0].library[0];
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .expect("source")
+            .tapped = true;
+        engine.state.players[0].mana_pool.red = 1;
+        engine.state.players[0].retained_combat_mana.red = 1;
+        engine
+            .state
+            .undoable_mana_abilities
+            .push(UndoableManaAbility {
+                player: 0,
+                source,
+                produced: ManaAmount {
+                    r: 1,
+                    ..Default::default()
+                },
+                restriction_group_id: None,
+            });
+
+        engine
+            .rewind_last_undoable_mana_ability(0, 0)
+            .expect_err("ordinary mana from the activation was already spent");
+        assert_eq!(engine.state.players[0].mana_pool.red, 1);
+        assert_eq!(engine.state.players[0].retained_combat_mana.red, 1);
+        assert_eq!(engine.state.undoable_mana_abilities.len(), 1);
+        assert!(engine.state.objects[&source].tapped);
     }
 
     #[test]

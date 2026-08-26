@@ -7,6 +7,33 @@ use super::resolution::resolve_creature_scope;
 use super::*;
 
 impl GameEngine {
+    pub(super) fn continuous_effect_condition_holds(&self, effect: &ContinuousEffect) -> bool {
+        let Some(condition) = effect.condition.as_ref() else {
+            return true;
+        };
+        let Some(source_oid) = effect.source_id else {
+            return false;
+        };
+        let Some(controller) = self.controller_of(source_oid) else {
+            return false;
+        };
+        self.condition_holds(
+            condition,
+            ConditionContext {
+                controller,
+                source_object_id: source_oid,
+                source_zone_change: self
+                    .state
+                    .zone_change_generation
+                    .get(&source_oid)
+                    .copied()
+                    .unwrap_or(0),
+                resolving_spell_id: None,
+                stack_item: None,
+            },
+        )
+    }
+
     /// Sum of extra land plays granted to `pid` by active `ExtraLandPlays` continuous effects.
     pub(super) fn extra_land_plays_for(&self, pid: PlayerId) -> u32 {
         self.state
@@ -326,6 +353,7 @@ impl GameEngine {
                     delta_power,
                     delta_toughness,
                     keywords,
+                    triggered_abilities,
                     can_attack_as_though_without_defender,
                 } => {
                     let affected = AffectedScope::Single(object_id);
@@ -347,6 +375,16 @@ impl GameEngine {
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                            condition: Some(condition.clone()),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    for ability in triggered_abilities {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
                             condition: Some(condition.clone()),
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,

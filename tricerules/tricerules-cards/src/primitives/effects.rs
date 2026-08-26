@@ -1648,6 +1648,13 @@ pub enum SpellEffectKind {
         #[serde(default)]
         conditional: Option<ConditionalManaOutput>,
     },
+    /// Add a fixed bag of mana while this spell or non-mana ability resolves. Unlike
+    /// [`ProduceMana`](Self::ProduceMana), this effect uses the stack normally. Firebending and
+    /// Radha, Heir to Keld are the first two mechanics supported by the shared retention shape.
+    AddMana {
+        amount: ManaAmount,
+        retention: ManaRetention,
+    },
     /// CR 701.18: pause resolution, let the casting player search their library for a card
     /// matching `filter` (None = any card; Some = only cards of that spell type), move it to
     /// `destination`, then shuffle if `shuffle` is true. Uses the tier-3 interrupt mechanism
@@ -1895,6 +1902,14 @@ pub struct ManaAmount {
     pub g: u32,
     #[serde(default)]
     pub c: u32,
+}
+
+/// The boundary at which resolving mana stops being retained. `EndOfStep` follows the ordinary
+/// CR 106.4 rule; `EndOfCombat` supports firebending's explicit exception.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ManaRetention {
+    EndOfStep,
+    EndOfCombat,
 }
 
 /// One OR-branch in a spending restriction. A branch may constrain card type, subtype, or both;
@@ -2241,6 +2256,7 @@ impl SpellEffectKind {
             | SpellEffectKind::CreateTokens { .. }
             | SpellEffectKind::CreateAttackingTokens { .. }
             | SpellEffectKind::ProduceMana { .. }
+            | SpellEffectKind::AddMana { .. }
             | SpellEffectKind::SearchLibrary { .. }
             | SpellEffectKind::PreventAllCombatDamageTurn
             | SpellEffectKind::DamageCantBePreventedThisTurn
@@ -3036,6 +3052,13 @@ impl SpellEffectKind {
                     }
                 }
                 Ok(())
+            }
+            SpellEffectKind::AddMana { amount, .. }
+                if [amount.w, amount.u, amount.b, amount.r, amount.g, amount.c]
+                    .into_iter()
+                    .all(|count| count == 0) =>
+            {
+                Err("AddMana requires at least one mana".into())
             }
             SpellEffectKind::CounterTargetSpell {
                 unless_controller_pays: Some(_),

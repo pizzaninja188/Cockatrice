@@ -1,0 +1,23 @@
+// Oracle, firebending, and exhaust rulings checked against Scryfall on 2026-08-26.
+(
+  id: "rough_rhino_cavalry",
+  name: "Rough Rhino Cavalry",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Human", "Mercenary"],
+  power: 5,
+  toughness: 5,
+  activated_abilities: [(
+    costs: [Mana("{8}")],
+    effect: [
+      PutCounters(counter: PlusOnePlusOne, count: 2, subject: Source),
+      GrantKeywords(subject: Source, keywords: [Trample]),
+    ],
+    activation_limit: Some(PerObject(max_activations: 1)),
+    text: "Exhaust — {8}: Put two +1/+1 counters on this creature. It gains trample until end of turn.",
+  )],
+  triggered_abilities: [(
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [AddMana(amount: (r: 2), retention: EndOfCombat)],
+    text: "Firebending 2",
+  )],
+)

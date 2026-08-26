@@ -1,0 +1,20 @@
+// Oracle and firebending rulings checked against Scryfall on 2026-08-26.
+(
+  id: "vindictive_warden",
+  name: "Vindictive Warden",
+  mana_cost: "{2}{B/R}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 3,
+  keywords: [Menace],
+  activated_abilities: [(
+    costs: [Mana("{3}")],
+    effect: [DamagePlayer(amount: 1, who: EachOpponent)],
+    text: "{3}: This creature deals 1 damage to each opponent.",
+  )],
+  triggered_abilities: [(
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [AddMana(amount: (r: 1), retention: EndOfCombat)],
+    text: "Firebending 1",
+  )],
+)

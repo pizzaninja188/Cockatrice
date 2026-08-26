@@ -1,0 +1,28 @@
+// Oracle and firebending rulings checked against Scryfall on 2026-08-26. The Lesson condition
+// grants the triggered ability continuously and is evaluated as attackers are declared.
+(
+  id: "fire_nation_cadets",
+  name: "Fire Nation Cadets",
+  mana_cost: "{R}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 1,
+  toughness: 2,
+  activated_abilities: [(
+    costs: [Mana("{2}")],
+    effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+    text: "{2}: This creature gets +1/+0 until end of turn.",
+  )],
+  static_abilities: [ConditionalSelfModifier(
+    condition: GraveyardAggregate(
+      owners: Controller,
+      aggregate: CardCount,
+      filter: Some((subtype: Some("Lesson"))),
+      min: Some(1),
+    ),
+    triggered_abilities: [(
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+      effect: [AddMana(amount: (r: 2), retention: EndOfCombat)],
+      text: "Firebending 2",
+    )],
+  )],
+)

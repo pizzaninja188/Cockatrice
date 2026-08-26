@@ -647,6 +647,7 @@ impl CardRegistry {
                         delta_power,
                         delta_toughness,
                         keywords,
+                        triggered_abilities,
                         can_attack_as_though_without_defender,
                     } = ability
                     {
@@ -659,6 +660,7 @@ impl CardRegistry {
                         if *delta_power == 0
                             && *delta_toughness == 0
                             && keywords.is_empty()
+                            && triggered_abilities.is_empty()
                             && !can_attack_as_though_without_defender
                         {
                             return Err(RegistryError::InvalidCard {
@@ -666,6 +668,14 @@ impl CardRegistry {
                                 reason: "ConditionalSelfModifier must modify at least one value"
                                     .into(),
                             });
+                        }
+                        for ability in triggered_abilities {
+                            ability.validate_shape().map_err(|reason| {
+                                RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                }
+                            })?;
                         }
                         if (*delta_power != 0 || *delta_toughness != 0 || !keywords.is_empty())
                             && matches!(

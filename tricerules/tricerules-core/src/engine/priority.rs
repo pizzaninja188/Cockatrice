@@ -264,7 +264,7 @@ impl GameEngine {
                 }
             }
             BeginCombat => {
-                self.clear_all_mana_pools();
+                self.clear_step_mana_pools();
                 if !self.active_player_has_eligible_attackers() {
                     // No eligible attackers — skip all declare substeps.
                     self.state.combat = None;
@@ -299,7 +299,7 @@ impl GameEngine {
                 }
             }
             DeclareAttackers => {
-                self.clear_all_mana_pools();
+                self.clear_step_mana_pools();
                 self.state.passes_since_stack_change = 0;
                 let has_eligible_blockers = self.defending_player_has_eligible_blockers();
                 let has_attackers = self
@@ -367,7 +367,7 @@ impl GameEngine {
                         if let Some(cc) = self.state.combat.as_mut() {
                             cc.assign_combat_damage_phase = true;
                         }
-                        self.clear_all_mana_pools();
+                        self.clear_step_mana_pools();
                         self.state.turn_step = DeclareBlockers;
                         if let Some(i) = self.state.player_idx(ap) {
                             self.state.priority_idx = i;
@@ -399,7 +399,7 @@ impl GameEngine {
                 self.resolve_combat_damage_step(ev)?;
             }
             CombatDamage => {
-                self.clear_all_mana_pools();
+                self.clear_step_mana_pools();
                 self.state.turn_step = EndCombat;
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;

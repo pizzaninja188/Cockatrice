@@ -394,6 +394,10 @@ pub struct PlayerState {
     pub graveyard: Vec<ObjectId>,
     pub exile: Vec<ObjectId>,
     pub mana_pool: ManaPool,
+    /// Unrestricted mana included in `mana_pool` that survives ordinary combat-step boundaries.
+    /// This engine-private subset is never published separately; it exists only to implement
+    /// effects such as firebending without changing the authoritative aggregate pool contract.
+    pub retained_combat_mana: ManaPool,
     /// CR 106.6 mana that cannot be merged into the unrestricted aggregate. Entries retain the
     /// activation that produced them for exact undo; events aggregate equal `restriction_group_id`
     /// values for the adjacent UI columns.
@@ -412,6 +416,7 @@ impl PlayerState {
             graveyard: Vec::new(),
             exile: Vec::new(),
             mana_pool: ManaPool::default(),
+            retained_combat_mana: ManaPool::default(),
             restricted_mana: Vec::new(),
         }
     }
@@ -423,7 +428,7 @@ pub struct RestrictedManaContribution {
     pub amount: ManaAmount,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ManaPool {
     pub white: u32,
     pub blue: u32,

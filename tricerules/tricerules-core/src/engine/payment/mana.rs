@@ -158,6 +158,8 @@ pub(in crate::engine) struct ManaPaymentPlan {
     pub(in crate::engine) life_cost: u32,
     pub(in crate::engine) restricted_spent: Vec<(u32, ManaAmount)>,
     expected_pool: PoolVec,
+    remaining_retained_combat: PoolVec,
+    expected_retained_combat: PoolVec,
     expected_life: i32,
     expected_restricted: Vec<RestrictedManaContribution>,
 }
@@ -346,12 +348,26 @@ pub(in crate::engine) fn plan_mana_payment_with_restricted_reduction(
             "not enough mana in pool; tap your lands first",
         ));
     };
+    let retained = &player.retained_combat_mana;
+    let expected_retained_combat = [
+        retained.white,
+        retained.blue,
+        retained.black,
+        retained.red,
+        retained.green,
+        retained.colorless,
+    ];
+    debug_assert!((0..6).all(|i| expected_retained_combat[i] <= unrestricted[i]));
+    let remaining_retained_combat =
+        std::array::from_fn(|i| expected_retained_combat[i].min(remaining[i]));
 
     Ok(ManaPaymentPlan {
         remaining,
         life_cost,
         restricted_spent,
         expected_pool: unrestricted,
+        remaining_retained_combat,
+        expected_retained_combat,
         expected_life: player.life,
         expected_restricted: player.restricted_mana.clone(),
     })
@@ -376,6 +392,15 @@ pub(super) fn mana_payment_still_valid(
             pool.colorless,
         ]
         && plan.expected_life == player.life
+        && plan.expected_retained_combat
+            == [
+                player.retained_combat_mana.white,
+                player.retained_combat_mana.blue,
+                player.retained_combat_mana.black,
+                player.retained_combat_mana.red,
+                player.retained_combat_mana.green,
+                player.retained_combat_mana.colorless,
+            ]
         && plan.expected_restricted == player.restricted_mana
 }
 
@@ -391,6 +416,13 @@ pub(in crate::engine) fn commit_mana_payment(
     pool.red = plan.remaining[3];
     pool.green = plan.remaining[4];
     pool.colorless = plan.remaining[POOL_C];
+    let retained = &mut state.players[player_idx].retained_combat_mana;
+    retained.white = plan.remaining_retained_combat[0];
+    retained.blue = plan.remaining_retained_combat[1];
+    retained.black = plan.remaining_retained_combat[2];
+    retained.red = plan.remaining_retained_combat[3];
+    retained.green = plan.remaining_retained_combat[4];
+    retained.colorless = plan.remaining_retained_combat[POOL_C];
     for (group_id, spent) in plan.restricted_spent {
         let entries = &mut state.players[player_idx].restricted_mana;
         for (slot, mut remaining) in [spent.w, spent.u, spent.b, spent.r, spent.g, spent.c]

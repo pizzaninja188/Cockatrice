@@ -13,7 +13,7 @@ use super::targeting::{
     TargetSourceIdentity,
 };
 use super::*;
-use tricerules_cards::primitives::{TargetRole, TargetingDef};
+use tricerules_cards::primitives::{ManaRetention, TargetRole, TargetingDef};
 
 mod choices;
 pub(in crate::engine) use choices::card_result_count;
@@ -1310,6 +1310,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::ProduceMana { .. } => {
                         misc::produce_mana(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::AddMana { .. } => misc::add_mana(&mut cx, effect)?,
                     effect @ SpellEffectKind::SearchLibrary { .. } => {
                         zones::search_library(&mut cx, effect)?
                     }

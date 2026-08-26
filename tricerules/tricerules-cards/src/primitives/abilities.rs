@@ -1266,6 +1266,11 @@ pub enum StaticAbilityDef {
         delta_toughness: i32,
         #[serde(default)]
         keywords: Vec<Keyword>,
+        /// Triggered abilities granted while `condition` holds. This uses the same continuous
+        /// grant path as copy and attachment effects, so attack-trigger collection sees the live
+        /// ability set without card-specific logic.
+        #[serde(default)]
+        triggered_abilities: Vec<TriggeredAbilityDef>,
         #[serde(default)]
         can_attack_as_though_without_defender: bool,
     },

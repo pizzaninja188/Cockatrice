@@ -79,33 +79,6 @@ impl GameEngine {
             })
     }
 
-    fn continuous_effect_condition_holds(&self, effect: &ContinuousEffect) -> bool {
-        let Some(condition) = effect.condition.as_ref() else {
-            return true;
-        };
-        let Some(source_oid) = effect.source_id else {
-            return false;
-        };
-        let Some(controller) = self.controller_of(source_oid) else {
-            return false;
-        };
-        self.condition_holds(
-            condition,
-            ConditionContext {
-                controller,
-                source_object_id: source_oid,
-                source_zone_change: self
-                    .state
-                    .zone_change_generation
-                    .get(&source_oid)
-                    .copied()
-                    .unwrap_or(0),
-                resolving_spell_id: None,
-                stack_item: None,
-            },
-        )
-    }
-
     fn can_attack_as_though_without_defender(
         &self,
         oid: ObjectId,
@@ -783,7 +756,7 @@ impl GameEngine {
         }
 
         if assignments.is_empty() {
-            self.clear_all_mana_pools();
+            self.clear_step_mana_pools();
             self.state.combat = None;
             self.state.turn_step = TurnStep::EndCombat;
             if let Some(i) = self.state.player_idx(ap) {
@@ -854,7 +827,7 @@ impl GameEngine {
                 first_strike_damage_done: false,
             });
         }
-        self.clear_all_mana_pools();
+        self.clear_step_mana_pools();
         // MTG timing: after attackers are declared, the game remains in declare-attackers
         // and the active player receives priority before moving to declare blockers.
         self.state.turn_step = TurnStep::DeclareAttackers;
@@ -1029,7 +1002,7 @@ impl GameEngine {
                 },
             )),
         });
-        self.clear_all_mana_pools();
+        self.clear_step_mana_pools();
         // MTG timing: blockers are declared in declare-blockers, then players get priority
         // before the game advances into combat-damage where damage is actually dealt.
         self.state.turn_step = TurnStep::DeclareBlockers;
@@ -1274,7 +1247,7 @@ impl GameEngine {
             // This mirrors adv_on_empty_stack(Untap) which emits PhaseChanged first, then
             // fires upkeep triggers — ensuring players see the non-empty stack and are not
             // auto-passed through triggered abilities.
-            self.clear_all_mana_pools();
+            self.clear_step_mana_pools();
             self.state.turn_step = TurnStep::FirstStrikeDamage;
             if let Some(i) = self.state.player_idx(ap) {
                 self.state.priority_idx = i;
@@ -1297,7 +1270,7 @@ impl GameEngine {
             // Emit PhaseChanged before resolving damage so the C++ client clears its
             // stack-object set before any combat damage triggers are pushed (StackPushed).
             self.state.combat = None;
-            self.clear_all_mana_pools();
+            self.clear_step_mana_pools();
             self.state.turn_step = TurnStep::CombatDamage;
             if let Some(i) = self.state.player_idx(ap) {
                 self.state.priority_idx = i;

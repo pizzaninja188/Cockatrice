@@ -682,6 +682,16 @@ impl GameEngine {
     fn clear_all_mana_pools(&mut self) {
         for p in &mut self.state.players {
             p.mana_pool.clear();
+            p.retained_combat_mana.clear();
+            p.restricted_mana.clear();
+        }
+    }
+
+    /// Empty ordinary step-scoped mana while preserving the subset explicitly retained through
+    /// combat. The retained amount is already included in `mana_pool`.
+    fn clear_step_mana_pools(&mut self) {
+        for p in &mut self.state.players {
+            p.mana_pool = p.retained_combat_mana;
             p.restricted_mana.clear();
         }
     }

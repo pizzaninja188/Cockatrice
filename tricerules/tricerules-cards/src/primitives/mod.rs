@@ -20,6 +20,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn firebending_uses_a_resolving_combat_retained_mana_effect() {
+        let effect = SpellEffectKind::AddMana {
+            amount: ManaAmount {
+                r: 2,
+                ..Default::default()
+            },
+            retention: ManaRetention::EndOfCombat,
+        };
+
+        assert!(effect.validate(EffectContext::Ability).is_ok());
+        assert!(!matches!(effect, SpellEffectKind::ProduceMana { .. }));
+    }
+
+    #[test]
     fn soft_counter_payment_must_be_nonzero() {
         let invalid = SpellEffectKind::CounterTargetSpell {
             spell_filter: None,

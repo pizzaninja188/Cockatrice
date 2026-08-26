@@ -1356,7 +1356,8 @@ impl GameEngine {
                 effect,
                 source_id,
                 &characteristics,
-            ) {
+            ) && self.continuous_effect_condition_holds(effect)
+            {
                 abilities.push((next_index, (**ability).clone()));
                 next_index += 1;
             }

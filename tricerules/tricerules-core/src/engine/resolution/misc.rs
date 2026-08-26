@@ -568,6 +568,34 @@ pub(super) fn produce_mana(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn add_mana(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::AddMana { amount, retention } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(player_idx) = cx.engine.state.player_idx(cx.top.controller) else {
+        return Err(EngineError::UnknownPlayer(cx.top.controller));
+    };
+    let player = &mut cx.engine.state.players[player_idx];
+    player.mana_pool.white += amount.w;
+    player.mana_pool.blue += amount.u;
+    player.mana_pool.black += amount.b;
+    player.mana_pool.red += amount.r;
+    player.mana_pool.green += amount.g;
+    player.mana_pool.colorless += amount.c;
+    if retention == ManaRetention::EndOfCombat {
+        player.retained_combat_mana.white += amount.w;
+        player.retained_combat_mana.blue += amount.u;
+        player.retained_combat_mana.black += amount.b;
+        player.retained_combat_mana.red += amount.r;
+        player.retained_combat_mana.green += amount.g;
+        player.retained_combat_mana.colorless += amount.c;
+    }
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn regenerate(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
