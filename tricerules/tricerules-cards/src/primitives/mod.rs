@@ -475,8 +475,13 @@ mod tests {
     }
 
     #[test]
-    fn activation_limit_rejects_zero_maximum() {
-        let ability = ActivatedAbilityDef {
+    fn activation_limit_rejects_zero_maximum_for_every_scope() {
+        assert_eq!(
+            ron::from_str::<ActivationLimit>("PerObject(max_activations: 1)")
+                .expect("deserialize the authored Exhaust limit"),
+            ActivationLimit::PerObject { max_activations: 1 }
+        );
+        let ability_with = |activation_limit| ActivatedAbilityDef {
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![],
             effect: vec![SpellEffectKind::ProduceMana {
@@ -490,10 +495,19 @@ mod tests {
             targeting: None,
             timing: ActivationTiming::Normal,
             conditions: vec![],
-            activation_limit: Some(ActivationLimit::PerTurn { max_activations: 0 }),
+            activation_limit: Some(activation_limit),
             text: "Add {G}.".into(),
         };
-        assert!(ability.validate_shape().is_err());
+        assert!(
+            ability_with(ActivationLimit::PerTurn { max_activations: 0 })
+                .validate_shape()
+                .is_err()
+        );
+        assert!(
+            ability_with(ActivationLimit::PerObject { max_activations: 0 })
+                .validate_shape()
+                .is_err()
+        );
     }
 
     #[test]

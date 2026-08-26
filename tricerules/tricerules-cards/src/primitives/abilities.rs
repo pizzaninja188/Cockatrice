@@ -41,12 +41,17 @@ pub struct ActivatedAbilityDef {
 pub enum ActivationLimit {
     /// The count resets only when the current turn actually ends.
     PerTurn { max_activations: u32 },
+    /// The count remains spent for this permanent object until a zone change creates a new
+    /// object under CR 400.7. Exhaust is the first consumer (CR 702.177).
+    PerObject { max_activations: u32 },
 }
 
 impl ActivationLimit {
     pub fn max_activations(self) -> u32 {
         match self {
-            Self::PerTurn { max_activations } => max_activations,
+            Self::PerTurn { max_activations } | Self::PerObject { max_activations } => {
+                max_activations
+            }
         }
     }
 

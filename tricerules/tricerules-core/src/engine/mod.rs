@@ -16,10 +16,11 @@ use crate::state::{
     PendingPlayerDiscardChoice, PendingPlayerSetDiscard, PendingResolution,
     PendingResolutionBranch, PendingResolutionBranchStage, PendingResolutionPresentation,
     PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
-    PendingWardPaymentStage, PlayerId, PlayerState, ReplacementPriority, ResolutionContinuation,
-    RoomState, SpellCastMethod, StackItem, StackObjectRef, StackTarget, StagedTrigger,
-    StagedTriggerGroup, TokenBattlefieldEntry, TriggerContext, TriggerObjectRef, TriggeredOnceKey,
-    TurnHistory, TurnStep, UndoableManaAbility, Zone,
+    PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
+    ReplacementPriority, ResolutionContinuation, RoomState, SpellCastMethod, StackItem,
+    StackObjectRef, StackTarget, StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry,
+    TriggerContext, TriggerObjectRef, TriggeredOnceKey, TurnHistory, TurnStep, UndoableManaAbility,
+    Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -489,6 +490,7 @@ struct BattlefieldViewSnapshot {
     players: Vec<PlayerBattlefieldSnapshot>,
     continuous_effects: Vec<ContinuousEffect>,
     activation_uses_this_turn: HashMap<ActivationUseKey, u32>,
+    activation_uses_per_object: HashMap<PersistentActivationUseKey, u32>,
     turn_history: TurnHistory,
     active_player: PlayerId,
     turn_step: TurnStep,
@@ -788,6 +790,7 @@ impl GameEngine {
             passes_since_stack_change: 0,
             lands_played_this_turn: 0,
             activation_uses_this_turn: HashMap::new(),
+            activation_uses_per_object: HashMap::new(),
             triggered_once: HashSet::new(),
             active_exile_play_permissions: Vec::new(),
             next_exile_play_permission_group_id: 1,

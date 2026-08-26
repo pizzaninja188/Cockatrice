@@ -9,6 +9,12 @@ use super::targeting::{
 };
 use super::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LimitedActivationUse {
+    PerTurn(ActivationUseKey),
+    PerObject(PersistentActivationUseKey),
+}
+
 fn format_paid_card_costs_log(costs: &[PaidCardCost]) -> String {
     let phrases: Vec<_> = costs.iter().map(PaidCardCost::log_phrase).collect();
     match phrases.as_slice() {
@@ -996,17 +1002,7 @@ impl GameEngine {
             .unwrap_or(0);
         let targeting_cost =
             self.targeting_cost_increase(player, TargetingCostAction::ActivatedAbilities, targets);
-        let activation_use_key =
-            (ability.activation_limit.is_some() || ability.is_loyalty_ability()).then(|| {
-                self.activation_use_key(
-                    permanent_id,
-                    if ability.is_loyalty_ability() {
-                        usize::MAX
-                    } else {
-                        ability_index
-                    },
-                )
-            });
+        let activation_uses = self.limited_activation_uses(permanent_id, ability_index, &ability);
         let cost_plan = self.plan_ability_costs(
             player,
             idx,
@@ -1018,7 +1014,7 @@ impl GameEngine {
             targeting_cost,
         )?;
         let payment = self.commit_cost_transaction(cost_plan)?;
-        self.record_limited_activation(activation_use_key);
+        self.record_limited_activations(activation_uses);
 
         let ability_text = ability.text.clone();
         let card_name = self
@@ -1222,42 +1218,104 @@ impl GameEngine {
         }
     }
 
+    fn persistent_activation_use_key(
+        &self,
+        permanent_id: ObjectId,
+        ability_index: usize,
+    ) -> PersistentActivationUseKey {
+        PersistentActivationUseKey {
+            object_id: permanent_id,
+            zone_change_generation: self
+                .state
+                .zone_change_generation
+                .get(&permanent_id)
+                .copied()
+                .unwrap_or(0),
+            ability_index,
+        }
+    }
+
+    fn limited_activation_uses(
+        &self,
+        permanent_id: ObjectId,
+        ability_index: usize,
+        ability: &tricerules_cards::ActivatedAbilityDef,
+    ) -> Vec<LimitedActivationUse> {
+        let mut uses = Vec::with_capacity(2);
+        if ability.is_loyalty_ability() {
+            uses.push(LimitedActivationUse::PerTurn(
+                self.activation_use_key(permanent_id, usize::MAX),
+            ));
+        }
+        if let Some(limit) = ability.activation_limit {
+            uses.push(match limit {
+                tricerules_cards::primitives::ActivationLimit::PerTurn { .. } => {
+                    LimitedActivationUse::PerTurn(
+                        self.activation_use_key(permanent_id, ability_index),
+                    )
+                }
+                tricerules_cards::primitives::ActivationLimit::PerObject { .. } => {
+                    LimitedActivationUse::PerObject(
+                        self.persistent_activation_use_key(permanent_id, ability_index),
+                    )
+                }
+            });
+        }
+        uses
+    }
+
     fn activation_limit_allows(
         &self,
         permanent_id: ObjectId,
         ability_index: usize,
         ability: &tricerules_cards::ActivatedAbilityDef,
     ) -> bool {
-        let is_loyalty = ability.is_loyalty_ability();
-        let Some(limit) = ability
-            .activation_limit
-            .map(|limit| limit.max_activations())
-            .or(is_loyalty.then_some(1))
-        else {
-            return true;
-        };
-        let key = self.activation_use_key(
-            permanent_id,
-            if is_loyalty {
-                usize::MAX
-            } else {
-                ability_index
-            },
-        );
-        self.state
-            .activation_uses_this_turn
-            .get(&key)
-            .copied()
-            .unwrap_or(0)
-            < limit
+        if ability.is_loyalty_ability()
+            && self
+                .state
+                .activation_uses_this_turn
+                .get(&self.activation_use_key(permanent_id, usize::MAX))
+                .copied()
+                .unwrap_or(0)
+                >= 1
+        {
+            return false;
+        }
+        match ability.activation_limit {
+            None => true,
+            Some(tricerules_cards::primitives::ActivationLimit::PerTurn { max_activations }) => {
+                self.state
+                    .activation_uses_this_turn
+                    .get(&self.activation_use_key(permanent_id, ability_index))
+                    .copied()
+                    .unwrap_or(0)
+                    < max_activations
+            }
+            Some(tricerules_cards::primitives::ActivationLimit::PerObject { max_activations }) => {
+                self.state
+                    .activation_uses_per_object
+                    .get(&self.persistent_activation_use_key(permanent_id, ability_index))
+                    .copied()
+                    .unwrap_or(0)
+                    < max_activations
+            }
+        }
     }
 
-    fn record_limited_activation(&mut self, key: Option<ActivationUseKey>) {
-        let Some(key) = key else {
-            return;
-        };
-        let count = self.state.activation_uses_this_turn.entry(key).or_insert(0);
-        *count = count.saturating_add(1);
+    fn record_limited_activations(&mut self, uses: Vec<LimitedActivationUse>) {
+        for usage in uses {
+            let count = match usage {
+                LimitedActivationUse::PerTurn(key) => {
+                    self.state.activation_uses_this_turn.entry(key).or_insert(0)
+                }
+                LimitedActivationUse::PerObject(key) => self
+                    .state
+                    .activation_uses_per_object
+                    .entry(key)
+                    .or_insert(0),
+            };
+            *count = count.saturating_add(1);
+        }
     }
 
     fn activation_conditions_hold(
@@ -1354,17 +1412,7 @@ impl GameEngine {
             .get(mana_option_index as usize)
             .copied()
             .ok_or(EngineError::Illegal("invalid mana option"))?;
-        let activation_use_key =
-            (ability.activation_limit.is_some() || ability.is_loyalty_ability()).then(|| {
-                self.activation_use_key(
-                    permanent_id,
-                    if ability.is_loyalty_ability() {
-                        usize::MAX
-                    } else {
-                        ability_index
-                    },
-                )
-            });
+        let activation_uses = self.limited_activation_uses(permanent_id, ability_index, ability);
 
         let cost_plan = self.plan_ability_costs(
             player,
@@ -1377,7 +1425,7 @@ impl GameEngine {
             0,
         )?;
         let payment = self.commit_cost_transaction(cost_plan)?;
-        self.record_limited_activation(activation_use_key);
+        self.record_limited_activations(activation_uses);
 
         let restriction_group_id = ability.mana_restriction().map(|restriction| {
             if let Some(position) = self
@@ -1804,7 +1852,7 @@ mod mana_payment_tests {
         assert!(engine.activation_limit_allows(object_id, 0, &ability));
         assert!(engine.activation_limit_allows(object_id, 1, &ability));
         let key = engine.activation_use_key(object_id, 0);
-        engine.record_limited_activation(Some(key));
+        engine.record_limited_activations(vec![LimitedActivationUse::PerTurn(key)]);
         assert!(!engine.activation_limit_allows(object_id, 0, &ability));
         assert!(engine.activation_limit_allows(object_id, 1, &ability));
     }
@@ -1820,7 +1868,7 @@ mod mana_payment_tests {
             .zone_change_generation
             .entry(object_id)
             .or_insert(0) += 1;
-        engine.record_limited_activation(Some(key_before_costs));
+        engine.record_limited_activations(vec![LimitedActivationUse::PerTurn(key_before_costs)]);
 
         assert_eq!(engine.state.activation_uses_this_turn[&key_before_costs], 1);
         assert_ne!(engine.activation_use_key(object_id, 0), key_before_costs);

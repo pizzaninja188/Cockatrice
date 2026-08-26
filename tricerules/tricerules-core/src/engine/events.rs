@@ -672,6 +672,7 @@ impl GameEngine {
             players,
             continuous_effects: self.state.continuous_effects.clone(),
             activation_uses_this_turn: self.state.activation_uses_this_turn.clone(),
+            activation_uses_per_object: self.state.activation_uses_per_object.clone(),
             turn_history: self.state.turn_history.clone(),
             active_player: self.state.active_player_id(),
             turn_step: self.state.turn_step,

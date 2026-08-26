@@ -39,6 +39,16 @@ pub struct ActivationUseKey {
     pub ability_index: usize,
 }
 
+/// One activated ability on one CR 400.7 permanent object. Unlike [`ActivationUseKey`], this key
+/// deliberately omits turn and face-status identity: only a zone change creates a fresh object
+/// and restores a once-per-object allowance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PersistentActivationUseKey {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub ability_index: usize,
+}
+
 /// A printed or copied triggered ability that has consumed a persistent "triggers only once"
 /// allowance on one battlefield object incarnation. Card/face/ability identity prevents an
 /// unrelated ability at the same index from inheriting the usage after a copy or face change;
@@ -1448,6 +1458,9 @@ pub struct GameState {
     /// Successful limited activations in the current turn, keyed to full object and ability
     /// identity. Control changes do not affect the key (CR 602.5b).
     pub activation_uses_this_turn: HashMap<ActivationUseKey, u32>,
+    /// Successful once-per-object activations. Old-generation entries are inert after a zone
+    /// change and remain deterministic replay evidence for the lifetime of the game.
+    pub activation_uses_per_object: HashMap<PersistentActivationUseKey, u32>,
     /// Persistent "triggers only once" usage. Generation-aware keys make leave-and-return a
     /// fresh object without copying or resetting usage on control changes or turn boundaries.
     pub triggered_once: HashSet<TriggeredOnceKey>,
