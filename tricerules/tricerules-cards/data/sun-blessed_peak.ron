@@ -1,0 +1,20 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "sun-blessed_peak",
+  name: "Sun-Blessed Peak",
+  mana_cost: "",
+  types: ["Land"],
+  static_abilities: [EntersTapped(affected: Self_)],
+  activated_abilities: [
+    (
+      costs: [Tap],
+      effect: [ProduceMana(options: [(r: 1), (w: 1)])],
+      text: "{T}: Add {R} or {W}.",
+    ),
+    (
+      costs: [Mana("{4}"), Tap, SacrificeSelf],
+      effect: [Draw(count: 1)],
+      text: "{4}, {T}, Sacrifice this land: Draw a card.",
+    ),
+  ],
+)

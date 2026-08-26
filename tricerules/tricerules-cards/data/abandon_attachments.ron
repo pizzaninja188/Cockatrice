@@ -1,0 +1,13 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "abandon_attachments",
+  name: "Abandon Attachments",
+  mana_cost: "{1}{U/R}",
+  types: ["Instant", "Lesson"],
+  spell_effect: [DrawDiscard(
+    draw_count: 2,
+    discard_count: 1,
+    order: DiscardThenDraw,
+    optional: true,
+  )],
+)

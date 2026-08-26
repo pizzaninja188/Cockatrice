@@ -1,0 +1,14 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "pretending_poxbearers",
+  name: "Pretending Poxbearers",
+  mana_cost: "{1}{W/B}",
+  types: ["Creature", "Human", "Citizen", "Ally"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    trigger: WhenSelfDies,
+    effect: [CreateTokens(token: "ally_w_1_1", count: 1, who: SourceController)],
+    text: "When this creature dies, create a 1/1 white Ally creature token.",
+  )],
+)

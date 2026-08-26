@@ -1,0 +1,22 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+// CR 601.2f locks the one-time generic reduction before the total cost is paid.
+(
+  id: "mistmeadow_council",
+  name: "Mistmeadow Council",
+  mana_cost: "{4}{G}",
+  cost_modifiers: [ConditionalGenericReduction(
+    amount: 1,
+    condition: BattlefieldCreatureCount(
+      filter: (controllers: Controller, subtype: Some("Kithkin")),
+      min: Some(1),
+    ),
+  )],
+  types: ["Creature", "Kithkin", "Advisor"],
+  power: 4,
+  toughness: 3,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Draw(count: 1)],
+    text: "When this creature enters, draw a card.",
+  )],
+)

@@ -1,0 +1,16 @@
+// CR 111.10u colorless Lander artifact token.
+(
+  id: "lander",
+  name: "Lander",
+  types: ["Artifact", "Lander"],
+  activated_abilities: [(
+    costs: [Mana("{2}"), Tap, SacrificeSelf],
+    effect: [SearchLibrary(
+      filter: Some((card_type: Some(BasicLand))),
+      destination: Battlefield(tapped: true),
+      shuffle: true,
+      reveal: false,
+    )],
+    text: "{2}, {T}, Sacrifice this token: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+  )],
+)

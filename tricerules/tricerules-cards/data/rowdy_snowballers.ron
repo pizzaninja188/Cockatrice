@@ -1,0 +1,17 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "rowdy_snowballers",
+  name: "Rowdy Snowballers",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Human", "Peasant", "Ally"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      Tap(subject: Chosen((kind: Creature, controller: Opponent))),
+      PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature, controller: Opponent))),
+    ],
+    text: "When this creature enters, tap target creature an opponent controls and put a stun counter on it.",
+  )],
+)

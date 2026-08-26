@@ -1,0 +1,14 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "wandering_musicians",
+  name: "Wandering Musicians",
+  mana_cost: "{3}{R/W}",
+  types: ["Creature", "Human", "Bard", "Ally"],
+  power: 2,
+  toughness: 5,
+  triggered_abilities: [(
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [PumpAll(filter: (controller: YouControl), power: 1, toughness: 0)],
+    text: "Whenever this creature attacks, creatures you control get +1/+0 until end of turn.",
+  )],
+)

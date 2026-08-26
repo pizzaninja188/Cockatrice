@@ -1,0 +1,23 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "boggart_prankster",
+  name: "Boggart Prankster",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Goblin", "Warrior"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [(
+    trigger: WheneverControllerAttacks(),
+    effect: [PumpTarget(
+      power: 1,
+      toughness: 0,
+      subject: Chosen((
+        kind: Creature,
+        controller: You,
+        attacking_or_blocking: true,
+        required_subtypes: ["Goblin"],
+      )),
+    )],
+    text: "Whenever you attack, target attacking Goblin you control gets +1/+0 until end of turn.",
+  )],
+)

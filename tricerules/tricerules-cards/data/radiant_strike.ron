@@ -1,0 +1,15 @@
+// Oracle and ruling checked against Scryfall on 2026-08-26. CR 608.2b: if the sole target is
+// illegal on resolution, the spell does not resolve and its controller does not gain life.
+(
+  id: "radiant_strike",
+  name: "Radiant Strike",
+  mana_cost: "{3}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    Destroy(subject: Chosen((any_of: Some([
+      (kind: AnyPermanent, permanent_types: [Artifact]),
+      (kind: Creature, tapped: true),
+    ])))),
+    GainLife(amount: 3),
+  ],
+)

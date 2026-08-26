@@ -1,0 +1,21 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "thawbringer",
+  name: "Thawbringer",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Insect", "Scout"],
+  power: 4,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
+      text: "When this creature enters or dies, surveil 1.",
+    ),
+    (
+      trigger: WhenSelfDies,
+      effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
+      text: "When this creature enters or dies, surveil 1.",
+    ),
+  ],
+)

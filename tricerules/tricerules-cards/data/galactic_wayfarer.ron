@@ -1,0 +1,14 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "galactic_wayfarer",
+  name: "Galactic Wayfarer",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Human", "Scout"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "lander", count: 1, who: SourceController)],
+    text: "When this creature enters, create a Lander token.",
+  )],
+)

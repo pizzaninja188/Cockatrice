@@ -1,0 +1,21 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "azula_always_lies",
+  name: "Azula Always Lies",
+  mana_cost: "{1}{B}",
+  types: ["Instant", "Lesson"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 2,
+    modes: [
+      (
+        label: "Target creature gets -1/-1 until end of turn",
+        effects: [PumpTarget(power: -1, toughness: -1, subject: Chosen((kind: Creature)))],
+      ),
+      (
+        label: "Put a +1/+1 counter on target creature",
+        effects: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))],
+      ),
+    ],
+  ),
+)

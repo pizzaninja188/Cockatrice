@@ -1,0 +1,18 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "cloudsculpt_technician",
+  name: "Cloudsculpt Technician",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Jellyfish", "Artificer"],
+  power: 1,
+  toughness: 4,
+  keywords: [Flying],
+  static_abilities: [ConditionalSelfModifier(
+    condition: BattlefieldAggregate(
+      filter: (controllers: Controller, card_type: Some(Artifact)),
+      aggregate: Count,
+      min: Some(1),
+    ),
+    delta_power: 1,
+  )],
+)

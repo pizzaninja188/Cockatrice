@@ -1,0 +1,11 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "rig_for_war",
+  name: "Rig for War",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 3, toughness: 0, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Reach, FirstStrike]),
+  ],
+)

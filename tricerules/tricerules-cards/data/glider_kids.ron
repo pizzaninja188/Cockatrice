@@ -1,0 +1,15 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "glider_kids",
+  name: "Glider Kids",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Pilot", "Ally"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Scry(count: 1)],
+    text: "When this creature enters, scry 1.",
+  )],
+)

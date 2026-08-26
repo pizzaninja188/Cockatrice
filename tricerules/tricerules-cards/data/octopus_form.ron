@@ -1,0 +1,12 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "octopus_form",
+  name: "Octopus Form",
+  mana_cost: "{U}",
+  types: ["Instant", "Lesson"],
+  spell_effect: [
+    PumpTarget(power: 1, toughness: 1, subject: Chosen((kind: Creature, controller: You))),
+    GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Hexproof]),
+    Untap(subject: Chosen((kind: Creature, controller: You))),
+  ],
+)

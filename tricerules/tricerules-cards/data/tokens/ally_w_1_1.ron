@@ -1,0 +1,9 @@
+// 1/1 white Ally creature token.
+(
+  id: "ally_w_1_1",
+  name: "Ally",
+  types: ["Creature", "Ally"],
+  colors: [White],
+  power: 1,
+  toughness: 1,
+)

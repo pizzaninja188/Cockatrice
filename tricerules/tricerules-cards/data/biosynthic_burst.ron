@@ -1,0 +1,12 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "biosynthic_burst",
+  name: "Biosynthic Burst",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature, controller: You))),
+    GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Reach, Trample, Indestructible]),
+    Untap(subject: Chosen((kind: Creature, controller: You))),
+  ],
+)
