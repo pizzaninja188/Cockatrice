@@ -102,13 +102,13 @@ which rejects previews, routes concede first, gates on a parked resolution, and 
 touch Cockatrice objects: for a cast it moves the physical `Server_Card` from HAND to the
 **canonical stack zone** (the lowest player-id STACK zone, so every client sees one merged stack)
 and queues a `PendingRuledCastVisual` to bind to the next `StackPushed`. Then
-`applyRuledBatch(resp)` runs its load-bearing ordered pipeline (§4), and the accepted command's
-bytes are appended to the replay log.
+`RuledBatchSynchronizer::applyBatch(resp)` runs its load-bearing ordered pipeline (§4), and the
+accepted command's bytes are appended to the replay log.
 
-**7 — Broadcast (Servatrice).** `broadcastRuledResponse` copies the batch, calls
-`appendServerObjectMaps` to inject the three server-built identity maps, then for **each
-participant** produces a redacted copy via `redactBatchForParticipant` (§5) and sends it as a
-private `Event_RuledPayload`. Each seat gets a different byte stream.
+**7 — Broadcast (Servatrice).** `RuledBroadcastRouter::broadcast` copies the batch, calls
+`appendServerObjectMaps` to inject the server-built identity maps, then for **each participant**
+produces a redacted copy via `redactBatchForParticipant` (§5) and sends it as a private
+`Event_RuledPayload`. Each seat gets a different byte stream.
 
 **8 — Apply (client).** `GameEventHandler`'s `RULED_PAYLOAD` case is one line into
 `RuledEventDispatcher::processPayload`, which resets the per-batch legal-action state and calls one
@@ -164,14 +164,21 @@ do not do sweeping renames in an otherwise-unrelated change.
 
 ---
 
-## 4. `RuledGameDriver` — the relay's shape
+## 4. Ruled server facade and collaborators
 
-`RuledGameDriver` (fork-owned) holds *all* ruled state for one `Server_Game`. The upstream class
-keeps only a `ruledGame` flag, the owning `unique_ptr`, `friend class RuledGameDriver`, a
-`ruled()` accessor, and one-line delegators.
+`RuledGameDriver` is the fork-owned facade for one `Server_Game`. The upstream class keeps only a
+`ruledGame` flag, the owning `unique_ptr`, `friend class RuledGameDriver`, a `ruled()` accessor,
+and one-line delegators. The facade coordinates three single-owner collaborators:
 
-`applyRuledBatch` runs the following **authoritative, load-bearing sequence**. Never merge or
-reorder these stages; `ruled_game_driver.h` deliberately mirrors this list for code-local safety:
+- `RuledGameSession` owns the `RulesRelay`, deck admission, command canonicalization, seed,
+  engine-loss state, and auto-pass policies;
+- `RuledBatchSynchronizer` owns engine-object/physical-card bindings, catalog and stack state,
+  accepted-command visuals, and authoritative physical batch projection;
+- `RuledBroadcastRouter` owns server-built identity-map injection, fail-closed per-recipient
+  redaction, the hand-map change cache, and reconnect resolution-choice state.
+
+`RuledBatchSynchronizer::applyBatch` runs the following **authoritative, load-bearing sequence**.
+Never merge or reorder these stages:
 
 0. `indexCardCatalogEvents` — refresh the engine card-id/name index when the batch carries a
    catalog. A dev conjure can introduce a name absent from the session's original deck catalog,
@@ -192,8 +199,8 @@ reorder these stages; `ruled_game_driver.h` deliberately mirrors this list for c
 8. `applyLifeManaAndCombatEvents` — apply life totals, mana-pool counters, combat declarations,
    combat damage, and removal from combat.
 
-`broadcastRuledResponse` then stages: `appendServerObjectMaps` (inject the three identity maps) →
-per-participant `redactBatchForParticipant` → private `Event_RuledPayload`.
+`RuledBroadcastRouter::broadcast` then stages: `appendServerObjectMaps` (inject the server-built
+identity maps) → per-participant `redactBatchForParticipant` → private `Event_RuledPayload`.
 
 ---
 
@@ -381,8 +388,8 @@ on `BattlefieldObject` / `BattlefieldObjectMap.Entry`, and the client reads them
 1. Message + `RuledEvent` oneof field in `ruled_v1.proto` — **with a `(field_visibility)` option on
    every field**, or the reflection test fails.
 2. Emit it from the engine (`engine/events.rs` helpers).
-3. Servatrice: translate it inside the correct `applyRuledBatch` pass (§4); add redaction handling
-   only if it carries per-player data.
+3. Servatrice: translate it inside the correct `RuledBatchSynchronizer::applyBatch` pass (§4);
+   add redaction handling only if it carries per-player data.
 4. Client: **one new private method in `RuledEventDispatcher` plus one `has_*()` line** — never an
    inline block. State it needs lives on `RuledClientState`; anything it needs from the Qt UI goes
    on `RuledClientHost`, never as a direct `AbstractGame`/`Player`/`CardItem` include.

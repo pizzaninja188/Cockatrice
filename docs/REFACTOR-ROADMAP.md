@@ -153,6 +153,11 @@ batch tests (client translation) → `tests/game_prompt/` (presentation) → thi
 > below (catalog indexing lives in `applyRuledStartupBatch`, not the batch path). Verified per
 > commit: full build + full ctest (incl. `ruled_batch_test`, `ruled_e2e_smoke_test`); manual
 > game still recommended before the next release-ish milestone.
+>
+> **Follow-up completed 2026-08-26 (Issue #136).** The facade now coordinates
+> `RuledGameSession`, `RuledBatchSynchronizer`, and `RuledBroadcastRouter`. Relay/policy state,
+> physical projection state, and recipient-routing state each have one owner; the public
+> `RuledGameDriver` and `Server_Game` boundaries are unchanged.
 
 `server_game.cpp` (upstream, 2440 lines) carries ~1,372 contiguous lines of ruled code plus a
 helper block, bolted onto the upstream `Server_Game` class; `Server_Player` carries 8 more

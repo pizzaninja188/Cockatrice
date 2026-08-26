@@ -30,7 +30,7 @@ struct RuledPlayerBinding
 
     // Latest server-only mapping between engine ObjectIds in RuledPerPlayerView's battlefield,
     // hand, and library rows and the corresponding Server_Card. Updated each
-    // applyRuledEngineZoneView; consumed by RuledGameDriver::applyRuledBatch when translating
+    // applyRuledEngineZoneView; consumed by RuledBatchSynchronizer::applyBatch when translating
     // engine-side events into client-visible Cockatrice events.
     QHash<quint32, int> engineOidToServerCardId;
     QHash<int, quint32> serverCardIdToEngineOid;

@@ -1,70 +1,38 @@
 #ifndef RULED_GAME_DRIVER_H
 #define RULED_GAME_DRIVER_H
 
-// Fork-owned. All ruled-mode (server-authoritative rules engine) integration for one
-// Server_Game lives here: the tricerules relay lifecycle, the engine card catalog,
-// stack-object bookkeeping, batch application (engine events -> physical Cockatrice
-// zones/events), and the two-stage broadcast redaction. Server_Game keeps only a
-// `ruledGame` flag, the owning unique_ptr, and 1-line delegation hooks.
+// Fork-owned facade for one server-authoritative ruled game. It validates and canonicalizes a
+// command through RuledGameSession, projects accepted batches through RuledBatchSynchronizer,
+// and publishes recipient-safe responses through RuledBroadcastRouter. Server_Game keeps only
+// the owning pointer and short delegation hooks.
 //
 // See docs/ARCHITECTURE.md for the identity glossary (engine ObjectId vs tricerules card_id
 // vs Oracle name vs Server_Card.id vs hand slot), the end-to-end "life of a command" trace,
 // and the authoritative batch-pipeline description in section 4.
 //
-// --- The batch pipeline -------------------------------------------------------------------
-//
-// A command's IpcResponse becomes client events in two stages. Both are ordered; neither may
-// be merged or reordered (see the comments on the individual methods for why each dependency
-// exists).
-//
-// applyRuledBatch — engine events onto the physical Cockatrice game. This compact list
-// deliberately mirrors docs/ARCHITECTURE.md section 4; keep the documentation authoritative:
-//   0. indexCardCatalogEvents       refresh name/id data before resolving a conjured card's name.
-//   1. applyDevCardConjures         mint and bind conjured cards before the identity snapshot.
-//   2. pre-batch oid-map capture    preserve oid -> Server_Card.id for same-batch moves and deaths.
-//   3. applyTokenCreations          mint token Server_Cards before zone-view reconciliation.
-//   4. applyPermanentMoves          PermanentMoved -> moveCard through the pre-batch map.
-//   5. applyPhaseStackAndZoneViews  apply phase/stack events and rebuild physical identity maps.
-//   6. applyFaceDisplays            update display identity through the refreshed zone-view maps.
-//   7. applyAttachmentRestores      AuraAttached -> Event_AttachCard through the refreshed maps.
-//   8. applyLifeManaAndCombatEvents apply life, mana, combat, damage, and removal-from-combat.
-//
-// broadcastRuledResponse — the same batch out to each participant, in two stages:
-//   a. appendServerObjectMaps     inject the server-built BattlefieldObjectMap (battlefield +
-//                                 stack), HandSlotMap and GraveyardObjectMap.
-//   b. redactBatchForParticipant  per recipient: keep their own legal actions / log lines /
-//                                 hand slots / choice candidates, then clear every PER_PLAYER
-//                                 and SERVER_ONLY field by protobuf reflection and restore only
-//                                 those reviewed values. Fail-closed: an unclassified field
-//                                 fails the ruled_batch_test coverage check.
+// See docs/ARCHITECTURE.md section 4 for collaborator ownership and the load-bearing physical
+// projection and broadcast pipelines.
 
 #include "../server_response_containers.h"
-#include "ruled_player_binding.h"
-#include "rules_relay.h"
 
 #include <QByteArray>
-#include <QHash>
-#include <QList>
-#include <QPair>
-#include <QSet>
 #include <QString>
-#include <QStringList>
-#include <QVector>
 #include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/response.pb.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <memory>
-#include <optional>
 
 class Server_Game;
 class Server_AbstractParticipant;
+class RuledBatchSynchronizer;
+class RuledBroadcastRouter;
+class RuledGameSession;
 
 /// One per ruled game, owned by (and friend of) Server_Game; non-null iff the game is ruled.
 class RuledGameDriver
 {
-    // Test-only friend: lets the ruled-batch unit test reach the otherwise-private
-    // catalog maps and applyRuledBatch entry point without going through the
-    // network/userInterface plumbing required by Server_Game::addPlayer().
+    // Test-only friend: lets the ruled-batch fixture reach the owned collaborators and register
+    // participants without Server_Game::addPlayer's network/userInterface plumbing.
     friend class RuledBatchTest;
 
 public:
@@ -95,14 +63,8 @@ public:
     /// the concession ends the game, before ordinary teardown clears the table zones.
     void revealFaceDownPermanentsOnConcede(int concedingPlayerId, GameEventStorage &ges);
 
-    int priorityPlayer() const
-    {
-        return ruledPriorityPlayer;
-    }
-    void setPriorityPlayer(int playerId)
-    {
-        ruledPriorityPlayer = playerId;
-    }
+    int priorityPlayer() const;
+    void setPriorityPlayer(int playerId);
 
     /// Engine card id for an Oracle card name via the session catalog; empty when unknown
     /// (no catalog yet / card not in this game's decks).
@@ -114,39 +76,6 @@ public:
     QString ruledFaceDisplayName(const QString &cardId, int faceIndex) const;
 
 private:
-    struct PendingRuledCastVisual
-    {
-        QString cardName;
-        int serverCardId = -1;
-        int casterPlayerId = -1;
-        QVector<quint32> targetOids;
-    };
-    struct RuledBatchApplyResult
-    {
-        bool zoneViewApplied = false;
-        bool handOrLibraryChanged = false;
-        bool battlefieldOrderChanged = false;
-        bool battlefieldDisplayChanged = false;
-        bool tapStateEventsQueued = false;
-        bool phaseChanged = false;
-    };
-
-    /// Mainboard Oracle card names per player id, one entry per copy (the format both
-    /// deck validation and the sidecar SessionStart consume).
-    QList<QPair<int, QStringList>> ruledMainboardNamesByPlayer() const;
-    /// Tells everyone a ruled game cannot start because of unimplemented cards: a game-log
-    /// message plus a popup (Event_NotifyUser CUSTOM) to every player, naming the cards
-    /// per player with copy counts.
-    void notifyRuledUnimplementedCards(const QList<QPair<int, QStringList>> &deckByPlayer,
-                                       const QStringList &missingNames);
-    /// Sends a rules-engine notice to every player: a game-log message plus a popup
-    /// (Event_NotifyUser CUSTOM) with the given title. Shared by the pregame-unreachable and
-    /// mid-game-disconnect paths.
-    void sendRuledEngineNotice(const QString &title, const QString &message);
-    /// Tells everyone a ruled game cannot start because the rules engine (tricerules sidecar)
-    /// is unreachable. The client commits to ruled-vs-freeform at join time, so a started game
-    /// cannot be downgraded to casual mid-life — we block the start instead of half-starting.
-    void notifyRuledEngineUnreachable();
     /// Handles the rules engine connection dropping during an active ruled game: notifies the
     /// players once (the game is unrecoverable) and tears down the dead relay so subsequent
     /// commands fail fast instead of re-timing-out and re-notifying. Idempotent.
@@ -157,102 +86,14 @@ private:
     /// Wrap one ordinary gameplay command with a sorted, complete server-authored policy snapshot.
     /// Returns empty for a UI-only/nested command or an unknown player.
     QByteArray canonicalGameplayCommand(int playerId, const ruled::v1::RuledCommand &command) const;
-    void applyRuledStartupBatch(const ruled::v1::IpcResponse &resp, const QList<QPair<int, QStringList>> &deckByPlayer);
-    RuledBatchApplyResult applyRuledBatch(const ruled::v1::IpcResponse &resp);
-    // applyRuledBatch passes, in call order (order dependencies are load-bearing — see the
-    // comment in applyRuledBatch; never merge or reorder these):
-    /// Index every CardCatalog event in `batch` into the name/id lookups. Returns true if the
-    /// batch carried one. Runs at startup and as the first batch pass, since the zone reconcile
-    /// resolves physical cards by translating their names through this index.
-    bool indexCardCatalogEvents(const ruled::v1::RuledEventBatch &batch);
-    /// Mint physical Server_Cards for dev-conjured cards, which have no deck card behind them.
-    /// Sets `result.handOrLibraryChanged` for a hand conjure, whose card is deliberately revealed
-    /// by the redacted full-state resync rather than by a broadcast creation event.
-    void applyDevCardConjures(const ruled::v1::RuledEventBatch &batch,
-                              const QHash<quint32, int> &battlefieldGridRows,
-                              const QHash<quint32, int> &battlefieldDisplayPlayers,
-                              RuledBatchApplyResult &result);
-    void applyTokenCreations(const ruled::v1::RuledEventBatch &batch,
-                             const QHash<quint32, int> &battlefieldGridRows);
-    void applyPermanentMoves(const ruled::v1::RuledEventBatch &batch,
-                             const QHash<int, QHash<quint32, int>> &preBatchOidMaps,
-                             const QHash<quint32, int> &battlefieldGridRows,
-                             const QHash<quint32, int> &battlefieldDisplayPlayers);
-    void applyBattlefieldControllerTransfers(const ruled::v1::ZoneViewSync &zoneView, RuledBatchApplyResult &result);
-    void applyPhaseStackAndZoneViews(const ruled::v1::RuledEventBatch &batch,
-                                     const QHash<quint32, int> &battlefieldGridRows,
-                                     const QHash<quint32, int> &battlefieldDisplayPlayers,
-                                     RuledBatchApplyResult &result);
-    void applyFaceDisplays(const ruled::v1::RuledEventBatch &batch, RuledBatchApplyResult &result);
-    Server_Card *findBattlefieldCardByEngineOid(quint32 oid, int preferredControllerId = -1);
-    void applyAttachmentRestores(const ruled::v1::RuledEventBatch &batch);
-    void applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBatch &batch);
-    void applyRuledStackResolvedEvent(const ruled::v1::StackResolved &stackResolved,
-                                      const QHash<quint32, int> &battlefieldGridRows,
-                                      const QHash<quint32, int> &battlefieldDisplayPlayers);
-    void applyRuledStackObjectCounteredEvent(const ruled::v1::StackObjectCountered &countered);
-    // broadcastRuledResponse stages: server-built identity-map injection, then per-participant
-    // hidden-info redaction.
-    void appendServerObjectMaps(ruled::v1::IpcResponse &toSend);
-    /// Replace the reconnect snapshot with the public reveal in this authoritative batch, or
-    /// clear it when the batch contains none. Local UI previews must never call this method.
-    void updatePendingResolutionChoiceCache(const ruled::v1::IpcResponse &response);
-    ruled::v1::RuledEventBatch redactBatchForParticipant(const ruled::v1::RuledEventBatch &batch,
-                                                         Server_AbstractParticipant *participant);
-
     /// Test-only: registers a participant directly on the game (bypassing addPlayer's
     /// network/userInterface plumbing) via the driver's Server_Game friendship.
     void insertParticipantForTest(int id, Server_AbstractParticipant *participant);
 
-    /// Per-player ruled state (engine-oid identity maps); default-constructed on first access.
-    RuledPlayerBinding &playerBinding(int playerId)
-    {
-        return playerBindings[playerId];
-    }
-
     Server_Game *const game;
-    QHash<int, RuledPlayerBinding> playerBindings;
-    quint64 ruledSeed;
-    int ruledPriorityPlayer;
-    std::unique_ptr<RulesRelay> rulesRelay;
-    /// Set once the rules engine connection drops during an active ruled game. The engine state
-    /// is unrecoverable (a restarted sidecar is a fresh process with no session), so we notify
-    /// the players exactly once and stop relaying further commands to a dead socket.
-    bool ruledEngineConnectionLost = false;
-    /// Engine-provided card identity catalog for this session (CardCatalog event, server-only):
-    /// the single name<->id mapping — Servatrice never derives engine card ids itself.
-    QHash<QString, ruled::v1::CardCatalog_Entry> ruledCardCatalogById;
-    /// Trimmed, lowercased Oracle name -> engine card id (mirrors the engine's own normalization).
-    QHash<QString, QString> ruledCardIdByLowerName;
-    /// StackPushed.object_id -> engine card name; push and resolve may arrive in different ruled IPC batches.
-    QHash<quint32, QString> ruledEngineStackPushDescriptionsByObjectId;
-    // Stack object id -> Server_Card.id currently in the Cockatrice STACK zone.
-    QHash<quint32, int> ruledStackObjectIdToServerCardId;
-    /// Stack object id -> player who cast the spell (may differ from canonical stack zone owner).
-    QHash<quint32, int> ruledStackObjectIdToCasterPlayerId;
-    // Stack object id -> target engine object ids captured from CastSpell intent.
-    QHash<quint32, QVector<quint32>> ruledStackTargetsByObjectId;
-    /// Stack object ids that are spell *copies* (CR 707.10, StackPushed.is_copy). A copy has no
-    /// physical Cockatrice card on the shared stack, so it is never bound to a Server_Card and its
-    /// StackResolved is a no-op move — without this guard the copy (which shares the original's
-    /// card_id/name) would mis-resolve the original's physical card.
-    QSet<quint32> ruledStackCopyObjectIds;
-    // Pending local cast intents waiting to be bound to the next StackPushed.object_id.
-    QList<PendingRuledCastVisual> ruledPendingCastVisualQueue;
-    /// Last HandSlotMap injected into a broadcast, plus the participant ids that received it.
-    /// appendServerObjectMaps re-sends the map only when one of the two changed: the client
-    /// treats an absent HandSlotMap as "unchanged" and a present one as a full replacement.
-    /// A changed participant set means someone joined or reconnected with an empty map and
-    /// needs a fresh copy even though no hand moved.
-    ruled::v1::HandSlotMap lastBroadcastHandSlotMap;
-    bool hasLastBroadcastHandSlotMap = false;
-    QSet<int> lastBroadcastHandSlotParticipants;
-    /// The sole active resolution choice while resolution is parked. Stored without
-    /// recipient-private physical ids; reconnect delivery runs normal redaction/injection.
-    std::optional<ruled::v1::ResolutionChoiceRequired> pendingResolutionChoice;
-    /// Authenticated phase-stop preferences by seat. Missing entries are expanded to an explicit
-    /// stop-everywhere row when a gameplay command is canonicalized.
-    QHash<int, ruled::v1::SetAutoPassPolicy> autoPassPolicies;
+    std::unique_ptr<RuledGameSession> session;
+    std::unique_ptr<RuledBatchSynchronizer> synchronizer;
+    std::unique_ptr<RuledBroadcastRouter> broadcaster;
 };
 
 #endif

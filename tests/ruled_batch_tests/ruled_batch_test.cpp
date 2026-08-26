@@ -1,4 +1,4 @@
-// Unit tests for RuledPlayerBinding::applyRuledEngineZoneView and RuledGameDriver::applyRuledBatch.
+// Unit tests for RuledPlayerBinding, RuledBatchSynchronizer, and RuledBroadcastRouter.
 //
 // These tests feed synthetic ruled::v1::IpcResponse batches to the server and assert that
 // the engine -> Cockatrice translation produces the expected state changes:
@@ -8,13 +8,16 @@
 //   * LifeChanged    -> per-player life counter updated
 //   * AttackersDeclared -> Server_Card::attacking flag flipped
 //
-// RuledGameDriver::applyRuledBatch and its catalog maps are private; we reach them via
-// `friend class RuledBatchTest` declared in ruled_game_driver.h. Friend privileges are not
+// The collaborators' state and pipeline stages are private; the fixture reaches them through
+// their `friend class RuledBatchTest` declarations. Friend privileges are not
 // inherited by TEST_F's auto-generated subclasses, so the fixture exposes its
 // privileged operations as protected helpers (callBatchApply / insertParticipant /
 // peekBatchResult) which the test bodies invoke.
 
 #include "game/ruled_game_driver.h"
+#include "game/ruled_batch_synchronizer.h"
+#include "game/ruled_broadcast_router.h"
+#include "game/ruled_game_session.h"
 #include "game/ruled_utils.h"
 #include "game/server_abstract_player.h"
 #include "game/server_card.h"
@@ -134,7 +137,7 @@ protected:
     ServerInfo_User userA;
     ServerInfo_User userB;
 
-    // Captured-but-opaque batch result (the result struct is private to RuledGameDriver).
+    // Test-facing projection of the synchronizer's batch result.
     struct BatchOutcome
     {
         bool zoneViewApplied = false;
@@ -192,8 +195,8 @@ protected:
             ruled::v1::CardCatalog_Entry entry;
             entry.set_card_id(id.toStdString());
             entry.set_name(name.toStdString());
-            game->ruled()->ruledCardCatalogById.insert(id, entry);
-            game->ruled()->ruledCardIdByLowerName.insert(name.trimmed().toLower(), id);
+            game->ruled()->synchronizer->ruledCardCatalogById.insert(id, entry);
+            game->ruled()->synchronizer->ruledCardIdByLowerName.insert(name.trimmed().toLower(), id);
         }
     }
 
@@ -207,13 +210,13 @@ protected:
         entry.set_name(combinedName.toStdString());
         for (const QString &faceName : faceNames) {
             entry.add_face_names(faceName.toStdString());
-            game->ruled()->ruledCardIdByLowerName.insert(faceName.trimmed().toLower(), cardId);
+            game->ruled()->synchronizer->ruledCardIdByLowerName.insert(faceName.trimmed().toLower(), cardId);
         }
         for (const QString &displayName : faceDisplayNames) {
             entry.add_face_display_names(displayName.toStdString());
         }
-        game->ruled()->ruledCardCatalogById.insert(cardId, entry);
-        game->ruled()->ruledCardIdByLowerName.insert(combinedName.trimmed().toLower(), cardId);
+        game->ruled()->synchronizer->ruledCardCatalogById.insert(cardId, entry);
+        game->ruled()->synchronizer->ruledCardIdByLowerName.insert(combinedName.trimmed().toLower(), cardId);
     }
 
     // Per-player binding access (the maps moved off Server_Player onto the driver).
@@ -225,48 +228,49 @@ protected:
                                                           bool battlefieldsUnchanged = false)
     {
         return game->ruled()
-            ->playerBinding(p->getPlayerId())
+            ->synchronizer->playerBinding(p->getPlayerId())
             .applyRuledEngineZoneView(p, v, tapGes, allowUntapReset, engineUntappedOids, battlefieldsUnchanged);
     }
 
     Server_Card *findCardByEngineOid(Server_Player *p, quint32 engineOid)
     {
-        return game->ruled()->playerBinding(p->getPlayerId()).findCardByEngineOid(p, engineOid);
+        return game->ruled()->synchronizer->playerBinding(p->getPlayerId()).findCardByEngineOid(p, engineOid);
     }
 
     void bindStackObject(quint32 engineOid, Server_Card *card, int casterPlayerId, const QString &description)
     {
-        game->ruled()->ruledStackObjectIdToServerCardId.insert(engineOid, card->getId());
-        game->ruled()->ruledStackObjectIdToCasterPlayerId.insert(engineOid, casterPlayerId);
-        game->ruled()->ruledEngineStackPushDescriptionsByObjectId.insert(engineOid, description);
+        game->ruled()->synchronizer->ruledStackObjectIdToServerCardId.insert(engineOid, card->getId());
+        game->ruled()->synchronizer->ruledStackObjectIdToCasterPlayerId.insert(engineOid, casterPlayerId);
+        game->ruled()->synchronizer->ruledEngineStackPushDescriptionsByObjectId.insert(engineOid, description);
     }
 
     void seedSyntheticStackBookkeeping(quint32 engineOid, quint32 targetOid, bool isCopy)
     {
-        game->ruled()->ruledStackTargetsByObjectId.insert(engineOid, {targetOid});
-        game->ruled()->ruledStackObjectIdToCasterPlayerId.insert(engineOid, p1->getPlayerId());
-        game->ruled()->ruledEngineStackPushDescriptionsByObjectId.insert(engineOid, QStringLiteral("Synthetic"));
+        game->ruled()->synchronizer->ruledStackTargetsByObjectId.insert(engineOid, {targetOid});
+        game->ruled()->synchronizer->ruledStackObjectIdToCasterPlayerId.insert(engineOid, p1->getPlayerId());
+        game->ruled()->synchronizer->ruledEngineStackPushDescriptionsByObjectId.insert(engineOid,
+                                                                                       QStringLiteral("Synthetic"));
         if (isCopy) {
-            game->ruled()->ruledStackCopyObjectIds.insert(engineOid);
+            game->ruled()->synchronizer->ruledStackCopyObjectIds.insert(engineOid);
         }
     }
 
     bool hasSyntheticStackBookkeeping(quint32 engineOid) const
     {
-        return game->ruled()->ruledStackTargetsByObjectId.contains(engineOid) ||
-               game->ruled()->ruledStackObjectIdToCasterPlayerId.contains(engineOid) ||
-               game->ruled()->ruledEngineStackPushDescriptionsByObjectId.contains(engineOid) ||
-               game->ruled()->ruledStackCopyObjectIds.contains(engineOid);
+        return game->ruled()->synchronizer->ruledStackTargetsByObjectId.contains(engineOid) ||
+               game->ruled()->synchronizer->ruledStackObjectIdToCasterPlayerId.contains(engineOid) ||
+               game->ruled()->synchronizer->ruledEngineStackPushDescriptionsByObjectId.contains(engineOid) ||
+               game->ruled()->synchronizer->ruledStackCopyObjectIds.contains(engineOid);
     }
 
     const RuledPlayerBinding &bindingFor(Server_Player *p)
     {
-        return game->ruled()->playerBinding(p->getPlayerId());
+        return game->ruled()->synchronizer->playerBinding(p->getPlayerId());
     }
 
     BatchOutcome callBatchApply(const ruled::v1::IpcResponse &resp)
     {
-        const auto r = game->ruled()->applyRuledBatch(resp);
+        const auto r = game->ruled()->synchronizer->applyBatch(resp);
         BatchOutcome out;
         out.zoneViewApplied = r.zoneViewApplied;
         out.handOrLibraryChanged = r.handOrLibraryChanged;
@@ -279,12 +283,12 @@ protected:
     ruled::v1::RuledEventBatch redactFor(const ruled::v1::RuledEventBatch &batch,
                                          Server_AbstractParticipant *participant)
     {
-        return game->ruled()->redactBatchForParticipant(batch, participant);
+        return game->ruled()->broadcaster->redactBatchForParticipant(batch, participant);
     }
 
     void updatePendingResolutionChoiceCache(const ruled::v1::IpcResponse &response)
     {
-        game->ruled()->updatePendingResolutionChoiceCache(response);
+        game->ruled()->broadcaster->updatePendingResolutionChoiceCache(response);
     }
 
     bool cacheAutoPassPolicy(int playerId, const ruled::v1::SetAutoPassPolicy &policy)
@@ -297,12 +301,35 @@ protected:
         return game->ruled()->canonicalGameplayCommand(playerId, command);
     }
 
+    void seedPerGameStateForReset()
+    {
+        game->ruled()->synchronizer->playerBinding(p1->getPlayerId()).engineOidToServerCardId.insert(101, 7);
+        seedSyntheticStackBookkeeping(501, 101, true);
+        game->ruled()->broadcaster->lastBroadcastHandSlotMap.add_entries()->set_player_id(p1->getPlayerId());
+        game->ruled()->broadcaster->hasLastBroadcastHandSlotMap = true;
+        game->ruled()->broadcaster->lastBroadcastHandSlotParticipants.insert(p1->getPlayerId());
+        game->ruled()->broadcaster->pendingResolutionChoice.emplace();
+        game->ruled()->broadcaster->pendingResolutionChoice->set_deciding_player_id(p1->getPlayerId());
+        game->ruled()->session->engineConnectionLost = true;
+    }
+
+    bool perGameStateIsReset() const
+    {
+        const auto *driver = game->ruled();
+        return driver->synchronizer->playerBindings.isEmpty() && !hasSyntheticStackBookkeeping(501) &&
+               driver->session->autoPassPolicies.isEmpty() &&
+               driver->broadcaster->lastBroadcastHandSlotMap.entries_size() == 0 &&
+               !driver->broadcaster->hasLastBroadcastHandSlotMap &&
+               driver->broadcaster->lastBroadcastHandSlotParticipants.isEmpty() &&
+               !driver->broadcaster->pendingResolutionChoice.has_value() && !driver->session->engineConnectionLost;
+    }
+
     // Runs the identity-map injection stage of broadcastRuledResponse on an otherwise empty
     // response, and reports whether it decided to carry a HandSlotMap this time.
     bool appendedHandSlotMap()
     {
         ruled::v1::IpcResponse resp;
-        game->ruled()->appendServerObjectMaps(resp);
+        game->ruled()->broadcaster->appendServerObjectMaps(resp);
         return std::any_of(resp.batch().events().begin(), resp.batch().events().end(),
                            [](const auto &event) { return event.has_hand_slot_map(); });
     }
@@ -310,7 +337,7 @@ protected:
     ruled::v1::RuledEventBatch appendedServerMaps()
     {
         ruled::v1::IpcResponse resp;
-        game->ruled()->appendServerObjectMaps(resp);
+        game->ruled()->broadcaster->appendServerObjectMaps(resp);
         return resp.batch();
     }
 
@@ -459,6 +486,40 @@ TEST_F(RuledBatchTest, ClientCannotSupplyCanonicalPolicyRows)
     auto *canonical = spoofed.mutable_canonical_gameplay();
     canonical->mutable_auto_pass_policies()->Add()->set_player_id(2);
     EXPECT_TRUE(canonicalGameplayCommand(1, spoofed).isEmpty());
+}
+
+TEST_F(RuledBatchTest, BlockerPreviewRequiresDeclareBlockersAndTheNonactivePlayer)
+{
+    ruled::v1::RuledCommand preview;
+    auto *pair = preview.mutable_preview_declare_blockers()->add_block_pairs();
+    pair->set_attacker_id(101);
+    pair->set_blocker_id(202);
+    std::string bytes;
+    ASSERT_TRUE(preview.SerializeToString(&bytes));
+    Command_RuledPayload payload;
+    payload.set_payload(bytes);
+    GameEventStorage ges;
+
+    game->setActivePlayer(p1->getPlayerId());
+    game->setActivePhase(5);
+    EXPECT_EQ(game->ruled()->processRuledPayload(p2->getPlayerId(), payload, ges), Response::RespContextError);
+
+    game->setActivePhase(6);
+    EXPECT_EQ(game->ruled()->processRuledPayload(p1->getPlayerId(), payload, ges), Response::RespContextError);
+    EXPECT_EQ(game->ruled()->processRuledPayload(p2->getPlayerId(), payload, ges), Response::RespOk);
+}
+
+TEST_F(RuledBatchTest, ResetForNewGameClearsAllPerGameDriverState)
+{
+    ruled::v1::SetAutoPassPolicy policy;
+    policy.add_stop_on_own_turn(ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_TRUE(cacheAutoPassPolicy(p1->getPlayerId(), policy));
+
+    seedPerGameStateForReset();
+
+    game->ruled()->resetForNewGame();
+
+    EXPECT_TRUE(perGameStateIsReset());
 }
 
 TEST(RuledProtocolVisibilityTest, EveryBroadcastReachableFieldIsClassifiedAndClearable)
@@ -1040,6 +1101,25 @@ TEST_F(RuledBatchTest, PendingPublicRevealIsRestoredOnJoinAndClearedByNextAuthor
     EXPECT_EQ(restoredChoice.candidate_server_card_ids(0), 0);
     EXPECT_EQ(restoredChoice.candidate_selectable_size(), 0);
 
+    ruled::v1::IpcResponse preview;
+    preview.set_ok(true);
+    preview.mutable_batch()->add_events()->mutable_attackers_preview()->set_declaring_player_id(1);
+    game->ruled()->broadcastRuledResponse(preview, false);
+
+    ResponseContainer afterPreview(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p2, afterPreview);
+    ASSERT_EQ(afterPreview.getPostResponseQueue().size(), 1)
+        << "a non-authoritative preview must not replace the reconnect choice cache";
+    const auto *afterPreviewContainer =
+        dynamic_cast<const GameEventContainer *>(afterPreview.getPostResponseQueue().last().second);
+    ASSERT_NE(afterPreviewContainer, nullptr);
+    ASSERT_EQ(afterPreviewContainer->event_list_size(), 1);
+    ruled::v1::RuledEventBatch afterPreviewBatch;
+    ASSERT_TRUE(afterPreviewBatch.ParseFromString(
+        afterPreviewContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    ASSERT_EQ(afterPreviewBatch.events_size(), 1);
+    EXPECT_TRUE(afterPreviewBatch.events(0).has_resolution_choice_required());
+
     ruled::v1::IpcResponse completed;
     completed.set_ok(true);
     completed.mutable_batch()->add_events()->mutable_log()->set_text("Choice completed.");
@@ -1539,7 +1619,7 @@ TEST_F(RuledBatchTest, ZoneViewUntapExemptionIsPerObject)
     EXPECT_TRUE(wolf->getTapped());
 }
 
-// End to end through applyRuledBatch: a PermanentsUntapped event anywhere in the batch (here
+// End to end through RuledBatchSynchronizer::applyBatch: a PermanentsUntapped event anywhere in the batch (here
 // *after* the zone view, as the engine emits it) reaches the binding, with no untap-step phase
 // change to fall back on.
 TEST_F(RuledBatchTest, ApplyRuledBatchAppliesUntapEffectMidTurn)
@@ -2692,7 +2772,7 @@ TEST_F(RuledBatchTest, ApplyRuledBatchIndexesAMidGameCardCatalog)
     // The catalog used to be indexed only from the startup batch, which meant a card that was in
     // no decklist could never be resolved by name — and the zone reconcile, which translates every
     // physical card's name through this index, would silently abandon its sync. Dev conjuring
-    // re-emits the catalog mid-game, so applyRuledBatch has to pick it up too.
+    // re-emits the catalog mid-game, so the synchronizer has to pick it up too.
     EXPECT_TRUE(game->ruled()->ruledCardIdForName(QStringLiteral("Serra Angel")).isEmpty());
 
     ruled::v1::IpcResponse resp;
