@@ -591,6 +591,14 @@ impl GameEngine {
         self.state.cleanup_priority_active = false;
         self.state.lands_played_this_turn = 0;
         self.state.activation_uses_this_turn.clear();
+        let ending_player = self.state.active_player_id();
+        let expired = self
+            .state
+            .dispatch_event_observers(ObservedGameEvent::TurnEnded {
+                active_player: ending_player,
+                turn_instance: ending_turn_instance,
+            });
+        debug_assert!(expired.is_empty(), "turn-end observers only expire");
         self.state.turn_history.finish_turn();
         let n = self.state.players.len();
         if n >= 1 {
@@ -601,6 +609,13 @@ impl GameEngine {
         }
         self.state.turn_instance = self.state.turn_instance.saturating_add(1);
         let ap = self.state.active_player_id();
+        let armed = self
+            .state
+            .dispatch_event_observers(ObservedGameEvent::TurnBegan {
+                active_player: ap,
+                turn_instance: self.state.turn_instance,
+            });
+        debug_assert!(armed.is_empty(), "turn-begin observers only arm");
         self.state.turn_step = TurnStep::Untap;
         ev.push(ev_phase(self, rv1::PhaseId::Untap));
 
@@ -629,6 +644,17 @@ impl GameEngine {
                     c.summoning_sick = false;
                 }
             }
+        }
+        let additional_untaps = self
+            .state
+            .players
+            .iter()
+            .filter(|player| player.id != ap)
+            .flat_map(|player| player.battlefield.iter().copied())
+            .filter(|oid| self.untaps_during_other_players_untap_steps(*oid))
+            .collect::<Vec<_>>();
+        for oid in additional_untaps {
+            super::attempt_untap(&mut self.state, oid);
         }
         // Servatrice only applies engine untaps during batches that include phase_changed("untap").
         // Emit zone_view in this same batch so battlefield_tapped reaches Cockatrice while

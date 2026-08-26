@@ -138,11 +138,13 @@ impl GameEngine {
             match event {
                 GameEvent::PhaseBegan {
                     phase: rv1::PhaseId::EndStep,
-                    ..
-                } => delayed.extend(
-                    self.state
-                        .dispatch_event_observers(ObservedGameEvent::BeginningOfEndStep),
-                ),
+                    active_player,
+                } => delayed.extend(self.state.dispatch_event_observers(
+                    ObservedGameEvent::BeginningOfEndStep {
+                        active_player: *active_player,
+                        turn_instance: self.state.turn_instance,
+                    },
+                )),
                 GameEvent::Dies { source, .. } => {
                     delayed.extend(self.state.dispatch_event_observers(ObservedGameEvent::Dies(
                         TriggerObjectRef {

@@ -45,11 +45,13 @@ fn curses_have_exact_attachment_data_and_complete_rewards() {
                     token: token.into(),
                     count: Amount::Fixed(1),
                     who: PlayerRecipient::Controller,
+                    sacrifice_timing: None,
                 },
                 SpellEffectKind::CreateTokens {
                     token: token.into(),
                     count: Amount::Fixed(1),
                     who: PlayerRecipient::AttackingOpponentsOfDefendingPlayer,
+                    sacrifice_timing: None,
                 },
             ]
         );

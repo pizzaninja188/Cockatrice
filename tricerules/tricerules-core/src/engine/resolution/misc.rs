@@ -303,6 +303,13 @@ pub(super) fn create_delayed_trigger(
         TriggerCondition::AtBeginningOfNextEndStep => {
             EventObserverMatcher::AtBeginningOfNextEndStep
         }
+        TriggerCondition::AtBeginningOfControllerNextTurnEndStep => {
+            EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
+                controller: cx.controller,
+                created_turn_instance: cx.engine.state.turn_instance,
+                target_turn_instance: None,
+            }
+        }
         TriggerCondition::WhenControllerLosesControlOf => {
             EventObserverMatcher::WhenControllerLosesControlOf
         }

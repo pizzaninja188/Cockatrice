@@ -75,6 +75,10 @@ impl GameEngine {
                     // CR 614.1c / 122.6 entry replacements are evaluated against the proposed
                     // event in `engine::replacement`; there is no post-entry effect to emit.
                 }
+                StaticAbilityDef::UntapsDuringOtherPlayersUntapSteps => {
+                    // CR 502.3 turn-based hook, queried at the untap boundary. It emits no
+                    // independent continuous-effect record.
+                }
                 StaticAbilityDef::PreventDamage {
                     subject,
                     amount,
@@ -507,6 +511,25 @@ impl GameEngine {
                 oid,
                 &characteristics,
             )
+        })
+    }
+
+    /// CR 502.3: this printed/copied static ability adds an untap attempt during each other
+    /// player's untap step. A layer-6 remove-all-abilities effect suppresses the hook.
+    pub(super) fn untaps_during_other_players_untap_steps(&self, oid: ObjectId) -> bool {
+        let Some(object) = self.state.objects.get(&oid) else {
+            return false;
+        };
+        if object.zone != Zone::Battlefield
+            || object.face_down
+            || super::characteristics::latest_remove_all_abilities_timestamp(&self.state, oid)
+                .is_some()
+        {
+            return false;
+        }
+        self.effective_face(oid).is_some_and(|face| {
+            face.static_abilities
+                .contains(&StaticAbilityDef::UntapsDuringOtherPlayersUntapSteps)
         })
     }
 

@@ -1,4 +1,4 @@
-use tricerules_cards::{CardRegistry, SpellEffectKind};
+use tricerules_cards::{CardRegistry, DelayedTokenSacrificeTiming, SpellEffectKind};
 
 #[test]
 fn issue_106_mobilize_cards_are_complete_registry_definitions() {
@@ -24,7 +24,8 @@ fn issue_106_mobilize_cards_are_complete_registry_definitions() {
                     ability.effect.as_slice(),
                     [SpellEffectKind::CreateAttackingTokens {
                         token,
-                        sacrifice_at_next_end_step: true,
+                        sacrifice_timing:
+                            Some(DelayedTokenSacrificeTiming::NextEndStep),
                         ..
                     }] if token == "warrior_r_1_1"
                 )

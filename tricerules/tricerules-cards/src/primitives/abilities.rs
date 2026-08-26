@@ -287,6 +287,10 @@ pub enum TriggerCondition {
     },
     /// Delayed-trigger-only condition: the next end step that begins after creation.
     AtBeginningOfNextEndStep,
+    /// Delayed-trigger-only condition: the end step of the creating controller's next actual
+    /// turn. Extra turns count; a skipped turn does not. If that turn has no end step, the
+    /// delayed trigger expires without waiting for a later turn.
+    AtBeginningOfControllerNextTurnEndStep,
     /// Delayed-trigger-only condition: the controller that created the delayed trigger stops
     /// controlling the observed permanent.
     WhenControllerLosesControlOf,
@@ -527,6 +531,7 @@ impl TriggerCondition {
         matches!(
             self,
             Self::AtBeginningOfNextEndStep
+                | Self::AtBeginningOfControllerNextTurnEndStep
                 | Self::WhenControllerLosesControlOf
                 | Self::WhenWatchedObjectDiesThisTurn
         )
@@ -591,6 +596,7 @@ impl TriggerCondition {
                 | Self::WheneverPermanentBecomesTarget { .. }
                 | Self::WheneverPlayerSacrificesPermanent { .. }
                 | Self::AtBeginningOfNextEndStep
+                | Self::AtBeginningOfControllerNextTurnEndStep
                 | Self::WhenControllerLosesControlOf
                 | Self::WhenWatchedObjectDiesThisTurn
         )
@@ -1196,6 +1202,11 @@ pub enum StaticAbilityDef {
         #[serde(default)]
         cant_block: bool,
     },
+    /// CR 502.3: this permanent untaps during every other player's untap step, at the same
+    /// turn-based boundary as that player's permanents. Bender's Waterskin supplies the printed
+    /// use, while Clone/Phyrexian Metamorph-style copy effects preserve it through copiable
+    /// values; layer-6 ability removal suppresses either form.
+    UntapsDuringOtherPlayersUntapSteps,
     /// CR 613.1b: the controller of this Aura controls the permanent it is attached to.
     /// Mind Control and Confiscate share this source-relative layer-2 ability.
     ControlsAttached,

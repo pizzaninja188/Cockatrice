@@ -1,0 +1,13 @@
+// Oracle and rulings checked against Gatherer on 2026-08-26.
+(
+  id: "benders_waterskin",
+  name: "Bender's Waterskin",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  static_abilities: [UntapsDuringOtherPlayersUntapSteps],
+  activated_abilities: [(
+    costs: [Tap],
+    effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    text: "{T}: Add one mana of any color.",
+  )],
+)

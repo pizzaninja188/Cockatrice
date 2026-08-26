@@ -927,6 +927,15 @@ pub struct CastCostConditionalAmount {
     pub otherwise: u32,
 }
 
+/// Timing for a delayed trigger that sacrifices the full post-replacement token cohort.
+/// Mobilize uses the next end step; Kav Landseeker uses the end step of its controller's next
+/// actual turn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DelayedTokenSacrificeTiming {
+    NextEndStep,
+    ControllerNextTurnEndStep,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
     DamageTarget {
@@ -1443,6 +1452,8 @@ pub enum SpellEffectKind {
         count: Amount,
         #[serde(default)]
         who: PlayerRecipient,
+        #[serde(default)]
+        sacrifice_timing: Option<DelayedTokenSacrificeTiming>,
     },
     /// CR 508.4 / 603.7: create a cohort under the resolving object's controller, tapped and
     /// attacking engine-chosen defending recipients. Each token's recipient is chosen separately;
@@ -1454,7 +1465,7 @@ pub enum SpellEffectKind {
         token: String,
         count: Amount,
         #[serde(default)]
-        sacrifice_at_next_end_step: bool,
+        sacrifice_timing: Option<DelayedTokenSacrificeTiming>,
     },
     /// CR 122/121.6: put `count` counters of `counter` on `subject` (default: a chosen creature
     /// target). The `counter` kind covers both +1/+1 counter spells

@@ -806,6 +806,7 @@ impl GameEngine {
         mut entries: Vec<TokenBattlefieldEntry>,
         logs: Vec<String>,
         attacking: Option<AttackingTokenBatch>,
+        delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         // CR 616.1: when one simultaneous event requires choices from multiple players, those
@@ -821,6 +822,7 @@ impl GameEngine {
                     remaining: entries.clone(),
                     logs: logs.clone(),
                     attacking: attacking.clone(),
+                    delayed_sacrifice,
                 }));
             match self.advance_or_park_battlefield_entry(
                 item.clone(),
@@ -835,7 +837,7 @@ impl GameEngine {
                 }),
             }
         }
-        self.commit_token_entry_batch(&item, ready, logs, attacking, events)?;
+        self.commit_token_entry_batch(&item, ready, logs, attacking, delayed_sacrifice, events)?;
         Ok(false)
     }
 
@@ -856,6 +858,7 @@ impl GameEngine {
                     remaining: batch.remaining.clone(),
                     logs: batch.logs.clone(),
                     attacking: batch.attacking.clone(),
+                    delayed_sacrifice: batch.delayed_sacrifice,
                 }));
             match self.advance_or_park_battlefield_entry(
                 item.clone(),
@@ -870,7 +873,14 @@ impl GameEngine {
                 }),
             }
         }
-        self.commit_token_entry_batch(&item, batch.ready, batch.logs, batch.attacking, events)?;
+        self.commit_token_entry_batch(
+            &item,
+            batch.ready,
+            batch.logs,
+            batch.attacking,
+            batch.delayed_sacrifice,
+            events,
+        )?;
         Ok(false)
     }
 
@@ -880,6 +890,7 @@ impl GameEngine {
         entries: Vec<TokenBattlefieldEntry>,
         logs: Vec<String>,
         attacking: Option<AttackingTokenBatch>,
+        delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         let object_ids = entries
@@ -914,8 +925,7 @@ impl GameEngine {
                 })),
             });
         }
-        if attacking.is_some_and(|batch| batch.sacrifice_at_next_end_step) && !object_ids.is_empty()
-        {
+        if let (Some(delayed_sacrifice), false) = (delayed_sacrifice, object_ids.is_empty()) {
             let observed_objects = object_ids
                 .iter()
                 .filter_map(|object_id| {
@@ -944,9 +954,25 @@ impl GameEngine {
                     .get(&item.card_id)
                     .map(|definition| definition.name.clone())
                     .unwrap_or_else(|| item.card_id.clone());
+                let (matcher, trigger, text) = match delayed_sacrifice {
+                    DelayedTokenSacrificeTiming::NextEndStep => (
+                        EventObserverMatcher::AtBeginningOfNextEndStep,
+                        TriggerCondition::AtBeginningOfNextEndStep,
+                        "At the beginning of the next end step, sacrifice those tokens.",
+                    ),
+                    DelayedTokenSacrificeTiming::ControllerNextTurnEndStep => (
+                        EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
+                            controller: item.controller,
+                            created_turn_instance: self.state.turn_instance,
+                            target_turn_instance: None,
+                        },
+                        TriggerCondition::AtBeginningOfControllerNextTurnEndStep,
+                        "At the beginning of the end step on your next turn, sacrifice those tokens.",
+                    ),
+                };
                 self.state.active_event_observers.push(ActiveEventObserver {
                     watched,
-                    matcher: EventObserverMatcher::AtBeginningOfNextEndStep,
+                    matcher,
                     payload: EventObserverPayload::StageDelayedTrigger(Box::new(
                         DelayedTriggerPayload {
                             controller: item.controller,
@@ -954,13 +980,11 @@ impl GameEngine {
                             card_name,
                             source_face_index: item.face_index,
                             ability: TriggeredAbilityDef {
-                                trigger: TriggerCondition::AtBeginningOfNextEndStep,
+                                trigger,
                                 effect: vec![SpellEffectKind::SacrificeObservedObjects],
                                 modal: None,
                                 targeting: None,
-                                text:
-                                    "At the beginning of the next end step, sacrifice those tokens."
-                                        .to_string(),
+                                text: text.to_string(),
                                 may: false,
                                 intervening_if: None,
                                 triggers_only_once: false,

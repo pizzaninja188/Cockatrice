@@ -2,9 +2,10 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
     ActivatedAbilityDef, CardResultAction, CardSearchZone, CardTypeFilter,
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
-    CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect, EffectDuration,
-    GameCondition, Keyword, LibraryBottomOrder, ManaAmount, ManaSpendingRestriction,
-    SearchDestination, TargetFilter, TriggeredAbilityDef, ZoneCardFilter,
+    CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
+    DelayedTokenSacrificeTiming, EffectDuration, GameCondition, Keyword, LibraryBottomOrder,
+    ManaAmount, ManaSpendingRestriction, SearchDestination, TargetFilter, TriggeredAbilityDef,
+    ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{CardFace, ManaCost};
@@ -753,7 +754,7 @@ pub enum ResolutionContinuation {
         logs: Vec<String>,
         chosen_defenders: Vec<tricerules_proto::ruled::v1::CombatDefenderOption>,
         current_options: Vec<tricerules_proto::ruled::v1::CombatDefenderOption>,
-        sacrifice_at_next_end_step: bool,
+        delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
     },
     SiegeCast {
         stack: ParkedStackResolution,
@@ -949,7 +950,6 @@ pub struct TokenBattlefieldEntry {
 #[derive(Debug, Clone)]
 pub(crate) struct AttackingTokenBatch {
     pub defenders: Vec<tricerules_proto::ruled::v1::CombatDefenderOption>,
-    pub sacrifice_at_next_end_step: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -959,6 +959,7 @@ pub(crate) struct PendingTokenEntryBatch {
     pub remaining: Vec<TokenBattlefieldEntry>,
     pub logs: Vec<String>,
     pub attacking: Option<AttackingTokenBatch>,
+    pub delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
 }
 
 #[derive(Debug, Clone)]
@@ -1248,9 +1249,14 @@ pub struct DelayedTriggerPayload {
 
 /// A closed set of event patterns observed after their underlying state transition commits.
 /// Object events compare both ObjectId and zone-change generation (CR 400.7).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventObserverMatcher {
     AtBeginningOfNextEndStep,
+    AtBeginningOfControllerNextTurnEndStep {
+        controller: PlayerId,
+        created_turn_instance: u64,
+        target_turn_instance: Option<u64>,
+    },
     WhenWatchedObjectDiesThisTurn,
     WhenWatchedObjectLeavesBattlefield,
     WhenControllerLosesControlOf,
@@ -1274,7 +1280,18 @@ pub struct ActiveEventObserver {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ObservedGameEvent {
-    BeginningOfEndStep,
+    TurnBegan {
+        active_player: PlayerId,
+        turn_instance: u64,
+    },
+    BeginningOfEndStep {
+        active_player: PlayerId,
+        turn_instance: u64,
+    },
+    TurnEnded {
+        active_player: PlayerId,
+        turn_instance: u64,
+    },
     Dies(TriggerObjectRef),
     LeavesBattlefield(TriggerObjectRef),
     ControllerChanged {
@@ -1646,16 +1663,56 @@ impl GameState {
     ) -> Vec<(TriggerObjectRef, DelayedTriggerPayload)> {
         let mut waiting = std::mem::take(&mut self.active_event_observers);
         let mut delayed = Vec::new();
-        for observer in waiting.drain(..) {
+        for mut observer in waiting.drain(..) {
+            let watched = observer.watched;
             let identity_matches = |observed: TriggerObjectRef| {
-                observed.object_id == observer.watched.object_id
-                    && observed.zone_change_generation == observer.watched.zone_change_generation
+                observed.object_id == watched.object_id
+                    && observed.zone_change_generation == watched.zone_change_generation
             };
-            let matched = match (observer.matcher, event) {
+            let mut expired = false;
+            let matched = match (&mut observer.matcher, event) {
                 (
                     EventObserverMatcher::AtBeginningOfNextEndStep,
-                    ObservedGameEvent::BeginningOfEndStep,
+                    ObservedGameEvent::BeginningOfEndStep { .. },
                 ) => true,
+                (
+                    EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
+                        controller,
+                        created_turn_instance,
+                        target_turn_instance,
+                    },
+                    ObservedGameEvent::TurnBegan {
+                        active_player,
+                        turn_instance,
+                    },
+                ) if active_player == *controller
+                    && turn_instance > *created_turn_instance
+                    && target_turn_instance.is_none() =>
+                {
+                    *target_turn_instance = Some(turn_instance);
+                    false
+                }
+                (
+                    EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
+                        controller,
+                        target_turn_instance: Some(target_turn_instance),
+                        ..
+                    },
+                    ObservedGameEvent::BeginningOfEndStep {
+                        active_player,
+                        turn_instance,
+                    },
+                ) => active_player == *controller && turn_instance == *target_turn_instance,
+                (
+                    EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
+                        target_turn_instance: Some(target_turn_instance),
+                        ..
+                    },
+                    ObservedGameEvent::TurnEnded { turn_instance, .. },
+                ) if turn_instance == *target_turn_instance => {
+                    expired = true;
+                    false
+                }
                 (
                     EventObserverMatcher::WhenWatchedObjectDiesThisTurn,
                     ObservedGameEvent::Dies(observed),
@@ -1678,13 +1735,16 @@ impl GameState {
                 }
                 _ => false,
             };
+            if expired {
+                continue;
+            }
             if !matched {
                 self.active_event_observers.push(observer);
                 continue;
             }
             match observer.payload {
                 EventObserverPayload::StageDelayedTrigger(payload) => {
-                    delayed.push((observer.watched, *payload));
+                    delayed.push((watched, *payload));
                 }
                 EventObserverPayload::ReturnExiledObject { exiled } => {
                     self.pending_immediate_observer_actions
@@ -1825,5 +1885,100 @@ mod seat_order_tests {
         // With every opponent gone there is no defending player at all.
         players[2].has_lost = true;
         assert!(defending_player_ids_of(&players, 0).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod event_observer_tests {
+    use super::*;
+    use crate::engine::GameEngine;
+
+    fn watched() -> TriggerObjectRef {
+        TriggerObjectRef {
+            object_id: 161,
+            zone_change_generation: 2,
+            controller_at_event: 0,
+        }
+    }
+
+    fn controller_next_turn_observer(created_turn_instance: u64) -> ActiveEventObserver {
+        ActiveEventObserver {
+            watched: watched(),
+            matcher: EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
+                controller: 0,
+                created_turn_instance,
+                target_turn_instance: None,
+            },
+            payload: EventObserverPayload::ReturnExiledObject { exiled: watched() },
+        }
+    }
+
+    #[test]
+    fn controller_next_turn_observer_arms_on_the_next_actual_turn() {
+        let mut engine = GameEngine::new(161_010, &[0, 1], 20, None, true).expect("new");
+        engine
+            .state
+            .active_event_observers
+            .push(controller_next_turn_observer(7));
+
+        engine
+            .state
+            .dispatch_event_observers(ObservedGameEvent::TurnBegan {
+                active_player: 1,
+                turn_instance: 8,
+            });
+        assert!(matches!(
+            engine.state.active_event_observers[0].matcher,
+            EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
+                target_turn_instance: None,
+                ..
+            }
+        ));
+
+        engine
+            .state
+            .dispatch_event_observers(ObservedGameEvent::TurnBegan {
+                active_player: 0,
+                turn_instance: 9,
+            });
+        assert!(matches!(
+            engine.state.active_event_observers[0].matcher,
+            EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
+                target_turn_instance: Some(9),
+                ..
+            }
+        ));
+        engine
+            .state
+            .dispatch_event_observers(ObservedGameEvent::BeginningOfEndStep {
+                active_player: 0,
+                turn_instance: 9,
+            });
+        assert!(engine.state.active_event_observers.is_empty());
+        assert_eq!(engine.state.pending_immediate_observer_actions.len(), 1);
+    }
+
+    #[test]
+    fn controller_next_turn_observer_expires_if_its_armed_turn_has_no_end_step() {
+        let mut engine = GameEngine::new(161_011, &[0, 1], 20, None, true).expect("new");
+        engine
+            .state
+            .active_event_observers
+            .push(controller_next_turn_observer(12));
+        engine
+            .state
+            .dispatch_event_observers(ObservedGameEvent::TurnBegan {
+                active_player: 0,
+                turn_instance: 13,
+            });
+        engine
+            .state
+            .dispatch_event_observers(ObservedGameEvent::TurnEnded {
+                active_player: 0,
+                turn_instance: 13,
+            });
+
+        assert!(engine.state.active_event_observers.is_empty());
+        assert!(engine.state.pending_immediate_observer_actions.is_empty());
     }
 }

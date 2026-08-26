@@ -4,7 +4,13 @@ pub(super) fn create_tokens(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::CreateTokens { token, count, who } = effect else {
+    let SpellEffectKind::CreateTokens {
+        token,
+        count,
+        who,
+        sacrifice_timing,
+    } = effect
+    else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let item = cx.top.clone();
@@ -26,6 +32,7 @@ pub(super) fn create_tokens(
             spell_label,
             item: &item,
         },
+        sacrifice_timing,
         events,
     )? {
         return Ok(EffectOutcome::Suspended);
@@ -41,7 +48,7 @@ pub(super) fn create_attacking_tokens(
     let SpellEffectKind::CreateAttackingTokens {
         token,
         count,
-        sacrifice_at_next_end_step,
+        sacrifice_timing,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -78,10 +85,8 @@ pub(super) fn create_attacking_tokens(
             item,
             entries,
             logs,
-            Some(AttackingTokenBatch {
-                defenders,
-                sacrifice_at_next_end_step,
-            }),
+            Some(AttackingTokenBatch { defenders }),
+            sacrifice_timing,
             cx.events,
         )? {
             return Ok(EffectOutcome::Suspended);
@@ -144,7 +149,7 @@ pub(super) fn create_attacking_tokens(
             logs,
             chosen_defenders: Vec::new(),
             current_options: options,
-            sacrifice_at_next_end_step,
+            delayed_sacrifice: sacrifice_timing,
         },
     });
     Ok(EffectOutcome::Suspended)

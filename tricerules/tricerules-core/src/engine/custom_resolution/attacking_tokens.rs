@@ -53,7 +53,7 @@ impl GameEngine {
             logs,
             chosen_defenders,
             current_options,
-            sacrifice_at_next_end_step,
+            delayed_sacrifice,
         } = &pending.continuation
         else {
             unreachable!("attacking-token choice routed by caller")
@@ -83,7 +83,7 @@ impl GameEngine {
         let entries = entries.clone();
         let logs = logs.clone();
         let mut chosen_defenders = chosen_defenders.clone();
-        let sacrifice_at_next_end_step = *sacrifice_at_next_end_step;
+        let delayed_sacrifice = *delayed_sacrifice;
         chosen_defenders.push(choice);
         if chosen_defenders.len() < entries.len() {
             let token_label = entries
@@ -109,7 +109,7 @@ impl GameEngine {
                 logs,
                 chosen_defenders,
                 current_options: live_options.clone(),
-                sacrifice_at_next_end_step,
+                delayed_sacrifice,
             };
             self.state.pending_resolution = Some(pending);
             return Ok(finish_with_events(
@@ -152,8 +152,8 @@ impl GameEngine {
             logs,
             Some(AttackingTokenBatch {
                 defenders: chosen_defenders,
-                sacrifice_at_next_end_step,
             }),
+            delayed_sacrifice,
             &mut events,
         )? {
             return Ok(finish_with_events(self, events));

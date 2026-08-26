@@ -1262,6 +1262,34 @@ mod tests {
     }
 
     #[test]
+    fn issue_161_shared_turn_boundary_vocabulary_deserializes() {
+        let card = r#"(
+            id: "issue_161_turn_boundary_card",
+            name: "Issue 161 Turn Boundary Card",
+            mana_cost: "{3}",
+            types: ["Artifact"],
+            static_abilities: [UntapsDuringOtherPlayersUntapSteps],
+            triggered_abilities: [(
+                trigger: WhenSelfEntersBattlefield,
+                effect: [CreateTokens(
+                    token: "issue_161_token",
+                    count: 1,
+                    sacrifice_timing: Some(ControllerNextTurnEndStep),
+                )],
+                text: "Create a token, then sacrifice it at the beginning of the end step on your next turn.",
+            )],
+        )"#;
+        let token = r#"(
+            id: "issue_161_token",
+            name: "Issue 161 Token",
+            types: ["Artifact"],
+        )"#;
+
+        CardRegistry::from_chunks_and_tokens(&[card], &[token])
+            .expect("issue 161 shared vocabulary must load");
+    }
+
+    #[test]
     fn previous_card_result_rejects_an_incompatible_preceding_effect() {
         let card = r#"(
             id: "bad_previous_result",

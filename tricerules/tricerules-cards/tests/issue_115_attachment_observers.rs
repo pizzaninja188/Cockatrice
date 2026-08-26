@@ -28,7 +28,9 @@ fn issue_115_cards_and_treasure_have_exact_shared_shapes() {
                 == TriggerCondition::WheneverAttachedObjectDealsCombatDamageToPlayer
                 && matches!(
                     ability.effect.as_slice(),
-                    [SpellEffectKind::CreateTokens { token, count, who }]
+                    [SpellEffectKind::CreateTokens {
+                        token, count, who, ..
+                    }]
                         if token == "treasure"
                             && *count == tricerules_cards::Amount::Fixed(1)
                             && *who == PlayerRecipient::SourceController
