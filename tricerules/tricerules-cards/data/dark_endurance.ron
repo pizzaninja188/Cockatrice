@@ -1,0 +1,16 @@
+// Oracle and ruling checked against Scryfall on 2026-08-26.
+// CR 601.2f: the blocking-target reduction is locked from the announced target.
+(
+  id: "dark_endurance",
+  name: "Dark Endurance",
+  mana_cost: "{1}{B}",
+  cost_modifiers: [TargetMatchGenericReduction(
+    amount: 1,
+    filter: (kind: Creature, combat_role: Blocking),
+  )],
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 0, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Indestructible]),
+  ],
+)

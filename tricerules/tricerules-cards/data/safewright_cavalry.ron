@@ -1,0 +1,20 @@
+// Oracle and ruling checked against Scryfall on 2026-08-26.
+// CR 509.1b: a completed declaration may assign at most one blocker to this creature.
+(
+  id: "safewright_cavalry",
+  name: "Safewright Cavalry",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Elf", "Warrior"],
+  power: 4,
+  toughness: 4,
+  evasions: [BlockerCountMaximum(maximum: 1)],
+  activated_abilities: [(
+    costs: [Mana("{5}")],
+    effect: [PumpTarget(
+      power: 2,
+      toughness: 2,
+      subject: Chosen((kind: Creature, controller: You, required_subtypes: ["Elf"])),
+    )],
+    text: "{5}: Target Elf you control gets +2/+2 until end of turn.",
+  )],
+)

@@ -180,29 +180,6 @@ impl GameEngine {
             })
     }
 
-    pub(super) fn eligible_blocker_ids(&self, defending_player: PlayerId) -> Vec<ObjectId> {
-        let attackers = self
-            .state
-            .combat
-            .as_ref()
-            .map(|combat| combat.attacking.as_slice())
-            .unwrap_or_default();
-        let Some(player_idx) = self.state.player_idx(defending_player) else {
-            return Vec::new();
-        };
-        self.state.players[player_idx]
-            .battlefield
-            .iter()
-            .copied()
-            .filter(|oid| {
-                self.base_blocker_eligible(*oid, defending_player)
-                    && attackers
-                        .iter()
-                        .any(|attacker_id| self.can_block(*attacker_id, *oid))
-            })
-            .collect()
-    }
-
     pub(super) fn attack_defenders(&self) -> Vec<(CombatDefenderTarget, PlayerId)> {
         let defending_players = self.state.defending_player_ids();
         let mut defenders: Vec<_> = defending_players
@@ -476,13 +453,16 @@ impl GameEngine {
         let Some(player_idx) = self.state.player_idx(defending_player) else {
             return Vec::new();
         };
+        let blockers = self.state.players[player_idx]
+            .battlefield
+            .iter()
+            .copied()
+            .filter(|blocker_id| self.base_blocker_eligible(*blocker_id, defending_player))
+            .collect::<Vec<_>>();
         let mut pairs = Vec::new();
-        for &blocker_id in &self.state.players[player_idx].battlefield {
-            if !self.base_blocker_eligible(blocker_id, defending_player) {
-                continue;
-            }
+        for &blocker_id in &blockers {
             for &attacker_id in attackers {
-                if self.can_block(attacker_id, blocker_id) {
+                if self.blocker_can_participate(attacker_id, blocker_id, &blockers) {
                     pairs.push(rv1::BlockPair {
                         attacker_id,
                         blocker_id,
@@ -567,7 +547,11 @@ impl GameEngine {
                     Evasion::Landwalk { land_subtype } => {
                         let matching_land = self
                             .state
-                            .sole_defending_player_id()
+                            .combat
+                            .as_ref()
+                            .and_then(|combat| combat.attack_assignments.get(&attacker_id))
+                            .map(|assignment| assignment.defending_player)
+                            .or_else(|| self.state.sole_defending_player_id())
                             .and_then(|defending_player| {
                                 self.state.player_idx(defending_player).map(|idx| {
                                     self.state.players[idx].battlefield.iter().any(|land_id| {
@@ -589,11 +573,78 @@ impl GameEngine {
                             return false;
                         }
                     }
+                    Evasion::BlockerPower { comparison } => {
+                        let Some(power) = self
+                            .characteristics(blocker_id)
+                            .and_then(|blocker| blocker.power)
+                        else {
+                            return false;
+                        };
+                        let prohibited = match comparison {
+                            tricerules_cards::PowerComparison::AtLeast(minimum) => {
+                                power >= *minimum
+                            }
+                            tricerules_cards::PowerComparison::AtMost(maximum) => power <= *maximum,
+                        };
+                        if prohibited {
+                            return false;
+                        }
+                    }
+                    Evasion::BlockerCountMaximum { .. } => {}
                 }
             }
         }
 
         true
+    }
+
+    /// Minimum and maximum blockers permitted for one attacker once it is blocked. Zero blockers
+    /// is always legal; menace supplies the minimum and authored evasion abilities supply caps.
+    fn blocker_count_bounds(&self, attacker_id: ObjectId) -> (usize, Option<usize>) {
+        use tricerules_cards::{Evasion, Keyword};
+        let minimum = if self.effective_has_keyword(attacker_id, Keyword::Menace) {
+            2
+        } else {
+            1
+        };
+        let maximum = self.characteristics(attacker_id).and_then(|attacker| {
+            attacker
+                .evasions
+                .iter()
+                .filter_map(|evasion| match evasion {
+                    Evasion::BlockerCountMaximum { maximum } => Some(*maximum as usize),
+                    _ => None,
+                })
+                .min()
+        });
+        (minimum, maximum)
+    }
+
+    fn blocker_count_is_legal(&self, attacker_id: ObjectId, count: usize) -> bool {
+        if count == 0 {
+            return true;
+        }
+        let (minimum, maximum) = self.blocker_count_bounds(attacker_id);
+        count >= minimum && maximum.is_none_or(|maximum| count <= maximum)
+    }
+
+    /// Whether `blocker_id` can occur in at least one legal nonempty declaration for this
+    /// attacker. Cardinality is evaluated per attacker, keeping blocker capacity orthogonal.
+    fn blocker_can_participate(
+        &self,
+        attacker_id: ObjectId,
+        blocker_id: ObjectId,
+        eligible_blockers: &[ObjectId],
+    ) -> bool {
+        if !self.can_block(attacker_id, blocker_id) {
+            return false;
+        }
+        let available = eligible_blockers
+            .iter()
+            .filter(|candidate| self.can_block(attacker_id, **candidate))
+            .count();
+        let (minimum, maximum) = self.blocker_count_bounds(attacker_id);
+        available >= minimum && maximum.is_none_or(|maximum| minimum <= maximum)
     }
 
     pub(super) fn active_player_has_eligible_attackers(&self) -> bool {
@@ -614,29 +665,21 @@ impl GameEngine {
         if attacking.is_empty() {
             return false;
         }
-        // CR 302.6: summoning sickness does NOT prevent blocking.
-        // Build the full list of untapped defender creatures up-front so the menace
-        // check can count potential co-blockers without re-scanning the battlefield.
-        let defenders = self.eligible_blocker_ids(dp);
-        // A legal non-empty blocking assignment exists only when at least one defender
-        // creature can participate in a valid block. For menace attackers (CR 702.111),
-        // participation requires at least one OTHER defender that can block the same
-        // attacker — otherwise the only achievable result is an illegal single-blocker.
+        // CR 302.6: summoning sickness does NOT prevent blocking. Build the complete untapped
+        // creature set so assignment-level minimum and maximum counts share one feasibility test.
+        let Some(dp_idx) = self.state.player_idx(dp) else {
+            return false;
+        };
+        let defenders = self.state.players[dp_idx]
+            .battlefield
+            .iter()
+            .copied()
+            .filter(|oid| self.base_blocker_eligible(*oid, dp))
+            .collect::<Vec<_>>();
         defenders.iter().any(|&cid| {
-            attacking.iter().any(|&aid| {
-                if !self.can_block(aid, cid) {
-                    return false;
-                }
-                let has_menace = self.effective_has_keyword(aid, Keyword::Menace);
-                if has_menace {
-                    // Need at least one other defender that can also block this attacker.
-                    defenders
-                        .iter()
-                        .any(|&other| other != cid && self.can_block(aid, other))
-                } else {
-                    true
-                }
-            })
+            attacking
+                .iter()
+                .any(|&aid| self.blocker_can_participate(aid, cid, &defenders))
         })
     }
 
@@ -687,14 +730,16 @@ impl GameEngine {
         if attacking.is_empty() {
             return Vec::new();
         }
-        let eligible: HashSet<ObjectId> = self
-            .eligible_blocker_ids(defending_player)
-            .into_iter()
-            .collect();
-        let mut out = Vec::new();
         let Some(dp_idx) = self.state.player_idx(defending_player) else {
-            return out;
+            return Vec::new();
         };
+        let eligible = self.state.players[dp_idx]
+            .battlefield
+            .iter()
+            .copied()
+            .filter(|oid| self.base_blocker_eligible(*oid, defending_player))
+            .collect::<Vec<_>>();
+        let mut out = Vec::new();
         for &oid in &self.state.players[dp_idx].battlefield {
             let Some(obj) = self.state.objects.get(&oid) else {
                 continue;
@@ -702,7 +747,10 @@ impl GameEngine {
             if !obj.must_block_if_able {
                 continue;
             }
-            if eligible.contains(&oid) {
+            if attacking
+                .iter()
+                .any(|attacker| self.blocker_can_participate(*attacker, oid, &eligible))
+            {
                 out.push(oid);
             }
         }
@@ -925,16 +973,11 @@ impl GameEngine {
             }
         }
 
-        // CR 702.111: menace — a creature with menace can't be blocked except by two or more
-        // creatures. A menace creature with zero blockers is fine (it's unblocked); one blocker
-        // is the illegal case. Return a prompt-friendly message so the UI can surface it.
+        // CR 509.1b: validate all assignment-level minimums and caps only after every pair is
+        // known. Zero blockers remains legal; any rejected declaration leaves combat untouched.
         for (&att_id, blk_ids) in &attacker_to_blockers {
-            if blk_ids.len() < 2 {
-                let has_menace =
-                    self.effective_has_keyword(att_id, tricerules_cards::Keyword::Menace);
-                if has_menace {
-                    return Err(EngineError::Illegal("Illegal blocks."));
-                }
+            if !self.blocker_count_is_legal(att_id, blk_ids.len()) {
+                return Err(EngineError::Illegal("Illegal blocks."));
             }
         }
         let block_edges: Vec<BlockEdgeSnapshot> = pairs
@@ -1749,10 +1792,17 @@ pub(super) fn is_attacking(state: &GameState, oid: ObjectId) -> bool {
         .is_some_and(|combat| combat.attacking.contains(&oid))
 }
 
+/// CR 509.1g: true if `oid` is currently a blocker in the active combat.
+pub(super) fn is_blocking(state: &GameState, oid: ObjectId) -> bool {
+    state.combat.as_ref().is_some_and(|combat| {
+        combat
+            .blockers
+            .values()
+            .any(|blockers| blockers.contains(&oid))
+    })
+}
+
 /// CR 508/509: true if `oid` is currently an attacker or a blocker in the active combat.
 pub(super) fn is_attacking_or_blocking(state: &GameState, oid: ObjectId) -> bool {
-    let Some(combat) = &state.combat else {
-        return false;
-    };
-    is_attacking(state, oid) || combat.blockers.values().any(|bs| bs.contains(&oid))
+    is_attacking(state, oid) || is_blocking(state, oid)
 }

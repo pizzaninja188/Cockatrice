@@ -1248,17 +1248,60 @@ include!(concat!(env!("OUT_DIR"), "/embedded_cards.rs"));
 mod tests {
     use super::*;
     use crate::primitives::{
-        Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer, CountExpression, CounterKind,
-        CreatureEventFilter, CreatureScopeController, CreatureScopeFilter, EffectSubject,
-        EntersTappedAffected, EntersWithCountersAffected, GameCondition, InterveningIf, ManaAmount,
-        PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
-        RelativePlayerSet, SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetFilter,
-        TargetKind, TriggerCondition,
+        Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer, CombatRole, CountExpression,
+        CounterKind, CreatureEventFilter, CreatureScopeController, CreatureScopeFilter,
+        EffectSubject, EntersTappedAffected, EntersWithCountersAffected, Evasion, GameCondition,
+        InterveningIf, ManaAmount, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
+        PowerComparison, RelativePlayerSet, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
+        TargetFilter, TargetKind, TriggerCondition,
     };
 
     #[test]
     fn embedded_registry_loads() {
         CardRegistry::from_embedded().unwrap();
+    }
+
+    #[test]
+    fn issue_160_cards_use_typed_combat_constraints() {
+        let registry = CardRegistry::from_embedded().expect("embedded registry");
+
+        let dark_endurance = registry
+            .get("dark_endurance")
+            .expect("Dark Endurance")
+            .primary_face();
+        assert!(matches!(
+            dark_endurance.cost_modifiers.as_slice(),
+            [SpellCostModifier::TargetMatchGenericReduction {
+                amount: 1,
+                filter: TargetFilter {
+                    combat_role: Some(CombatRole::Blocking),
+                    ..
+                },
+            }]
+        ));
+
+        let vinebender = registry
+            .get("foggy_swamp_vinebender")
+            .expect("Foggy Swamp Vinebender");
+        assert!(matches!(
+            vinebender.primary_face().evasions.as_slice(),
+            [Evasion::BlockerPower {
+                comparison: PowerComparison::AtMost(2),
+            }]
+        ));
+        assert!(vinebender
+            .partial
+            .as_deref()
+            .is_some_and(|note| note.contains("#146")));
+
+        let cavalry = registry
+            .get("safewright_cavalry")
+            .expect("Safewright Cavalry");
+        assert!(matches!(
+            cavalry.primary_face().evasions.as_slice(),
+            [Evasion::BlockerCountMaximum { maximum: 1 }]
+        ));
+        assert_eq!(cavalry.partial, None);
     }
 
     #[test]

@@ -1,0 +1,12 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26.
+// CR 509.1b: the blocker's current derived power is checked as blockers are declared.
+(
+  id: "foggy_swamp_vinebender",
+  name: "Foggy Swamp Vinebender",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Human", "Plant", "Ally"],
+  power: 4,
+  toughness: 3,
+  evasions: [BlockerPower(comparison: AtMost(2))],
+  partial: "Waterbend {5} activated ability is not implemented (tracked by #146)",
+)

@@ -1,6 +1,6 @@
 use crate::helpers::*;
 use tricerules_cards::primitives::{
-    Color, ContinuousEffectKind, CounterKind, EffectDuration, Keyword,
+    Color, ContinuousEffectKind, CounterKind, EffectDuration, Evasion, Keyword,
 };
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone, TargetRef};
@@ -247,6 +247,23 @@ fn clone_copies_printed_values_but_not_source_status_counters_damage_or_pump() {
         .insert(CounterKind::PlusOnePlusOne, 1);
     assert_eq!(engine.effective_power(clone), Some(5));
     assert_eq!(engine.effective_toughness(clone), Some(5));
+}
+
+#[test]
+fn clone_copies_safewright_cavalrys_blocker_cap() {
+    let (mut engine, source) = resolving_clone_with_source("safewright_cavalry", 160_008);
+    engine
+        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .expect("copy Safewright Cavalry");
+    let clone = battlefield_object_for_card(&engine, 0, "clone");
+    assert!(matches!(
+        engine
+            .characteristics(clone)
+            .expect("Clone characteristics")
+            .evasions
+            .as_slice(),
+        [Evasion::BlockerCountMaximum { maximum: 1 }]
+    ));
 }
 
 #[test]

@@ -730,8 +730,16 @@ pub(super) fn permanent_matches_filter_characteristics(
     {
         return false;
     }
-    if filter.attacking_or_blocking && !super::combat::is_attacking_or_blocking(state, oid) {
-        return false;
+    if let Some(role) = filter.combat_role {
+        use tricerules_cards::CombatRole;
+        let matches = match role {
+            CombatRole::Attacking => super::combat::is_attacking(state, oid),
+            CombatRole::Blocking => super::combat::is_blocking(state, oid),
+            CombatRole::AttackingOrBlocking => super::combat::is_attacking_or_blocking(state, oid),
+        };
+        if !matches {
+            return false;
+        }
     }
     true
 }

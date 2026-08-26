@@ -12,7 +12,7 @@
       effect: [GrantKeywords(
         subject: Chosen((
           kind: Creature,
-          attacking_or_blocking: true,
+          combat_role: AttackingOrBlocking,
           exclude_source: true,
         )),
         keywords: [Flying],

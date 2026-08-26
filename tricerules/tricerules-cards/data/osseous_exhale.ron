@@ -21,7 +21,7 @@
   spell_effect: [
     DamageTarget(
       amount: 5,
-      target: (kind: Creature, attacking_or_blocking: true),
+      target: (kind: Creature, combat_role: AttackingOrBlocking),
     ),
     ChooseResolutionBranch(
       selection: FirstApplicable,

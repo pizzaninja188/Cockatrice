@@ -14,7 +14,7 @@
       subject: Chosen((
         kind: Creature,
         controller: You,
-        attacking_or_blocking: true,
+        combat_role: AttackingOrBlocking,
         required_subtypes: ["Goblin"],
       )),
     )],

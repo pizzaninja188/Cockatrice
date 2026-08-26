@@ -1,6 +1,7 @@
 //! Colors, parameterless keywords, and parameterized evasion abilities used by card
 //! characteristics.
 
+use super::PowerComparison;
 use serde::{Deserialize, Serialize};
 
 /// The five MTG colors. Used for characteristic-based blocking checks (Intimidate, Protection)
@@ -21,6 +22,12 @@ pub enum Evasion {
     /// CR 702.14c: this creature can't be blocked while the defending player controls a land
     /// with `land_subtype` (River Boa's Islandwalk, Shanodin Dryads' Forestwalk).
     Landwalk { land_subtype: String },
+    /// CR 509.1b: creatures whose current derived power matches `comparison` cannot block this
+    /// attacker. Foggy Swamp Vinebender and Arlinn's Wolf use `AtMost(2)`.
+    BlockerPower { comparison: PowerComparison },
+    /// CR 509.1b: a completed declaration may assign at most this many blockers to this attacker.
+    /// Safewright Cavalry and Bristling Boar use one; zero is the ordinary unblockable shape.
+    BlockerCountMaximum { maximum: u32 },
 }
 
 /// Exact card types currently represented by the ordinary ruled-game card model. This is kept

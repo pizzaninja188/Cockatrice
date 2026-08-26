@@ -20,7 +20,7 @@
       triggered_abilities: [(
         trigger: WheneverControllerAttacks(min_attackers: Some(1), max_attackers: None),
         effect: [GrantKeywords(
-          subject: Chosen((kind: Creature, attacking_or_blocking: true)),
+          subject: Chosen((kind: Creature, combat_role: AttackingOrBlocking)),
           keywords: [DoubleStrike],
         )],
         text: "Whenever you attack, target attacking creature gains double strike until end of turn.",

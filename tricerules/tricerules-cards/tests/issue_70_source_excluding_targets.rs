@@ -35,7 +35,7 @@ fn pegasus_courser_has_complete_oracle_behavior() {
         [SpellEffectKind::GrantKeywords {
             subject: EffectSubject::Chosen(TargetFilter {
                 kind: TargetKind::Creature,
-                attacking_or_blocking: true,
+                combat_role: Some(tricerules_cards::primitives::CombatRole::AttackingOrBlocking),
                 exclude_source: true,
                 ..TargetFilter::default()
             }),

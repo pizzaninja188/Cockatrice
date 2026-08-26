@@ -289,7 +289,7 @@ fn issue_163_uses_generic_target_modal_and_trigger_shapes() {
         }
     ));
     assert!(
-        matches!(boggart.triggered_abilities[0].effect.as_slice(), [SpellEffectKind::PumpTarget { subject: EffectSubject::Chosen(target), .. }] if target.controller == TargetController::You && target.required_subtypes == ["Goblin"] && target.attacking_or_blocking)
+        matches!(boggart.triggered_abilities[0].effect.as_slice(), [SpellEffectKind::PumpTarget { subject: EffectSubject::Chosen(target), .. }] if target.controller == TargetController::You && target.required_subtypes == ["Goblin"] && target.combat_role == Some(tricerules_cards::primitives::CombatRole::AttackingOrBlocking))
     );
 
     let thawbringer = registry.get("thawbringer").unwrap().primary_face();

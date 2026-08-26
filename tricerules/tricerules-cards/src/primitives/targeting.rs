@@ -358,6 +358,16 @@ pub enum PowerComparison {
     AtMost(u32),
 }
 
+/// Authoritative combat designation required by a permanent filter. Keeping the three useful
+/// forms in one enum avoids contradictory boolean combinations while covering attacking-only,
+/// blocking-only, and the common union used by combat tricks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CombatRole {
+    Attacking,
+    Blocking,
+    AttackingOrBlocking,
+}
+
 /// Which player's graveyard a [`GraveyardFilter`] targets. Defaults to [`Controller`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum GraveyardOwner {
@@ -474,7 +484,8 @@ fn default_creature_filter() -> TargetFilter {
 /// - `(kind: Creature, tapped: true)` — tapped creature (for future use)
 /// - `(kind: Creature, not_color: Black)` — nonblack creature (Doom Blade, Terror)
 /// - `(kind: Creature, is_color: Green)` — green creature (Perish, Virtue's Ruin)
-/// - `(kind: Creature, attacking_or_blocking: true)` — Divine Verdict, Hunt Down
+/// - `(kind: Creature, combat_role: AttackingOrBlocking)` — Divine Verdict, Hunt Down
+/// - `(kind: Creature, combat_role: Blocking)` — Dark Endurance
 /// - `(kind: Creature, controller: You)` — "target creature you control" (Equip, Regenerate,
 ///   many activated abilities). Enforced at targeting time relative to the activating player.
 /// - `(kind: AnyPermanent, controller: Opponent, permanent_types: [Artifact, Enchantment])` —
@@ -496,10 +507,10 @@ pub struct TargetFilter {
     /// If Some(true), target must be tapped; Some(false) must be untapped; None = either.
     #[serde(default)]
     pub tapped: Option<bool>,
-    /// CR 508/509: if true, the target must currently be attacking or blocking. Combat-only
-    /// removal/tricks — Divine Verdict, Hunt Down ("destroy target attacking or blocking creature").
+    /// CR 508/509: optional current combat designation. Combat-only removal and tricks use the
+    /// union; Dark Endurance uses the blocking-only form for its target-dependent reduction.
     #[serde(default)]
-    pub attacking_or_blocking: bool,
+    pub combat_role: Option<CombatRole>,
     /// CR 105/202.2: if `Some`, the target must NOT be of this color (derived from its mana cost).
     /// Doom Blade ("nonblack creature"), Terror ("nonblack" — paired with `not_artifact`).
     #[serde(default)]
@@ -693,7 +704,7 @@ impl TargetFilter {
         self.not_artifact
             || self.not_land
             || self.tapped.is_some()
-            || self.attacking_or_blocking
+            || self.combat_role.is_some()
             || self.not_color.is_some()
             || self.is_color.is_some()
             || self.controller != TargetController::Any

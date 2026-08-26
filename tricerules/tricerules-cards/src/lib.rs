@@ -14,13 +14,13 @@ pub use primitives::{
     AdditionalCost, Amount, BattlefieldAggregate, BattlefieldCreatureCountFilter,
     BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
     CardSearchZone, CastCostConditionalAmount, CastCostGroupDef, CastCostOptionDef,
-    CastCostReceiptCondition, CastTriggerPlayer, Color, ConditionalManaOutput,
+    CastCostReceiptCondition, CastTriggerPlayer, Color, CombatRole, ConditionalManaOutput,
     ConditionalSearchDestination, ContinuousEffectKind, ControllerReference, CountExpression,
     CounterKind, DelayedTokenSacrificeTiming, EffectContext, EffectDuration, Evasion,
     GameCondition, GraveyardAggregate, Keyword, LibraryPartitionKind, ManaAmount, ManaSpendFilter,
-    ManaSpendingRestriction, PermanentTypeFilter, PtScale, RelativePlayerSet, SearchDestination,
-    SearchZoneSelection, SpellCostModifier, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
-    TypeLineAddition, ZoneCardFilter,
+    ManaSpendingRestriction, PermanentTypeFilter, PowerComparison, PtScale, RelativePlayerSet,
+    SearchDestination, SearchZoneSelection, SpellCostModifier, SpellEffectKind, TriggerCondition,
+    TriggeredAbilityDef, TypeLineAddition, ZoneCardFilter,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

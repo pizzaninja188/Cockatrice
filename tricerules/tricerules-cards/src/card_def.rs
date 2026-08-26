@@ -175,7 +175,7 @@ pub struct CardFace {
     /// Parameterized protection abilities printed on this face.
     #[serde(default)]
     pub protections: Vec<ProtectionQuality>,
-    /// Parameterized combat evasion abilities (Islandwalk, Forestwalk, …).
+    /// Parameterized combat evasion abilities (landwalk, blocker power, blocker count, …).
     #[serde(default)]
     pub evasions: Vec<Evasion>,
     /// Activated abilities (cost + effect pairs). Omit or leave empty for faces with none.
