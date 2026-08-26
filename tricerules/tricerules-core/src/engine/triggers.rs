@@ -27,6 +27,16 @@ pub(super) struct CollectedTrigger {
 }
 
 impl GameEngine {
+    pub(super) fn battlefield_leave_event(&self, object_id: ObjectId) -> Option<GameEvent> {
+        self.state
+            .objects
+            .get(&object_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield)
+            .then(|| self.trigger_source_snapshot(object_id))
+            .flatten()
+            .map(|source| GameEvent::LeavesBattlefield { source })
+    }
+
     pub(super) fn siege_defeat_trigger_active(
         &self,
         source_id: ObjectId,
@@ -175,10 +185,19 @@ impl GameEngine {
         let mut sources = self.battlefield_sources_apnap();
         // Zone-leaving sources are no longer in the battlefield index. Their event-local snapshot
         // supplies the identity/controller needed for LKI trigger matching (CR 603.6/603.10).
-        sources.extend(events.iter().filter_map(|event| match event {
-            GameEvent::Dies { source, .. } => Some(source.clone()),
+        for source in events.iter().filter_map(|event| match event {
+            GameEvent::Dies { source, .. }
+            | GameEvent::LeavesBattlefield { source }
+            | GameEvent::Sacrificed { source, .. } => Some(source.clone()),
             _ => None,
-        }));
+        }) {
+            if !sources.iter().any(|existing| {
+                existing.object_id == source.object_id
+                    && existing.zone_change_generation == source.zone_change_generation
+            }) {
+                sources.push(source);
+            }
+        }
 
         let mut collected = Vec::new();
         for event in events {
@@ -504,6 +523,68 @@ impl GameEngine {
                             self.relative_player_matches(*who, *player, source.controller)
                         }));
                     }
+                }
+                out
+            }
+            GameEvent::BecameTapped { object } => {
+                let mut out = Vec::new();
+                for source in sources {
+                    if source.object_id == object.object_id
+                        && source.zone_change_generation == object.zone_change_generation
+                    {
+                        out.extend(self.matching_snapshot_abilities(source, |condition| {
+                            *condition == TriggerCondition::WheneverSelfBecomesTapped
+                        }));
+                    }
+                    if source.attached_to
+                        == Some(AttachmentSnapshot::Object(
+                            object.object_id,
+                            object.zone_change_generation,
+                        ))
+                    {
+                        let mut matching = self.matching_snapshot_abilities(source, |condition| {
+                            *condition == TriggerCondition::WheneverAttachedObjectBecomesTapped
+                        });
+                        for trigger in &mut matching {
+                            trigger.trigger_context.observed_object = Some(*object);
+                        }
+                        out.extend(matching);
+                    }
+                }
+                out
+            }
+            GameEvent::LeavesBattlefield { source } => self
+                .matching_snapshot_abilities(source, |condition| {
+                    *condition == TriggerCondition::WhenSelfLeavesBattlefield
+                }),
+            GameEvent::Sacrificed {
+                source: sacrificed,
+                player,
+            } => {
+                let observed = TriggerObjectRef {
+                    object_id: sacrificed.object_id,
+                    zone_change_generation: sacrificed.zone_change_generation,
+                    controller_at_event: sacrificed.controller,
+                };
+                let mut out = Vec::new();
+                for source in sources {
+                    let mut matching = self.matching_snapshot_abilities(source, |condition| {
+                        let TriggerCondition::WheneverPlayerSacrificesPermanent {
+                            player: who,
+                            exclude_self,
+                        } = condition
+                        else {
+                            return false;
+                        };
+                        (!*exclude_self
+                            || source.object_id != observed.object_id
+                            || source.zone_change_generation != observed.zone_change_generation)
+                            && self.relative_player_matches(*who, *player, source.controller)
+                    });
+                    for trigger in &mut matching {
+                        trigger.trigger_context.observed_object = Some(observed);
+                    }
+                    out.extend(matching);
                 }
                 out
             }
@@ -1431,6 +1512,7 @@ impl GameEngine {
     fn trigger_player_for(event: &GameEvent) -> Option<PlayerId> {
         match event {
             GameEvent::PhaseBegan { active_player, .. } => Some(*active_player),
+            GameEvent::Sacrificed { player, .. } => Some(*player),
             GameEvent::Surveilled { player } => Some(*player),
             GameEvent::CardDrawn { drawer, .. } => Some(*drawer),
             GameEvent::TargetsChosen { controller, .. } => Some(*controller),

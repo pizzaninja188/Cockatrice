@@ -68,7 +68,8 @@ impl GameEngine {
         if self.state.pending_resolution.is_some() {
             return Ok(changed);
         }
-        let mut dies: Vec<(TriggerSourceSnapshot, bool)> = Vec::new();
+        let mut leaves: Vec<(TriggerSourceSnapshot, bool, bool)> = Vec::new();
+        let mut tap_events = Vec::new();
         // CR 122.3: counter annihilation (+1/+1 and -1/-1 pairs cancel).
         for o in self.state.objects.values_mut() {
             if o.zone != Zone::Battlefield {
@@ -171,10 +172,8 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if died {
-                    if let Some(snapshot) = death_snapshots.get(&id).cloned() {
-                        dies.push(snapshot);
-                    }
+                if let Some((source, was_creature)) = death_snapshots.get(&id).cloned() {
+                    leaves.push((source, was_creature, died));
                 }
             }
         }
@@ -182,8 +181,10 @@ impl GameEngine {
         for id in to_destroy_lethal {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let snapshot = death_snapshots.get(&id).cloned();
-            if consume_regen_shield(&mut self.state, id, out) {
+            let (regenerated, tap_event) = consume_regen_shield(&mut self.state, id, out);
+            if regenerated {
                 changed = true;
+                tap_events.extend(tap_event);
                 let name = snapshot
                     .as_ref()
                     .map(|(source, _)| source.card_id.as_str())
@@ -199,22 +200,17 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if died {
-                    if let Some(snapshot) = snapshot {
-                        dies.push(snapshot);
-                    }
+                if let Some((source, was_creature)) = snapshot {
+                    leaves.push((source, was_creature, died));
                 }
             }
         }
 
-        if !dies.is_empty() {
-            let trigger_events: Vec<GameEvent> = dies
-                .into_iter()
-                .map(|(source, was_creature)| GameEvent::Dies {
-                    source,
-                    was_creature,
-                })
-                .collect();
+        if !leaves.is_empty() || !tap_events.is_empty() {
+            let mut trigger_events = tap_events;
+            trigger_events.extend(leaves.into_iter().flat_map(|(source, was_creature, died)| {
+                leaves_and_dies_events(source, was_creature, died)
+            }));
             self.fire_triggers(&trigger_events);
         }
 
@@ -328,13 +324,8 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if died {
-                    if let Some(source) = snapshot {
-                        self.fire_triggers(&[GameEvent::Dies {
-                            source,
-                            was_creature,
-                        }]);
-                    }
+                if let Some(source) = snapshot {
+                    self.fire_triggers(&leaves_and_dies_events(source, was_creature, died));
                 }
             }
         }

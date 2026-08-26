@@ -243,6 +243,7 @@ impl CardRegistry {
                     })?;
                 match &ability.trigger {
                     TriggerCondition::WheneverAttachedObjectAttacks
+                    | TriggerCondition::WheneverAttachedObjectBecomesTapped
                     | TriggerCondition::WheneverAttachedObjectDies
                         if !can_reference_attached_object =>
                     {
@@ -954,6 +955,7 @@ impl CardRegistry {
                         })?;
                     match &ability.trigger {
                         TriggerCondition::WheneverAttachedObjectAttacks
+                        | TriggerCondition::WheneverAttachedObjectBecomesTapped
                         | TriggerCondition::WheneverAttachedObjectDies
                         | TriggerCondition::WheneverAttachedObjectDealsCombatDamageToPlayer
                         | TriggerCondition::WheneverAttachedObjectIsDealtDamage

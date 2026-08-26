@@ -319,6 +319,22 @@ enum GameEvent {
     EntersBattlefield {
         object_id: ObjectId,
     },
+    /// One actual untapped-to-tapped status edge. The generation and controller are captured at
+    /// the event boundary so attached-object triggers never rebind after a zone change.
+    BecameTapped {
+        object: TriggerObjectRef,
+    },
+    /// A source moved from the battlefield to another zone. The complete pre-move snapshot is
+    /// required by CR 603.10a lookback, including when several observers leave simultaneously.
+    LeavesBattlefield {
+        source: TriggerSourceSnapshot,
+    },
+    /// A controller performed the sacrifice action. This remains distinct from destruction and
+    /// other battlefield-to-graveyard events even when a replacement changes the destination.
+    Sacrificed {
+        source: TriggerSourceSnapshot,
+        player: PlayerId,
+    },
     /// CR 709.5c: one locked-to-unlocked designation edge. `fully_unlocked` is computed from the
     /// same mutation so the door's own trigger and eerie observers share one APNAP group.
     RoomDoorUnlocked {
@@ -396,6 +412,37 @@ enum GameEvent {
         stack_object: StackObjectRef,
         targets: Vec<ObjectId>,
     },
+}
+
+fn leaves_and_dies_events(
+    source: TriggerSourceSnapshot,
+    was_creature: bool,
+    died: bool,
+) -> Vec<GameEvent> {
+    let mut events = vec![GameEvent::LeavesBattlefield {
+        source: source.clone(),
+    }];
+    if died {
+        events.push(GameEvent::Dies {
+            source,
+            was_creature,
+        });
+    }
+    events
+}
+
+fn sacrifice_events(
+    source: TriggerSourceSnapshot,
+    was_creature: bool,
+    player: PlayerId,
+    died: bool,
+) -> Vec<GameEvent> {
+    let mut events = vec![GameEvent::Sacrificed {
+        source: source.clone(),
+        player,
+    }];
+    events.extend(leaves_and_dies_events(source, was_creature, died));
+    events
 }
 
 pub struct GameEngine {
@@ -512,6 +559,22 @@ fn set_tapped(state: &mut GameState, oid: ObjectId, tapped: bool) -> bool {
         }
         _ => false,
     }
+}
+
+/// Commit one rules-driven tap and return its internal trigger event. Entry status and rollback
+/// restoration deliberately bypass this helper.
+fn become_tapped(state: &mut GameState, oid: ObjectId) -> Option<GameEvent> {
+    if !set_tapped(state, oid, true) {
+        return None;
+    }
+    let object = state.objects.get(&oid)?;
+    Some(GameEvent::BecameTapped {
+        object: TriggerObjectRef {
+            object_id: oid,
+            zone_change_generation: state.zone_change_generation.get(&oid).copied().unwrap_or(0),
+            controller_at_event: object.controller,
+        },
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

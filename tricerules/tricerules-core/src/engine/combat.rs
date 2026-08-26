@@ -764,12 +764,15 @@ impl GameEngine {
             parsed_assignments.insert(oid, parsed);
             list.push(oid);
         }
+        let mut tap_events = Vec::new();
         for &oid in &list {
             // CR 702.20b — Vigilance: attacking doesn't cause this creature to tap.
             let has_vigilance =
                 self.effective_has_keyword(oid, tricerules_cards::Keyword::Vigilance);
             if !has_vigilance {
-                super::set_tapped(&mut self.state, oid, true);
+                if let Some(event) = super::become_tapped(&mut self.state, oid) {
+                    tap_events.push(event);
+                }
             }
         }
         let attackers_for_event = list.clone();
@@ -844,10 +847,11 @@ impl GameEngine {
                 })
             })
             .collect();
-        self.fire_triggers(&[GameEvent::AttackersDeclared {
+        tap_events.push(GameEvent::AttackersDeclared {
             attacking_player: ap,
             attacks,
-        }]);
+        });
+        self.fire_triggers(&tap_events);
         b.events.push(ev_priority_changed(self));
         Ok(b)
     }

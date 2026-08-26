@@ -1,0 +1,14 @@
+// Oracle checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "wanderbrine_preacher",
+  name: "Wanderbrine Preacher",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Merfolk", "Cleric"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WheneverSelfBecomesTapped,
+    effect: [GainLife(who: Controller, amount: 2)],
+    text: "Whenever this creature becomes tapped, you gain 2 life.",
+  )],
+)

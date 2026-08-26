@@ -191,25 +191,21 @@ pub(super) fn sacrifice_observed_objects(
             .engine
             .characteristics(reference.object_id)
             .is_some_and(|value| value.is_creature());
-        if sacrifice_permanent(
+        let died = sacrifice_permanent(
             &mut cx.engine.state,
             cx.engine.registry,
             reference.object_id,
-        )? {
-            cx.events.push(permanent_moved_event(
-                &cx.engine.state,
-                reference.object_id,
-                owner,
-                rv1::permanent_moved::Destination::Graveyard,
-            ));
-            if let Some(source) = source {
-                dies.push(GameEvent::Dies {
-                    source,
-                    was_creature,
-                });
-            }
-            sacrificed += 1;
+        )?;
+        cx.events.push(permanent_moved_event(
+            &cx.engine.state,
+            reference.object_id,
+            owner,
+            rv1::permanent_moved::Destination::Graveyard,
+        ));
+        if let Some(source) = source {
+            dies.extend(sacrifice_events(source, was_creature, cx.controller, died));
         }
+        sacrificed += 1;
     }
     cx.engine.fire_triggers(&dies);
     cx.events.push(ev_log(format!(

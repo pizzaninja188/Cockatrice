@@ -2221,10 +2221,10 @@ pub(super) fn destroy_permanent(
         .is_some_and(|object| object.zone == Zone::Graveyard))
 }
 
-/// Sacrifice a permanent (CR 701.17). Unlike destroy, sacrifice bypasses indestructible and
-/// regeneration — it is always a cost, never a triggered or replacement effect that can be
-/// redirected.
-pub(super) fn sacrifice_permanent(
+/// Move a permanent to its owner's graveyard without assigning a semantic cause. The legend
+/// rule and other direct rule actions use this seam so they produce leave/death events but never
+/// masquerade as sacrifices.
+pub(super) fn put_permanent_in_graveyard(
     state: &mut GameState,
     registry: &'static CardRegistry,
     oid: ObjectId,
@@ -2234,6 +2234,17 @@ pub(super) fn sacrifice_permanent(
         .objects
         .get(&oid)
         .is_some_and(|object| object.zone == Zone::Graveyard))
+}
+
+/// Sacrifice a permanent (CR 701.17). Unlike destroy, sacrifice bypasses indestructible and
+/// regeneration — it is always a cost, never a triggered or replacement effect that can be
+/// redirected.
+pub(super) fn sacrifice_permanent(
+    state: &mut GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+) -> Result<bool, EngineError> {
+    put_permanent_in_graveyard(state, registry, oid)
 }
 
 /// CR 608.2m: "As the final part of an instant or sorcery spell's resolution, the spell is put
@@ -2431,25 +2442,26 @@ mod zone_card_filter_tests {
 }
 
 /// CR 614.8 / 701.19: attempt to consume one regeneration shield from `oid`. If a shield is present,
-/// taps the creature, removes it from combat, clears all marked damage, and returns `true`.
-/// The caller is responsible for not destroying the creature. Returns `false` if no shield exists.
+/// taps the creature, removes it from combat, clears all marked damage, and returns `true` plus
+/// the tap edge, if any. The caller is responsible for not destroying the creature. Returns
+/// `false` if no shield exists.
 /// Does NOT emit a zone-change event (the creature stays on the battlefield).
 pub(super) fn consume_regen_shield(
     state: &mut GameState,
     oid: ObjectId,
     events: &mut Vec<rv1::RuledEvent>,
-) -> bool {
+) -> (bool, Option<GameEvent>) {
     let shields = state
         .objects
         .get(&oid)
         .map(|o| o.regeneration_shields)
         .unwrap_or(0);
     if shields == 0 {
-        return false;
+        return (false, None);
     }
     // CR 701.19a: regenerating taps the permanent — a real "becomes tapped" edge, so it goes
     // through the shared funnel rather than writing the flag inline.
-    super::set_tapped(state, oid, true);
+    let tap_event = super::become_tapped(state, oid);
     if let Some(o) = state.objects.get_mut(&oid) {
         o.regeneration_shields -= 1;
         o.damage = 0;
@@ -2476,7 +2488,7 @@ pub(super) fn consume_regen_shield(
             });
         }
     }
-    true
+    (true, tap_event)
 }
 
 #[cfg(test)]

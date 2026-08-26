@@ -720,7 +720,8 @@ impl GameEngine {
             })),
         });
         let ordinal = self.record_spell_cast(player);
-        target_triggers.extend(self.collect_committed_sacrifice_cost_dies(payment.sacrificed));
+        target_triggers
+            .extend(self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed));
         target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
             caster: player,
             card_id: cast_card_id,
@@ -1105,7 +1106,8 @@ impl GameEngine {
         // the ability it paid for, so its events must follow that ability's StackPushed. Emitting
         // the trigger prompt first also made the client discard it, because an activated ability
         // reaching the stack is its signal that a pending trigger target was just answered.
-        target_triggers.extend(self.collect_committed_sacrifice_cost_dies(payment.sacrificed));
+        target_triggers
+            .extend(self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed));
         self.stage_triggers(target_triggers);
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
@@ -1116,24 +1118,22 @@ impl GameEngine {
     /// battlefield abilities (Blood Artist, Bottle Gnomes' own controller triggers) see it. The
     /// triggers go on the stack *above* the ability whose cost they paid, so this runs after the
     /// ability has been pushed.
-    fn collect_committed_sacrifice_cost_dies(
+    fn collect_committed_cost_triggers(
         &mut self,
+        mut events: Vec<GameEvent>,
         snapshots: Vec<SacrificeSnapshot>,
     ) -> Vec<super::triggers::CollectedTrigger> {
-        let events: Vec<_> = snapshots
-            .into_iter()
-            .map(|snapshot| GameEvent::Dies {
-                source: snapshot.source,
-                was_creature: snapshot.was_creature,
-            })
-            .collect();
+        events.extend(snapshots.into_iter().flat_map(|snapshot| {
+            let player = snapshot.source.controller;
+            sacrifice_events(
+                snapshot.source,
+                snapshot.was_creature,
+                player,
+                snapshot.died,
+            )
+        }));
         self.record_committed_events(&events);
         self.collect_event_triggers(&events)
-    }
-
-    fn fire_sacrifice_cost_dies(&mut self, snapshots: Vec<SacrificeSnapshot>) {
-        let collected = self.collect_committed_sacrifice_cost_dies(snapshots);
-        self.stage_triggers(collected);
     }
 
     /// Whether `ability` on `permanent_id` could be activated right now, so the client can grey it
@@ -1409,7 +1409,9 @@ impl GameEngine {
             pool.colorless += amount.c;
         }
 
-        if matches!(ability.costs.as_slice(), [AbilityCost::Tap]) {
+        let cost_triggers =
+            self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed);
+        if cost_triggers.is_empty() && matches!(ability.costs.as_slice(), [AbilityCost::Tap]) {
             self.state
                 .undoable_mana_abilities
                 .push(UndoableManaAbility {
@@ -1448,9 +1450,9 @@ impl GameEngine {
                 payment.life_paid
             )));
         }
-        // A mana ability does not use the stack (CR 605.3a), so a permanent sacrificed to pay for
-        // one dies immediately rather than under a pushed ability.
-        self.fire_sacrifice_cost_dies(payment.sacrificed);
+        // A mana ability does not use the stack (CR 605.3a). Cost triggers are collected only
+        // after mana is produced, and a consequential trigger disables the undo courtesy above.
+        self.stage_triggers(cost_triggers);
         Ok(batch)
     }
 

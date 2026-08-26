@@ -111,6 +111,8 @@ mod issue_130_calibration_creatures;
 mod issue_139_pending_trigger_publication;
 #[path = "scenario/issue_142_endure.rs"]
 mod issue_142_endure;
+#[path = "scenario/issue_156_event_observers.rs"]
+mod issue_156_event_observers;
 #[path = "scenario/issue_163_calibration_cards.rs"]
 mod issue_163_calibration_cards;
 #[path = "scenario/issue_57_targeting_costs.rs"]

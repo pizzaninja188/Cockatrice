@@ -42,12 +42,12 @@ impl GameEngine {
             )),
         ];
 
-        if died {
-            self.fire_triggers(&[GameEvent::Dies {
-                source,
-                was_creature,
-            }]);
-        }
+        self.fire_triggers(&sacrifice_events(
+            source,
+            was_creature,
+            pending.deciding_player,
+            died,
+        ));
         let _ = self.apply_sbas(&mut ev);
         let result = CardResultCohort {
             cards: vec![payment::card_result_entry(
@@ -67,8 +67,8 @@ impl GameEngine {
         )
     }
 
-    /// CR 704.5j: the controller has chosen which legend to keep. Sacrifice all other candidates
-    /// via `sacrifice_permanent` so LTB / death triggers fire normally, then re-run SBAs.
+    /// CR 704.5j: the controller has chosen which legend to keep. Put all other candidates into
+    /// their owners' graveyards, emit their LTB / death events, then re-run SBAs.
     pub(super) fn finish_legend_sba_choice(
         &mut self,
         pending: PendingResolution,
@@ -86,7 +86,7 @@ impl GameEngine {
             let was_creature = self
                 .characteristics(oid)
                 .is_some_and(|value| value.is_creature());
-            if let Ok(died) = sacrifice_permanent(&mut self.state, self.registry, oid) {
+            if let Ok(died) = put_permanent_in_graveyard(&mut self.state, self.registry, oid) {
                 if let Some(owner_id) = owner {
                     ev.push(permanent_moved_event(
                         &self.state,
@@ -95,13 +95,8 @@ impl GameEngine {
                         rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
-                if died {
-                    if let Some(source) = source {
-                        trigger_events.push(GameEvent::Dies {
-                            source,
-                            was_creature,
-                        });
-                    }
+                if let Some(source) = source {
+                    trigger_events.extend(leaves_and_dies_events(source, was_creature, died));
                 }
             }
         }

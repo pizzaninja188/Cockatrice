@@ -11,6 +11,7 @@ use super::mana::{
 pub(in crate::engine) struct SacrificeSnapshot {
     pub(in crate::engine) source: TriggerSourceSnapshot,
     pub(in crate::engine) was_creature: bool,
+    pub(in crate::engine) died: bool,
 }
 
 enum CostDebit {
@@ -52,6 +53,7 @@ enum CostDebit {
 
 pub(in crate::engine) struct CostPaymentReceipt {
     pub(in crate::engine) move_events: Vec<rv1::RuledEvent>,
+    pub(in crate::engine) tap_events: Vec<GameEvent>,
     pub(in crate::engine) sacrificed: Vec<SacrificeSnapshot>,
     pub(in crate::engine) paid_card_costs: Vec<PaidCardCost>,
     pub(in crate::engine) life_paid: u32,
@@ -748,6 +750,7 @@ impl GameEngine {
 
         let mut payment = CostPaymentReceipt {
             move_events: vec![],
+            tap_events: vec![],
             sacrificed: vec![],
             paid_card_costs: vec![],
             life_paid: 0,
@@ -776,7 +779,9 @@ impl GameEngine {
                     }
                 }
                 CostDebit::Tap { object_id, .. } => {
-                    crate::engine::set_tapped(&mut self.state, object_id, true);
+                    if let Some(event) = crate::engine::become_tapped(&mut self.state, object_id) {
+                        payment.tap_events.push(event);
+                    }
                 }
                 CostDebit::Mana(mana) => {
                     payment.life_paid += mana.life_cost;
@@ -847,13 +852,12 @@ impl GameEngine {
                     payment.paid_card_costs.push(paid_cost);
                 }
                 CostDebit::Sacrifice { snapshot, owner } => {
+                    let mut snapshot = snapshot;
                     let oid = snapshot.source.object_id;
                     let card_name = object_display_name(&self.state, self.registry, oid);
-                    if sacrifice_permanent(&mut self.state, self.registry, oid)
-                        .expect("prevalidated sacrifice cost must commit")
-                    {
-                        payment.sacrificed.push(snapshot);
-                    }
+                    snapshot.died = sacrifice_permanent(&mut self.state, self.registry, oid)
+                        .expect("prevalidated sacrifice cost must commit");
+                    payment.sacrificed.push(snapshot);
                     payment.move_events.push(permanent_moved_event(
                         &self.state,
                         oid,
@@ -1061,6 +1065,7 @@ impl GameEngine {
             was_creature: self
                 .characteristics(permanent_id)
                 .is_some_and(|value| value.is_creature()),
+            died: false,
         })
     }
 }

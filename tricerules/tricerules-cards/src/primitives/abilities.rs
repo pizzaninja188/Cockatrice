@@ -260,6 +260,15 @@ impl ActivatedAbilityDef {
 pub enum TriggerCondition {
     /// When this permanent enters the battlefield.
     WhenSelfEntersBattlefield,
+    /// Whenever this permanent changes from untapped to tapped. Entering the battlefield tapped
+    /// is an entry status, not this event (CR 603.6d / 701.26).
+    WheneverSelfBecomesTapped,
+    /// Whenever the object this Aura or Equipment is attached to changes from untapped to
+    /// tapped. The attached object's event-time identity is supplied as `TriggerObject`.
+    WheneverAttachedObjectBecomesTapped,
+    /// When this permanent moves from the battlefield to any other zone. Uses the source's
+    /// immediately-prior characteristics and controller under CR 603.10a.
+    WhenSelfLeavesBattlefield,
     /// When this permanent is put into a graveyard from the battlefield.
     WhenSelfDies,
     /// CR 709.5c: this ability belongs to one Room door and triggers only when that exact door's
@@ -476,6 +485,15 @@ pub enum TriggerCondition {
         #[serde(default)]
         exclude_self: bool,
     },
+    /// Whenever the selected player sacrifices a permanent. Sacrifice is a semantic action, not
+    /// an inference from a graveyard move; `exclude_self` implements the common "another"
+    /// wording. The sacrificed permanent is supplied as `TriggerObject`.
+    WheneverPlayerSacrificesPermanent {
+        #[serde(default)]
+        player: CastTriggerPlayer,
+        #[serde(default)]
+        exclude_self: bool,
+    },
     /// Whenever a player gains life (CR 118.3). The lifegain-payoff analog of
     /// [`Self::WheneverPlayerCastsSpell`]: `player` filters whose life gain counts, relative to
     /// the source permanent's controller. Covers "whenever you gain life" (Ajani's Pridemate,
@@ -556,6 +574,7 @@ impl TriggerCondition {
             Self::WheneverSelfBlocksCreature { .. }
                 | Self::WheneverSelfBecomesBlockedByCreature { .. }
                 | Self::WheneverAttachedObjectAttacks
+                | Self::WheneverAttachedObjectBecomesTapped
                 | Self::WheneverAttachedObjectDies
                 | Self::WheneverAttachedObjectDealsCombatDamageToPlayer
                 | Self::WheneverAttachedObjectIsDealtDamage
@@ -565,6 +584,7 @@ impl TriggerCondition {
                 }
                 | Self::WheneverSelfBecomesTarget { .. }
                 | Self::WheneverPermanentBecomesTarget { .. }
+                | Self::WheneverPlayerSacrificesPermanent { .. }
                 | Self::AtBeginningOfNextEndStep
                 | Self::WhenControllerLosesControlOf
                 | Self::WhenWatchedObjectDiesThisTurn

@@ -1,0 +1,27 @@
+// Oracle checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "cryogen_relic",
+  name: "Cryogen Relic",
+  mana_cost: "{1}{U}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Draw(count: 1)],
+    text: "When this artifact enters the battlefield, draw a card.",
+  ), (
+    trigger: WhenSelfLeavesBattlefield,
+    effect: [Draw(count: 1)],
+    text: "When this artifact leaves the battlefield, draw a card.",
+  )],
+  activated_abilities: [(
+    costs: [Mana("{1}{U}"), SacrificeSelf],
+    effect: [PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature, tapped: true)))],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 1,
+      prompt: "Choose up to one target tapped creature",
+      effect_indices: [0],
+    )])),
+    text: "{1}{U}, Sacrifice this artifact: Put a stun counter on up to one target tapped creature.",
+  )],
+)

@@ -524,13 +524,13 @@ impl GameEngine {
                     "P{} sacrifices {name}.",
                     pending.deciding_player
                 )));
-                if died {
-                    if let Some(source) = source {
-                        self.fire_triggers(&[GameEvent::Dies {
-                            source,
-                            was_creature,
-                        }]);
-                    }
+                if let Some(source) = source {
+                    self.fire_triggers(&sacrifice_events(
+                        source,
+                        was_creature,
+                        pending.deciding_player,
+                        died,
+                    ));
                 }
             }
             ResolutionCost::Mana(_) => {

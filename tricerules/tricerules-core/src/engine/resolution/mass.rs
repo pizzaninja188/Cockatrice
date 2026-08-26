@@ -69,6 +69,7 @@ pub(super) fn destroy_attached(
         .collect::<Vec<_>>();
 
     let mut destroyed = Vec::new();
+    let mut tap_events = Vec::new();
     for (oid, name, indestructible, owner, source, was_creature) in snapshots {
         if indestructible {
             events.push(ev_log(format!(
@@ -76,7 +77,9 @@ pub(super) fn destroy_attached(
             )));
             continue;
         }
-        if consume_regen_shield(&mut engine.state, oid, events) {
+        let (regenerated, tap_event) = consume_regen_shield(&mut engine.state, oid, events);
+        if regenerated {
+            tap_events.extend(tap_event);
             events.push(ev_log(format!("{name} regenerates.")));
             continue;
         }
@@ -90,20 +93,19 @@ pub(super) fn destroy_attached(
                 rv1::permanent_moved::Destination::Graveyard,
             ));
         }
-        if died {
-            if let Some(source) = source {
-                destroyed.push((source, was_creature));
-            }
+        if let Some(source) = source {
+            destroyed.push((source, was_creature, died));
         }
     }
 
-    let trigger_events = destroyed
-        .into_iter()
-        .map(|(source, was_creature)| GameEvent::Dies {
-            source,
-            was_creature,
-        })
-        .collect::<Vec<_>>();
+    let mut trigger_events = tap_events;
+    trigger_events.extend(
+        destroyed
+            .into_iter()
+            .flat_map(|(source, was_creature, died)| {
+                leaves_and_dies_events(source, was_creature, died)
+            }),
+    );
     engine.fire_triggers(&trigger_events);
 
     Ok(EffectOutcome::Continue)
@@ -138,7 +140,8 @@ pub(super) fn destroy_all(
             (tid, source, was_creature)
         })
         .collect::<Vec<_>>();
-    let mut destroyed: Vec<(TriggerSourceSnapshot, bool)> = Vec::new();
+    let mut destroyed: Vec<(TriggerSourceSnapshot, bool, bool)> = Vec::new();
+    let mut tap_events = Vec::new();
     for (tid, source, was_creature) in victims {
         let indestructible = engine.effective_has_keyword(tid, Keyword::Indestructible);
         let tgt = object_display_name(&engine.state, engine.registry, tid);
@@ -149,9 +152,13 @@ pub(super) fn destroy_all(
             continue;
         }
         // CR 701.19c: "can't be regenerated" bypasses shields.
-        if !prevent_regeneration && consume_regen_shield(&mut engine.state, tid, events) {
-            events.push(ev_log(format!("{tgt} regenerates.")));
-            continue;
+        if !prevent_regeneration {
+            let (regenerated, tap_event) = consume_regen_shield(&mut engine.state, tid, events);
+            if regenerated {
+                tap_events.extend(tap_event);
+                events.push(ev_log(format!("{tgt} regenerates.")));
+                continue;
+            }
         }
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         let died = destroy_permanent(&mut engine.state, engine.registry, tid)?;
@@ -164,19 +171,18 @@ pub(super) fn destroy_all(
                 rv1::permanent_moved::Destination::Graveyard,
             ));
         }
-        if died {
-            if let Some(source) = source {
-                destroyed.push((source, was_creature));
-            }
+        if let Some(source) = source {
+            destroyed.push((source, was_creature, died));
         }
     }
-    let trigger_events: Vec<GameEvent> = destroyed
-        .into_iter()
-        .map(|(source, was_creature)| GameEvent::Dies {
-            source,
-            was_creature,
-        })
-        .collect();
+    let mut trigger_events = tap_events;
+    trigger_events.extend(
+        destroyed
+            .into_iter()
+            .flat_map(|(source, was_creature, died)| {
+                leaves_and_dies_events(source, was_creature, died)
+            }),
+    );
     engine.fire_triggers(&trigger_events);
 
     Ok(EffectOutcome::Continue)

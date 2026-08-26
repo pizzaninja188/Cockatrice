@@ -30,6 +30,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
     let controller = cx.top.controller;
     let card_id = object.card_id.clone();
     let label = object_display_name(&cx.engine.state, cx.engine.registry, source_id);
+    let leave_event = cx.engine.battlefield_leave_event(source_id);
     move_object_to_zone(
         &mut cx.engine.state,
         cx.engine.registry,
@@ -45,6 +46,8 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
     ));
     cx.events
         .push(ev_log(format!("{label} is defeated and exiled.")));
+    cx.engine
+        .fire_triggers(&leave_event.into_iter().collect::<Vec<_>>());
 
     let Some(definition) = cx.engine.registry.get(&card_id) else {
         return Ok(EffectOutcome::Continue);
@@ -168,6 +171,7 @@ pub(super) fn exile_until_source_leaves(
     }) else {
         return Ok(EffectOutcome::Continue);
     };
+    let leave_event = cx.engine.battlefield_leave_event(target_id);
     move_object_to_zone(
         &mut cx.engine.state,
         cx.engine.registry,
@@ -175,6 +179,8 @@ pub(super) fn exile_until_source_leaves(
         Zone::Exile,
         None,
     )?;
+    cx.engine
+        .fire_triggers(&leave_event.into_iter().collect::<Vec<_>>());
     let exiled = TriggerObjectRef {
         object_id: target_id,
         zone_change_generation: cx
@@ -469,7 +475,9 @@ pub(super) fn exile_target(
     if let Some(&tid) = targets.first() {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
+        let leave_event = engine.battlefield_leave_event(tid);
         move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Exile, None)?;
+        engine.fire_triggers(&leave_event.into_iter().collect::<Vec<_>>());
         events.push(ev_log(format!("{spell_label} exiles {tgt}")));
         if let Some(owner_id) = owner {
             events.push(permanent_moved_event(
@@ -542,7 +550,9 @@ pub(super) fn exile_target_gain_life_equal_to_power(
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         let target_controller = engine.state.objects.get(&tid).map(|o| o.controller);
         let target_controller = target_controller.unwrap_or(controller);
+        let leave_event = engine.battlefield_leave_event(tid);
         move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Exile, None)?;
+        engine.fire_triggers(&leave_event.into_iter().collect::<Vec<_>>());
         events.push(ev_log(format!("{spell_label} exiles {tgt}")));
         if let Some(owner_id) = owner {
             events.push(permanent_moved_event(
@@ -575,7 +585,9 @@ pub(super) fn return_to_owners_hand(
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         // Transient battlefield state (damage, counters, tap) is reset centrally
         // by move_object_to_zone on leaving the battlefield (CR 400.7 / 121.2).
+        let leave_event = engine.battlefield_leave_event(tid);
         move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Hand, None)?;
+        engine.fire_triggers(&leave_event.into_iter().collect::<Vec<_>>());
         events.push(ev_log(format!(
             "{spell_label} returns {tgt} to its owner's hand"
         )));
@@ -607,7 +619,9 @@ pub(in crate::engine) fn move_permanent_to_owners_library(
         .map(|object| object.owner)
         .ok_or(EngineError::Illegal("no target object"))?;
 
+    let leave_event = engine.battlefield_leave_event(tid);
     move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Library, None)?;
+    engine.fire_triggers(&leave_event.into_iter().collect::<Vec<_>>());
     let owner_idx = engine
         .state
         .player_idx(owner)

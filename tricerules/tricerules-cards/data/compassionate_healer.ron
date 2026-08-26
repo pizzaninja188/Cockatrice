@@ -1,0 +1,17 @@
+// Oracle and ruling checked against Scryfall on 2026-08-26.
+(
+  id: "compassionate_healer",
+  name: "Compassionate Healer",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Cleric", "Ally"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WheneverSelfBecomesTapped,
+    effect: [
+      GainLife(who: Controller, amount: 1),
+      Scry(count: 1),
+    ],
+    text: "Whenever this creature becomes tapped, you gain 1 life and scry 1.",
+  )],
+)

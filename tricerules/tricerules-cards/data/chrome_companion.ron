@@ -1,0 +1,19 @@
+// Oracle checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "chrome_companion",
+  name: "Chrome Companion",
+  mana_cost: "{2}",
+  types: ["Artifact", "Creature", "Dog"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    trigger: WheneverSelfBecomesTapped,
+    effect: [GainLife(who: Controller, amount: 1)],
+    text: "Whenever this creature becomes tapped, you gain 1 life.",
+  )],
+  activated_abilities: [(
+    costs: [Mana("{2}"), Tap],
+    effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: LibraryBottom)],
+    text: "{2}, {T}: Put target card from a graveyard on the bottom of its owner's library.",
+  )],
+)

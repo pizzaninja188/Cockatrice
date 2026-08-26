@@ -1,0 +1,18 @@
+// Oracle and rulings checked against Scryfall on 2026-08-26.
+(
+  id: "cryoshatter",
+  name: "Cryoshatter",
+  mana_cost: "{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  triggered_abilities: [(
+    trigger: WheneverAttachedObjectBecomesTapped,
+    effect: [Destroy(subject: TriggerObject)],
+    text: "When enchanted creature becomes tapped, destroy it.",
+  ), (
+    trigger: WheneverAttachedObjectIsDealtDamage,
+    effect: [Destroy(subject: TriggerObject)],
+    text: "When enchanted creature is dealt damage, destroy it.",
+  )],
+  static_abilities: [AttachedModifier(delta_power: -5, delta_toughness: 0)],
+)

@@ -11,7 +11,7 @@ use super::events::{
 use super::legal_actions::fill_legal;
 use super::resolution::{
     counter_stack_object_ref, counter_stack_spell, move_object_to_zone, permanent_moved_event,
-    permanent_moved_event_with_library_position, sacrifice_permanent,
+    permanent_moved_event_with_library_position, put_permanent_in_graveyard, sacrifice_permanent,
     seat_resolved_spell_last_in_graveyard,
 };
 use super::targeting::{

@@ -53,9 +53,13 @@ pub(super) fn destroy(
             events.push(ev_log(format!(
                 "{spell_label} has no effect: {tgt} is indestructible."
             )));
-        } else if consume_regen_shield(&mut engine.state, tid, events) {
-            events.push(ev_log(format!("{tgt} regenerates.")));
         } else {
+            let (regenerated, tap_event) = consume_regen_shield(&mut engine.state, tid, events);
+            if regenerated {
+                events.push(ev_log(format!("{tgt} regenerates.")));
+                engine.fire_triggers(&tap_event.into_iter().collect::<Vec<_>>());
+                continue;
+            }
             events.push(ev_log(format!("{spell_label} destroys {tgt}")));
             let owner = engine.state.objects.get(&tid).map(|o| o.owner);
             let source = engine.trigger_source_snapshot(tid);
@@ -71,13 +75,8 @@ pub(super) fn destroy(
                     rv1::permanent_moved::Destination::Graveyard,
                 ));
             }
-            if died {
-                if let Some(source) = source {
-                    engine.fire_triggers(&[GameEvent::Dies {
-                        source,
-                        was_creature,
-                    }]);
-                }
+            if let Some(source) = source {
+                engine.fire_triggers(&leaves_and_dies_events(source, was_creature, died));
             }
         }
     }
@@ -96,6 +95,7 @@ fn set_target_tapped(cx: &mut EffectCx<'_>, tapped: bool) -> Result<EffectOutcom
     let targets = cx.targets;
     let spell_label = cx.spell_label;
 
+    let mut tap_events = Vec::new();
     for &tid in targets {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let on_battlefield = engine
@@ -103,11 +103,21 @@ fn set_target_tapped(cx: &mut EffectCx<'_>, tapped: bool) -> Result<EffectOutcom
             .objects
             .get(&tid)
             .is_some_and(|o| o.zone == Zone::Battlefield);
-        if on_battlefield && set_tapped(&mut engine.state, tid, tapped) {
+        let changed = if !on_battlefield {
+            false
+        } else if tapped {
+            become_tapped(&mut engine.state, tid)
+                .map(|event| tap_events.push(event))
+                .is_some()
+        } else {
+            set_tapped(&mut engine.state, tid, false)
+        };
+        if on_battlefield && changed {
             let verb = if tapped { "taps" } else { "untaps" };
             events.push(ev_log(format!("{spell_label} {verb} {tgt}")));
         }
     }
+    engine.fire_triggers(&tap_events);
 
     Ok(EffectOutcome::Continue)
 }
@@ -133,9 +143,13 @@ pub(super) fn tap(
         .objects
         .get(&tid)
         .is_some_and(|object| object.zone == Zone::Battlefield);
-    if on_battlefield && set_tapped(&mut cx.engine.state, tid, true) {
-        cx.events
-            .push(ev_log(format!("{} taps {subject_name}", cx.spell_label)));
+    if on_battlefield {
+        let tap_event = become_tapped(&mut cx.engine.state, tid);
+        if let Some(event) = tap_event {
+            cx.engine.fire_triggers(&[event]);
+            cx.events
+                .push(ev_log(format!("{} taps {subject_name}", cx.spell_label)));
+        }
     }
     Ok(EffectOutcome::Continue)
 }
@@ -351,6 +365,7 @@ pub(super) fn tap_all_creatures(
         })
         .collect();
     let mut tapped = 0;
+    let mut tap_events = Vec::new();
     for oid in affected {
         let on_battlefield = cx
             .engine
@@ -358,10 +373,14 @@ pub(super) fn tap_all_creatures(
             .objects
             .get(&oid)
             .is_some_and(|o| o.zone == Zone::Battlefield);
-        if on_battlefield && set_tapped(&mut cx.engine.state, oid, true) {
-            tapped += 1;
+        if on_battlefield {
+            if let Some(event) = become_tapped(&mut cx.engine.state, oid) {
+                tap_events.push(event);
+                tapped += 1;
+            }
         }
     }
+    cx.engine.fire_triggers(&tap_events);
     cx.events.push(ev_log(format!(
         "{} taps {tapped} affected creature(s)",
         cx.spell_label

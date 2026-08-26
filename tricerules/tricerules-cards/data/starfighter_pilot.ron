@@ -1,0 +1,14 @@
+// Oracle checked against Scryfall on 2026-08-26; there are no card-specific rulings.
+(
+  id: "starfighter_pilot",
+  name: "Starfighter Pilot",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Pilot"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WheneverSelfBecomesTapped,
+    effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
+    text: "Whenever this creature becomes tapped, surveil 1.",
+  )],
+)
