@@ -1,0 +1,17 @@
+// Oracle and rulings checked 2026-08-27. The Mount condition is frozen after costs;
+// ordinary spell copies deal only 2 damage because they were not cast.
+(
+  id: "steer_clear",
+  name: "Steer Clear",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  cast_conditions: [BattlefieldAggregate(
+    filter: (controllers: Controller, required_subtypes: ["Mount"]),
+    aggregate: Count,
+    min: Some(1),
+  )],
+  spell_effect: [DamageTarget(
+    amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2),
+    target: (kind: Creature, combat_role: AttackingOrBlocking),
+  )],
+)

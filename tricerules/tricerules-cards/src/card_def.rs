@@ -17,8 +17,8 @@ use crate::mana::ManaCost;
 use crate::primitives::{
     ActivatedAbilityDef, AdditionalCost, Amount, CardTypeFilter, CastCostGroupDef,
     CastCostReceiptCondition, Color, CounterKind, EffectContext, EntersWithCountersAffected,
-    Evasion, Keyword, PermanentTypeFilter, ProtectionQuality, SpellCostModifier, SpellEffectKind,
-    StaticAbilityDef, TargetingDef, TriggeredAbilityDef,
+    Evasion, GameCondition, Keyword, PermanentTypeFilter, ProtectionQuality, SpellCostModifier,
+    SpellEffectKind, StaticAbilityDef, TargetingDef, TriggeredAbilityDef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -471,6 +471,10 @@ pub struct CardFace {
     /// Announced optional/alternative cast-time payments such as kicker and behold.
     #[serde(default)]
     pub cast_cost_groups: Vec<CastCostGroupDef>,
+    /// Public conditions frozen at successful cast completion (CR 601.2i, 608.2i).
+    /// Faerie Fencing and Steer Clear share this automatic, nonpayment vocabulary.
+    #[serde(default)]
+    pub cast_conditions: Vec<GameCondition>,
     /// This normally sorcery-speed face may be announced at instant timing only when the named
     /// cast-cost option is selected. Molten Exhale is the calibration consumer.
     #[serde(default)]
@@ -735,6 +739,8 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub cast_cost_groups: Vec<CastCostGroupDef>,
     #[serde(default)]
+    pub cast_conditions: Vec<GameCondition>,
+    #[serde(default)]
     pub instant_speed_cast_cost: Option<CastCostReceiptCondition>,
     #[serde(default)]
     pub cost_modifiers: Vec<SpellCostModifier>,
@@ -814,6 +820,7 @@ impl RawCardDefinition {
                 harmonize_cost: self.harmonize_cost,
                 additional_costs: self.additional_costs,
                 cast_cost_groups: self.cast_cost_groups,
+                cast_conditions: self.cast_conditions,
                 instant_speed_cast_cost: self.instant_speed_cast_cost,
                 cost_modifiers: self.cost_modifiers,
                 types: self.types,

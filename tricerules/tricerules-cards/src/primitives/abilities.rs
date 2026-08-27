@@ -96,7 +96,7 @@ pub enum ActivationCondition {
 impl ActivationCondition {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
-            ActivationCondition::GameCondition(condition) => condition.validate(),
+            ActivationCondition::GameCondition(condition) => condition.validate_live(),
             ActivationCondition::BattlefieldCreatureCount { filter, min, max } => {
                 filter.validate()?;
                 if min.is_none() && max.is_none() {
@@ -940,7 +940,7 @@ impl TriggeredAbilityDef {
             );
         }
         if let Some(InterveningIf::GameCondition(condition)) = self.intervening_if.as_ref() {
-            condition.validate()?;
+            condition.validate_live()?;
         }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;

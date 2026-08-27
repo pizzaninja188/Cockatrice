@@ -271,6 +271,12 @@ impl GameEngine {
         context: ConditionContext,
     ) -> bool {
         match condition {
+            GameCondition::CastSnapshot { index } => context
+                .stack_item
+                .filter(|item| item.ability_text.is_none() && !item.is_copy)
+                .and_then(|item| item.cast_condition_results.get(*index as usize))
+                .copied()
+                .unwrap_or(false),
             GameCondition::ActivePlayer { players } => relative_player_set_contains(
                 &self.state,
                 *players,

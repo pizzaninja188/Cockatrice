@@ -1,4 +1,223 @@
 use crate::helpers::*;
+
+#[test]
+fn issue_173_faerie_fencing_freezes_the_cast_condition() {
+    for (controlled_at_cast, x) in [(false, 0), (true, 0), (false, 1), (true, 1)] {
+        let mut e = GameEngine::new(
+            173001,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with("swamp", &["faerie_fencing"]),
+                island_only_deck(),
+            ]),
+            true,
+        )
+        .unwrap();
+        advance_to_main1_from_game_start(&mut e);
+        let target = inject_creature_with_stats(&mut e, 1, "colossal_dreadmaw", 6, 6);
+        let faerie = controlled_at_cast
+            .then(|| inject_creature_on_battlefield(&mut e, 0, "faerie_miscreant"));
+        ensure_in_hand(&mut e, 0, "faerie_fencing");
+        give_mana(
+            &mut e,
+            0,
+            ManaGift {
+                b: 1,
+                c: 1,
+                ..Default::default()
+            },
+        );
+        e.apply_command(
+            0,
+            &cast_spell_x(
+                hand_index_for_card(&e, 0, "faerie_fencing"),
+                target_object(target),
+                x,
+            ),
+        )
+        .unwrap();
+        if let Some(faerie) = faerie {
+            e.state.players[0].battlefield.retain(|id| *id != faerie);
+            e.state.players[0].graveyard.push(faerie);
+            e.state.objects.get_mut(&faerie).unwrap().zone = Zone::Graveyard;
+        } else {
+            inject_creature_on_battlefield(&mut e, 0, "faerie_miscreant");
+        }
+        resolve_entire_stack_two_player(&mut e);
+        assert_eq!(
+            e.effective_power(target),
+            Some(6 - x - if controlled_at_cast { 3 } else { 0 })
+        );
+    }
+}
+
+#[test]
+fn issue_173_steer_clear_uses_cast_time_mount_and_live_combat_targets() {
+    for (controlled_at_cast, remove_from_combat) in [(false, false), (true, false), (true, true)] {
+        let mut e = GameEngine::new(
+            173002,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with("plains", &["steer_clear"]),
+                island_only_deck(),
+            ]),
+            true,
+        )
+        .unwrap();
+        advance_to_declare_attackers(&mut e);
+        let target = inject_creature_with_stats(&mut e, 0, "colossal_dreadmaw", 6, 6);
+        e.apply_command(0, &declare_attackers(vec![target]))
+            .unwrap();
+        let mount = controlled_at_cast
+            .then(|| inject_creature_on_battlefield(&mut e, 0, "changeling_wayfinder"));
+        let bystander = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+        ensure_in_hand(&mut e, 0, "steer_clear");
+        give_mana(
+            &mut e,
+            0,
+            ManaGift {
+                w: 1,
+                ..Default::default()
+            },
+        );
+        let slot = hand_index_for_card(&e, 0, "steer_clear");
+        let command_index = e.state.command_index;
+        assert!(e
+            .apply_command(0, &cast_spell(slot, target_object(bystander)))
+            .is_err());
+        assert_eq!(e.state.command_index, command_index);
+        assert_eq!(e.state.players[0].mana_pool.white, 1);
+        assert!(e.state.stack.is_empty());
+        e.apply_command(0, &cast_spell(slot, target_object(target)))
+            .unwrap();
+        assert_eq!(
+            e.state.stack.last().unwrap().cast_condition_results,
+            vec![controlled_at_cast]
+        );
+        if let Some(mount) = mount {
+            e.state.players[0].battlefield.retain(|id| *id != mount);
+            e.state.players[0].graveyard.push(mount);
+            e.state.objects.get_mut(&mount).unwrap().zone = Zone::Graveyard;
+        } else {
+            inject_creature_on_battlefield(&mut e, 0, "changeling_wayfinder");
+        }
+        if remove_from_combat {
+            e.state
+                .combat
+                .as_mut()
+                .unwrap()
+                .attacking
+                .retain(|id| *id != target);
+            e.state
+                .combat
+                .as_mut()
+                .unwrap()
+                .attack_assignments
+                .remove(&target);
+        }
+        resolve_entire_stack_two_player(&mut e);
+        assert_eq!(
+            e.state.objects[&target].damage,
+            if remove_from_combat {
+                0
+            } else if controlled_at_cast {
+                4
+            } else {
+                2
+            }
+        );
+    }
+}
+
+#[test]
+fn issue_173_pending_casts_and_recasts_have_independent_snapshots() {
+    let mut e = GameEngine::new(
+        173003,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("swamp", &["faerie_fencing", "faerie_fencing"]),
+            island_only_deck(),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    let first_target = inject_creature_with_stats(&mut e, 1, "colossal_dreadmaw", 6, 6);
+    let second_target = inject_creature_with_stats(&mut e, 1, "colossal_dreadmaw", 6, 6);
+    ensure_in_hand(&mut e, 0, "faerie_fencing");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 2,
+            ..Default::default()
+        },
+    );
+    e.apply_command(
+        0,
+        &cast_spell_x(
+            hand_index_for_card(&e, 0, "faerie_fencing"),
+            target_object(first_target),
+            0,
+        ),
+    )
+    .unwrap();
+    let first_spell = e.state.stack.last().unwrap().id;
+    inject_creature_on_battlefield(&mut e, 0, "changeling_wayfinder");
+    ensure_in_hand(&mut e, 0, "faerie_fencing");
+    e.apply_command(
+        0,
+        &cast_spell_x(
+            hand_index_for_card(&e, 0, "faerie_fencing"),
+            target_object(second_target),
+            0,
+        ),
+    )
+    .unwrap();
+    assert_eq!(
+        e.state
+            .stack
+            .iter()
+            .map(|s| s.cast_condition_results.clone())
+            .collect::<Vec<_>>(),
+        vec![vec![false], vec![true]]
+    );
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.effective_power(first_target), Some(6));
+    assert_eq!(e.effective_power(second_target), Some(3));
+    // The same physical card is a fresh cast, not a cache keyed by ObjectId or card definition.
+    e.state.players[0].graveyard.retain(|id| *id != first_spell);
+    e.state.players[0].hand.push(first_spell);
+    e.state.objects.get_mut(&first_spell).unwrap().zone = Zone::Hand;
+    *e.state
+        .zone_change_generation
+        .entry(first_spell)
+        .or_default() += 1;
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            ..Default::default()
+        },
+    );
+    let slot = e.state.players[0]
+        .hand
+        .iter()
+        .position(|id| *id == first_spell)
+        .unwrap();
+    e.apply_command(0, &cast_spell_x(slot, target_object(first_target), 0))
+        .unwrap();
+    assert_eq!(
+        e.state.stack.last().unwrap().cast_condition_results,
+        vec![true]
+    );
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.effective_power(first_target), Some(3));
+}
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration, Keyword};
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 

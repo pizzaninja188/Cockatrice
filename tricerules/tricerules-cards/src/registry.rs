@@ -187,7 +187,9 @@ impl CardRegistry {
         Self::from_chunks_and_tokens(chunks, &[])
     }
 
-    fn from_chunks_and_tokens(
+    /// Load and validate a complete RON corpus, including its separate token namespace.
+    /// Embedded startup and isolated engine fixtures use the same validation path.
+    pub fn from_chunks_and_tokens(
         chunks: &[&str],
         token_chunks: &[&str],
     ) -> Result<Self, RegistryError> {
@@ -286,7 +288,7 @@ impl CardRegistry {
                     ability.intervening_if.as_ref()
                 {
                     condition
-                        .validate()
+                        .validate_live()
                         .map_err(|reason| RegistryError::InvalidCard {
                             id: id.clone(),
                             reason,
@@ -385,6 +387,27 @@ impl CardRegistry {
             // subjects are rejected here (EffectContext::Spell); activated/triggered
             // effects bind to a source (Ability).
             for face in card.faces_iter() {
+                for condition in &face.cast_conditions {
+                    condition
+                        .validate_live()
+                        .map_err(|reason| RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        })?;
+                }
+                for effect in face.spell_effect.iter().chain(
+                    face.modal_spell
+                        .iter()
+                        .flat_map(|modal| &modal.modes)
+                        .flat_map(|mode| &mode.effects),
+                ) {
+                    effect
+                        .validate_cast_snapshot_references(face.cast_conditions.len())
+                        .map_err(|reason| RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        })?;
+                }
                 for modifier in &face.cost_modifiers {
                     modifier
                         .validate()
@@ -559,7 +582,7 @@ impl CardRegistry {
                     } = ability
                     {
                         condition
-                            .validate()
+                            .validate_live()
                             .map_err(|reason| RegistryError::InvalidCard {
                                 id: card.id.clone(),
                                 reason,
@@ -600,12 +623,12 @@ impl CardRegistry {
                                 reason,
                             })?;
                         if let Some(condition) = condition {
-                            condition
-                                .validate()
-                                .map_err(|reason| RegistryError::InvalidCard {
+                            condition.validate_live().map_err(|reason| {
+                                RegistryError::InvalidCard {
                                     id: card.id.clone(),
                                     reason,
-                                })?;
+                                }
+                            })?;
                             if matches!(
                                 condition,
                                 GameCondition::BattlefieldAggregate {
@@ -639,12 +662,12 @@ impl CardRegistry {
                             });
                         }
                         if let Some(condition) = condition {
-                            condition
-                                .validate()
-                                .map_err(|reason| RegistryError::InvalidCard {
+                            condition.validate_live().map_err(|reason| {
+                                RegistryError::InvalidCard {
                                     id: card.id.clone(),
                                     reason,
-                                })?;
+                                }
+                            })?;
                         }
                     }
                     if let StaticAbilityDef::ConditionalSelfModifier {
@@ -657,7 +680,7 @@ impl CardRegistry {
                     } = ability
                     {
                         condition
-                            .validate()
+                            .validate_live()
                             .map_err(|reason| RegistryError::InvalidCard {
                                 id: card.id.clone(),
                                 reason,
@@ -788,7 +811,7 @@ impl CardRegistry {
                             });
                         }
                         amount
-                            .validate()
+                            .validate_live()
                             .map_err(|reason| RegistryError::InvalidCard {
                                 id: card.id.clone(),
                                 reason,
@@ -902,12 +925,12 @@ impl CardRegistry {
                             }
                         }
                         if let Some(condition) = condition {
-                            condition
-                                .validate()
-                                .map_err(|reason| RegistryError::InvalidCard {
+                            condition.validate_live().map_err(|reason| {
+                                RegistryError::InvalidCard {
                                     id: card.id.clone(),
                                     reason,
-                                })?;
+                                }
+                            })?;
                             if !triggered_abilities.is_empty()
                                 || !activated_abilities.is_empty()
                                 || *cant_attack
@@ -988,12 +1011,12 @@ impl CardRegistry {
                                 })?;
                         }
                         if let Some(condition) = condition {
-                            condition
-                                .validate()
-                                .map_err(|reason| RegistryError::InvalidCard {
+                            condition.validate_live().map_err(|reason| {
+                                RegistryError::InvalidCard {
                                     id: card.id.clone(),
                                     reason,
-                                })?;
+                                }
+                            })?;
                         }
                     }
                     if let StaticAbilityDef::SelfCombatRestriction {
@@ -1084,7 +1107,7 @@ impl CardRegistry {
                         ability.intervening_if.as_ref()
                     {
                         condition
-                            .validate()
+                            .validate_live()
                             .map_err(|reason| RegistryError::InvalidCard {
                                 id: card.id.clone(),
                                 reason,
@@ -3538,6 +3561,38 @@ mod tests {
                 ),
                 "expected malformed characteristic replacement to be rejected"
             );
+        }
+    }
+
+    #[test]
+    fn issue_173_rejects_invalid_snapshot_references_and_definitions() {
+        for fields in [
+            "cast_conditions: [ActivePlayer(players: Controller)], spell_effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 1), when_true: 4, otherwise: 2))]",
+            "cast_conditions: [CastSnapshot(index: 0)], spell_effect: [GainLife(amount: 2)]",
+            "cast_conditions: [CreatureDeathsThisTurn(min: None, max: None)], spell_effect: [GainLife(amount: 2)]",
+            "cast_conditions: [ActivePlayer(players: Controller)], modal_spell: (min_modes: 1, max_modes: 1, modes: [(label: \"Mode\", effects: [GainLife(amount: Conditional(condition: CastSnapshot(index: 1), when_true: 4, otherwise: 2))])])",
+            "spell_effect: [ChooseResolutionBranch(selection: FirstApplicable, branches: [(label: \"Bonus\", cost: None, requirement: GameCondition(CastSnapshot(index: 0)), effects: [GainLife(amount: 4)]), (label: \"Fallback\", cost: None, requirement: Always, effects: [])])]",
+        ] {
+            let card = format!("(id: \"snapshot_test\", name: \"Snapshot Test\", types: [\"Instant\"], {fields})");
+            assert!(matches!(CardRegistry::from_chunks(&[&card]), Err(RegistryError::InvalidCard { .. })), "must reject: {fields}");
+        }
+    }
+
+    #[test]
+    fn issue_173_rejects_snapshots_outside_spell_resolution() {
+        for fields in [
+            "cost_modifiers: [ConditionalGenericReduction(amount: 1, condition: CastSnapshot(index: 0))]",
+            "static_abilities: [ConditionalSelfModifier(condition: CastSnapshot(index: 0), delta_power: 1)]",
+            "static_abilities: [EntersWithCounters(counter: PlusOnePlusOne, amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))]",
+            "activated_abilities: [(costs: [], effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))], text: \"Gain life.\")]",
+            "activated_abilities: [(costs: [], conditions: [GameCondition(CastSnapshot(index: 0))], effect: [GainLife(amount: 1)], text: \"Gain life.\")]",
+            "triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))], text: \"Gain life.\")]",
+            "triggered_abilities: [(trigger: WhenSelfEntersBattlefield, intervening_if: GameCondition(CastSnapshot(index: 0)), effect: [GainLife(amount: 1)], text: \"Gain life.\")]",
+            "triggered_abilities: [(trigger: WheneverSelfAttacks(minimum_other_attackers: 0), effect: [DamageAttackedPlayerOrPlaneswalker(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))], text: \"Damage the defender.\")]",
+            "spell_effect: [GrantTriggeredAbility(subject: Chosen((kind: Creature)), ability: (trigger: WhenSelfDies, effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))], text: \"Gain life.\"))]",
+        ] {
+            let card = format!("(id: \"snapshot_test\", name: \"Snapshot Test\", types: [\"Creature\"], power: 1, toughness: 1, cast_conditions: [ActivePlayer(players: Controller)], {fields})");
+            assert!(matches!(CardRegistry::from_chunks(&[&card]), Err(RegistryError::InvalidCard { .. })), "must reject: {fields}");
         }
     }
 

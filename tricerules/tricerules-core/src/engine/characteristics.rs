@@ -395,6 +395,8 @@ impl CharacteristicsEvaluator<'_> {
         };
         let controller = self.layer_2_controller(source_oid, &mut Vec::new());
         match condition {
+            // Cast snapshots are internal to resolving spells, never continuous characteristics.
+            GameCondition::CastSnapshot { .. } => false,
             GameCondition::ActivePlayer { players } => relative_player_set_contains(
                 self.state,
                 *players,

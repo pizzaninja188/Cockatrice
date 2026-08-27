@@ -63,6 +63,37 @@ pub(in crate::engine) struct PreparedSpellCast {
 }
 
 impl GameEngine {
+    /// CR 601.2i / 608.2i: freeze automatic public conditions after all costs and cast facts
+    /// have committed. Unlike cost receipts these facts do not transfer to an uncast copy.
+    fn snapshot_completed_cast(&mut self, object_id: ObjectId) {
+        let index = self
+            .state
+            .stack
+            .iter()
+            .position(|item| item.id == object_id)
+            .expect("a completed cast has a stack item");
+        let item = &self.state.stack[index];
+        let context = ConditionContext {
+            source_zone_change: self
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0),
+            resolving_spell_id: None,
+            ..ConditionContext::for_stack_item(item)
+        };
+        let results = self
+            .registry
+            .get(&item.card_id)
+            .and_then(|definition| definition.face(item.face_index))
+            .into_iter()
+            .flat_map(|face| &face.cast_conditions)
+            .map(|condition| self.condition_holds(condition, context))
+            .collect();
+        self.state.stack[index].cast_condition_results = results;
+    }
+
     pub(super) fn cast_siege_defeat_offer(
         &mut self,
         player: PlayerId,
@@ -179,6 +210,7 @@ impl GameEngine {
             cast_method: SpellCastMethod::SiegeDefeat,
             chosen_x: 0,
             chosen_modes: vec![],
+            cast_condition_results: Vec::new(),
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
@@ -216,6 +248,7 @@ impl GameEngine {
             })),
         });
         let ordinal = self.record_spell_cast(player);
+        self.snapshot_completed_cast(source_oid);
         triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
             caster: player,
             card_id,
@@ -713,6 +746,7 @@ impl GameEngine {
             chosen_x,
             face_index,
             chosen_modes,
+            cast_condition_results: Vec::new(),
             cast_cost_receipts,
             payment_result,
             resolution_branch_choices: Default::default(),
@@ -807,6 +841,7 @@ impl GameEngine {
         target_triggers
             .extend(self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed));
         target_triggers.extend(payment.expend_triggers);
+        self.snapshot_completed_cast(oid);
         target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
             caster: player,
             card_id: cast_card_id,
@@ -1128,6 +1163,7 @@ impl GameEngine {
             chosen_x: 0,
             face_index: face_up_index,
             chosen_modes: vec![],
+            cast_condition_results: Vec::new(),
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort {
                 cards: payment
@@ -1792,6 +1828,7 @@ impl GameEngine {
             cast_method: SpellCastMethod::Normal,
             chosen_x: 0,
             chosen_modes: Vec::new(),
+            cast_condition_results: Vec::new(),
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
@@ -1830,6 +1867,303 @@ impl GameEngine {
             .push(ev_log(format!("P{player} played {land_name}")));
         fill_legal(&mut batch, self);
         Ok(batch)
+    }
+}
+
+#[cfg(test)]
+mod cast_snapshot_tests {
+    use super::*;
+
+    fn engine(spell_fields: &str) -> GameEngine {
+        let spell = format!(
+            r#"(id: "snapshot_spell", name: "Snapshot Spell", mana_cost: "{{B}}", types: ["Instant"], {spell_fields})"#
+        );
+        let registry = CardRegistry::from_chunks_and_tokens(&[
+            include_str!("../../../tricerules-cards/data/forest.ron"),
+            r#"(id: "snapshot_faerie", name: "Snapshot Faerie", types: ["Creature", "Faerie", "Mount"], power: 2, toughness: 2)"#,
+            r#"(id: "snapshot_kindred", name: "Snapshot Kindred", types: ["Kindred", "Artifact", "Faerie"],)"#,
+            r#"(id: "snapshot_siege_snapshot_reverse", name: "Snapshot Siege // Snapshot Reverse", layout: Transform, faces: [
+                (name: "Snapshot Siege", types: ["Battle", "Siege"], defense: 3,
+                 cast_conditions: [ActivePlayer(players: Opponents)]),
+                (name: "Snapshot Reverse", types: ["Sorcery"],
+                 cast_conditions: [ActivePlayer(players: Controller)],
+                 spell_effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 1))]),
+            ])"#,
+            &spell,
+        ], &[]).unwrap();
+        let mut e = GameEngine::new(
+            173010,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 20]; 2]),
+            true,
+        )
+        .unwrap();
+        e.registry = Box::leak(Box::new(registry));
+        e.state.turn_step = TurnStep::Main1;
+        e.state.priority_idx = 0;
+        e
+    }
+
+    fn add(e: &mut GameEngine, player: usize, card: &str, zone: Zone) -> ObjectId {
+        let id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        let owner = e.state.players[player].id;
+        let face = e.registry.get(card).unwrap().primary_face();
+        let mut object = new_object_from_card(id, owner, card, zone, face);
+        object.summoning_sick = false;
+        e.state.objects.insert(id, object);
+        match zone {
+            Zone::Hand => e.state.players[player].hand.push(id),
+            Zone::Battlefield => e.state.players[player].battlefield.push(id),
+            _ => panic!("unsupported fixture zone"),
+        }
+        id
+    }
+
+    fn command(e: &GameEngine, spell: ObjectId) -> RuledCommand {
+        RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                cast_method: rv1::CastMethod::Normal as i32,
+                source: Some(rv1::CastSource {
+                    location: Some(rv1::cast_source::Location::HandIndex(
+                        e.state.players[0]
+                            .hand
+                            .iter()
+                            .position(|id| *id == spell)
+                            .unwrap() as u32,
+                    )),
+                }),
+                ..Default::default()
+            })),
+        }
+    }
+
+    fn resolve(e: &mut GameEngine) {
+        while !e.state.stack.is_empty() && e.state.pending_resolution.is_none() {
+            let player = e.state.priority_player_id();
+            e.apply_command(
+                player,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                },
+            )
+            .unwrap();
+        }
+    }
+
+    const FAERIE: &str = r#"BattlefieldAggregate(filter: (controllers: Controller, required_subtypes: ["Faerie"]), aggregate: Count, min: Some(1))"#;
+
+    #[test]
+    fn issue_173_payment_and_cast_history_are_committed_before_capture() {
+        use prost::Message;
+        fn run(reject_first: bool) -> (Vec<RuledEventBatch>, Vec<bool>, i32) {
+            let mut e = engine(&format!(
+                r#"
+                additional_costs: [SacrificePermanent(filter: (kind: Creature, controller: You))],
+                cast_conditions: [{FAERIE}, CreatureDeathsThisTurn(min: Some(1)), SpellsCastThisTurn(players: Controller, min: Some(1))],
+                spell_effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))],
+            "#
+            ));
+            let faerie = add(&mut e, 0, "snapshot_faerie", Zone::Battlefield);
+            let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+            let mut cast = command(&e, spell);
+            let Some(rv1::ruled_command::Cmd::CastSpell(cs)) = cast.cmd.as_mut() else {
+                unreachable!()
+            };
+            cs.cost_selections = vec![rv1::CostSelection {
+                cost_index: 0,
+                selection: Some(rv1::cost_selection::Selection::PermanentId(faerie)),
+            }];
+            let cast = RuledCommand::decode(cast.encode_to_vec().as_slice()).unwrap();
+            if reject_first {
+                let index = e.state.command_index;
+                assert!(e.apply_command(0, &cast).is_err());
+                assert_eq!(e.state.command_index, index);
+                assert_eq!(e.state.objects[&faerie].zone, Zone::Battlefield);
+                assert_eq!(e.state.objects[&spell].zone, Zone::Hand);
+                assert!(e.state.stack.is_empty());
+                assert_eq!(e.state.turn_history.current.creatures_died, 0);
+            }
+            e.state.players[0].mana_pool.black = 1;
+            let mut batches = vec![e.apply_command(0, &cast).unwrap()];
+            let snapshots = e.state.stack.last().unwrap().cast_condition_results.clone();
+            assert_eq!(snapshots, vec![false, true, true]);
+            assert_eq!(e.state.objects[&faerie].zone, Zone::Graveyard);
+            while !e.state.stack.is_empty() {
+                let player = e.state.priority_player_id();
+                batches.push(
+                    e.apply_command(
+                        player,
+                        &RuledCommand {
+                            cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                        },
+                    )
+                    .unwrap(),
+                );
+            }
+            (batches, snapshots, e.state.players[0].life)
+        }
+        let accepted = run(false);
+        assert_eq!(accepted.2, 22);
+        assert_eq!(
+            accepted,
+            run(true),
+            "rejected attempts do not alter accepted-command replay"
+        );
+    }
+
+    #[test]
+    fn issue_173_parked_modal_branch_keeps_snapshot_while_live_conditions_change() {
+        let mut e = engine(&format!(
+            r#"
+            cast_conditions: [{FAERIE}],
+            modal_spell: (min_modes: 1, max_modes: 1, modes: [(label: "Test", effects: [
+                Scry(count: 1),
+                ChooseResolutionBranch(selection: FirstApplicable, branches: [
+                    (label: "Snapshot", cost: None, requirement: GameCondition(CastSnapshot(index: 0)), effects: [GainLife(amount: 4)]),
+                    (label: "Fallback", cost: None, requirement: Always, effects: [GainLife(amount: 1)]),
+                ]),
+                GainLife(amount: Conditional(condition: {FAERIE}, when_true: 8, otherwise: 2)),
+            ])]),
+        "#
+        ));
+        let faerie = add(&mut e, 0, "snapshot_faerie", Zone::Battlefield);
+        let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+        let mut cast = command(&e, spell);
+        let Some(rv1::ruled_command::Cmd::CastSpell(cs)) = cast.cmd.as_mut() else {
+            unreachable!()
+        };
+        cs.selected_modes = vec![rv1::SelectedSpellMode {
+            mode_index: 0,
+            targets: vec![],
+        }];
+        e.state.players[0].mana_pool.black = 1;
+        e.apply_command(0, &cast).unwrap();
+        resolve(&mut e);
+        assert!(e.state.pending_resolution.is_some());
+        super::super::resolution::move_object_to_zone(
+            &mut e.state,
+            e.registry,
+            faerie,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        let answer = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![],
+                    ..Default::default()
+                },
+            )),
+        };
+        assert!(e.apply_command(1, &answer).is_err());
+        e.apply_command(0, &answer).unwrap();
+        resolve(&mut e);
+        assert!(e.state.pending_resolution.is_none());
+        assert_eq!(
+            e.state.players[0].life, 26,
+            "frozen bonus + live fallback, exactly once"
+        );
+        assert!(
+            e.apply_command(0, &answer).is_err(),
+            "completed continuation cannot be replayed"
+        );
+    }
+
+    #[test]
+    fn issue_173_snapshots_use_controllers_and_noncreature_subtypes() {
+        let mut e = engine(&format!(
+            r#"cast_conditions: [{FAERIE}], spell_effect: [GainLife(amount: 1)]"#
+        ));
+        e.state.players.push(PlayerState::new(99, 20));
+        e.state.next_object_id = 100;
+        let kindred = add(&mut e, 2, "snapshot_kindred", Zone::Battlefield);
+        e.state.players[2].battlefield.clear();
+        e.state.players[0].battlefield.push(kindred);
+        e.state.objects.get_mut(&kindred).unwrap().base_controller = 0;
+        e.state.objects.get_mut(&kindred).unwrap().controller = 0;
+        let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+        e.state.players[0].mana_pool.black = 1;
+        e.apply_command(0, &command(&e, spell)).unwrap();
+        assert_eq!(
+            e.state.stack.last().unwrap().cast_condition_results,
+            vec![true]
+        );
+        assert_eq!(e.state.objects[&kindred].owner, 99);
+    }
+
+    #[test]
+    fn issue_173_snapshot_can_read_the_selected_target_generation() {
+        let mut e = engine(
+            r#"
+            cast_conditions: [ObjectWasDealtDamageThisTurn(object: ChosenTarget(group_index: 0, target_index: 0))],
+            spell_effect: [DamageTarget(target: (kind: Creature), amount: Conditional(condition: CastSnapshot(index: 0), when_true: 1, otherwise: 0))],
+        "#,
+        );
+        let target = add(&mut e, 1, "snapshot_faerie", Zone::Battlefield);
+        e.state
+            .turn_history
+            .current
+            .damaged_objects
+            .push((target, 0));
+        let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+        let mut cast = command(&e, spell);
+        let Some(rv1::ruled_command::Cmd::CastSpell(cs)) = cast.cmd.as_mut() else {
+            unreachable!()
+        };
+        cs.targets = vec![rv1::TargetRef {
+            object_id: target,
+            ..Default::default()
+        }];
+        e.state.players[0].mana_pool.black = 1;
+        e.apply_command(0, &cast).unwrap();
+        assert_eq!(
+            e.state.stack.last().unwrap().cast_condition_results,
+            vec![true]
+        );
+    }
+
+    #[test]
+    fn issue_173_siege_offer_snapshots_the_cast_face() {
+        let mut e = engine("spell_effect: [GainLife(amount: 1)]");
+        let siege = add(&mut e, 0, "snapshot_siege_snapshot_reverse", Zone::Hand);
+        super::super::resolution::move_object_to_zone(
+            &mut e.state,
+            e.registry,
+            siege,
+            Zone::Exile,
+            None,
+        )
+        .unwrap();
+        let generation = e.state.zone_change_generation[&siege];
+        let command = rv1::CastSpell {
+            cast_method: rv1::CastMethod::SiegeDefeat as i32,
+            source: Some(rv1::CastSource {
+                location: Some(rv1::cast_source::Location::ExileObjectId(siege)),
+            }),
+            face_index: 1,
+            ..Default::default()
+        };
+        e.cast_siege_defeat_offer(
+            0,
+            &command,
+            TriggerObjectRef {
+                object_id: siege,
+                zone_change_generation: generation,
+                controller_at_event: 0,
+            },
+            1,
+            &mut vec![],
+        )
+        .unwrap();
+        assert_eq!(
+            e.state.stack.last().unwrap().cast_condition_results,
+            vec![true]
+        );
+        resolve(&mut e);
+        assert_eq!(e.state.players[0].life, 24);
     }
 }
 

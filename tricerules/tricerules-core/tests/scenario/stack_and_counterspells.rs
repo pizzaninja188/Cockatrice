@@ -1,5 +1,81 @@
 use crate::helpers::*;
 
+#[test]
+fn issue_173_twincast_retains_x_but_not_the_faerie_bonus() {
+    let mut e = GameEngine::new(
+        173004,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("swamp", &["faerie_fencing"]),
+            deck_with("island", &["twincast"]),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    inject_creature_on_battlefield(&mut e, 0, "faerie_miscreant");
+    // Even a copy controller with a Faerie never cast the copy.
+    inject_creature_on_battlefield(&mut e, 1, "faerie_miscreant");
+    let original_target = inject_creature_with_stats(&mut e, 1, "colossal_dreadmaw", 8, 8);
+    let copy_target = inject_creature_with_stats(&mut e, 0, "colossal_dreadmaw", 8, 8);
+    ensure_in_hand(&mut e, 0, "faerie_fencing");
+    ensure_in_hand(&mut e, 1, "twincast");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            b: 1,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    e.apply_command(
+        0,
+        &cast_spell_x(
+            hand_index_for_card(&e, 0, "faerie_fencing"),
+            target_object(original_target),
+            2,
+        ),
+    )
+    .unwrap();
+    let original = e.state.stack.last().unwrap().id;
+    e.apply_command(0, &pass()).unwrap();
+    give_mana(
+        &mut e,
+        1,
+        ManaGift {
+            u: 2,
+            ..Default::default()
+        },
+    );
+    e.apply_command(
+        1,
+        &cast_spell(
+            hand_index_for_card(&e, 1, "twincast"),
+            target_object(original),
+        ),
+    )
+    .unwrap();
+    e.apply_command(1, &pass()).unwrap();
+    e.apply_command(0, &pass()).unwrap();
+    assert!(e.state.pending_resolution.is_some());
+    assert!(e
+        .apply_command(0, &submit_resolution_choice(vec![copy_target]))
+        .is_err());
+    e.apply_command(1, &submit_resolution_choice(vec![copy_target]))
+        .unwrap();
+    let copy = e.state.stack.last().unwrap();
+    assert!(copy.is_copy);
+    assert_eq!(copy.chosen_x, 2);
+    assert!(copy.cast_condition_results.is_empty());
+    assert_eq!(e.state.stack[0].cast_condition_results, vec![true]);
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.effective_power(original_target), Some(3));
+    assert_eq!(e.effective_power(copy_target), Some(6));
+    assert_eq!(e.state.turn_history.current.spells_cast, 2);
+}
+
 fn setup_convolute_over_bolt() -> (GameEngine, u32, u32) {
     let decks = Some(vec![
         vec![

@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-08-27. CR 601.2i / 608.2i: check after costs;
+// spell copies were not cast and receive no Faerie bonus (CR 707.10).
+(
+  id: "faerie_fencing",
+  name: "Faerie Fencing",
+  mana_cost: "{X}{B}",
+  types: ["Instant"],
+  cast_conditions: [BattlefieldAggregate(
+    filter: (controllers: Controller, required_subtypes: ["Faerie"]),
+    aggregate: Count,
+    min: Some(1),
+  )],
+  spell_effect: [
+    PumpTarget(power: 0, toughness: 0, scale: (
+      amount: "X", power_per_unit: -1, toughness_per_unit: -1,
+    )),
+    PumpTarget(power: 0, toughness: 0, scale: (
+      amount: Conditional(condition: CastSnapshot(index: 0), when_true: 3, otherwise: 0),
+      power_per_unit: -1, toughness_per_unit: -1,
+    )),
+  ],
+)

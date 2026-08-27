@@ -213,7 +213,7 @@ impl ActivatedCostModifier {
                 if *amount == 0 {
                     return Err("activated generic cost reduction must be nonzero".into());
                 }
-                condition.validate()
+                condition.validate_live()
             }
         }
     }
@@ -226,7 +226,7 @@ impl SpellCostModifier {
                 if *amount == 0 {
                     return Err("conditional generic cost reduction must be nonzero".into());
                 }
-                condition.validate()
+                condition.validate_live()
             }
             Self::TargetMatchGenericReduction { amount, filter } => {
                 if *amount == 0 {

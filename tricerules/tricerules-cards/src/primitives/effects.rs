@@ -25,6 +25,9 @@ use std::fmt;
 /// the identities of the cards that moved through a graveyard.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameCondition {
+    /// A face-authored condition captured after successful casting. Spell copies were not cast
+    /// and have no result; ordinary live conditions elsewhere are unaffected.
+    CastSnapshot { index: u32 },
     /// Whether the active player belongs to a player set relative to the condition's controller.
     /// `Controller` is "during your turn" (Daggersail Aeronaut); `Opponents` supports the inverse
     /// without assuming a two-player game.
@@ -144,8 +147,28 @@ pub enum GameCondition {
 }
 
 impl GameCondition {
+    /// Validate a condition in a context without a completed spell cast (costs, abilities,
+    /// continuous effects, and the snapshot declarations themselves).
+    pub(crate) fn validate_live(&self) -> Result<(), String> {
+        self.validate_cast_snapshot_reference(0)?;
+        self.validate()
+    }
+
+    pub(crate) fn validate_cast_snapshot_reference(&self, count: usize) -> Result<(), String> {
+        if let Self::CastSnapshot { index } = self {
+            if *index as usize >= count {
+                return Err(
+                    "CastSnapshot requires an existing condition on the resolving spell face"
+                        .into(),
+                );
+            }
+        }
+        Ok(())
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         match self {
+            GameCondition::CastSnapshot { .. } => Ok(()),
             GameCondition::ActivePlayer { .. } => Ok(()),
             GameCondition::PlayerLifeAggregate { min, max, .. } => {
                 if min.is_none() && max.is_none() {
@@ -264,7 +287,8 @@ impl GameCondition {
 
     pub fn matches_value(&self, value: u32) -> bool {
         match self {
-            GameCondition::ActivePlayer { .. }
+            GameCondition::CastSnapshot { .. }
+            | GameCondition::ActivePlayer { .. }
             | GameCondition::PlayerLifeAggregate { .. }
             | GameCondition::AttackedThisTurn { .. }
             | GameCondition::ObjectWasDealtDamageThisTurn { .. } => false,
@@ -533,6 +557,18 @@ pub enum Amount {
 }
 
 impl Amount {
+    pub(crate) fn validate_cast_snapshot_references(&self, count: usize) -> Result<(), String> {
+        if let Self::Conditional { condition, .. } = self {
+            condition.validate_cast_snapshot_reference(count)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn validate_live(&self) -> Result<(), String> {
+        self.validate_cast_snapshot_references(0)?;
+        self.validate()
+    }
+
     /// Resolve an amount that needs no game-state query. Dynamic amounts return `None` so a
     /// caller cannot accidentally choose a branch without consulting the authoritative engine.
     pub fn resolve_unconditional(&self, x: u32) -> Option<u32> {
@@ -2329,6 +2365,58 @@ impl SpellEffectKind {
             .any(TargetRole::targets_an_object)
     }
 
+    /// Face-local references share the existing amount and branch consumers. Nested branches
+    /// retain the spell's context; created/granted abilities validate independently as abilities.
+    pub(crate) fn validate_cast_snapshot_references(&self, count: usize) -> Result<(), String> {
+        match self {
+            Self::DamageTarget { amount, .. }
+            | Self::DamageTargets { amount, .. }
+            | Self::DamagePlayer { amount, .. }
+            | Self::DamageAttackedPlayerOrPlaneswalker { amount }
+            | Self::Draw { count: amount, .. }
+            | Self::GainLife { amount }
+            | Self::Mill { count: amount, .. }
+            | Self::CreateTokens { count: amount, .. }
+            | Self::CreateTokenCopies { count: amount, .. }
+            | Self::CreateAttackingTokens { count: amount, .. } => {
+                amount.validate_cast_snapshot_references(count)?;
+            }
+            Self::PumpTarget {
+                scale: Some(scale), ..
+            } => {
+                scale.amount.validate_cast_snapshot_references(count)?;
+            }
+            Self::ChooseResolutionBranch { branches, .. } => {
+                for branch in branches {
+                    if let ResolutionBranchRequirement::GameCondition(condition) =
+                        &branch.requirement
+                    {
+                        condition.validate_cast_snapshot_reference(count)?;
+                    }
+                    for effect in &branch.effects {
+                        effect.validate_cast_snapshot_references(count)?;
+                    }
+                }
+            }
+            Self::SearchLibrary {
+                conditional_destination: Some(conditional),
+                ..
+            } => {
+                conditional
+                    .condition
+                    .validate_cast_snapshot_reference(count)?;
+            }
+            Self::ProduceMana {
+                conditional: Some(conditional),
+                ..
+            } => {
+                conditional.condition.validate_live()?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     /// Startup validation for a whole effect list (one face's `spell_effect`, or one mode's
     /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
     /// [`SpellEffectKind::validate`], which the caller runs too.
@@ -2441,6 +2529,9 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if context == EffectContext::Ability {
+            self.validate_cast_snapshot_references(0)?;
+        }
         for filter in self.target_filters() {
             filter.validate_target_constraints()?;
         }

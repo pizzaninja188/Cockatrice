@@ -1149,6 +1149,10 @@ pub struct StackItem {
     /// CR 601.2b / 607.2i: stable announced additional-cost choices. Resolution and spell copies
     /// consume this receipt instead of rechecking the object used to pay.
     pub cast_cost_receipts: Vec<CastCostReceipt>,
+    /// CR 601.2i / 608.2i: automatic public conditions captured for this actual cast, in face
+    /// declaration order. Retained while parked, but not copied under CR 707.10: copies were
+    /// never cast. Empty for abilities and directly created spell copies.
+    pub cast_condition_results: Vec<bool>,
     /// Exact card objects used to pay this spell or ability's costs. Copies retain the original
     /// cohort under CR 707.10.
     pub(crate) payment_result: CardResultCohort,

@@ -1718,6 +1718,7 @@ impl GameEngine {
                 chosen_x: 0,
                 face_index: source_face_index,
                 chosen_modes: vec![],
+                cast_condition_results: Vec::new(),
                 cast_cost_receipts: vec![],
                 payment_result: CardResultCohort::default(),
                 resolution_branch_choices: Default::default(),

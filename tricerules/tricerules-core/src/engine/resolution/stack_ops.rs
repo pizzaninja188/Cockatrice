@@ -482,6 +482,7 @@ pub(super) fn copy_target_spell(
                     chosen_x: src.chosen_x,
                     face_index: src.face_index,
                     chosen_modes: src.chosen_modes.clone(),
+                    cast_condition_results: Vec::new(),
                     cast_cost_receipts: src.cast_cost_receipts.clone(),
                     payment_result: src.payment_result.clone(),
                     resolution_branch_choices: Default::default(),
