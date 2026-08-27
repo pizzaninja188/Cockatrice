@@ -162,6 +162,7 @@ fn destroy_attached_honors_indestructible_and_regeneration() {
     attach(&mut engine, indestructible, target);
     attach(&mut engine, regenerating, target);
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(indestructible),
         kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Indestructible),

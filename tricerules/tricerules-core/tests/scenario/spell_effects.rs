@@ -3412,6 +3412,7 @@ fn setup_noncombat_deathtouch_scenario(
     let target = inject_creature_with_stats(&mut engine, 1, "hill_giant", 3, 3);
     if grant_deathtouch {
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(source),
             kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Deathtouch),

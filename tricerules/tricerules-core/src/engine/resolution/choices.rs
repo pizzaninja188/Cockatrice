@@ -348,6 +348,7 @@ pub(super) fn create_reflexive_trigger(
                     text: ability_text.clone(),
                     may: false,
                     intervening_if: None,
+                    max_triggers_per_turn: None,
                     triggers_only_once: false,
                 },
                 ability_text,

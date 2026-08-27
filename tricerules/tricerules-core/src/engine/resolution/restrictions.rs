@@ -27,6 +27,7 @@ pub(super) fn apply_combat_restriction(
             .collect::<Vec<_>>();
         for oid in affected {
             cx.engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: Some(cx.top.id),
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::CombatRestriction(restriction),
@@ -79,6 +80,7 @@ pub(super) fn apply_combat_restriction(
     };
 
     cx.engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: effect_source_id,
         affected,
         kind: ContinuousEffectKind::CombatRestriction(restriction),

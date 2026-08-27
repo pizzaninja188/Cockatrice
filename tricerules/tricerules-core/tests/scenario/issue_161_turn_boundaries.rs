@@ -81,6 +81,7 @@ fn waterskin_untaps_at_another_players_untap_boundary_unless_it_lost_the_ability
         .expect("stunned Waterskin")
         .set_counter(CounterKind::Stun, 1);
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(silenced),
         kind: ContinuousEffectKind::Layer6RemoveAllAbilities,

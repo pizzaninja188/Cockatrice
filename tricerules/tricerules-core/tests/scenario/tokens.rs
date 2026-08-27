@@ -386,6 +386,7 @@ fn anthem_buffs_token_via_shared_pt_path() {
     e.state
         .continuous_effects
         .push(tricerules_core::ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: tricerules_core::AffectedScope::AllCreatures,
             kind: ContinuousEffectKind::PtModify {

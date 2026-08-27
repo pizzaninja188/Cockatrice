@@ -51,6 +51,7 @@ pub(super) fn pump_target(
         if is_valid_target {
             let tgt = object_display_name(&engine.state, engine.registry, tid);
             engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: top.source_permanent_id,
                 affected: AffectedScope::Single(tid),
                 kind: ContinuousEffectKind::PtModify {
@@ -95,6 +96,7 @@ pub(super) fn pump_all(
     let affected = snapshot_creature_scope(engine, &filter, controller, filter_source);
     for oid in affected {
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: Some(top.id),
             affected: AffectedScope::Single(oid),
             kind: ContinuousEffectKind::PtModify {
@@ -134,6 +136,7 @@ pub(super) fn grant_keywords_all(
     for oid in affected {
         for kw in &keywords {
             engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: Some(top.id),
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::Layer6AddKeyword(*kw),
@@ -195,6 +198,7 @@ pub(super) fn grant_keywords(
     let keyword_names: Vec<&str> = keywords.iter().map(|keyword| keyword.as_str()).collect();
     for keyword in keywords {
         cx.engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: effect_source_id,
             affected: AffectedScope::Single(tid),
             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
@@ -285,6 +289,7 @@ pub(super) fn grant_protection(
     };
     let target_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
     cx.engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: effect_source_id,
         affected: AffectedScope::Single(tid),
         kind: ContinuousEffectKind::Layer6AddProtection(quality),
@@ -342,14 +347,17 @@ pub(super) fn grant_triggered_ability(
 
     let target_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
     let ability_text = ability.text.clone();
-    cx.engine.state.continuous_effects.push(ContinuousEffect {
-        source_id: effect_source_id,
-        affected: AffectedScope::Single(tid),
-        kind: ContinuousEffectKind::GrantTriggeredAbility(ability),
-        condition: None,
-        duration: EffectDuration::UntilEndOfTurn,
-        timestamp: cx.engine.state.command_index,
-    });
+    cx.engine
+        .state
+        .add_triggered_ability_grant(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: effect_source_id,
+            affected: AffectedScope::Single(tid),
+            kind: ContinuousEffectKind::GrantTriggeredAbility(ability),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: cx.engine.state.command_index,
+        });
     cx.events.push(ev_log(format!(
         "{} grants \"{ability_text}\" to {target_name} until end of turn",
         cx.spell_label
@@ -405,6 +413,7 @@ pub(super) fn add_types(
         .collect();
     type_names.extend(addition.creature_types.iter().cloned());
     cx.engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: effect_source_id,
         affected: AffectedScope::Single(tid),
         kind: ContinuousEffectKind::Layer4AddTypes(addition),
@@ -442,6 +451,7 @@ pub(super) fn grant_keywords_all_permanents(
     for oid in affected {
         for keyword in &keywords {
             cx.engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: Some(cx.top.id),
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::Layer6AddKeyword(*keyword),

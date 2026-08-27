@@ -120,13 +120,40 @@ impl GameEngine {
         let controller = object.controller;
         let card_id = object.card_id.clone();
         let effective_name = self.effective_face(object_id).map(|face| face.name.clone());
-        let statics: Vec<StaticAbilityDef> = self
-            .effective_face(object_id)
-            .map(|face| face.static_abilities.to_vec())
-            .unwrap_or_default();
+        let mut statics = Vec::new();
+        if let Some(faces) = self.room_faces(object_id) {
+            for door in self
+                .state
+                .room_states
+                .get(&object_id)
+                .copied()
+                .unwrap_or_default()
+                .unlocked_indices()
+            {
+                for (slot, ability) in faces[door].static_abilities.iter().enumerate() {
+                    statics.push((
+                        self.ability_definition(object_id, door, slot),
+                        ability.clone(),
+                    ));
+                }
+            }
+        } else if let Some(face) = self.effective_face(object_id) {
+            for (slot, ability) in face.static_abilities.iter().enumerate() {
+                statics.push((
+                    self.ability_definition(object_id, object.face_up_index, slot),
+                    ability.clone(),
+                ));
+            }
+        }
+        let source_zone_change = self
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
         let timestamp = self.state.command_index;
 
-        for static_ability in statics {
+        for (definition, static_ability) in statics {
             match static_ability {
                 StaticAbilityDef::ProhibitLifeGain { .. } => {
                     // Queried at each life-gain event; no independent effect record is needed.
@@ -191,6 +218,7 @@ impl GameEngine {
                     delta_toughness,
                 } => {
                     self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
                         source_id: Some(object_id),
                         affected: resolve_creature_scope(&filter, controller, object_id),
                         kind: ContinuousEffectKind::PtModify {
@@ -224,6 +252,7 @@ impl GameEngine {
                         }
                     };
                     self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
                         source_id: Some(object_id),
                         affected,
                         kind: ContinuousEffectKind::ProhibitSpecialAction(action),
@@ -253,6 +282,7 @@ impl GameEngine {
                     let affected = AffectedScope::AttachedTo(object_id);
                     if let Some(name) = set_name {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer3SetName(name),
@@ -263,6 +293,7 @@ impl GameEngine {
                     }
                     if !add_types.is_empty() {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer4AddTypes(add_types),
@@ -273,6 +304,7 @@ impl GameEngine {
                     }
                     if let Some(replacement) = set_types {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer4SetTypeLine(replacement),
@@ -283,6 +315,7 @@ impl GameEngine {
                     }
                     if let Some(colors) = set_colors {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer5SetColors(colors),
@@ -293,6 +326,7 @@ impl GameEngine {
                     }
                     if delta_power != 0 || delta_toughness != 0 {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::PtModify {
@@ -306,6 +340,7 @@ impl GameEngine {
                     }
                     if let (Some(power), Some(toughness)) = (set_power, set_toughness) {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer7bSetPt { power, toughness },
@@ -316,6 +351,7 @@ impl GameEngine {
                     }
                     if remove_all_abilities {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
@@ -326,6 +362,7 @@ impl GameEngine {
                     }
                     for keyword in keywords {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
@@ -336,6 +373,7 @@ impl GameEngine {
                     }
                     for ability in activated_abilities {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::GrantActivatedAbility(Box::new(ability)),
@@ -344,8 +382,14 @@ impl GameEngine {
                             timestamp,
                         });
                     }
-                    for ability in triggered_abilities {
-                        self.state.continuous_effects.push(ContinuousEffect {
+                    for (grant_index, ability) in triggered_abilities.into_iter().enumerate() {
+                        self.state.add_triggered_ability_grant(ContinuousEffect {
+                            trigger_grant_origin: Some(TriggerAbilityOrigin::StaticGrant {
+                                source_id: object_id,
+                                source_zone_change,
+                                definition: definition.clone(),
+                                grant_index,
+                            }),
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
@@ -356,6 +400,7 @@ impl GameEngine {
                     }
                     if cant_attack || cant_block {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::CombatRestriction(CombatRestriction {
@@ -370,6 +415,7 @@ impl GameEngine {
                     }
                     if doesnt_untap_during_untap_step {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected,
                             kind: ContinuousEffectKind::DoesntUntapDuringUntapStep,
@@ -384,6 +430,7 @@ impl GameEngine {
                     cant_block,
                 } => {
                     self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
                         source_id: Some(object_id),
                         affected: AffectedScope::Single(object_id),
                         kind: ContinuousEffectKind::CombatRestriction(CombatRestriction {
@@ -398,6 +445,7 @@ impl GameEngine {
                 }
                 StaticAbilityDef::ControlsAttached => {
                     self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
                         source_id: Some(object_id),
                         affected: AffectedScope::AttachedTo(object_id),
                         kind: ContinuousEffectKind::Layer2Control {
@@ -414,6 +462,7 @@ impl GameEngine {
                     keyword,
                 } => {
                     self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
                         source_id: Some(object_id),
                         affected: resolve_creature_scope(&filter, controller, object_id),
                         kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
@@ -433,6 +482,7 @@ impl GameEngine {
                     let affected = AffectedScope::Single(object_id);
                     if delta_power != 0 || delta_toughness != 0 {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::PtModify {
@@ -446,6 +496,7 @@ impl GameEngine {
                     }
                     for keyword in keywords {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
@@ -454,8 +505,14 @@ impl GameEngine {
                             timestamp,
                         });
                     }
-                    for ability in triggered_abilities {
-                        self.state.continuous_effects.push(ContinuousEffect {
+                    for (grant_index, ability) in triggered_abilities.into_iter().enumerate() {
+                        self.state.add_triggered_ability_grant(ContinuousEffect {
+                            trigger_grant_origin: Some(TriggerAbilityOrigin::StaticGrant {
+                                source_id: object_id,
+                                source_zone_change,
+                                definition: definition.clone(),
+                                grant_index,
+                            }),
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
@@ -466,6 +523,7 @@ impl GameEngine {
                     }
                     if can_attack_as_though_without_defender {
                         self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected,
                             kind: ContinuousEffectKind::AttackAsThoughWithoutDefender,
@@ -481,6 +539,7 @@ impl GameEngine {
                     toughness_per_match,
                 } => {
                     self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
                         source_id: Some(object_id),
                         affected: AffectedScope::Single(object_id),
                         kind: ContinuousEffectKind::PtModifyByCreatureCount {
@@ -495,6 +554,7 @@ impl GameEngine {
                 }
                 StaticAbilityDef::ExtraLandPlays { count } => {
                     self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
                         source_id: Some(object_id),
                         affected: AffectedScope::Player(controller),
                         kind: ContinuousEffectKind::ExtraLandPlays(count),

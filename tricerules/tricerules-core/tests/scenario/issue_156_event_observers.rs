@@ -18,7 +18,8 @@ fn grant_counter_trigger(engine: &mut GameEngine, source: u32, trigger: TriggerC
         .triggered_abilities[0]
         .clone();
     ability.trigger = trigger;
-    engine.state.continuous_effects.push(ContinuousEffect {
+    engine.state.add_triggered_ability_grant(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(source),
         kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),

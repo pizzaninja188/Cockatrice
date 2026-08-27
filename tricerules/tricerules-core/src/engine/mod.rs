@@ -2,16 +2,16 @@
 
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
-    ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement, ActiveEventObserver,
-    ActiveExilePlayPermission, AffectedScope, AttachmentRecipient, AttackingTokenBatch,
-    BattlefieldEntryCompletion, BattlefieldEntryEvent, BlockingChoice, CardResultCohort,
-    CardResultEntry, CastCostObjectReceipt, CastCostReceipt, ChosenMode, CombatAttackAssignment,
-    CombatDefenderTarget, CombatState, ContinuousEffect, CopiableValues, DamagePreventionAmount,
-    DamagePreventionProhibition, DamagePreventionScope, DelayedTriggerPayload,
-    EntryReplacementApplication, EntryReplacementEffectId, EventObserverMatcher,
-    EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState, HandCardAction,
-    ImmediateObserverAction, ObjectId, ObservedGameEvent, OpeningSequence, ParkedStackResolution,
-    PendingBattlefieldEntry, PendingHandChoice, PendingLibraryLookStage,
+    AbilityDefinitionId, ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement,
+    ActiveEventObserver, ActiveExilePlayPermission, AffectedScope, AttachmentRecipient,
+    AttackingTokenBatch, BattlefieldEntryCompletion, BattlefieldEntryEvent, BlockingChoice,
+    CardResultCohort, CardResultEntry, CastCostObjectReceipt, CastCostReceipt, ChosenMode,
+    CombatAttackAssignment, CombatDefenderTarget, CombatState, ContinuousEffect, CopiableValues,
+    DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
+    DelayedTriggerPayload, EntryReplacementApplication, EntryReplacementEffectId,
+    EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState,
+    HandCardAction, ImmediateObserverAction, ObjectId, ObservedGameEvent, OpeningSequence,
+    ParkedStackResolution, PendingBattlefieldEntry, PendingHandChoice, PendingLibraryLookStage,
     PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
     PendingPlayerDiscardChoice, PendingPlayerSetDiscard, PendingResolution,
     PendingResolutionBranch, PendingResolutionBranchStage, PendingResolutionPresentation,
@@ -19,8 +19,8 @@ use crate::state::{
     PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
     ReplacementPriority, ResolutionContinuation, RoomState, SpellCastMethod, StackItem,
     StackObjectRef, StackTarget, StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry,
-    TriggerContext, TriggerObjectRef, TriggeredOnceKey, TurnHistory, TurnObjectFact, TurnStep,
-    UndoableManaAbility, Zone,
+    TriggerAbilityOrigin, TriggerContext, TriggerObjectRef, TriggerUseKey, TurnHistory,
+    TurnObjectFact, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -300,7 +300,7 @@ struct TriggerSourceSnapshot {
     zone_change_generation: u64,
     face_change_generation: u64,
     attached_to: Option<AttachmentSnapshot>,
-    triggered_abilities: Vec<(usize, TriggeredAbilityDef)>,
+    triggered_abilities: Vec<(usize, TriggeredAbilityDef, TriggerAbilityOrigin)>,
 }
 
 /// Event-time attachment identity captured with a trigger source. Object recipients include
@@ -833,6 +833,8 @@ impl GameEngine {
             activation_uses_this_turn: HashMap::new(),
             activation_uses_per_object: HashMap::new(),
             triggered_once: HashSet::new(),
+            trigger_uses_this_turn: HashMap::new(),
+            next_trigger_grant_id: 0,
             active_exile_play_permissions: Vec::new(),
             next_exile_play_permission_group_id: 1,
             turn_history: TurnHistory::default(),

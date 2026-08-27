@@ -50,17 +50,35 @@ pub struct PersistentActivationUseKey {
     pub ability_index: usize,
 }
 
-/// A printed or copied triggered ability that has consumed a persistent "triggers only once"
-/// allowance on one battlefield object incarnation. Card/face/ability identity prevents an
-/// unrelated ability at the same index from inheriting the usage after a copy or face change;
-/// control and turn changes deliberately do not participate.
+/// Authored ability slot, independent of display names and flattened live ability indexes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TriggeredOnceKey {
-    pub object_id: ObjectId,
-    pub zone_change_generation: u64,
+pub struct AbilityDefinitionId {
     pub card_id: String,
     pub face_index: usize,
     pub ability_index: usize,
+}
+
+/// CR 113.2c identity of an ability occurrence. Infernal Scarring's static grant and
+/// Abnormal Endurance's resolving grant must remain distinct even when their text is identical.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TriggerAbilityOrigin {
+    Printed(AbilityDefinitionId),
+    StaticGrant {
+        source_id: ObjectId,
+        source_zone_change: u64,
+        definition: AbilityDefinitionId,
+        grant_index: usize,
+    },
+    ResolvingGrant(u64),
+}
+
+/// One ability on one CR 400.7 source incarnation. Control, turn and face-status generations
+/// deliberately do not participate; the authored face belongs to the ability's provenance.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TriggerUseKey {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub ability_origin: TriggerAbilityOrigin,
 }
 
 /// Generation-aware identity for the distinct permanent observed by a trigger event. The
@@ -1247,6 +1265,9 @@ pub enum AffectedScope {
 /// A single active continuous effect (CR 611/613).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContinuousEffect {
+    /// Present only for a granted triggered ability. Retained when unrelated effects expire;
+    /// static grants use authored provenance, resolving grants a deterministic creation ID.
+    pub trigger_grant_origin: Option<TriggerAbilityOrigin>,
     /// Spell/ability that created this (for display and future targeted removal).
     pub source_id: Option<ObjectId>,
     pub affected: AffectedScope,
@@ -1526,7 +1547,11 @@ pub struct GameState {
     pub activation_uses_per_object: HashMap<PersistentActivationUseKey, u32>,
     /// Persistent "triggers only once" usage. Generation-aware keys make leave-and-return a
     /// fresh object without copying or resetting usage on control changes or turn boundaries.
-    pub triggered_once: HashSet<TriggeredOnceKey>,
+    pub triggered_once: HashSet<TriggerUseKey>,
+    /// Printed trigger caps for the current actual turn instance, independent of active seat.
+    /// Including the instance also makes direct deterministic turn-boundary fixtures safe.
+    pub trigger_uses_this_turn: HashMap<(u64, TriggerUseKey), u32>,
+    pub next_trigger_grant_id: u64,
     pub active_exile_play_permissions: Vec<ActiveExilePlayPermission>,
     pub next_exile_play_permission_group_id: u64,
     pub turn_history: TurnHistory,
@@ -1613,6 +1638,25 @@ pub struct GameState {
 }
 
 impl GameState {
+    pub(crate) fn allocate_trigger_grant_origin(&mut self) -> TriggerAbilityOrigin {
+        let origin = TriggerAbilityOrigin::ResolvingGrant(self.next_trigger_grant_id);
+        self.next_trigger_grant_id += 1;
+        origin
+    }
+
+    /// Install a grant with its stable identity. Static grants supply their authored origin;
+    /// each resolving grant gets a fresh occurrence, including two grants in the same command.
+    pub fn add_triggered_ability_grant(&mut self, mut effect: ContinuousEffect) {
+        assert!(matches!(
+            effect.kind,
+            ContinuousEffectKind::GrantTriggeredAbility(_)
+        ));
+        if effect.trigger_grant_origin.is_none() {
+            effect.trigger_grant_origin = Some(self.allocate_trigger_grant_origin());
+        }
+        self.continuous_effects.push(effect);
+    }
+
     pub fn add_damage_prevention_shield(&mut self, recipient: ObjectId, amount: u32) {
         let id = self.next_damage_prevention_effect_id;
         self.next_damage_prevention_effect_id = id.saturating_add(1);

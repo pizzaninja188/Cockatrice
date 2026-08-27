@@ -595,6 +595,7 @@ mod sba_tests {
 
     fn anthem(source: ObjectId, dt: i32, duration: EffectDuration) -> ContinuousEffect {
         ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: Some(source),
             affected: AffectedScope::AllCreatures,
             kind: ContinuousEffectKind::PtModify {
@@ -630,6 +631,7 @@ mod sba_tests {
         let src = add_creature(&mut e, 0, 2, 0);
         let target = add_creature(&mut e, 0, 1, 0);
         e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: Some(src),
             affected: AffectedScope::Single(target),
             kind: ContinuousEffectKind::PtModify {
@@ -649,6 +651,7 @@ mod sba_tests {
         let mut e = engine();
         let target = add_creature(&mut e, 0, 2, 0);
         e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(target),
             kind: ContinuousEffectKind::Layer2Control {
@@ -689,6 +692,7 @@ mod sba_tests {
             first_strike_damage_done: false,
         });
         e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(target),
             kind: ContinuousEffectKind::Layer2Control {
@@ -753,6 +757,7 @@ mod sba_tests {
         let target = add_creature(&mut e, 0, 3, 1);
         e.state.objects.get_mut(&target).unwrap().deathtouch_damage = true;
         e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(target),
             kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Indestructible),

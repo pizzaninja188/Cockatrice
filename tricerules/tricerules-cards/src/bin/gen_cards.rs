@@ -513,6 +513,7 @@ fn parse_etb_recipe(text: &str) -> Option<(TriggeredAbilityDef, &'static str)> {
             text: text.to_string(),
             may: false,
             intervening_if: None,
+            max_triggers_per_turn: None,
             triggers_only_once: false,
         },
         label,

@@ -163,6 +163,7 @@ fn fight_reuses_prevention_deathtouch_lifelink_and_state_based_actions() {
     engine.state.players[0].life = 10;
     for keyword in [Keyword::Deathtouch, Keyword::Lifelink] {
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(first),
             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),

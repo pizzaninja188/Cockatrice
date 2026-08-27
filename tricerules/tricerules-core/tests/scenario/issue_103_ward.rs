@@ -343,7 +343,8 @@ fn each_ward_instance_creates_an_independent_orderable_trigger() {
         .primary_face()
         .triggered_abilities[0]
         .clone();
-    engine.state.continuous_effects.push(ContinuousEffect {
+    engine.state.add_triggered_ability_grant(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(dirgur),
         kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ward)),

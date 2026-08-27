@@ -188,6 +188,7 @@ fn conditional_controller_reference_tracks_layer_2_control() {
     assert_eq!(power(&engine, guardian), 5);
 
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(guardian),
         kind: ContinuousEffectKind::Layer2Control {
@@ -272,6 +273,7 @@ fn drowsing_tyrannodon_bypasses_only_defender_when_the_condition_holds() {
         .expect("tyrannodon")
         .power = Some(4);
     restricted.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(restricted_tyrannodon),
         kind: ContinuousEffectKind::CombatRestriction(CombatRestriction {

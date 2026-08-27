@@ -126,6 +126,7 @@ fn toughness_zero_and_simultaneous_unmarked_death_use_the_actual_destinations() 
     cast_damage_spell(&mut engine, 0, "scorching_dragonfire", marked);
 
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(marked),
         kind: ContinuousEffectKind::PtModify {

@@ -318,6 +318,7 @@ mod tests {
             for controller in [20, 30] {
                 if controller == 30 {
                     engine.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
                         source_id: None,
                         affected: AffectedScope::Single(source),
                         kind: ContinuousEffectKind::Layer2Control {
@@ -389,6 +390,7 @@ mod tests {
         assert!(engine.can_player_gain_life(0));
         engine.state.objects.get_mut(&second).unwrap().face_down = false;
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(second),
             kind: ContinuousEffectKind::Layer6RemoveAllAbilities,

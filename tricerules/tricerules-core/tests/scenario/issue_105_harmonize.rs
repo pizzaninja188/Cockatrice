@@ -58,6 +58,7 @@ fn harmonize_publishes_owner_only_candidates_and_commits_tap_with_reduced_paymen
     engine.state.objects.get_mut(&zero_power).unwrap().power = Some(0);
     let negative_power = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(negative_power),
         kind: ContinuousEffectKind::PtModify {

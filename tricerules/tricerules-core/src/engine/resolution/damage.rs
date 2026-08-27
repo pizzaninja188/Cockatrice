@@ -560,6 +560,7 @@ mod damage_source_tests {
         let (mut engine, first, _) = fight_engine();
         engine.state.players[0].life = 10;
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(first),
             kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Lifelink),

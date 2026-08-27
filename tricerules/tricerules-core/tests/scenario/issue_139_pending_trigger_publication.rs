@@ -36,7 +36,8 @@ fn issue_139_refresh_publishes_targets_for_granted_trigger_beyond_printed_abilit
     let ability = targeted_graveyard_trigger(TriggerCondition::WheneverSelfAttacks {
         minimum_other_attackers: 0,
     });
-    engine.state.continuous_effects.push(ContinuousEffect {
+    engine.state.add_triggered_ability_grant(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(source),
         kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),

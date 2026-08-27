@@ -244,6 +244,7 @@ impl CardRegistry {
                 ability
                     .trigger
                     .validate()
+                    .and_then(|()| ability.validate_trigger_limit())
                     .map_err(|reason| RegistryError::InvalidCard {
                         id: id.clone(),
                         reason,
@@ -1050,6 +1051,7 @@ impl CardRegistry {
                     ability
                         .trigger
                         .validate()
+                        .and_then(|()| ability.validate_trigger_limit())
                         .map_err(|reason| RegistryError::InvalidCard {
                             id: card.id.clone(),
                             reason,
@@ -1368,6 +1370,53 @@ mod tests {
     #[test]
     fn embedded_registry_loads() {
         CardRegistry::from_embedded().unwrap();
+    }
+
+    #[test]
+    fn issue_164_rejects_zero_trigger_caps_in_printed_and_granted_abilities() {
+        let ability = r#"(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "Gain life.", max_triggers_per_turn: Some(0))"#;
+        for fields in [
+            format!("triggered_abilities: [{ability}]"),
+            format!("static_abilities: [ConditionalSelfModifier(condition: ActivePlayer(players: Controller), triggered_abilities: [{ability}])]"),
+            format!("activated_abilities: [(costs: [], effect: [GrantTriggeredAbility(subject: Source, ability: {ability})], text: \"Grant an ability.\")]"),
+        ] {
+            let card = format!(r#"(id: "trigger_limit_test", name: "Trigger Limit Test", mana_cost: "{{1}}", types: ["Enchantment"], {fields})"#);
+            let error = CardRegistry::from_chunks(&[&card]).expect_err("zero cap must be rejected");
+            assert!(matches!(&error,
+                RegistryError::InvalidCard { reason, .. } if reason.contains("max_triggers_per_turn")),
+                "a zero trigger cap must fail shape validation: {fields}: {error}");
+        }
+        let token = format!(
+            r#"(id: "trigger_limit_test", name: "Trigger Limit Test", types: ["Creature"], power: Some(1), toughness: Some(1), triggered_abilities: [{ability}])"#
+        );
+        let error = CardRegistry::from_chunks_and_tokens(&[], &[&token])
+            .expect_err("zero cap on a token must be rejected");
+        assert!(
+            matches!(error, RegistryError::InvalidCard { reason, .. } if reason.contains("max_triggers_per_turn"))
+        );
+    }
+
+    #[test]
+    fn issue_164_trigger_caps_preserve_defaults_and_lifetime_limits() {
+        for (limit, expected) in [
+            ("", None),
+            ("max_triggers_per_turn: Some(1),", Some(1)),
+            ("max_triggers_per_turn: Some(2),", Some(2)),
+        ] {
+            for lifetime in [false, true] {
+                let card = format!(
+                    r#"(id: "trigger_limit_test", name: "Trigger Limit Test", mana_cost: "{{1}}", types: ["Enchantment"], triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "Gain life.", triggers_only_once: {lifetime}, {limit})])"#
+                );
+                let registry = CardRegistry::from_chunks(&[&card]).unwrap();
+                let ability = &registry
+                    .get("trigger_limit_test")
+                    .unwrap()
+                    .primary_face()
+                    .triggered_abilities[0];
+                assert_eq!(ability.max_triggers_per_turn, expected);
+                assert_eq!(ability.triggers_only_once, lifetime);
+            }
+        }
     }
 
     #[test]

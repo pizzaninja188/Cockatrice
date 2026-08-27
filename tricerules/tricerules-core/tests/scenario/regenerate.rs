@@ -188,6 +188,7 @@ fn toughness_zero_bypasses_regen_shield() {
     }
     // Apply a -4 toughness continuous effect (base 3 → effective 0).
     e.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(troll),
         kind: ContinuousEffectKind::PtModify {

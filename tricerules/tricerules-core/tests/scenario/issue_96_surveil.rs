@@ -242,7 +242,8 @@ fn issue_96_surveil_trigger_fires_only_after_the_complete_action() {
     ability.trigger = TriggerCondition::WheneverPlayerSurveils {
         player: CastTriggerPlayer::Controller,
     };
-    e.state.continuous_effects.push(ContinuousEffect {
+    e.state.add_triggered_ability_grant(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(observer),
         kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),

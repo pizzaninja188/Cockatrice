@@ -1228,6 +1228,7 @@ mod tests {
         assert!(!characteristics.has_type("Forest"));
 
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(oid),
             kind: ContinuousEffectKind::Layer4SetCreatureTypes(vec!["Frog".into()]),
@@ -1243,6 +1244,7 @@ mod tests {
         assert!(characteristics.has_type("Creature"));
 
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(oid),
             kind: ContinuousEffectKind::Layer4SetCreatureTypes(Vec::new()),
@@ -1265,6 +1267,7 @@ mod tests {
             GameEngine::new_with_default_decks(154_002, &[0, 1], 20).expect("new engine");
         let oid = install_changeling_face(&mut engine, false);
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(oid),
             kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
@@ -1325,6 +1328,7 @@ mod tests {
         engine.state.players[0].battlefield.push(oid);
         engine.state.continuous_effects.extend([
             ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: None,
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
@@ -1336,6 +1340,7 @@ mod tests {
                 timestamp: 2,
             },
             ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: None,
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
@@ -1347,6 +1352,7 @@ mod tests {
                 timestamp: 1,
             },
             ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: None,
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
@@ -1358,6 +1364,7 @@ mod tests {
                 timestamp: 2,
             },
             ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: None,
                 affected: AffectedScope::CreaturesMatching {
                     reference_player: 0,
@@ -1429,6 +1436,7 @@ mod tests {
         );
         engine.state.continuous_effects.extend([
             ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: None,
                 affected: AffectedScope::AllCreatures,
                 kind: ContinuousEffectKind::PtModify {
@@ -1440,6 +1448,7 @@ mod tests {
                 timestamp: 2,
             },
             ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: None,
                 affected: AffectedScope::AllCreatures,
                 kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Haste),
@@ -1493,6 +1502,7 @@ mod tests {
             },
         );
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(oid),
             kind: ContinuousEffectKind::Layer2Control {
@@ -1562,6 +1572,7 @@ mod tests {
         );
         engine.state.continuous_effects.extend([
             ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: Some(control_aura),
                 affected: AffectedScope::AttachedTo(control_aura),
                 kind: ContinuousEffectKind::Layer2Control {
@@ -1572,6 +1583,7 @@ mod tests {
                 timestamp: 1,
             },
             ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: Some(aura_thief),
                 affected: AffectedScope::AttachedTo(aura_thief),
                 kind: ContinuousEffectKind::Layer2Control {
@@ -1622,6 +1634,7 @@ mod tests {
         );
         for (timestamp, controller) in [(1, 1), (2, 0)] {
             engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: None,
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::Layer2Control {
@@ -1690,6 +1703,7 @@ mod tests {
         engine.state.players[0].battlefield.extend([source, mine]);
         engine.state.players[1].battlefield.push(theirs);
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: Some(source),
             affected: AffectedScope::CreaturesMatching {
                 reference_player: 0,

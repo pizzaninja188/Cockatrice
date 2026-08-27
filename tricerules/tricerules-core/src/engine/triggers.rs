@@ -20,6 +20,7 @@ pub(super) struct CollectedTrigger {
     /// CR 603.3d: the ability's controller — the controller of its source permanent.
     pub controller: PlayerId,
     pub ability_index: usize,
+    pub ability_origin: Option<TriggerAbilityOrigin>,
     pub ability: TriggeredAbilityDef,
     pub ability_text: String,
     /// The event's affected player ("that player"), when distinct from the ability controller.
@@ -89,6 +90,7 @@ impl GameEngine {
             text: "When the last defense counter is removed from this Siege, exile it, then you may cast it transformed without paying its mana cost.".into(),
             may: false,
             intervening_if: None,
+            max_triggers_per_turn: None,
             triggers_only_once: false,
         };
         let face_index = object.face_up_index;
@@ -108,6 +110,7 @@ impl GameEngine {
             source_face_change,
             controller,
             ability_index: usize::MAX,
+            ability_origin: None,
             ability: ability.clone(),
             ability_text: ability.text.clone(),
             trigger_context: TriggerContext::default(),
@@ -170,6 +173,7 @@ impl GameEngine {
                     source_face_change: 0,
                     controller: delayed.controller,
                     ability_index: 0,
+                    ability_origin: None,
                     ability_text: delayed.ability.text.clone(),
                     trigger_context: TriggerContext {
                         observed_object: Some(watched),
@@ -243,14 +247,47 @@ impl GameEngine {
         }
         collected.sort_by_key(|trigger| self.state.apnap_rank(trigger.controller));
         collected.retain(|trigger| {
-            !trigger.ability.triggers_only_once
-                || self.state.triggered_once.insert(TriggeredOnceKey {
-                    object_id: trigger.source_id,
-                    zone_change_generation: trigger.source_zone_change,
-                    card_id: trigger.card_id.clone(),
-                    face_index: trigger.face_index,
-                    ability_index: trigger.ability_index,
+            let lifetime = trigger.ability.triggers_only_once;
+            let cap = trigger.ability.max_triggers_per_turn;
+            if !lifetime && cap.is_none() {
+                return true;
+            }
+            let key = TriggerUseKey {
+                object_id: trigger.source_id,
+                zone_change_generation: trigger.source_zone_change,
+                // Synthetic delayed triggers have already consumed their one-shot observer.
+                // Give each such occurrence its own identity rather than a printed slot.
+                ability_origin: trigger
+                    .ability_origin
+                    .clone()
+                    .unwrap_or_else(|| self.state.allocate_trigger_grant_origin()),
+            };
+            let turn_key = (self.state.turn_instance, key.clone());
+            if lifetime && self.state.triggered_once.contains(&key)
+                || cap.is_some_and(|max| {
+                    self.state
+                        .trigger_uses_this_turn
+                        .get(&turn_key)
+                        .copied()
+                        .unwrap_or(0)
+                        >= max
                 })
+            {
+                return false;
+            }
+            // Commit both restrictions together, before any ordering, targeting or optional
+            // choice. A later decline, counter or failed resolution cannot refund a trigger.
+            if lifetime {
+                self.state.triggered_once.insert(key);
+            }
+            if cap.is_some() {
+                *self
+                    .state
+                    .trigger_uses_this_turn
+                    .entry(turn_key)
+                    .or_default() += 1;
+            }
+            true
         });
         if collected.is_empty() {
             return;
@@ -520,6 +557,13 @@ impl GameEngine {
                                     source_face_change: source.face_change_generation,
                                     controller: source.controller,
                                     ability_index: prior_abilities + ability_index,
+                                    ability_origin: Some(TriggerAbilityOrigin::Printed(
+                                        self.ability_definition(
+                                            source.object_id,
+                                            *face_index,
+                                            ability_index,
+                                        ),
+                                    )),
                                     ability: ability.clone(),
                                     ability_text: ability.text.clone(),
                                     trigger_context: TriggerContext::default(),
@@ -1250,13 +1294,13 @@ impl GameEngine {
         let abilities = self.effective_triggered_abilities(source_id, card_id, face_index);
         abilities
             .into_iter()
-            .filter(|(_, ta)| filter(&ta.trigger))
+            .filter(|(_, ta, _)| filter(&ta.trigger))
             // CR 603.4, first of the two checks: an intervening-"if" clause that is false as the
             // ability would go on the stack means it never triggers at all.
-            .filter(|(_, ta)| {
+            .filter(|(_, ta, _)| {
                 self.intervening_if_holds(source_id, controller, ta.intervening_if.as_ref())
             })
-            .map(|(idx, ta)| CollectedTrigger {
+            .map(|(idx, ta, origin)| CollectedTrigger {
                 source_id,
                 card_id: card_id.to_string(),
                 face_index,
@@ -1286,6 +1330,7 @@ impl GameEngine {
                     .unwrap_or(0),
                 controller,
                 ability_index: idx,
+                ability_origin: Some(origin),
                 ability: ta.clone(),
                 ability_text: ta.text.clone(),
                 trigger_context: TriggerContext::default(),
@@ -1348,12 +1393,38 @@ impl GameEngine {
         })
     }
 
+    /// Definition provenance follows copiable values, not the physical card's registry ID.
+    /// Room callers supply the original door slot rather than a flattened unlocked-face index.
+    pub(super) fn ability_definition(
+        &self,
+        source_id: ObjectId,
+        face_index: usize,
+        ability_index: usize,
+    ) -> AbilityDefinitionId {
+        let object = &self.state.objects[&source_id];
+        let values = object
+            .copiable_values
+            .as_ref()
+            .or(object.token_origin.as_ref());
+        AbilityDefinitionId {
+            card_id: values
+                .filter(|v| !v.source_card_id.is_empty())
+                .map(|v| v.source_card_id.clone())
+                .unwrap_or_else(|| object.card_id.clone()),
+            face_index: values
+                .filter(|v| v.room_faces.is_none())
+                .map(|v| v.source_face_index)
+                .unwrap_or(face_index),
+            ability_index,
+        }
+    }
+
     fn effective_triggered_abilities(
         &self,
         source_id: ObjectId,
         _card_id: &str,
-        _face_index: usize,
-    ) -> Vec<(usize, TriggeredAbilityDef)> {
+        face_index: usize,
+    ) -> Vec<(usize, TriggeredAbilityDef, TriggerAbilityOrigin)> {
         let face_down = self
             .state
             .objects
@@ -1361,17 +1432,40 @@ impl GameEngine {
             .is_some_and(|object| object.face_down);
         let removed_at =
             super::characteristics::latest_remove_all_abilities_timestamp(&self.state, source_id);
-        let mut abilities: Vec<(usize, TriggeredAbilityDef)> = (!face_down && removed_at.is_none())
-            .then(|| self.effective_face(source_id))
-            .flatten()
-            .map(|face| {
-                face.triggered_abilities
-                    .iter()
-                    .cloned()
-                    .enumerate()
-                    .collect()
+        let mut printed = Vec::new();
+        if !face_down && removed_at.is_none() {
+            if let Some(faces) = self.room_faces(source_id) {
+                for door in self
+                    .state
+                    .room_states
+                    .get(&source_id)
+                    .copied()
+                    .unwrap_or_default()
+                    .unlocked_indices()
+                {
+                    for (slot, ability) in faces[door].triggered_abilities.iter().enumerate() {
+                        printed.push((
+                            ability.clone(),
+                            self.ability_definition(source_id, door, slot),
+                        ));
+                    }
+                }
+            } else if let Some(face) = self.effective_face(source_id) {
+                for (slot, ability) in face.triggered_abilities.iter().enumerate() {
+                    printed.push((
+                        ability.clone(),
+                        self.ability_definition(source_id, face_index, slot),
+                    ));
+                }
+            }
+        }
+        let mut abilities: Vec<_> = printed
+            .into_iter()
+            .enumerate()
+            .map(|(index, (ability, definition))| {
+                (index, ability, TriggerAbilityOrigin::Printed(definition))
             })
-            .unwrap_or_default();
+            .collect();
         let mut next_index = abilities.len();
         let Some(characteristics) = self.characteristics(source_id) else {
             return abilities;
@@ -1391,7 +1485,14 @@ impl GameEngine {
                 &characteristics,
             ) && self.continuous_effect_condition_holds(effect)
             {
-                abilities.push((next_index, (**ability).clone()));
+                abilities.push((
+                    next_index,
+                    (**ability).clone(),
+                    effect
+                        .trigger_grant_origin
+                        .clone()
+                        .expect("trigger grant has provenance"),
+                ));
                 next_index += 1;
             }
         }
@@ -1406,15 +1507,15 @@ impl GameEngine {
         source
             .triggered_abilities
             .iter()
-            .filter(|(_, ability)| filter(&ability.trigger))
-            .filter(|(_, ability)| {
+            .filter(|(_, ability, _)| filter(&ability.trigger))
+            .filter(|(_, ability, _)| {
                 self.intervening_if_holds(
                     source.object_id,
                     source.controller,
                     ability.intervening_if.as_ref(),
                 )
             })
-            .map(|(ability_index, ability)| CollectedTrigger {
+            .map(|(ability_index, ability, origin)| CollectedTrigger {
                 source_id: source.object_id,
                 card_id: source.card_id.clone(),
                 face_index: source.face_index,
@@ -1422,6 +1523,7 @@ impl GameEngine {
                 source_face_change: source.face_change_generation,
                 controller: source.controller,
                 ability_index: *ability_index,
+                ability_origin: Some(origin.clone()),
                 ability: ability.clone(),
                 ability_text: ability.text.clone(),
                 trigger_context: TriggerContext::default(),
@@ -1750,6 +1852,418 @@ impl GameEngine {
 mod tests {
     use super::*;
 
+    fn test_ability_origin(index: usize) -> TriggerAbilityOrigin {
+        TriggerAbilityOrigin::Printed(AbilityDefinitionId {
+            card_id: "test_trigger_source".into(),
+            face_index: 0,
+            ability_index: index,
+        })
+    }
+
+    fn trigger_limit_source() -> (GameEngine, ObjectId) {
+        let mut engine = GameEngine::new(164_001, &[0, 1], 20, None, true).unwrap();
+        let source = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&source).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        (engine, source)
+    }
+
+    fn add_limited_grant(engine: &mut GameEngine, source: ObjectId, trigger: TriggerCondition) {
+        let mut ability = engine
+            .registry
+            .get("gravedigger")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .clone();
+        ability.trigger = trigger;
+        ability.triggers_only_once = true;
+        engine.state.add_triggered_ability_grant(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+    }
+
+    fn stage_limited_dies_grants(engine: &mut GameEngine, source: ObjectId) {
+        let triggers =
+            engine.matching_triggered_abilities("grizzly_bears", source, 0, 0, |trigger| {
+                *trigger == TriggerCondition::WhenSelfDies
+            });
+        engine.stage_triggers(triggers);
+    }
+
+    #[test]
+    fn issue_164_removing_an_earlier_grant_does_not_refresh_a_spent_ability() {
+        let (mut engine, source) = trigger_limit_source();
+        add_limited_grant(
+            &mut engine,
+            source,
+            TriggerCondition::WhenSelfEntersBattlefield,
+        );
+        add_limited_grant(&mut engine, source, TriggerCondition::WhenSelfDies);
+        stage_limited_dies_grants(&mut engine, source);
+        assert_eq!(
+            engine
+                .state
+                .staged_trigger_groups
+                .pop_front()
+                .unwrap()
+                .triggers
+                .len(),
+            1
+        );
+        engine.state.continuous_effects.remove(0);
+        stage_limited_dies_grants(&mut engine, source);
+        assert!(
+            engine.state.staged_trigger_groups.is_empty(),
+            "the remaining grant already triggered"
+        );
+    }
+
+    #[test]
+    fn issue_164_a_new_identical_grant_does_not_inherit_a_removed_grants_usage() {
+        let (mut engine, source) = trigger_limit_source();
+        add_limited_grant(&mut engine, source, TriggerCondition::WhenSelfDies);
+        stage_limited_dies_grants(&mut engine, source);
+        engine.state.staged_trigger_groups.clear();
+        engine.state.continuous_effects.clear();
+        add_limited_grant(&mut engine, source, TriggerCondition::WhenSelfDies);
+        stage_limited_dies_grants(&mut engine, source);
+        assert_eq!(
+            engine.state.staged_trigger_groups.len(),
+            1,
+            "a new grant has its own allowance"
+        );
+    }
+
+    fn take_staged_count(engine: &mut GameEngine) -> usize {
+        engine
+            .state
+            .staged_trigger_groups
+            .drain(..)
+            .map(|group| group.triggers.len())
+            .sum()
+    }
+
+    #[test]
+    fn issue_164_caps_bound_a_batch_and_reset_on_a_new_turn_instance() {
+        for cap in [None, Some(1), Some(2)] {
+            let (mut engine, source) = trigger_limit_source();
+            add_limited_grant(&mut engine, source, TriggerCondition::WhenSelfDies);
+            let ContinuousEffectKind::GrantTriggeredAbility(ability) =
+                &mut engine.state.continuous_effects[0].kind
+            else {
+                unreachable!()
+            };
+            ability.triggers_only_once = false;
+            ability.max_triggers_per_turn = cap;
+            let mut batch = Vec::new();
+            for _ in 0..3 {
+                batch.extend(engine.matching_triggered_abilities(
+                    "grizzly_bears",
+                    source,
+                    0,
+                    0,
+                    |trigger| *trigger == TriggerCondition::WhenSelfDies,
+                ));
+            }
+            engine.stage_triggers(batch);
+            assert_eq!(take_staged_count(&mut engine), cap.unwrap_or(3) as usize);
+            stage_limited_dies_grants(&mut engine, source);
+            assert_eq!(take_staged_count(&mut engine), usize::from(cap.is_none()));
+
+            // Model another turn for the same seat: this tests extra-turn-safe bookkeeping,
+            // not extra-turn scheduling (which the engine does not implement yet).
+            engine.state.turn_instance += 1;
+            stage_limited_dies_grants(&mut engine, source);
+            assert_eq!(take_staged_count(&mut engine), 1);
+        }
+    }
+
+    fn limited_dies_ability(engine: &GameEngine) -> TriggeredAbilityDef {
+        let mut ability = engine
+            .registry
+            .get("gravedigger")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .clone();
+        ability.trigger = TriggerCondition::WhenSelfDies;
+        ability.max_triggers_per_turn = Some(1);
+        ability
+    }
+
+    fn install_trigger_face(
+        engine: &mut GameEngine,
+        source: ObjectId,
+        abilities: Vec<TriggeredAbilityDef>,
+    ) {
+        let mut values = engine.copiable_values_for(source).unwrap();
+        values.face.triggered_abilities = abilities;
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .copiable_values = Some(values);
+    }
+
+    #[test]
+    fn issue_164_both_limits_are_checked_before_either_is_spent() {
+        for first_lifetime in [false, true] {
+            let (mut engine, source) = trigger_limit_source();
+            let mut ability = limited_dies_ability(&engine);
+            ability.triggers_only_once = first_lifetime;
+            ability.max_triggers_per_turn = (!first_lifetime).then_some(1);
+            install_trigger_face(&mut engine, source, vec![ability.clone()]);
+            stage_limited_dies_grants(&mut engine, source);
+            assert_eq!(take_staged_count(&mut engine), 1);
+            ability.triggers_only_once = true;
+            ability.max_triggers_per_turn = Some(1);
+            install_trigger_face(&mut engine, source, vec![ability]);
+            let before = (
+                engine.state.triggered_once.clone(),
+                engine.state.trigger_uses_this_turn.clone(),
+            );
+            stage_limited_dies_grants(&mut engine, source);
+            assert_eq!(take_staged_count(&mut engine), 0);
+            assert_eq!(
+                before,
+                (
+                    engine.state.triggered_once.clone(),
+                    engine.state.trigger_uses_this_turn.clone()
+                )
+            );
+            engine.state.turn_instance += 1;
+            stage_limited_dies_grants(&mut engine, source);
+            assert_eq!(take_staged_count(&mut engine), usize::from(!first_lifetime));
+        }
+    }
+
+    #[test]
+    fn issue_164_printed_slots_control_suppression_and_blink_keep_the_right_identity() {
+        let (mut engine, source) = trigger_limit_source();
+        let ability = limited_dies_ability(&engine);
+        install_trigger_face(&mut engine, source, vec![ability.clone(), ability.clone()]);
+        let values = engine.state.objects[&source]
+            .copiable_values
+            .clone()
+            .unwrap();
+        stage_limited_dies_grants(&mut engine, source);
+        assert_eq!(
+            take_staged_count(&mut engine),
+            2,
+            "identical printed slots are independent"
+        );
+        engine.state.objects.get_mut(&source).unwrap().controller = 1;
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index + 1,
+        });
+        stage_limited_dies_grants(&mut engine, source);
+        assert_eq!(take_staged_count(&mut engine), 0);
+        engine.state.continuous_effects.clear();
+        engine.state.face_change_generation.insert(source, 7);
+        stage_limited_dies_grants(&mut engine, source);
+        assert_eq!(
+            take_staged_count(&mut engine),
+            0,
+            "restoration and control/status changes do not refund usage"
+        );
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Exile,
+            None,
+        )
+        .unwrap();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .copiable_values = Some(values);
+        stage_limited_dies_grants(&mut engine, source);
+        assert_eq!(
+            take_staged_count(&mut engine),
+            2,
+            "the returned source is a fresh incarnation"
+        );
+    }
+
+    #[test]
+    fn issue_164_static_grants_survive_refresh_and_conditional_suppression() {
+        let (mut engine, source) = trigger_limit_source();
+        let ability = limited_dies_ability(&engine);
+        let mut values = engine.copiable_values_for(source).unwrap();
+        values.face.static_abilities = vec![StaticAbilityDef::ConditionalSelfModifier {
+            condition: GameCondition::ActivePlayer {
+                players: RelativePlayerSet::Controller,
+            },
+            delta_power: 0,
+            delta_toughness: 0,
+            keywords: vec![],
+            triggered_abilities: vec![ability.clone(), ability],
+            can_attack_as_though_without_defender: false,
+        }];
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .copiable_values = Some(values);
+        engine.emit_static_abilities_on_enter(source);
+        stage_limited_dies_grants(&mut engine, source);
+        assert_eq!(take_staged_count(&mut engine), 2);
+        engine.state.active_player_idx = 1;
+        assert!(engine
+            .effective_triggered_abilities(source, "grizzly_bears", 0)
+            .is_empty());
+        engine.state.active_player_idx = 0;
+        engine.refresh_source_static_abilities(source);
+        stage_limited_dies_grants(&mut engine, source);
+        assert_eq!(
+            take_staged_count(&mut engine),
+            0,
+            "refresh and the same conditional grant retain provenance"
+        );
+    }
+
+    #[test]
+    fn issue_164_room_door_slots_survive_unlocking_an_earlier_door() {
+        let (mut engine, source) = trigger_limit_source();
+        let ability = limited_dies_ability(&engine);
+        let mut values = engine.copiable_values_for(source).unwrap();
+        let mut doors = engine
+            .registry
+            .get("glassworks_shattered_yard")
+            .unwrap()
+            .faces
+            .clone();
+        for door in &mut doors {
+            door.triggered_abilities = vec![ability.clone()];
+            door.static_abilities.clear();
+        }
+        values.room_faces = Some(doors);
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .copiable_values = Some(values);
+        engine.state.room_states.insert(
+            source,
+            RoomState {
+                unlocked: [false, true],
+            },
+        );
+        stage_limited_dies_grants(&mut engine, source);
+        assert_eq!(take_staged_count(&mut engine), 1);
+        engine.state.room_states.get_mut(&source).unwrap().unlocked[0] = true;
+        stage_limited_dies_grants(&mut engine, source);
+        assert_eq!(
+            take_staged_count(&mut engine),
+            1,
+            "only the newly unlocked door has an allowance"
+        );
+        stage_limited_dies_grants(&mut engine, source);
+        assert_eq!(take_staged_count(&mut engine), 0);
+    }
+
+    #[test]
+    fn issue_164_departed_grant_lki_keeps_the_consumed_identity() {
+        let (mut engine, source) = trigger_limit_source();
+        add_limited_grant(&mut engine, source, TriggerCondition::WhenSelfDies);
+        let snapshot = engine.trigger_source_snapshot(source).unwrap();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        assert!(engine.state.continuous_effects.is_empty());
+        let event = GameEvent::Dies {
+            source: snapshot,
+            was_creature: true,
+        };
+        engine.fire_triggers(std::slice::from_ref(&event));
+        assert_eq!(take_staged_count(&mut engine), 1);
+        engine.fire_triggers(&[event]);
+        assert_eq!(
+            take_staged_count(&mut engine),
+            0,
+            "lookback cannot reconstruct a fresh grant"
+        );
+    }
+
+    #[test]
+    fn issue_164_countering_and_repeated_cleanup_do_not_reset_usage() {
+        let (mut engine, source) = trigger_limit_source();
+        let mut ability = limited_dies_ability(&engine);
+        ability.effect = vec![SpellEffectKind::GainLife {
+            amount: Amount::Fixed(1),
+        }];
+        ability.targeting = None;
+        ability.may = false;
+        install_trigger_face(&mut engine, source, vec![ability]);
+        stage_limited_dies_grants(&mut engine, source);
+        let mut events = Vec::new();
+        engine.flush_staged_triggers(&mut events);
+        let trigger = engine.state.stack[0].id;
+        let turn = engine.state.turn_instance;
+        engine.state.turn_step = TurnStep::Cleanup;
+        engine.finish_cleanup_roll_new_turn(Vec::new()).unwrap();
+        assert!(engine.state.cleanup_priority_active);
+        assert_eq!(engine.state.turn_instance, turn);
+        let usage = engine.state.trigger_uses_this_turn.clone();
+        super::super::resolution::counter_stack_object_ref(
+            &mut engine,
+            StackObjectRef {
+                object_id: trigger,
+                zone_change_generation: None,
+            },
+            "test counter",
+            &mut events,
+        )
+        .unwrap();
+        assert!(engine.state.stack.is_empty());
+        assert!(events.iter().any(|e| matches!(&e.ev, Some(rv1::ruled_event::Ev::StackObjectCountered(c)) if c.object_id == trigger)));
+        stage_limited_dies_grants(&mut engine, source);
+        assert_eq!(take_staged_count(&mut engine), 0);
+        assert_eq!(engine.state.trigger_uses_this_turn, usage);
+        engine.finish_cleanup_roll_new_turn(Vec::new()).unwrap();
+        assert_eq!(engine.state.turn_instance, turn + 1);
+        assert!(engine.state.trigger_uses_this_turn.is_empty());
+    }
+
     #[test]
     fn issue_172_thresholds_overshoot_and_relative_players_share_snapshot_matching() {
         let mut engine = GameEngine::new(172012, &[0, 1], 20, None, true).unwrap();
@@ -1778,7 +2292,7 @@ mod tests {
                         player: CastTriggerPlayer::AnyPlayer,
                         amount,
                     };
-                    (index, ability)
+                    (index, ability, test_ability_origin(index))
                 })
                 .collect(),
         };
@@ -2024,8 +2538,10 @@ mod tests {
                     text: "Whenever enchanted player is attacked, draw a card.".into(),
                     may: false,
                     intervening_if: None,
+                    max_triggers_per_turn: None,
                     triggers_only_once: false,
                 },
+                test_ability_origin(0),
             )],
         };
         let attacker = |object_id| TriggerObjectRef {

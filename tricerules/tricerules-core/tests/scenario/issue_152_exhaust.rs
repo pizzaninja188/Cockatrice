@@ -26,6 +26,7 @@ fn grant_exhaust_ability(engine: &mut GameEngine, source: u32) {
     ability.activation_limit = Some(ActivationLimit::PerObject { max_activations: 1 });
     ability.text = "{1}: Add {G}, {U}, or {R}. Activate only once.".into();
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(source),
         kind: ContinuousEffectKind::GrantActivatedAbility(Box::new(ability)),
@@ -207,6 +208,7 @@ fn a_countered_exhaust_ability_remains_spent() {
         .clone();
     ability.activation_limit = Some(ActivationLimit::PerObject { max_activations: 1 });
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(source),
         kind: ContinuousEffectKind::GrantActivatedAbility(Box::new(ability)),

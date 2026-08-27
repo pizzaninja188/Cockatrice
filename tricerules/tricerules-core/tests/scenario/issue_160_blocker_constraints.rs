@@ -131,6 +131,7 @@ fn blocker_power_evasion_uses_derived_power_and_composes_with_flying() {
         .expect("boosted spider")
         .add_counters(CounterKind::PlusOnePlusOne, 1, timestamp);
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(vinebender),
         kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Flying),
@@ -244,6 +245,7 @@ fn maximum_one_plus_menace_makes_blocking_impossible_even_with_requirements() {
             .must_block_if_able = true;
     }
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(cavalry),
         kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Menace),
@@ -321,6 +323,7 @@ fn removing_safewright_cavalrys_abilities_removes_its_blocker_cap() {
     let first = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(cavalry),
         kind: ContinuousEffectKind::Layer6RemoveAllAbilities,

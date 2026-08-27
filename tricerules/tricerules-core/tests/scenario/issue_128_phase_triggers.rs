@@ -1,5 +1,6 @@
 use crate::helpers::*;
-use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
+use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration, InterveningIf};
+use tricerules_cards::{Amount, SpellEffectKind, TriggeredAbilityDef};
 use tricerules_cards::{CardRegistry, CastTriggerPlayer, CounterKind, Keyword, TriggerCondition};
 use tricerules_core::state::PlayerState;
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
@@ -345,10 +346,12 @@ fn simultaneous_phase_triggers_use_apnap_order_before_priority() {
     };
     ability.intervening_if = None;
     ability.triggers_only_once = false;
+    ability.max_triggers_per_turn = Some(1);
 
     for player in 0..3 {
         let source = inject_creature_on_battlefield(&mut engine, player, "grizzly_bears");
-        engine.state.continuous_effects.push(ContinuousEffect {
+        engine.state.add_triggered_ability_grant(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(source),
             kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability.clone())),
@@ -389,4 +392,205 @@ fn simultaneous_phase_triggers_use_apnap_order_before_priority() {
         &event.ev,
         Some(Ev::PhaseChanged(change)) if change.phase_id == PhaseId::BeginCombat as i32
     )));
+    assert_eq!(engine.state.trigger_uses_this_turn.len(), 3);
+}
+
+fn capped_phase_source(engine: &mut GameEngine, mut ability: TriggeredAbilityDef) -> u32 {
+    let source = inject_creature_on_battlefield(engine, 0, "grizzly_bears");
+    ability.trigger = TriggerCondition::AtBeginningOfCombat {
+        player: CastTriggerPlayer::AnyPlayer,
+    };
+    ability.triggers_only_once = false;
+    ability.max_triggers_per_turn = Some(1);
+    let mut face = CardRegistry::global()
+        .get("grizzly_bears")
+        .unwrap()
+        .primary_face()
+        .clone();
+    face.triggered_abilities = vec![ability];
+    engine
+        .state
+        .objects
+        .get_mut(&source)
+        .unwrap()
+        .copiable_values = Some(tricerules_core::state::CopiableValues {
+        source_card_id: "grizzly_bears".into(),
+        source_face_index: 0,
+        display_name: face.name.clone(),
+        face,
+        room_faces: None,
+    });
+    source
+}
+
+fn refire_begin_combat(engine: &mut GameEngine) -> RuledEventBatch {
+    // An extra combat's beginning is enough to retest a printed cap without implementing
+    // additional-combat effects. The phase transition and trigger are ordinary commands.
+    engine.state.turn_step = TurnStep::Main1;
+    engine.state.priority_idx = engine.state.active_player_idx;
+    engine.state.passes_since_stack_change = 0;
+    engine
+        .apply_command(engine.state.active_player_id(), &primitive_yield())
+        .unwrap()
+}
+
+#[test]
+fn issue_164_intervening_if_and_real_turn_rollover_preserve_trigger_caps() {
+    let mut engine = engine_at_main1(164_101);
+    let mut ability = CardRegistry::global()
+        .get("acrobatic_cheerleader")
+        .unwrap()
+        .primary_face()
+        .triggered_abilities[0]
+        .clone();
+    ability.effect = vec![SpellEffectKind::GainLife {
+        amount: Amount::Fixed(1),
+    }];
+    ability.intervening_if = Some(InterveningIf::SourceTapped);
+    let source = capped_phase_source(&mut engine, ability);
+    refire_begin_combat(&mut engine);
+    assert!(engine.state.stack.is_empty());
+    assert!(
+        engine.state.trigger_uses_this_turn.is_empty(),
+        "false intervening-if never triggers"
+    );
+    engine.state.objects.get_mut(&source).unwrap().tapped = true;
+    refire_begin_combat(&mut engine);
+    assert_eq!(engine.state.stack.len(), 1);
+    engine.state.objects.get_mut(&source).unwrap().tapped = false;
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(
+        engine.state.players[0].life, 20,
+        "the resolution-time check fails"
+    );
+    engine.state.objects.get_mut(&source).unwrap().tapped = true;
+    refire_begin_combat(&mut engine);
+    assert!(
+        engine.state.stack.is_empty(),
+        "failed resolution does not refund the cap"
+    );
+    let turn = engine.state.turn_instance;
+    finish_turn_from_begin_combat(&mut engine, 0);
+    assert_eq!(engine.state.turn_instance, turn + 1);
+    assert!(engine.state.trigger_uses_this_turn.is_empty());
+    advance_to_main1_from_game_start(&mut engine);
+    refire_begin_combat(&mut engine);
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "another player's turn restores the allowance"
+    );
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(engine.state.players[0].life, 21);
+}
+
+#[test]
+fn issue_164_decline_rejected_target_and_refresh_do_not_refund_a_trigger() {
+    let mut engine = engine_at_main1(164_102);
+    let ability = CardRegistry::global()
+        .get("gravedigger")
+        .unwrap()
+        .primary_face()
+        .triggered_abilities[0]
+        .clone();
+    let source = capped_phase_source(&mut engine, ability);
+    let graveyard_card = inject_graveyard_card(&mut engine, 0, "grizzly_bears");
+    refire_begin_combat(&mut engine);
+    assert_eq!(engine.state.pending_triggers.len(), 1);
+    let usage = engine.state.trigger_uses_this_turn.clone();
+    let command_index = engine.state.command_index;
+    assert!(engine
+        .apply_command(0, &choose_trigger_target(source))
+        .is_err());
+    assert_eq!(engine.state.command_index, command_index);
+    assert_eq!(engine.state.pending_triggers.len(), 1);
+    engine.initial_response_batch();
+    assert_eq!(engine.state.trigger_uses_this_turn, usage);
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                    decline: true,
+                    selected_modes: vec![],
+                    targets: vec![],
+                })),
+            },
+        )
+        .unwrap();
+    assert!(engine.state.pending_triggers.is_empty());
+    assert_eq!(engine.state.objects[&graveyard_card].zone, Zone::Graveyard);
+    refire_begin_combat(&mut engine);
+    assert!(engine.state.pending_triggers.is_empty());
+    assert_eq!(engine.state.trigger_uses_this_turn, usage);
+}
+
+#[test]
+fn issue_164_no_legal_targets_still_spends_the_trigger_allowance() {
+    let mut engine = engine_at_main1(164_103);
+    let mut ability = CardRegistry::global()
+        .get("gravedigger")
+        .unwrap()
+        .primary_face()
+        .triggered_abilities[0]
+        .clone();
+    ability.may = false;
+    capped_phase_source(&mut engine, ability);
+    refire_begin_combat(&mut engine);
+    assert!(engine.state.pending_triggers.is_empty());
+    assert!(engine.state.stack.is_empty());
+    assert_eq!(
+        engine
+            .state
+            .trigger_uses_this_turn
+            .values()
+            .copied()
+            .sum::<u32>(),
+        1
+    );
+    inject_graveyard_card(&mut engine, 0, "grizzly_bears");
+    refire_begin_combat(&mut engine);
+    assert!(
+        engine.state.pending_triggers.is_empty(),
+        "later legal targets cannot refund the earlier trigger"
+    );
+}
+
+#[test]
+fn issue_164_target_leaving_before_resolution_does_not_refund_the_cap() {
+    let mut engine = engine_at_main1(164_104);
+    let ability = CardRegistry::global()
+        .get("riling_dawnbreaker_signaling_roar")
+        .unwrap()
+        .primary_face()
+        .triggered_abilities[0]
+        .clone();
+    capped_phase_source(&mut engine, ability);
+    let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    inject_card_into_hand(&mut engine, 0, "unsummon");
+    refire_begin_combat(&mut engine);
+    engine
+        .apply_command(0, &choose_trigger_target(target))
+        .unwrap();
+    grant_pool(&mut engine, 0);
+    let command = cast_spell(
+        hand_index_for_card(&engine, 0, "unsummon"),
+        target_object(target),
+    );
+    engine.apply_command(0, &command).unwrap();
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(engine.state.objects[&target].zone, Zone::Hand);
+    assert!(engine.state.stack.is_empty());
+    inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    refire_begin_combat(&mut engine);
+    assert!(engine.state.pending_triggers.is_empty());
+    assert_eq!(
+        engine
+            .state
+            .trigger_uses_this_turn
+            .values()
+            .copied()
+            .sum::<u32>(),
+        1
+    );
 }

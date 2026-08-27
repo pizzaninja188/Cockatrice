@@ -28,6 +28,7 @@ fn big_board_characteristics_full_turn_stays_bounded() {
     // serialization, and SBA checks.
     for timestamp in 0..ANTHEM_PAIRS as u64 {
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::AllCreatures,
             kind: ContinuousEffectKind::PtModify {
@@ -39,6 +40,7 @@ fn big_board_characteristics_full_turn_stays_bounded() {
             timestamp,
         });
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::AllCreatures,
             kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Vigilance),

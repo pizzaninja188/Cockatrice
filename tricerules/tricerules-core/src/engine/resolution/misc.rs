@@ -280,6 +280,7 @@ pub(super) fn gain_control_until_end_of_turn(
         return Ok(EffectOutcome::Continue);
     }
     cx.engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: Some(cx.top.id),
         affected: AffectedScope::Single(target),
         kind: ContinuousEffectKind::Layer2Control {

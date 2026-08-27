@@ -117,7 +117,8 @@ fn separately_granted_firebending_instances_trigger_and_resolve_independently() 
         .primary_face()
         .triggered_abilities[0]
         .clone();
-    engine.state.continuous_effects.push(ContinuousEffect {
+    engine.state.add_triggered_ability_grant(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(warden),
         kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(firebending)),
@@ -154,7 +155,8 @@ fn a_creature_put_onto_the_battlefield_attacking_does_not_fire_its_granted_fireb
         .primary_face()
         .triggered_abilities[0]
         .clone();
-    engine.state.continuous_effects.push(ContinuousEffect {
+    engine.state.add_triggered_ability_grant(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::AllCreatures,
         kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(firebending)),

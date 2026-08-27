@@ -215,6 +215,7 @@ fn prodigal_sorcerer_lifelink_uses_the_shared_noncombat_damage_pipeline() {
     let source = inject_creature_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
     engine.state.players[0].life = 10;
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(source),
         kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Lifelink),
@@ -273,6 +274,7 @@ fn issue_175_noncombat_lifelink_preserves_damage_and_prevention() {
         let source = inject_creature_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
         inject_creature_on_battlefield(&mut engine, 1, "giant_cindermaw");
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(source),
             kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Lifelink),
@@ -311,6 +313,7 @@ fn rabid_bite_uses_creature_deathtouch_and_lifelink_after_prevention() {
     engine.state.players[0].life = 10;
     for keyword in [Keyword::Deathtouch, Keyword::Lifelink] {
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(source),
             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),

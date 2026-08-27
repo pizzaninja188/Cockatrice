@@ -92,6 +92,7 @@ fn cards_publish_the_exact_union_of_recursive_branches_without_duplicates() {
         .insert(CounterKind::PlusOnePlusOne, 2);
     let derived_flyer = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(derived_flyer),
         kind: ContinuousEffectKind::Layer6AddKeyword(tricerules_cards::primitives::Keyword::Flying),

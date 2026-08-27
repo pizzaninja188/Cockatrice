@@ -253,6 +253,7 @@ fn inactive_landwalk_still_obeys_flying_restriction() {
     inject_permanent_on_battlefield(&mut e, 1, "forest");
     let (boa, _) = advance_landwalk_attack_to_manual_blocks(&mut e, "river_boa");
     e.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(boa),
         kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Flying),

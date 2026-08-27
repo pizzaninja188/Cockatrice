@@ -887,11 +887,25 @@ pub struct TriggeredAbilityDef {
     /// object incarnation and therefore a fresh allowance.
     #[serde(default)]
     pub triggers_only_once: bool,
+    /// Printed trigger cap, as on Sharae of Numbing Depths and Raven of Fell Omens.
+    /// Consumed when the ability triggers (CR 603.2), not when its effect resolves.
+    /// This is distinct from Valiant, Expend, and CR 603.2h action-based limits.
+    /// None is unlimited; zero is invalid. If a lifetime limit is also present, both apply.
+    #[serde(default)]
+    pub max_triggers_per_turn: Option<u32>,
 }
 
 impl TriggeredAbilityDef {
+    pub(crate) fn validate_trigger_limit(&self) -> Result<(), String> {
+        if self.max_triggers_per_turn == Some(0) {
+            return Err("max_triggers_per_turn must be positive".into());
+        }
+        Ok(())
+    }
+
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
         self.trigger.validate()?;
+        self.validate_trigger_limit()?;
         if self.text.trim().is_empty() {
             return Err("triggered ability text must not be empty".into());
         }

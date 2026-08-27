@@ -2729,6 +2729,7 @@ mod attached_subject_tests {
             item.triggered_ability = Some(trigger.ability);
             item.trigger_context = trigger.trigger_context;
             engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
                 source_id: None,
                 affected: AffectedScope::Single(creature),
                 kind: ContinuousEffectKind::Layer2Control {
@@ -3078,6 +3079,7 @@ mod attached_subject_tests {
             text: "Choose, then gain more life.".into(),
             may: false,
             intervening_if: None,
+            max_triggers_per_turn: None,
             triggers_only_once: false,
         });
         let (effects, label) = engine.build_resolution_effects(&item);
@@ -3150,6 +3152,7 @@ mod attached_subject_tests {
             text: "Use the first live branch, then gain more life.".into(),
             may: false,
             intervening_if: None,
+            max_triggers_per_turn: None,
             triggers_only_once: false,
         });
         let (effects, label) = engine.build_resolution_effects(&item);
@@ -3210,6 +3213,7 @@ mod attached_subject_tests {
             text: "Choose if possible, then gain life.".into(),
             may: false,
             intervening_if: None,
+            max_triggers_per_turn: None,
             triggers_only_once: false,
         });
         let (effects, label) = engine.build_resolution_effects(&item);
@@ -3423,6 +3427,7 @@ mod source_keyword_tests {
         );
         engine.state.players[0].battlefield.push(source);
         engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(source),
             kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Deathtouch),

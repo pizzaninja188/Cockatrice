@@ -286,6 +286,84 @@ fn token_copy_and_populate_replay_identically() {
 }
 
 #[test]
+fn issue_164_token_copy_has_its_own_cap_and_accepted_commands_replay_identically() {
+    fn setup() -> (GameEngine, u32) {
+        let (mut engine, source) = token_copy_game("soul_warden");
+        let mut face = tricerules_cards::CardRegistry::global()
+            .get("soul_warden")
+            .unwrap()
+            .primary_face()
+            .clone();
+        face.triggered_abilities[0].max_triggers_per_turn = Some(1);
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .copiable_values = Some(tricerules_core::state::CopiableValues {
+            source_card_id: "soul_warden".into(),
+            source_face_index: 0,
+            display_name: face.name.clone(),
+            face,
+            room_faces: None,
+        });
+        for _ in 0..3 {
+            inject_card_into_hand(&mut engine, 0, "raise_the_alarm");
+        }
+        ensure_in_hand(&mut engine, 0, "cackling_counterpart");
+        grant_pool(&mut engine, 0);
+        (engine, source)
+    }
+    let (mut engine, source) = setup();
+    let mut commands = Vec::new();
+    let mut batches = Vec::new();
+    for (card, expected_life) in [
+        ("raise_the_alarm", 21),
+        ("cackling_counterpart", 21),
+        ("raise_the_alarm", 22),
+        ("raise_the_alarm", 22),
+    ] {
+        let targets = if card == "cackling_counterpart" {
+            target_object(source)
+        } else {
+            vec![]
+        };
+        let command = cast_spell(hand_index_for_card(&engine, 0, card), targets);
+        batches.push(engine.apply_command(0, &command).unwrap());
+        commands.push((0, command));
+        while !engine.state.stack.is_empty() {
+            assert!(
+                engine.state.pending_trigger_order.is_none(),
+                "caps suppress repeated entry occurrences before ordering"
+            );
+            for player in [0, 1] {
+                let command = pass();
+                batches.push(engine.apply_command(player, &command).unwrap());
+                commands.push((player, command));
+            }
+        }
+        assert_eq!(engine.state.players[0].life, expected_life);
+    }
+    assert_eq!(
+        engine.state.trigger_uses_this_turn.len(),
+        2,
+        "original and copied watcher have independent allowances"
+    );
+    let (mut replay, _) = setup();
+    let replayed = commands
+        .iter()
+        .map(|(player, command)| replay.apply_command(*player, command).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(replayed, batches);
+    assert_eq!(
+        replay.state.trigger_uses_this_turn,
+        engine.state.trigger_uses_this_turn
+    );
+    assert_eq!(replay.state.command_index, engine.state.command_index);
+    assert_eq!(replay.state.players[0].life, engine.state.players[0].life);
+}
+
+#[test]
 fn token_copy_inline_ability_revalidates_targets_after_source_disappears() {
     let (mut engine, source) = token_copy_game("prodigal_sorcerer");
     let mut face = tricerules_cards::CardRegistry::global()
@@ -828,6 +906,7 @@ fn clone_copies_printed_values_but_not_source_status_counters_damage_or_pump() {
         source_object.add_counters(CounterKind::Keyword(Keyword::Menace), 1, 2);
     }
     engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(source),
         kind: ContinuousEffectKind::PtModify {
