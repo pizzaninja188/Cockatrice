@@ -7,6 +7,44 @@ use super::resolution::resolve_creature_scope;
 use super::*;
 
 impl GameEngine {
+    /// CR 119.7 / 614.17: query the prohibition before committing a life-gain event.
+    /// Printed and copied abilities are live only on the battlefield and while not blanked
+    /// in layer 6. There is no historical source binding to retain after a zone change.
+    ///
+    /// Life-setting, exchanges/redistribution, and gain-life costs are not currently supported.
+    /// Future upward setters must use the gain funnel; exchanges and gain-life costs must
+    /// consult this query before committing any part of their transaction (CR 119.5 / 119.7).
+    pub(super) fn can_player_gain_life(&self, player: PlayerId) -> bool {
+        if self.state.player_idx(player).is_none() {
+            return false;
+        }
+        !self.state.objects.iter().any(|(&oid, object)| {
+            if object.zone != Zone::Battlefield
+                || object.face_down
+                || super::characteristics::latest_remove_all_abilities_timestamp(&self.state, oid)
+                    .is_some()
+            {
+                return false;
+            }
+            let Some(face) = self.effective_face(oid) else {
+                return false;
+            };
+            face.static_abilities.iter().any(|ability| {
+                let StaticAbilityDef::ProhibitLifeGain { players } = ability else {
+                    return false;
+                };
+                self.controller_of(oid).is_some_and(|controller| {
+                    super::history::relative_player_set_contains(
+                        &self.state,
+                        *players,
+                        controller,
+                        player,
+                    )
+                })
+            })
+        })
+    }
+
     pub(super) fn continuous_effect_condition_holds(&self, effect: &ContinuousEffect) -> bool {
         let Some(condition) = effect.condition.as_ref() else {
             return true;
@@ -90,6 +128,9 @@ impl GameEngine {
 
         for static_ability in statics {
             match static_ability {
+                StaticAbilityDef::ProhibitLifeGain { .. } => {
+                    // Queried at each life-gain event; no independent effect record is needed.
+                }
                 StaticAbilityDef::EntersAsCopy { .. } => {
                     // CR 614.12 / 707.5 entry replacement, handled before zone commitment in
                     // `engine::replacement`; there is no post-entry continuous effect to emit.

@@ -1,6 +1,6 @@
 use super::*;
 
-/// CR 118.3: `player` gains `amount` life — emit `LifeChanged`, log it, and fire
+/// CR 119.3 / 119.9: `player` gains `amount` life — emit `LifeChanged`, log it, and fire
 /// [`GameEvent::LifeGained`].
 ///
 /// The single funnel for every life *gain* edge (spell effects, drain, exile-for-life, lifelink),
@@ -10,7 +10,8 @@ use super::*;
 ///
 /// One call is one life-gain event, so callers must not pre-sum unrelated gains: two lifelink
 /// creatures in the same damage step gain separately and trigger separately. A gain of 0 is not an
-/// event (CR 118.4) — no life change, no log line, no trigger.
+/// event (CR 119.9) — no life change, no log line, no trigger. The same is true of a
+/// prohibited gain (CR 119.7 / 614.17); the enclosing spell or ability still resolves.
 ///
 /// `reason` is the parenthetical shown in the game log (a spell label, or "lifelink").
 pub(in crate::engine) fn apply_life_gain(
@@ -35,7 +36,7 @@ pub(in crate::engine) fn apply_life_gain_without_triggers(
     amount: u32,
     reason: &str,
 ) -> Option<GameEvent> {
-    if amount == 0 {
+    if amount == 0 || !engine.can_player_gain_life(player) {
         return None;
     }
     let pi = engine.state.player_idx(player)?;
@@ -279,6 +280,178 @@ pub(super) fn drain_target(
 mod tests {
     use super::*;
     use crate::state::PlayerState;
+
+    fn prohibition_source(engine: &mut GameEngine, player: PlayerId) -> ObjectId {
+        let pi = engine.state.player_idx(player).unwrap();
+        let source = engine.state.players[pi].hand[0];
+        engine.state.objects.get_mut(&source).unwrap().card_id = "giant_cindermaw".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .expect("put prohibition source onto battlefield");
+        source
+    }
+
+    #[test]
+    fn issue_175_relative_prohibitions_follow_derived_control_in_three_seats() {
+        for scope in [
+            RelativePlayerSet::All,
+            RelativePlayerSet::Controller,
+            RelativePlayerSet::Opponents,
+        ] {
+            let mut engine = GameEngine::new(175_101, &[10, 20], 20, None, true).unwrap();
+            engine.state.players.push(PlayerState::new(30, 20));
+            let source = prohibition_source(&mut engine, 20);
+            let mut values = engine.copiable_values_for(source).unwrap();
+            values.face.static_abilities =
+                vec![StaticAbilityDef::ProhibitLifeGain { players: scope }];
+            engine
+                .state
+                .objects
+                .get_mut(&source)
+                .unwrap()
+                .copiable_values = Some(values);
+            for controller in [20, 30] {
+                if controller == 30 {
+                    engine.state.continuous_effects.push(ContinuousEffect {
+                        source_id: None,
+                        affected: AffectedScope::Single(source),
+                        kind: ContinuousEffectKind::Layer2Control {
+                            controller: tricerules_cards::ControllerReference::Fixed(30),
+                        },
+                        condition: None,
+                        duration: EffectDuration::UntilEndOfTurn,
+                        timestamp: engine.state.command_index,
+                    });
+                }
+                for player in [10, 20, 30] {
+                    let prohibited = match scope {
+                        RelativePlayerSet::All => true,
+                        RelativePlayerSet::Controller => player == controller,
+                        RelativePlayerSet::Opponents => player != controller,
+                    };
+                    let before =
+                        engine.state.players[engine.state.player_idx(player).unwrap()].life;
+                    let mut events = Vec::new();
+                    let gained = apply_life_gain_without_triggers(
+                        &mut engine,
+                        &mut events,
+                        player,
+                        1,
+                        "scope test",
+                    );
+                    assert_eq!(
+                        gained.is_none(),
+                        prohibited,
+                        "{scope:?}: controller {controller}, recipient {player}"
+                    );
+                    assert_eq!(
+                        engine.state.players[engine.state.player_idx(player).unwrap()].life,
+                        before + i32::from(!prohibited)
+                    );
+                    assert_eq!(
+                        events.is_empty(),
+                        prohibited,
+                        "prohibited gains emit no log or life event"
+                    );
+                }
+                assert_eq!(engine.state.objects[&source].owner, 20);
+            }
+        }
+    }
+
+    #[test]
+    fn issue_175_prohibition_tracks_copy_blanking_face_down_and_zone_lifetime() {
+        let mut engine = GameEngine::new(175_102, &[0, 1], 20, None, true).unwrap();
+        let source = prohibition_source(&mut engine, 0);
+        let second = prohibition_source(&mut engine, 1);
+        let values = engine.copiable_values_for(source).unwrap();
+        let copy = engine.state.objects.get_mut(&second).unwrap();
+        copy.card_id = "clone".into();
+        copy.copiable_values = Some(values);
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        assert!(
+            !engine.can_player_gain_life(0),
+            "the remaining copy still prohibits gain"
+        );
+        engine.state.objects.get_mut(&second).unwrap().face_down = true;
+        assert!(engine.can_player_gain_life(0));
+        engine.state.objects.get_mut(&second).unwrap().face_down = false;
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(second),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+        assert!(
+            engine.can_player_gain_life(0),
+            "copied printed abilities can be removed"
+        );
+        engine.state.continuous_effects.clear();
+        assert!(
+            !engine.can_player_gain_life(0),
+            "restoring abilities restores the prohibition"
+        );
+        move_object_to_zone(&mut engine.state, engine.registry, second, Zone::Hand, None).unwrap();
+        assert!(
+            engine.can_player_gain_life(0),
+            "no stale prohibition after the last source leaves"
+        );
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            second,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        assert!(
+            engine.can_player_gain_life(0),
+            "a new Clone occurrence does not retain copied values"
+        );
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        assert!(
+            !engine.can_player_gain_life(0),
+            "a returned Cindermaw has its printed ability"
+        );
+    }
+
+    #[test]
+    fn issue_175_zero_or_unknown_recipient_gains_emit_nothing() {
+        let mut engine = GameEngine::new(175_103, &[0, 1], 20, None, true).unwrap();
+        for (player, amount) in [(0, 0), (99, 3)] {
+            let mut events = Vec::new();
+            assert!(apply_life_gain_without_triggers(
+                &mut engine,
+                &mut events,
+                player,
+                amount,
+                "no gain"
+            )
+            .is_none());
+            assert!(events.is_empty());
+        }
+    }
 
     #[test]
     fn lose_life_recipient_sets_are_player_generic_and_skip_lost_players() {

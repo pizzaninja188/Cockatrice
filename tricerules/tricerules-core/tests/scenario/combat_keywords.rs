@@ -462,6 +462,39 @@ fn non_vigilance_attacker_still_taps() {
 // Tests for CR 702.15b: damage dealt by a lifelink permanent also causes its
 // controller to gain that much life.
 
+#[test]
+fn issue_175_lethally_damaged_cindermaw_still_prohibits_simultaneous_lifelink() {
+    let mut e = GameEngine::new(175_201, &[0, 1], 20, None, true).unwrap();
+    advance_to_declare_attackers(&mut e);
+    let attacker = inject_creature_with_stats(&mut e, 0, "giant_cindermaw", 4, 3);
+    let blocker = inject_creature_with_stats(&mut e, 1, "vampire_nighthawk", 2, 3);
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .unwrap();
+    pass_both_players(&mut e);
+    e.apply_command(
+        1,
+        &declare_blockers(vec![BlockPair {
+            attacker_id: attacker,
+            blocker_id: blocker,
+        }]),
+    )
+    .unwrap();
+    pass_both_players(&mut e);
+    e.apply_command(
+        0,
+        &assign_combat_damage_cmd_with_player(attacker, vec![(blocker, 3)], 1),
+    )
+    .unwrap();
+    assert_eq!(
+        e.state.objects[&attacker].zone,
+        tricerules_core::Zone::Graveyard,
+        "deathtouch kills Cindermaw at the SBA boundary"
+    );
+    assert_eq!(
+        e.state.players[1].life, 19,
+        "trample deals 1; Nighthawk's simultaneous lifelink is prohibited"
+    );
+}
 /// An unblocked lifelink attacker deals damage to the defending player AND its
 /// controller gains that much life simultaneously (CR 702.15b).
 /// Child of Night (2/1 Lifelink) attacks unblocked — P1 loses 2 life, P0 gains 2.

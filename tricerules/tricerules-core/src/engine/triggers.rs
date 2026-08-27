@@ -208,6 +208,18 @@ impl GameEngine {
             let mut event_triggers = self.collect_triggers(event, &sources);
             for trigger in &mut event_triggers {
                 trigger.trigger_context.affected_player = trigger_player;
+                // Rampaging Ferocidon needs the entering creature's controller, and Aether
+                // Flash needs the creature itself. Reuse the generation-bound reference so
+                // either instruction follows current characteristics or the correct LKI.
+                if let GameEvent::EntersBattlefield { object_id } = event {
+                    if matches!(
+                        trigger.ability.trigger,
+                        TriggerCondition::WheneverPermanentEntersBattlefield { .. }
+                    ) {
+                        trigger.trigger_context.observed_object =
+                            self.trigger_object_ref(*object_id);
+                    }
+                }
             }
             collected.extend(event_triggers);
         }

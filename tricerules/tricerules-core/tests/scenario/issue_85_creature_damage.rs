@@ -266,6 +266,39 @@ fn prodigal_damage_feeds_general_damage_triggers_only_when_damage_is_dealt() {
 }
 
 #[test]
+fn issue_175_noncombat_lifelink_preserves_damage_and_prevention() {
+    for prevented in [false, true] {
+        let mut engine = GameEngine::new(175_401, &[0, 1], 20, None, true).unwrap();
+        advance_to_main1_from_game_start(&mut engine);
+        let source = inject_creature_on_battlefield(&mut engine, 0, "prodigal_sorcerer");
+        inject_creature_on_battlefield(&mut engine, 1, "giant_cindermaw");
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Lifelink),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+        if prevented {
+            engine.state.add_damage_prevention_shield(1, 1);
+        }
+        engine
+            .apply_command(0, &activate_ability(source, 0, target_player(1)))
+            .unwrap();
+        resolve_entire_stack_two_player(&mut engine);
+        assert_eq!(
+            engine.state.players[0].life, 20,
+            "no noncombat lifelink gain"
+        );
+        assert_eq!(
+            engine.state.players[1].life,
+            if prevented { 20 } else { 19 }
+        );
+    }
+}
+
+#[test]
 fn rabid_bite_uses_creature_deathtouch_and_lifelink_after_prevention() {
     let decks = Some(vec![
         deck_with("forest", &["rabid_bite", "grizzly_bears"]),

@@ -115,6 +115,40 @@ fn clone_chooses_its_copy_source_during_resolution_not_casting() {
 }
 
 #[test]
+fn issue_175_clone_copies_the_life_gain_prohibition() {
+    let (mut engine, source) = resolving_clone_with_source("giant_cindermaw", 175_501);
+    engine
+        .apply_command(0, &submit_resolution_choice(vec![source]))
+        .unwrap();
+    let clone = battlefield_object_for_card(&engine, 0, "clone");
+    assert_eq!(engine.effective_power(clone), Some(4));
+    assert_eq!(engine.effective_toughness(clone), Some(3));
+    // Leave the real copy as the only prohibition source, then activate an ordinary gain.
+    engine.enable_dev_commands();
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: 1,
+                    dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                        zone: DevZone::Graveyard as i32,
+                        card_name: "Giant Cindermaw".into(),
+                        ready: false,
+                    })),
+                })),
+            },
+        )
+        .unwrap();
+    let gnomes = inject_creature_on_battlefield(&mut engine, 0, "bottle_gnomes");
+    engine
+        .apply_command(0, &activate_ability(gnomes, 0, vec![]))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(engine.state.players[0].life, 20);
+}
+
+#[test]
 fn countered_clone_never_emits_a_copy_source_choice() {
     let decks = Some(vec![
         vec![

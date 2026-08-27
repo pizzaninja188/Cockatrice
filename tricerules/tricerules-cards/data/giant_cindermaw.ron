@@ -1,0 +1,10 @@
+(
+  id: "giant_cindermaw",
+  name: "Giant Cindermaw",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Dinosaur", "Beast"],
+  power: 4,
+  toughness: 3,
+  keywords: [Trample],
+  static_abilities: [ProhibitLifeGain(players: All)],
+)

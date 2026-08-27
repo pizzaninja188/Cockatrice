@@ -764,6 +764,139 @@ fn two_blood_artists_both_trigger_on_one_death() {
 // "Whenever you gain life" (CR 118.3) — Ajani's Pridemate, Bloodthirsty Aerialist
 // ===========================================================================
 
+#[test]
+fn issue_175_prohibited_gain_does_not_change_life_or_trigger_pridemate() {
+    let mut e = anthem_engine(175_001, "angels_mercy");
+    inject_creature_on_battlefield(&mut e, 1, "giant_cindermaw");
+    let pridemate = inject_creature_on_battlefield(&mut e, 0, "ajanis_pridemate");
+    let life_before = e.state.players[0].life;
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "angels_mercy");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("gain spells remain legal");
+    e.apply_command(0, &pass()).expect("caster passes");
+    let batch = e.apply_command(1, &pass()).expect("resolve Angel's Mercy");
+
+    assert_eq!(
+        e.state.players[0].life, life_before,
+        "Cindermaw prohibits the gain"
+    );
+    assert!(!batch.events.iter().any(|event| matches!(
+        event.ev.as_ref(), Some(Ev::LifeChanged(life)) if life.delta > 0
+    )));
+    assert!(e.state.stack.is_empty(), "no life-gain trigger was created");
+    assert_eq!(e.effective_power(pridemate), Some(2));
+}
+
+#[test]
+fn issue_175_ferocidon_damages_the_entering_creatures_controller() {
+    for source_controller in [0, 1] {
+        let mut e = anthem_engine(175_002, "grizzly_bears");
+        inject_creature_on_battlefield(&mut e, source_controller, "rampaging_ferocidon");
+        grant_pool(&mut e, 0);
+        let idx = hand_index_for_card(&e, 0, "grizzly_bears");
+        e.apply_command(0, &cast_spell(idx, vec![]))
+            .expect("cast creature");
+        resolve_entire_stack_two_player(&mut e);
+        assert_eq!(
+            e.state.players[0].life, 19,
+            "entering creature's controller takes damage"
+        );
+        assert_eq!(e.state.players[1].life, 20);
+    }
+}
+
+#[test]
+fn issue_175_swords_checks_the_prohibition_after_exiling_its_target() {
+    for (exile_source, second_source, expected_gain) in
+        [(true, false, 4), (true, true, 0), (false, false, 0)]
+    {
+        let mut e = anthem_engine(175_003, "swords_to_plowshares");
+        let source = inject_creature_with_stats(&mut e, 1, "giant_cindermaw", 4, 3);
+        let target = if exile_source {
+            source
+        } else {
+            inject_creature_on_battlefield(&mut e, 1, "grizzly_bears")
+        };
+        if second_source {
+            inject_creature_on_battlefield(&mut e, 0, "giant_cindermaw");
+        }
+        grant_pool(&mut e, 0);
+        let idx = hand_index_for_card(&e, 0, "swords_to_plowshares");
+        e.apply_command(0, &cast_spell(idx, trigger_targets(target)))
+            .unwrap();
+        resolve_entire_stack_two_player(&mut e);
+        assert_eq!(e.state.objects[&target].zone, tricerules_core::Zone::Exile);
+        assert_eq!(e.state.players[1].life, 20 + expected_gain);
+    }
+}
+
+#[test]
+fn issue_175_activated_triggered_and_targeted_gains_use_the_prohibition() {
+    let mut e = anthem_engine(175_004, "dawning_angel");
+    inject_creature_on_battlefield(&mut e, 1, "giant_cindermaw");
+    let gnomes = inject_creature_on_battlefield(&mut e, 0, "bottle_gnomes");
+    e.apply_command(0, &activate_ability(gnomes, 0, vec![]))
+        .unwrap();
+    let command_index = e.state.command_index;
+    assert!(
+        e.apply_command(0, &activate_ability(gnomes, 0, vec![]))
+            .is_err(),
+        "the sacrificed source cannot activate twice"
+    );
+    assert_eq!(e.state.command_index, command_index);
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.objects[&gnomes].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert_eq!(
+        e.state.players[0].life, 20,
+        "the cost is paid but the gain is prohibited"
+    );
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "dawning_angel");
+    e.apply_command(0, &cast_spell(idx, vec![])).unwrap();
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.players[0].life, 20, "ETB gain is prohibited");
+
+    let mut e = anthem_engine(175_005, "healing_salve");
+    inject_creature_on_battlefield(&mut e, 1, "giant_cindermaw");
+    grant_pool(&mut e, 0);
+    let idx = hand_index_for_card(&e, 0, "healing_salve");
+    e.apply_command(0, &cast_modal_spell(idx, vec![(0, target_player(1))]))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.players[1].life, 20,
+        "targeted gains remain legal but do nothing"
+    );
+}
+
+#[test]
+fn issue_175_rejected_cast_does_not_change_accepted_command_replay() {
+    use prost::Message;
+    fn run(reject_first: bool) -> Vec<RuledEventBatch> {
+        let mut e = anthem_engine(175_006, "angels_mercy");
+        inject_creature_on_battlefield(&mut e, 1, "giant_cindermaw");
+        let idx = hand_index_for_card(&e, 0, "angels_mercy");
+        let encoded = cast_spell(idx, vec![]).encode_to_vec();
+        let command = RuledCommand::decode(encoded.as_slice()).unwrap();
+        if reject_first {
+            assert!(e.apply_command(0, &command).is_err(), "no mana to pay yet");
+        }
+        grant_pool(&mut e, 0);
+        let batches = vec![
+            e.apply_command(0, &command).unwrap(),
+            e.apply_command(0, &pass()).unwrap(),
+            e.apply_command(1, &pass()).unwrap(),
+        ];
+        assert_eq!(e.state.players[0].life, 20);
+        batches
+    }
+    assert_eq!(run(false), run(true));
+}
+
 /// The gain funnel fires the trigger once per life-gain event, whatever the amount:
 /// Angel's Mercy gains 7 life and grows Ajani's Pridemate by exactly one counter.
 #[test]

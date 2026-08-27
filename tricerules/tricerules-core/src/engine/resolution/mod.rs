@@ -320,7 +320,19 @@ fn trigger_object_controller(engine: &GameEngine, top: &StackItem) -> Option<Pla
     if is_current {
         engine.controller_of(trigger_object.object_id)
     } else {
-        Some(trigger_object.controller_at_event)
+        // Control can change between the observed event and departure. CR 608.2h reads the
+        // last controller of that occurrence, never a new occurrence with the same ObjectId.
+        Some(
+            engine
+                .state
+                .last_known_controller_by_generation
+                .get(&(
+                    trigger_object.object_id,
+                    trigger_object.zone_change_generation,
+                ))
+                .copied()
+                .unwrap_or(trigger_object.controller_at_event),
+        )
     }
 }
 
@@ -2624,6 +2636,160 @@ mod attached_subject_tests {
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
+        }
+    }
+
+    #[test]
+    fn issue_175_ferocidon_simultaneous_entry_uses_current_or_last_known_controller() {
+        for departure in [0, 1, 2] {
+            let mut engine = GameEngine::new_with_default_decks(175_301, &[0, 1], 20).unwrap();
+            let ferocidon = add_battlefield_object(&mut engine, 1, "rampaging_ferocidon");
+            let creature = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+            let triggers = engine.collect_event_triggers(&[
+                GameEvent::EntersBattlefield {
+                    object_id: ferocidon,
+                },
+                GameEvent::EntersBattlefield {
+                    object_id: creature,
+                },
+            ]);
+            assert_eq!(triggers.len(), 1, "another creature triggers even during simultaneous entry; Ferocidon excludes itself");
+            let trigger = triggers.into_iter().next().unwrap();
+            let mut item = triggered_item(ferocidon, 0);
+            item.controller = 1;
+            item.card_id = "rampaging_ferocidon".into();
+            item.triggered_ability = Some(trigger.ability);
+            item.trigger_context = trigger.trigger_context;
+            engine.state.continuous_effects.push(ContinuousEffect {
+                source_id: None,
+                affected: AffectedScope::Single(creature),
+                kind: ContinuousEffectKind::Layer2Control {
+                    controller: tricerules_cards::ControllerReference::Fixed(1),
+                },
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: engine.state.command_index,
+            });
+            let mut events = Vec::new();
+            engine.apply_sbas(&mut events).unwrap();
+            if departure > 0 {
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    creature,
+                    Zone::Hand,
+                    None,
+                )
+                .unwrap();
+            }
+            if departure == 2 {
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    creature,
+                    Zone::Battlefield,
+                    None,
+                )
+                .unwrap();
+                assert_eq!(
+                    engine.controller_of(creature),
+                    Some(0),
+                    "new occurrence belongs to its owner"
+                );
+            }
+            let (effects, label) = engine.build_resolution_effects(&item);
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut events)
+                .unwrap();
+            assert_eq!(
+                engine.state.players[0].life, 20,
+                "event-time controller is not necessarily last known; departure={departure}"
+            );
+            assert_eq!(
+                engine.state.players[1].life, 19,
+                "current or last-known controller takes damage; departure={departure}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_175_gain_routes_continue_the_effect_tail_and_preserve_loss() {
+        let player_target = TargetFilter {
+            kind: TargetKind::AnyPlayer,
+            ..Default::default()
+        };
+        let cases = [
+            (
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(3),
+                },
+                vec![],
+                0,
+            ),
+            (
+                SpellEffectKind::TargetPlayerGainsLife {
+                    amount: 3,
+                    target: player_target.clone(),
+                },
+                vec![0],
+                0,
+            ),
+            (
+                SpellEffectKind::DrainTarget {
+                    amount: 3,
+                    target: player_target,
+                },
+                vec![1],
+                3,
+            ),
+            (
+                SpellEffectKind::EachOpponentLosesLifeYouGainEqual { amount: 3 },
+                vec![],
+                3,
+            ),
+        ];
+        for (effect, targets, lost) in cases {
+            for prohibited in [false, true] {
+                let mut engine = GameEngine::new_with_default_decks(175_302, &[0, 1], 20).unwrap();
+                let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+                if prohibited {
+                    add_battlefield_object(&mut engine, 1, "giant_cindermaw");
+                }
+                let item = triggered_item(source, 0);
+                let library_before = engine.state.players[0].library.len();
+                let mut events = Vec::new();
+                let entries = [
+                    effect.clone(),
+                    SpellEffectKind::Draw {
+                        count: Amount::Fixed(1),
+                        who: PlayerRecipient::Controller,
+                    },
+                ]
+                .into_iter()
+                .map(|effect| ResolutionEffect {
+                    effect,
+                    targets: targets.clone(),
+                    target_damage: vec![],
+                    target_group_indices: vec![0; targets.len()],
+                    role_group_indices: vec![],
+                })
+                .collect();
+                engine
+                    .run_effect_list(&item, "gain then draw", entries, 0, &mut events)
+                    .unwrap();
+                assert_eq!(
+                    engine.state.players[0].life,
+                    if prohibited { 20 } else { 23 },
+                    "{effect:?}"
+                );
+                assert_eq!(engine.state.players[1].life, 20 - lost);
+                assert_eq!(
+                    engine.state.players[0].library.len(),
+                    library_before - 1,
+                    "the draw tail still resolves"
+                );
+                assert_eq!(events.iter().any(|event| matches!(event.ev.as_ref(), Some(rv1::ruled_event::Ev::LifeChanged(life)) if life.delta > 0)), !prohibited);
+            }
         }
     }
 

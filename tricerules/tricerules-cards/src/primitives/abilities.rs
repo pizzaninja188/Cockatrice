@@ -607,6 +607,7 @@ impl TriggerCondition {
         matches!(
             self,
             Self::WheneverSelfBlocksCreature { .. }
+                | Self::WheneverPermanentEntersBattlefield { .. }
                 | Self::WheneverSelfBecomesBlockedByCreature { .. }
                 | Self::WheneverAttachedObjectAttacks
                 | Self::WheneverAttachedObjectBecomesTapped
@@ -1138,6 +1139,10 @@ pub enum SpecialActionAffected {
 /// do not use the stack, unlike triggered and activated abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// CR 119.7 / 614.17: selected players cannot gain life while this ability is active.
+    /// Giant Cindermaw and Rampaging Ferocidon affect all players. This is a prohibition,
+    /// not damage prevention or a replacement effect, and is queried at each attempted gain.
+    ProhibitLifeGain { players: RelativePlayerSet },
     /// CR 614.12 / 707.5: as this permanent enters, its controller may replace its copiable
     /// values with those of a live battlefield permanent matching `filter`. This is a selection,
     /// not a target; Clone and Stunt Double therefore ignore hexproof and shroud.
