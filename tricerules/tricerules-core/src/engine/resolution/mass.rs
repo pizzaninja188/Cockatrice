@@ -77,7 +77,7 @@ pub(super) fn destroy_attached(
             )));
             continue;
         }
-        let (regenerated, tap_event) = consume_regen_shield(&mut engine.state, oid, events);
+        let (regenerated, tap_event) = consume_regen_shield(engine, oid, events);
         if regenerated {
             tap_events.extend(tap_event);
             events.push(ev_log(format!("{name} regenerates.")));
@@ -153,7 +153,7 @@ pub(super) fn destroy_all(
         }
         // CR 701.19c: "can't be regenerated" bypasses shields.
         if !prevent_regeneration {
-            let (regenerated, tap_event) = consume_regen_shield(&mut engine.state, tid, events);
+            let (regenerated, tap_event) = consume_regen_shield(engine, tid, events);
             if regenerated {
                 tap_events.extend(tap_event);
                 events.push(ev_log(format!("{tgt} regenerates.")));

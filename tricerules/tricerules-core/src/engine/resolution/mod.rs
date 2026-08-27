@@ -2510,11 +2510,12 @@ mod zone_card_filter_tests {
 /// `false` if no shield exists.
 /// Does NOT emit a zone-change event (the creature stays on the battlefield).
 pub(super) fn consume_regen_shield(
-    state: &mut GameState,
+    engine: &mut GameEngine,
     oid: ObjectId,
     events: &mut Vec<rv1::RuledEvent>,
 ) -> (bool, Option<GameEvent>) {
-    let shields = state
+    let shields = engine
+        .state
         .objects
         .get(&oid)
         .map(|o| o.regeneration_shields)
@@ -2524,7 +2525,13 @@ pub(super) fn consume_regen_shield(
     }
     // CR 701.19a: regenerating taps the permanent — a real "becomes tapped" edge, so it goes
     // through the shared funnel rather than writing the flag inline.
-    let tap_event = super::become_tapped(state, oid);
+    // CR 701.19: the permanent's controller taps it, not the shield's creator or destroyer.
+    let actor = engine
+        .characteristics(oid)
+        .map(|c| c.controller)
+        .unwrap_or(engine.state.objects[&oid].controller);
+    let tap_event = engine.tap_permanents(actor, &[oid]).pop();
+    let state = &mut engine.state;
     if let Some(o) = state.objects.get_mut(&oid) {
         o.regeneration_shields -= 1;
         o.damage = 0;

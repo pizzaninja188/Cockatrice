@@ -281,6 +281,13 @@ pub enum TriggerCondition {
     /// Whenever the object this Aura or Equipment is attached to changes from untapped to
     /// tapped. The attached object's event-time identity is supplied as `TriggerObject`.
     WheneverAttachedObjectBecomesTapped,
+    /// Solitary Sanctuary and Icewrought Sentry observe each creature; Sharae observes one or
+    /// more per tap action (CR 603.2c, 701.26). Both relationships are relative to this source.
+    WheneverPlayerTapsCreature {
+        player: CastTriggerPlayer,
+        controllers: RelativePlayerSet,
+        cardinality: TapTriggerCardinality,
+    },
     /// When this permanent moves from the battlefield to any other zone. Uses the source's
     /// immediately-prior characteristics and controller under CR 603.10a.
     WhenSelfLeavesBattlefield,
@@ -626,6 +633,10 @@ impl TriggerCondition {
                 | Self::WheneverSelfBecomesBlockedByCreature { .. }
                 | Self::WheneverAttachedObjectAttacks
                 | Self::WheneverAttachedObjectBecomesTapped
+                | Self::WheneverPlayerTapsCreature {
+                    cardinality: TapTriggerCardinality::EachObject,
+                    ..
+                }
                 | Self::WheneverAttachedObjectDies
                 | Self::WheneverAttachedObjectDealsCombatDamageToPlayer
                 | Self::WheneverAttachedObjectIsDealtDamage
@@ -817,6 +828,13 @@ pub enum CastTriggerPlayer {
     Opponent,
     /// "Whenever a player casts" — any player including the controller.
     AnyPlayer,
+}
+
+/// Multiplicity within one committed tap instruction, independent of a printed per-turn cap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TapTriggerCardinality {
+    EachObject,
+    OneOrMorePerAction,
 }
 
 /// Which kind of object choosing targets can satisfy a becomes-the-target trigger.

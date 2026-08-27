@@ -641,12 +641,9 @@ impl GameEngine {
                 }
             }
             ResolutionCost::TapPermanents { .. } => {
-                let mut tap_events = Vec::new();
+                let tap_events = self.tap_permanents(pending.deciding_player, chosen);
                 for oid in chosen {
                     let name = object_display_name(&self.state, self.registry, *oid);
-                    if let Some(event) = crate::engine::become_tapped(&mut self.state, *oid) {
-                        tap_events.push(event);
-                    }
                     ev.push(ev_log(format!("P{} taps {name}.", pending.deciding_player)));
                 }
                 self.fire_triggers(&tap_events);

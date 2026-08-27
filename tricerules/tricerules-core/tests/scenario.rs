@@ -135,6 +135,8 @@ mod issue_161_turn_boundaries;
 mod issue_162_tapped_tokens;
 #[path = "scenario/issue_163_calibration_cards.rs"]
 mod issue_163_calibration_cards;
+#[path = "scenario/issue_169_actor_aware_taps.rs"]
+mod issue_169_actor_aware_taps;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

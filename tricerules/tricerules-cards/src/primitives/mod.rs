@@ -17,6 +17,34 @@ pub use targeting::*;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn issue_169_tap_trigger_cardinalities_are_typed() {
+        for cardinality in ["EachObject", "OneOrMorePerAction"] {
+            let definition = format!(
+                "WheneverPlayerTapsCreature(player: Controller, controllers: Opponents, cardinality: {cardinality})"
+            );
+            assert!(
+                ron::from_str::<super::TriggerCondition>(&definition).is_ok(),
+                "actor-aware tap trigger must deserialize: {definition}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_169_grouped_taps_cannot_pretend_to_supply_one_observed_object() {
+        for (cardinality, valid) in [("EachObject", true), ("OneOrMorePerAction", false)] {
+            let definition = format!(
+                r#"(
+                trigger: WheneverPlayerTapsCreature(player: Controller, controllers: Opponents, cardinality: {cardinality}),
+                effect: [PutCounters(counter: Stun, count: 1, subject: TriggerObject)],
+                text: "Observed creature counter",
+            )"#
+            );
+            let ability: super::TriggeredAbilityDef = ron::from_str(&definition).unwrap();
+            assert_eq!(ability.validate_shape().is_ok(), valid);
+        }
+    }
+
     use super::*;
 
     #[test]

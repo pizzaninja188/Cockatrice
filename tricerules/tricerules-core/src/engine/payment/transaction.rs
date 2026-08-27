@@ -24,6 +24,8 @@ enum CostDebit {
         object_id: ObjectId,
         generation: u64,
     },
+    /// One authored multi-permanent tap component, distinct from a separate source {T} cost.
+    TapGroup(Vec<(ObjectId, u64)>),
     Mana(ManaPaymentPlan),
     Discard {
         object_id: ObjectId,
@@ -166,11 +168,11 @@ pub(in crate::engine) struct PreparedSpellCosts {
 
 impl PreparedSpellCosts {
     pub fn can_convoke(&self, oid: ObjectId) -> bool {
-        !self
-            .transaction
-            .debits
-            .iter()
-            .any(|d| matches!(d, CostDebit::Tap { object_id, .. } if *object_id == oid))
+        !self.transaction.debits.iter().any(|d| match d {
+            CostDebit::Tap { object_id, .. } => *object_id == oid,
+            CostDebit::TapGroup(objects) => objects.iter().any(|(id, _)| *id == oid),
+            _ => false,
+        })
     }
 
     pub fn finish_explicit(
@@ -191,14 +193,13 @@ impl PreparedSpellCosts {
             .convoke
             .iter()
             .filter_map(|c| c.object.as_ref())
-            .map(|c| CostDebit::Tap {
-                object_id: c.object_id,
-                generation: c.zone_change_generation,
-            })
+            .map(|c| (c.object_id, c.zone_change_generation))
             .collect::<Vec<_>>();
         // CR 601.2h permits tapping for Convoke before sacrificing the same creature as another
         // cost. A second tap is forbidden by can_convoke; sacrifice is deliberately not excluded.
-        self.transaction.debits.splice(0..0, taps);
+        if !taps.is_empty() {
+            self.transaction.debits.insert(0, CostDebit::TapGroup(taps));
+        }
         self.transaction.debits.insert(0, CostDebit::Mana(mana));
         Ok(self.transaction)
     }
@@ -563,6 +564,7 @@ impl GameEngine {
                     if selected.objects.len() != *count as usize {
                         return Err(EngineError::Illegal("incorrect tap cost selection count"));
                     }
+                    let mut taps = Vec::new();
                     for selected in &selected.objects {
                         let oid = selected.object_id;
                         if (*exclude_source && oid == source_oid)
@@ -587,11 +589,9 @@ impl GameEngine {
                         if !consumed.insert(oid) {
                             return Err(EngineError::Illegal("one object cannot pay two costs"));
                         }
-                        debits.push(CostDebit::Tap {
-                            object_id: oid,
-                            generation,
-                        });
+                        taps.push((oid, generation));
                     }
+                    debits.push(CostDebit::TapGroup(taps));
                 }
             }
         }
@@ -721,6 +721,7 @@ impl GameEngine {
                     if selected.objects.len() != *count as usize {
                         return Err(EngineError::Illegal("incorrect tap cost selection count"));
                     }
+                    let mut taps = Vec::new();
                     for selected in &selected.objects {
                         let oid = selected.object_id;
                         if (*exclude_source && oid == permanent_id)
@@ -750,11 +751,9 @@ impl GameEngine {
                         if !consumed.insert(oid) {
                             return Err(EngineError::Illegal("one object cannot pay two costs"));
                         }
-                        debits.push(CostDebit::Tap {
-                            object_id: oid,
-                            generation,
-                        });
+                        taps.push((oid, generation));
                     }
+                    debits.push(CostDebit::TapGroup(taps));
                 }
                 AbilityCost::Mana(cost) => {
                     if saw_mana {
@@ -995,9 +994,15 @@ impl GameEngine {
                     }
                 }
                 CostDebit::Tap { object_id, .. } => {
-                    if let Some(event) = crate::engine::become_tapped(&mut self.state, object_id) {
-                        payment.tap_events.push(event);
-                    }
+                    payment
+                        .tap_events
+                        .extend(self.tap_permanents(plan.player, &[object_id]));
+                }
+                CostDebit::TapGroup(objects) => {
+                    let ids = objects.into_iter().map(|(oid, _)| oid).collect::<Vec<_>>();
+                    payment
+                        .tap_events
+                        .extend(self.tap_permanents(plan.player, &ids));
                 }
                 CostDebit::Mana(mana) => {
                     let spent = mana.mana_spent();
@@ -1156,6 +1161,19 @@ impl GameEngine {
                             .unwrap_or(0)
                             == *generation
                     }
+                    CostDebit::TapGroup(objects) => objects.iter().all(|(oid, generation)| {
+                        self.state.objects.get(oid).is_some_and(|object| {
+                            object.zone == Zone::Battlefield
+                                && !object.tapped
+                                && object.controller == plan.player
+                        }) && self
+                            .state
+                            .zone_change_generation
+                            .get(oid)
+                            .copied()
+                            .unwrap_or(0)
+                            == *generation
+                    }),
                     CostDebit::Discard {
                         object_id,
                         generation,
@@ -1299,6 +1317,68 @@ impl GameEngine {
 #[cfg(test)]
 mod convoke_transaction_tests {
     use super::*;
+
+    #[test]
+    fn issue_169_tap_components_keep_action_boundaries_and_stale_groups_are_atomic() {
+        let mut engine = GameEngine::new(169030, &[7, 19], 20, None, true).unwrap();
+        let objects = engine.state.players[1].hand[..3].to_vec();
+        for oid in &objects {
+            engine.state.objects.get_mut(oid).unwrap().card_id = "grizzly_bears".into();
+            super::super::super::resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                *oid,
+                Zone::Battlefield,
+                None,
+            )
+            .unwrap();
+        }
+        let references = objects
+            .iter()
+            .map(|oid| (*oid, engine.state.zone_change_generation[oid]))
+            .collect::<Vec<_>>();
+        let plan = |stale| CostTransactionPlan {
+            purpose: CostPurpose::Ability,
+            player: 19,
+            player_idx: 1,
+            cast_cost_receipts: vec![],
+            debits: vec![
+                CostDebit::Tap {
+                    object_id: objects[0],
+                    generation: references[0].1,
+                },
+                CostDebit::TapGroup(vec![
+                    references[1],
+                    (objects[2], references[2].1 + u64::from(stale)),
+                ]),
+            ],
+        };
+        let before = format!("{:?}", engine.state);
+        assert!(engine.commit_cost_transaction(plan(true)).is_err());
+        assert_eq!(format!("{:?}", engine.state), before);
+        let receipt = engine.commit_cost_transaction(plan(false)).unwrap();
+        let actions = receipt
+            .tap_events
+            .iter()
+            .map(|event| {
+                let GameEvent::BecameTapped { action, .. } = event else {
+                    panic!("tap receipt")
+                };
+                assert_eq!(action.actor, 19);
+                action.id
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(actions.len(), 3);
+        assert_ne!(
+            actions[0], actions[1],
+            "source tap is a separate cost component"
+        );
+        assert_eq!(
+            actions[1], actions[2],
+            "one selected tap cost is simultaneous"
+        );
+        assert_eq!(engine.state.next_tap_action_id, 2);
+    }
 
     #[test]
     fn issue_172_receipts_count_actual_mana_not_cost_or_life() {
@@ -1563,7 +1643,9 @@ mod convoke_transaction_tests {
             .finish_explicit(&engine.state, &payment, life)
             .unwrap();
         // The debit order carries the rule, and revalidation happens before either mutation.
-        assert!(matches!(plan.debits[1], CostDebit::Tap { object_id, .. } if object_id == bear));
+        assert!(
+            matches!(&plan.debits[1], CostDebit::TapGroup(objects) if objects.len() == 1 && objects[0].0 == bear)
+        );
         assert!(matches!(plan.debits[2], CostDebit::Sacrifice { .. }));
         let probe = PreparedSpellCosts {
             transaction: CostTransactionPlan {

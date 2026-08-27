@@ -181,7 +181,7 @@ impl GameEngine {
         for id in to_destroy_lethal {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
             let snapshot = death_snapshots.get(&id).cloned();
-            let (regenerated, tap_event) = consume_regen_shield(&mut self.state, id, out);
+            let (regenerated, tap_event) = consume_regen_shield(self, id, out);
             if regenerated {
                 changed = true;
                 tap_events.extend(tap_event);

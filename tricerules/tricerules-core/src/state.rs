@@ -1556,6 +1556,8 @@ pub struct GameState {
     /// Including the instance also makes direct deterministic turn-boundary fixtures safe.
     pub trigger_uses_this_turn: HashMap<(u64, TriggerUseKey), u32>,
     pub next_trigger_grant_id: u64,
+    /// Internal committed tap instruction identity; shared by simultaneous transitions only.
+    pub next_tap_action_id: u64,
     pub active_exile_play_permissions: Vec<ActiveExilePlayPermission>,
     pub next_exile_play_permission_group_id: u64,
     pub turn_history: TurnHistory,

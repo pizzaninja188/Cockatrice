@@ -28,6 +28,7 @@ use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::sync::Arc;
 use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 use tricerules_cards::primitives::{
@@ -47,9 +48,10 @@ use tricerules_cards::primitives::{
     ProtectionCardType, ProtectionGrant, ProtectionQuality, RelativePlayerSet, ResolutionBranchDef,
     ResolutionCost, ReturnController, SearchDestination, SearchZoneSelection,
     SpecialActionAffected, SpecialActionKind, SpecialActionManaPurpose, SpellCostModifier,
-    SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount, TargetController,
-    TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected, TargetingSourceFilter,
-    TriggerCondition, TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
+    SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount, TapTriggerCardinality,
+    TargetController, TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected,
+    TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
+    ZoneCardFilter,
 };
 use tricerules_cards::{
     is_creature_type, CardDefinition, CardFace, CardRegistry, CharacteristicDefiningAbility,
@@ -145,6 +147,8 @@ pub(crate) mod damage;
 mod dev;
 mod events;
 mod history;
+#[cfg(test)]
+mod issue_169_taps;
 mod legal_actions;
 mod opening;
 mod payment;
@@ -300,7 +304,19 @@ struct TriggerSourceSnapshot {
     zone_change_generation: u64,
     face_change_generation: u64,
     attached_to: Option<AttachmentSnapshot>,
+    /// Tap payment receipts may be collected after another debit changed the board. Their
+    /// ability list already excludes false trigger-time conditions; resolution still rechecks.
+    event_conditions_checked: bool,
     triggered_abilities: Vec<(usize, TriggeredAbilityDef, TriggerAbilityOrigin)>,
+}
+
+/// One rules instruction, not a whole command or trigger-flush batch. Solitary Sanctuary and
+/// Sharae share its actor and post-action observers, but use different trigger cardinalities.
+#[derive(Debug)]
+struct TapActionSnapshot {
+    id: u64,
+    actor: PlayerId,
+    sources: Vec<TriggerSourceSnapshot>,
 }
 
 /// Event-time attachment identity captured with a trigger source. Object recipients include
@@ -346,6 +362,8 @@ enum GameEvent {
     /// the event boundary so attached-object triggers never rebind after a zone change.
     BecameTapped {
         object: TriggerObjectRef,
+        is_creature: bool,
+        action: Arc<TapActionSnapshot>,
     },
     /// A source moved from the battlefield to another zone. The complete pre-move snapshot is
     /// required by CR 603.10a lookback, including when several observers leave simultaneously.
@@ -598,20 +616,64 @@ fn set_tapped(state: &mut GameState, oid: ObjectId, tapped: bool) -> bool {
     }
 }
 
-/// Commit one rules-driven tap and return its internal trigger event. Entry status and rollback
-/// restoration deliberately bypass this helper.
-fn become_tapped(state: &mut GameState, oid: ObjectId) -> Option<GameEvent> {
-    if !set_tapped(state, oid, true) {
-        return None;
+impl GameEngine {
+    /// CR 701.26 / 603.10: finish the simultaneous status changes before observing the event.
+    /// Callers supply the instructed player explicitly (not the source spell's controller).
+    /// Entry state and rollback restoration deliberately bypass this helper.
+    fn tap_permanents(&mut self, actor: PlayerId, objects: &[ObjectId]) -> Vec<GameEvent> {
+        let mut changed = Vec::new();
+        for &oid in objects {
+            if self
+                .state
+                .objects
+                .get(&oid)
+                .is_some_and(|o| o.zone == Zone::Battlefield)
+                && set_tapped(&mut self.state, oid, true)
+            {
+                changed.push(oid);
+            }
+        }
+        if changed.is_empty() {
+            return Vec::new();
+        }
+        let mut sources = self.battlefield_sources_apnap();
+        for source in &mut sources {
+            source.triggered_abilities.retain(|(_, ability, _)| {
+                self.intervening_if_holds(
+                    source.object_id,
+                    source.controller,
+                    ability.intervening_if.as_ref(),
+                )
+            });
+            source.event_conditions_checked = true;
+        }
+        let action = Arc::new(TapActionSnapshot {
+            id: self.state.next_tap_action_id,
+            actor,
+            sources,
+        });
+        self.state.next_tap_action_id += 1;
+        changed
+            .into_iter()
+            .filter_map(|oid| {
+                let characteristics = self.characteristics(oid)?;
+                Some(GameEvent::BecameTapped {
+                    object: TriggerObjectRef {
+                        object_id: oid,
+                        zone_change_generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0),
+                        controller_at_event: characteristics.controller,
+                    },
+                    is_creature: characteristics.is_creature(),
+                    action: Arc::clone(&action),
+                })
+            })
+            .collect()
     }
-    let object = state.objects.get(&oid)?;
-    Some(GameEvent::BecameTapped {
-        object: TriggerObjectRef {
-            object_id: oid,
-            zone_change_generation: state.zone_change_generation.get(&oid).copied().unwrap_or(0),
-            controller_at_event: object.controller,
-        },
-    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -840,6 +902,7 @@ impl GameEngine {
             triggered_once: HashSet::new(),
             trigger_uses_this_turn: HashMap::new(),
             next_trigger_grant_id: 0,
+            next_tap_action_id: 0,
             active_exile_play_permissions: Vec::new(),
             next_exile_play_permission_group_id: 1,
             turn_history: TurnHistory::default(),

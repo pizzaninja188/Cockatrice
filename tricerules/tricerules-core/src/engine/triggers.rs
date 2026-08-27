@@ -207,11 +207,47 @@ impl GameEngine {
         }
 
         let mut collected = Vec::new();
+        let mut grouped_taps = HashSet::new();
         for event in events {
             let trigger_player = Self::trigger_player_for(event);
-            let mut event_triggers = self.collect_triggers(event, &sources);
+            let event_sources = match event {
+                GameEvent::BecameTapped { action, .. } => &action.sources,
+                _ => &sources,
+            };
+            let mut event_triggers = self.collect_triggers(event, event_sources);
+            if let GameEvent::BecameTapped { action, .. } = event {
+                event_triggers.retain(|trigger| {
+                    !matches!(
+                        trigger.ability.trigger,
+                        TriggerCondition::WheneverPlayerTapsCreature {
+                            cardinality: TapTriggerCardinality::OneOrMorePerAction,
+                            ..
+                        }
+                    ) || grouped_taps.insert((
+                        action.id,
+                        TriggerUseKey {
+                            object_id: trigger.source_id,
+                            zone_change_generation: trigger.source_zone_change,
+                            ability_origin: trigger
+                                .ability_origin
+                                .clone()
+                                .expect("battlefield ability origin"),
+                        },
+                    ))
+                });
+            }
             for trigger in &mut event_triggers {
-                trigger.trigger_context.affected_player = trigger_player;
+                trigger.trigger_context.affected_player = match event {
+                    GameEvent::BecameTapped { action, .. }
+                        if matches!(
+                            trigger.ability.trigger,
+                            TriggerCondition::WheneverPlayerTapsCreature { .. }
+                        ) =>
+                    {
+                        Some(action.actor)
+                    }
+                    _ => trigger_player,
+                };
                 // Rampaging Ferocidon needs the entering creature's controller, and Aether
                 // Flash needs the creature itself. Reuse the generation-bound reference so
                 // either instruction follows current characteristics or the correct LKI.
@@ -416,7 +452,7 @@ impl GameEngine {
     /// own — the former upkeep-specific arm — scanned only the active player's battlefield, so a
     /// nonactive player's upkeep trigger never fired at all (CR 603.2: *every* permanent observes
     /// the event). `sort_by_key` is stable, so each player's battlefield keeps its own order.
-    fn battlefield_sources_apnap(&self) -> Vec<TriggerSourceSnapshot> {
+    pub(super) fn battlefield_sources_apnap(&self) -> Vec<TriggerSourceSnapshot> {
         let mut ordered: Vec<usize> = (0..self.state.players.len()).collect();
         ordered.sort_by_key(|&i| self.state.apnap_rank(self.state.players[i].id));
         let mut sources = Vec::new();
@@ -585,9 +621,44 @@ impl GameEngine {
                 }
                 out
             }
-            GameEvent::BecameTapped { object } => {
+            GameEvent::BecameTapped {
+                object,
+                is_creature,
+                action,
+            } => {
                 let mut out = Vec::new();
                 for source in sources {
+                    if *is_creature {
+                        let mut matching = self.matching_snapshot_abilities(source, |condition| {
+                            let TriggerCondition::WheneverPlayerTapsCreature {
+                                player,
+                                controllers,
+                                ..
+                            } = condition
+                            else {
+                                return false;
+                            };
+                            self.relative_player_matches(*player, action.actor, source.controller)
+                                && super::history::relative_player_set_contains(
+                                    &self.state,
+                                    *controllers,
+                                    source.controller,
+                                    object.controller_at_event,
+                                )
+                        });
+                        for trigger in &mut matching {
+                            if matches!(
+                                trigger.ability.trigger,
+                                TriggerCondition::WheneverPlayerTapsCreature {
+                                    cardinality: TapTriggerCardinality::EachObject,
+                                    ..
+                                }
+                            ) {
+                                trigger.trigger_context.observed_object = Some(*object);
+                            }
+                        }
+                        out.extend(matching);
+                    }
                     if source.object_id == object.object_id
                         && source.zone_change_generation == object.zone_change_generation
                     {
@@ -1380,6 +1451,7 @@ impl GameEngine {
             AttachmentRecipient::Player(player_id) => AttachmentSnapshot::Player(player_id),
         });
         Some(TriggerSourceSnapshot {
+            event_conditions_checked: false,
             object_id: source_id,
             triggered_abilities: self
                 .effective_triggered_abilities(source_id, &card_id, face_index),
@@ -1518,11 +1590,12 @@ impl GameEngine {
             .iter()
             .filter(|(_, ability, _)| filter(&ability.trigger))
             .filter(|(_, ability, _)| {
-                self.intervening_if_holds(
-                    source.object_id,
-                    source.controller,
-                    ability.intervening_if.as_ref(),
-                )
+                source.event_conditions_checked
+                    || self.intervening_if_holds(
+                        source.object_id,
+                        source.controller,
+                        ability.intervening_if.as_ref(),
+                    )
             })
             .map(|(ability_index, ability, origin)| CollectedTrigger {
                 source_id: source.object_id,
@@ -2286,6 +2359,7 @@ mod tests {
             .triggered_abilities[0]
             .clone();
         let source = TriggerSourceSnapshot {
+            event_conditions_checked: false,
             object_id: 100,
             card_id: "wandertale_mentor".into(),
             controller: 1,
@@ -2528,6 +2602,7 @@ mod tests {
     fn attached_player_attack_trigger_fires_once_for_the_declaration_group() {
         let engine = GameEngine::new(6303, &[0, 1], 20, None, true).expect("engine");
         let source = TriggerSourceSnapshot {
+            event_conditions_checked: false,
             object_id: 100,
             card_id: "curse_of_disturbance".into(),
             controller: 0,

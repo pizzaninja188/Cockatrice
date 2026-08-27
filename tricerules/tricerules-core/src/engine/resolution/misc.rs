@@ -54,7 +54,7 @@ pub(super) fn destroy(
                 "{spell_label} has no effect: {tgt} is indestructible."
             )));
         } else {
-            let (regenerated, tap_event) = consume_regen_shield(&mut engine.state, tid, events);
+            let (regenerated, tap_event) = consume_regen_shield(engine, tid, events);
             if regenerated {
                 events.push(ev_log(format!("{tgt} regenerates.")));
                 engine.fire_triggers(&tap_event.into_iter().collect::<Vec<_>>());
@@ -141,7 +141,11 @@ fn set_target_tapped(cx: &mut EffectCx<'_>, tapped: bool) -> Result<EffectOutcom
     let targets = cx.targets;
     let spell_label = cx.spell_label;
 
-    let mut tap_events = Vec::new();
+    let tap_events = if tapped {
+        engine.tap_permanents(cx.controller, targets)
+    } else {
+        Vec::new()
+    };
     for &tid in targets {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let on_battlefield = engine
@@ -152,9 +156,10 @@ fn set_target_tapped(cx: &mut EffectCx<'_>, tapped: bool) -> Result<EffectOutcom
         let changed = if !on_battlefield {
             false
         } else if tapped {
-            become_tapped(&mut engine.state, tid)
-                .map(|event| tap_events.push(event))
-                .is_some()
+            tap_events.iter().any(|event| {
+                matches!(event,
+                GameEvent::BecameTapped { object, .. } if object.object_id == tid)
+            })
         } else {
             set_tapped(&mut engine.state, tid, false)
         };
@@ -190,9 +195,9 @@ pub(super) fn tap(
         .get(&tid)
         .is_some_and(|object| object.zone == Zone::Battlefield);
     if on_battlefield {
-        let tap_event = become_tapped(&mut cx.engine.state, tid);
-        if let Some(event) = tap_event {
-            cx.engine.fire_triggers(&[event]);
+        let tap_events = cx.engine.tap_permanents(cx.controller, &[tid]);
+        if !tap_events.is_empty() {
+            cx.engine.fire_triggers(&tap_events);
             cx.events
                 .push(ev_log(format!("{} taps {subject_name}", cx.spell_label)));
         }
@@ -418,22 +423,8 @@ pub(super) fn tap_all_creatures(
                 })
         })
         .collect();
-    let mut tapped = 0;
-    let mut tap_events = Vec::new();
-    for oid in affected {
-        let on_battlefield = cx
-            .engine
-            .state
-            .objects
-            .get(&oid)
-            .is_some_and(|o| o.zone == Zone::Battlefield);
-        if on_battlefield {
-            if let Some(event) = become_tapped(&mut cx.engine.state, oid) {
-                tap_events.push(event);
-                tapped += 1;
-            }
-        }
-    }
+    let tap_events = cx.engine.tap_permanents(controller, &affected);
+    let tapped = tap_events.len();
     cx.engine.fire_triggers(&tap_events);
     cx.events.push(ev_log(format!(
         "{} taps {tapped} affected creature(s)",
