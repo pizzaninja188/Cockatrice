@@ -210,13 +210,7 @@ fn try_drain_stack(e: &mut GameEngine) {
 /// is unchanged. `expected_objects` is the non-token baseline; tokens (CR 111) created by a
 /// resolving maker are counted on top of it, since they legitimately appear and vanish.
 fn assert_zone_integrity(e: &GameEngine, expected_objects: usize, ctx: &str) {
-    let registry = CardRegistry::global();
-    let token_count = e
-        .state
-        .objects
-        .values()
-        .filter(|o| registry.is_token(&o.card_id))
-        .count();
+    let token_count = e.state.objects.values().filter(|o| o.is_token()).count();
     assert_eq!(
         e.state.objects.len(),
         expected_objects + token_count,

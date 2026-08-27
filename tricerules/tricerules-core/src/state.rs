@@ -182,6 +182,10 @@ pub struct GameObject {
     /// CR 707.2 layer-1 values replacing the physical card's printed face while this object
     /// remains on the battlefield. Physical identity stays in `card_id`.
     pub copiable_values: Option<CopiableValues>,
+    /// CR 111.3: intrinsic token identity, independent of registry membership and of later
+    /// copy effects. Ordinary token makers and copy-token makers both populate this snapshot.
+    /// It remains present after a zone change until the token ceases to exist.
+    pub token_origin: Option<CopiableValues>,
     /// Incremented whenever a copy snapshot is installed. Intrinsic replacement identity uses
     /// this revision so abilities acquired from the copied face are evaluated once.
     pub copy_revision: u64,
@@ -233,6 +237,8 @@ pub struct GameObject {
 /// abilities, while the cloned face also represents registry-backed token definitions directly.
 #[derive(Debug, Clone)]
 pub struct CopiableValues {
+    /// Definition provenance when available; empty for inline or anonymous values.
+    /// Rules execution uses the owned face, never requires this registry lookup.
     pub source_card_id: String,
     pub source_face_index: usize,
     pub face: CardFace,
@@ -319,8 +325,8 @@ pub struct DamagePreventionProhibition {
 impl GameObject {
     /// True if this object is a token (CR 111): created by an effect, not backed by a deck card.
     /// Tokens cease to exist as a state-based action once they leave the battlefield (CR 111.7).
-    pub fn is_token(&self, registry: &tricerules_cards::CardRegistry) -> bool {
-        registry.is_token(&self.card_id)
+    pub fn is_token(&self) -> bool {
+        self.token_origin.is_some()
     }
 
     /// Number of counters of `kind` currently on this permanent (0 if none).
@@ -740,6 +746,10 @@ pub enum ResolutionContinuation {
     EntryCopySource {
         stack: ParkedStackResolution,
     },
+    Populate {
+        stack: ParkedStackResolution,
+        candidate_generations: Vec<(ObjectId, u64)>,
+    },
     EntryReplacement {
         stack: ParkedStackResolution,
     },
@@ -789,6 +799,7 @@ impl ResolutionContinuation {
             | Self::LibraryLook { stack, .. }
             | Self::ManifestDread { stack, .. }
             | Self::EntryCopySource { stack }
+            | Self::Populate { stack, .. }
             | Self::EntryReplacement { stack }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
@@ -817,6 +828,7 @@ impl ResolutionContinuation {
             | Self::LibraryLook { stack, .. }
             | Self::ManifestDread { stack, .. }
             | Self::EntryCopySource { stack }
+            | Self::Populate { stack, .. }
             | Self::EntryReplacement { stack }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }

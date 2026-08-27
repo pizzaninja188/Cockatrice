@@ -193,6 +193,21 @@ mod face_change_tests {
     }
 
     #[test]
+    fn runtime_token_room_keeps_both_doors_and_starts_locked() {
+        let mut engine = engine_with(&["derelict_attic_widows_walk"]);
+        let oid = put_on_battlefield(&mut engine, "derelict_attic_widows_walk");
+        let values = engine.copiable_values_for(oid).unwrap();
+        let object = engine.state.objects.get_mut(&oid).unwrap();
+        object.card_id = "inline_room".into();
+        object.token_origin = Some(values);
+        engine.state.room_states.insert(oid, RoomState::default());
+        assert_eq!(engine.room_faces(oid).map(<[CardFace]>::len), Some(2));
+        assert!(engine.effective_face(oid).unwrap().name.is_empty());
+        engine.transition_room_door(oid, 0).unwrap();
+        assert_eq!(engine.effective_face(oid).unwrap().name, "Derelict Attic");
+    }
+
+    #[test]
     fn internal_transform_and_flip_obey_layout_semantics() {
         let mut engine = engine_with(&[
             "cragcrown_pathway_timbercrown_pathway",
@@ -657,6 +672,7 @@ fn new_object_from_card(
         base_controller: owner,
         controller: owner,
         card_id: card_id.to_string(),
+        token_origin: None,
         copiable_values: None,
         copy_revision: 0,
         zone,
@@ -886,7 +902,11 @@ impl GameEngine {
     /// resolve copied activated and triggered abilities after the physical Clone has left play.
     pub(super) fn effective_card_identity(&self, oid: ObjectId) -> Option<(&str, usize)> {
         let object = self.state.objects.get(&oid)?;
-        if let Some(values) = &object.copiable_values {
+        if let Some(values) = object
+            .copiable_values
+            .as_ref()
+            .or(object.token_origin.as_ref())
+        {
             return Some((&values.source_card_id, values.source_face_index));
         }
         Some((&object.card_id, object.face_up_index))
@@ -896,7 +916,27 @@ impl GameEngine {
     /// counters, damage, attachments, status, and later continuous effects live outside this data.
     pub(super) fn copiable_values_for(&self, oid: ObjectId) -> Option<CopiableValues> {
         let object = self.state.objects.get(&oid)?;
-        if let Some(values) = &object.copiable_values {
+        // CR 707.2: layer 1b values are public and copied even when the underlying card is not.
+        if object.face_down && object.zone == Zone::Battlefield {
+            return Some(CopiableValues {
+                source_card_id: String::new(),
+                source_face_index: 0,
+                face: CardFace {
+                    types: vec!["Creature".into()],
+                    is_creature: true,
+                    power: Some(2),
+                    toughness: Some(2),
+                    ..Default::default()
+                },
+                room_faces: None,
+                display_name: "Face-down creature".into(),
+            });
+        }
+        if let Some(values) = object
+            .copiable_values
+            .as_ref()
+            .or(object.token_origin.as_ref())
+        {
             return Some(values.clone());
         }
         let definition = self.registry.get(&object.card_id)?;
@@ -1240,8 +1280,9 @@ impl GameEngine {
         object
             .copiable_values
             .as_ref()
-            .and_then(|values| values.room_faces.as_deref())
-            .or_else(|| {
+            .or(object.token_origin.as_ref())
+            .map(|values| values.room_faces.as_deref())
+            .unwrap_or_else(|| {
                 let definition = self.registry.get(&object.card_id)?;
                 (definition.layout == Layout::Room).then_some(definition.faces.as_slice())
             })
@@ -1803,8 +1844,9 @@ fn effective_face_from<'a>(
         let room_faces = object
             .copiable_values
             .as_ref()
-            .and_then(|values| values.room_faces.as_deref())
-            .or_else(|| {
+            .or(object.token_origin.as_ref())
+            .map(|values| values.room_faces.as_deref())
+            .unwrap_or_else(|| {
                 let definition = registry.get(&object.card_id)?;
                 (definition.layout == Layout::Room).then_some(definition.faces.as_slice())
             });
@@ -1820,7 +1862,11 @@ fn effective_face_from<'a>(
                 .map(Cow::Owned);
         }
     }
-    if let Some(values) = &object.copiable_values {
+    if let Some(values) = object
+        .copiable_values
+        .as_ref()
+        .or(object.token_origin.as_ref())
+    {
         return Some(Cow::Borrowed(&values.face));
     }
     registry

@@ -108,7 +108,7 @@ impl CharacteristicsEvaluator<'_> {
     /// type, and color through this boundary without recursively asking for their own result.
     fn characteristics_through_layer_5(&self, oid: ObjectId) -> Option<Characteristics> {
         let object = self.state.objects.get(&oid)?;
-        let definition = self.registry.get(&object.card_id)?;
+        let definition = self.registry.get(&object.card_id);
         let copied = object.copiable_values.as_ref();
         let face = effective_face_from(self.state, self.registry, oid)?;
 
@@ -126,10 +126,13 @@ impl CharacteristicsEvaluator<'_> {
                 .contains(&CharacteristicDefiningAbility::Changeling),
             supertypes: face.supertypes.to_vec(),
             colors: if copied.is_none()
-                && definition.layout == Layout::Flip
+                && definition.is_some_and(|definition| definition.layout == Layout::Flip)
                 && object.face_up_index > 0
             {
-                definition.primary_face().colors()
+                definition
+                    .expect("checked flip definition")
+                    .primary_face()
+                    .colors()
             } else {
                 face.colors()
             },
@@ -1297,6 +1300,7 @@ mod tests {
                 base_controller: 0,
                 controller: 0,
                 card_id: "cavalry_drillmaster".to_string(),
+                token_origin: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -1401,6 +1405,7 @@ mod tests {
                 base_controller: 0,
                 controller: 0,
                 card_id: "grizzly_bears".to_string(),
+                token_origin: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -1465,6 +1470,7 @@ mod tests {
                 base_controller: 0,
                 controller: 0,
                 card_id: "grizzly_bears".to_string(),
+                token_origin: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -1513,6 +1519,7 @@ mod tests {
             base_controller: owner,
             controller: owner,
             card_id: "grizzly_bears".to_string(),
+            token_origin: None,
             copiable_values: None,
             copy_revision: 0,
             zone: Zone::Battlefield,
@@ -1591,6 +1598,7 @@ mod tests {
                 base_controller: 0,
                 controller: 0,
                 card_id: "grizzly_bears".to_string(),
+                token_origin: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -1641,6 +1649,7 @@ mod tests {
             base_controller: controller,
             controller,
             card_id: card_id.to_string(),
+            token_origin: None,
             copiable_values: None,
             copy_revision: 0,
             zone: Zone::Battlefield,

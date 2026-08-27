@@ -914,6 +914,13 @@ fn validate_effect_targets(
                 return Err(EngineError::Illegal("illegal target for damage effect"));
             }
         }
+        SpellEffectKind::CreateTokenCopies { target: filter, .. } => {
+            if targets.len() != 1 || !target_filter_legal_with_context(
+                engine, filter, targets[0].object_id, caster, source, trigger_context,
+            ) {
+                return Err(EngineError::Illegal("illegal token copy target"));
+            }
+        }
         SpellEffectKind::ExileIfWouldDieThisTurn { target: filter } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
@@ -1171,6 +1178,7 @@ fn validate_effect_targets(
         | SpellEffectKind::GrantKeywordsAll { .. }
         | SpellEffectKind::GrantKeywordsAllPermanents { .. }
         | SpellEffectKind::CreateTokens { .. }
+        | SpellEffectKind::Populate
         | SpellEffectKind::CreateAttackingTokens { .. }
         | SpellEffectKind::SacrificeObservedObjects
         | SpellEffectKind::PreventAllCombatDamageTurn

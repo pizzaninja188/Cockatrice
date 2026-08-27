@@ -201,6 +201,17 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             effect_role_counts,
         };
         schema.validate_player_recipient_groups(effects)?;
+        for group in &schema.groups {
+            if group.bindings.iter().any(|binding| {
+                matches!(
+                    effects[binding.effect_index],
+                    SpellEffectKind::CreateTokenCopies { .. }
+                )
+            }) && (group.min != 1 || group.max != 1)
+            {
+                return Err("CreateTokenCopies requires exactly one source target".into());
+            }
+        }
         Ok(schema)
     }
 

@@ -127,10 +127,40 @@ fn target_roles_by_group<'a>(
 
 pub(super) struct TokenCreationRequest<'a> {
     token_id: &'a str,
+    values: Option<&'a CopiableValues>,
     count: u32,
     recipients: Vec<PlayerId>,
     spell_label: &'a str,
     item: &'a StackItem,
+}
+
+pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
+    let face = &values.face;
+    rv1::TokenIdentity {
+        name: values.display_name.clone(),
+        pt: if face.is_creature {
+            format!(
+                "{}/{}",
+                face.power.unwrap_or(0),
+                face.toughness.unwrap_or(0)
+            )
+        } else {
+            String::new()
+        },
+        color: color_string(&face.colors()),
+        types: face.types.clone(),
+        is_creature: face.is_creature,
+        keywords: face
+            .keywords
+            .iter()
+            .map(|keyword| keyword.as_str().to_string())
+            .collect(),
+        triggered_ability_texts: face
+            .triggered_abilities
+            .iter()
+            .map(|ability| ability.text.clone())
+            .collect(),
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -477,15 +507,17 @@ impl GameEngine {
                 })
         };
 
-        let Some(face) = self
+        let face = self
             .registry
             .get(&top.card_id)
-            .and_then(|definition| definition.face(top.face_index))
-        else {
-            return;
-        };
+            .and_then(|definition| definition.face(top.face_index));
         if !top.chosen_modes.is_empty() {
-            let Some(modal) = face.modal_spell.as_ref() else {
+            let Some(modal) = top
+                .triggered_ability
+                .as_ref()
+                .and_then(|ability| ability.modal.as_ref())
+                .or_else(|| face.and_then(|face| face.modal_spell.as_ref()))
+            else {
                 return;
             };
             for chosen in &mut top.chosen_modes {
@@ -504,25 +536,28 @@ impl GameEngine {
 
         let (effects, targeting) = if top.ability_text.is_some() {
             if top.is_triggered {
-                let Some(ability) = top
-                    .triggered_ability
-                    .as_ref()
-                    .or_else(|| face.triggered_abilities.get(top.ability_index.unwrap_or(0)))
-                else {
+                let Some(ability) = top.triggered_ability.as_ref().or_else(|| {
+                    face.and_then(|face| {
+                        face.triggered_abilities.get(top.ability_index.unwrap_or(0))
+                    })
+                }) else {
                     return;
                 };
                 (&ability.effect[..], ability.targeting.as_ref())
             } else {
-                let Some(ability) = top
-                    .activated_ability
-                    .as_ref()
-                    .or_else(|| face.activated_abilities.get(top.ability_index.unwrap_or(0)))
-                else {
+                let Some(ability) = top.activated_ability.as_ref().or_else(|| {
+                    face.and_then(|face| {
+                        face.activated_abilities.get(top.ability_index.unwrap_or(0))
+                    })
+                }) else {
                     return;
                 };
                 (&ability.effect[..], ability.targeting.as_ref())
             }
         } else {
+            let Some(face) = face else {
+                return;
+            };
             (&face.spell_effect[..], face.targeting.as_ref())
         };
         let requirements = target_roles_by_group(effects, targeting);
@@ -1022,23 +1057,29 @@ impl GameEngine {
             }
         } else {
             let targeting = if is_ability {
-                self.registry
+                let face = self
+                    .registry
                     .get(card_id)
-                    .and_then(|definition| definition.face(top.face_index))
-                    .and_then(|face| {
-                        if top.is_triggered {
-                            top.triggered_ability
-                                .as_ref()
-                                .or_else(|| {
-                                    face.triggered_abilities.get(top.ability_index.unwrap_or(0))
-                                })
-                                .and_then(|ability| ability.targeting.as_ref())
-                        } else {
-                            face.activated_abilities
-                                .get(top.ability_index.unwrap_or(0))
-                                .and_then(|ability| ability.targeting.as_ref())
-                        }
-                    })
+                    .and_then(|definition| definition.face(top.face_index));
+                if top.is_triggered {
+                    top.triggered_ability
+                        .as_ref()
+                        .or_else(|| {
+                            face.and_then(|face| {
+                                face.triggered_abilities.get(top.ability_index.unwrap_or(0))
+                            })
+                        })
+                        .and_then(|ability| ability.targeting.as_ref())
+                } else {
+                    top.activated_ability
+                        .as_ref()
+                        .or_else(|| {
+                            face.and_then(|face| {
+                                face.activated_abilities.get(top.ability_index.unwrap_or(0))
+                            })
+                        })
+                        .and_then(|ability| ability.targeting.as_ref())
+                }
             } else {
                 self.registry
                     .get(card_id)
@@ -1292,6 +1333,10 @@ impl GameEngine {
                     effect @ SpellEffectKind::CreateTokens { .. } => {
                         tokens::create_tokens(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::CreateTokenCopies { .. } => {
+                        tokens::create_token_copies(&mut cx, effect)?
+                    }
+                    SpellEffectKind::Populate => tokens::populate(&mut cx)?,
                     effect @ SpellEffectKind::CreateAttackingTokens { .. } => {
                         tokens::create_attacking_tokens(&mut cx, effect)?
                     }
@@ -1425,7 +1470,7 @@ impl GameEngine {
             }
             // CR 111.7: a token that left the battlefield has ceased to exist at the preceding
             // SBA check. Do not recreate one if a synthetic test reaches this boundary earlier.
-            if object.is_token(self.registry) {
+            if object.is_token() {
                 continue;
             }
             let owner = object.owner;
@@ -1693,38 +1738,32 @@ impl GameEngine {
     ) -> Result<(Vec<TokenBattlefieldEntry>, Vec<String>), EngineError> {
         let TokenCreationRequest {
             token_id,
+            values,
             count,
             recipients,
             spell_label,
             item: _,
         } = request;
         let registry = self.registry;
-        let Some(def) = registry.get(token_id) else {
-            return Err(EngineError::MissingCard(token_id.to_string()));
+        let values = if let Some(values) = values {
+            values.clone()
+        } else {
+            let def = registry
+                .get(token_id)
+                .ok_or_else(|| EngineError::MissingCard(token_id.to_string()))?;
+            CopiableValues {
+                source_card_id: token_id.to_string(),
+                source_face_index: 0,
+                face: def.primary_face().clone(),
+                display_name: def.name.clone(),
+                room_faces: None,
+            }
         };
-        let name = def.name.clone();
-        // A token definition is always single-face (CR 111.4 identity is one characteristic tuple).
-        let face = def.primary_face();
+        let name = values.display_name.clone();
+        let face = &values.face;
         let is_creature = face.is_creature;
         let power = face.power;
         let toughness = face.toughness;
-        let types = face.types.to_vec();
-        let keywords: Vec<String> = face
-            .keywords
-            .iter()
-            .map(|k| k.as_str().to_string())
-            .collect();
-        let triggered_ability_texts: Vec<String> = face
-            .triggered_abilities
-            .iter()
-            .map(|ability| ability.text.clone())
-            .collect();
-        let color = color_string(&face.colors());
-        let pt = if is_creature {
-            format!("{}/{}", power.unwrap_or(0), toughness.unwrap_or(0))
-        } else {
-            String::new()
-        };
 
         let player_life_snapshot = self.player_life_snapshot();
         let mut entries = Vec::new();
@@ -1746,6 +1785,7 @@ impl GameEngine {
                         base_controller: pid,
                         controller: pid,
                         card_id: token_id.to_string(),
+                        token_origin: Some(values.clone()),
                         copiable_values: None,
                         copy_revision: 0,
                         // Proposed tokens live in no player's zone until entry replacements finish.
@@ -1770,15 +1810,7 @@ impl GameEngine {
                     object_id: oid,
                     controller_player_id: pid,
                     card_id: token_id.to_string(),
-                    identity: Some(rv1::TokenIdentity {
-                        name: name.clone(),
-                        pt: pt.clone(),
-                        color: color.clone(),
-                        types: types.clone(),
-                        is_creature,
-                        keywords: keywords.clone(),
-                        triggered_ability_texts: triggered_ability_texts.clone(),
-                    }),
+                    identity: Some(token_identity(&values)),
                     enters_tapped,
                 };
                 entries.push(TokenBattlefieldEntry {
@@ -1999,6 +2031,17 @@ pub(crate) fn move_object_to_zone(
     let old_zone = state.objects.get(&oid).map(|o| o.zone);
     let leaving_battlefield = old_zone == Some(Zone::Battlefield) && z != Zone::Battlefield;
     let prior_generation = state.zone_change_generation.get(&oid).copied().unwrap_or(0);
+    // CR 111.8: after leaving the battlefield a token cannot change zones again, even
+    // while resolution defers SBAs. Proposed, not-yet-entered tokens have generation zero.
+    if old_zone != Some(Zone::Battlefield)
+        && prior_generation > 0
+        && state
+            .objects
+            .get(&oid)
+            .is_some_and(|object| object.token_origin.is_some())
+    {
+        return Ok(());
+    }
     if old_zone == Some(Zone::Battlefield)
         && z == Zone::Graveyard
         && state.death_replacement_effects.iter().any(|effect| {
@@ -2522,6 +2565,7 @@ mod anthem_scope_tests {
                 base_controller: controller,
                 controller,
                 card_id: "grizzly_bears".to_string(),
+                token_origin: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -2544,6 +2588,27 @@ mod anthem_scope_tests {
         let player_index = engine.state.player_idx(controller).expect("controller");
         engine.state.players[player_index].battlefield.push(id);
         id
+    }
+
+    #[test]
+    fn token_copy_cannot_reenter_before_the_next_sba() {
+        let mut engine = GameEngine::new(4610, &[0, 1], 20, None, true).unwrap();
+        let token = add_creature(&mut engine, 0);
+        let values = engine.copiable_values_for(token).unwrap();
+        engine.state.objects.get_mut(&token).unwrap().token_origin = Some(values);
+        move_object_to_zone(&mut engine.state, engine.registry, token, Zone::Exile, None).unwrap();
+        let generation = engine.state.zone_change_generation[&token];
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            token,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        assert_eq!(engine.state.objects[&token].zone, Zone::Exile);
+        assert_eq!(engine.state.zone_change_generation[&token], generation);
+        assert!(!engine.state.players[0].battlefield.contains(&token));
     }
 
     #[test]
@@ -2589,6 +2654,7 @@ mod attached_subject_tests {
                 base_controller: controller,
                 controller,
                 card_id: card_id.to_string(),
+                token_origin: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -3293,6 +3359,7 @@ mod source_keyword_tests {
                 base_controller: controller,
                 controller,
                 card_id: "hill_giant".to_string(),
+                token_origin: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -3330,6 +3397,7 @@ mod source_keyword_tests {
                 base_controller: 0,
                 controller: 0,
                 card_id: "prodigal_sorcerer".to_string(),
+                token_origin: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,

@@ -1,6 +1,21 @@
 //! Shared helpers for scenario tests.
 #![allow(dead_code)]
 
+fn fixture_token_origin(card_id: &str) -> Option<tricerules_core::state::CopiableValues> {
+    let registry = tricerules_cards::CardRegistry::global();
+    if !registry.is_token(card_id) {
+        return None;
+    }
+    let definition = registry.get(card_id).unwrap();
+    Some(tricerules_core::state::CopiableValues {
+        source_card_id: card_id.into(),
+        source_face_index: 0,
+        face: definition.primary_face().clone(),
+        room_faces: None,
+        display_name: definition.name.clone(),
+    })
+}
+
 pub(crate) use tricerules_core::state::{
     HandCardAction, PendingLibraryLookStage, PendingLibraryPartitionKind,
     PendingLibraryPartitionStage, PendingResolutionBranchStage, ResolutionContinuation,
@@ -596,6 +611,7 @@ pub(crate) fn inject_creature_on_battlefield(
             base_controller: player_id,
             controller: player_id,
             card_id: card_id.to_string(),
+            token_origin: fixture_token_origin(card_id),
             copiable_values: None,
             copy_revision: 0,
             zone: tricerules_core::Zone::Battlefield,
@@ -637,6 +653,7 @@ pub(crate) fn inject_permanent_on_battlefield(
             base_controller: player_id,
             controller: player_id,
             card_id: card_id.to_string(),
+            token_origin: fixture_token_origin(card_id),
             copiable_values: None,
             copy_revision: 0,
             zone: tricerules_core::Zone::Battlefield,
@@ -674,6 +691,7 @@ pub(crate) fn inject_card_into_hand(e: &mut GameEngine, player: usize, card_id: 
             base_controller: player_id,
             controller: player_id,
             card_id: card_id.to_string(),
+            token_origin: fixture_token_origin(card_id),
             copiable_values: None,
             copy_revision: 0,
             zone: tricerules_core::Zone::Hand,
@@ -711,6 +729,7 @@ pub(crate) fn inject_library_card(e: &mut GameEngine, player: usize, card_id: &s
             base_controller: player_id,
             controller: player_id,
             card_id: card_id.to_string(),
+            token_origin: fixture_token_origin(card_id),
             copiable_values: None,
             copy_revision: 0,
             zone: tricerules_core::Zone::Library,
@@ -755,6 +774,7 @@ pub(crate) fn inject_creature_under_foreign_control(
             base_controller: controller_id,
             controller: controller_id,
             card_id: card_id.to_string(),
+            token_origin: fixture_token_origin(card_id),
             copiable_values: None,
             copy_revision: 0,
             zone: tricerules_core::Zone::Battlefield,
@@ -794,6 +814,7 @@ pub(crate) fn inject_graveyard_card(e: &mut GameEngine, player: usize, card_id: 
             base_controller: player_id,
             controller: player_id,
             card_id: card_id.to_string(),
+            token_origin: fixture_token_origin(card_id),
             copiable_values: None,
             copy_revision: 0,
             zone: tricerules_core::Zone::Graveyard,
@@ -1005,6 +1026,7 @@ pub(crate) fn inject_creature_with_stats(
             base_controller: player_id,
             controller: player_id,
             card_id: card_id.to_string(),
+            token_origin: fixture_token_origin(card_id),
             copiable_values: None,
             copy_revision: 0,
             zone: tricerules_core::Zone::Battlefield,

@@ -1105,8 +1105,8 @@ enum ChoiceKind {
   // CR 616 ordering among applicable replacement and prevention effects. Candidate ids are
   // opaque application ids, not game objects. Public; candidate_names carry descriptions.
   CHOICE_KIND_REPLACEMENT_EFFECT = 7;
-  // A live battlefield permanent selected for an untargeted "enters as a copy" replacement
-  // effect (Clone, Stunt Double). Public; zero selections means decline.
+  // A live battlefield permanent selected as an untargeted copy source (Clone, Stunt Double,
+  // Populate). Public; min=0 permits declining, while min=1 requires a source.
   CHOICE_KIND_COPY_SOURCE = 8;
   // A public resolution-time generic-mana payment. The decider receives the prompt; other players
   // receive the ordinary waiting state. No candidate objects are exposed for this choice.
@@ -1248,7 +1248,8 @@ message ResolutionChoiceRequired {
 message TokenCreated {
   uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   int32 controller_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  // Engine token id (e.g. "soldier_w_1_1"); intentionally absent from the deck CardCatalog.
+  // Engine definition/provenance id. Copied tokens may share an id with a real card or have
+  // no registry definition; token status and physical creation are conveyed by this event.
   string card_id = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   TokenIdentity identity = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // True when the creation instruction puts this token onto the battlefield tapped.

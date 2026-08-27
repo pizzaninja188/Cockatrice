@@ -51,7 +51,7 @@ pub(super) fn graveyard_aggregate_value(
         .flat_map(|player| player.graveyard.iter().copied())
         .filter(|oid| Some(*oid) != resolving_spell_id)
         .filter_map(|oid| state.objects.get(&oid))
-        .filter(|object| object.zone == Zone::Graveyard && !object.is_token(registry))
+        .filter(|object| object.zone == Zone::Graveyard && !object.is_token())
         .filter(|object| {
             super::resolution::library_card_matches_filter(state, registry, object.id, filter)
         })
@@ -711,7 +711,7 @@ impl GameEngine {
                     .filter_map(|oid| self.state.objects.get(&oid))
                     .filter(|object| {
                         object.zone == Zone::Graveyard
-                            && !object.is_token(self.registry)
+                            && !object.is_token()
                             && self
                                 .registry
                                 .get(&object.card_id)

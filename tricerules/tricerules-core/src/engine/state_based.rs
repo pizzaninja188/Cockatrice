@@ -257,7 +257,7 @@ impl GameEngine {
             .state
             .objects
             .iter()
-            .filter(|(_, o)| o.zone != Zone::Battlefield && o.is_token(self.registry))
+            .filter(|(_, o)| o.zone != Zone::Battlefield && o.is_token())
             .map(|(id, _)| *id)
             .collect();
         for id in vanished {
@@ -568,6 +568,7 @@ mod sba_tests {
                 base_controller: owner,
                 controller: owner,
                 card_id: "walking_corpse".to_string(),
+                token_origin: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,

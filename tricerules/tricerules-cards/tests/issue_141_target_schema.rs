@@ -1,6 +1,34 @@
 use tricerules_cards::primitives::{SpellEffectKind, TargetSchema, TargetingDef};
 use tricerules_cards::{CardRegistry, ModalDef};
 
+#[test]
+fn token_copy_requires_one_permanent_source() {
+    use tricerules_cards::primitives::{EffectContext, TargetFilter, TargetGroupDef, TargetKind};
+    let effect = SpellEffectKind::CreateTokenCopies {
+        count: 1.into(),
+        target: TargetFilter {
+            kind: TargetKind::AnyPlayer,
+            ..Default::default()
+        },
+    };
+    assert!(effect.validate(EffectContext::Spell).is_err());
+    let effect = SpellEffectKind::CreateTokenCopies {
+        count: 2.into(),
+        target: TargetFilter::default_creature(),
+    };
+    let targeting = TargetingDef {
+        groups: vec![TargetGroupDef {
+            min: 1,
+            max: 2,
+            prompt: "Sources".into(),
+            effect_indices: vec![0],
+            distinct_from: vec![],
+            same_graveyard: false,
+        }],
+    };
+    assert!(TargetSchema::compile(&[effect], Some(&targeting)).is_err());
+}
+
 fn assert_schema(
     card_id: &str,
     location: &str,

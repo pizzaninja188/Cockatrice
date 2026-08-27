@@ -1,0 +1,9 @@
+// Oracle and rulings: https://scryfall.com/card/mm3/28/wake-the-reflections
+(
+  id: "wake_the_reflections",
+  name: "Wake the Reflections",
+  mana_cost: "{W}",
+  types: ["Sorcery"],
+  partial: "Double-faced token copies and copy-with-modifications remain unsupported.",
+  spell_effect: [Populate],
+)

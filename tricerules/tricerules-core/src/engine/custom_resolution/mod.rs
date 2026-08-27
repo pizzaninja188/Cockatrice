@@ -237,6 +237,9 @@ impl GameEngine {
             ResolutionContinuation::EntryCopySource { .. } => {
                 return self.finish_entry_copy_source_choice(pending, chosen);
             }
+            ResolutionContinuation::Populate { .. } => {
+                return self.finish_populate_choice(pending, chosen[0]);
+            }
             ResolutionContinuation::EntryReplacement { .. } => {
                 return self.finish_battlefield_entry_replacement_choice(pending, chosen[0]);
             }

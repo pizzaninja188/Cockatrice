@@ -5704,6 +5704,150 @@ TEST_F(RuledE2ESmokeTest, MobilizeDefenderChoiceAndTokenLifecycleReachBothClient
     EXPECT_TRUE(p1.sawMobilizeTokenSacrificed && p2.sawMobilizeTokenSacrificed);
 }
 
+TEST_F(RuledE2ESmokeTest, TokenCopiesAndPopulatePreserveBothClientsPhysicalIdentity)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("copytokenp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("copytokenp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "copy game start"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "copy game start"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command) {
+        const auto before1 = p1.stateVersion;
+        const auto before2 = p2.stateVersion;
+        sender.sendRuled(command, QStringLiteral("issue 46 command"));
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto pass = [&](SmokeClient &sender) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(sender, command);
+    };
+    auto put = [&](const char *name, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        dev->mutable_put_card_in_zone()->set_card_name(name);
+        dev->mutable_put_card_in_zone()->set_zone(zone);
+        return send(p1, command);
+    };
+    auto cast = [&](const QString &name, quint32 oid) {
+        const auto *action = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, name);
+        if (!action) {
+            return false;
+        }
+        ruled::v1::RuledCommand command;
+        auto *spell = command.mutable_cast_spell();
+        spell->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        spell->mutable_source()->set_hand_index(action->hand_index());
+        if (oid != 0) {
+            const auto published = p1.latestLegal.valid_targets_by_hand_slot().find(action->hand_index() << 8);
+            if (published == p1.latestLegal.valid_targets_by_hand_slot().end() ||
+                published->second.groups_size() != 1) {
+                return false;
+            }
+            const auto &group = published->second.groups(0);
+            if (std::find(group.valid_permanent_ids().begin(), group.valid_permanent_ids().end(), oid) ==
+                group.valid_permanent_ids().end()) {
+                return false;
+            }
+            auto *target = spell->add_targets();
+            target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+            target->set_object_id(oid);
+            target->set_group_index(group.group_index());
+        }
+        return send(p1, command);
+    };
+    ASSERT_TRUE(put("Serra Angel", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_EQ(p1.battlefieldByPlayer[p1.myId].size(), 1u);
+    const quint32 original = p1.battlefieldByPlayer[p1.myId][0].oid;
+    const int originalPhysical = p1.serverCardByEngineOid.at(original);
+    ASSERT_TRUE(put("Cackling Counterpart", ruled::v1::DEV_ZONE_HAND));
+    ASSERT_TRUE(put("Wake the Reflections", ruled::v1::DEV_ZONE_HAND));
+    ASSERT_TRUE(put("Unsummon", ruled::v1::DEV_ZONE_HAND));
+    ruled::v1::RuledCommand mana;
+    mana.mutable_dev_command()->set_target_player_id(p1.myId);
+    mana.mutable_dev_command()->mutable_add_mana()->set_u(3);
+    mana.mutable_dev_command()->mutable_add_mana()->set_w(1);
+    mana.mutable_dev_command()->mutable_add_mana()->set_c(1);
+    ASSERT_TRUE(send(p1, mana));
+    ASSERT_TRUE(cast(QStringLiteral("Cackling Counterpart"), original));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    ASSERT_EQ(p1.battlefieldByPlayer[p1.myId].size(), 2u);
+    ASSERT_EQ(p2.battlefieldByPlayer[p1.myId].size(), 2u);
+    const auto copied = std::find_if(p1.battlefieldByPlayer[p1.myId].begin(), p1.battlefieldByPlayer[p1.myId].end(),
+                                     [original](const auto &permanent) { return permanent.oid != original; });
+    ASSERT_NE(copied, p1.battlefieldByPlayer[p1.myId].end());
+    const quint32 token = copied->oid;
+    EXPECT_EQ(copied->power, 4);
+    EXPECT_EQ(copied->toughness, 4);
+    EXPECT_NE(p1.serverCardByEngineOid.at(token), originalPhysical);
+    EXPECT_EQ(p1.serverCardByEngineOid.at(token), p2.serverCardByEngineOid.at(token));
+    ASSERT_TRUE(cast(QStringLiteral("Wake the Reflections"), 0));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    ASSERT_TRUE(p1.pendingChoice.has_value());
+    EXPECT_FALSE(p2.pendingChoice.has_value());
+    EXPECT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_COPY_SOURCE);
+    EXPECT_EQ(p1.pendingChoice->min(), 1u);
+    ASSERT_EQ(p1.pendingChoice->candidate_object_ids_size(), 1);
+    EXPECT_EQ(p1.pendingChoice->candidate_object_ids(0), token);
+    ruled::v1::RuledCommand choose;
+    choose.mutable_submit_resolution_choice()->add_chosen_object_ids(token);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, choose));
+    ASSERT_EQ(p1.battlefieldByPlayer[p1.myId].size(), 3u);
+    ASSERT_EQ(p2.battlefieldByPlayer[p1.myId].size(), 3u);
+    EXPECT_EQ(p1.serverCardByEngineOid.at(original), originalPhysical);
+    ASSERT_TRUE(cast(QStringLiteral("Unsummon"), token));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    ASSERT_EQ(p1.battlefieldByPlayer[p1.myId].size(), 2u);
+    ASSERT_EQ(p2.battlefieldByPlayer[p1.myId].size(), 2u);
+    EXPECT_EQ(p1.serverCardByEngineOid.at(original), originalPhysical);
+    for (const auto &permanent : p1.battlefieldByPlayer[p1.myId]) {
+        EXPECT_NE(permanent.oid, token);
+        EXPECT_EQ(p1.serverCardByEngineOid.at(permanent.oid), p2.serverCardByEngineOid.at(permanent.oid));
+    }
+}
+
 TEST_F(RuledE2ESmokeTest, TappedOrdinaryTokenReachesBothClientsWithoutCombatState)
 {
     const auto started = startServers();

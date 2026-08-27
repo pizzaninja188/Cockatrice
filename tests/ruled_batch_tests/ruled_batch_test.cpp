@@ -3367,6 +3367,73 @@ TEST_F(RuledBatchTest, CopySnapshotRepaintsAndAnnotatesTheExistingPhysicalCard)
     EXPECT_EQ(card->getId(), serverId);
 }
 
+TEST_F(RuledBatchTest, TokenCopyKeepsIndependentPhysicalIdentityAcrossResyncAndRemoval)
+{
+    seedCardCatalog({"Serra Angel"});
+    Server_Card *original = addCardToTable(p1, "Serra Angel");
+    const int originalId = original->getId();
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    *seedView->add_per_player() = buildPerPlayerView(p1, {460u}, {false});
+    *seedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+
+    ruled::v1::IpcResponse created;
+    created.set_ok(true);
+    auto *token = created.mutable_batch()->add_events()->mutable_token_created();
+    token->set_object_id(461u);
+    token->set_controller_player_id(p1->getPlayerId());
+    token->set_card_id("serra_angel");
+    token->mutable_identity()->set_name("Serra Angel");
+    token->mutable_identity()->set_pt("4/4");
+    token->mutable_identity()->set_color("w");
+    token->mutable_identity()->set_is_creature(true);
+    token->mutable_identity()->add_types("Creature");
+    token->mutable_identity()->add_keywords("Flying");
+    token->mutable_identity()->add_keywords("Vigilance");
+    callBatchApply(created);
+    Server_Card *physicalToken = findCardByEngineOid(p1, 461u);
+    ASSERT_NE(physicalToken, nullptr);
+    const int tokenId = physicalToken->getId();
+    EXPECT_NE(tokenId, originalId);
+    EXPECT_TRUE(physicalToken->getDestroyOnZoneChange());
+    EXPECT_FALSE(original->getDestroyOnZoneChange());
+
+    ruled::v1::IpcResponse resync;
+    resync.set_ok(true);
+    auto *sync = resync.mutable_batch()->add_events()->mutable_zone_view();
+    auto view = buildPerPlayerView(p1, {460u, 461u}, {false, false});
+    for (auto &object : *view.mutable_battlefield_objects()) {
+        object.set_card_id("serra_angel");
+        object.set_effective_display_name("Serra Angel");
+    }
+    *sync->add_per_player() = view;
+    *sync->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(resync);
+    ASSERT_EQ(findCardByEngineOid(p1, 460u)->getId(), originalId);
+    ASSERT_EQ(findCardByEngineOid(p1, 461u)->getId(), tokenId);
+
+    ruled::v1::IpcResponse removed;
+    removed.set_ok(true);
+    auto *move = removed.mutable_batch()->add_events()->mutable_permanent_moved();
+    move->set_object_id(461u);
+    move->set_card_id("serra_angel");
+    move->set_owner_player_id(p1->getPlayerId());
+    move->set_controller_player_id(p1->getPlayerId());
+    move->set_destination(ruled::v1::PermanentMoved::DESTINATION_HAND);
+    auto *remaining = removed.mutable_batch()->add_events()->mutable_zone_view();
+    auto remainingView = buildPerPlayerView(p1, {460u}, {false});
+    remainingView.mutable_battlefield_objects()->RemoveLast();
+    *remaining->add_per_player() = remainingView;
+    *remaining->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(removed);
+    EXPECT_EQ(findCardByEngineOid(p1, 460u), original);
+    EXPECT_EQ(original->getId(), originalId);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards().size(), 1);
+    EXPECT_TRUE(p1->getZones().value(ZoneNames::HAND)->getCards().isEmpty());
+}
+
 TEST_F(RuledBatchTest, CopiedPermanentLeavesAsItsPhysicalCardWithoutMovingTheSource)
 {
     seedCardCatalog({"Clone", "Serra Angel"});

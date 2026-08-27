@@ -4259,6 +4259,35 @@ TEST_F(RuledClientTest, CopySourceChoiceUsesBoardSelectionAndEmptyResolutionChoi
     EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource));
 }
 
+TEST_F(RuledClientTest, PopulateUsesMandatoryCopySourceSelection)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_COPY_SOURCE);
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->set_prompt_text("Choose a creature token you control to populate.");
+    choice->add_candidate_object_ids(501);
+    choice->add_candidate_object_ids(502);
+    apply(batch);
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource));
+    EXPECT_FALSE(state->pendingClickChoiceMayDecline());
+    host.sentCommands.clear();
+    state->declinePendingClickChoice();
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    EXPECT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource));
+    state->submitPendingChoiceObject(502);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    ASSERT_TRUE(host.sentCommands[0].has_submit_resolution_choice());
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids(0), 502u);
+    EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource));
+
+    choice->set_deciding_player_id(kLocalPlayer + 1);
+    apply(batch);
+    EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource));
+}
+
 TEST_F(RuledClientTest, ResolutionCostObjectsToggleAsABoundedCohortBeforeSubmission)
 {
     QSignalSpy progressSpy(state, &RuledClientState::resolutionCostSelectionChanged);

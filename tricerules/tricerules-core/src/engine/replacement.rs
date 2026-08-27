@@ -42,7 +42,11 @@ impl GameEngine {
         event: &BattlefieldEntryEvent,
     ) -> Option<Cow<'a, CardFace>> {
         let object = self.state.objects.get(&event.object_id)?;
-        if let Some(values) = &object.copiable_values {
+        if let Some(values) = object
+            .copiable_values
+            .as_ref()
+            .or(object.token_origin.as_ref())
+        {
             return Some(Cow::Borrowed(&values.face));
         }
         self.registry
@@ -750,18 +754,18 @@ impl GameEngine {
             .objects
             .get(&event.object_id)
             .map(|object| {
-                let copied_room = object
+                let snapshot = object
                     .copiable_values
                     .as_ref()
-                    .is_some_and(|values| values.room_faces.is_some());
-                let printed_room = self
-                    .registry
-                    .get(&object.card_id)
-                    .is_some_and(|definition| definition.layout == Layout::Room);
-                (
-                    copied_room || printed_room,
-                    object.copiable_values.is_some(),
-                )
+                    .or(object.token_origin.as_ref());
+                let is_room = snapshot
+                    .map(|values| values.room_faces.is_some())
+                    .unwrap_or_else(|| {
+                        self.registry
+                            .get(&object.card_id)
+                            .is_some_and(|definition| definition.layout == Layout::Room)
+                    });
+                (is_room, snapshot.is_some())
             })
             .ok_or(EngineError::Illegal("no object"))?;
         move_object_to_zone(
@@ -914,7 +918,14 @@ impl GameEngine {
         } else {
             Vec::new()
         };
-        for entry in entries {
+        for mut entry in entries {
+            // Replacement choices may have changed both characteristics and entry status.
+            // The physical token must be minted with the final, public identity.
+            entry.created.enters_tapped = entry.event.tapped;
+            entry.created.controller_player_id = entry.event.destination_controller;
+            if let Some(values) = self.copiable_values_for(entry.event.object_id) {
+                entry.created.identity = Some(super::resolution::token_identity(&values));
+            }
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::TokenCreated(entry.created)),
             });

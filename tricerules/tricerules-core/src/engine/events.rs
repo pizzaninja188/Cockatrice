@@ -525,6 +525,7 @@ impl GameEngine {
                             object
                                 .copiable_values
                                 .as_ref()
+                                .or(object.token_origin.as_ref())
                                 .map(|values| values.display_name.clone())
                                 .or_else(|| {
                                     self.registry.get(&object.card_id).and_then(|definition| {
@@ -753,6 +754,7 @@ pub(super) fn object_display_name(
             object
                 .copiable_values
                 .as_ref()
+                .or(object.token_origin.as_ref())
                 .map(|values| values.display_name.clone())
                 .or_else(|| registry.get(&object.card_id).map(|d| d.name.clone()))
         })

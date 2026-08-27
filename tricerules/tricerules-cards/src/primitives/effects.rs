@@ -1596,6 +1596,17 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_creature")]
         kind: TargetFilter,
     },
+    /// CR 111 / 707: create `count` tokens copying one targeted permanent under the
+    /// resolving object's controller (Cackling Counterpart, Quasiduplicate).
+    /// Copies use the source's copiable values, not later continuous modifications.
+    CreateTokenCopies {
+        count: Amount,
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
+    },
+    /// CR 701.36: choose a creature token you control during resolution, then copy it.
+    /// Untargeted (Wake the Reflections, Rootborn Defenses).
+    Populate,
     /// CR 111: create `count` token permanents of the registry-defined [`token`](crate::token_def)
     /// under the chosen controller. Untargeted — the characteristics come from the
     /// [`TokenDefinition`](crate::token_def::TokenDefinition); only `count` and `who` vary per
@@ -2225,6 +2236,7 @@ impl SpellEffectKind {
                 CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_) => Vec::new(),
             },
             SpellEffectKind::DamageTarget { target, .. }
+            | SpellEffectKind::CreateTokenCopies { target, .. }
             | SpellEffectKind::ExileIfWouldDieThisTurn { target }
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyAttached { target, .. }
@@ -2284,6 +2296,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DestroyAll { .. }
             | SpellEffectKind::DamageAll { .. }
             | SpellEffectKind::CreateTokens { .. }
+            | SpellEffectKind::Populate
             | SpellEffectKind::CreateAttackingTokens { .. }
             | SpellEffectKind::ProduceMana { .. }
             | SpellEffectKind::AddMana { .. }
@@ -2382,6 +2395,7 @@ impl SpellEffectKind {
                 | SpellEffectKind::GainLife { amount }
                 | SpellEffectKind::Mill { count: amount, .. }
                 | SpellEffectKind::CreateTokens { count: amount, .. }
+                | SpellEffectKind::CreateTokenCopies { count: amount, .. }
                 | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
                 SpellEffectKind::PumpTarget {
                     scale: Some(scale), ..
@@ -2436,6 +2450,11 @@ impl SpellEffectKind {
         if let SpellEffectKind::PutCounters { counter, .. } = self {
             counter.validate()?;
         }
+        if let SpellEffectKind::CreateTokenCopies { target, .. } = self {
+            if !target.is_permanent_only() {
+                return Err("CreateTokenCopies requires a permanent source".into());
+            }
+        }
 
         match self {
             SpellEffectKind::DamageTarget { amount, .. }
@@ -2444,6 +2463,7 @@ impl SpellEffectKind {
             | SpellEffectKind::GainLife { amount }
             | SpellEffectKind::Mill { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. }
+            | SpellEffectKind::CreateTokenCopies { count: amount, .. }
             | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => amount.validate()?,
             SpellEffectKind::PumpTarget {
                 scale: Some(scale), ..
