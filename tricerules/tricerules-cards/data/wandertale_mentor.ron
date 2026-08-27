@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-08-27. CR 700.14; producing mana is not spending it.
+(
+  id: "wandertale_mentor",
+  name: "Wandertale Mentor",
+  mana_cost: "{R}{G}",
+  types: ["Creature", "Raccoon", "Bard"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WheneverPlayerExpendsMana(amount: 4),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    text: "Whenever you expend 4, put a +1/+1 counter on this creature.",
+  )],
+  activated_abilities: [(
+    costs: [Tap],
+    effect: [ProduceMana(options: [(r: 1), (g: 1)])],
+    text: "{T}: Add {R} or {G}.",
+  )],
+)

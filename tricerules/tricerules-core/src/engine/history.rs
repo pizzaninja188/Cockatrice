@@ -241,6 +241,19 @@ impl GameEngine {
         record.spells_cast
     }
 
+    /// CR 700.14: record only committed mana payments for spells. Independent of watcher presence.
+    pub(super) fn record_spell_mana_spent(&mut self, player: PlayerId, amount: u64) -> GameEvent {
+        let record = self.state.turn_history.current.player_mut(player);
+        let before = record.mana_spent_casting_spells;
+        let after = before.saturating_add(amount);
+        record.mana_spent_casting_spells = after;
+        GameEvent::ManaSpentCastingSpell {
+            player,
+            before,
+            after,
+        }
+    }
+
     pub(super) fn fire_card_drawn(&mut self, drawer: PlayerId) {
         let ordinal = self
             .state
@@ -723,6 +736,34 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issue_172_new_turn_record_resets_spending_even_for_the_same_active_player() {
+        let mut engine = GameEngine::new(172030, &[0, 1], 20, None, true).unwrap();
+        let player = engine.state.active_player_id();
+        engine.record_spell_mana_spent(player, 8);
+        // Exercise the shared rollover with a consecutive turn for the same seat. This does not
+        // implement extra-turn scheduling; it proves the ledger has no player-change dependency.
+        engine.state.turn_history.finish_turn();
+        engine.state.turn_instance += 1;
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .previous
+                .player(player)
+                .mana_spent_casting_spells,
+            8
+        );
+        assert!(matches!(
+            engine.record_spell_mana_spent(player, 4),
+            GameEvent::ManaSpentCastingSpell {
+                before: 0,
+                after: 4,
+                ..
+            }
+        ));
+    }
 
     fn deck_with_cards(cards: &[&str], basic: &str) -> Vec<String> {
         let mut deck: Vec<_> = cards.iter().map(|card| (*card).to_string()).collect();

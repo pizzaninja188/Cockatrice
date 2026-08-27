@@ -437,6 +437,13 @@ pub enum TriggerCondition {
         #[serde(default)]
         max_mana_value: Option<u32>,
     },
+    /// CR 700.14: the selected player's actual spell spending crosses this threshold once a turn.
+    /// Covers Bark-Knuckle Boxer, Teapot Slinger, and Wandertale Mentor; not a trigger-use cap.
+    WheneverPlayerExpendsMana {
+        #[serde(default)]
+        player: CastTriggerPlayer,
+        amount: u32,
+    },
     /// Whenever a selected player draws their Nth card in a turn. Each successfully drawn card
     /// is a distinct CR 121.2 event; opening hands and mulligans are not draws.
     WheneverPlayerDrawsNthCard {
@@ -580,6 +587,9 @@ impl TriggerCondition {
                 .is_some_and(|(minimum, maximum)| minimum > maximum) =>
             {
                 Err("WheneverControllerAttacks min_attackers cannot exceed max_attackers".into())
+            }
+            Self::WheneverPlayerExpendsMana { amount: 0, .. } => {
+                Err("Expend threshold must be at least one".into())
             }
             Self::WheneverPlayerCastsSpell {
                 ordinal: Some(0), ..

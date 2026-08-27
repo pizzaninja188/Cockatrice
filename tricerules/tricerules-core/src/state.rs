@@ -1386,6 +1386,8 @@ pub struct UndoableManaAbility {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PlayerTurnRecord {
     pub spells_cast: u32,
+    /// CR 700.14: actual mana spent casting spells, including before an Expend watcher entered.
+    pub mana_spent_casting_spells: u64,
     pub cards_drawn: u32,
     pub attacked: bool,
 }

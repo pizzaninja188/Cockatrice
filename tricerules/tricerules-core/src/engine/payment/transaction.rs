@@ -57,6 +57,8 @@ pub(in crate::engine) struct CostPaymentReceipt {
     pub(in crate::engine) sacrificed: Vec<SacrificeSnapshot>,
     pub(in crate::engine) paid_card_costs: Vec<PaidCardCost>,
     pub(in crate::engine) life_paid: u32,
+    pub(in crate::engine) mana_spent: u64,
+    pub(in crate::engine) expend_triggers: Vec<crate::engine::triggers::CollectedTrigger>,
     pub(in crate::engine) restricted_mana_spent: Vec<(u32, ManaAmount)>,
     pub(in crate::engine) cast_cost_receipts: Vec<CastCostReceipt>,
 }
@@ -136,7 +138,15 @@ pub(in crate::engine) fn card_result_entry(
     }
 }
 
+/// The same atomic debits pay casting or activated costs, but only casting expends mana.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CostPurpose {
+    Spell,
+    Ability,
+}
+
 pub(in crate::engine) struct CostTransactionPlan {
+    purpose: CostPurpose,
     player: PlayerId,
     player_idx: usize,
     debits: Vec<CostDebit>,
@@ -591,6 +601,7 @@ impl GameEngine {
 
         Ok(PreparedSpellCosts {
             transaction: CostTransactionPlan {
+                purpose: CostPurpose::Spell,
                 player,
                 player_idx,
                 debits,
@@ -937,6 +948,7 @@ impl GameEngine {
         }
 
         Ok(CostTransactionPlan {
+            purpose: CostPurpose::Ability,
             player,
             player_idx: idx,
             debits,
@@ -956,6 +968,8 @@ impl GameEngine {
             sacrificed: vec![],
             paid_card_costs: vec![],
             life_paid: 0,
+            mana_spent: 0,
+            expend_triggers: vec![],
             restricted_mana_spent: vec![],
             cast_cost_receipts: plan.cast_cost_receipts,
         };
@@ -986,11 +1000,21 @@ impl GameEngine {
                     }
                 }
                 CostDebit::Mana(mana) => {
+                    let spent = mana.mana_spent();
+                    payment.mana_spent += spent;
                     payment.life_paid += mana.life_cost;
                     payment
                         .restricted_mana_spent
                         .extend(mana.restricted_spent.iter().copied());
                     commit_mana_payment(&mut self.state, plan.player_idx, mana);
+                    if plan.purpose == CostPurpose::Spell {
+                        let event = self.record_spell_mana_spent(plan.player, spent);
+                        // Mana is the first spell debit, so capture before later sacrifices.
+                        // Stage only after casting completes, with every other waiting trigger.
+                        payment
+                            .expend_triggers
+                            .extend(self.collect_event_triggers(&[event]));
+                    }
                 }
                 CostDebit::Discard {
                     object_id: oid,
@@ -1277,6 +1301,139 @@ mod convoke_transaction_tests {
     use super::*;
 
     #[test]
+    fn issue_172_receipts_count_actual_mana_not_cost_or_life() {
+        // Costs, X, taxes and reductions exercise the shared planner, not a printed-MV proxy.
+        for (cost, x, extra, reduction, phyrexian, expected) in [
+            ("{2}{G}", 0, 0, 2, false, 1),
+            ("{X}{G}", 3, 2, 1, false, 5),
+            ("{2}{G}", 0, 0, 0, false, 3),
+            ("{0}", 0, 0, 0, false, 0),
+            ("{G/P}", 0, 0, 0, true, 0),
+            ("{G/P}", 0, 0, 0, false, 1),
+        ] {
+            for purpose in [CostPurpose::Spell, CostPurpose::Ability] {
+                let mut engine = GameEngine::new(172010, &[0, 1], 20, None, true).unwrap();
+                engine.state.players[0].mana_pool.green = 1;
+                engine.state.players[0].mana_pool.colorless = 10;
+                engine.state.players[0].retained_combat_mana.colorless = 10;
+                let flex = if phyrexian {
+                    vec![rv1::FlexPipPayment {
+                        pip_index: 0,
+                        pay_life: true,
+                    }]
+                } else {
+                    vec![]
+                };
+                let mana = super::super::mana::plan_mana_payment_with_reduction(
+                    &engine.state,
+                    0,
+                    &ManaCost::parse(cost).unwrap(),
+                    x,
+                    extra,
+                    reduction,
+                    &flex,
+                )
+                .unwrap();
+                let payment = engine
+                    .commit_cost_transaction(CostTransactionPlan {
+                        purpose,
+                        player: 0,
+                        player_idx: 0,
+                        debits: vec![CostDebit::Mana(mana)],
+                        cast_cost_receipts: vec![],
+                    })
+                    .unwrap();
+                assert_eq!(payment.mana_spent, expected, "{cost}");
+                assert_eq!(payment.life_paid, if phyrexian { 2 } else { 0 });
+                assert_eq!(
+                    engine
+                        .state
+                        .turn_history
+                        .current
+                        .player(0)
+                        .mana_spent_casting_spells,
+                    if purpose == CostPurpose::Spell {
+                        expected
+                    } else {
+                        0
+                    }
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn issue_172_restricted_and_retained_mana_are_counted_once_and_stale_debits_are_atomic() {
+        let mut engine = GameEngine::new(172011, &[0, 1], 20, None, true).unwrap();
+        engine.state.players[0].mana_pool.colorless = 2;
+        engine.state.players[0].retained_combat_mana.colorless = 2;
+        engine.state.players[0]
+            .restricted_mana
+            .push(crate::state::RestrictedManaContribution {
+                restriction_group_id: 7,
+                amount: ManaAmount {
+                    g: 1,
+                    ..Default::default()
+                },
+            });
+        let selections = [rv1::ManaSpendSelection {
+            restriction_group_id: 7,
+            g: 1,
+            ..Default::default()
+        }];
+        let mana = plan_mana_payment_with_restricted_reduction(
+            &engine.state,
+            0,
+            &ManaCost::parse("{2}{G}").unwrap(),
+            0,
+            0,
+            0,
+            &[],
+            &selections,
+            &[7],
+        )
+        .unwrap();
+        assert_eq!(mana.mana_spent(), 3);
+        let stale = CostTransactionPlan {
+            purpose: CostPurpose::Spell,
+            player: 0,
+            player_idx: 0,
+            debits: vec![
+                CostDebit::Mana(mana.clone()),
+                CostDebit::Tap {
+                    object_id: u32::MAX,
+                    generation: 0,
+                },
+            ],
+            cast_cost_receipts: vec![],
+        };
+        let before = format!("{:?}", engine.state);
+        assert!(engine.commit_cost_transaction(stale).is_err());
+        assert_eq!(format!("{:?}", engine.state), before);
+        let payment = engine
+            .commit_cost_transaction(CostTransactionPlan {
+                purpose: CostPurpose::Spell,
+                player: 0,
+                player_idx: 0,
+                debits: vec![CostDebit::Mana(mana)],
+                cast_cost_receipts: vec![],
+            })
+            .unwrap();
+        assert_eq!(payment.mana_spent, 3);
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .current
+                .player(0)
+                .mana_spent_casting_spells,
+            3
+        );
+        assert!(engine.state.players[0].restricted_mana.is_empty());
+        assert_eq!(engine.state.players[0].retained_combat_mana.colorless, 0);
+    }
+
+    #[test]
     fn convoke_can_tap_then_sacrifice_but_not_pay_a_second_tap_cost() {
         let mut engine = GameEngine::new(
             145,
@@ -1361,6 +1518,7 @@ mod convoke_transaction_tests {
         assert!(matches!(plan.debits[2], CostDebit::Sacrifice { .. }));
         let probe = PreparedSpellCosts {
             transaction: CostTransactionPlan {
+                purpose: CostPurpose::Spell,
                 player: 0,
                 player_idx: 0,
                 debits: vec![CostDebit::Tap {

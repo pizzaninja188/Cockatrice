@@ -1085,6 +1085,27 @@ impl GameEngine {
                 }
                 out
             }
+            GameEvent::ManaSpentCastingSpell {
+                player,
+                before,
+                after,
+            } => sources
+                .iter()
+                .flat_map(|source| {
+                    self.matching_snapshot_abilities(source, |condition| {
+                        let TriggerCondition::WheneverPlayerExpendsMana {
+                            player: who,
+                            amount,
+                        } = condition
+                        else {
+                            return false;
+                        };
+                        self.relative_player_matches(*who, *player, source.controller)
+                            && *before < u64::from(*amount)
+                            && u64::from(*amount) <= *after
+                    })
+                })
+                .collect(),
             GameEvent::SpellCast {
                 caster,
                 card_id: cast_card_id,
@@ -1543,6 +1564,7 @@ impl GameEngine {
             GameEvent::PhaseBegan { active_player, .. } => Some(*active_player),
             GameEvent::Sacrificed { player, .. } => Some(*player),
             GameEvent::Surveilled { player } => Some(*player),
+            GameEvent::ManaSpentCastingSpell { player, .. } => Some(*player),
             GameEvent::CardDrawn { drawer, .. } => Some(*drawer),
             GameEvent::TargetsChosen { controller, .. } => Some(*controller),
             _ => None,
@@ -1726,6 +1748,89 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issue_172_thresholds_overshoot_and_relative_players_share_snapshot_matching() {
+        let mut engine = GameEngine::new(172012, &[0, 1], 20, None, true).unwrap();
+        engine.state.players.push(PlayerState::new(2, 20));
+        let ability = engine
+            .registry
+            .get("wandertale_mentor")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .clone();
+        let source = TriggerSourceSnapshot {
+            object_id: 100,
+            card_id: "wandertale_mentor".into(),
+            controller: 1,
+            face_index: 0,
+            zone_change_generation: 3,
+            face_change_generation: 0,
+            attached_to: None,
+            triggered_abilities: [4, 8]
+                .into_iter()
+                .enumerate()
+                .map(|(index, amount)| {
+                    let mut ability = ability.clone();
+                    ability.trigger = TriggerCondition::WheneverPlayerExpendsMana {
+                        player: CastTriggerPlayer::AnyPlayer,
+                        amount,
+                    };
+                    (index, ability)
+                })
+                .collect(),
+        };
+        for (before, after, count) in [
+            (0, 3, 0),
+            (3, 4, 1),
+            (0, 9, 2),
+            (4, 8, 1),
+            (8, 16, 0),
+            (3, 3, 0),
+        ] {
+            let event = GameEvent::ManaSpentCastingSpell {
+                player: 2,
+                before,
+                after,
+            };
+            let matches = engine.collect_triggers(&event, std::slice::from_ref(&source));
+            assert_eq!(matches.len(), count);
+            assert!(matches
+                .iter()
+                .all(|t| t.source_zone_change == 3 && t.controller == 1));
+        }
+        for who in [
+            CastTriggerPlayer::Controller,
+            CastTriggerPlayer::Opponent,
+            CastTriggerPlayer::AnyPlayer,
+        ] {
+            let mut source = source.clone();
+            source.triggered_abilities.truncate(1);
+            source.triggered_abilities[0].1.trigger = TriggerCondition::WheneverPlayerExpendsMana {
+                player: who,
+                amount: 4,
+            };
+            for player in [0, 1, 2] {
+                let event = GameEvent::ManaSpentCastingSpell {
+                    player,
+                    before: 0,
+                    after: 4,
+                };
+                let expected = match who {
+                    CastTriggerPlayer::Controller => player == 1,
+                    CastTriggerPlayer::Opponent => player != 1,
+                    CastTriggerPlayer::AnyPlayer => true,
+                };
+                assert_eq!(
+                    !engine
+                        .collect_triggers(&event, std::slice::from_ref(&source))
+                        .is_empty(),
+                    expected
+                );
+            }
+        }
+    }
 
     fn target_condition_match(
         condition: &TriggerCondition,

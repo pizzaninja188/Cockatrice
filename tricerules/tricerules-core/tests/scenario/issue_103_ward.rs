@@ -104,6 +104,16 @@ fn paying_mana_preserves_the_exact_targeting_spell() {
             &submit_resolution_decision(ResolutionChoiceDecision::PayMana),
         )
         .expect("pay Ward");
+    assert_eq!(
+        engine
+            .state
+            .turn_history
+            .current
+            .player(0)
+            .mana_spent_casting_spells,
+        1,
+        "only Unsummon's mana counts for Expend, not Ward's two mana"
+    );
     assert!(engine.state.stack.iter().any(|item| item.id == spell_id));
     assert!(engine.state.pending_resolution.is_none());
 

@@ -20,6 +20,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn issue_172_expend_threshold_is_positive_and_defaults_to_controller() {
+        for amount in [0, 1, 4, u32::MAX] {
+            let trigger: TriggerCondition =
+                ron::from_str(&format!("WheneverPlayerExpendsMana(amount: {amount})")).unwrap();
+            assert_eq!(
+                trigger,
+                TriggerCondition::WheneverPlayerExpendsMana {
+                    player: CastTriggerPlayer::Controller,
+                    amount,
+                }
+            );
+            assert_eq!(trigger.validate().is_ok(), amount != 0);
+        }
+    }
+
+    #[test]
     fn special_action_mana_restrictions_validate_without_spell_or_ability_permissions() {
         for purpose in ["UnlockRoomDoor", "TurnFaceUp"] {
             let restriction: ManaSpendingRestriction = ron::from_str(&format!(

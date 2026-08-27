@@ -89,6 +89,75 @@ fn commit(
 }
 
 #[test]
+fn issue_172_convoke_spends_only_selected_mana_and_previews_never_expend() {
+    for (convoke_count, mana_spent) in [(0, 5), (1, 4), (2, 3), (5, 0)] {
+        let mut engine = setup("unexpected_assistance");
+        inject_creature_on_battlefield(&mut engine, 0, "wandertale_mentor");
+        let mut contributions = vec![];
+        for index in 0..convoke_count {
+            let (card, kind) = if index < 3 {
+                ("grizzly_bears", rv1::ConvokePaymentKind::Generic)
+            } else {
+                (
+                    "merfolk_of_the_pearl_trident",
+                    rv1::ConvokePaymentKind::Blue,
+                )
+            };
+            let oid = inject_creature_on_battlefield(&mut engine, 0, card);
+            contributions.push((oid, kind));
+        }
+        let mana = if convoke_count == 5 {
+            rv1::SpellPaymentMana::default()
+        } else {
+            rv1::SpellPaymentMana {
+                u: 2,
+                c: 3 - convoke_count,
+                ..Default::default()
+            }
+        };
+        engine.state.players[0].mana_pool.blue = mana.u;
+        engine.state.players[0].mana_pool.colorless = mana.c;
+        let cast = draft(&engine, "unexpected_assistance", &contributions, mana);
+        for _ in 0..3 {
+            assert!(preview(&engine, &cast).complete);
+        }
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .current
+                .player(0)
+                .mana_spent_casting_spells,
+            0
+        );
+        let mut stale = cast.clone();
+        stale.payment.as_mut().unwrap().expected_state_revision += 1;
+        let before = format!("{:?}", engine.state);
+        assert!(commit(&mut engine, stale).is_err());
+        assert_eq!(format!("{:?}", engine.state), before);
+        commit(&mut engine, cast).unwrap();
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .current
+                .player(0)
+                .mana_spent_casting_spells,
+            mana_spent
+        );
+        assert_eq!(
+            engine
+                .state
+                .stack
+                .iter()
+                .filter(|item| item.is_triggered)
+                .count(),
+            usize::from(mana_spent >= 4)
+        );
+    }
+}
+
+#[test]
 fn convoke_serialized_command_replays_identically_without_preview_queries() {
     use prost::Message;
     fn run(with_previews: bool) -> (Vec<u8>, Vec<rv1::RuledEventBatch>) {

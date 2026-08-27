@@ -650,6 +650,15 @@ fn bump_in_the_night_can_be_cast_from_graveyard_with_flashback() {
             },
         )
         .expect("flashback cast");
+    assert_eq!(
+        e.state
+            .turn_history
+            .current
+            .player(0)
+            .mana_spent_casting_spells,
+        6,
+        "Expend counts the {{5}}{{R}} alternative cost, not Bump's mana value of one"
+    );
     // CR 702.34: the stack card is labelled, because nothing on the face distinguishes a flashback
     // cast from a normal one — and this one is exiled rather than buried when it leaves the stack.
     let annotation = cast

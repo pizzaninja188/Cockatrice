@@ -413,6 +413,12 @@ enum GameEvent {
         /// Mana value of the cast face on the stack, including the announced value of X.
         mana_value: u32,
     },
+    /// CR 700.14: one committed spell mana debit. No protocol event or client spending ledger.
+    ManaSpentCastingSpell {
+        player: PlayerId,
+        before: u64,
+        after: u64,
+    },
     /// A spell or ability has legally acquired its final targets. `targets` intentionally keeps
     /// duplicates for the stack object's own semantics; trigger collection deduplicates watched
     /// permanents so one object becoming a target multiple times fires each watcher only once.

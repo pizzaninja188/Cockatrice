@@ -806,6 +806,7 @@ impl GameEngine {
         let ordinal = self.record_spell_cast(player);
         target_triggers
             .extend(self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed));
+        target_triggers.extend(payment.expend_triggers);
         target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
             caster: player,
             card_id: cast_card_id,

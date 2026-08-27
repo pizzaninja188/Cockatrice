@@ -164,6 +164,30 @@ pub(in crate::engine) struct ManaPaymentPlan {
     expected_restricted: Vec<RestrictedManaContribution>,
 }
 
+impl ManaPaymentPlan {
+    /// Actual debits for Expend (Bark-Knuckle Boxer, Teapot Slinger), not the printed cost.
+    /// Retained combat mana is a subset of the ordinary pool; life is not mana.
+    pub(in crate::engine) fn mana_spent(&self) -> u64 {
+        let ordinary: u64 = self
+            .expected_pool
+            .iter()
+            .zip(self.remaining)
+            .map(|(before, after)| u64::from(before - after))
+            .sum();
+        let restricted: u64 = self
+            .restricted_spent
+            .iter()
+            .map(|(_, amount)| {
+                [amount.w, amount.u, amount.b, amount.r, amount.g, amount.c]
+                    .into_iter()
+                    .map(u64::from)
+                    .sum::<u64>()
+            })
+            .sum();
+        ordinary + restricted
+    }
+}
+
 /// Validate a mana payment without mutating the pool or life total. Activated costs use this
 /// plan as one component of their all-or-nothing CR 601.2h transaction.
 pub(in crate::engine) fn plan_mana_payment(

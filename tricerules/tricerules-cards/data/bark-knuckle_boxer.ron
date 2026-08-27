@@ -1,0 +1,14 @@
+// Oracle and rulings checked 2026-08-27. CR 700.14 counts actual spell spending, once per threshold.
+(
+  id: "bark-knuckle_boxer",
+  name: "Bark-Knuckle Boxer",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Raccoon", "Berserker"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WheneverPlayerExpendsMana(amount: 4),
+    effect: [GrantKeywords(subject: Source, keywords: [Indestructible])],
+    text: "Whenever you expend 4, this creature gains indestructible until end of turn.",
+  )],
+)
