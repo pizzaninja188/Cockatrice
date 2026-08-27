@@ -22,8 +22,9 @@ pub use primitives::{
     CounterKind, DelayedTokenSacrificeTiming, EffectContext, EffectDuration, Evasion,
     GameCondition, GraveyardAggregate, Keyword, LibraryPartitionKind, ManaAmount, ManaSpendFilter,
     ManaSpendingRestriction, PermanentTypeFilter, PowerComparison, PtScale, RelativePlayerSet,
-    SearchDestination, SearchZoneSelection, SpellCostModifier, SpellEffectKind, TriggerCondition,
-    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
+    SearchDestination, SearchZoneSelection, SpecialActionManaPurpose, SpellCostModifier,
+    SpellEffectKind, TriggerCondition, TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
+    ZoneCardFilter,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

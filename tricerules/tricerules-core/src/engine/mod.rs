@@ -45,10 +45,11 @@ use tricerules_cards::primitives::{
     PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
     PowerComparison, PreventionAmountBasis, ProtectionCardType, ProtectionGrant, ProtectionQuality,
     RelativePlayerSet, ResolutionBranchDef, ResolutionCost, ReturnController, SearchDestination,
-    SearchZoneSelection, SpecialActionAffected, SpecialActionKind, SpellCostModifier,
-    SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount, TargetController,
-    TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected, TargetingSourceFilter,
-    TriggerCondition, TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
+    SearchZoneSelection, SpecialActionAffected, SpecialActionKind, SpecialActionManaPurpose,
+    SpellCostModifier, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
+    TargetController, TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected,
+    TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
+    ZoneCardFilter,
 };
 use tricerules_cards::{
     is_creature_type, CardDefinition, CardFace, CardRegistry, CharacteristicDefiningAbility,
@@ -1095,6 +1096,7 @@ impl GameEngine {
             &cost,
             &command.flex_payments,
             &command.restricted_mana,
+            SpecialActionManaPurpose::TurnFaceUp,
         )?;
         self.state
             .objects
@@ -1178,6 +1180,7 @@ impl GameEngine {
             &cost,
             &command.flex_payments,
             &command.restricted_mana,
+            SpecialActionManaPurpose::UnlockRoomDoor,
         )?;
 
         let unlock_event = self.transition_room_door(command.object_id, face_index)?;

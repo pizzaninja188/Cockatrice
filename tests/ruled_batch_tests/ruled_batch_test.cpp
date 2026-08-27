@@ -574,6 +574,12 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
 
     auto &p1Legal = (*batch.mutable_legal_by_player())[1];
     p1Legal.add_labels("P1 legal");
+    auto *faceUp = p1Legal.add_permanent_actions();
+    faceUp->set_kind(ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP);
+    faceUp->set_object_id(129u);
+    faceUp->set_zone_change_generation(4u);
+    faceUp->set_mana_cost("{1}{U}");
+    faceUp->add_eligible_restricted_mana_group_ids(7u);
     auto *p1Cast = p1Legal.add_hand_actions();
     p1Cast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
     p1Cast->mutable_cost_choices()->add_choices()->add_candidate_ids(7);
@@ -632,6 +638,13 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     const auto forP1 = redactFor(batch, p1);
     ASSERT_EQ(forP1.legal_by_player_size(), 1);
     EXPECT_TRUE(forP1.legal_by_player().contains(1));
+    ASSERT_EQ(forP1.legal_by_player().at(1).permanent_actions_size(), 1);
+    const auto &privateAction = forP1.legal_by_player().at(1).permanent_actions(0);
+    EXPECT_EQ(privateAction.object_id(), 129u);
+    EXPECT_EQ(privateAction.zone_change_generation(), 4u);
+    EXPECT_EQ(privateAction.mana_cost(), "{1}{U}");
+    ASSERT_EQ(privateAction.eligible_restricted_mana_group_ids_size(), 1);
+    EXPECT_EQ(privateAction.eligible_restricted_mana_group_ids(0), 7u);
     EXPECT_EQ(forP1.legal_by_player().at(1).hand_actions(0).cost_choices().choices(0).candidate_ids(0), 7u);
     EXPECT_EQ(forP1.legal_by_player()
                   .at(1)
@@ -649,6 +662,7 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     const auto forP2 = redactFor(batch, p2);
     ASSERT_EQ(forP2.legal_by_player_size(), 1);
     EXPECT_TRUE(forP2.legal_by_player().contains(2));
+    EXPECT_EQ(forP2.legal_by_player().at(2).permanent_actions_size(), 0);
     EXPECT_EQ(forP2.legal_by_player().at(2).hand_actions(0).cost_choices().choices(0).candidate_ids(0), 9u);
     EXPECT_EQ(forP2.legal_by_player()
                   .at(2)

@@ -2840,6 +2840,7 @@ TEST_F(RuledClientTest, MultiplePermanentActionsAreEngineAuthoredAndClearWhenNoL
     action->set_zone_change_generation(9u);
     action->set_label("Turn face up — {1}{G}");
     action->set_mana_cost("{1}{G}");
+    action->add_eligible_restricted_mana_group_ids(7u);
     auto *unlock = (*batch.mutable_legal_by_player())[kLocalPlayer].add_permanent_actions();
     unlock->set_kind(ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR);
     unlock->set_object_id(9802u);
@@ -2847,6 +2848,7 @@ TEST_F(RuledClientTest, MultiplePermanentActionsAreEngineAuthoredAndClearWhenNoL
     unlock->set_label("Unlock Tunnel of Hate — {4}{R}{R}");
     unlock->set_mana_cost("{4}{R}{R}");
     unlock->set_face_index(1u);
+    unlock->add_eligible_restricted_mana_group_ids(8u);
     apply(batch);
 
     const auto parsed = state->permanentActionsForOid(9802u);
@@ -2855,10 +2857,12 @@ TEST_F(RuledClientTest, MultiplePermanentActionsAreEngineAuthoredAndClearWhenNoL
     EXPECT_EQ(parsed[0].zoneChangeGeneration, 9u);
     EXPECT_EQ(parsed[0].label, QString("Turn face up — {1}{G}"));
     EXPECT_EQ(parsed[0].manaCost, QString("{1}{G}"));
+    EXPECT_EQ(parsed[0].eligibleRestrictedManaGroupIds, QSet<quint32>({7u}));
     EXPECT_FALSE(parsed[0].faceIndex.has_value());
     EXPECT_EQ(parsed[1].kind, ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR);
     ASSERT_TRUE(parsed[1].faceIndex.has_value());
     EXPECT_EQ(*parsed[1].faceIndex, 1u);
+    EXPECT_EQ(parsed[1].eligibleRestrictedManaGroupIds, QSet<quint32>({8u}));
     const auto current = state->permanentActionFor(9802u, 9u, ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR,
                                                    std::optional<quint32>{1u});
     ASSERT_TRUE(current.has_value());
@@ -2876,6 +2880,15 @@ TEST_F(RuledClientTest, MultiplePermanentActionsAreEngineAuthoredAndClearWhenNoL
     EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(*state, pending));
     pending.expectedZoneChangeGeneration = 10u;
     EXPECT_FALSE(ruledPendingAbilitySourceStillCurrent(*state, pending));
+
+    action->clear_eligible_restricted_mana_group_ids();
+    action->add_eligible_restricted_mana_group_ids(9u);
+    unlock->clear_eligible_restricted_mana_group_ids();
+    apply(batch);
+    const auto refreshed = state->permanentActionsForOid(9802u);
+    ASSERT_EQ(refreshed.size(), 2);
+    EXPECT_EQ(refreshed[0].eligibleRestrictedManaGroupIds, QSet<quint32>({9u}));
+    EXPECT_TRUE(refreshed[1].eligibleRestrictedManaGroupIds.isEmpty());
 
     apply(ruled::v1::RuledEventBatch{});
     EXPECT_TRUE(state->permanentActionsForOid(9802u).isEmpty());

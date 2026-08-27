@@ -146,13 +146,20 @@ impl GameEngine {
         cost: &ManaCost,
         flex_payments: &[rv1::FlexPipPayment],
         restricted_mana: &[rv1::ManaSpendSelection],
+        purpose: SpecialActionManaPurpose,
     ) -> Result<(), EngineError> {
-        if !restricted_mana.is_empty() {
-            return Err(EngineError::Illegal(
-                "restricted mana cannot pay this permanent action",
-            ));
-        }
-        let plan = plan_mana_payment(&self.state, player_idx, cost, 0, 0, flex_payments)?;
+        let eligible = self.eligible_restricted_mana_for_special_action(player_idx, purpose);
+        let plan = mana::plan_mana_payment_with_restricted_reduction(
+            &self.state,
+            player_idx,
+            cost,
+            0,
+            0,
+            0,
+            flex_payments,
+            restricted_mana,
+            &eligible,
+        )?;
         commit_mana_payment(&mut self.state, player_idx, plan);
         Ok(())
     }
@@ -428,6 +435,32 @@ impl GameEngine {
                 })
             })
             .collect()
+    }
+
+    /// Room unlocking and turning a manifested permanent face up are distinct from spells and
+    /// activated abilities. Use this same engine-owned quote for publication and final payment.
+    pub(super) fn eligible_restricted_mana_for_special_action(
+        &self,
+        player_idx: usize,
+        purpose: SpecialActionManaPurpose,
+    ) -> Vec<u32> {
+        let mut ids: Vec<u32> = self.state.players[player_idx]
+            .restricted_mana
+            .iter()
+            .filter_map(|entry| {
+                let restriction = self
+                    .state
+                    .mana_restrictions
+                    .get(entry.restriction_group_id.checked_sub(1)? as usize)?;
+                restriction
+                    .special_actions
+                    .contains(&purpose)
+                    .then_some(entry.restriction_group_id)
+            })
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids
     }
 
     pub(super) fn eligible_restricted_mana_for_spell(

@@ -247,6 +247,10 @@ public:
         }
     };
     Pool myPool;
+    std::map<int, int> restrictedBlueByPlayer;
+    bool sawRestrictedBlueMana = false;
+    int specialActionManaSteps = 0;
+    int specialActionRestrictedPayments = 0;
     std::optional<ruled::v1::ResolutionChoiceRequired> pendingChoice;
     // CR 603.3b: the engine blocks on this until it is answered, so the bot must handle it or the
     // whole game deadlocks — every simultaneous multi-trigger board reaches it.
@@ -1597,6 +1601,12 @@ public:
                 }
             } else if (ev.has_mana_pool_updated()) {
                 const auto &mp = ev.mana_pool_updated();
+                int restrictedBlue = 0;
+                for (const auto &group : mp.restricted_groups()) {
+                    restrictedBlue += static_cast<int>(group.u());
+                }
+                restrictedBlueByPlayer[mp.player_id()] = restrictedBlue;
+                sawRestrictedBlueMana = sawRestrictedBlueMana || restrictedBlue > 0;
                 if (mp.player_id() == myId) {
                     myPool.w = mp.w();
                     myPool.u = mp.u();
@@ -1946,6 +1956,36 @@ public:
     bool hasRoomPhysicalAnnotation() const
     {
         return sawRoomPhysicalAnnotation;
+    }
+
+    // Produce a real, separately tracked Peeper contribution for each special-action payment.
+    bool prepareRestrictedSpecialActionMana(int paymentIndex)
+    {
+        const int firstStep = paymentIndex * 2;
+        if (specialActionManaSteps == firstStep) {
+            ruled::v1::RuledCommand cmd;
+            auto *dev = cmd.mutable_dev_command();
+            dev->set_target_player_id(myId);
+            auto *put = dev->mutable_put_card_in_zone();
+            put->set_card_name("Creeping Peeper");
+            put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+            put->set_ready(true);
+            ++specialActionManaSteps;
+            sendRuled(cmd, QStringLiteral("dev: conjure Creeping Peeper"));
+            return false;
+        }
+        if (specialActionManaSteps == firstStep + 1) {
+            if (const auto oid = firstOwnUntapped(QStringLiteral("creeping_peeper"))) {
+                ruled::v1::RuledCommand cmd;
+                auto *ability = cmd.mutable_activate_ability();
+                setBattlefieldAbilitySource(ability, *oid);
+                ability->set_ability_index(0);
+                ++specialActionManaSteps;
+                sendRuled(cmd, QStringLiteral("produce restricted Peeper mana"));
+            }
+            return false;
+        }
+        return true;
     }
 
     std::optional<quint32> firstOwnUntapped(const QString &cardId) const
@@ -2576,8 +2616,9 @@ public:
                 dev->set_target_player_id(myId);
                 dev->mutable_add_mana()->set_g(1);
                 dev->mutable_add_mana()->set_r(1);
-                // {1}{G} for Manifest Dread plus {3}{R} for Hill Giant's special action.
-                dev->mutable_add_mana()->set_c(4);
+                // {1}{G} for Manifest Dread; two ordinary generic plus Peeper's {U} pay
+                // the generic portion of Hill Giant's {3}{R} face-up special action.
+                dev->mutable_add_mana()->set_c(3);
                 sendRuled(cmd, QStringLiteral("dev: add mana for Manifest Dread and turn face up"));
                 return;
             }
@@ -2595,16 +2636,27 @@ public:
                 return;
             }
             if (submittedManifestChoice && !turnManifestFaceUpSent) {
+                if (!prepareRestrictedSpecialActionMana(0)) {
+                    return;
+                }
                 for (const auto &action : latestLegal.permanent_actions()) {
                     if (action.kind() == ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP &&
                         action.object_id() == manifestOid) {
                         EXPECT_EQ(action.zone_change_generation(), manifestGeneration);
                         EXPECT_EQ(action.mana_cost(), "{3}{R}");
+                        EXPECT_EQ(action.eligible_restricted_mana_group_ids_size(), 1);
+                        if (action.eligible_restricted_mana_group_ids_size() != 1) {
+                            return;
+                        }
                         ruled::v1::RuledCommand cmd;
                         auto *turn = cmd.mutable_execute_permanent_action();
                         turn->set_kind(ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP);
                         turn->set_object_id(action.object_id());
                         turn->set_expected_zone_change_generation(action.zone_change_generation());
+                        auto *payment = turn->add_restricted_mana();
+                        payment->set_restriction_group_id(action.eligible_restricted_mana_group_ids(0));
+                        payment->set_u(1);
+                        ++specialActionRestrictedPayments;
                         turnManifestFaceUpSent = true;
                         sendRuled(cmd, QStringLiteral("turn manifested Hill Giant face up"));
                         return;
@@ -2619,6 +2671,7 @@ public:
             // generic permanent-action contract. The unlock itself never becomes a stack object;
             // Derelict Attic's resulting triggered ability does.
             if (!devRoomConjureSent) {
+                EXPECT_EQ(restrictedBlueByPlayer[myId], 0);
                 devRoomConjureSent = true;
                 ruled::v1::RuledCommand cmd;
                 auto *dev = cmd.mutable_dev_command();
@@ -2635,7 +2688,7 @@ public:
                 auto *dev = cmd.mutable_dev_command();
                 dev->set_target_player_id(myId);
                 dev->mutable_add_mana()->set_b(2);
-                dev->mutable_add_mana()->set_c(5);
+                dev->mutable_add_mana()->set_c(4);
                 sendRuled(cmd, QStringLiteral("dev: add mana for both Room doors"));
                 return;
             }
@@ -2654,15 +2707,26 @@ public:
                 return;
             }
             if (!roomUnlockSent) {
+                if (!prepareRestrictedSpecialActionMana(1)) {
+                    return;
+                }
                 for (const auto &action : latestLegal.permanent_actions()) {
                     if (action.kind() == ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR &&
                         action.object_id() == roomOid && action.has_face_index() && action.face_index() == 0u) {
+                        EXPECT_EQ(action.eligible_restricted_mana_group_ids_size(), 1);
+                        if (action.eligible_restricted_mana_group_ids_size() != 1) {
+                            return;
+                        }
                         ruled::v1::RuledCommand cmd;
                         auto *unlock = cmd.mutable_execute_permanent_action();
                         unlock->set_kind(action.kind());
                         unlock->set_object_id(action.object_id());
                         unlock->set_expected_zone_change_generation(action.zone_change_generation());
                         unlock->set_face_index(action.face_index());
+                        auto *payment = unlock->add_restricted_mana();
+                        payment->set_restriction_group_id(action.eligible_restricted_mana_group_ids(0));
+                        payment->set_u(1);
+                        ++specialActionRestrictedPayments;
                         roomUnlockSent = true;
                         sendRuled(cmd, QStringLiteral("unlock Derelict Attic door"));
                         return;
@@ -2673,6 +2737,7 @@ public:
             if (!sawRoomFullyUnlocked || !sawRoomUnlockTrigger || stackDepth != 0) {
                 return;
             }
+            EXPECT_EQ(restrictedBlueByPlayer[myId], 0);
             // Issue #101: activate a subtypecycling ability from the hand, then a Renew
             // ability from the graveyard. Both commands use the exact engine ObjectId and
             // zone-change generation published only to the owning client.
@@ -4077,6 +4142,10 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
         << "both clients did not receive identical cast-door and fully-unlocked Room state";
     EXPECT_TRUE(p1.sawRoomUnlockTrigger && p2.sawRoomUnlockTrigger)
         << "the unlock action produced no physical stack object, but its resulting door trigger was not published";
+    EXPECT_EQ(p1.specialActionRestrictedPayments, 2);
+    EXPECT_TRUE(p1.sawRestrictedBlueMana && p2.sawRestrictedBlueMana);
+    EXPECT_EQ(p1.restrictedBlueByPlayer[p1.myId], 0);
+    EXPECT_EQ(p2.restrictedBlueByPlayer[p1.myId], 0);
     EXPECT_TRUE(p1.roomPhysicalIdentityContinuous && p2.roomPhysicalIdentityContinuous && p1.roomServerCardId >= 0 &&
                 p1.roomServerCardId == p2.roomServerCardId)
         << "Room casting and unlocking did not preserve one physical Server_Card identity";

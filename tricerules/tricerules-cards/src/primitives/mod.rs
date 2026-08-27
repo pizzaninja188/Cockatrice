@@ -20,6 +20,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn special_action_mana_restrictions_validate_without_spell_or_ability_permissions() {
+        for purpose in ["UnlockRoomDoor", "TurnFaceUp"] {
+            let restriction: ManaSpendingRestriction = ron::from_str(&format!(
+                "(label: \"Special action only\", special_actions: [{purpose}])"
+            ))
+            .expect("typed special-action restriction");
+            assert!(restriction.validate().is_ok(), "{purpose}");
+            assert!(restriction.cast_spell.is_empty());
+            assert!(restriction.activate_ability.is_empty());
+        }
+    }
+
+    #[test]
+    fn special_action_mana_restrictions_reject_unknown_purposes() {
+        assert!(ron::from_str::<ManaSpendingRestriction>(
+            "(label: \"Invalid\", special_actions: [CastAnything])"
+        )
+        .is_err());
+    }
+
+    #[test]
     fn firebending_uses_a_resolving_combat_retained_mana_effect() {
         let effect = SpellEffectKind::AddMana {
             amount: ManaAmount {

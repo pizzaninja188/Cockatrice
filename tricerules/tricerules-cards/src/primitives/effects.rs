@@ -1951,6 +1951,14 @@ impl ManaSpendFilter {
     }
 }
 
+/// Payment purposes for the existing Room-unlock and manifest face-up special actions.
+/// Kept separate from special-action prohibitions: these permissions constrain mana, not actions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SpecialActionManaPurpose {
+    UnlockRoomDoor,
+    TurnFaceUp,
+}
+
 /// CR 106.6 restriction carried by an individual mana contribution. Empty purpose lists mean
 /// that purpose is disallowed. Filters within one list are ORed so one contribution can cover
 /// wording such as "an Elemental spell or a Chandra planeswalker spell."
@@ -1962,6 +1970,8 @@ pub struct ManaSpendingRestriction {
     pub cast_spell: Vec<ManaSpendFilter>,
     #[serde(default)]
     pub activate_ability: Vec<ManaSpendFilter>,
+    #[serde(default)]
+    pub special_actions: Vec<SpecialActionManaPurpose>,
 }
 
 impl ManaSpendingRestriction {
@@ -1969,8 +1979,11 @@ impl ManaSpendingRestriction {
         if self.label.trim().is_empty() {
             return Err("mana spending restriction label cannot be empty".into());
         }
-        if self.cast_spell.is_empty() && self.activate_ability.is_empty() {
-            return Err("mana spending restriction must allow a spell or ability purpose".into());
+        if self.cast_spell.is_empty()
+            && self.activate_ability.is_empty()
+            && self.special_actions.is_empty()
+        {
+            return Err("mana spending restriction must allow a spending purpose".into());
         }
         self.cast_spell
             .iter()

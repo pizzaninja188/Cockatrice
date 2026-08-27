@@ -147,6 +147,7 @@ fn convolute_decline_counters_target_to_its_owners_graveyard() {
 #[test]
 fn convolute_allows_mana_abilities_without_priority_and_refreshes_affordability() {
     let (mut e, bolt_oid, _) = setup_convolute_over_bolt();
+    let peeper = inject_permanent_on_battlefield(&mut e, 0, "creeping_peeper");
     let mut islands = Vec::new();
     for _ in 0..4 {
         let index = hand_index_for_card(&e, 0, "island");
@@ -160,6 +161,14 @@ fn convolute_allows_mana_abilities_without_priority_and_refreshes_affordability(
     e.apply_command(1, &pass())
         .expect("Convolute controller passes");
     e.apply_command(0, &pass()).expect("park payment");
+    let restricted = e
+        .apply_command(0, &activate_ability(peeper, 0, vec![]))
+        .expect("produce Peeper mana during resolution payment");
+    assert!(
+        !find_resolution_choice(&restricted)
+            .unwrap()
+            .payment_currently_legal
+    );
     for (index, island) in islands.into_iter().enumerate() {
         let batch = e
             .apply_command(0, &activate_ability(island, 0, vec![]))
@@ -175,6 +184,9 @@ fn convolute_allows_mana_abilities_without_priority_and_refreshes_affordability(
     .expect("pay after fourth Island");
     assert!(e.state.stack.iter().any(|item| item.id == bolt_oid));
     assert_eq!(e.state.players[0].mana_pool.blue, 0);
+    // Even with three ordinary mana and one restricted mana, the fourth Island was required:
+    // paying a soft counter is neither an enchantment spell nor an allowed special action.
+    assert_eq!(e.state.players[0].restricted_mana[0].amount.u, 1);
 }
 
 #[test]

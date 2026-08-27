@@ -456,7 +456,11 @@ fn legal_permanent_actions(eng: &GameEngine, player: PlayerId) -> Vec<rv1::Legal
                         zone_change_generation: generation,
                         label: format!("Turn face up — {mana_cost}"),
                         mana_cost,
-                        eligible_restricted_mana_group_ids: Vec::new(),
+                        eligible_restricted_mana_group_ids: eng
+                            .eligible_restricted_mana_for_special_action(
+                                player_index,
+                                SpecialActionManaPurpose::TurnFaceUp,
+                            ),
                         face_index: None,
                     });
                 }
@@ -482,7 +486,11 @@ fn legal_permanent_actions(eng: &GameEngine, player: PlayerId) -> Vec<rv1::Legal
                         zone_change_generation: generation,
                         label: format!("Unlock {} — {mana_cost}", face.name),
                         mana_cost,
-                        eligible_restricted_mana_group_ids: Vec::new(),
+                        eligible_restricted_mana_group_ids: eng
+                            .eligible_restricted_mana_for_special_action(
+                                player_index,
+                                SpecialActionManaPurpose::UnlockRoomDoor,
+                            ),
                         face_index: Some(face_index as u32),
                     });
                 }

@@ -1,0 +1,22 @@
+// Oracle and ruling checked 2026-08-27. CR 106.6; 116.2b/m; 701.40b; 709.5e.
+// The same restricted blue mana pays enchantment spells, Room unlocks, and face-up costs.
+(
+  id: "creeping_peeper",
+  name: "Creeping Peeper",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Eye"],
+  power: 2,
+  toughness: 1,
+  activated_abilities: [(
+    costs: [Tap],
+    effect: [ProduceMana(
+      options: [(u: 1)],
+      restriction: Some((
+        label: "Spend only to cast an enchantment spell, unlock a door, or turn a permanent face up.",
+        cast_spell: [(card_type: Some(Enchantment))],
+        special_actions: [UnlockRoomDoor, TurnFaceUp],
+      )),
+    )],
+    text: "{T}: Add {U}. Spend this mana only to cast an enchantment spell, unlock a door, or turn a permanent face up.",
+  )],
+)

@@ -1,4 +1,441 @@
 use crate::helpers::*;
+use tricerules_proto::ruled::v1::{DevCommand, DevMoveCard, DevZone};
+
+// Issue #129: both existing special actions share restricted-mana planning. Use a real mana
+// ability so these scenarios cover the card definition, contribution identity, and publication.
+fn special_action_payment_fixture(
+    kind: PermanentActionKind,
+) -> (GameEngine, u32, ExecutePermanentAction) {
+    special_action_payment_fixture_for_players(kind, &[0, 1])
+}
+
+fn special_action_payment_fixture_for_players(
+    kind: PermanentActionKind,
+    players: &[i32],
+) -> (GameEngine, u32, ExecutePermanentAction) {
+    // Session creation is currently two-seat-only; extend the state like existing multiplayer
+    // scenarios, without widening session creation as part of this payment change.
+    let mut engine = GameEngine::new(129_001, &players[..2], 20, None, true).expect("new");
+    while engine.state.turn_step != tricerules_core::TurnStep::Main1 {
+        engine
+            .apply_command(engine.state.priority_player_id(), &pass())
+            .expect("advance to main");
+    }
+    for &player in &players[2..] {
+        engine
+            .state
+            .players
+            .push(tricerules_core::state::PlayerState::new(player, 20));
+        engine.state.next_object_id = engine.state.next_object_id.max(player as u32 + 1);
+    }
+    let peeper = inject_permanent_on_battlefield(&mut engine, 0, "creeping_peeper");
+    let object_id = match kind {
+        PermanentActionKind::TurnFaceUp => {
+            let oid = inject_permanent_on_battlefield(&mut engine, 0, "coral_merfolk");
+            engine.state.objects.get_mut(&oid).unwrap().face_down = true;
+            oid
+        }
+        PermanentActionKind::UnlockRoomDoor => {
+            let oid = inject_permanent_on_battlefield(&mut engine, 0, "glassworks_shattered_yard");
+            engine
+                .state
+                .room_states
+                .insert(oid, tricerules_core::state::RoomState::default());
+            engine.state.players[0].mana_pool.red = 1;
+            oid
+        }
+        _ => unreachable!(),
+    };
+    engine.state.players[0].mana_pool.colorless = 1;
+    engine
+        .apply_command(players[0], &activate_ability(peeper, 0, vec![]))
+        .expect("produce restricted blue");
+    let group = engine.state.players[0].restricted_mana[0].restriction_group_id;
+    let action = ExecutePermanentAction {
+        kind: kind as i32,
+        object_id,
+        expected_zone_change_generation: 0,
+        face_index: (kind == PermanentActionKind::UnlockRoomDoor).then_some(0),
+        restricted_mana: vec![ManaSpendSelection {
+            restriction_group_id: group,
+            u: 1,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    (engine, peeper, action)
+}
+
+fn execute_special_action(action: ExecutePermanentAction) -> RuledCommand {
+    RuledCommand {
+        cmd: Some(Cmd::ExecutePermanentAction(action)),
+    }
+}
+
+fn special_action_payment_snapshot(engine: &GameEngine) -> String {
+    // Undo history is intentionally invalidated by existing command dispatch, even on rejection.
+    // Compare resources, identities and command-log position rather than that UI convenience.
+    let objects = engine
+        .state
+        .objects
+        .iter()
+        .map(|(id, object)| {
+            (
+                *id,
+                (
+                    object.zone,
+                    object.tapped,
+                    object.face_down,
+                    object.controller,
+                ),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    format!(
+        "{:?}",
+        (
+            &engine.state.players,
+            objects,
+            &engine.state.room_states,
+            engine.state.command_index,
+            engine.state.priority_idx,
+            engine.state.stack.len()
+        )
+    )
+}
+
+#[test]
+fn special_action_restricted_mana_is_published_and_spent_for_both_purposes() {
+    for kind in [
+        PermanentActionKind::TurnFaceUp,
+        PermanentActionKind::UnlockRoomDoor,
+    ] {
+        let (mut engine, _, action) = special_action_payment_fixture(kind);
+        let legal = engine.initial_response_batch();
+        let published = legal.legal_by_player[&0]
+            .permanent_actions
+            .iter()
+            .find(|candidate| {
+                candidate.object_id == action.object_id && candidate.face_index == action.face_index
+            })
+            .expect("published action");
+        assert_eq!(
+            published.eligible_restricted_mana_group_ids,
+            vec![action.restricted_mana[0].restriction_group_id]
+        );
+        assert!(legal.legal_by_player[&1].permanent_actions.is_empty());
+        let oid = action.object_id;
+        let batch = engine
+            .apply_command(0, &execute_special_action(action))
+            .expect("special action payment");
+        assert!(engine.state.players[0].restricted_mana.is_empty());
+        assert_eq!(engine.state.players[0].mana_pool, Default::default());
+        assert_eq!(engine.state.priority_player_id(), 0);
+        assert_eq!(
+            engine.state.objects[&oid].zone,
+            tricerules_core::Zone::Battlefield
+        );
+        assert_eq!(
+            engine
+                .state
+                .zone_change_generation
+                .get(&oid)
+                .copied()
+                .unwrap_or(0),
+            0
+        );
+        match kind {
+            PermanentActionKind::TurnFaceUp => {
+                assert!(!engine.state.objects[&oid].face_down);
+                assert!(engine.state.stack.is_empty());
+                assert!(batch.events.iter().any(|event| matches!(&event.ev,
+                    Some(Ev::FaceChanged(face)) if face.object_id == oid && !face.face_down)));
+            }
+            PermanentActionKind::UnlockRoomDoor => {
+                assert_eq!(engine.state.room_states[&oid].unlocked, [true, false])
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[test]
+fn special_action_restricted_mana_invalid_selections_are_atomic() {
+    for kind in [
+        PermanentActionKind::TurnFaceUp,
+        PermanentActionKind::UnlockRoomDoor,
+    ] {
+        for invalid in 0..7 {
+            let (mut engine, _, mut action) = special_action_payment_fixture(kind);
+            match invalid {
+                0 => action.restricted_mana[0].restriction_group_id = 999,
+                1 => action.restricted_mana.push(action.restricted_mana[0]),
+                2 => action.restricted_mana[0].u = 0,
+                3 => action.restricted_mana[0].u = 2,
+                4 => engine.state.players[0].restricted_mana.clear(),
+                5 => action.expected_zone_change_generation += 1,
+                6 => engine.state.players[0].mana_pool.colorless = 0,
+                _ => unreachable!(),
+            }
+            let before = special_action_payment_snapshot(&engine);
+            assert!(
+                matches!(
+                    engine.apply_command(0, &execute_special_action(action)),
+                    Err(tricerules_core::EngineError::Illegal(_))
+                ),
+                "case {invalid}"
+            );
+            assert_eq!(
+                special_action_payment_snapshot(&engine),
+                before,
+                "case {invalid}"
+            );
+        }
+    }
+}
+
+#[test]
+fn special_action_restricted_mana_does_not_depend_on_the_mana_source_remaining() {
+    let (mut engine, peeper, action) =
+        special_action_payment_fixture(PermanentActionKind::TurnFaceUp);
+    engine.enable_dev_commands();
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: 0,
+                    dev: Some(tricerules_proto::ruled::v1::dev_command::Dev::MoveCard(
+                        DevMoveCard {
+                            card_name: "Creeping Peeper".into(),
+                            zone: DevZone::Graveyard as i32,
+                            ready: false,
+                        },
+                    )),
+                })),
+            },
+        )
+        .expect("remove mana source");
+    assert_eq!(
+        engine.state.objects[&peeper].zone,
+        tricerules_core::Zone::Graveyard
+    );
+    engine
+        .apply_command(0, &execute_special_action(action))
+        .expect("mana retains its permission");
+}
+
+#[test]
+fn special_action_restricted_mana_does_not_expand_spell_or_ability_permissions() {
+    let (mut engine, peeper, _) = special_action_payment_fixture(PermanentActionKind::TurnFaceUp);
+    let group = engine.state.players[0].restricted_mana[0].restriction_group_id;
+    let creature = inject_card_into_hand(&mut engine, 0, "coral_merfolk");
+    let mut command = cast_spell(
+        engine.state.players[0]
+            .hand
+            .iter()
+            .position(|oid| *oid == creature)
+            .unwrap(),
+        vec![],
+    );
+    if let Some(Cmd::CastSpell(cast)) = command.cmd.as_mut() {
+        cast.restricted_mana.push(ManaSpendSelection {
+            restriction_group_id: group,
+            u: 1,
+            ..Default::default()
+        });
+    }
+    let before = special_action_payment_snapshot(&engine);
+    assert!(engine.apply_command(0, &command).is_err());
+    assert_eq!(special_action_payment_snapshot(&engine), before);
+    let tome = inject_permanent_on_battlefield(&mut engine, 0, "jayemdae_tome");
+    let legal = engine.initial_response_batch();
+    assert!(
+        legal.legal_by_player[&0].mana_payment_by_ability[&((tome as u64) << 32)]
+            .eligible_restricted_mana_group_ids
+            .is_empty()
+    );
+    engine.state.players[0].mana_pool.colorless = 3;
+    let mut activation = activate_ability(tome, 0, vec![]);
+    if let Some(Cmd::ActivateAbility(ability)) = activation.cmd.as_mut() {
+        ability.restricted_mana.push(ManaSpendSelection {
+            restriction_group_id: group,
+            u: 1,
+            ..Default::default()
+        });
+    }
+    let before = special_action_payment_snapshot(&engine);
+    assert!(engine.apply_command(0, &activation).is_err());
+    assert_eq!(special_action_payment_snapshot(&engine), before);
+    let flight = inject_card_into_hand(&mut engine, 0, "flight");
+    let mut command = cast_spell(
+        engine.state.players[0]
+            .hand
+            .iter()
+            .position(|oid| *oid == flight)
+            .unwrap(),
+        target_object(peeper),
+    );
+    if let Some(Cmd::CastSpell(cast)) = command.cmd.as_mut() {
+        cast.restricted_mana.push(ManaSpendSelection {
+            restriction_group_id: group,
+            u: 1,
+            ..Default::default()
+        });
+    }
+    engine
+        .apply_command(0, &command)
+        .expect("Peeper mana casts enchantments");
+}
+
+#[test]
+fn special_action_restricted_mana_permissions_are_specific_and_refresh_after_changes() {
+    use tricerules_cards::SpecialActionManaPurpose;
+    for kind in [
+        PermanentActionKind::TurnFaceUp,
+        PermanentActionKind::UnlockRoomDoor,
+    ] {
+        for allowed in [
+            vec![],
+            vec![if kind == PermanentActionKind::TurnFaceUp {
+                SpecialActionManaPurpose::UnlockRoomDoor
+            } else {
+                SpecialActionManaPurpose::TurnFaceUp
+            }],
+        ] {
+            let (mut engine, _, action) = special_action_payment_fixture(kind);
+            let group = action.restricted_mana[0].restriction_group_id;
+            // Spell-only mana, or mana for the other special action, cannot pay this action.
+            engine.state.mana_restrictions[(group - 1) as usize].special_actions = allowed;
+            let legal = engine.initial_response_batch();
+            assert!(legal.legal_by_player[&0]
+                .permanent_actions
+                .iter()
+                .filter(|candidate| candidate.object_id == action.object_id)
+                .all(|candidate| candidate.eligible_restricted_mana_group_ids.is_empty()));
+            let before = special_action_payment_snapshot(&engine);
+            assert!(engine
+                .apply_command(0, &execute_special_action(action))
+                .is_err());
+            assert_eq!(special_action_payment_snapshot(&engine), before);
+        }
+    }
+}
+
+#[test]
+fn special_action_restricted_mana_obeys_controller_timing_and_action_state() {
+    for kind in [
+        PermanentActionKind::TurnFaceUp,
+        PermanentActionKind::UnlockRoomDoor,
+    ] {
+        for invalid in 0..4 {
+            let (mut engine, _, action) = special_action_payment_fixture(kind);
+            match invalid {
+                0 => engine.state.priority_idx = 1,
+                1 => {
+                    engine
+                        .state
+                        .objects
+                        .get_mut(&action.object_id)
+                        .unwrap()
+                        .controller = 1
+                }
+                2 if kind == PermanentActionKind::TurnFaceUp => {
+                    engine
+                        .state
+                        .objects
+                        .get_mut(&action.object_id)
+                        .unwrap()
+                        .face_down = false
+                }
+                2 => {
+                    engine
+                        .state
+                        .room_states
+                        .get_mut(&action.object_id)
+                        .unwrap()
+                        .unlocked[0] = true
+                }
+                3 if kind == PermanentActionKind::TurnFaceUp => {
+                    engine
+                        .state
+                        .objects
+                        .get_mut(&action.object_id)
+                        .unwrap()
+                        .card_id = "lightning_bolt".into();
+                }
+                3 => engine.state.turn_step = tricerules_core::TurnStep::Upkeep,
+                _ => unreachable!(),
+            }
+            let before = special_action_payment_snapshot(&engine);
+            assert!(engine
+                .apply_command(0, &execute_special_action(action))
+                .is_err());
+            assert_eq!(special_action_payment_snapshot(&engine), before);
+        }
+    }
+}
+
+#[test]
+fn special_action_restricted_mana_supports_multiplayer_and_owner_controller_divergence() {
+    for kind in [
+        PermanentActionKind::TurnFaceUp,
+        PermanentActionKind::UnlockRoomDoor,
+    ] {
+        let (mut engine, _, action) =
+            special_action_payment_fixture_for_players(kind, &[7, 19, 2_000_000]);
+        engine
+            .state
+            .objects
+            .get_mut(&action.object_id)
+            .unwrap()
+            .owner = 2_000_000;
+        let legal = engine.initial_response_batch();
+        assert!(!legal.legal_by_player[&7].permanent_actions.is_empty());
+        assert!(legal.legal_by_player[&19].permanent_actions.is_empty());
+        assert!(legal.legal_by_player[&2_000_000]
+            .permanent_actions
+            .is_empty());
+        let before = special_action_payment_snapshot(&engine);
+        assert!(engine
+            .apply_command(2_000_000, &execute_special_action(action.clone()))
+            .is_err());
+        assert_eq!(special_action_payment_snapshot(&engine), before);
+        engine
+            .apply_command(7, &execute_special_action(action))
+            .expect("controller pays with own mana");
+        assert!(engine.state.players[0].restricted_mana.is_empty());
+        assert_eq!(engine.state.priority_player_id(), 7);
+    }
+}
+
+#[test]
+fn special_action_restricted_mana_can_pay_the_entire_cost_and_replay_deterministically() {
+    let run = || {
+        let (mut engine, _, mut action) =
+            special_action_payment_fixture(PermanentActionKind::TurnFaceUp);
+        let second = inject_permanent_on_battlefield(&mut engine, 0, "creeping_peeper");
+        engine
+            .apply_command(0, &activate_ability(second, 0, vec![]))
+            .unwrap();
+        engine.state.players[0].mana_pool.clear();
+        action.restricted_mana[0].u = 2;
+        let legal = engine.initial_response_batch();
+        assert_eq!(
+            legal.legal_by_player[&0].permanent_actions[0]
+                .eligible_restricted_mana_group_ids
+                .len(),
+            1,
+            "multiple contributions of the same group publish one eligibility id"
+        );
+        let batch = engine
+            .apply_command(0, &execute_special_action(action))
+            .expect("restricted mana pays colored and generic pips");
+        assert!(engine.state.players[0].restricted_mana.is_empty());
+        (special_action_payment_snapshot(&engine), batch)
+    };
+    assert_eq!(run(), run());
+}
 
 /// CR 605: a basic land's `{T}: Add {C}` mana ability is engine-owned. Activating it taps the
 /// source and adds the mana immediately — no stack, no priority change (CR 605.3a–b) — and the
