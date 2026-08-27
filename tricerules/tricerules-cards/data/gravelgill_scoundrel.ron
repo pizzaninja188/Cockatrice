@@ -1,0 +1,30 @@
+// Oracle and rulings checked 2026-08-26. This is an optional resolution payment, not a target;
+// the chosen creature may have entered this turn and the selection excludes the attacker itself.
+(
+  id: "gravelgill_scoundrel",
+  name: "Gravelgill Scoundrel",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Merfolk", "Rogue"],
+  power: 1,
+  toughness: 3,
+  keywords: [Vigilance],
+  triggered_abilities: [(
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [ChooseResolutionBranch(
+      optional: true,
+      branches: [(
+        label: "Tap another untapped creature you control",
+        cost: TapPermanents(
+          count: 1,
+          filter: (kind: Creature, controller: You),
+          exclude_source: true,
+        ),
+        effects: [ApplyCombatRestriction(
+          scope: Source,
+          restriction: (cant_be_blocked: true),
+        )],
+      )],
+    )],
+    text: "Whenever this creature attacks, you may tap another untapped creature you control. If you do, this creature can't be blocked this turn.",
+  )],
+)

@@ -725,7 +725,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     // No mulligan below a zero-card hand.
     openingMulliganButton->setVisible(mode == PromptMode::OpeningMulligan && (7 - promptState.required) - 1 >= 0);
     openingBottomCancelButton->setVisible((mode == PromptMode::OpeningBottom && promptState.selected >= 1) ||
-                                          mode == PromptMode::CostSelection);
+                                          (mode == PromptMode::CostSelection && promptState.canDecline));
     openingBottomDoneButton->setVisible(mode == PromptMode::OpeningBottom && promptState.required > 0 &&
                                         promptState.selected == promptState.required);
     resolutionHandPickConfirmButton->setVisible(mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection);

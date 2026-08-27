@@ -134,7 +134,9 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
         ResolutionCost::DiscardCard { .. } => {
             format!("Discard a matching card to pay for {ward_text}, or decline.")
         }
-        ResolutionCost::None | ResolutionCost::SacrificePermanent { .. } => {
+        ResolutionCost::None
+        | ResolutionCost::SacrificePermanent { .. }
+        | ResolutionCost::TapPermanents { .. } => {
             return Err(EngineError::Illegal("unsupported Ward cost"));
         }
     };
@@ -205,7 +207,9 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
         }
         ResolutionCost::DiscardCard { filter } => {
             let cost = ResolutionCost::DiscardCard { filter };
-            let candidates = cx.engine.resolution_cost_candidates(deciding_player, &cost);
+            let candidates = cx
+                .engine
+                .resolution_cost_candidates(deciding_player, 0, &cost);
             if candidates.is_empty() {
                 counter_stack_object_ref(cx.engine, target, &ward_text, cx.events)?;
                 return Ok(EffectOutcome::Continue);
@@ -280,7 +284,9 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 event,
             )
         }
-        ResolutionCost::None | ResolutionCost::SacrificePermanent { .. } => unreachable!(),
+        ResolutionCost::None
+        | ResolutionCost::SacrificePermanent { .. }
+        | ResolutionCost::TapPermanents { .. } => unreachable!(),
     };
 
     cx.events.push(rv1::RuledEvent {

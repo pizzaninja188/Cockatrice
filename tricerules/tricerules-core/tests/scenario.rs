@@ -113,6 +113,8 @@ mod issue_130_calibration_creatures;
 mod issue_139_pending_trigger_publication;
 #[path = "scenario/issue_142_endure.rs"]
 mod issue_142_endure;
+#[path = "scenario/issue_144_selectable_tap_payments.rs"]
+mod issue_144_selectable_tap_payments;
 #[path = "scenario/issue_151_firebending.rs"]
 mod issue_151_firebending;
 #[path = "scenario/issue_152_exhaust.rs"]

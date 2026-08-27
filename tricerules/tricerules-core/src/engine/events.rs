@@ -449,6 +449,9 @@ impl GameEngine {
                                     .iter()
                                     .map(|cost| match cost {
                                         AbilityCost::Tap => "{T}".to_string(),
+                                        AbilityCost::TapPermanents { count, .. } => {
+                                            format!("Tap {count} permanents")
+                                        }
                                         AbilityCost::Loyalty(delta) if *delta >= 0 => {
                                             format!("+{delta}")
                                         }

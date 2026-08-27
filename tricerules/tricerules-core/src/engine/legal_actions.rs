@@ -331,6 +331,7 @@ fn activated_ability_info(
         .iter()
         .map(|cost| match cost {
             AbilityCost::Tap => "{T}".to_string(),
+            AbilityCost::TapPermanents { count, .. } => format!("Tap {count} permanents"),
             AbilityCost::Loyalty(delta) if *delta >= 0 => format!("+{delta}"),
             AbilityCost::Loyalty(delta) => delta.to_string(),
             AbilityCost::Mana(cost) => cost.to_string(),
@@ -534,9 +535,11 @@ fn legal_ability_cost_choices(
                 choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Hand as i32,
-                    candidate_ids,
+                    candidate_ids: candidate_ids.clone(),
                     min: 1,
                     max: 1,
+                    kind: rv1::CostChoiceKind::Discard as i32,
+                    candidate_objects: vec![],
                 });
             }
             AbilityCost::SacrificeSelf | AbilityCost::DiscardSelf | AbilityCost::ExileSelf => {
@@ -556,9 +559,62 @@ fn legal_ability_cost_choices(
                 choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Battlefield as i32,
-                    candidate_ids,
+                    candidate_ids: candidate_ids.clone(),
                     min: 1,
                     max: 1,
+                    kind: rv1::CostChoiceKind::Sacrifice as i32,
+                    candidate_objects: candidate_ids
+                        .iter()
+                        .map(|oid| rv1::CostObjectRef {
+                            object_id: *oid,
+                            zone_change_generation: eng
+                                .state
+                                .zone_change_generation
+                                .get(oid)
+                                .copied()
+                                .unwrap_or(0),
+                        })
+                        .collect(),
+                });
+            }
+            AbilityCost::TapPermanents {
+                count,
+                filter,
+                exclude_source,
+            } => {
+                let candidate_ids: Vec<ObjectId> = eng
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|state| state.battlefield.iter().copied())
+                    .filter(|oid| !exclude_source || *oid != source)
+                    .filter(|&oid| {
+                        eng.ability_cost_permanent_matches(player, Some(source), oid, filter)
+                            && !eng.state.objects[&oid].tapped
+                    })
+                    .collect();
+                for _ in 0..*count {
+                    assignment_candidates.push(candidate_ids.clone());
+                }
+                choices.push(rv1::LegalCostChoice {
+                    cost_index: cost_index as u32,
+                    zone: rv1::CostChoiceZone::Battlefield as i32,
+                    candidate_ids: candidate_ids.clone(),
+                    min: *count,
+                    max: *count,
+                    kind: rv1::CostChoiceKind::Tap as i32,
+                    candidate_objects: candidate_ids
+                        .iter()
+                        .map(|oid| rv1::CostObjectRef {
+                            object_id: *oid,
+                            zone_change_generation: eng
+                                .state
+                                .zone_change_generation
+                                .get(oid)
+                                .copied()
+                                .unwrap_or(0),
+                        })
+                        .collect(),
                 });
             }
             AbilityCost::ExileGraveyardCards {
@@ -589,6 +645,8 @@ fn legal_ability_cost_choices(
                     candidate_ids,
                     min: *count,
                     max: *count,
+                    kind: rv1::CostChoiceKind::Exile as i32,
+                    candidate_objects: vec![],
                 });
             }
             AbilityCost::Tap | AbilityCost::Mana(_) | AbilityCost::Loyalty(_) => {}
@@ -632,6 +690,8 @@ fn legal_spell_cost_choices(
                     candidate_ids: candidates.into_iter().map(|(slot, _)| slot).collect(),
                     min: 1,
                     max: 1,
+                    kind: rv1::CostChoiceKind::Discard as i32,
+                    candidate_objects: vec![],
                 });
             }
             AdditionalCost::SacrificePermanent { filter } => {
@@ -646,9 +706,62 @@ fn legal_spell_cost_choices(
                 choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Battlefield as i32,
-                    candidate_ids,
+                    candidate_ids: candidate_ids.clone(),
                     min: 1,
                     max: 1,
+                    kind: rv1::CostChoiceKind::Sacrifice as i32,
+                    candidate_objects: candidate_ids
+                        .iter()
+                        .map(|oid| rv1::CostObjectRef {
+                            object_id: *oid,
+                            zone_change_generation: eng
+                                .state
+                                .zone_change_generation
+                                .get(oid)
+                                .copied()
+                                .unwrap_or(0),
+                        })
+                        .collect(),
+                });
+            }
+            AdditionalCost::TapPermanents {
+                count,
+                filter,
+                exclude_source,
+            } => {
+                let candidate_ids: Vec<ObjectId> = eng
+                    .state
+                    .players
+                    .iter()
+                    .flat_map(|state| state.battlefield.iter().copied())
+                    .filter(|oid| !exclude_source || *oid != source)
+                    .filter(|&oid| {
+                        eng.ability_cost_permanent_matches(player, None, oid, filter)
+                            && !eng.state.objects[&oid].tapped
+                    })
+                    .collect();
+                for _ in 0..*count {
+                    assignment_candidates.push(candidate_ids.clone());
+                }
+                choices.push(rv1::LegalCostChoice {
+                    cost_index: cost_index as u32,
+                    zone: rv1::CostChoiceZone::Battlefield as i32,
+                    candidate_ids: candidate_ids.clone(),
+                    min: *count,
+                    max: *count,
+                    kind: rv1::CostChoiceKind::Tap as i32,
+                    candidate_objects: candidate_ids
+                        .iter()
+                        .map(|oid| rv1::CostObjectRef {
+                            object_id: *oid,
+                            zone_change_generation: eng
+                                .state
+                                .zone_change_generation
+                                .get(oid)
+                                .copied()
+                                .unwrap_or(0),
+                        })
+                        .collect(),
                 });
             }
         }

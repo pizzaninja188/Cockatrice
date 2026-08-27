@@ -84,6 +84,52 @@ pub(super) fn destroy(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn sacrifice(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::Sacrifice { subject } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let subjects: Vec<ObjectId> = match &subject {
+        EffectSubject::Chosen(_) => cx.targets.to_vec(),
+        EffectSubject::Source | EffectSubject::AttachedObject | EffectSubject::TriggerObject => {
+            resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
+                .into_iter()
+                .collect()
+        }
+    };
+    for oid in subjects {
+        let Some(owner) = cx.engine.state.objects.get(&oid).map(|object| object.owner) else {
+            continue;
+        };
+        let name = object_display_name(&cx.engine.state, cx.engine.registry, oid);
+        let source = cx.engine.trigger_source_snapshot(oid);
+        let was_creature = cx
+            .engine
+            .characteristics(oid)
+            .is_some_and(|value| value.is_creature());
+        let died = sacrifice_permanent(&mut cx.engine.state, cx.engine.registry, oid)?;
+        cx.events.push(permanent_moved_event(
+            &cx.engine.state,
+            oid,
+            owner,
+            rv1::permanent_moved::Destination::Graveyard,
+        ));
+        cx.events
+            .push(ev_log(format!("{} sacrifices {name}", cx.spell_label)));
+        if let Some(source) = source {
+            cx.engine.fire_triggers(&sacrifice_events(
+                source,
+                was_creature,
+                cx.top.controller,
+                died,
+            ));
+        }
+    }
+    Ok(EffectOutcome::Continue)
+}
+
 /// CR 701.19 / 701.20: tap or untap the single declared target.
 ///
 /// One body for both directions — they differ only in the flag and the log verb. The target is

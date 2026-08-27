@@ -191,6 +191,7 @@ impl GameEngine {
     pub(in crate::engine) fn resolution_cost_candidates(
         &self,
         player: PlayerId,
+        source_object_id: ObjectId,
         cost: &ResolutionCost,
     ) -> Vec<ObjectId> {
         let Some(index) = self.state.player_idx(player) else {
@@ -217,6 +218,20 @@ impl GameEngine {
                 .iter()
                 .copied()
                 .filter(|oid| object_matches_mass_filter(self, *oid, filter))
+                .collect(),
+            ResolutionCost::TapPermanents {
+                filter,
+                exclude_source,
+                ..
+            } => self.state.players[index]
+                .battlefield
+                .iter()
+                .copied()
+                .filter(|oid| !exclude_source || *oid != source_object_id)
+                .filter(|oid| {
+                    !self.state.objects[oid].tapped
+                        && object_matches_mass_filter(self, *oid, filter)
+                })
                 .collect(),
         }
     }
@@ -293,10 +308,17 @@ impl GameEngine {
                 "that resolution branch is no longer legal",
             ));
         }
-        let candidates = self.resolution_cost_candidates(pending.deciding_player, &branch.cost);
-        if !matches!(branch.cost, ResolutionCost::None | ResolutionCost::Mana(_))
-            && candidates.is_empty()
-        {
+        let candidates = self.resolution_cost_candidates(
+            pending.deciding_player,
+            stack.item.source_permanent_id.unwrap_or(stack.item.id),
+            &branch.cost,
+        );
+        let required_candidates = match branch.cost {
+            ResolutionCost::TapPermanents { count, .. } => count as usize,
+            ResolutionCost::None | ResolutionCost::Mana(_) => 0,
+            _ => 1,
+        };
+        if candidates.len() < required_candidates {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
                 "that resolution branch no longer has a legal payment",
@@ -351,21 +373,51 @@ impl GameEngine {
                         .expect("resolution branch payment remains parked"),
                 );
             }
-            ResolutionCost::DiscardCard { .. } | ResolutionCost::SacrificePermanent { .. } => {
+            ResolutionCost::DiscardCard { .. }
+            | ResolutionCost::SacrificePermanent { .. }
+            | ResolutionCost::TapPermanents { .. } => {
                 let is_discard = matches!(branch.cost, ResolutionCost::DiscardCard { .. });
+                let is_tap = matches!(branch.cost, ResolutionCost::TapPermanents { .. });
+                let count = match branch.cost {
+                    ResolutionCost::TapPermanents { count, .. } => count,
+                    _ => 1,
+                };
                 pending.presentation.choice_kind = if is_discard {
                     rv1::ChoiceKind::HandCards
+                } else if is_tap {
+                    rv1::ChoiceKind::CostObjects
                 } else {
                     rv1::ChoiceKind::TargetObjects
                 };
                 pending.presentation.candidates = candidates.clone();
-                pending.presentation.min = u32::from(!branch_state.optional);
-                pending.presentation.max = 1;
+                pending.presentation.min = if branch_state.optional { 0 } else { count };
+                pending.presentation.max = count;
                 pending.presentation.prompt = if is_discard {
                     "Choose a card to discard, or decline.".into()
+                } else if is_tap {
+                    let plural = if count == 1 { "" } else { "s" };
+                    let decline = if branch_state.optional {
+                        ", or decline"
+                    } else {
+                        ""
+                    };
+                    format!("Choose {count} untapped permanent{plural} to tap{decline}.")
                 } else {
                     "Choose a permanent to sacrifice, or decline.".into()
                 };
+                let candidate_generations = candidates
+                    .iter()
+                    .map(|oid| {
+                        (
+                            *oid,
+                            self.state
+                                .zone_change_generation
+                                .get(oid)
+                                .copied()
+                                .unwrap_or(0),
+                        )
+                    })
+                    .collect();
                 let ResolutionContinuation::AuthoredBranch { branch, .. } =
                     &mut pending.continuation
                 else {
@@ -373,6 +425,7 @@ impl GameEngine {
                 };
                 branch.stage = PendingResolutionBranchStage::PayingObjects {
                     selected_branch: branch_index,
+                    candidate_generations,
                 };
                 let candidate_card_ids = candidates
                     .iter()
@@ -394,7 +447,7 @@ impl GameEngine {
                             candidate_object_ids: candidates.clone(),
                             candidate_card_ids,
                             min: pending.presentation.min,
-                            max: 1,
+                            max: count,
                             ordered: false,
                             candidate_names: self.object_names(&candidates),
                             candidate_server_card_ids: Vec::new(),
@@ -422,11 +475,18 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[ObjectId],
     ) -> Result<RuledEventBatch, EngineError> {
-        let (stack, branch_state, branch_index) = match &pending.continuation {
+        let (stack, branch_state, branch_index, candidate_generations) = match &pending.continuation
+        {
             ResolutionContinuation::AuthoredBranch { stack, branch } => match branch.stage {
-                PendingResolutionBranchStage::PayingObjects { selected_branch } => {
-                    (stack.clone(), branch.clone(), selected_branch)
-                }
+                PendingResolutionBranchStage::PayingObjects {
+                    selected_branch,
+                    ref candidate_generations,
+                } => (
+                    stack.clone(),
+                    branch.clone(),
+                    selected_branch,
+                    candidate_generations.clone(),
+                ),
                 _ => {
                     self.state.pending_resolution = Some(pending);
                     return Err(EngineError::Illegal("resolution branch was not selected"));
@@ -468,8 +528,34 @@ impl GameEngine {
                 ))],
             );
         }
-        let current = self.resolution_cost_candidates(pending.deciding_player, &branch.cost);
-        if chosen.len() != 1 || !current.contains(&chosen[0]) {
+        let current = self.resolution_cost_candidates(
+            pending.deciding_player,
+            stack.item.source_permanent_id.unwrap_or(stack.item.id),
+            &branch.cost,
+        );
+        let expected_count = match branch.cost {
+            ResolutionCost::TapPermanents { count, .. } => count as usize,
+            _ => 1,
+        };
+        let distinct = chosen.iter().copied().collect::<HashSet<_>>();
+        let generations_match = chosen.iter().all(|oid| {
+            let expected = candidate_generations
+                .iter()
+                .find_map(|(candidate, generation)| (candidate == oid).then_some(*generation));
+            expected.is_some_and(|expected| {
+                self.state
+                    .zone_change_generation
+                    .get(oid)
+                    .copied()
+                    .unwrap_or(0)
+                    == expected
+            })
+        });
+        if chosen.len() != expected_count
+            || distinct.len() != chosen.len()
+            || !chosen.iter().all(|oid| current.contains(oid))
+            || !generations_match
+        {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("resolution payment choice is stale"));
         }
@@ -532,6 +618,17 @@ impl GameEngine {
                         died,
                     ));
                 }
+            }
+            ResolutionCost::TapPermanents { .. } => {
+                let mut tap_events = Vec::new();
+                for oid in chosen {
+                    let name = object_display_name(&self.state, self.registry, *oid);
+                    if let Some(event) = crate::engine::become_tapped(&mut self.state, *oid) {
+                        tap_events.push(event);
+                    }
+                    ev.push(ev_log(format!("P{} taps {name}.", pending.deciding_player)));
+                }
+                self.fire_triggers(&tap_events);
             }
             ResolutionCost::Mana(_) => {
                 self.state.pending_resolution = Some(pending);

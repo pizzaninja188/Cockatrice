@@ -613,6 +613,26 @@ enum CostChoiceZone {
   COST_CHOICE_ZONE_GRAVEYARD = 3;
 }
 
+// Semantic identity of an authored nonmana cost choice. Clients render from this value and never
+// infer "tap" versus "sacrifice" from the candidate zone or Oracle display text.
+enum CostChoiceKind {
+  COST_CHOICE_KIND_UNSPECIFIED = 0;
+  COST_CHOICE_KIND_DISCARD = 1;
+  COST_CHOICE_KIND_SACRIFICE = 2;
+  COST_CHOICE_KIND_EXILE = 3;
+  COST_CHOICE_KIND_TAP = 4;
+}
+
+// A public-zone object choice bound to the exact zone-change generation that was published.
+message CostObjectRef {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message CostObjectRefs {
+  repeated CostObjectRef objects = 1;
+}
+
 // A land face the player may currently play from a public zone. The permission group remains
 // published separately even when normal land timing or the per-turn land limit suppresses this
 // action.
@@ -637,6 +657,8 @@ message LegalCostChoice {
   repeated uint32 candidate_ids = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 min = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 max = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  CostChoiceKind kind = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated CostObjectRef candidate_objects = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalCostChoices {
@@ -1051,6 +1073,9 @@ enum ChoiceKind {
   // CR 508.4: choose the player, planeswalker, or Battle a token enters attacking. Public domain,
   // but the exact candidate snapshot is routed only to the deciding player.
   CHOICE_KIND_ATTACKING_TOKEN_DEFENDER = 19;
+  // Untargeted battlefield objects selected to pay a resolving authored cost. The candidate
+  // snapshot is private to the deciding player even though accepted taps become public state.
+  CHOICE_KIND_COST_OBJECTS = 20;
 }
 
 enum ChoiceCandidateSourceZone {
@@ -1074,6 +1099,7 @@ enum ResolutionBranchCostKind {
   RESOLUTION_BRANCH_COST_KIND_MANA = 1;
   RESOLUTION_BRANCH_COST_KIND_DISCARD_CARD = 2;
   RESOLUTION_BRANCH_COST_KIND_SACRIFICE_PERMANENT = 3;
+  RESOLUTION_BRANCH_COST_KIND_TAP_PERMANENTS = 4;
 }
 
 message ResolutionBranchOption {
@@ -1331,6 +1357,7 @@ message CostSelection {
     uint32 hand_index = 2;
     uint32 permanent_id = 3;
     GraveyardObjectIds graveyard_object_ids = 4;
+    CostObjectRefs battlefield_objects = 5;
   }
 }
 

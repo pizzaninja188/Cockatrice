@@ -5744,6 +5744,137 @@ TEST_F(RuledE2ESmokeTest, TappedOrdinaryTokenReachesBothClientsWithoutCombatStat
     EXPECT_TRUE(p1Robot->tapped && p2Robot->tapped);
 }
 
+TEST_F(RuledE2ESmokeTest, SelectableTapPaymentPublishesGenerationAndMovesExactCardsForBothClients)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("tappaymentp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("tappaymentp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "issue 144 game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "issue 144 game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto putPermanent = [&](const char *name, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(name);
+        put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        put->set_ready(ready);
+        return send(p1, command, QStringLiteral("issue 144 put %1").arg(name));
+    };
+    auto findPermanent = [](const SmokeClient &client, int controller,
+                            const QString &cardId) -> std::optional<SmokeClient::Permanent> {
+        const auto battlefield = client.battlefieldByPlayer.find(controller);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return std::nullopt;
+        }
+        const auto permanent = std::find_if(
+            battlefield->second.begin(), battlefield->second.end(),
+            [&cardId](const SmokeClient::Permanent &candidate) { return candidate.cardId == cardId; });
+        return permanent == battlefield->second.end() ? std::nullopt : std::optional(*permanent);
+    };
+
+    ASSERT_TRUE(putPermanent("Gene Pollinator", true));
+    ASSERT_TRUE(putPermanent("Grizzly Bears", false));
+    const auto gene = findPermanent(p1, p1.myId, QStringLiteral("gene_pollinator"));
+    const auto bear = findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears"));
+    ASSERT_TRUE(gene.has_value());
+    ASSERT_TRUE(bear.has_value());
+    ASSERT_FALSE(bear->tapped);
+    ASSERT_TRUE(bear->sick) << "the separate tap payment must accept a newly controlled permanent";
+
+    const quint64 abilityKey = static_cast<quint64>(gene->oid) << 32;
+    const auto costs = p1.latestLegal.cost_choices_by_ability().find(abilityKey);
+    ASSERT_NE(costs, p1.latestLegal.cost_choices_by_ability().end());
+    const ruled::v1::LegalCostChoice *tapCost = nullptr;
+    for (const auto &choice : costs->second.choices()) {
+        if (choice.kind() == ruled::v1::COST_CHOICE_KIND_TAP && choice.min() == 1 && choice.max() == 1) {
+            tapCost = &choice;
+            break;
+        }
+    }
+    ASSERT_NE(tapCost, nullptr);
+    ASSERT_EQ(tapCost->candidate_objects_size(), 1);
+    EXPECT_EQ(tapCost->candidate_objects(0).object_id(), bear->oid);
+    EXPECT_EQ(tapCost->candidate_objects(0).zone_change_generation(), bear->generation);
+
+    ruled::v1::RuledCommand activate;
+    auto *ability = activate.mutable_activate_ability();
+    p1.setBattlefieldAbilitySource(ability, gene->oid);
+    ability->set_ability_index(0);
+    ability->set_mana_option_index(0);
+    auto *selection = ability->add_cost_selections();
+    selection->set_cost_index(tapCost->cost_index());
+    auto *selected = selection->mutable_battlefield_objects()->add_objects();
+    selected->set_object_id(bear->oid);
+    selected->set_zone_change_generation(bear->generation);
+    ASSERT_TRUE(send(p1, activate, QStringLiteral("issue 144 activate Gene Pollinator")));
+
+    const auto p1Gene = findPermanent(p1, p1.myId, QStringLiteral("gene_pollinator"));
+    const auto p1Bear = findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears"));
+    const auto p2Gene = findPermanent(p2, p1.myId, QStringLiteral("gene_pollinator"));
+    const auto p2Bear = findPermanent(p2, p1.myId, QStringLiteral("grizzly_bears"));
+    ASSERT_TRUE(p1Gene.has_value() && p1Bear.has_value() && p2Gene.has_value() && p2Bear.has_value());
+    EXPECT_TRUE(p1Gene->tapped && p1Bear->tapped);
+    EXPECT_TRUE(p2Gene->tapped && p2Bear->tapped);
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(gene->oid) && p1.serverCardByEngineOid.count(bear->oid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(gene->oid) && p2.serverCardByEngineOid.count(bear->oid));
+    EXPECT_EQ(p1.serverCardByEngineOid[gene->oid], p2.serverCardByEngineOid[gene->oid]);
+    EXPECT_EQ(p1.serverCardByEngineOid[bear->oid], p2.serverCardByEngineOid[bear->oid]);
+    EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[gene->oid]));
+    EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[bear->oid]));
+    EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[gene->oid]));
+    EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[bear->oid]));
+    EXPECT_EQ(p1.myPool.total(), 1);
+}
+
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can
 // rebuild it. Servatrice used to reconnect anyway: the fresh connection answered "no session",
 // which is an ok=false the driver reports as a plain context error — invisible in the client. The

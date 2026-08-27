@@ -113,11 +113,20 @@ pub(in crate::engine) fn resolution_branch_is_live(
             min.is_none_or(|minimum| count >= minimum) && max.is_none_or(|maximum| count <= maximum)
         }
     };
+    let required_candidates = match branch.cost {
+        ResolutionCost::None | ResolutionCost::Mana(_) => 0,
+        ResolutionCost::TapPermanents { count, .. } => count as usize,
+        _ => 1,
+    };
     requirement_met
-        && (matches!(branch.cost, ResolutionCost::None | ResolutionCost::Mana(_))
-            || !engine
-                .resolution_cost_candidates(deciding_player, &branch.cost)
-                .is_empty())
+        && engine
+            .resolution_cost_candidates(
+                deciding_player,
+                top.source_permanent_id.unwrap_or(top.id),
+                &branch.cost,
+            )
+            .len()
+            >= required_candidates
 }
 
 pub(in crate::engine) fn card_result_count(
@@ -220,6 +229,10 @@ fn park_resolution_branches_for(
                 ResolutionCost::SacrificePermanent { .. } => (
                     rv1::ResolutionBranchCostKind::SacrificePermanent,
                     "sacrifice a matching permanent".into(),
+                ),
+                ResolutionCost::TapPermanents { count, .. } => (
+                    rv1::ResolutionBranchCostKind::TapPermanents,
+                    format!("tap {count} matching permanents"),
                 ),
             };
             rv1::ResolutionBranchOption {

@@ -160,6 +160,15 @@ enum class RuledCostChoiceZone : int
     Graveyard,
 };
 
+enum class RuledCostChoiceKind : int
+{
+    Unspecified,
+    Discard,
+    Sacrifice,
+    Exile,
+    Tap,
+};
+
 struct RuledCostChoice
 {
     int costIndex = -1;
@@ -167,6 +176,8 @@ struct RuledCostChoice
     QSet<quint32> candidateIds;
     int min = 1;
     int max = 1;
+    RuledCostChoiceKind kind = RuledCostChoiceKind::Unspecified;
+    QHash<quint32, quint64> candidateGenerations;
 };
 
 enum class RuledCastCostOptionKind : int
@@ -383,6 +394,8 @@ public:
             BattleProtector,
             /// CR 508.4: choose what a token enters the battlefield attacking.
             AttackingTokenDefender,
+            /// CR 608.2d: untargeted battlefield objects chosen to pay a resolving cost.
+            CostObjects,
             /// Tier-3 mid-resolution pick over cards in a zone (Brainstorm, Gifts Ungiven, …).
             ResolutionPick,
             /// CR 608.2g: a resolving effect offers a generic-mana payment.
@@ -401,6 +414,7 @@ public:
         bool mayDecline = false;
         /// Click-to-select candidates on the battlefield or player surface.
         QVector<quint32> candidateOids;
+        QVector<quint32> selectedObjectOids;
         /// Exact generation-bound defender options for an entering attacking token. These are
         /// submitted verbatim; Qt never derives the defending player from display ownership.
         QVector<ruled::v1::CombatDefenderOption> combatDefenderOptions;
@@ -1382,6 +1396,20 @@ public:
     /// For LegendKeep the chosen permanent is the one KEPT (CR 704.5j); the engine sacrifices
     /// the rest. Clears the choice and sends SubmitResolutionChoice.
     void submitPendingChoiceObject(quint32 oid);
+    [[nodiscard]] bool isResolutionCostObjectSelected(quint32 oid) const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::CostObjects) && pendingChoice->selectedObjectOids.contains(oid);
+    }
+    [[nodiscard]] int resolutionCostObjectRequired() const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::CostObjects) ? pendingChoice->max : 0;
+    }
+    [[nodiscard]] int resolutionCostObjectSelectedCount() const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::CostObjects) ? pendingChoice->selectedObjectOids.size() : 0;
+    }
+    void toggleResolutionCostObject(quint32 oid);
+    void submitResolutionCostObjects();
 
     [[nodiscard]] bool pendingClickChoiceMayDecline() const
     {
@@ -1738,6 +1766,7 @@ signals:
     /// Emitted when resolution hand-pick mode starts, progresses (card toggled), or ends.
     /// required >= 0 means the mode is active; required == -1 (selected == -1) means cleared.
     void resolutionHandPickUiChanged(int required, int selected);
+    void resolutionCostSelectionChanged();
     void resolutionPaymentUiChanged(bool active);
     /// Completion of the optimistic pay/decline command. A rejection lets the cost UI restore
     /// locally staged pool-counter pips before the engine prompt is reinstated.

@@ -431,6 +431,51 @@ impl GameEngine {
                     let owner = self.state.objects[&oid].owner;
                     debits.push(CostDebit::Sacrifice { snapshot, owner });
                 }
+                AdditionalCost::TapPermanents {
+                    count,
+                    filter,
+                    exclude_source,
+                } => {
+                    let Some(Selection::BattlefieldObjects(selected)) =
+                        selection.selection.as_ref()
+                    else {
+                        return Err(EngineError::Illegal(
+                            "tap cost requires battlefield object references",
+                        ));
+                    };
+                    if selected.objects.len() != *count as usize {
+                        return Err(EngineError::Illegal("incorrect tap cost selection count"));
+                    }
+                    for selected in &selected.objects {
+                        let oid = selected.object_id;
+                        if (*exclude_source && oid == source_oid)
+                            || !self.ability_cost_permanent_matches(player, None, oid, filter)
+                            || self
+                                .state
+                                .objects
+                                .get(&oid)
+                                .is_none_or(|object| object.tapped)
+                        {
+                            return Err(EngineError::Illegal("illegal tap cost selection"));
+                        }
+                        let generation = self
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0);
+                        if generation != selected.zone_change_generation {
+                            return Err(EngineError::Illegal("stale tap cost selection"));
+                        }
+                        if !consumed.insert(oid) {
+                            return Err(EngineError::Illegal("one object cannot pay two costs"));
+                        }
+                        debits.push(CostDebit::Tap {
+                            object_id: oid,
+                            generation,
+                        });
+                    }
+                }
             }
         }
         if selections.len() != costs.len() {
@@ -543,6 +588,60 @@ impl GameEngine {
                             .copied()
                             .unwrap_or(0),
                     });
+                }
+                AbilityCost::TapPermanents {
+                    count,
+                    filter,
+                    exclude_source,
+                } => {
+                    expected_selections += 1;
+                    let Some(selection) = by_index.get(&cost_index) else {
+                        return Err(EngineError::Illegal("missing tap cost selection"));
+                    };
+                    let Some(Selection::BattlefieldObjects(selected)) =
+                        selection.selection.as_ref()
+                    else {
+                        return Err(EngineError::Illegal(
+                            "tap cost requires battlefield object references",
+                        ));
+                    };
+                    if selected.objects.len() != *count as usize {
+                        return Err(EngineError::Illegal("incorrect tap cost selection count"));
+                    }
+                    for selected in &selected.objects {
+                        let oid = selected.object_id;
+                        if (*exclude_source && oid == permanent_id)
+                            || !self.ability_cost_permanent_matches(
+                                player,
+                                Some(permanent_id),
+                                oid,
+                                filter,
+                            )
+                            || self
+                                .state
+                                .objects
+                                .get(&oid)
+                                .is_none_or(|object| object.tapped)
+                        {
+                            return Err(EngineError::Illegal("illegal tap cost selection"));
+                        }
+                        let generation = self
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0);
+                        if generation != selected.zone_change_generation {
+                            return Err(EngineError::Illegal("stale tap cost selection"));
+                        }
+                        if !consumed.insert(oid) {
+                            return Err(EngineError::Illegal("one object cannot pay two costs"));
+                        }
+                        debits.push(CostDebit::Tap {
+                            object_id: oid,
+                            generation,
+                        });
+                    }
                 }
                 AbilityCost::Mana(cost) => {
                     if saw_mana {

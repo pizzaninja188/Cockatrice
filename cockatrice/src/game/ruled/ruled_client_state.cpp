@@ -334,7 +334,11 @@ void RuledClientState::teardownPendingChoice()
         !pendingChoice->publicReveal) {
         emit revealedPickChanged(false, {}, {}, 0, 0);
     }
+    const bool wasCostSelection = pendingChoice->kind == ChoiceKind::CostObjects;
     pendingChoice.reset();
+    if (wasCostSelection) {
+        emit resolutionCostSelectionChanged();
+    }
 }
 
 void RuledClientState::setPendingChoice(RuledPendingChoice choice)
@@ -346,6 +350,9 @@ void RuledClientState::setPendingChoice(RuledPendingChoice choice)
         choice.activeTriggerTargetGroupPosition = 0;
     }
     pendingChoice = std::move(choice);
+    if (pendingChoice->kind == ChoiceKind::CostObjects) {
+        emit resolutionCostSelectionChanged();
+    }
 }
 
 void RuledClientState::clearPendingChoice()
@@ -447,13 +454,45 @@ void RuledClientState::submitPendingChoiceObject(quint32 oid)
     sendResolutionChoice({oid});
 }
 
+void RuledClientState::toggleResolutionCostObject(quint32 oid)
+{
+    if (!hasPendingChoiceOfKind(ChoiceKind::CostObjects) || !pendingChoice->candidateOids.contains(oid)) {
+        return;
+    }
+    const int index = pendingChoice->selectedObjectOids.indexOf(oid);
+    if (index >= 0) {
+        pendingChoice->selectedObjectOids.removeAt(index);
+    } else if (pendingChoice->selectedObjectOids.size() < pendingChoice->max) {
+        pendingChoice->selectedObjectOids.append(oid);
+    } else {
+        return;
+    }
+    emit resolutionCostSelectionChanged();
+    emit combatStateChanged();
+}
+
+void RuledClientState::submitResolutionCostObjects()
+{
+    if (!hasPendingChoiceOfKind(ChoiceKind::CostObjects)) {
+        return;
+    }
+    const int count = pendingChoice->selectedObjectOids.size();
+    if (count < pendingChoice->min || count > pendingChoice->max) {
+        return;
+    }
+    const auto chosen = pendingChoice->selectedObjectOids;
+    clearPendingChoiceOfKind(ChoiceKind::CostObjects);
+    sendResolutionChoice(chosen);
+}
+
 void RuledClientState::declinePendingClickChoice()
 {
     if (!pendingClickChoiceMayDecline()) {
         return;
     }
     const ChoiceKind kind = pendingChoice->kind;
-    if (kind == ChoiceKind::CopySource || kind == ChoiceKind::CopyTarget || kind == ChoiceKind::ResolutionPick) {
+    if (kind == ChoiceKind::CopySource || kind == ChoiceKind::CopyTarget || kind == ChoiceKind::ResolutionPick ||
+        kind == ChoiceKind::CostObjects) {
         clearPendingChoiceOfKind(kind);
         sendResolutionChoice({});
         return;

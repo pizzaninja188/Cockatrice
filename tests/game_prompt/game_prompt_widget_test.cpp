@@ -334,7 +334,13 @@ TEST_F(GamePromptWidgetTest, GraveyardCostSelectionRequiresExactCountAndCanCance
     QSignalSpy confirmSpy(widget.get(), &GamePromptWidget::ruledCostSelectionConfirmRequested);
     QSignalSpy cancelSpy(widget.get(), &GamePromptWidget::ruledCostSelectionCancelRequested);
     widget->setLocalPlayerHasPriority(true);
-    widget->setRuledPromptState({PromptMode::CostSelection, 2, 1, "Choose two graveyard cards.", {}});
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::CostSelection;
+    state.required = 2;
+    state.selected = 1;
+    state.text = "Choose two graveyard cards.";
+    state.canDecline = true;
+    widget->setRuledPromptState(state);
 
     EXPECT_EQ(widget->effectiveMode(), PromptMode::CostSelection);
     EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isHidden());
@@ -342,12 +348,32 @@ TEST_F(GamePromptWidgetTest, GraveyardCostSelectionRequiresExactCountAndCanCance
     EXPECT_FALSE(btn("openingBottomCancelButton")->isHidden());
     EXPECT_TRUE(btn("passPriorityButton")->isHidden());
 
-    widget->setRuledPromptState({PromptMode::CostSelection, 2, 2, "Choose two graveyard cards.", {}});
+    state.selected = 2;
+    widget->setRuledPromptState(state);
     EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isEnabled());
     btn("resolutionHandPickConfirmButton")->click();
     btn("openingBottomCancelButton")->click();
     EXPECT_EQ(confirmSpy.count(), 1);
     EXPECT_EQ(cancelSpy.count(), 1);
+}
+
+TEST_F(GamePromptWidgetTest, MandatoryResolutionCostSelectionDoesNotOfferCancel)
+{
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::CostSelection;
+    state.required = 1;
+    state.text = "Choose one untapped permanent.";
+    state.canDecline = false;
+    widget->setRuledPromptState(state);
+    EXPECT_TRUE(btn("openingBottomCancelButton")->isHidden());
+    EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isEnabled());
+
+    state.selected = 1;
+    widget->setRuledPromptState(state);
+    EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isEnabled());
+    state.canDecline = true;
+    widget->setRuledPromptState(state);
+    EXPECT_FALSE(btn("openingBottomCancelButton")->isHidden());
 }
 
 TEST_F(GamePromptWidgetTest, ChoiceOptionsRenderAsOrdinaryLabeledButtons)

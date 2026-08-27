@@ -1945,6 +1945,64 @@ TEST_F(RuledBatchTest, PendingPrivateWardDiscardIsRestoredForPayerAndRedactedFor
     EXPECT_EQ(opponentChoice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+TEST_F(RuledBatchTest, PendingTapPaymentCohortIsRestoredForPayerAndRedactedForOpponent)
+{
+    Server_Card *bear = addCardToTable(p1, QStringLiteral("Grizzly Bears"));
+    Server_Card *wolf = addCardToTable(p1, QStringLiteral("Timber Wolves"));
+    ruled::v1::RuledPerPlayerView view = buildPerPlayerView(p1, {601u, 602u}, {false, false});
+    applyZoneView(p1, view, nullptr);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *choice = response.mutable_batch()->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_COST_OBJECTS);
+    choice->set_prompt_text("Tap two untapped permanents you control.");
+    choice->set_min(2);
+    choice->set_max(2);
+    choice->add_candidate_object_ids(601u);
+    choice->add_candidate_object_ids(602u);
+    choice->add_candidate_card_ids("grizzly_bears");
+    choice->add_candidate_card_ids("timber_wolves");
+    choice->add_candidate_names("Grizzly Bears");
+    choice->add_candidate_names("Timber Wolves");
+    updatePendingResolutionChoiceCache(response);
+
+    ResponseContainer payerReconnect(-1);
+    game->createGameJoinedEvent(p1, payerReconnect, true);
+    ASSERT_EQ(payerReconnect.getPostResponseQueue().size(), 3);
+    const auto *payerContainer =
+        dynamic_cast<const GameEventContainer *>(payerReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(payerContainer, nullptr);
+    ruled::v1::RuledEventBatch payerBatch;
+    ASSERT_TRUE(payerBatch.ParseFromString(
+        payerContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    const auto &payerChoice = payerBatch.events(0).resolution_choice_required();
+    ASSERT_EQ(payerChoice.candidate_object_ids_size(), 2);
+    EXPECT_EQ(payerChoice.candidate_object_ids(0), 601u);
+    EXPECT_EQ(payerChoice.candidate_object_ids(1), 602u);
+    ASSERT_EQ(payerChoice.candidate_server_card_ids_size(), 2);
+    EXPECT_EQ(payerChoice.candidate_server_card_ids(0), bear->getId());
+    EXPECT_EQ(payerChoice.candidate_server_card_ids(1), wolf->getId());
+    EXPECT_EQ(payerChoice.prompt_text(), "Tap two untapped permanents you control.");
+
+    ResponseContainer opponentReconnect(-1);
+    game->createGameJoinedEvent(p2, opponentReconnect, true);
+    ASSERT_EQ(opponentReconnect.getPostResponseQueue().size(), 3);
+    const auto *opponentContainer =
+        dynamic_cast<const GameEventContainer *>(opponentReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(opponentContainer, nullptr);
+    ruled::v1::RuledEventBatch opponentBatch;
+    ASSERT_TRUE(opponentBatch.ParseFromString(
+        opponentContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    const auto &opponentChoice = opponentBatch.events(0).resolution_choice_required();
+    EXPECT_EQ(opponentChoice.candidate_object_ids_size(), 0);
+    EXPECT_EQ(opponentChoice.candidate_card_ids_size(), 0);
+    EXPECT_EQ(opponentChoice.candidate_names_size(), 0);
+    EXPECT_EQ(opponentChoice.candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(opponentChoice.prompt_text(), "Opponent is making a resolution choice.");
+}
+
 TEST_F(RuledBatchTest, ResolvedOmenMovesTheExactStackCardFaceDownAndReconcilesDuplicateLibraryCards)
 {
     const QString cardId = QStringLiteral("dirgur_island_dragon_skimming_strike");

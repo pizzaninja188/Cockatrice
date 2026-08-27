@@ -853,6 +853,9 @@ fn validate_effect_targets(
         SpellEffectKind::Destroy {
             subject: EffectSubject::Chosen(filter),
         }
+        | SpellEffectKind::Sacrifice {
+            subject: EffectSubject::Chosen(filter),
+        }
         | SpellEffectKind::ExileUntilSourceLeaves { target: filter }
         | SpellEffectKind::DestroyAttached { target: filter, .. }
         | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: filter, .. } => {
@@ -959,7 +962,8 @@ fn validate_effect_targets(
         | SpellEffectKind::CreateDelayedTrigger { subject, .. }
         | SpellEffectKind::AddTypes { subject, .. }
         | SpellEffectKind::Regenerate { subject }
-        | SpellEffectKind::Destroy { subject } => match subject {
+        | SpellEffectKind::Destroy { subject }
+        | SpellEffectKind::Sacrifice { subject } => match subject {
             EffectSubject::Source
             | EffectSubject::AttachedObject
             | EffectSubject::TriggerObject => {
@@ -1453,6 +1457,9 @@ fn spell_target_legality_error_with_context(
         // Filter-based targeted effects share one legality path; the filter carries any
         // characteristic restriction (creature/player, `tapped`, `not_artifact`, hexproof/shroud).
         SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(filter),
+        }
+        | SpellEffectKind::Sacrifice {
             subject: EffectSubject::Chosen(filter),
         }
         | SpellEffectKind::DestroyAttached { target: filter, .. }

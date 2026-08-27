@@ -384,8 +384,10 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                     rcr->clear_candidate_selectable();
                     rcr->set_prompt_text("Opponent is making a resolution choice.");
                 }
-                if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS) {
-                    // HandCards: populate server card ids so client hand-click UI can match engine OIDs.
+                if (rcr->choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS ||
+                    rcr->choice_kind() == ruled::v1::CHOICE_KIND_COST_OBJECTS) {
+                    // HandCards and CostObjects: populate physical ids so client card-click UI can
+                    // match engine OIDs without inferring candidates from the visible battlefield.
                     const int deciderId = rcr->deciding_player_id();
                     auto *deciderPlayer = static_cast<Server_Player *>(game->getPlayers().value(deciderId));
                     if (deciderPlayer) {

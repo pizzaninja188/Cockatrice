@@ -587,6 +587,7 @@ pub enum PendingResolutionBranchStage {
     },
     PayingObjects {
         selected_branch: usize,
+        candidate_generations: Vec<(ObjectId, u64)>,
     },
 }
 

@@ -1033,7 +1033,11 @@ TEST_F(RuledClientTest, ParsesAuthoritativeActivatedCostChoicesAndPayability)
     auto *sacrifice = costs.add_choices();
     sacrifice->set_cost_index(2);
     sacrifice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
+    sacrifice->set_kind(ruled::v1::COST_CHOICE_KIND_SACRIFICE);
     sacrifice->add_candidate_ids(100);
+    auto *sacrificeRef = sacrifice->add_candidate_objects();
+    sacrificeRef->set_object_id(100);
+    sacrificeRef->set_zone_change_generation(7);
     auto *graveyard = costs.add_choices();
     graveyard->set_cost_index(3);
     graveyard->set_zone(ruled::v1::COST_CHOICE_ZONE_GRAVEYARD);
@@ -1050,7 +1054,9 @@ TEST_F(RuledClientTest, ParsesAuthoritativeActivatedCostChoicesAndPayability)
     EXPECT_EQ(choices.at(0).zone, RuledCostChoiceZone::Hand);
     EXPECT_EQ(choices.at(0).candidateIds, QSet<quint32>({1, 3}));
     EXPECT_EQ(choices.at(1).zone, RuledCostChoiceZone::Battlefield);
+    EXPECT_EQ(choices.at(1).kind, RuledCostChoiceKind::Sacrifice);
     EXPECT_TRUE(choices.at(1).candidateIds.contains(100));
+    EXPECT_EQ(choices.at(1).candidateGenerations.value(100), 7u);
     EXPECT_EQ(choices.at(2).zone, RuledCostChoiceZone::Graveyard);
     EXPECT_EQ(choices.at(2).min, 2);
     EXPECT_EQ(choices.at(2).max, 2);
@@ -1099,6 +1105,25 @@ TEST(RuledPendingCostSelectionTest, GraveyardProgressCountsOnlyCurrentEngineCand
     EXPECT_FALSE(progress->confirmable);
     EXPECT_FALSE(ruledPendingGraveyardCostSelectionContains(pending, 500u));
     EXPECT_TRUE(ruledPendingGraveyardCostSelectionContains(pending, 501u));
+}
+
+TEST(RuledPendingCostSelectionTest, TapPaymentProgressDoesNotRequestAGraveyardView)
+{
+    PendingActivatedAbility pending;
+    pending.valid = true;
+    pending.waitingForCost = true;
+    RuledCostChoice choice;
+    choice.costIndex = 1;
+    choice.zone = RuledCostChoiceZone::Battlefield;
+    choice.kind = RuledCostChoiceKind::Tap;
+    choice.min = choice.max = 1;
+    choice.candidateIds = {501};
+    pending.costChoices = {choice};
+    const auto progress = ruledPendingGraveyardCostSelectionProgress(pending);
+    ASSERT_TRUE(progress.has_value());
+    EXPECT_EQ(progress->zone, RuledCostChoiceZone::Battlefield);
+    EXPECT_EQ(progress->required, 1);
+    EXPECT_FALSE(progress->confirmable);
 }
 
 TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
@@ -2827,6 +2852,38 @@ TEST_F(RuledClientTest, CastAndCycleAreCombinedIntoOneCardActionMenuModel)
     EXPECT_TRUE(options.at(1).enabled);
 }
 
+TEST(RuledPendingCastTest, ManaPaymentMenuRetainsEveryEngineOptionAndItsIndex)
+{
+    const auto options = RuledPendingCast::cardActionMenuOptions(
+        {}, {0, 2}, {"Tap another permanent: Add one mana of any color.", "", "Add blue or green."},
+        {{0, true}, {2, false}}, {"W/U/B/R/G", "", "U/G"});
+    ASSERT_EQ(options.size(), 7);
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_EQ(options.at(i).index, 0);
+        EXPECT_EQ(options.at(i).manaOptionIndex, i);
+        EXPECT_TRUE(options.at(i).enabled);
+    }
+    EXPECT_TRUE(options.at(3).label.contains("{R}"));
+    EXPECT_EQ(options.at(6).index, 2);
+    EXPECT_EQ(options.at(6).manaOptionIndex, 1);
+    EXPECT_FALSE(options.at(6).enabled);
+}
+
+TEST(RuledPendingCastTest, ActivationHeaderPreservesSelectedManaOptionAndSourceIdentity)
+{
+    PendingActivatedAbility pending;
+    pending.permanentOid = 501;
+    pending.abilityIndex = 2;
+    pending.manaOptionIndex = 3;
+    pending.expectedZoneChangeGeneration = 7;
+    ruled::v1::ActivateAbility command;
+    pending.writeActivationHeader(command);
+    EXPECT_EQ(command.source_object_id(), 501u);
+    EXPECT_EQ(command.ability_index(), 2u);
+    EXPECT_EQ(command.expected_zone_change_generation(), 7u);
+    EXPECT_EQ(command.mana_option_index(), 3u);
+}
+
 TEST_F(RuledClientTest, TriggerModesBecomePromptOptionsAndSubmitTheChosenMode)
 {
     ruled::v1::RuledEventBatch batch;
@@ -4096,6 +4153,43 @@ TEST_F(RuledClientTest, CopySourceChoiceUsesBoardSelectionAndEmptyResolutionChoi
     EXPECT_TRUE(host.sentCommands[0].has_submit_resolution_choice());
     EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 0);
     EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource));
+}
+
+TEST_F(RuledClientTest, ResolutionCostObjectsToggleAsABoundedCohortBeforeSubmission)
+{
+    QSignalSpy progressSpy(state, &RuledClientState::resolutionCostSelectionChanged);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_COST_OBJECTS);
+    rcr->set_min(2);
+    rcr->set_max(2);
+    rcr->set_prompt_text("Choose two untapped permanents.");
+    rcr->add_candidate_object_ids(100);
+    rcr->add_candidate_object_ids(101);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CostObjects));
+    EXPECT_EQ(progressSpy.count(), 1);
+    progressSpy.clear();
+    state->toggleResolutionCostObject(999);
+    EXPECT_EQ(progressSpy.count(), 0);
+    state->toggleResolutionCostObject(100);
+    EXPECT_EQ(progressSpy.count(), 1);
+    EXPECT_TRUE(state->isResolutionCostObjectSelected(100));
+    EXPECT_EQ(state->resolutionCostObjectSelectedCount(), 1);
+    host.sentCommands.clear();
+    state->submitResolutionCostObjects();
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+
+    state->toggleResolutionCostObject(101);
+    state->submitResolutionCostObjects();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &chosen = host.sentCommands[0].submit_resolution_choice().chosen_object_ids();
+    ASSERT_EQ(chosen.size(), 2);
+    EXPECT_EQ(chosen.Get(0), 100u);
+    EXPECT_EQ(chosen.Get(1), 101u);
+    EXPECT_EQ(progressSpy.count(), 3); // two selections and clearing the submitted choice
 }
 
 TEST_F(RuledClientTest, AuraReturnChoicesUseTypedPermanentAndPlayerClickSurfaces)

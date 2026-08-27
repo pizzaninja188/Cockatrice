@@ -41,6 +41,7 @@ struct RuledCardActionMenuOption
     int index = -1;
     QString label;
     bool enabled = true;
+    int manaOptionIndex = 0;
 };
 
 struct RuledFlexPip
@@ -60,6 +61,8 @@ struct RuledPendingCostSelection
     /// Stable Server_Card.id for hand choices; engine ObjectId for battlefield/graveyard choices.
     /// Single-card legacy costs carry one value; bounded graveyard costs carry the complete set.
     QVector<quint32> selectedIds;
+    /// Parallel generation snapshot for typed public-zone choices; zero/empty for concealed slots.
+    QVector<quint64> selectedGenerations;
 };
 
 struct RuledPendingCastCostSelection
@@ -89,6 +92,7 @@ struct PendingActivatedAbility
     quint64 expectedZoneChangeGeneration = 0;
     quint32 permanentOid = 0;
     int abilityIndex = -1;
+    int manaOptionIndex = 0;
     QString abilityText;
     QString cardName;
     bool needsTarget = false;
@@ -103,6 +107,16 @@ struct PendingActivatedAbility
     QVector<RuledFlexPip> flexPips;
     QVector<quint32> lifePipIndices;
     bool targetingCostApplied = false;
+
+    /// Shared activation identity and choice header; target and payment cohorts are appended by the host.
+    void writeActivationHeader(ruled::v1::ActivateAbility &command) const
+    {
+        command.set_source_object_id(permanentOid);
+        command.set_source_zone(sourceZone);
+        command.set_expected_zone_change_generation(expectedZoneChangeGeneration);
+        command.set_ability_index(static_cast<quint32>(abilityIndex));
+        command.set_mana_option_index(static_cast<quint32>(manaOptionIndex));
+    }
 };
 
 struct RuledGraveyardCostSelectionProgress
@@ -110,20 +124,22 @@ struct RuledGraveyardCostSelectionProgress
     int required = 0;
     int selected = 0;
     bool confirmable = false;
+    RuledCostChoiceZone zone = RuledCostChoiceZone::Graveyard;
 };
 
 /// Reconstruct the visible graveyard-cost transaction from the current engine-authored choice.
 /// Generic prompt refreshes use this instead of defaulting to 0/0, and stale, duplicate, or
 /// non-candidate object ids never contribute to the visible selected count.
+template <typename PendingPayment>
 [[nodiscard]] inline std::optional<RuledGraveyardCostSelectionProgress>
-ruledPendingGraveyardCostSelectionProgress(const PendingActivatedAbility &pending)
+ruledPendingGraveyardCostSelectionProgress(const PendingPayment &pending)
 {
     if (!pending.valid || !pending.waitingForCost || pending.nextCostChoice < 0 ||
         pending.nextCostChoice >= pending.costChoices.size()) {
         return std::nullopt;
     }
     const auto &choice = pending.costChoices.at(pending.nextCostChoice);
-    if (choice.zone != RuledCostChoiceZone::Graveyard) {
+    if (choice.zone != RuledCostChoiceZone::Graveyard && choice.kind != RuledCostChoiceKind::Tap) {
         return std::nullopt;
     }
 
@@ -145,11 +161,12 @@ ruledPendingGraveyardCostSelectionProgress(const PendingActivatedAbility &pendin
         choice.min,
         selected,
         selected >= choice.min && selected <= choice.max,
+        choice.zone,
     };
 }
 
-[[nodiscard]] inline bool ruledPendingGraveyardCostSelectionContains(const PendingActivatedAbility &pending,
-                                                                      quint32 objectId)
+template <typename PendingPayment>
+[[nodiscard]] inline bool ruledPendingGraveyardCostSelectionContains(const PendingPayment &pending, quint32 objectId)
 {
     if (objectId == 0 || !ruledPendingGraveyardCostSelectionProgress(pending).has_value()) {
         return false;
@@ -763,7 +780,8 @@ public:
     cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
                           const QList<int> &abilityIndices,
                           const QStringList &abilityLabels,
-                          const QHash<int, bool> &abilityEnabled);
+                          const QHash<int, bool> &abilityEnabled,
+                          const QStringList &manaProduced = {});
 
     /// Spell casts and activated abilities are mutually exclusive local UI transactions.
     PendingRuledSpellCast &beginSpell();

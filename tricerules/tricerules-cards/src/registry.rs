@@ -149,9 +149,10 @@ fn validate_effect_payment_results(
 fn additional_cost_result_actions(costs: &[AdditionalCost]) -> Vec<CardResultAction> {
     costs
         .iter()
-        .map(|cost| match cost {
-            AdditionalCost::DiscardCard => CardResultAction::Discard,
-            AdditionalCost::SacrificePermanent { .. } => CardResultAction::Sacrifice,
+        .filter_map(|cost| match cost {
+            AdditionalCost::DiscardCard => Some(CardResultAction::Discard),
+            AdditionalCost::SacrificePermanent { .. } => Some(CardResultAction::Sacrifice),
+            AdditionalCost::TapPermanents { .. } => None,
         })
         .collect()
 }
@@ -167,7 +168,10 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
             AbilityCost::SacrificeSelf | AbilityCost::SacrificePermanent { .. } => {
                 Some(CardResultAction::Sacrifice)
             }
-            AbilityCost::Tap | AbilityCost::Mana(_) | AbilityCost::Loyalty(_) => None,
+            AbilityCost::Tap
+            | AbilityCost::TapPermanents { .. }
+            | AbilityCost::Mana(_)
+            | AbilityCost::Loyalty(_) => None,
         })
         .collect()
 }
@@ -1118,7 +1122,15 @@ impl CardRegistry {
                     }
                 }
                 for cost in &face.additional_costs {
-                    if let AdditionalCost::SacrificePermanent { filter } = cost {
+                    if matches!(cost, AdditionalCost::TapPermanents { count: 0, .. }) {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "additional tap cost requires a positive count".into(),
+                        });
+                    }
+                    if let AdditionalCost::SacrificePermanent { filter }
+                    | AdditionalCost::TapPermanents { filter, .. } = cost
+                    {
                         filter
                             .validate_characteristic_constraints()
                             .map_err(|reason| RegistryError::InvalidCard {
@@ -1132,7 +1144,7 @@ impl CardRegistry {
                         }) {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
-                                reason: "additional sacrifice cost filter requires Creature or AnyPermanent, controller: You, and may include its source".into(),
+                                reason: "additional selected-permanent cost filter requires Creature or AnyPermanent, controller: You, and may include its source".into(),
                             });
                         }
                     }

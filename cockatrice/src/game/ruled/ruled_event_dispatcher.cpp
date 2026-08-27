@@ -151,8 +151,28 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
         }
         parsed.min = static_cast<int>(choice.min());
         parsed.max = static_cast<int>(choice.max());
+        switch (choice.kind()) {
+            case ruled::v1::COST_CHOICE_KIND_DISCARD:
+                parsed.kind = RuledCostChoiceKind::Discard;
+                break;
+            case ruled::v1::COST_CHOICE_KIND_SACRIFICE:
+                parsed.kind = RuledCostChoiceKind::Sacrifice;
+                break;
+            case ruled::v1::COST_CHOICE_KIND_EXILE:
+                parsed.kind = RuledCostChoiceKind::Exile;
+                break;
+            case ruled::v1::COST_CHOICE_KIND_TAP:
+                parsed.kind = RuledCostChoiceKind::Tap;
+                break;
+            default:
+                parsed.kind = RuledCostChoiceKind::Unspecified;
+                break;
+        }
         for (const quint32 candidate : choice.candidate_ids()) {
             parsed.candidateIds.insert(candidate);
+        }
+        for (const auto &candidate : choice.candidate_objects()) {
+            parsed.candidateGenerations.insert(candidate.object_id(), candidate.zone_change_generation());
         }
         data.choices.append(parsed);
     }
@@ -844,6 +864,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     }
 
     if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_TARGET_OBJECTS ||
+        rcr.choice_kind() == ruled::v1::CHOICE_KIND_COST_OBJECTS ||
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_COPY_SOURCE ||
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP ||
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_AURA_PERMANENT ||
@@ -854,7 +875,11 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         //   LEGEND_KEEP    — CR 704.5j, the controller clicks the legend to KEEP; the rest are
         //                    sacrificed.
         PendingChoice choice;
-        if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP) {
+        if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_COST_OBJECTS) {
+            choice.kind = ChoiceKind::CostObjects;
+            choice.min = static_cast<int>(rcr.min());
+            choice.max = static_cast<int>(rcr.max());
+        } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP) {
             choice.kind = ChoiceKind::LegendKeep;
         } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_COPY_SOURCE) {
             choice.kind = ChoiceKind::CopySource;

@@ -1880,6 +1880,82 @@ mod mana_payment_tests {
     }
 
     #[test]
+    fn selected_tap_payment_does_not_require_a_ready_source() {
+        use rv1::cost_selection::Selection;
+
+        let mut engine = engine_with_priority();
+        let mut objects = Vec::new();
+        for card_id in ["gene_pollinator", "grizzly_bears", "grizzly_bears"] {
+            let oid = engine.state.players[0].library.pop_front().expect("card");
+            engine.state.players[0].battlefield.push(oid);
+            let object = engine.state.objects.get_mut(&oid).expect("object");
+            object.card_id = card_id.into();
+            object.zone = Zone::Battlefield;
+            object.base_controller = 0;
+            object.controller = 0;
+            object.summoning_sick = true;
+            objects.push(oid);
+        }
+        let source = objects[0];
+        let mut ability = CardRegistry::global()
+            .get("gene_pollinator")
+            .expect("Gene Pollinator")
+            .primary_face()
+            .activated_abilities[0]
+            .clone();
+        // A mechanic-shaped two-creature payment with no source {T} component.
+        ability.costs = vec![AbilityCost::TapPermanents {
+            count: 2,
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..Default::default()
+            },
+            exclude_source: true,
+        }];
+        for (tapped, summoning_sick) in [(false, true), (true, false), (true, true)] {
+            let object = engine.state.objects.get_mut(&source).expect("source");
+            object.tapped = tapped;
+            object.summoning_sick = summoning_sick;
+            assert!(
+                engine.ability_activatable(source, 0, &ability),
+                "selected tap cost must not apply source readiness: tapped={tapped}, sick={summoning_sick}"
+            );
+        }
+        let selections = vec![rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(Selection::BattlefieldObjects(rv1::CostObjectRefs {
+                objects: objects[1..]
+                    .iter()
+                    .map(|oid| rv1::CostObjectRef {
+                        object_id: *oid,
+                        zone_change_generation: engine
+                            .state
+                            .zone_change_generation
+                            .get(oid)
+                            .copied()
+                            .unwrap_or(0),
+                    })
+                    .collect(),
+            })),
+        }];
+        let plan = engine
+            .plan_ability_costs(0, 0, source, &ability.costs, &[], &selections, &[], 0, 0)
+            .expect("two summoning-sick creatures can pay a selected tap cost");
+        engine.state.objects.get_mut(&objects[2]).unwrap().tapped = true;
+        assert!(engine.commit_cost_transaction(plan).is_err());
+        assert!(!engine.state.objects[&objects[1]].tapped);
+
+        engine.state.objects.get_mut(&objects[2]).unwrap().tapped = false;
+        let plan = engine
+            .plan_ability_costs(0, 0, source, &ability.costs, &[], &selections, &[], 0, 0)
+            .expect("valid selected tap payment");
+        let receipt = engine.commit_cost_transaction(plan).expect("atomic taps");
+        assert_eq!(receipt.tap_events.len(), 2);
+        assert!(objects.iter().all(|oid| engine.state.objects[oid].tapped));
+    }
+
+    #[test]
     fn combat_retained_mana_is_spent_after_ordinary_mana_of_the_same_type() {
         let mut engine = engine_with_priority();
         engine.state.players[0].mana_pool.red = 3;

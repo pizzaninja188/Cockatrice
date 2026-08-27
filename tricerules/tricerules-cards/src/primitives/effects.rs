@@ -996,6 +996,12 @@ pub enum ResolutionCost {
     SacrificePermanent {
         filter: TargetFilter,
     },
+    TapPermanents {
+        count: u32,
+        filter: TargetFilter,
+        #[serde(default)]
+        exclude_source: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1243,6 +1249,11 @@ pub enum SpellEffectKind {
     /// chosen subjects, while Cracked Skull uses the damage event's trigger object.
     Destroy {
         #[serde(default = "default_destroy_subject")]
+        subject: EffectSubject,
+    },
+    /// CR 701.17: sacrifice an untargeted subject. Source-bound triggers such as Command Bridge
+    /// use this instead of destroy so indestructible and regeneration never apply.
+    Sacrifice {
         subject: EffectSubject,
     },
     /// Destroy every current Aura and/or Equipment attached to one chosen permanent. The target
@@ -2179,6 +2190,7 @@ impl SpellEffectKind {
                 })
                 .collect(),
             SpellEffectKind::Destroy { subject }
+            | SpellEffectKind::Sacrifice { subject }
             | SpellEffectKind::PumpTarget { subject, .. }
             | SpellEffectKind::Tap { subject }
             | SpellEffectKind::Untap { subject }
@@ -2508,11 +2520,16 @@ impl SpellEffectKind {
                         && branch_index + 1 == branches.len()
                         && matches!(branch.requirement, ResolutionBranchRequirement::Always)
                         && branch.cost == ResolutionCost::None;
+                    // Paying a real cost can be the entire successful branch (Command Bridge,
+                    // Transguild Promenade); it needs no fabricated follow-up effect.
+                    let is_cost_only_branch = branch.cost != ResolutionCost::None;
                     if branch.label.trim().is_empty()
-                        || (branch.effects.is_empty() && !is_first_applicable_noop_fallback)
+                        || (branch.effects.is_empty()
+                            && !is_first_applicable_noop_fallback
+                            && !is_cost_only_branch)
                     {
                         return Err(
-                            "resolution choice branches require a label and at least one effect"
+                            "resolution choice branches require a label and an effect or payment"
                                 .into(),
                         );
                     }
@@ -2541,6 +2558,20 @@ impl SpellEffectKind {
                                 return Err(
                                     "resolution sacrifice cost must select a permanent you control"
                                         .into(),
+                                );
+                            }
+                        }
+                        ResolutionCost::TapPermanents { count, filter, .. } => {
+                            if *count == 0 {
+                                return Err("resolution tap cost requires a positive count".into());
+                            }
+                            filter.validate_target_constraints()?;
+                            if !filter.all_terminal_filters_match(|leaf| {
+                                matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                                    && leaf.controller == TargetController::You
+                            }) {
+                                return Err(
+                                    "resolution tap cost must select permanents you control".into(),
                                 );
                             }
                         }
@@ -3094,7 +3125,9 @@ impl SpellEffectKind {
                 ResolutionCost::Mana(_) => {
                     Err("Ward mana cost must be nonempty and cannot contain X".into())
                 }
-                ResolutionCost::None | ResolutionCost::SacrificePermanent { .. } => {
+                ResolutionCost::None
+                | ResolutionCost::SacrificePermanent { .. }
+                | ResolutionCost::TapPermanents { .. } => {
                     Err("Ward supports only mana and discard-card costs".into())
                 }
             },

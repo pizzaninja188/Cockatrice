@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-08-26. The selected permanent is paying a separate tap cost,
+// so it may have entered this turn; only Gene Pollinator's own {T} cost checks readiness.
+(
+  id: "gene_pollinator",
+  name: "Gene Pollinator",
+  mana_cost: "{G}",
+  types: ["Artifact", "Creature", "Robot", "Insect"],
+  power: 1,
+  toughness: 2,
+  activated_abilities: [(
+    costs: [
+      Tap,
+      TapPermanents(
+        count: 1,
+        filter: (kind: AnyPermanent, controller: You),
+        exclude_source: true,
+      ),
+    ],
+    effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    text: "{T}, Tap an untapped permanent you control: Add one mana of any color.",
+  )],
+)

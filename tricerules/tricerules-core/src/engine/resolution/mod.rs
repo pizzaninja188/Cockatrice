@@ -1200,6 +1200,7 @@ impl GameEngine {
                         pump_counters::put_counters(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Destroy { .. } => misc::destroy(&mut cx, effect)?,
+                    effect @ SpellEffectKind::Sacrifice { .. } => misc::sacrifice(&mut cx, effect)?,
                     effect @ SpellEffectKind::DestroyAttached { .. } => {
                         mass::destroy_attached(&mut cx, effect)?
                     }

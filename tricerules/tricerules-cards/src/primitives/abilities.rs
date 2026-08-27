@@ -224,24 +224,27 @@ impl ActivatedAbilityDef {
         }
         for cost in &self.costs {
             cost.validate()?;
-            if let AbilityCost::SacrificePermanent { filter } = cost {
+            if let AbilityCost::SacrificePermanent { filter }
+            | AbilityCost::TapPermanents { filter, .. } = cost
+            {
                 filter.validate_characteristic_constraints()?;
                 if !filter.all_terminal_filters_match(|leaf| {
                     matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
                         && leaf.controller == TargetController::You
                 }) {
                     return Err(
-                        "sacrifice cost filter requires Creature or AnyPermanent and controller: You"
+                        "selected permanent cost filter requires Creature or AnyPermanent and controller: You"
                             .into(),
                     );
                 }
             }
         }
-        if self
-            .costs
-            .iter()
-            .any(|cost| matches!(cost, AbilityCost::Tap | AbilityCost::SacrificeSelf))
-            && self.source_zone != AbilitySourceZone::Battlefield
+        if self.costs.iter().any(|cost| {
+            matches!(
+                cost,
+                AbilityCost::Tap | AbilityCost::TapPermanents { .. } | AbilityCost::SacrificeSelf
+            )
+        }) && self.source_zone != AbilitySourceZone::Battlefield
         {
             return Err("tap and sacrifice-self costs require a battlefield source".into());
         }

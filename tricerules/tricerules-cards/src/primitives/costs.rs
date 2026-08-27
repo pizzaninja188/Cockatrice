@@ -15,6 +15,15 @@ pub enum AbilityCost {
     Loyalty(i32),
     /// {T}: tap the source permanent.
     Tap,
+    /// Tap exactly `count` untapped permanents the activating player controls that match
+    /// `filter`. This is a selection cost, not targeting, and summoning sickness does not apply
+    /// unless the selected object is also paying a separate `{T}` source cost.
+    TapPermanents {
+        count: u32,
+        filter: TargetFilter,
+        #[serde(default)]
+        exclude_source: bool,
+    },
     /// Pay mana (e.g. `"{4}"`, `"{2}{R}"`). Same brace syntax as `CardDefinition.mana_cost`.
     Mana(ManaCost),
     /// Discard one card chosen from the activating player's hand.
@@ -43,6 +52,10 @@ pub enum AbilityCost {
 impl AbilityCost {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::TapPermanents { count: 0, .. } => {
+                Err("permanent tap cost requires a positive count".into())
+            }
+            Self::TapPermanents { filter, .. } => filter.validate_characteristic_constraints(),
             Self::ExileGraveyardCards { count: 0, .. } => {
                 Err("graveyard-card exile cost requires a positive count".into())
             }
@@ -62,6 +75,13 @@ pub enum AdditionalCost {
     DiscardCard,
     /// Sacrifice one permanent the caster controls that matches `filter`.
     SacrificePermanent { filter: TargetFilter },
+    /// Tap exactly `count` matching untapped permanents the caster controls.
+    TapPermanents {
+        count: u32,
+        filter: TargetFilter,
+        #[serde(default)]
+        exclude_source: bool,
+    },
 }
 
 /// One announced cast-time cost choice group (CR 601.2b). Kicker and behold share this

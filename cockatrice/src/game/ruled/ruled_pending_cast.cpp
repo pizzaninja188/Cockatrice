@@ -52,7 +52,8 @@ QVector<RuledCardActionMenuOption>
 RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
                                         const QList<int> &abilityIndices,
                                         const QStringList &abilityLabels,
-                                        const QHash<int, bool> &abilityEnabled)
+                                        const QHash<int, bool> &abilityEnabled,
+                                        const QStringList &manaProduced)
 {
     QVector<RuledCardActionMenuOption> options;
     options.reserve(castFaces.size() + abilityIndices.size());
@@ -61,8 +62,15 @@ RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFace
                         QObject::tr("Cast %1").arg(face.faceName), true});
     }
     for (const int abilityIndex : abilityIndices) {
-        options.append({RuledCardActionMenuOption::Kind::ActivateAbility, abilityIndex,
-                        abilityLabels.value(abilityIndex), abilityEnabled.value(abilityIndex, false)});
+        const QStringList manaOptions = manaProduced.value(abilityIndex).split(QLatin1Char('/'));
+        for (int optionIndex = 0; optionIndex < manaOptions.size(); ++optionIndex) {
+            const QString label = manaOptions.size() > 1
+                                      ? QObject::tr("%1 — Add {%2}").arg(abilityLabels.value(abilityIndex),
+                                                                        manaOptions.at(optionIndex))
+                                      : abilityLabels.value(abilityIndex);
+            options.append({RuledCardActionMenuOption::Kind::ActivateAbility, abilityIndex, label,
+                            abilityEnabled.value(abilityIndex, false), optionIndex});
+        }
     }
     return options;
 }

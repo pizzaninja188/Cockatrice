@@ -308,7 +308,8 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             painter->drawPath(shape());
             painter->restore();
         }
-        if (zone && zone->getName() == ZoneNames::GRAVE && owner && owner->getPlayerInfo()->getLocal() &&
+        if (zone && (zone->getName() == ZoneNames::GRAVE || zone->getName() == ZoneNames::TABLE) &&
+            owner && owner->getPlayerInfo()->getLocal() &&
             ruledTargetSelectionOid != 0 &&
             RuledActions::isSelectedGraveyardCostObject(ruledGame, ruledTargetSelectionOid)) {
             painter->save();

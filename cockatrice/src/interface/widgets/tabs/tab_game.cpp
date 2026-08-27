@@ -419,13 +419,25 @@ void TabGame::connectToGameEventHandler()
                 });
         connect(gamePromptWidget, &GamePromptWidget::ruledResolutionHandPickConfirmRequested,
                 game->getGameEventHandler()->ruled(), &RuledClientState::submitResolutionHandPick);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionCostSelectionChanged,
+                this, [this]() { refreshRuledPromptState(); });
         connect(gamePromptWidget, &GamePromptWidget::ruledCostSelectionConfirmRequested, this, [this]() {
+            RuledClientState *const ruled = game->getGameEventHandler()->ruled();
+            if (ruled && ruled->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CostObjects)) {
+                ruled->submitResolutionCostObjects();
+                return;
+            }
             const int localId = game->getPlayerManager()->getLocalPlayerId();
             if (Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
                 local->getPlayerActions()->confirmRuledGraveyardCostSelection();
             }
         });
         connect(gamePromptWidget, &GamePromptWidget::ruledCostSelectionCancelRequested, this, [this]() {
+            RuledClientState *const ruled = game->getGameEventHandler()->ruled();
+            if (ruled && ruled->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CostObjects)) {
+                ruled->declinePendingClickChoice();
+                return;
+            }
             const int localId = game->getPlayerManager()->getLocalPlayerId();
             if (Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
                 local->getPlayerActions()->cancelRuledGraveyardCostSelection();
@@ -755,6 +767,12 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         for (const auto &option : h->pendingChoiceOptions()) {
             state.choiceOptions.append({option.index, option.label, option.enabled});
         }
+    } else if (h->hasPendingChoiceOfKind(ChoiceKind::CostObjects)) {
+        state.mode = PromptMode::CostSelection;
+        state.required = h->resolutionCostObjectRequired();
+        state.selected = h->resolutionCostObjectSelectedCount();
+        state.canDecline = h->pendingClickChoiceMayDecline();
+        state.text = h->pendingChoicePromptText(ChoiceKind::CostObjects);
     } else if (h->isWaitingForResolutionChoice()) {
         state.mode = PromptMode::WaitingForChoice;
         if (Player *decider = game->getPlayerManager()->getPlayer(h->resolutionChoiceWaitingPlayer())) {
@@ -843,10 +861,19 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
             state.choiceOptions.append({option.optionIndex, option.label, option.selectable});
         }
     } else if (localActions && localActions->isAwaitingRuledSpellCostSelection()) {
-        state.mode = PromptMode::ClickChoice;
         state.text = localActions->pendingRuledSpellPromptText();
+        if (localActions->isAwaitingRuledGraveyardCostSelection()) {
+            state.mode = PromptMode::CostSelection;
+            state.canDecline = true; // Cancel the unsubmitted local cast.
+            state.required = 1;
+            state.selected = 0;
+            (void)localActions->getRuledGraveyardCostSelectionProgress(state.required, state.selected);
+        } else {
+            state.mode = PromptMode::ClickChoice;
+        }
     } else if (localActions && localActions->isAwaitingRuledGraveyardCostSelection()) {
         state.mode = PromptMode::CostSelection;
+        state.canDecline = true; // Cancel the unsubmitted local activation.
         state.text = localActions->pendingRuledAbilityCostPromptText();
         // Reconstruct from the pending engine-authored choice on every refresh. A rejected click,
         // mana action, or unrelated UI refresh must not reset this to 0/0 and enable Confirm.
@@ -1717,6 +1744,7 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                         }
                         GamePromptWidget::RuledPromptState prompt;
                         prompt.mode = GamePromptWidget::PromptMode::CostSelection;
+                        prompt.canDecline = true;
                         prompt.required = required;
                         prompt.selected = selected;
                         prompt.text = newPlayer->getPlayerActions()->pendingRuledAbilityCostPromptText();

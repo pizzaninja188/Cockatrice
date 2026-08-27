@@ -101,6 +101,7 @@ bool isPrivateChoiceKind(ruled::v1::ChoiceKind kind)
         case ruled::v1::CHOICE_KIND_MANIFEST_DREAD: // CR 701.62: choose from the library top two
         case ruled::v1::CHOICE_KIND_ZONE_SEARCH:    // hand / graveyard / library unified search
         case ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS: // chooser-only graveyard selection
+        case ruled::v1::CHOICE_KIND_COST_OBJECTS: // chooser-only authored payment candidates
             return true;
         case ruled::v1::CHOICE_KIND_REVEALED:
         case ruled::v1::CHOICE_KIND_TARGET_OBJECTS:

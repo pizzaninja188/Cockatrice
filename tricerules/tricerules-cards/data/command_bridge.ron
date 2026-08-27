@@ -1,0 +1,36 @@
+// Oracle and rulings checked 2026-08-26. The entry trigger offers a real untargeted tap payment;
+// if it cannot or will not be paid, sacrificing the source is a semantic sacrifice, not destroy.
+(
+  id: "command_bridge",
+  name: "Command Bridge",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(
+    costs: [Tap],
+    effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    text: "{T}: Add one mana of any color.",
+  )],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ChooseResolutionBranch(
+      branches: [
+        (
+          label: "Tap an untapped permanent you control",
+          cost: TapPermanents(
+            count: 1,
+            filter: (kind: AnyPermanent, controller: You),
+            exclude_source: false,
+          ),
+          effects: [],
+        ),
+        (
+          label: "Sacrifice Command Bridge",
+          cost: None,
+          effects: [Sacrifice(subject: Source)],
+        ),
+      ],
+    )],
+    text: "When this land enters, sacrifice it unless you tap an untapped permanent you control.",
+  )],
+  static_abilities: [EntersTapped(affected: Self_)],
+)
