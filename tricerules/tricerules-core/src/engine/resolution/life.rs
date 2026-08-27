@@ -5,8 +5,8 @@ use super::*;
 ///
 /// The single funnel for every life *gain* edge (spell effects, drain, exile-for-life, lifelink),
 /// the gain-side analog of `engine::set_tapped`: a "whenever you gain life" trigger hangs off this
-/// one call instead of auditing every mutation site. Life *loss* has no such funnel yet — no
-/// implemented card watches for it.
+/// one call instead of auditing every mutation site. Both gain and loss mutations commit their
+/// history through `history::commit_life_change`, separately from trigger dispatch.
 ///
 /// One call is one life-gain event, so callers must not pre-sum unrelated gains: two lifelink
 /// creatures in the same damage step gain separately and trigger separately. A gain of 0 is not an
@@ -40,7 +40,7 @@ pub(in crate::engine) fn apply_life_gain_without_triggers(
         return None;
     }
     let pi = engine.state.player_idx(player)?;
-    engine.state.players[pi].life += amount as i32;
+    crate::engine::history::commit_life_change(&mut engine.state, pi, amount as i32);
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
             player_id: player,
@@ -131,7 +131,7 @@ pub(super) fn lose_life(
         let Some(pi) = engine.state.player_idx(player) else {
             continue;
         };
-        engine.state.players[pi].life -= amount as i32;
+        crate::engine::history::commit_life_change(&mut engine.state, pi, -(amount as i32));
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
                 player_id: player,
@@ -184,7 +184,7 @@ pub(super) fn target_player_loses_life(
     if let Some(&tid) = targets.first() {
         if let Some(pi) = engine.state.player_idx(tid as i32) {
             let pid = engine.state.players[pi].id;
-            engine.state.players[pi].life -= amount as i32;
+            crate::engine::history::commit_life_change(&mut engine.state, pi, -(amount as i32));
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
                     player_id: pid,
@@ -223,7 +223,7 @@ pub(super) fn each_opponent_loses_life_you_gain_equal(
         .collect();
     let mut total_lost: u32 = 0;
     for (pi, pid) in opps {
-        engine.state.players[pi].life -= amount as i32;
+        crate::engine::history::commit_life_change(&mut engine.state, pi, -(amount as i32));
         total_lost += amount;
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
@@ -258,7 +258,7 @@ pub(super) fn drain_target(
     if let Some(&tid) = targets.first() {
         if let Some(pi) = engine.state.player_idx(tid as i32) {
             let pid = engine.state.players[pi].id;
-            engine.state.players[pi].life -= amount as i32;
+            crate::engine::history::commit_life_change(&mut engine.state, pi, -(amount as i32));
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
                     player_id: pid,
@@ -280,6 +280,25 @@ pub(super) fn drain_target(
 mod tests {
     use super::*;
     use crate::state::PlayerState;
+
+    #[test]
+    fn issue_170_gain_history_commits_before_triggers_and_rolls_over() {
+        let mut engine = GameEngine::new(170001, &[10, 20], 20, None, true).unwrap();
+        let mut events = Vec::new();
+        assert_eq!(engine.state.turn_history.current.player(10).life_gained, 0);
+        assert!(
+            apply_life_gain_without_triggers(&mut engine, &mut events, 10, 0, "zero").is_none()
+        );
+        let gained =
+            apply_life_gain_without_triggers(&mut engine, &mut events, 10, 2, "gain").unwrap();
+        assert_eq!(engine.state.turn_history.current.player(10).life_gained, 2);
+        engine.fire_triggers(&[gained]);
+        assert_eq!(engine.state.turn_history.current.player(10).life_gained, 2);
+        assert_eq!(engine.state.turn_history.current.player(10).life_lost, 0);
+        engine.state.turn_history.finish_turn();
+        assert_eq!(engine.state.turn_history.previous.player(10).life_gained, 2);
+        assert_eq!(engine.state.turn_history.current.player(10).life_gained, 0);
+    }
 
     fn prohibition_source(engine: &mut GameEngine, player: PlayerId) -> ObjectId {
         let pi = engine.state.player_idx(player).unwrap();
@@ -452,6 +471,10 @@ mod tests {
             )
             .is_none());
             assert!(events.is_empty());
+            assert_eq!(
+                engine.state.turn_history.current.player(player).life_gained,
+                0
+            );
         }
     }
 

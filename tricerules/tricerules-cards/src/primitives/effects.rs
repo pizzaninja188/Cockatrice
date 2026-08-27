@@ -32,6 +32,13 @@ pub enum GameCondition {
     /// `Controller` is "during your turn" (Daggersail Aeronaut); `Opponents` supports the inverse
     /// without assuming a two-player game.
     ActivePlayer { players: RelativePlayerSet },
+    /// Star Charter checks either change to its controller; Flamecache Gecko checks loss by
+    /// any opponent. Totals are separate, so offsetting changes still qualify (CR 119).
+    LifeChangedThisTurn {
+        players: ConditionPlayerSet,
+        change: LifeChangeKind,
+        quantifier: PlayerQuantifier,
+    },
     /// Compare the minimum or maximum life total among a multiplayer-safe relative player set
     /// against signed inclusive bounds. Signed values preserve rules-correct comparisons after a
     /// player reaches zero or negative life but remains in the game until state-based actions.
@@ -179,6 +186,7 @@ impl GameCondition {
         match self {
             GameCondition::CastSnapshot { .. } => Ok(()),
             GameCondition::ActivePlayer { .. } => Ok(()),
+            GameCondition::LifeChangedThisTurn { .. } => Ok(()),
             GameCondition::PlayerLifeAggregate { min, max, .. } => {
                 if min.is_none() && max.is_none() {
                     return Err("PlayerLifeAggregate requires at least one of min or max".into());
@@ -299,6 +307,7 @@ impl GameCondition {
         match self {
             GameCondition::CastSnapshot { .. }
             | GameCondition::ActivePlayer { .. }
+            | GameCondition::LifeChangedThisTurn { .. }
             | GameCondition::PlayerLifeAggregate { .. }
             | GameCondition::AttackedThisTurn { .. }
             | GameCondition::ObjectWasDealtDamageThisTurn { .. } => false,
@@ -335,6 +344,31 @@ impl GameCondition {
 pub enum PlayerLifeAggregate {
     Minimum,
     Maximum,
+}
+
+/// Gain/loss predicates for Star Charter and Flamecache Gecko; Either is a disjunction,
+/// never a net-total comparison.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LifeChangeKind {
+    Gain,
+    Loss,
+    Either,
+}
+
+/// Relative conditions (Star Charter/Flamecache Gecko) or a stack-bound selected player
+/// (Thought-Stalker Warlock). This selects an existing target; it does not create targeting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConditionPlayerSet {
+    Relative(RelativePlayerSet),
+    ChosenTarget { group_index: u32, target_index: u32 },
+}
+
+/// Distinguishes existential and universal player conditions without summing players' facts.
+/// Both require a nonempty set. Applies to controller and opponent life-history mechanics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PlayerQuantifier {
+    Any,
+    All,
 }
 
 /// Public characteristics used to select battlefield permanents for a [`GameCondition`].

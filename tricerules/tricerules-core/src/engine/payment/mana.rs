@@ -536,5 +536,5 @@ pub(in crate::engine) fn commit_mana_payment(
             amount.w + amount.u + amount.b + amount.r + amount.g + amount.c > 0
         });
     }
-    state.players[player_idx].life -= plan.life_cost as i32;
+    crate::engine::history::commit_life_change(state, player_idx, -(plan.life_cost as i32));
 }

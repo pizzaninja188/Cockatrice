@@ -42,4 +42,6 @@ fn infectious_horror_attack_trigger_is_untargeted_life_loss_not_damage() {
         2,
         "direct life loss neither uses nor consumes damage prevention"
     );
+    assert_eq!(engine.state.turn_history.current.player(1).life_lost, 2);
+    assert_eq!(engine.state.turn_history.current.player(0).life_lost, 0);
 }

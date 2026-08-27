@@ -2856,12 +2856,93 @@ mod attached_subject_tests {
                 );
                 assert_eq!(engine.state.players[1].life, 20 - lost);
                 assert_eq!(
+                    engine.state.turn_history.current.player(0).life_gained,
+                    if prohibited { 0 } else { 3 },
+                    "{effect:?}"
+                );
+                assert_eq!(
+                    engine.state.turn_history.current.player(1).life_lost,
+                    lost as u64
+                );
+                assert_eq!(
                     engine.state.players[0].library.len(),
                     library_before - 1,
                     "the draw tail still resolves"
                 );
                 assert_eq!(events.iter().any(|event| matches!(event.ev.as_ref(), Some(rv1::ruled_event::Ev::LifeChanged(life)) if life.delta > 0)), !prohibited);
             }
+        }
+    }
+
+    #[test]
+    fn issue_170_direct_loss_effects_and_chosen_player_conditions_share_history() {
+        for amount in [0, 2] {
+            let mut engine = GameEngine::new_with_default_decks(170007, &[0, 1], 20).unwrap();
+            let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+            let mut item = triggered_item(source, 0);
+            item.targets = vec![super::super::targeting::capture_stack_target(
+                &engine,
+                &rv1::TargetRef {
+                    object_id: 1,
+                    group_index: 0,
+                    ..Default::default()
+                },
+            )];
+            let entries = [
+                (
+                    SpellEffectKind::LoseLife {
+                        amount: LifeAmount::Fixed(amount),
+                        who: PlayerRecipient::Controller,
+                    },
+                    vec![],
+                ),
+                (
+                    SpellEffectKind::TargetPlayerLosesLife {
+                        amount,
+                        target: TargetFilter {
+                            kind: TargetKind::AnyPlayer,
+                            ..Default::default()
+                        },
+                    },
+                    vec![1],
+                ),
+            ]
+            .into_iter()
+            .map(|(effect, targets)| ResolutionEffect {
+                target_group_indices: vec![0; targets.len()],
+                targets,
+                effect,
+                target_damage: vec![],
+                role_group_indices: vec![],
+            })
+            .collect();
+            engine
+                .run_effect_list(&item, "life loss", entries, 0, &mut Vec::new())
+                .unwrap();
+            for player in [0, 1] {
+                assert_eq!(
+                    engine.state.turn_history.current.player(player).life_lost,
+                    u64::from(amount)
+                );
+                assert_eq!(
+                    engine.state.turn_history.current.player(player).life_gained,
+                    0
+                );
+            }
+            assert_eq!(
+                engine.condition_holds(
+                    &GameCondition::LifeChangedThisTurn {
+                        players: ConditionPlayerSet::ChosenTarget {
+                            group_index: 0,
+                            target_index: 0
+                        },
+                        change: LifeChangeKind::Loss,
+                        quantifier: PlayerQuantifier::Any,
+                    },
+                    ConditionContext::for_stack_item(&item)
+                ),
+                amount > 0
+            );
         }
     }
 

@@ -961,7 +961,7 @@ impl GameEngine {
                 let Some(index) = self.state.player_idx(player) else {
                     return 0;
                 };
-                self.state.players[index].life -= result.dealt as i32;
+                super::history::commit_life_change(&mut self.state, index, -(result.dealt as i32));
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
                         player_id: player,

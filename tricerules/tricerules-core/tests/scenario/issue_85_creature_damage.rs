@@ -297,6 +297,11 @@ fn issue_175_noncombat_lifelink_preserves_damage_and_prevention() {
             engine.state.players[1].life,
             if prevented { 20 } else { 19 }
         );
+        assert_eq!(engine.state.turn_history.current.player(0).life_gained, 0);
+        assert_eq!(
+            engine.state.turn_history.current.player(1).life_lost,
+            u64::from(!prevented)
+        );
     }
 }
 

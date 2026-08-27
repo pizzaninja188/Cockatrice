@@ -1363,6 +1363,55 @@ mod convoke_transaction_tests {
     }
 
     #[test]
+    fn issue_170_life_payment_history_is_committed_atomically() {
+        for purpose in [CostPurpose::Spell, CostPurpose::Ability] {
+            let mut engine = GameEngine::new(170002, &[0, 1], 20, None, true).unwrap();
+            let mana = super::super::mana::plan_mana_payment_with_reduction(
+                &engine.state,
+                0,
+                &ManaCost::parse("{G/P}").unwrap(),
+                0,
+                0,
+                0,
+                &[rv1::FlexPipPayment {
+                    pip_index: 0,
+                    pay_life: true,
+                }],
+            )
+            .unwrap();
+            let plan = CostTransactionPlan {
+                purpose,
+                player: 0,
+                player_idx: 0,
+                debits: vec![
+                    CostDebit::Mana(mana.clone()),
+                    CostDebit::Tap {
+                        object_id: u32::MAX,
+                        generation: 0,
+                    },
+                ],
+                cast_cost_receipts: vec![],
+            };
+            let before = format!("{:?}", engine.state);
+            assert!(engine.commit_cost_transaction(plan).is_err());
+            assert_eq!(format!("{:?}", engine.state), before);
+            let receipt = engine
+                .commit_cost_transaction(CostTransactionPlan {
+                    purpose,
+                    player: 0,
+                    player_idx: 0,
+                    debits: vec![CostDebit::Mana(mana)],
+                    cast_cost_receipts: vec![],
+                })
+                .unwrap();
+            assert_eq!(receipt.life_paid, 2);
+            assert_eq!(engine.state.players[0].life, 18);
+            assert_eq!(engine.state.turn_history.current.player(0).life_lost, 2);
+            assert_eq!(engine.state.turn_history.current.player(0).life_gained, 0);
+        }
+    }
+
+    #[test]
     fn issue_172_restricted_and_retained_mana_are_counted_once_and_stale_debits_are_atomic() {
         let mut engine = GameEngine::new(172011, &[0, 1], 20, None, true).unwrap();
         engine.state.players[0].mana_pool.colorless = 2;

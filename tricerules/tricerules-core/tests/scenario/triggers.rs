@@ -1249,6 +1249,8 @@ fn pridemate_grows_once_per_lifelink_creature() {
     pass_both_players(&mut e); // declare attackers -> declare blockers
     pass_both_players(&mut e); // no blockers -> combat damage
     resolve_entire_stack_two_player(&mut e); // the two lifegain triggers
+    assert_eq!(e.state.turn_history.current.player(0).life_gained, 4);
+    assert_eq!(e.state.turn_history.current.player(1).life_lost, 4);
 
     assert_eq!(
         e.state.players[0].life,

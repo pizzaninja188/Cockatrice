@@ -1,7 +1,95 @@
 use super::*;
 
+/// Commit an already authorized life change. Star Charter and Flamecache Gecko need actual
+/// gains/losses, including damage and payments, rather than the net change or emitted UI events.
+/// Callers own prevention/prohibition and transaction validation; trigger dispatch never records
+/// this again. Initialization does not pass through this boundary (CR 119.2-119.4).
+pub(super) fn commit_life_change(state: &mut GameState, player_idx: usize, delta: i32) {
+    if delta == 0 {
+        return;
+    }
+    let player = &mut state.players[player_idx];
+    player.life += delta;
+    let player_id = player.id;
+    let record = state.turn_history.current.player_mut(player_id);
+    let total = if delta > 0 {
+        &mut record.life_gained
+    } else {
+        &mut record.life_lost
+    };
+    *total = total.saturating_add(u64::from(delta.unsigned_abs()));
+}
+
 fn clamp_public_count(count: usize) -> u32 {
     u32::try_from(count).unwrap_or(u32::MAX)
+}
+
+pub(super) fn life_changed_this_turn(
+    state: &GameState,
+    players: ConditionPlayerSet,
+    change: LifeChangeKind,
+    quantifier: PlayerQuantifier,
+    controller: PlayerId,
+    targets: Option<&[StackTarget]>,
+) -> bool {
+    let chosen = match players {
+        ConditionPlayerSet::Relative(_) => None,
+        ConditionPlayerSet::ChosenTarget {
+            group_index,
+            target_index,
+        } => {
+            let Some(target) = targets.and_then(|targets| {
+                targets
+                    .iter()
+                    .filter(|target| target.group_index == group_index)
+                    .nth(target_index as usize)
+            }) else {
+                return false;
+            };
+            // Accepted older commands may omit the presentation kind. As in target admission,
+            // identify those solely from authoritative player membership and absence of an
+            // object generation. Explicit non-player or unknown kinds must never be inferred.
+            if !matches!(
+                rv1::TargetRefKind::try_from(target.kind),
+                Ok(rv1::TargetRefKind::Player | rv1::TargetRefKind::Unspecified)
+            ) || target.zone_change_generation.is_some()
+            {
+                return false;
+            }
+            let Ok(player) = PlayerId::try_from(target.object_id) else {
+                return false;
+            };
+            Some(player)
+        }
+    };
+    let mut selected = state
+        .players
+        .iter()
+        .filter(|player| {
+            !player.has_lost
+                && match players {
+                    ConditionPlayerSet::Relative(set) => {
+                        relative_player_set_contains(state, set, controller, player.id)
+                    }
+                    ConditionPlayerSet::ChosenTarget { .. } => chosen == Some(player.id),
+                }
+        })
+        .peekable();
+    if selected.peek().is_none() {
+        return false;
+    }
+    let matches = |player: &PlayerState| {
+        let record = state.turn_history.current.player(player.id);
+        match change {
+            LifeChangeKind::Gain => record.life_gained > 0,
+            LifeChangeKind::Loss => record.life_lost > 0,
+            LifeChangeKind::Either => record.life_gained > 0 || record.life_lost > 0,
+        }
+    };
+    match quantifier {
+        PlayerQuantifier::Any => selected.any(matches),
+        PlayerQuantifier::All => selected.all(matches),
+    }
 }
 
 pub(super) fn relative_player_set_contains(
@@ -350,6 +438,18 @@ impl GameEngine {
                 .and_then(|item| item.cast_condition_results.get(*index as usize))
                 .copied()
                 .unwrap_or(false),
+            GameCondition::LifeChangedThisTurn {
+                players,
+                change,
+                quantifier,
+            } => life_changed_this_turn(
+                &self.state,
+                *players,
+                *change,
+                *quantifier,
+                context.controller,
+                context.stack_item.map(|item| item.targets.as_slice()),
+            ),
             GameCondition::ActivePlayer { players } => relative_player_set_contains(
                 &self.state,
                 *players,
@@ -1078,6 +1178,304 @@ mod tests {
                 }]
             )
             .is_none());
+    }
+
+    #[test]
+    fn issue_170_life_conditions_keep_each_players_gain_and_loss_separate() {
+        let mut e = GameEngine::new(170003, &[10, 20], 20, None, true).unwrap();
+        e.state.players.push(PlayerState::new(30, 20));
+        commit_life_change(&mut e.state, 0, 2);
+        commit_life_change(&mut e.state, 0, -2);
+        commit_life_change(&mut e.state, 1, 2);
+        commit_life_change(&mut e.state, 1, -1);
+        let context = ConditionContext {
+            controller: 10,
+            source_object_id: 0,
+            source_zone_change: 0,
+            resolving_spell_id: None,
+            stack_item: None,
+        };
+        for (players, change, quantifier, expected) in [
+            (
+                RelativePlayerSet::Controller,
+                LifeChangeKind::Gain,
+                PlayerQuantifier::Any,
+                true,
+            ),
+            (
+                RelativePlayerSet::Controller,
+                LifeChangeKind::Loss,
+                PlayerQuantifier::All,
+                true,
+            ),
+            (
+                RelativePlayerSet::Controller,
+                LifeChangeKind::Either,
+                PlayerQuantifier::Any,
+                true,
+            ),
+            (
+                RelativePlayerSet::Opponents,
+                LifeChangeKind::Loss,
+                PlayerQuantifier::Any,
+                true,
+            ),
+            (
+                RelativePlayerSet::Opponents,
+                LifeChangeKind::Loss,
+                PlayerQuantifier::All,
+                false,
+            ),
+            (
+                RelativePlayerSet::All,
+                LifeChangeKind::Either,
+                PlayerQuantifier::All,
+                false,
+            ),
+        ] {
+            assert_eq!(
+                e.condition_holds(
+                    &GameCondition::LifeChangedThisTurn {
+                        players: ConditionPlayerSet::Relative(players),
+                        change,
+                        quantifier,
+                    },
+                    context
+                ),
+                expected,
+                "{players:?} {change:?} {quantifier:?}"
+            );
+        }
+        assert_eq!(e.state.players[0].life, 20);
+        assert_eq!(e.state.players[1].life, 21);
+        assert_eq!(e.state.turn_history.current.player(10).life_gained, 2);
+        assert_eq!(e.state.turn_history.current.player(10).life_lost, 2);
+        e.state.turn_history.finish_turn();
+        assert!(!e.condition_holds(
+            &GameCondition::LifeChangedThisTurn {
+                players: ConditionPlayerSet::Relative(RelativePlayerSet::All),
+                change: LifeChangeKind::Either,
+                quantifier: PlayerQuantifier::Any,
+            },
+            context
+        ));
+    }
+
+    #[test]
+    fn issue_170_chosen_player_and_empty_sets_fail_closed() {
+        let mut e = GameEngine::new(170004, &[10, 20], 20, None, true).unwrap();
+        e.state.players.push(PlayerState::new(30, 20));
+        commit_life_change(&mut e.state, 1, -1);
+        let selector = ConditionPlayerSet::ChosenTarget {
+            group_index: 2,
+            target_index: 0,
+        };
+        let valid = StackTarget {
+            object_id: 20,
+            group_index: 2,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Player as i32,
+            zone_change_generation: None,
+        };
+        for (target, expected) in [
+            (valid, true),
+            (
+                StackTarget {
+                    kind: rv1::TargetRefKind::Unspecified as i32,
+                    ..valid
+                },
+                true,
+            ),
+            (
+                StackTarget {
+                    object_id: 30,
+                    ..valid
+                },
+                false,
+            ),
+            (
+                StackTarget {
+                    object_id: 999,
+                    ..valid
+                },
+                false,
+            ),
+            (
+                StackTarget {
+                    group_index: 1,
+                    ..valid
+                },
+                false,
+            ),
+            (
+                StackTarget {
+                    kind: rv1::TargetRefKind::Permanent as i32,
+                    ..valid
+                },
+                false,
+            ),
+            (
+                StackTarget {
+                    zone_change_generation: Some(0),
+                    ..valid
+                },
+                false,
+            ),
+        ] {
+            assert_eq!(
+                life_changed_this_turn(
+                    &e.state,
+                    selector,
+                    LifeChangeKind::Loss,
+                    PlayerQuantifier::Any,
+                    10,
+                    Some(&[target])
+                ),
+                expected
+            );
+        }
+        for targets in [None, Some([].as_slice())] {
+            assert!(!life_changed_this_turn(
+                &e.state,
+                selector,
+                LifeChangeKind::Loss,
+                PlayerQuantifier::All,
+                10,
+                targets
+            ));
+        }
+        e.state.players[1].has_lost = true;
+        assert!(!life_changed_this_turn(
+            &e.state,
+            selector,
+            LifeChangeKind::Loss,
+            PlayerQuantifier::Any,
+            10,
+            Some(&[valid])
+        ));
+        e.state.players.truncate(1);
+        for quantifier in [PlayerQuantifier::Any, PlayerQuantifier::All] {
+            assert!(!life_changed_this_turn(
+                &e.state,
+                ConditionPlayerSet::Relative(RelativePlayerSet::Opponents),
+                LifeChangeKind::Either,
+                quantifier,
+                10,
+                None
+            ));
+        }
+    }
+
+    #[test]
+    fn issue_170_gecko_rechecks_opponents_but_keeps_its_trigger_controller() {
+        for departure in ["none", "source", "control", "opponent"] {
+            let mut e = GameEngine::new(
+                170005,
+                &[0, 1],
+                20,
+                Some(vec![
+                    deck_with_cards(&["flamecache_gecko"], "mountain"),
+                    deck_with_cards(&[], "island"),
+                ]),
+                true,
+            )
+            .unwrap();
+            e.state.players.push(PlayerState::new(2, 20));
+            // Gain two / lose one remains loss, even though this opponent is above starting life.
+            commit_life_change(&mut e.state, 1, 2);
+            commit_life_change(&mut e.state, 1, -1);
+            let source = move_to_battlefield(&mut e, 0, "flamecache_gecko");
+            e.fire_triggers(&[GameEvent::EntersBattlefield { object_id: source }]);
+            let mut events = Vec::new();
+            e.flush_staged_triggers(&mut events);
+            assert_eq!(e.state.stack.len(), 1);
+            assert_eq!(e.state.stack[0].controller, 0);
+            match departure {
+                "source" => {
+                    super::super::resolution::move_object_to_zone(
+                        &mut e.state,
+                        e.registry,
+                        source,
+                        Zone::Graveyard,
+                        None,
+                    )
+                    .unwrap();
+                }
+                "control" => {
+                    let object = e.state.objects.get_mut(&source).unwrap();
+                    object.base_controller = 1;
+                    object.controller = 1;
+                    e.state.players[0].battlefield.retain(|oid| *oid != source);
+                    e.state.players[1].battlefield.push(source);
+                }
+                "opponent" => e.state.players[1].has_lost = true,
+                _ => {}
+            }
+            e.resolve_top_of_stack(&mut events).unwrap();
+            let expected = u32::from(departure != "opponent");
+            assert_eq!(e.state.players[0].mana_pool.black, expected, "{departure}");
+            assert_eq!(e.state.players[0].mana_pool.red, expected, "{departure}");
+            assert_eq!(e.state.players[1].mana_pool.red, 0);
+            assert_eq!(e.state.turn_history.current.player(1).life_lost, 1);
+        }
+    }
+
+    #[test]
+    fn issue_170_continuous_conditions_share_life_history_and_live_controller() {
+        let mut e = GameEngine::new(
+            170006,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with_cards(&["grizzly_bears"], "forest"),
+                deck_with_cards(&[], "island"),
+            ]),
+            true,
+        )
+        .unwrap();
+        let source = move_to_battlefield(&mut e, 0, "grizzly_bears");
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: Some(source),
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Flying),
+            condition: Some(GameCondition::LifeChangedThisTurn {
+                players: ConditionPlayerSet::Relative(RelativePlayerSet::Controller),
+                change: LifeChangeKind::Either,
+                quantifier: PlayerQuantifier::Any,
+            }),
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 0,
+        });
+        assert!(!e
+            .characteristics(source)
+            .unwrap()
+            .keywords
+            .contains(&Keyword::Flying));
+        commit_life_change(&mut e.state, 0, -1);
+        assert!(e
+            .characteristics(source)
+            .unwrap()
+            .keywords
+            .contains(&Keyword::Flying));
+        e.state.objects.get_mut(&source).unwrap().base_controller = 1;
+        assert!(!e
+            .characteristics(source)
+            .unwrap()
+            .keywords
+            .contains(&Keyword::Flying));
+        commit_life_change(&mut e.state, 1, 1);
+        assert!(e
+            .characteristics(source)
+            .unwrap()
+            .keywords
+            .contains(&Keyword::Flying));
+        e.state.turn_history.finish_turn();
+        assert!(!e
+            .characteristics(source)
+            .unwrap()
+            .keywords
+            .contains(&Keyword::Flying));
     }
 
     #[test]

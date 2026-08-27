@@ -1371,7 +1371,11 @@ impl GameEngine {
                     let p = match recipient {
                         DamageRecipient::Player(player) => {
                             if let Some(index) = self.state.player_idx(player) {
-                                self.state.players[index].life -= result.dealt as i32;
+                                super::history::commit_life_change(
+                                    &mut self.state,
+                                    index,
+                                    -(result.dealt as i32),
+                                );
                                 *life_lost.entry(player).or_default() += result.dealt as i32;
                                 result.dealt
                             } else {
@@ -1627,7 +1631,11 @@ impl GameEngine {
                             let trample_after = match recipient {
                                 DamageRecipient::Player(player) => {
                                     if let Some(index) = self.state.player_idx(player) {
-                                        self.state.players[index].life -= result.dealt as i32;
+                                        super::history::commit_life_change(
+                                            &mut self.state,
+                                            index,
+                                            -(result.dealt as i32),
+                                        );
                                         *life_lost.entry(player).or_default() +=
                                             result.dealt as i32;
                                         result.dealt

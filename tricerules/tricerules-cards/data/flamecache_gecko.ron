@@ -1,0 +1,23 @@
+// Oracle and rulings fetched 2026-08-27. CR 119, 603.4, 605.1b: the ETB trigger uses
+// the stack, and an opponent's earlier gain does not cancel their life-loss history.
+(
+  id: "flamecache_gecko",
+  name: "Flamecache Gecko",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Lizard", "Warlock"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    intervening_if: Some(GameCondition(LifeChangedThisTurn(
+      players: Relative(Opponents), change: Loss, quantifier: Any,
+    ))),
+    effect: [AddMana(amount: (b: 1, r: 1), retention: EndOfStep)],
+    text: "When this creature enters, if an opponent lost life this turn, add {B}{R}.",
+  )],
+  activated_abilities: [(
+    costs: [Mana("{1}{R}"), Discard],
+    effect: [Draw(count: 1)],
+    text: "{1}{R}, Discard a card: Draw a card.",
+  )],
+)

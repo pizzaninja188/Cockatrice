@@ -2,6 +2,289 @@ use super::helpers::*;
 
 use tricerules_proto::ruled::v1::TargetRef;
 
+fn issue_170_engine() -> GameEngine {
+    let mut e = GameEngine::new(
+        170010,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with(
+                "plains",
+                &[
+                    "star_charter",
+                    "flamecache_gecko",
+                    "venerable_monk",
+                    "shock",
+                    "shock",
+                    "blood_tithe",
+                ],
+            ),
+            island_only_deck(),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    e
+}
+
+fn issue_170_cast(e: &mut GameEngine, card: &str, targets: Vec<TargetRef>, mana: ManaGift) {
+    ensure_in_hand(e, 0, card);
+    give_mana(e, 0, mana);
+    e.apply_command(0, &cast_spell(hand_index_for_card(e, 0, card), targets))
+        .unwrap();
+}
+
+fn issue_170_end_step(e: &mut GameEngine) {
+    for _ in 0..8 {
+        if e.state.turn_step == tricerules_core::TurnStep::EndStep {
+            return;
+        }
+        e.apply_command(e.state.active_player_id(), &primitive_yield())
+            .unwrap();
+    }
+    panic!("did not reach end step");
+}
+
+#[test]
+fn issue_170_star_charter_looks_after_offsetting_changes_and_replays_choices() {
+    fn play(
+        decline: bool,
+        count: usize,
+        matching: bool,
+    ) -> (Vec<u32>, tricerules_core::state::TurnHistory) {
+        let mut e = issue_170_engine();
+        issue_170_cast(
+            &mut e,
+            "venerable_monk",
+            vec![],
+            ManaGift {
+                w: 1,
+                c: 2,
+                ..Default::default()
+            },
+        );
+        resolve_entire_stack_two_player(&mut e);
+        issue_170_cast(
+            &mut e,
+            "shock",
+            target_player(0),
+            ManaGift {
+                r: 1,
+                ..Default::default()
+            },
+        );
+        resolve_entire_stack_two_player(&mut e);
+        assert_eq!(e.state.players[0].life, 20);
+        assert_eq!(e.state.turn_history.current.player(0).life_gained, 2);
+        assert_eq!(e.state.turn_history.current.player(0).life_lost, 2);
+        issue_170_cast(
+            &mut e,
+            "star_charter",
+            vec![],
+            ManaGift {
+                w: 1,
+                c: 3,
+                ..Default::default()
+            },
+        );
+        resolve_entire_stack_two_player(&mut e);
+        issue_170_end_step(&mut e);
+        assert_eq!(
+            e.state.stack.len(),
+            1,
+            "history predates Star Charter's entry"
+        );
+
+        let cards = if matching {
+            ["hill_giant", "serra_angel", "forest", "grizzly_bears"]
+        } else {
+            ["forest", "serra_angel", "forest", "serra_angel"]
+        };
+        let looked: Vec<_> = cards
+            .iter()
+            .take(count)
+            .map(|card| inject_library_card(&mut e, 0, card))
+            .collect();
+        // Keep a short library when requested; removed cards remain in a real public zone.
+        let old: Vec<_> = e.state.players[0].library.drain(..).collect();
+        for oid in old.into_iter().filter(|oid| !looked.contains(oid)) {
+            e.state.objects.get_mut(&oid).unwrap().zone = tricerules_core::Zone::Exile;
+            e.state.players[0].exile.push(oid);
+        }
+        e.state.players[0].library.extend(looked.iter().copied());
+        e.apply_command(0, &pass()).unwrap();
+        let batch = e.apply_command(1, &pass()).unwrap();
+        if count == 0 {
+            assert!(find_resolution_choice(&batch).is_none());
+        } else {
+            let choice = find_resolution_choice(&batch).unwrap();
+            assert_eq!(
+                choice.choice_kind(),
+                tricerules_proto::ruled::v1::ChoiceKind::LibraryLook
+            );
+            assert_eq!(choice.deciding_player_id, 0);
+            assert_eq!(choice.candidate_object_ids, looked);
+            assert_eq!(
+                choice.candidate_selectable,
+                [matching, false, false, matching][..count]
+            );
+            for (actor, selected) in [
+                (1, vec![looked[0]]),
+                (0, vec![looked[1]]),
+                (0, vec![u32::MAX]),
+            ] {
+                let before = format!("{:?}", e.state);
+                e.apply_command(actor, &submit_resolution_choice(selected))
+                    .unwrap_err();
+                assert_eq!(format!("{:?}", e.state), before);
+            }
+            let take = !decline && matching;
+            let chosen = if take { vec![looked[0]] } else { vec![] };
+            e.apply_command(0, &submit_resolution_choice(chosen))
+                .unwrap();
+            assert_eq!(e.state.players[0].hand.contains(&looked[0]), take);
+            assert_eq!(e.state.players[0].library.len(), count - usize::from(take));
+            assert!(e.state.pending_resolution.is_none());
+        }
+        (
+            e.state.players[0].library.iter().copied().collect(),
+            e.state.turn_history.clone(),
+        )
+    }
+    for count in [0, 2, 4] {
+        for decline in [false, true] {
+            for matching in [false, true] {
+                assert_eq!(
+                    play(decline, count, matching),
+                    play(decline, count, matching)
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn issue_170_star_charter_does_not_trigger_retroactively_at_end_step() {
+    let mut e = issue_170_engine();
+    issue_170_cast(
+        &mut e,
+        "star_charter",
+        vec![],
+        ManaGift {
+            w: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    resolve_entire_stack_two_player(&mut e);
+    issue_170_end_step(&mut e);
+    assert!(e.state.stack.is_empty());
+    issue_170_cast(
+        &mut e,
+        "shock",
+        target_player(0),
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    resolve_entire_stack_two_player(&mut e);
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.stack.is_empty());
+    assert_eq!(e.state.turn_history.current.player(0).life_lost, 2);
+    e.apply_command(0, &primitive_yield()).unwrap();
+    resolve_cleanup_discards_if_any(&mut e);
+    assert_eq!(e.state.turn_history.current.player(0).life_lost, 0);
+    assert_eq!(e.state.turn_history.previous.player(0).life_lost, 2);
+}
+
+#[test]
+fn issue_170_gecko_uses_a_respondable_trigger_and_atomic_discard_payment() {
+    for damaged_player in [0, 1] {
+        let mut e = issue_170_engine();
+        issue_170_cast(
+            &mut e,
+            "shock",
+            target_player(damaged_player),
+            ManaGift {
+                r: 1,
+                ..Default::default()
+            },
+        );
+        resolve_entire_stack_two_player(&mut e);
+        issue_170_cast(
+            &mut e,
+            "flamecache_gecko",
+            vec![],
+            ManaGift {
+                r: 1,
+                c: 1,
+                ..Default::default()
+            },
+        );
+        pass_both_players(&mut e);
+        assert_eq!(e.state.stack.len(), usize::from(damaged_player == 1));
+        assert_eq!(e.state.players[0].mana_pool.black, 0);
+        assert_eq!(e.state.players[0].mana_pool.red, 0);
+        if damaged_player == 1 {
+            assert!(e.state.stack[0].is_triggered);
+        }
+        resolve_entire_stack_two_player(&mut e);
+        assert_eq!(
+            e.state.players[0].mana_pool.black,
+            u32::from(damaged_player == 1)
+        );
+        assert_eq!(
+            e.state.players[0].mana_pool.red,
+            u32::from(damaged_player == 1)
+        );
+        let source = battlefield_object_for_card(&e, 0, "flamecache_gecko");
+        ensure_in_hand(&mut e, 0, "blood_tithe");
+        let discard = hand_index_for_card(&e, 0, "blood_tithe");
+        let discarded_oid = e.state.players[0].hand[discard];
+        let mut command = activate_ability_for(&e, source, 0, vec![]);
+        if let Some(tricerules_proto::ruled::v1::ruled_command::Cmd::ActivateAbility(ability)) =
+            command.cmd.as_mut()
+        {
+            ability.cost_selections = vec![hand_cost_selection(1, u32::MAX)];
+        }
+        give_mana(
+            &mut e,
+            0,
+            ManaGift {
+                r: 1,
+                c: 1,
+                ..Default::default()
+            },
+        );
+        let before = format!("{:?}", e.state);
+        e.apply_command(0, &command).unwrap_err();
+        assert_eq!(format!("{:?}", e.state), before);
+        if let Some(tricerules_proto::ruled::v1::ruled_command::Cmd::ActivateAbility(ability)) =
+            command.cmd.as_mut()
+        {
+            ability.cost_selections = vec![hand_cost_selection(1, discard as u32)];
+        }
+        let pool = e.state.players[0].mana_pool;
+        e.state.players[0].mana_pool = Default::default();
+        let before = format!("{:?}", e.state);
+        e.apply_command(0, &command).unwrap_err();
+        assert_eq!(
+            format!("{:?}", e.state),
+            before,
+            "insufficient mana cannot discard"
+        );
+        e.state.players[0].mana_pool = pool;
+        let hand_before = e.state.players[0].hand.len();
+        e.apply_command(0, &command).unwrap();
+        assert!(e.state.players[0].graveyard.contains(&discarded_oid));
+        assert_eq!(e.state.players[0].hand.len(), hand_before - 1);
+        resolve_entire_stack_two_player(&mut e);
+        assert_eq!(e.state.players[0].hand.len(), hand_before);
+    }
+}
+
 fn issue_172_engine(cards: &[&str]) -> GameEngine {
     let mut e = GameEngine::new(
         172020,

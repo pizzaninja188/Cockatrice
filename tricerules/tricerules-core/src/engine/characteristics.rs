@@ -397,6 +397,18 @@ impl CharacteristicsEvaluator<'_> {
         match condition {
             // Cast snapshots are internal to resolving spells, never continuous characteristics.
             GameCondition::CastSnapshot { .. } => false,
+            GameCondition::LifeChangedThisTurn {
+                players,
+                change,
+                quantifier,
+            } => super::history::life_changed_this_turn(
+                self.state,
+                *players,
+                *change,
+                *quantifier,
+                controller,
+                None,
+            ),
             GameCondition::ActivePlayer { players } => relative_player_set_contains(
                 self.state,
                 *players,

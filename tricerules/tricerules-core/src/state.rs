@@ -1422,6 +1422,9 @@ pub struct UndoableManaAbility {
 /// booleans because some cards ask whether anything happened while others use the exact total.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PlayerTurnRecord {
+    /// Actual positive changes, retained separately even when the net life change is zero.
+    pub life_gained: u64,
+    pub life_lost: u64,
     pub spells_cast: u32,
     pub crimes_committed: u32,
     /// CR 700.14: actual mana spent casting spells, including before an Expend watcher entered.

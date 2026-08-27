@@ -1,0 +1,23 @@
+// Oracle and rulings fetched 2026-08-27. CR 119 and 603.4: offsetting life changes count;
+// a change after the beginning of the end step cannot create this trigger retroactively.
+(
+  id: "star_charter",
+  name: "Star Charter",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Bat", "Cleric"],
+  power: 3,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    trigger: AtBeginningOfEndStep(player: Controller),
+    intervening_if: Some(GameCondition(LifeChangedThisTurn(
+      players: Relative(Controller), change: Either, quantifier: Any,
+    ))),
+    effect: [LookChooseToHand(
+      count: 4,
+      filter: (card_type: Some(Creature), printed_power: Some(AtMost(3))),
+      bottom_order: Random,
+    )],
+    text: "At the beginning of your end step, if you gained or lost life this turn, look at the top four cards of your library. You may reveal a creature card with power 3 or less from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
+  )],
+)

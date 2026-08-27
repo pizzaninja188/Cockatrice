@@ -495,6 +495,8 @@ fn issue_175_lethally_damaged_cindermaw_still_prohibits_simultaneous_lifelink() 
         e.state.players[1].life, 19,
         "trample deals 1; Nighthawk's simultaneous lifelink is prohibited"
     );
+    assert_eq!(e.state.turn_history.current.player(1).life_lost, 1);
+    assert_eq!(e.state.turn_history.current.player(1).life_gained, 0);
 }
 /// An unblocked lifelink attacker deals damage to the defending player AND its
 /// controller gains that much life simultaneously (CR 702.15b).
@@ -533,6 +535,8 @@ fn lifelink_unblocked_attacker_gains_life() {
     assert_eq!(attacker_ev.new_total, 22);
     assert_eq!(e.state.players[0].life, 22);
     assert_eq!(e.state.players[1].life, 18);
+    assert_eq!(e.state.turn_history.current.player(0).life_gained, 2);
+    assert_eq!(e.state.turn_history.current.player(1).life_lost, 2);
 }
 
 /// A lifelink creature gains its controller life when blocked — it deals damage to
