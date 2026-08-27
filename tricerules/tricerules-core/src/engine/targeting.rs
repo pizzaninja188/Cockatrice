@@ -964,6 +964,7 @@ fn validate_effect_targets(
         SpellEffectKind::PumpTarget { subject, .. }
         | SpellEffectKind::PutCounters { subject, .. }
         | SpellEffectKind::GrantKeywords { subject, .. }
+        | SpellEffectKind::GrantKeywordChoice { subject, .. }
         | SpellEffectKind::GrantProtection { subject, .. }
         | SpellEffectKind::GrantTriggeredAbility { subject, .. }
         | SpellEffectKind::CreateDelayedTrigger { subject, .. }
@@ -1392,7 +1393,12 @@ fn validate_grouped_targets(
 }
 
 fn target_ref_domain_exists(engine: &GameEngine, target: &rv1::TargetRef) -> bool {
-    match rv1::TargetRefKind::try_from(target.kind).unwrap_or(rv1::TargetRefKind::Unspecified) {
+    // Unknown wire values must not bypass typed target observers such as Crime. The explicit
+    // Unspecified value remains supported for callers without presentation metadata.
+    let Ok(kind) = rv1::TargetRefKind::try_from(target.kind) else {
+        return false;
+    };
+    match kind {
         // Older in-process test helpers omit presentation metadata. Legality is still established
         // below from the engine-owned effect and object state; shipped clients always send a kind.
         rv1::TargetRefKind::Unspecified => true,
@@ -1488,6 +1494,10 @@ fn spell_target_legality_error_with_context(
             ..
         }
         | SpellEffectKind::GrantKeywords {
+            subject: EffectSubject::Chosen(filter),
+            ..
+        }
+        | SpellEffectKind::GrantKeywordChoice {
             subject: EffectSubject::Chosen(filter),
             ..
         }

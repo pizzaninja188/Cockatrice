@@ -416,6 +416,11 @@ enum GameEvent {
     Surveilled {
         player: PlayerId,
     },
+    /// CR 700.13: one completed original cast, activation, or triggered stack placement.
+    /// Internal only; target identities and private information never enter a history payload.
+    CrimeCommitted {
+        player: PlayerId,
+    },
     /// Fired when a spell is put on the stack (CR 601.2; triggers on cast, not resolution).
     SpellCast {
         caster: PlayerId,

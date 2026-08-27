@@ -9,6 +9,301 @@ fn trigger_targets(object_id: u32) -> Vec<TargetRef> {
     }]
 }
 
+#[test]
+fn issue_171_crime_is_committed_only_after_a_successful_cast() {
+    let mut e = anthem_engine(171_001, "lightning_bolt");
+    let watcher = r#"(id: "grizzly_bears", name: "Grizzly Bears", mana_cost: "{1}{G}", types: ["Creature", "Bear"], power: 2, toughness: 2,
+        triggered_abilities: [(trigger: WheneverPlayerCommitsCrime(player: Controller),
+            effect: [GainLife(amount: 1)], max_triggers_per_turn: Some(1), text: "Crime payoff.")])"#;
+    let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(&[watcher], &[])
+        .expect("Crime vocabulary must load");
+    let source = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    e.state
+        .add_triggered_ability_grant(tricerules_core::state::ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: tricerules_core::state::AffectedScope::Single(source),
+            kind: tricerules_cards::ContinuousEffectKind::GrantTriggeredAbility(Box::new(
+                registry
+                    .get("grizzly_bears")
+                    .unwrap()
+                    .primary_face()
+                    .triggered_abilities[0]
+                    .clone(),
+            )),
+            condition: None,
+            duration: tricerules_cards::EffectDuration::UntilEndOfTurn,
+            timestamp: e.state.command_index,
+        });
+    let command = cast_spell(
+        hand_index_for_card(&e, 0, "lightning_bolt"),
+        trigger_targets(1),
+    );
+    assert!(e.apply_command(0, &command).is_err());
+    assert!(e.state.stack.is_empty());
+    grant_pool(&mut e, 0);
+    e.apply_command(0, &command).unwrap();
+    assert_eq!(e.state.stack.len(), 2, "one Crime trigger above the spell");
+    assert!(e.state.stack.last().unwrap().is_triggered);
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.players[0].life, 21);
+    assert_eq!(e.state.players[1].life, 17);
+}
+
+fn issue_171_engine() -> GameEngine {
+    let mut e = GameEngine::new(
+        171_010,
+        &[0, 1],
+        20,
+        Some(vec![forest_only_deck(), island_only_deck()]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    e
+}
+
+fn issue_171_bolt(e: &mut GameEngine, target: Vec<TargetRef>) -> RuledEventBatch {
+    inject_card_into_hand(e, 0, "lightning_bolt");
+    grant_pool(e, 0);
+    e.apply_command(
+        0,
+        &cast_spell(hand_index_for_card(e, 0, "lightning_bolt"), target),
+    )
+    .unwrap()
+}
+
+#[test]
+fn issue_171_raven_drains_once_per_turn_and_history_counts_every_crime() {
+    let mut e = issue_171_engine();
+    inject_creature_on_battlefield(&mut e, 0, "raven_of_fell_omens");
+    issue_171_bolt(&mut e, target_player(1));
+    assert_eq!(e.state.stack.len(), 2);
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!((e.state.players[0].life, e.state.players[1].life), (21, 16));
+    issue_171_bolt(&mut e, target_player(1));
+    assert_eq!(e.state.stack.len(), 1, "the printed cap is spent");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 2);
+    issue_171_bolt(&mut e, target_player(0));
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.turn_history.current.player(0).crimes_committed,
+        2,
+        "own targets are not crimes"
+    );
+    let turn = e.state.turn_instance;
+    end_active_turn(&mut e, 0);
+    assert!(e.state.turn_instance > turn);
+    assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 0);
+    e.apply_command(1, &pass()).unwrap();
+    issue_171_bolt(&mut e, target_player(1));
+    assert_eq!(
+        e.state.stack.len(),
+        2,
+        "Raven may trigger again on the opponent's turn"
+    );
+}
+
+#[test]
+fn issue_171_bandit_untaps_before_the_crime_resolves_and_only_once() {
+    let mut e = issue_171_engine();
+    let bandit = inject_creature_on_battlefield(&mut e, 0, "hardbristle_bandit");
+    apply_ability(&mut e, 0, bandit, 0, vec![]).unwrap();
+    assert!(e.state.objects[&bandit].tapped);
+    issue_171_bolt(&mut e, target_player(1));
+    pass_both_players(&mut e);
+    assert!(!e.state.objects[&bandit].tapped);
+    assert_eq!(e.state.players[1].life, 20);
+    resolve_entire_stack_two_player(&mut e);
+    apply_ability(&mut e, 0, bandit, 0, vec![]).unwrap();
+    issue_171_bolt(&mut e, target_player(1));
+    assert_eq!(e.state.stack.len(), 1);
+    assert!(e.state.objects[&bandit].tapped);
+}
+
+#[test]
+fn issue_171_sphinx_surveils_two_cards_with_existing_private_choice() {
+    let mut e = issue_171_engine();
+    inject_creature_on_battlefield(&mut e, 0, "marauding_sphinx");
+    issue_171_bolt(&mut e, target_player(1));
+    pass_both_players(&mut e);
+    let pending = e.state.pending_resolution.as_ref().expect("surveil parks");
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(pending.presentation.choice_kind, ChoiceKind::LibraryLook);
+    let candidates = pending.presentation.candidates.clone();
+    assert_eq!(candidates.len(), 2);
+    assert!(e
+        .apply_command(1, &submit_resolution_choice(candidates.clone()))
+        .is_err());
+    e.apply_command(0, &submit_resolution_choice(candidates.clone()))
+        .unwrap();
+    assert!(candidates
+        .iter()
+        .all(|id| e.state.players[0].graveyard.contains(id)));
+    assert!(e.state.pending_resolution.is_none());
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.players[1].life, 17);
+}
+
+#[test]
+fn issue_171_cast_and_crime_triggers_share_an_ordering_group() {
+    let mut e = issue_171_engine();
+    inject_creature_on_battlefield(&mut e, 0, "raven_of_fell_omens");
+    let mage = inject_creature_on_battlefield(&mut e, 0, "aven_wind_mage");
+    issue_171_bolt(&mut e, target_player(1));
+    assert_eq!(
+        e.state
+            .pending_trigger_order
+            .as_ref()
+            .unwrap()
+            .candidates
+            .len(),
+        2
+    );
+    assert_eq!(
+        e.state.stack.len(),
+        1,
+        "both abilities await the same ordering choice"
+    );
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!((e.state.players[0].life, e.state.players[1].life), (21, 16));
+    assert_eq!(e.effective_power(mage), Some(3));
+}
+
+#[test]
+fn issue_171_activated_and_targeted_triggered_abilities_commit_at_completion() {
+    let mut e = issue_171_engine();
+    inject_creature_on_battlefield(&mut e, 0, "raven_of_fell_omens");
+    let pyromancer = inject_creature_on_battlefield(&mut e, 0, "prodigal_pyromancer");
+    apply_ability(&mut e, 0, pyromancer, 0, target_player(1)).unwrap();
+    assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 1);
+    assert!(apply_ability(&mut e, 0, pyromancer, 0, target_player(1)).is_err());
+    assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 1);
+    resolve_entire_stack_two_player(&mut e);
+    let grave = inject_graveyard_card(&mut e, 1, "hill_giant");
+    inject_card_into_hand(&mut e, 0, "soul-shackled_zombie");
+    grant_pool(&mut e, 0);
+    e.apply_command(
+        0,
+        &cast_spell(hand_index_for_card(&e, 0, "soul-shackled_zombie"), vec![]),
+    )
+    .unwrap();
+    pass_both_players(&mut e);
+    assert!(e.state.pending_triggers.front().is_some());
+    assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 1);
+    let choose = RuledCommand {
+        cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+            targets: vec![TargetRef {
+                object_id: grave,
+                kind: TargetRefKind::Graveyard as i32,
+                ..Default::default()
+            }],
+            decline: false,
+            selected_modes: vec![],
+        })),
+    };
+    assert!(e.apply_command(1, &choose).is_err());
+    e.apply_command(0, &choose).unwrap();
+    assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 2);
+    assert!(e.state.pending_triggers.is_empty());
+}
+
+#[test]
+fn issue_171_raven_uses_all_opponents_but_gains_only_one_life() {
+    let mut e = issue_171_engine();
+    // Lobby creation is two-seat-only; player-relative rules are tested with a third seat.
+    e.state
+        .players
+        .push(tricerules_core::state::PlayerState::new(2, 20));
+    inject_creature_on_battlefield(&mut e, 0, "raven_of_fell_omens");
+    issue_171_bolt(&mut e, target_player(2));
+    while !e.state.stack.is_empty() {
+        let player = e.state.priority_player_id();
+        e.apply_command(player, &pass()).unwrap();
+    }
+    assert_eq!(
+        e.state.players.iter().map(|p| p.life).collect::<Vec<_>>(),
+        vec![21, 19, 16]
+    );
+}
+
+#[test]
+fn issue_171_rejected_commands_preserve_accepted_replay() {
+    use prost::Message;
+    fn run(reject: bool) -> (Vec<RuledEventBatch>, tricerules_core::state::TurnHistory) {
+        let mut e = issue_171_engine();
+        inject_creature_on_battlefield(&mut e, 0, "raven_of_fell_omens");
+        inject_card_into_hand(&mut e, 0, "lightning_bolt");
+        let bytes = cast_spell(
+            hand_index_for_card(&e, 0, "lightning_bolt"),
+            target_player(1),
+        )
+        .encode_to_vec();
+        let command = RuledCommand::decode(bytes.as_slice()).unwrap();
+        if reject {
+            assert!(e.apply_command(0, &command).is_err());
+        }
+        grant_pool(&mut e, 0);
+        let mut batches = vec![e.apply_command(0, &command).unwrap()];
+        while !e.state.stack.is_empty() {
+            let player = e.state.priority_player_id();
+            batches.push(e.apply_command(player, &pass()).unwrap());
+        }
+        (batches, e.state.turn_history.clone())
+    }
+    assert_eq!(run(false), run(true));
+}
+
+#[test]
+fn issue_171_ward_is_not_a_targeted_crime_and_countering_preserves_history() {
+    let mut e = issue_171_engine();
+    let sphinx = inject_creature_on_battlefield(&mut e, 1, "marauding_sphinx");
+    issue_171_bolt(&mut e, target_object(sphinx));
+    assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 1);
+    assert_eq!(
+        e.state.turn_history.current.player(1).crimes_committed,
+        0,
+        "Ward does not target"
+    );
+    pass_both_players(&mut e);
+    assert_eq!(
+        e.state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .choice_kind,
+        ChoiceKind::ManaPayment
+    );
+    e.apply_command(
+        0,
+        &submit_resolution_decision(tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline),
+    )
+    .unwrap();
+    assert!(e.state.stack.is_empty(), "Ward counters Bolt");
+    assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 1);
+}
+
+#[test]
+fn issue_171_unknown_target_kind_cannot_bypass_crime_accounting() {
+    let mut e = issue_171_engine();
+    inject_card_into_hand(&mut e, 0, "lightning_bolt");
+    grant_pool(&mut e, 0);
+    let index = hand_index_for_card(&e, 0, "lightning_bolt");
+    let malformed = vec![TargetRef {
+        object_id: 1,
+        kind: 999,
+        ..Default::default()
+    }];
+    assert!(e.apply_command(0, &cast_spell(index, malformed)).is_err());
+    assert!(e.state.stack.is_empty());
+    assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 0);
+    e.apply_command(0, &cast_spell(index, target_player(1)))
+        .unwrap();
+    assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 1);
+}
+
 /// Regression test: combat damage triggers must land on the stack and require both players to
 /// pass priority before resolving.  The fix is that PhaseChanged is emitted before StackPushed
 /// so the C++ client doesn't clear ruledStackObjectIds and mistakenly auto-passes.

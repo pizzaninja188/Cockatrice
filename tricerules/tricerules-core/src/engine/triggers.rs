@@ -1150,6 +1150,15 @@ impl GameEngine {
                     })
                 })
                 .collect(),
+            GameEvent::CrimeCommitted { player } => sources
+                .iter()
+                .flat_map(|source| {
+                    self.matching_snapshot_abilities(source, |condition| {
+                    matches!(condition, TriggerCondition::WheneverPlayerCommitsCrime { player: who }
+                        if self.relative_player_matches(*who, *player, source.controller))
+                })
+                })
+                .collect(),
             GameEvent::SpellCast {
                 caster,
                 card_id: cast_card_id,
@@ -1666,6 +1675,7 @@ impl GameEngine {
             GameEvent::PhaseBegan { active_player, .. } => Some(*active_player),
             GameEvent::Sacrificed { player, .. } => Some(*player),
             GameEvent::Surveilled { player } => Some(*player),
+            GameEvent::CrimeCommitted { player } => Some(*player),
             GameEvent::ManaSpentCastingSpell { player, .. } => Some(*player),
             GameEvent::CardDrawn { drawer, .. } => Some(*drawer),
             GameEvent::TargetsChosen { controller, .. } => Some(*controller),

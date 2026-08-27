@@ -27,6 +27,229 @@ fn select_branch(index: u32) -> RuledCommand {
     }
 }
 
+fn crime_with_bolt(e: &mut GameEngine) {
+    inject_card_into_hand(e, 0, "lightning_bolt");
+    grant_pool(e, 0);
+    e.apply_command(
+        0,
+        &cast_spell(
+            hand_index_for_card(e, 0, "lightning_bolt"),
+            target_player(1),
+        ),
+    )
+    .unwrap();
+}
+
+#[test]
+fn issue_171_apothecary_targets_first_and_chooses_keyword_at_resolution() {
+    for (choice, keyword) in [
+        (0, tricerules_cards::Keyword::Menace),
+        (1, tricerules_cards::Keyword::Lifelink),
+    ] {
+        let mut e = engine();
+        let apothecary = inject_creature_on_battlefield(&mut e, 0, "rattleback_apothecary");
+        let opponent = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+        crime_with_bolt(&mut e);
+        assert!(e.state.pending_resolution.is_none());
+        assert!(e.state.pending_triggers.front().is_some());
+        let choose = |oid| RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                targets: target_object(oid),
+                decline: false,
+                selected_modes: vec![],
+            })),
+        };
+        assert!(e.apply_command(0, &choose(opponent)).is_err());
+        e.apply_command(0, &choose(apothecary)).unwrap();
+        assert!(
+            e.state.pending_resolution.is_none(),
+            "keyword is not a modal trigger choice"
+        );
+        pass_both_players(&mut e);
+        assert_eq!(
+            e.state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .choice_kind,
+            ChoiceKind::ResolutionBranch
+        );
+        assert!(e.apply_command(0, &select_branch(99)).is_err());
+        assert!(e.apply_command(1, &select_branch(choice)).is_err());
+        e.apply_command(0, &select_branch(choice)).unwrap();
+        assert!(e
+            .characteristics(apothecary)
+            .unwrap()
+            .keywords
+            .contains(&keyword));
+        assert_eq!(e.state.turn_history.current.player(0).crimes_committed, 1);
+        assert!(
+            e.apply_command(0, &select_branch(choice)).is_err(),
+            "no repeated continuation"
+        );
+        resolve_entire_stack_two_player(&mut e);
+        end_active_turn(&mut e, 0);
+        assert!(!e
+            .characteristics(apothecary)
+            .unwrap()
+            .keywords
+            .contains(&keyword));
+    }
+}
+
+fn servant_combat_trigger(crime: bool) -> (GameEngine, u32, u32) {
+    let mut e = engine();
+    let servant = inject_creature_on_battlefield(&mut e, 0, "servant_of_the_stinger");
+    let object = e.state.objects.get_mut(&servant).unwrap();
+    object.power = Some(1);
+    object.toughness = Some(3);
+    let other = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    if crime {
+        crime_with_bolt(&mut e);
+        resolve_entire_stack_two_player(&mut e);
+    }
+    e.apply_command(0, &primitive_yield()).unwrap();
+    pass_both_players(&mut e);
+    e.apply_command(0, &declare_attackers(vec![servant]))
+        .unwrap();
+    pass_both_players(&mut e);
+    pass_both_players(&mut e);
+    assert_eq!(e.state.players[1].life, if crime { 16 } else { 19 });
+    (e, servant, other)
+}
+
+#[test]
+fn issue_171_servant_sacrifices_only_itself_then_searches() {
+    let (mut e, servant, other) = servant_combat_trigger(true);
+    pass_both_players(&mut e);
+    assert_eq!(
+        e.state
+            .pending_resolution
+            .as_ref()
+            .expect("optional sacrifice")
+            .presentation
+            .choice_kind,
+        ChoiceKind::ResolutionBranch
+    );
+    e.apply_command(0, &select_branch(0)).unwrap();
+    assert_eq!(
+        e.state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .candidates,
+        vec![servant]
+    );
+    assert!(e
+        .apply_command(0, &submit_resolution_choice(vec![other]))
+        .is_err());
+    e.apply_command(0, &submit_resolution_choice(vec![servant]))
+        .unwrap();
+    assert!(e.state.players[0].graveyard.contains(&servant));
+    let pending = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("search follows payment");
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(pending.presentation.choice_kind, ChoiceKind::LibrarySearch);
+    let searched = pending.presentation.candidates[0];
+    e.apply_command(0, &submit_resolution_choice(vec![searched]))
+        .unwrap();
+    assert!(e.state.players[0].hand.contains(&searched));
+    assert!(e.state.pending_resolution.is_none());
+}
+
+#[test]
+fn issue_171_servant_checks_condition_and_never_searches_without_payment() {
+    let (e, _, _) = servant_combat_trigger(false);
+    assert!(e.state.stack.is_empty(), "no Crime means no combat trigger");
+    for failure in ["condition", "decline", "departed", "stolen"] {
+        let (mut e, servant, _) = servant_combat_trigger(true);
+        let hand_before = e.state.players[0].hand.len();
+        match failure {
+            // Exercise the resolution-side intervening-if check independently of its monotonic
+            // normal turn history, as other condition tests do with controlled fixtures.
+            "condition" => e.state.turn_history.current.player_mut(0).crimes_committed = 0,
+            "departed" => {
+                e.state.players[0].battlefield.retain(|id| *id != servant);
+                e.state.players[0].graveyard.push(servant);
+                e.state.objects.get_mut(&servant).unwrap().zone = tricerules_core::Zone::Graveyard;
+                e.state.zone_change_generation.insert(servant, 1);
+            }
+            "stolen" => {
+                e.state.players[0].battlefield.retain(|id| *id != servant);
+                e.state.players[1].battlefield.push(servant);
+                let object = e.state.objects.get_mut(&servant).unwrap();
+                object.controller = 1;
+                object.base_controller = 1;
+            }
+            _ => {}
+        }
+        pass_both_players(&mut e);
+        if failure == "decline" {
+            e.apply_command(
+                0,
+                &submit_resolution_decision(ResolutionChoiceDecision::Decline),
+            )
+            .unwrap();
+        }
+        assert!(
+            e.state.pending_resolution.is_none(),
+            "{failure}: no library prompt"
+        );
+        assert_eq!(e.state.players[0].hand.len(), hand_before);
+        assert!(e.state.stack.is_empty());
+    }
+}
+
+#[test]
+fn issue_171_servant_rejects_a_returned_source_during_payment() {
+    let (mut e, servant, _) = servant_combat_trigger(true);
+    pass_both_players(&mut e);
+    e.apply_command(0, &select_branch(0)).unwrap();
+    e.state.zone_change_generation.insert(servant, 1);
+    let history = e.state.turn_history.clone();
+    assert!(e
+        .apply_command(0, &submit_resolution_choice(vec![servant]))
+        .is_err());
+    assert!(e.state.players[0].battlefield.contains(&servant));
+    assert_eq!(e.state.turn_history, history);
+    assert!(e.state.pending_resolution.is_some());
+    e.apply_command(0, &submit_resolution_choice(vec![]))
+        .unwrap();
+    assert!(e.state.pending_resolution.is_none());
+}
+
+#[test]
+fn issue_171_apothecary_fizzles_without_prompt_when_target_blinks() {
+    let mut e = engine();
+    let source = inject_creature_on_battlefield(&mut e, 0, "rattleback_apothecary");
+    crime_with_bolt(&mut e);
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                targets: target_object(source),
+                decline: false,
+                selected_modes: vec![],
+            })),
+        },
+    )
+    .unwrap();
+    e.state.zone_change_generation.insert(source, 1);
+    pass_both_players(&mut e);
+    assert!(e.state.pending_resolution.is_none());
+    assert!(!e
+        .characteristics(source)
+        .unwrap()
+        .keywords
+        .contains(&tricerules_cards::Keyword::Menace));
+    assert_eq!(e.state.stack.len(), 1, "the original Bolt remains");
+}
+
 #[test]
 fn issue_59_calibration_cards_are_registered() {
     let registry = CardRegistry::global();

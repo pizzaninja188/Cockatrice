@@ -1847,6 +1847,22 @@ fn twincast_copy_may_keep_an_original_target_that_is_now_illegal() {
     );
 }
 
+#[test]
+fn issue_171_copy_retargeting_does_not_commit_another_crime() {
+    let (mut e, _, _) = twincast_awaiting_copy_target(171_023);
+    assert_eq!(
+        e.state.turn_history.current.player(1).crimes_committed,
+        1,
+        "Twincast targeted an opposing spell"
+    );
+    inject_creature_on_battlefield(&mut e, 1, "raven_of_fell_omens");
+    e.apply_command(1, &submit_resolution_choice(vec![0]))
+        .unwrap();
+    assert_eq!(e.state.turn_history.current.player(1).crimes_committed, 1);
+    assert!(e.state.stack.iter().all(|item| !item.is_triggered));
+    assert!(e.state.stack.last().unwrap().is_copy);
+}
+
 /// A *changed* target must be legal (CR 707.10c). Rejecting it must leave the pending choice in
 /// place so the player can pick again — dropping it stranded the copy and hung the client on a
 /// prompt the engine had forgotten.

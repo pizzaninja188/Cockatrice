@@ -1,0 +1,23 @@
+// Oracle and rulings verified 2026-08-27. Ward references the offending stack object without targeting it.
+(
+  id: "marauding_sphinx",
+  name: "Marauding Sphinx",
+  mana_cost: "{3}{U}{U}",
+  types: ["Creature", "Sphinx", "Rogue"],
+  power: 3,
+  toughness: 5,
+  keywords: [Flying, Vigilance],
+  triggered_abilities: [
+    (
+      trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+      effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))],
+      text: "Ward {2}",
+    ),
+    (
+      trigger: WheneverPlayerCommitsCrime(player: Controller),
+      effect: [LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil)],
+      max_triggers_per_turn: Some(1),
+      text: "Whenever you commit a crime, surveil 2. This ability triggers only once each turn.",
+    ),
+  ],
+)

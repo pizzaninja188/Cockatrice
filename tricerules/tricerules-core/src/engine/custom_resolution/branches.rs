@@ -192,6 +192,7 @@ impl GameEngine {
         &self,
         player: PlayerId,
         source_object_id: ObjectId,
+        source_zone_change: u64,
         cost: &ResolutionCost,
     ) -> Vec<ObjectId> {
         let Some(index) = self.state.player_idx(player) else {
@@ -213,10 +214,28 @@ impl GameEngine {
                     )
                 })
                 .collect(),
-            ResolutionCost::SacrificePermanent { filter } => self.state.players[index]
+            ResolutionCost::SacrificePermanent {
+                filter,
+                source_only,
+            } => self.state.players[index]
                 .battlefield
                 .iter()
                 .copied()
+                .filter(|oid| {
+                    !source_only
+                        || (*oid == source_object_id
+                            && self
+                                .state
+                                .zone_change_generation
+                                .get(oid)
+                                .copied()
+                                .unwrap_or(0)
+                                == source_zone_change)
+                })
+                .filter(|oid| {
+                    self.characteristics(*oid)
+                        .is_some_and(|c| c.controller == player)
+                })
                 .filter(|oid| object_matches_mass_filter(self, *oid, filter))
                 .collect(),
             ResolutionCost::TapPermanents {
@@ -311,6 +330,7 @@ impl GameEngine {
         let candidates = self.resolution_cost_candidates(
             pending.deciding_player,
             stack.item.source_permanent_id.unwrap_or(stack.item.id),
+            stack.item.source_zone_change,
             &branch.cost,
         );
         let required_candidates = match branch.cost {
@@ -531,6 +551,7 @@ impl GameEngine {
         let current = self.resolution_cost_candidates(
             pending.deciding_player,
             stack.item.source_permanent_id.unwrap_or(stack.item.id),
+            stack.item.source_zone_change,
             &branch.cost,
         );
         let expected_count = match branch.cost {

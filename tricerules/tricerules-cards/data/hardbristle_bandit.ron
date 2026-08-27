@@ -1,0 +1,20 @@
+// Oracle and rulings verified 2026-08-27. The untap resolves before the action that caused Crime.
+(
+  id: "hardbristle_bandit",
+  name: "Hardbristle Bandit",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Plant", "Rogue"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [(
+    costs: [Tap],
+    effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    text: "{T}: Add one mana of any color.",
+  )],
+  triggered_abilities: [(
+    trigger: WheneverPlayerCommitsCrime(player: Controller),
+    effect: [Untap(subject: Source)],
+    max_triggers_per_turn: Some(1),
+    text: "Whenever you commit a crime, untap this creature. This ability triggers only once each turn.",
+  )],
+)

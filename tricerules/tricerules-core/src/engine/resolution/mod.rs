@@ -1237,6 +1237,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::GrantProtection { .. } => {
                         pump_counters::grant_protection(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::GrantKeywordChoice { .. } => {
+                        pump_counters::grant_keyword_choice(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::GrantTriggeredAbility { .. } => {
                         pump_counters::grant_triggered_ability(&mut cx, effect)?
                     }

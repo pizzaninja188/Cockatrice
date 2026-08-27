@@ -1,0 +1,24 @@
+// Oracle and rulings verified 2026-08-27. CR 603.4 checks Crime at trigger creation and resolution.
+// The optional sacrifice is a resolution payment; a departed or stolen source cannot pay it.
+(
+  id: "servant_of_the_stinger",
+  name: "Servant of the Stinger",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Warlock"],
+  power: 1,
+  toughness: 3,
+  keywords: [Deathtouch],
+  triggered_abilities: [(
+    trigger: WheneverSelfDealsCombatDamageToPlayer,
+    intervening_if: Some(GameCondition(CrimesCommittedThisTurn(players: Controller, min: Some(1)))),
+    effect: [ChooseResolutionBranch(
+      optional: true,
+      branches: [(
+        label: "Sacrifice Servant of the Stinger",
+        cost: SacrificePermanent(filter: (kind: AnyPermanent, controller: You), source_only: true),
+        effects: [SearchLibrary(filter: None, destination: Hand, shuffle: true, reveal: false)],
+      )],
+    )],
+    text: "Whenever this creature deals combat damage to a player, if you've committed a crime this turn, you may sacrifice this creature. If you do, search your library for a card, put it into your hand, then shuffle.",
+  )],
+)

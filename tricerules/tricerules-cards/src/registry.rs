@@ -1373,6 +1373,47 @@ mod tests {
     }
 
     #[test]
+    fn issue_171_keyword_choices_are_validated() {
+        for (choices, valid) in [
+            ("[Menace, Lifelink]", true),
+            ("[]", false),
+            ("[Menace]", false),
+            ("[Menace, Menace]", false),
+        ] {
+            let card = format!(
+                r#"(id: "choice_test", name: "Choice Test", types: ["Instant"],
+                spell_effect: [GrantKeywordChoice(subject: Chosen((kind: Creature)), choices: {choices})])"#
+            );
+            assert_eq!(
+                CardRegistry::from_chunks(&[&card]).is_ok(),
+                valid,
+                "{choices}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_171_crime_count_bounds_are_validated() {
+        for (bounds, valid) in [
+            ("min: Some(1)", true),
+            ("max: Some(0)", true),
+            ("min: Some(2), max: Some(1)", false),
+            ("", false),
+        ] {
+            let card = format!(
+                r#"(id: "crime_test", name: "Crime Test", types: ["Creature"], power: 1, toughness: 1,
+                triggered_abilities: [(trigger: WhenSelfEntersBattlefield, text: "Crime check.", effect: [GainLife(amount: 1)],
+                    intervening_if: Some(GameCondition(CrimesCommittedThisTurn(players: Controller, {bounds}))) )])"#
+            );
+            assert_eq!(
+                CardRegistry::from_chunks(&[&card]).is_ok(),
+                valid,
+                "{bounds}"
+            );
+        }
+    }
+
+    #[test]
     fn issue_164_rejects_zero_trigger_caps_in_printed_and_granted_abilities() {
         let ability = r#"(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "Gain life.", max_triggers_per_turn: Some(0))"#;
         for fields in [

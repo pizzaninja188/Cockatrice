@@ -444,6 +444,11 @@ pub enum TriggerCondition {
         player: CastTriggerPlayer,
         amount: u32,
     },
+    /// CR 700.13: Raven of Fell Omens and Hardbristle Bandit observe completed crimes.
+    WheneverPlayerCommitsCrime {
+        #[serde(default)]
+        player: CastTriggerPlayer,
+    },
     /// Whenever a selected player draws their Nth card in a turn. Each successfully drawn card
     /// is a distinct CR 121.2 event; opening hands and mulligans are not draws.
     WheneverPlayerDrawsNthCard {

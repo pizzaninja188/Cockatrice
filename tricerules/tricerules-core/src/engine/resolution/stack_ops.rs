@@ -209,7 +209,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
             let cost = ResolutionCost::DiscardCard { filter };
             let candidates = cx
                 .engine
-                .resolution_cost_candidates(deciding_player, 0, &cost);
+                .resolution_cost_candidates(deciding_player, 0, 0, &cost);
             if candidates.is_empty() {
                 counter_stack_object_ref(cx.engine, target, &ward_text, cx.events)?;
                 return Ok(EffectOutcome::Continue);

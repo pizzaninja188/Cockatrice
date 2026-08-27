@@ -113,6 +113,75 @@ pub(super) fn permanent_event_fact_matches(
 }
 
 impl GameEngine {
+    /// Classify the initial legal targets without committing anything. Callers retain this
+    /// snapshot across payment, then record it only when the original action completes. Copies,
+    /// retargeting, and untargeted references (including Ward) do not call this boundary.
+    pub(super) fn crime_event(
+        &self,
+        player: PlayerId,
+        targets: &[rv1::TargetRef],
+    ) -> Option<GameEvent> {
+        targets
+            .iter()
+            .any(|target| {
+                let oid = target.object_id;
+                let Ok(kind) = rv1::TargetRefKind::try_from(target.kind) else {
+                    return false;
+                };
+                let opponent = match kind {
+                    rv1::TargetRefKind::Player => self
+                        .state
+                        .players
+                        .iter()
+                        .find(|candidate| candidate.id as ObjectId == oid)
+                        .map(|p| p.id),
+                    rv1::TargetRefKind::Stack => self
+                        .state
+                        .stack
+                        .iter()
+                        .find(|item| item.id == oid)
+                        .map(|item| item.controller),
+                    rv1::TargetRefKind::Permanent => self
+                        .state
+                        .objects
+                        .get(&oid)
+                        .filter(|object| object.zone == Zone::Battlefield)
+                        .and_then(|_| self.characteristics(oid))
+                        .map(|c| c.controller),
+                    rv1::TargetRefKind::Graveyard => self
+                        .state
+                        .objects
+                        .get(&oid)
+                        .filter(|object| object.zone == Zone::Graveyard)
+                        .map(|object| object.owner),
+                    rv1::TargetRefKind::Unspecified => {
+                        // Legacy callers omit the kind; infer it only from authoritative live state.
+                        if let Some(p) = self.state.players.iter().find(|p| p.id as ObjectId == oid)
+                        {
+                            Some(p.id)
+                        } else if let Some(item) =
+                            self.state.stack.iter().find(|item| item.id == oid)
+                        {
+                            Some(item.controller)
+                        } else {
+                            self.state
+                                .objects
+                                .get(&oid)
+                                .and_then(|object| match object.zone {
+                                    Zone::Battlefield => {
+                                        self.characteristics(oid).map(|c| c.controller)
+                                    }
+                                    Zone::Graveyard => Some(object.owner),
+                                    _ => None,
+                                })
+                        }
+                    }
+                };
+                opponent.is_some_and(|opponent| self.state.are_opponents(player, opponent))
+            })
+            .then_some(GameEvent::CrimeCommitted { player })
+    }
+
     /// Record a committed simultaneous event set. This is deliberately separate from trigger
     /// matching: transactional cast/activation checks may collect prospective triggers, but turn
     /// history must only observe changes that actually reached game state.
@@ -138,6 +207,10 @@ impl GameEngine {
 
         for event in events {
             match event {
+                GameEvent::CrimeCommitted { player } => {
+                    let record = self.state.turn_history.current.player_mut(*player);
+                    record.crimes_committed = record.crimes_committed.saturating_add(1);
+                }
                 GameEvent::EntersBattlefield { object_id } => {
                     if let Some(characteristics) = self.characteristics(*object_id) {
                         self.state
@@ -322,6 +395,30 @@ impl GameEngine {
                                 .current
                                 .player(player.id)
                                 .spells_cast,
+                        )
+                    });
+                condition.matches_value(count)
+            }
+            GameCondition::CrimesCommittedThisTurn { players, .. } => {
+                let count = self
+                    .state
+                    .players
+                    .iter()
+                    .filter(|player| {
+                        relative_player_set_contains(
+                            &self.state,
+                            *players,
+                            context.controller,
+                            player.id,
+                        )
+                    })
+                    .fold(0u32, |total, player| {
+                        total.saturating_add(
+                            self.state
+                                .turn_history
+                                .current
+                                .player(player.id)
+                                .crimes_committed,
                         )
                     });
                 condition.matches_value(count)
@@ -835,6 +932,195 @@ mod tests {
         if usize::BITS > u32::BITS {
             assert_eq!(clamp_public_count(usize::MAX), u32::MAX);
         }
+    }
+
+    #[test]
+    fn issue_171_resolution_sacrifice_can_require_the_exact_source() {
+        let mut engine = GameEngine::new(
+            171_002,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with_cards(&["grizzly_bears", "hill_giant"], "forest"),
+                deck_with_cards(&[], "island"),
+            ]),
+            true,
+        )
+        .unwrap();
+        let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        move_to_battlefield(&mut engine, 0, "hill_giant");
+        let registry = CardRegistry::from_chunks_and_tokens(&[r#"(id: "test", name: "Test", types: ["Creature"], power: 1, toughness: 1,
+            triggered_abilities: [(trigger: WhenSelfEntersBattlefield, text: "Sacrifice this.", effect: [ChooseResolutionBranch(optional: true,
+                branches: [(label: "Sacrifice this", cost: SacrificePermanent(filter: (kind: AnyPermanent, controller: You), source_only: true), effects: [Draw(count: 1)])])])])"#], &[]).unwrap();
+        let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &registry
+            .get("test")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .effect[0]
+        else {
+            panic!("branch")
+        };
+        assert_eq!(
+            engine.resolution_cost_candidates(0, source, 0, &branches[0].cost),
+            vec![source]
+        );
+        engine.state.zone_change_generation.insert(source, 1);
+        assert!(
+            engine
+                .resolution_cost_candidates(0, source, 0, &branches[0].cost)
+                .is_empty(),
+            "a returned source is a different object"
+        );
+    }
+
+    #[test]
+    fn issue_171_classification_uses_target_kind_controller_and_graveyard_owner() {
+        let mut e = GameEngine::new(
+            171_020,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with_cards(&["grizzly_bears"], "forest"),
+                deck_with_cards(&["hill_giant", "storm_crow"], "mountain"),
+            ]),
+            true,
+        )
+        .unwrap();
+        // Lobby creation is two-seat-only; exercise the engine's player-set contract directly.
+        e.state.players.push(crate::state::PlayerState::new(2, 20));
+        let ours = move_to_battlefield(&mut e, 0, "grizzly_bears");
+        let theirs = move_to_battlefield(&mut e, 1, "hill_giant");
+        let grave = move_to_graveyard(&mut e, 1, "storm_crow");
+        e.state.players[1].graveyard.retain(|id| *id != grave);
+        e.state.players[2].graveyard.push(grave);
+        e.state.objects.get_mut(&grave).unwrap().owner = 2;
+        // Printed ownership is irrelevant on the battlefield; control is irrelevant in a graveyard.
+        e.state.objects.get_mut(&ours).unwrap().owner = 2;
+        e.state.objects.get_mut(&theirs).unwrap().owner = 0;
+        e.state.objects.get_mut(&grave).unwrap().controller = 0;
+        let virtual_id = e.state.next_object_id;
+        e.state.stack.push(StackItem {
+            id: virtual_id,
+            controller: 2,
+            card_id: "prodigal_pyromancer".into(),
+            targets: vec![],
+            ability_text: Some("Test ability".into()),
+            source_permanent_id: Some(ours),
+            source_zone_change: 0,
+            source_face_change: 0,
+            ability_index: Some(0),
+            activated_ability: None,
+            triggered_ability: None,
+            is_triggered: false,
+            is_copy: false,
+            face_index: 0,
+            cast_method: SpellCastMethod::Normal,
+            chosen_x: 0,
+            chosen_modes: vec![],
+            cast_cost_receipts: vec![],
+            cast_condition_results: vec![],
+            payment_result: CardResultCohort::default(),
+            resolution_branch_choices: Default::default(),
+            trigger_context: TriggerContext::default(),
+        });
+        for (kind, oid, expected) in [
+            (rv1::TargetRefKind::Player, 0, false),
+            (rv1::TargetRefKind::Player, 1, true),
+            (rv1::TargetRefKind::Player, 2, true),
+            (rv1::TargetRefKind::Permanent, ours, false),
+            (rv1::TargetRefKind::Permanent, theirs, true),
+            (rv1::TargetRefKind::Graveyard, grave, true),
+            (rv1::TargetRefKind::Stack, virtual_id, true),
+            (rv1::TargetRefKind::Permanent, virtual_id, false),
+            (rv1::TargetRefKind::Graveyard, theirs, false),
+            (rv1::TargetRefKind::Player, theirs, false),
+            (rv1::TargetRefKind::Unspecified, virtual_id, true),
+        ] {
+            let targets = vec![
+                rv1::TargetRef {
+                    object_id: oid,
+                    kind: kind as i32,
+                    ..Default::default()
+                };
+                3
+            ];
+            assert_eq!(
+                e.crime_event(0, &targets).is_some(),
+                expected,
+                "{kind:?} {oid}"
+            );
+        }
+        assert_eq!(
+            e.state.turn_history.current.player(0).crimes_committed,
+            0,
+            "classification is read-only"
+        );
+        assert!(e.crime_event(0, &[]).is_none());
+        assert!(e
+            .crime_event(
+                0,
+                &[rv1::TargetRef {
+                    object_id: 1,
+                    kind: 999,
+                    ..Default::default()
+                }]
+            )
+            .is_none());
+        e.state.stack[0].controller = 0;
+        assert!(e
+            .crime_event(
+                0,
+                &[rv1::TargetRef {
+                    object_id: virtual_id,
+                    kind: rv1::TargetRefKind::Stack as i32,
+                    ..Default::default()
+                }]
+            )
+            .is_none());
+    }
+
+    #[test]
+    fn issue_171_history_conditions_count_each_commit_and_reset_at_turn_boundary() {
+        let mut e = GameEngine::new(171_021, &[0, 1], 20, None, true).unwrap();
+        e.state.players.push(crate::state::PlayerState::new(2, 20));
+        e.record_committed_events(&[
+            GameEvent::CrimeCommitted { player: 0 },
+            GameEvent::CrimeCommitted { player: 1 },
+            GameEvent::CrimeCommitted { player: 2 },
+        ]);
+        let context = ConditionContext {
+            controller: 0,
+            source_object_id: 0,
+            source_zone_change: 0,
+            resolving_spell_id: None,
+            stack_item: None,
+        };
+        for (players, count) in [
+            (RelativePlayerSet::Controller, 1),
+            (RelativePlayerSet::Opponents, 2),
+            (RelativePlayerSet::All, 3),
+        ] {
+            assert!(e.condition_holds(
+                &GameCondition::CrimesCommittedThisTurn {
+                    players,
+                    min: Some(count),
+                    max: Some(count)
+                },
+                context
+            ));
+        }
+        let condition = GameCondition::CrimesCommittedThisTurn {
+            players: RelativePlayerSet::Controller,
+            min: Some(1),
+            max: None,
+        };
+        e.state.turn_history.finish_turn();
+        e.state.turn_instance += 1; // same active player is also how an extra turn starts
+        assert!(!e.condition_holds(&condition, context));
+        assert_eq!(e.state.turn_history.previous.player(0).crimes_committed, 1);
+        e.record_committed_events(&[GameEvent::CrimeCommitted { player: 0 }]);
+        assert!(e.condition_holds(&condition, context));
     }
 
     #[test]

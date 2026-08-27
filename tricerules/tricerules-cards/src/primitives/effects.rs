@@ -59,6 +59,15 @@ pub enum GameCondition {
         #[serde(default)]
         max: Option<u32>,
     },
+    /// Committed crimes, retained even when the spell or ability leaves the stack. Servant of
+    /// the Stinger and Take for a Ride share this history predicate (not a timing permission).
+    CrimesCommittedThisTurn {
+        players: RelativePlayerSet,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
     /// Compare committed successful draws by the selected players this turn.
     CardsDrawnThisTurn {
         players: RelativePlayerSet,
@@ -197,6 +206,7 @@ impl GameCondition {
                 Ok(())
             }
             GameCondition::SpellsCastThisTurn { min, max, .. }
+            | GameCondition::CrimesCommittedThisTurn { min, max, .. }
             | GameCondition::CardsDrawnThisTurn { min, max, .. }
             | GameCondition::AttackersDeclaredThisTurn { min, max, .. }
             | GameCondition::PermanentsEnteredThisTurn { min, max, .. }
@@ -294,6 +304,7 @@ impl GameCondition {
             | GameCondition::ObjectWasDealtDamageThisTurn { .. } => false,
             GameCondition::CreatureDeathsThisTurn { min, max }
             | GameCondition::SpellsCastThisTurn { min, max, .. }
+            | GameCondition::CrimesCommittedThisTurn { min, max, .. }
             | GameCondition::CardsDrawnThisTurn { min, max, .. }
             | GameCondition::AttackersDeclaredThisTurn { min, max, .. }
             | GameCondition::PermanentsEnteredThisTurn { min, max, .. }
@@ -1031,6 +1042,10 @@ pub enum ResolutionCost {
     },
     SacrificePermanent {
         filter: TargetFilter,
+        /// Servant of the Stinger pays with its own incarnation; Crypt Lurker can pay with
+        /// any matching permanent. This is a payment restriction, never a target.
+        #[serde(default)]
+        source_only: bool,
     },
     TapPermanents {
         count: u32,
@@ -1422,6 +1437,13 @@ pub enum SpellEffectKind {
         #[serde(default)]
         subject: EffectSubject,
         keywords: Vec<Keyword>,
+    },
+    /// Rattleback Apothecary and Golem Artisan choose one keyword on resolution, after targets
+    /// have been chosen. Uses the same logged choice channel as GrantProtection.
+    GrantKeywordChoice {
+        #[serde(default)]
+        subject: EffectSubject,
+        choices: Vec<Keyword>,
     },
     /// CR 702.16 / layer 6: grant protection until end of turn. The explicit option list covers
     /// both color choices and mixed choices such as Apostle's Blessing.
@@ -2109,6 +2131,9 @@ impl SpellEffectKind {
             } | SpellEffectKind::GrantKeywords {
                 subject: EffectSubject::AttachedObject,
                 ..
+            } | SpellEffectKind::GrantKeywordChoice {
+                subject: EffectSubject::AttachedObject,
+                ..
             } | SpellEffectKind::GrantTriggeredAbility {
                 subject: EffectSubject::AttachedObject,
                 ..
@@ -2148,6 +2173,9 @@ impl SpellEffectKind {
                 subject: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::GrantKeywordChoice {
                 subject: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::GrantTriggeredAbility {
@@ -2255,6 +2283,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Tap { subject }
             | SpellEffectKind::Untap { subject }
             | SpellEffectKind::GrantKeywords { subject, .. }
+            | SpellEffectKind::GrantKeywordChoice { subject, .. }
             | SpellEffectKind::GrantProtection { subject, .. }
             | SpellEffectKind::GrantTriggeredAbility { subject, .. }
             | SpellEffectKind::CreateDelayedTrigger { subject, .. }
@@ -2673,8 +2702,18 @@ impl SpellEffectKind {
                             }
                         }
                         ResolutionCost::DiscardCard { .. } => {}
-                        ResolutionCost::SacrificePermanent { filter } => {
+                        ResolutionCost::SacrificePermanent {
+                            filter,
+                            source_only,
+                        } => {
                             filter.validate_target_constraints()?;
+                            if *source_only
+                                && filter.any_terminal_filter_matches(|leaf| leaf.exclude_source)
+                            {
+                                return Err(
+                                    "source-only sacrifice cannot exclude its source".into()
+                                );
+                            }
                             if !filter.all_terminal_filters_match(|leaf| {
                                 matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
                                     && leaf.controller == TargetController::You
@@ -2836,6 +2875,11 @@ impl SpellEffectKind {
                     | EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::GrantKeywordChoice {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
@@ -3030,6 +3074,21 @@ impl SpellEffectKind {
                     return Err("mass effect filter cannot exclude the effect source".into());
                 }
                 Ok(())
+            }
+            SpellEffectKind::GrantKeywordChoice { subject, choices } => {
+                if choices.len() < 2
+                    || choices
+                        .iter()
+                        .enumerate()
+                        .any(|(i, kw)| choices[..i].contains(kw))
+                {
+                    return Err("keyword choice requires at least two distinct keywords".into());
+                }
+                SpellEffectKind::GrantKeywords {
+                    subject: subject.clone(),
+                    keywords: choices.clone(),
+                }
+                .validate(context)
             }
             SpellEffectKind::GrantKeywords { subject, keywords } => {
                 if let EffectSubject::Chosen(target) = subject {

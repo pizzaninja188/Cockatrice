@@ -123,6 +123,7 @@ pub(in crate::engine) fn resolution_branch_is_live(
             .resolution_cost_candidates(
                 deciding_player,
                 top.source_permanent_id.unwrap_or(top.id),
+                top.source_zone_change,
                 &branch.cost,
             )
             .len()

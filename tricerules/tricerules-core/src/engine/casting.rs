@@ -174,6 +174,10 @@ impl GameEngine {
             &command.targets,
         )?;
         let public_targets = command.targets.clone();
+        let crime_events: Vec<_> = self
+            .crime_event(player, &public_targets)
+            .into_iter()
+            .collect();
         let trefs: Vec<_> = public_targets
             .iter()
             .map(|target| target.object_id)
@@ -248,6 +252,8 @@ impl GameEngine {
             })),
         });
         let ordinal = self.record_spell_cast(player);
+        self.record_committed_events(&crime_events);
+        triggers.extend(self.collect_event_triggers(&crime_events));
         self.snapshot_completed_cast(source_oid);
         triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
             caster: player,
@@ -707,6 +713,10 @@ impl GameEngine {
             },
             targets: trefs.clone(),
         }]);
+        let crime_events: Vec<_> = self
+            .crime_event(player, &public_targets)
+            .into_iter()
+            .collect();
         let payment = self.commit_cost_transaction(payment_plan)?;
         let life_paid = payment.life_paid;
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
@@ -838,6 +848,8 @@ impl GameEngine {
             })),
         });
         let ordinal = self.record_spell_cast(player);
+        self.record_committed_events(&crime_events);
+        target_triggers.extend(self.collect_event_triggers(&crime_events));
         target_triggers
             .extend(self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed));
         target_triggers.extend(payment.expend_triggers);
@@ -1098,6 +1110,7 @@ impl GameEngine {
         // Reserve without consuming: a failed payment must not advance the deterministic id
         // stream, while target triggers still need the eventual ability's exact identity.
         let virtual_id = self.state.next_object_id;
+        let crime_events: Vec<_> = self.crime_event(player, targets).into_iter().collect();
         // Snapshot target-watchers before costs: the source itself can be sacrificed while paying
         // for the activation. Nothing is staged unless payment succeeds and the ability is pushed.
         let mut target_triggers = self.collect_event_triggers(&[GameEvent::TargetsChosen {
@@ -1221,6 +1234,8 @@ impl GameEngine {
         // the ability it paid for, so its events must follow that ability's StackPushed. Emitting
         // the trigger prompt first also made the client discard it, because an activated ability
         // reaching the stack is its signal that a pending trigger target was just answered.
+        self.record_committed_events(&crime_events);
+        target_triggers.extend(self.collect_event_triggers(&crime_events));
         target_triggers
             .extend(self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed));
         self.stage_triggers(target_triggers);

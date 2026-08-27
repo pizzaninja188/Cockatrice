@@ -460,6 +460,25 @@ impl CharacteristicsEvaluator<'_> {
                     });
                 condition.matches_value(count)
             }
+            GameCondition::CrimesCommittedThisTurn { players, .. } => {
+                let count = self
+                    .state
+                    .players
+                    .iter()
+                    .filter(|player| {
+                        relative_player_set_contains(self.state, *players, controller, player.id)
+                    })
+                    .fold(0u32, |total, player| {
+                        total.saturating_add(
+                            self.state
+                                .turn_history
+                                .current
+                                .player(player.id)
+                                .crimes_committed,
+                        )
+                    });
+                condition.matches_value(count)
+            }
             GameCondition::AttackedThisTurn { players } => self
                 .state
                 .players

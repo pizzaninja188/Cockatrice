@@ -195,7 +195,7 @@ impl GameEngine {
 
         // Choosing a target for the original triggered ability can itself cause target-watchers
         // to trigger. This new simultaneous group waits behind the group currently being placed.
-        self.fire_triggers(&[GameEvent::TargetsChosen {
+        let mut committed_events = vec![GameEvent::TargetsChosen {
             controller,
             source: TargetingSourceKind::Ability,
             stack_object: StackObjectRef {
@@ -203,7 +203,9 @@ impl GameEngine {
                 zone_change_generation: None,
             },
             targets: trefs,
-        }]);
+        }];
+        committed_events.extend(self.crime_event(controller, &public_targets));
+        self.fire_triggers(&committed_events);
 
         self.resume_trigger_placement(&mut batch);
         fill_legal(&mut batch, self);

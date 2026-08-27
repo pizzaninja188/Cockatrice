@@ -215,6 +215,44 @@ pub(super) fn grant_keywords(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn grant_keyword_choice(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::GrantKeywordChoice { subject, choices } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    if let Some(choice) = cx
+        .top
+        .resolution_branch_choices
+        .get(&cx.effect_index)
+        .copied()
+        .flatten()
+    {
+        let keyword = *choices
+            .get(choice)
+            .ok_or(EngineError::Illegal("keyword choice became stale"))?;
+        grant_keywords(
+            cx,
+            SpellEffectKind::GrantKeywords {
+                subject,
+                keywords: vec![keyword],
+            },
+        )
+    } else {
+        let branches = choices
+            .into_iter()
+            .map(|keyword| ResolutionBranchDef {
+                label: keyword.as_str().to_string(),
+                cost: ResolutionCost::None,
+                requirement: Default::default(),
+                effects: Vec::new(),
+            })
+            .collect();
+        super::choices::park_resolution_branches(cx, false, branches)
+    }
+}
+
 pub(super) fn grant_protection(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

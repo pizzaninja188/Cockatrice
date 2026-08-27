@@ -1,0 +1,16 @@
+// Oracle and rulings verified 2026-08-27. CR 700.13; the life loss is not damage.
+(
+  id: "raven_of_fell_omens",
+  name: "Raven of Fell Omens",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Bird"],
+  power: 1,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [(
+    trigger: WheneverPlayerCommitsCrime(player: Controller),
+    effect: [LoseLife(amount: Fixed(1), who: EachOpponent), GainLife(amount: 1)],
+    max_triggers_per_turn: Some(1),
+    text: "Whenever you commit a crime, each opponent loses 1 life and you gain 1 life. This ability triggers only once each turn.",
+  )],
+)
