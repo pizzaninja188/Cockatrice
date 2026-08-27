@@ -1,0 +1,181 @@
+{
+  "version": 4,
+  "baseline_commit": "5ecc9219e9e5551156a97e49cd5895eaaa662ca4",
+  "retrieval_first_response_utc": "2026-08-27T07:05:02.3866037Z",
+  "retrieval_last_response_utc": "2026-08-27T07:05:13.3973419Z",
+  "sample_size": 360,
+  "rows_per_stratum": 30,
+  "selection_salt": "cockatrice-card-coverage-2026-08-v4\n",
+  "registry_full": 1449,
+  "registry_partial": 8,
+  "registry_name_count": 1457,
+  "registry_names_sha256": "de919cb133d79dd37f72397e257997bd686de026229035b1e5774c63847afc8d",
+  "registry_checklist_sha256": "6e071e516527630c00a215cae561bdc83a6e2b267085580e0ef2a6da7dc52b0b",
+  "rules_url": "https://media.wizards.com/2026/downloads/MagicCompRules%2020260819.txt",
+  "rules_effective": "2026-08-07",
+  "rules_sha256": "4381ad1b39ab2c05f7d03633a20f711ed37277074d3266dcba5f38cbb527423f",
+  "strata": [
+    {
+      "stratum": "BRO-common",
+      "query": "set:bro rarity:common game:paper is:booster lang:en",
+      "source_cards": 106,
+      "eligible_cards": 97,
+      "selected_cards": 30
+    },
+    {
+      "stratum": "BRO-uncommon",
+      "query": "set:bro rarity:uncommon game:paper is:booster lang:en",
+      "source_cards": 80,
+      "eligible_cards": 78,
+      "selected_cards": 30
+    },
+    {
+      "stratum": "WOE-common",
+      "query": "set:woe rarity:common game:paper is:booster lang:en",
+      "source_cards": 106,
+      "eligible_cards": 96,
+      "selected_cards": 30
+    },
+    {
+      "stratum": "WOE-uncommon",
+      "query": "set:woe rarity:uncommon game:paper is:booster lang:en",
+      "source_cards": 80,
+      "eligible_cards": 80,
+      "selected_cards": 30
+    },
+    {
+      "stratum": "LCI-common",
+      "query": "set:lci rarity:common game:paper is:booster lang:en",
+      "source_cards": 113,
+      "eligible_cards": 108,
+      "selected_cards": 30
+    },
+    {
+      "stratum": "LCI-uncommon",
+      "query": "set:lci rarity:uncommon game:paper is:booster lang:en",
+      "source_cards": 92,
+      "eligible_cards": 91,
+      "selected_cards": 30
+    },
+    {
+      "stratum": "MKM-common",
+      "query": "set:mkm rarity:common game:paper is:booster lang:en",
+      "source_cards": 86,
+      "eligible_cards": 78,
+      "selected_cards": 30
+    },
+    {
+      "stratum": "MKM-uncommon",
+      "query": "set:mkm rarity:uncommon game:paper is:booster lang:en",
+      "source_cards": 100,
+      "eligible_cards": 100,
+      "selected_cards": 30
+    },
+    {
+      "stratum": "OTJ-common",
+      "query": "set:otj rarity:common game:paper is:booster lang:en",
+      "source_cards": 96,
+      "eligible_cards": 90,
+      "selected_cards": 30
+    },
+    {
+      "stratum": "OTJ-uncommon",
+      "query": "set:otj rarity:uncommon game:paper is:booster lang:en",
+      "source_cards": 100,
+      "eligible_cards": 100,
+      "selected_cards": 30
+    },
+    {
+      "stratum": "BLB-common",
+      "query": "set:blb rarity:common game:paper is:booster lang:en",
+      "source_cards": 86,
+      "eligible_cards": 79,
+      "selected_cards": 30
+    },
+    {
+      "stratum": "BLB-uncommon",
+      "query": "set:blb rarity:uncommon game:paper is:booster lang:en",
+      "source_cards": 100,
+      "eligible_cards": 95,
+      "selected_cards": 30
+    }
+  ],
+  "files_sha256": {
+    "card-coverage-calibration-2026-08-27-population.csv": "058b0d2c665ee4deb138add015b3629820b69d3e41132e882a4906ee32211d97",
+    "card-coverage-calibration-2026-08-27-gaps.csv": "1093da1985644a107df4e8dc4ca12ff6547f13d00a89d79d03d6b41647c2b407",
+    "card-coverage-calibration-2026-08-27.csv": "9c62093b3bf6fbf74ee83051fd7686987f0a68125a140cff49dfec0f3429a0ac",
+    "card-coverage-calibration-2026-08-27-rulings.json": "fd881bcfc7f77d202b78dc1dd201a23cd2c6db4c6fd5eb8b556212cc9ad94d50"
+  },
+  "source_response_sha256": [
+    {
+      "file": "blb-common-1.json",
+      "sha256": "5c8d32714e3c5550839a2408b34f658c96d3ea058f76ab7bb106002d1e839745"
+    },
+    {
+      "file": "blb-uncommon-1.json",
+      "sha256": "6e3af734c1ac44a3daf46fb38321afbbc200790bf3ba3c1bc1b3ede20918eb95"
+    },
+    {
+      "file": "bro-common-1.json",
+      "sha256": "25828ac90448c363282c9d7e4c13a4465db66deac61e15e06076cb6278672b0b"
+    },
+    {
+      "file": "bro-uncommon-1.json",
+      "sha256": "ef2908366a2f1523da6c24dd67574ff874b636e8ea90ab75de8dfd542713f3c3"
+    },
+    {
+      "file": "lci-common-1.json",
+      "sha256": "c70c18af95088dd9a24e62f58820e6eaeaefab54546664c44cfa4a1b3520e3bb"
+    },
+    {
+      "file": "lci-uncommon-1.json",
+      "sha256": "4307106c237a85aef496d3b9b0bd4e1858c41e2b282d3b58696259fdb6429e60"
+    },
+    {
+      "file": "mkm-common-1.json",
+      "sha256": "5b8e0182bc77f949bf8ace0329876949eade6a625433113aa2174f16350324ef"
+    },
+    {
+      "file": "mkm-uncommon-1.json",
+      "sha256": "59f50cc424191c22df4ee3aeecaed8f0026442d7631c03772bbf12493558ad54"
+    },
+    {
+      "file": "otj-common-1.json",
+      "sha256": "af3935541b6e1f21a22cc38ee0418a7542b9f4a0fd8bbf08a5fd24ed8ba4f65b"
+    },
+    {
+      "file": "otj-uncommon-1.json",
+      "sha256": "7449d47c178e85cc1a83923353cacc64639f346696d70943527a8dc001fbc4aa"
+    },
+    {
+      "file": "woe-common-1.json",
+      "sha256": "06b840472619c0a821327869d372c52f18b652e3310a8b2a098d86e9c52c9613"
+    },
+    {
+      "file": "woe-uncommon-1.json",
+      "sha256": "f5dd1ec0e903600d77e805d512a034ebed4f99a4bbb70b000e48b7f97426af25"
+    }
+  ],
+  "new_issue_numbers": [
+    164,
+    165,
+    166,
+    167,
+    168,
+    169,
+    170,
+    171,
+    172,
+    173,
+    174,
+    175,
+    176
+  ],
+  "existing_dependencies": [
+    46,
+    155,
+    159
+  ],
+  "oracle_exclusion": "Exclude any live-registry full or partial card name or face name; deduplicate Oracle IDs in declared stratum order before hash selection.",
+  "evidence_note": "Source responses and registry names were temporary retrieval inputs; committed population, selected Oracle rows, relevant rulings and checksums preserve the evaluation. Current live search results may change."
+}
