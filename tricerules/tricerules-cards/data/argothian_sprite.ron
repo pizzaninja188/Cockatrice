@@ -1,0 +1,13 @@
+// Oracle and rulings fetched 2026-08-27. CR 509.1b: artifact creatures cannot block this.
+(
+  id: "argothian_sprite", name: "Argothian Sprite", mana_cost: "{1}{G}",
+  types: ["Creature", "Faerie"], power: 2, toughness: 2,
+  static_abilities: [SelfCombatRestriction(restriction: (
+    cant_be_blocked_by: [(kind: Creature, permanent_types: [Artifact])],
+  ))],
+  activated_abilities: [(
+    costs: [Mana("{7}")],
+    effect: [PutCounters(subject: Source, counter: PlusOnePlusOne, count: 2)],
+    text: "{7}: Put two +1/+1 counters on this creature.",
+  )],
+)

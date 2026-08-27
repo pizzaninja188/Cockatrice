@@ -8,7 +8,7 @@
   power: 3,
   toughness: 2,
   keywords: [Flying],
-  static_abilities: [SelfCombatRestriction(cant_block: true)],
+  static_abilities: [SelfCombatRestriction(restriction: (cant_block: true))],
   triggered_abilities: [
     (
       trigger: WhenSelfEntersBattlefield,

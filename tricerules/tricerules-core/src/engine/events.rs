@@ -40,15 +40,7 @@ impl GameEngine {
 
         if let Some(characteristics) = characteristics {
             let restrictions = self.combat_restrictions_for(oid, characteristics);
-            if restrictions.cant_attack {
-                labels.push("Can't attack".to_string());
-            }
-            if restrictions.cant_block {
-                labels.push("Can't block".to_string());
-            }
-            if restrictions.cant_be_blocked {
-                labels.push("Can't be blocked".to_string());
-            }
+            labels.extend(restrictions.labels());
         }
 
         let generation = self

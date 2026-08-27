@@ -1,6 +1,6 @@
 use crate::helpers::*;
 use tricerules_cards::primitives::{
-    Color, ContinuousEffectKind, CounterKind, EffectDuration, Evasion, Keyword,
+    Color, ContinuousEffectKind, CounterKind, EffectDuration, Keyword, StaticAbilityDef,
 };
 use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone, TargetRef};
@@ -966,12 +966,8 @@ fn clone_copies_safewright_cavalrys_blocker_cap() {
         .expect("copy Safewright Cavalry");
     let clone = battlefield_object_for_card(&engine, 0, "clone");
     assert!(matches!(
-        engine
-            .characteristics(clone)
-            .expect("Clone characteristics")
-            .evasions
-            .as_slice(),
-        [Evasion::BlockerCountMaximum { maximum: 1 }]
+        engine.state.objects[&clone].copiable_values.as_ref().unwrap().face.static_abilities.as_slice(),
+        [StaticAbilityDef::SelfCombatRestriction { restriction, .. }] if restriction.maximum_blockers == Some(1)
     ));
 }
 

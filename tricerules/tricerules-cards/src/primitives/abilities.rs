@@ -1302,15 +1302,14 @@ pub enum StaticAbilityDef {
         #[serde(default)]
         doesnt_untap_during_untap_step: bool,
     },
-    /// CR 508.1c / 509.1b: this permanent is continuously prohibited from attacking and/or
-    /// blocking while it has this static ability. Vampire Soulcaller and Goblin Raider exercise
-    /// the block-only form; Vigean Hydropon exercises both restrictions. This stays typed card
-    /// vocabulary instead of adding one face-level boolean for every future rule restriction.
+    /// CR 508.1c / 509.1b: cumulative combat restrictions, optionally conditioned on live state.
+    /// Vampire Soulcaller prohibits blocking; Argothian Sprite filters blockers; Rampaging
+    /// Ceratops constrains their number; Nightwhorl Hermit checks its controller's graveyard.
     SelfCombatRestriction {
         #[serde(default)]
-        cant_attack: bool,
+        restriction: super::CombatRestriction,
         #[serde(default)]
-        cant_block: bool,
+        condition: Option<GameCondition>,
     },
     /// CR 502.3: this permanent untaps during every other player's untap step, at the same
     /// turn-based boundary as that player's permanents. Bender's Waterskin supplies the printed

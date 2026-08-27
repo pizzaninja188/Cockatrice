@@ -280,6 +280,7 @@ fn drowsing_tyrannodon_bypasses_only_defender_when_the_condition_holds() {
             cant_attack: true,
             cant_block: false,
             cant_be_blocked: false,
+            ..Default::default()
         }),
         condition: None,
         duration: EffectDuration::UntilEndOfTurn,

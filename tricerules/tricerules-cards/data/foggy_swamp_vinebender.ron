@@ -7,6 +7,6 @@
   types: ["Creature", "Human", "Plant", "Ally"],
   power: 4,
   toughness: 3,
-  evasions: [BlockerPower(comparison: AtMost(2))],
+  static_abilities: [SelfCombatRestriction(restriction: (cant_be_blocked_by: [(kind: Creature, power: Some(AtMost(2)))]))],
   partial: "Waterbend {5} activated ability is not implemented (tracked by #146)",
 )

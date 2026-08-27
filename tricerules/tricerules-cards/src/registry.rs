@@ -177,6 +177,473 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
         .collect()
 }
 
+// Shared by deck cards and fixed tokens, so token abilities cannot bypass authoring checks.
+fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(), RegistryError> {
+    let attachment_source = face.is_aura || face.types.iter().any(|t| t == "Equipment");
+    for ability in &face.static_abilities {
+        if let StaticAbilityDef::EntersTapped {
+            condition: Some(condition),
+            ..
+        } = ability
+        {
+            condition
+                .validate_live()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+        }
+        if let StaticAbilityDef::TargetingCostIncrease {
+            protected, amount, ..
+        } = ability
+        {
+            if *amount == 0 {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "TargetingCostIncrease amount must be nonzero".into(),
+                });
+            }
+            if let crate::primitives::TargetingCostProtected::Creatures(filter) = protected {
+                filter
+                    .validate()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+        }
+        if let StaticAbilityDef::AnthemPt {
+            filter, condition, ..
+        }
+        | StaticAbilityDef::AnthemKeyword {
+            filter, condition, ..
+        } = ability
+        {
+            filter
+                .validate()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+            if let Some(condition) = condition {
+                condition
+                    .validate_live()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+                if matches!(
+                    condition,
+                    GameCondition::BattlefieldAggregate {
+                        aggregate: BattlefieldAggregate::DistinctNames
+                            | BattlefieldAggregate::TotalPower
+                            | BattlefieldAggregate::MaximumPower,
+                        ..
+                    }
+                ) {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "conditional layer-6/7 anthems support only simple battlefield counts until CR 613.8 dependency ordering is implemented".into(),
+                    });
+                }
+                if matches!(condition, GameCondition::BattlefieldCreatureCount { .. }) {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "conditional layer-6/7 anthems cannot depend on derived creature counts until CR 613.8 dependency ordering is implemented".into(),
+                    });
+                }
+            }
+        }
+        if let StaticAbilityDef::SpellGenericReduction {
+            amount, condition, ..
+        } = ability
+        {
+            if *amount == 0 {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "SpellGenericReduction amount must be nonzero".into(),
+                });
+            }
+            if let Some(condition) = condition {
+                condition
+                    .validate_live()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+        }
+        if let StaticAbilityDef::ConditionalSelfModifier {
+            condition,
+            delta_power,
+            delta_toughness,
+            keywords,
+            triggered_abilities,
+            can_attack_as_though_without_defender,
+        } = ability
+        {
+            condition
+                .validate_live()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+            if *delta_power == 0
+                && *delta_toughness == 0
+                && keywords.is_empty()
+                && triggered_abilities.is_empty()
+                && !can_attack_as_though_without_defender
+            {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "ConditionalSelfModifier must modify at least one value".into(),
+                });
+            }
+            for ability in triggered_abilities {
+                ability
+                    .validate_shape()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            if (*delta_power != 0 || *delta_toughness != 0 || !keywords.is_empty())
+                && matches!(
+                    condition,
+                    crate::primitives::GameCondition::BattlefieldAggregate {
+                        aggregate: BattlefieldAggregate::DistinctNames
+                            | BattlefieldAggregate::TotalPower
+                            | BattlefieldAggregate::MaximumPower,
+                        ..
+                    }
+                )
+            {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "conditional layer-6/7 modifiers support only simple battlefield counts until CR 613.8 dependency ordering is implemented".into(),
+                });
+            }
+            if matches!(condition, GameCondition::BattlefieldCreatureCount { .. }) {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "conditional self modifiers cannot depend on derived creature counts until CR 613.8 dependency ordering is implemented".into(),
+                });
+            }
+        }
+        if let StaticAbilityDef::CountScaledSelfPt {
+            filter,
+            power_per_match,
+            toughness_per_match,
+        } = ability
+        {
+            filter
+                .validate()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+            if *power_per_match == 0 && *toughness_per_match == 0 {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "CountScaledSelfPt must modify power or toughness".into(),
+                });
+            }
+            if !filter.required_keywords.is_empty() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason:
+                        "CountScaledSelfPt keyword filters require CR 613.8 dependency ordering"
+                            .into(),
+                });
+            }
+        }
+        if let StaticAbilityDef::EntersAsCopy { filter } = ability {
+            filter
+                .validate_characteristic_constraints()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+            if !filter.all_terminal_filters_match(|leaf| {
+                matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                    && leaf.controller == TargetController::Any
+                    && !leaf.exclude_source
+            }) {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "EntersAsCopy requires an untargeted Creature or AnyPermanent filter"
+                        .into(),
+                });
+            }
+        }
+        if let StaticAbilityDef::EntersWithCounters {
+            affected,
+            counter,
+            amount,
+            cast_cost_condition,
+        } = ability
+        {
+            if let Some(condition) = cast_cost_condition {
+                validate_cast_cost_condition(&face.cast_cost_groups, *condition).map_err(
+                    |reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    },
+                )?;
+            }
+            counter
+                .validate()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+            if let crate::primitives::EntersWithCountersAffected::Creatures(filter) = affected {
+                filter
+                    .validate()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            if amount.card_result_filter().is_some() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "card result counts are valid only in a resolving effect list".into(),
+                });
+            }
+            amount
+                .validate_live()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+        }
+        if let StaticAbilityDef::PreventDamage {
+            additional_effect:
+                Some(crate::primitives::DamagePreventionAdditionalEffect::PutCounters {
+                    counter, ..
+                }),
+            ..
+        } = ability
+        {
+            counter
+                .validate()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+        }
+        if let StaticAbilityDef::AttachedModifier {
+            condition,
+            add_types,
+            set_types,
+            set_name,
+            set_colors,
+            delta_power,
+            delta_toughness,
+            set_power,
+            set_toughness,
+            remove_all_abilities,
+            keywords,
+            triggered_abilities,
+            activated_abilities,
+            cant_attack,
+            cant_block,
+            doesnt_untap_during_untap_step,
+        } = ability
+        {
+            if !attachment_source {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "AttachedModifier requires an Aura or Equipment source".into(),
+                });
+            }
+            if *delta_power == 0
+                && *delta_toughness == 0
+                && set_power.is_none()
+                && set_toughness.is_none()
+                && !remove_all_abilities
+                && add_types.is_empty()
+                && set_types.is_none()
+                && set_name.is_none()
+                && set_colors.is_none()
+                && keywords.is_empty()
+                && triggered_abilities.is_empty()
+                && activated_abilities.is_empty()
+                && !cant_attack
+                && !cant_block
+                && !doesnt_untap_during_untap_step
+            {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "AttachedModifier must modify at least one value".into(),
+                });
+            }
+            if set_power.is_some() != set_toughness.is_some() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "AttachedModifier must set both power and toughness".into(),
+                });
+            }
+            if !add_types.is_empty() && set_types.is_some() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "AttachedModifier cannot both add and replace types".into(),
+                });
+            }
+            if !add_types.is_empty() {
+                add_types
+                    .validate()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            if let Some(replacement) = set_types {
+                replacement
+                    .validate()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            if set_name.as_ref().is_some_and(|name| name.trim().is_empty()) {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "AttachedModifier set_name cannot be empty".into(),
+                });
+            }
+            if let Some(colors) = set_colors {
+                let unique: std::collections::HashSet<_> = colors.iter().copied().collect();
+                if unique.len() != colors.len() {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "AttachedModifier set_colors repeats a color".into(),
+                    });
+                }
+            }
+            if let Some(condition) = condition {
+                condition
+                    .validate_live()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+                if !triggered_abilities.is_empty()
+                    || !activated_abilities.is_empty()
+                    || *cant_attack
+                    || *cant_block
+                    || *doesnt_untap_during_untap_step
+                {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason:
+                            "conditioned AttachedModifier only supports characteristic modifiers"
+                                .into(),
+                    });
+                }
+                if (*delta_power != 0
+                    || *delta_toughness != 0
+                    || set_power.is_some()
+                    || *remove_all_abilities
+                    || !keywords.is_empty())
+                    && matches!(
+                        condition,
+                        crate::primitives::GameCondition::BattlefieldAggregate {
+                            aggregate: BattlefieldAggregate::TotalPower
+                                | BattlefieldAggregate::MaximumPower,
+                            ..
+                        }
+                    )
+                {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "power-dependent conditional characteristics require CR 613.8 dependency ordering"
+                            .into(),
+                    });
+                }
+            }
+            for granted in triggered_abilities {
+                if granted.trigger.is_delayed_only() {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "AttachedModifier cannot grant a delayed trigger".into(),
+                    });
+                }
+                granted
+                    .validate_shape()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            for granted in activated_abilities {
+                granted
+                    .validate_shape()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+        }
+        if let StaticAbilityDef::ProhibitSpecialAction {
+            affected,
+            condition,
+            ..
+        } = ability
+        {
+            if matches!(affected, SpecialActionAffected::AttachedPermanent) && !attachment_source {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason:
+                        "attached special-action prohibition requires an Aura or Equipment source"
+                            .into(),
+                });
+            }
+            if let SpecialActionAffected::Permanents(filter) = affected {
+                filter
+                    .validate_characteristic_constraints()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            if let Some(condition) = condition {
+                condition
+                    .validate_live()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+        }
+        if let StaticAbilityDef::SelfCombatRestriction {
+            restriction,
+            condition,
+        } = ability
+        {
+            restriction
+                .validate()
+                .and_then(|()| {
+                    condition
+                        .as_ref()
+                        .map_or(Ok(()), GameCondition::validate_live)
+                })
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+        }
+        if matches!(ability, StaticAbilityDef::ControlsAttached) && !face.is_aura {
+            return Err(RegistryError::InvalidCard {
+                id: card.id.clone(),
+                reason: "ControlsAttached requires an Aura source".into(),
+            });
+        }
+    }
+    Ok(())
+}
+
 impl CardRegistry {
     pub fn from_embedded() -> Result<Self, RegistryError> {
         Self::from_chunks_and_tokens(EMBEDDED_RON_CHUNKS, EMBEDDED_TOKEN_CHUNKS)
@@ -212,6 +679,7 @@ impl CardRegistry {
         // regardless of file ordering.
         for (id, token) in &reg.tokens {
             let face = token.primary_face();
+            validate_static_abilities(token, face)?;
             let can_reference_attached_object = face_can_reference_attached_object(face);
             let can_reference_attached_player = face_can_reference_attached_player(face);
             for ability in &face.activated_abilities {
@@ -556,7 +1024,6 @@ impl CardRegistry {
                         reason: "AuraAttach is only valid on an Aura face".into(),
                     });
                 }
-                let attachment_source = face.is_aura || face.types.iter().any(|t| t == "Equipment");
                 let can_reference_attached_object = face_can_reference_attached_object(face);
                 let can_reference_attached_player = face_can_reference_attached_player(face);
                 let uses_attached_object = face
@@ -576,470 +1043,7 @@ impl CardRegistry {
                             .into(),
                     });
                 }
-                for ability in &face.static_abilities {
-                    if let StaticAbilityDef::EntersTapped {
-                        condition: Some(condition),
-                        ..
-                    } = ability
-                    {
-                        condition
-                            .validate_live()
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                    }
-                    if let StaticAbilityDef::TargetingCostIncrease {
-                        protected, amount, ..
-                    } = ability
-                    {
-                        if *amount == 0 {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "TargetingCostIncrease amount must be nonzero".into(),
-                            });
-                        }
-                        if let crate::primitives::TargetingCostProtected::Creatures(filter) =
-                            protected
-                        {
-                            filter
-                                .validate()
-                                .map_err(|reason| RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                })?;
-                        }
-                    }
-                    if let StaticAbilityDef::AnthemPt {
-                        filter, condition, ..
-                    }
-                    | StaticAbilityDef::AnthemKeyword {
-                        filter, condition, ..
-                    } = ability
-                    {
-                        filter
-                            .validate()
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                        if let Some(condition) = condition {
-                            condition.validate_live().map_err(|reason| {
-                                RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                }
-                            })?;
-                            if matches!(
-                                condition,
-                                GameCondition::BattlefieldAggregate {
-                                    aggregate: BattlefieldAggregate::DistinctNames
-                                        | BattlefieldAggregate::TotalPower
-                                        | BattlefieldAggregate::MaximumPower,
-                                    ..
-                                }
-                            ) {
-                                return Err(RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason: "conditional layer-6/7 anthems support only simple battlefield counts until CR 613.8 dependency ordering is implemented".into(),
-                                });
-                            }
-                            if matches!(condition, GameCondition::BattlefieldCreatureCount { .. }) {
-                                return Err(RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason: "conditional layer-6/7 anthems cannot depend on derived creature counts until CR 613.8 dependency ordering is implemented".into(),
-                                });
-                            }
-                        }
-                    }
-                    if let StaticAbilityDef::SpellGenericReduction {
-                        amount, condition, ..
-                    } = ability
-                    {
-                        if *amount == 0 {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "SpellGenericReduction amount must be nonzero".into(),
-                            });
-                        }
-                        if let Some(condition) = condition {
-                            condition.validate_live().map_err(|reason| {
-                                RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                }
-                            })?;
-                        }
-                    }
-                    if let StaticAbilityDef::ConditionalSelfModifier {
-                        condition,
-                        delta_power,
-                        delta_toughness,
-                        keywords,
-                        triggered_abilities,
-                        can_attack_as_though_without_defender,
-                    } = ability
-                    {
-                        condition
-                            .validate_live()
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                        if *delta_power == 0
-                            && *delta_toughness == 0
-                            && keywords.is_empty()
-                            && triggered_abilities.is_empty()
-                            && !can_attack_as_though_without_defender
-                        {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "ConditionalSelfModifier must modify at least one value"
-                                    .into(),
-                            });
-                        }
-                        for ability in triggered_abilities {
-                            ability.validate_shape().map_err(|reason| {
-                                RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                }
-                            })?;
-                        }
-                        if (*delta_power != 0 || *delta_toughness != 0 || !keywords.is_empty())
-                            && matches!(
-                                condition,
-                                crate::primitives::GameCondition::BattlefieldAggregate {
-                                    aggregate: BattlefieldAggregate::DistinctNames
-                                        | BattlefieldAggregate::TotalPower
-                                        | BattlefieldAggregate::MaximumPower,
-                                    ..
-                                }
-                            )
-                        {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "conditional layer-6/7 modifiers support only simple battlefield counts until CR 613.8 dependency ordering is implemented".into(),
-                            });
-                        }
-                        if matches!(condition, GameCondition::BattlefieldCreatureCount { .. }) {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "conditional self modifiers cannot depend on derived creature counts until CR 613.8 dependency ordering is implemented".into(),
-                            });
-                        }
-                    }
-                    if let StaticAbilityDef::CountScaledSelfPt {
-                        filter,
-                        power_per_match,
-                        toughness_per_match,
-                    } = ability
-                    {
-                        filter
-                            .validate()
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                        if *power_per_match == 0 && *toughness_per_match == 0 {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "CountScaledSelfPt must modify power or toughness".into(),
-                            });
-                        }
-                        if !filter.required_keywords.is_empty() {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "CountScaledSelfPt keyword filters require CR 613.8 dependency ordering".into(),
-                            });
-                        }
-                    }
-                    if let StaticAbilityDef::EntersAsCopy { filter } = ability {
-                        filter
-                            .validate_characteristic_constraints()
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                        if !filter.all_terminal_filters_match(|leaf| {
-                            matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
-                                && leaf.controller == TargetController::Any
-                                && !leaf.exclude_source
-                        }) {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "EntersAsCopy requires an untargeted Creature or AnyPermanent filter"
-                                    .into(),
-                            });
-                        }
-                    }
-                    if let StaticAbilityDef::EntersWithCounters {
-                        affected,
-                        counter,
-                        amount,
-                        cast_cost_condition,
-                    } = ability
-                    {
-                        if let Some(condition) = cast_cost_condition {
-                            validate_cast_cost_condition(&face.cast_cost_groups, *condition)
-                                .map_err(|reason| RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                })?;
-                        }
-                        counter
-                            .validate()
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                        if let crate::primitives::EntersWithCountersAffected::Creatures(filter) =
-                            affected
-                        {
-                            filter
-                                .validate()
-                                .map_err(|reason| RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                })?;
-                        }
-                        if amount.card_result_filter().is_some() {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason:
-                                    "card result counts are valid only in a resolving effect list"
-                                        .into(),
-                            });
-                        }
-                        amount
-                            .validate_live()
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                    }
-                    if let StaticAbilityDef::PreventDamage {
-                        additional_effect:
-                            Some(crate::primitives::DamagePreventionAdditionalEffect::PutCounters {
-                                counter,
-                                ..
-                            }),
-                        ..
-                    } = ability
-                    {
-                        counter
-                            .validate()
-                            .map_err(|reason| RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason,
-                            })?;
-                    }
-                    if let StaticAbilityDef::AttachedModifier {
-                        condition,
-                        add_types,
-                        set_types,
-                        set_name,
-                        set_colors,
-                        delta_power,
-                        delta_toughness,
-                        set_power,
-                        set_toughness,
-                        remove_all_abilities,
-                        keywords,
-                        triggered_abilities,
-                        activated_abilities,
-                        cant_attack,
-                        cant_block,
-                        doesnt_untap_during_untap_step,
-                    } = ability
-                    {
-                        if !attachment_source {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "AttachedModifier requires an Aura or Equipment source"
-                                    .into(),
-                            });
-                        }
-                        if *delta_power == 0
-                            && *delta_toughness == 0
-                            && set_power.is_none()
-                            && set_toughness.is_none()
-                            && !remove_all_abilities
-                            && add_types.is_empty()
-                            && set_types.is_none()
-                            && set_name.is_none()
-                            && set_colors.is_none()
-                            && keywords.is_empty()
-                            && triggered_abilities.is_empty()
-                            && activated_abilities.is_empty()
-                            && !cant_attack
-                            && !cant_block
-                            && !doesnt_untap_during_untap_step
-                        {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "AttachedModifier must modify at least one value".into(),
-                            });
-                        }
-                        if set_power.is_some() != set_toughness.is_some() {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "AttachedModifier must set both power and toughness".into(),
-                            });
-                        }
-                        if !add_types.is_empty() && set_types.is_some() {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "AttachedModifier cannot both add and replace types".into(),
-                            });
-                        }
-                        if !add_types.is_empty() {
-                            add_types
-                                .validate()
-                                .map_err(|reason| RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                })?;
-                        }
-                        if let Some(replacement) = set_types {
-                            replacement.validate().map_err(|reason| {
-                                RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                }
-                            })?;
-                        }
-                        if set_name.as_ref().is_some_and(|name| name.trim().is_empty()) {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "AttachedModifier set_name cannot be empty".into(),
-                            });
-                        }
-                        if let Some(colors) = set_colors {
-                            let unique: std::collections::HashSet<_> =
-                                colors.iter().copied().collect();
-                            if unique.len() != colors.len() {
-                                return Err(RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason: "AttachedModifier set_colors repeats a color".into(),
-                                });
-                            }
-                        }
-                        if let Some(condition) = condition {
-                            condition.validate_live().map_err(|reason| {
-                                RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                }
-                            })?;
-                            if !triggered_abilities.is_empty()
-                                || !activated_abilities.is_empty()
-                                || *cant_attack
-                                || *cant_block
-                                || *doesnt_untap_during_untap_step
-                            {
-                                return Err(RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason: "conditioned AttachedModifier only supports characteristic modifiers"
-                                        .into(),
-                                });
-                            }
-                            if (*delta_power != 0
-                                || *delta_toughness != 0
-                                || set_power.is_some()
-                                || *remove_all_abilities
-                                || !keywords.is_empty())
-                                && matches!(
-                                    condition,
-                                    crate::primitives::GameCondition::BattlefieldAggregate {
-                                        aggregate: BattlefieldAggregate::TotalPower
-                                            | BattlefieldAggregate::MaximumPower,
-                                        ..
-                                    }
-                                )
-                            {
-                                return Err(RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason: "power-dependent conditional characteristics require CR 613.8 dependency ordering"
-                                        .into(),
-                                });
-                            }
-                        }
-                        for granted in triggered_abilities {
-                            if granted.trigger.is_delayed_only() {
-                                return Err(RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason: "AttachedModifier cannot grant a delayed trigger"
-                                        .into(),
-                                });
-                            }
-                            granted.validate_shape().map_err(|reason| {
-                                RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                }
-                            })?;
-                        }
-                        for granted in activated_abilities {
-                            granted.validate_shape().map_err(|reason| {
-                                RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                }
-                            })?;
-                        }
-                    }
-                    if let StaticAbilityDef::ProhibitSpecialAction {
-                        affected,
-                        condition,
-                        ..
-                    } = ability
-                    {
-                        if matches!(affected, SpecialActionAffected::AttachedPermanent)
-                            && !attachment_source
-                        {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "attached special-action prohibition requires an Aura or Equipment source".into(),
-                            });
-                        }
-                        if let SpecialActionAffected::Permanents(filter) = affected {
-                            filter
-                                .validate_characteristic_constraints()
-                                .map_err(|reason| RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                })?;
-                        }
-                        if let Some(condition) = condition {
-                            condition.validate_live().map_err(|reason| {
-                                RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                }
-                            })?;
-                        }
-                    }
-                    if let StaticAbilityDef::SelfCombatRestriction {
-                        cant_attack,
-                        cant_block,
-                    } = ability
-                    {
-                        if !cant_attack && !cant_block {
-                            return Err(RegistryError::InvalidCard {
-                                id: card.id.clone(),
-                                reason: "SelfCombatRestriction must prohibit attacking or blocking"
-                                    .into(),
-                            });
-                        }
-                    }
-                    if matches!(ability, StaticAbilityDef::ControlsAttached) && !face.is_aura {
-                        return Err(RegistryError::InvalidCard {
-                            id: card.id.clone(),
-                            reason: "ControlsAttached requires an Aura source".into(),
-                        });
-                    }
-                }
+                validate_static_abilities(&card, face)?;
                 for ability in &face.triggered_abilities {
                     if ability.trigger.is_delayed_only() {
                         return Err(RegistryError::InvalidCard {
@@ -1361,7 +1365,7 @@ mod tests {
     use crate::primitives::{
         Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer, CombatRole, CountExpression,
         CounterKind, CreatureEventFilter, CreatureScopeController, CreatureScopeFilter,
-        EffectSubject, EntersTappedAffected, EntersWithCountersAffected, Evasion, GameCondition,
+        EffectSubject, EntersTappedAffected, EntersWithCountersAffected, GameCondition,
         InterveningIf, ManaAmount, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
         PowerComparison, RelativePlayerSet, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
         TargetFilter, TargetKind, TriggerCondition,
@@ -1483,10 +1487,9 @@ mod tests {
             .get("foggy_swamp_vinebender")
             .expect("Foggy Swamp Vinebender");
         assert!(matches!(
-            vinebender.primary_face().evasions.as_slice(),
-            [Evasion::BlockerPower {
-                comparison: PowerComparison::AtMost(2),
-            }]
+            vinebender.primary_face().static_abilities.as_slice(),
+            [StaticAbilityDef::SelfCombatRestriction { restriction, .. }]
+                if restriction.cant_be_blocked_by[0].power == Some(PowerComparison::AtMost(2))
         ));
         assert!(vinebender
             .partial
@@ -1497,8 +1500,8 @@ mod tests {
             .get("safewright_cavalry")
             .expect("Safewright Cavalry");
         assert!(matches!(
-            cavalry.primary_face().evasions.as_slice(),
-            [Evasion::BlockerCountMaximum { maximum: 1 }]
+            cavalry.primary_face().static_abilities.as_slice(),
+            [StaticAbilityDef::SelfCombatRestriction { restriction, .. }] if restriction.maximum_blockers == Some(1)
         ));
         assert_eq!(cavalry.partial, None);
     }
@@ -2847,6 +2850,62 @@ mod tests {
     }
 
     #[test]
+    fn issue_174_tokens_preserve_and_validate_static_abilities() {
+        let token = r#"(id: "faerie_u_1_1_restricted", name: "Faerie", types: ["Creature", "Faerie"],
+            colors: [Blue], power: 1, toughness: 1, keywords: [Flying],
+            static_abilities: [SelfCombatRestriction(restriction: (
+                cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])]
+            ))])"#;
+        let registry = CardRegistry::from_chunks_and_tokens(&[], &[token]).unwrap();
+        assert_eq!(
+            registry
+                .get("faerie_u_1_1_restricted")
+                .unwrap()
+                .primary_face()
+                .static_abilities
+                .len(),
+            1
+        );
+        let invalid = token.replace("kind: Creature", "kind: AnyPlayer");
+        assert!(CardRegistry::from_chunks_and_tokens(&[], &[&invalid]).is_err());
+    }
+
+    #[test]
+    fn issue_174_composable_combat_restrictions_load() {
+        let card = r#"(
+            id: "combat_predicates", name: "Combat Predicates",
+            types: ["Creature"], power: 2, toughness: 2,
+            static_abilities: [SelfCombatRestriction(
+                restriction: (
+                    cant_be_blocked_by: [(kind: Creature, permanent_types: [Artifact])],
+                    cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
+                    minimum_blockers: Some(3), maximum_blockers: Some(4),
+                ),
+                condition: Some(GraveyardAggregate(owners: Controller, aggregate: CardCount, min: Some(7))),
+            )],
+        )"#;
+        CardRegistry::from_chunks(&[card])
+            .expect("typed static and conditional combat restrictions");
+        for (old, new) in [
+            ("minimum_blockers: Some(3)", "minimum_blockers: Some(0)"),
+            ("maximum_blockers: Some(4)", "maximum_blockers: Some(2)"),
+            (
+                "kind: Creature, permanent_types",
+                "kind: Creature, controller: Opponent, permanent_types",
+            ),
+            (
+                "excluded_keywords: [Flying]",
+                "excluded_keywords: [Flying], required_keywords: [Flying]",
+            ),
+        ] {
+            assert!(
+                CardRegistry::from_chunks(&[&card.replace(old, new)]).is_err(),
+                "invalid authored restriction: {new}"
+            );
+        }
+    }
+
+    #[test]
     fn self_combat_restriction_requires_at_least_one_prohibition() {
         let bad = r#"(
             id: "empty_self_combat_restriction",
@@ -2860,7 +2919,7 @@ mod tests {
         assert!(matches!(
             err,
             RegistryError::InvalidCard { ref reason, .. }
-                if reason.contains("must prohibit attacking or blocking")
+                if reason.contains("requires at least one restriction")
         ));
     }
 
@@ -2874,9 +2933,8 @@ mod tests {
         assert!(matches!(
             face.static_abilities.as_slice(),
             [StaticAbilityDef::SelfCombatRestriction {
-                cant_attack: false,
-                cant_block: true,
-            }]
+                restriction, condition: None,
+            }] if restriction.cant_block
         ));
     }
 

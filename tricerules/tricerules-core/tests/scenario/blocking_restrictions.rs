@@ -1,6 +1,590 @@
 use super::helpers::*;
-use tricerules_cards::{CounterKind, Keyword};
-use tricerules_core::TurnStep;
+use tricerules_cards::{ContinuousEffectKind, CounterKind, EffectDuration, Keyword};
+use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
+
+fn issue_174_effect(engine: &mut GameEngine, oid: u32, kind: ContinuousEffectKind) {
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(oid),
+        kind,
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: engine.state.command_index,
+    });
+}
+
+#[test]
+fn issue_174_sprite_uses_animated_types_and_counters_and_loses_static_restrictions() {
+    let decks = Some(vec![
+        deck_with("forest", &["argothian_sprite"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(174_009, &[0, 1], 20, decks, true).unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    let sprite = move_ready_to_battlefield(&mut engine, 0, "argothian_sprite");
+    let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let animated = inject_permanent_on_battlefield(&mut engine, 1, "explosive_apparatus");
+    issue_174_effect(
+        &mut engine,
+        animated,
+        ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+            card_types: vec![tricerules_cards::PermanentTypeFilter::Creature],
+            ..Default::default()
+        }),
+    );
+    issue_174_effect(
+        &mut engine,
+        animated,
+        ContinuousEffectKind::Layer7bSetPt {
+            power: 3,
+            toughness: 3,
+        },
+    );
+    let characteristics = engine.characteristics(animated).expect("animated artifact");
+    assert!(characteristics.is_creature() && characteristics.is_artifact());
+    let ordinary = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    grant_pool(&mut engine, 0);
+    apply_ability(&mut engine, 0, sprite, 0, vec![]).unwrap();
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(engine.characteristics(sprite).unwrap().power, Some(4));
+    issue_174_effect(
+        &mut engine,
+        blocker,
+        ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+            card_types: vec![tricerules_cards::PermanentTypeFilter::Artifact],
+            ..Default::default()
+        }),
+    );
+    advance_main1_to_declare_attackers(&mut engine);
+    engine
+        .apply_command(0, &declare_attackers(vec![sprite, ordinary]))
+        .unwrap();
+    pass_to_declare_blockers(&mut engine);
+    assert!(!engine.initial_response_batch().legal_by_player[&1]
+        .legal_block_pairs
+        .iter()
+        .any(|pair| pair.attacker_id == sprite));
+    issue_174_effect(
+        &mut engine,
+        sprite,
+        ContinuousEffectKind::Layer6RemoveAllAbilities,
+    );
+    assert!(engine.initial_response_batch().legal_by_player[&1]
+        .legal_block_pairs
+        .iter()
+        .any(|pair| pair.attacker_id == sprite && pair.blocker_id == animated));
+    engine
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: sprite,
+                blocker_id: animated,
+            }]),
+        )
+        .unwrap();
+}
+
+#[test]
+fn issue_174_synthetic_defenders_have_separate_blocking_graphs() {
+    let mut engine = GameEngine::new(174_010, &[10, 20], 20, None, true).unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    let first = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let second = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    engine.apply_command(10, &primitive_yield()).unwrap();
+    pass_both_players(&mut engine);
+    engine
+        .apply_command(10, &declare_attackers(vec![first, second]))
+        .unwrap();
+    pass_both_players(&mut engine);
+    // The constructor still rejects multiplayer; exercise only the seat-generic snapshot seam.
+    let mut third = engine.state.players[1].clone();
+    third.id = 30;
+    third.battlefield.clear();
+    third.hand.clear();
+    third.library.clear();
+    engine.state.players.push(third);
+    let third_blocker = inject_creature_on_battlefield(&mut engine, 2, "grizzly_bears");
+    let assignment = engine
+        .state
+        .combat
+        .as_mut()
+        .unwrap()
+        .attack_assignments
+        .get_mut(&second)
+        .unwrap();
+    assignment.defending_player = 30;
+    assignment.defender = tricerules_core::state::CombatDefenderTarget::Player(30);
+    let batch = engine.initial_response_batch();
+    assert_eq!(
+        batch.legal_by_player[&20].legal_block_pairs,
+        [BlockPair {
+            attacker_id: first,
+            blocker_id: blocker
+        }]
+    );
+    assert_eq!(
+        batch.legal_by_player[&30].legal_block_pairs,
+        [BlockPair {
+            attacker_id: second,
+            blocker_id: third_blocker
+        }]
+    );
+}
+
+fn issue_174_graveyard_card(engine: &mut GameEngine, player: usize) -> u32 {
+    let oid = engine.state.players[player].library.pop_back().unwrap();
+    engine.state.players[player].graveyard.push(oid);
+    engine.state.objects.get_mut(&oid).unwrap().zone = Zone::Graveyard;
+    oid
+}
+
+#[test]
+fn issue_174_accepted_commands_replay_after_an_illegal_declaration() {
+    use tricerules_proto::ruled::v1::{
+        dev_command::Dev, DevAddMana, DevCommand, DevPutCardInZone, DevZone,
+    };
+    fn fresh() -> GameEngine {
+        let mut engine = GameEngine::new(
+            174_011,
+            &[0, 1],
+            20,
+            Some(vec![deck_with("forest", &[]), deck_with("forest", &[])]),
+            true,
+        )
+        .unwrap();
+        engine.enable_dev_commands();
+        engine
+    }
+    fn record(
+        engine: &mut GameEngine,
+        log: &mut Vec<(i32, RuledCommand, RuledEventBatch)>,
+        player: i32,
+        command: RuledCommand,
+    ) {
+        let batch = engine.apply_command(player, &command).unwrap();
+        log.push((player, command, batch));
+    }
+    let dev = |target, payload| RuledCommand {
+        cmd: Some(Cmd::DevCommand(DevCommand {
+            target_player_id: target,
+            dev: Some(payload),
+        })),
+    };
+    let put = |target, name: &str| {
+        dev(
+            target,
+            Dev::PutCardInZone(DevPutCardInZone {
+                card_name: name.into(),
+                zone: DevZone::Battlefield as i32,
+                ready: true,
+            }),
+        )
+    };
+    let mut engine = fresh();
+    let mut log = Vec::new();
+    for player in [0, 1, 0, 1] {
+        record(&mut engine, &mut log, player, pass());
+    }
+    record(&mut engine, &mut log, 0, put(0, "Rampaging Ceratops"));
+    let ceratops = *engine.state.players[0].battlefield.last().unwrap();
+    record(&mut engine, &mut log, 0, put(0, "Verdant Outrider"));
+    let outrider = *engine.state.players[0].battlefield.last().unwrap();
+    let mut blockers = Vec::new();
+    for _ in 0..3 {
+        record(&mut engine, &mut log, 0, put(1, "Grizzly Bears"));
+        blockers.push(*engine.state.players[1].battlefield.last().unwrap());
+    }
+    record(
+        &mut engine,
+        &mut log,
+        0,
+        dev(
+            0,
+            Dev::AddMana(DevAddMana {
+                g: 1,
+                c: 1,
+                ..Default::default()
+            }),
+        ),
+    );
+    let activation = activate_ability_for(&engine, outrider, 0, vec![]);
+    record(&mut engine, &mut log, 0, activation);
+    for player in [0, 1] {
+        record(&mut engine, &mut log, player, pass());
+    }
+    record(&mut engine, &mut log, 0, primitive_yield());
+    for player in [0, 1] {
+        record(&mut engine, &mut log, player, pass());
+    }
+    record(
+        &mut engine,
+        &mut log,
+        0,
+        declare_attackers(vec![ceratops, outrider]),
+    );
+    for player in [0, 1] {
+        record(&mut engine, &mut log, player, pass());
+    }
+    let before = engine.initial_response_batch();
+    let index = engine.state.command_index;
+    assert!(engine
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: ceratops,
+                blocker_id: blockers[0]
+            }])
+        )
+        .is_err());
+    assert_eq!(engine.state.command_index, index);
+    assert_eq!(engine.initial_response_batch(), before);
+    record(
+        &mut engine,
+        &mut log,
+        1,
+        declare_blockers(
+            blockers
+                .into_iter()
+                .map(|blocker_id| BlockPair {
+                    attacker_id: ceratops,
+                    blocker_id,
+                })
+                .collect(),
+        ),
+    );
+    let mut replay = fresh();
+    for (player, command, expected) in log {
+        assert_eq!(replay.apply_command(player, &command).unwrap(), expected);
+    }
+    assert_eq!(
+        replay.initial_response_batch(),
+        engine.initial_response_batch()
+    );
+    assert_eq!(replay.state.command_index, engine.state.command_index);
+}
+
+#[test]
+fn issue_174_outrider_checks_live_power_but_does_not_undo_blocks() {
+    let decks = Some(vec![
+        deck_with("forest", &["verdant_outrider"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(174_004, &[0, 1], 20, decks, true).unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    let outrider = move_ready_to_battlefield(&mut engine, 0, "verdant_outrider");
+    let ordinary = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    grant_pool(&mut engine, 0);
+    apply_ability(&mut engine, 0, outrider, 0, vec![]).unwrap();
+    resolve_entire_stack_two_player(&mut engine);
+    advance_main1_to_declare_attackers(&mut engine);
+    engine
+        .apply_command(0, &declare_attackers(vec![outrider, ordinary]))
+        .unwrap();
+    pass_to_declare_blockers(&mut engine);
+    let blocks = declare_blockers(vec![BlockPair {
+        attacker_id: outrider,
+        blocker_id: blocker,
+    }]);
+    let command_index = engine.state.command_index;
+    assert!(engine.apply_command(1, &blocks).is_err());
+    assert_eq!(engine.state.command_index, command_index);
+    engine
+        .state
+        .objects
+        .get_mut(&blocker)
+        .unwrap()
+        .counters
+        .insert(CounterKind::PlusOnePlusOne, 1);
+    assert!(engine.initial_response_batch().legal_by_player[&1]
+        .legal_block_pairs
+        .iter()
+        .any(|p| p.attacker_id == outrider));
+    engine.apply_command(1, &blocks).unwrap();
+    engine
+        .state
+        .objects
+        .get_mut(&blocker)
+        .unwrap()
+        .counters
+        .clear();
+    grant_pool(&mut engine, 0);
+    apply_ability(&mut engine, 0, outrider, 0, vec![]).unwrap();
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(
+        engine.state.combat.as_ref().unwrap().blockers[&outrider],
+        [blocker]
+    );
+    pass_both_players(&mut engine);
+    assert_eq!(
+        engine.state.players[1].life, 18,
+        "only the ordinary unblocked attacker deals player damage"
+    );
+}
+
+#[test]
+fn issue_174_outrider_generation_expiry_and_ability_removal() {
+    let decks = Some(vec![
+        deck_with("forest", &["verdant_outrider", "unsummon"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(174_005, &[0, 1], 20, decks, true).unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    let outrider = move_ready_to_battlefield(&mut engine, 0, "verdant_outrider");
+    let command_index = engine.state.command_index;
+    assert!(apply_ability(&mut engine, 0, outrider, 0, vec![]).is_err());
+    assert_eq!(engine.state.command_index, command_index);
+    grant_pool(&mut engine, 0);
+    let stale_activation = activate_ability_for(&engine, outrider, 0, vec![]);
+    engine.apply_command(0, &stale_activation).unwrap();
+    ensure_in_hand(&mut engine, 0, "unsummon");
+    let slot = hand_index_for_card(&engine, 0, "unsummon");
+    engine
+        .apply_command(0, &cast_spell(slot, target_object(outrider)))
+        .unwrap();
+    pass_both_players(&mut engine);
+    assert_eq!(engine.state.objects[&outrider].zone, Zone::Hand);
+    assert_eq!(
+        move_ready_to_battlefield(&mut engine, 0, "verdant_outrider"),
+        outrider
+    );
+    resolve_entire_stack_two_player(&mut engine);
+    assert!(
+        zone_view_rules_annotation_labels(&mut engine, 0, outrider).is_empty(),
+        "old activation must not bind to the new generation"
+    );
+    assert!(engine.apply_command(0, &stale_activation).is_err());
+    grant_pool(&mut engine, 0);
+    apply_ability(&mut engine, 0, outrider, 0, vec![]).unwrap();
+    resolve_entire_stack_two_player(&mut engine);
+    issue_174_effect(
+        &mut engine,
+        outrider,
+        ContinuousEffectKind::Layer6RemoveAllAbilities,
+    );
+    assert!(
+        zone_view_rules_annotation_labels(&mut engine, 0, outrider)
+            .iter()
+            .any(|label| label.contains("power 2 or less")),
+        "resolved rules effects survive ability removal"
+    );
+    end_active_turn(&mut engine, 0);
+    assert!(!zone_view_rules_annotation_labels(&mut engine, 0, outrider)
+        .iter()
+        .any(|label| label.contains("power 2 or less")));
+}
+
+#[test]
+fn issue_174_hermit_threshold_is_live_and_does_not_change_established_blocks() {
+    let decks = Some(vec![
+        deck_with("island", &["nightwhorl_hermit"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(174_006, &[0, 1], 20, decks, true).unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    let hermit = move_ready_to_battlefield(&mut engine, 0, "nightwhorl_hermit");
+    let ordinary = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    for _ in 0..6 {
+        issue_174_graveyard_card(&mut engine, 0);
+    }
+    advance_main1_to_declare_attackers(&mut engine);
+    engine
+        .apply_command(0, &declare_attackers(vec![hermit, ordinary]))
+        .unwrap();
+    assert!(!engine.state.objects[&hermit].tapped, "vigilance");
+    pass_to_declare_blockers(&mut engine);
+    assert_eq!(engine.characteristics(hermit).unwrap().power, Some(1));
+    let seventh = issue_174_graveyard_card(&mut engine, 0);
+    assert_eq!(engine.characteristics(hermit).unwrap().power, Some(2));
+    assert!(!engine.initial_response_batch().legal_by_player[&1]
+        .legal_block_pairs
+        .iter()
+        .any(|p| p.attacker_id == hermit));
+    engine.state.players[0]
+        .graveyard
+        .retain(|oid| *oid != seventh);
+    engine.state.players[0].hand.push(seventh);
+    engine.state.objects.get_mut(&seventh).unwrap().zone = Zone::Hand;
+    assert!(engine.initial_response_batch().legal_by_player[&1]
+        .legal_block_pairs
+        .iter()
+        .any(|p| p.attacker_id == hermit));
+    engine
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: hermit,
+                blocker_id: blocker,
+            }]),
+        )
+        .unwrap();
+    issue_174_graveyard_card(&mut engine, 0);
+    assert_eq!(
+        engine.state.combat.as_ref().unwrap().blockers[&hermit],
+        [blocker]
+    );
+    issue_174_effect(
+        &mut engine,
+        hermit,
+        ContinuousEffectKind::Layer6RemoveAllAbilities,
+    );
+    assert_eq!(engine.characteristics(hermit).unwrap().power, Some(1));
+    assert!(!zone_view_rules_annotation_labels(&mut engine, 0, hermit)
+        .contains(&"Can't be blocked".into()));
+}
+
+#[test]
+fn issue_174_hermit_threshold_uses_controller_not_owner() {
+    let decks = Some(vec![
+        deck_with("island", &["nightwhorl_hermit"]),
+        deck_with("island", &[]),
+    ]);
+    let mut engine = GameEngine::new(174_007, &[10, 20], 20, decks, true).unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    let hermit = move_ready_to_battlefield(&mut engine, 0, "nightwhorl_hermit");
+    for _ in 0..7 {
+        issue_174_graveyard_card(&mut engine, 0);
+    }
+    assert_eq!(engine.characteristics(hermit).unwrap().power, Some(2));
+    issue_174_effect(
+        &mut engine,
+        hermit,
+        ContinuousEffectKind::Layer2Control {
+            controller: tricerules_cards::ControllerReference::Fixed(20),
+        },
+    );
+    assert_eq!(engine.characteristics(hermit).unwrap().controller, 20);
+    assert_eq!(engine.characteristics(hermit).unwrap().power, Some(1));
+    for _ in 0..7 {
+        issue_174_graveyard_card(&mut engine, 1);
+    }
+    assert_eq!(engine.characteristics(hermit).unwrap().power, Some(2));
+    assert_eq!(engine.state.objects[&hermit].owner, 10);
+}
+
+#[test]
+fn issue_174_outrider_publishes_its_resolved_restriction() {
+    let decks = Some(vec![
+        deck_with("forest", &["verdant_outrider"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(174_003, &[0, 1], 20, decks, true).unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    let outrider = move_ready_to_battlefield(&mut engine, 0, "verdant_outrider");
+    grant_pool(&mut engine, 0);
+    apply_ability(&mut engine, 0, outrider, 0, vec![]).unwrap();
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 0, outrider),
+        ["Can't be blocked by creatures with power 2 or less"]
+    );
+}
+
+#[test]
+fn issue_174_ceratops_requires_three_and_sprite_excludes_artifacts() {
+    let decks = Some(vec![
+        deck_with("forest", &["rampaging_ceratops", "argothian_sprite"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(174_002, &[10, 20], 20, decks, true).unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    let ceratops = move_ready_to_battlefield(&mut engine, 0, "rampaging_ceratops");
+    let sprite = move_ready_to_battlefield(&mut engine, 0, "argothian_sprite");
+    let blockers: Vec<_> = (0..3)
+        .map(|_| inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears"))
+        .collect();
+    let artifact = inject_creature_on_battlefield(&mut engine, 1, "ornithopter");
+    engine.apply_command(10, &primitive_yield()).unwrap();
+    pass_both_players(&mut engine);
+    engine
+        .apply_command(10, &declare_attackers(vec![ceratops, sprite]))
+        .unwrap();
+    pass_both_players(&mut engine);
+    let legal = &engine.initial_response_batch().legal_by_player[&20];
+    assert!(!legal
+        .legal_block_pairs
+        .iter()
+        .any(|p| p.attacker_id == sprite && p.blocker_id == artifact));
+    for count in [1, 2] {
+        let command_index = engine.state.command_index;
+        assert!(engine
+            .apply_command(
+                20,
+                &declare_blockers(
+                    blockers[..count]
+                        .iter()
+                        .map(|b| BlockPair {
+                            attacker_id: ceratops,
+                            blocker_id: *b
+                        })
+                        .collect()
+                )
+            )
+            .is_err());
+        assert_eq!(engine.state.command_index, command_index);
+    }
+    engine
+        .apply_command(
+            20,
+            &declare_blockers(
+                blockers
+                    .iter()
+                    .map(|b| BlockPair {
+                        attacker_id: ceratops,
+                        blocker_id: *b,
+                    })
+                    .collect(),
+            ),
+        )
+        .expect("three blockers are legal, Sprite may remain unblocked");
+}
+
+#[test]
+fn issue_174_competing_must_block_creatures_allow_a_maximal_declaration() {
+    let decks = Some(vec![
+        deck_with("forest", &["safewright_cavalry"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(174_001, &[0, 1], 20, decks, true).unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    let attacker = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
+    let first = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let second = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    for blocker in [first, second] {
+        engine
+            .state
+            .objects
+            .get_mut(&blocker)
+            .unwrap()
+            .must_block_if_able = true;
+    }
+    advance_main1_to_declare_attackers(&mut engine);
+    engine
+        .apply_command(0, &declare_attackers(vec![attacker]))
+        .unwrap();
+    pass_to_declare_blockers(&mut engine);
+    let legal = &engine.initial_response_batch().legal_by_player[&1];
+    assert!(
+        legal.required_blocker_ids.is_empty(),
+        "either blocker is a legal choice; neither is individually mandatory"
+    );
+    assert_eq!(legal.legal_block_pairs.len(), 2);
+    let command_index = engine.state.command_index;
+    assert!(engine.apply_command(1, &declare_blockers(vec![])).is_err());
+    assert_eq!(engine.state.command_index, command_index);
+    engine
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: attacker,
+                blocker_id: first,
+            }]),
+        )
+        .expect("satisfy the maximum one requirement");
+}
 
 fn advance_main1_to_declare_attackers(engine: &mut GameEngine) {
     engine

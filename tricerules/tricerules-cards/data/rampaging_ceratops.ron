@@ -1,0 +1,6 @@
+// Oracle and rulings fetched 2026-08-27. CR 509.1b: zero blockers or at least three.
+(
+  id: "rampaging_ceratops", name: "Rampaging Ceratops", mana_cost: "{4}{R}",
+  types: ["Creature", "Dinosaur"], power: 5, toughness: 4,
+  static_abilities: [SelfCombatRestriction(restriction: (minimum_blockers: Some(3)))],
+)

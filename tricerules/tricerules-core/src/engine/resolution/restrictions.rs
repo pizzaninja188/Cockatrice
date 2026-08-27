@@ -30,7 +30,7 @@ pub(super) fn apply_combat_restriction(
                 trigger_grant_origin: None,
                 source_id: Some(cx.top.id),
                 affected: AffectedScope::Single(oid),
-                kind: ContinuousEffectKind::CombatRestriction(restriction),
+                kind: ContinuousEffectKind::CombatRestriction(restriction.clone()),
                 condition: None,
                 duration: EffectDuration::UntilEndOfTurn,
                 timestamp: cx.engine.state.command_index,

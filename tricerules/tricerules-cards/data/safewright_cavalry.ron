@@ -7,7 +7,7 @@
   types: ["Creature", "Elf", "Warrior"],
   power: 4,
   toughness: 4,
-  evasions: [BlockerCountMaximum(maximum: 1)],
+  static_abilities: [SelfCombatRestriction(restriction: (maximum_blockers: Some(1)))],
   activated_abilities: [(
     costs: [Mana("{5}")],
     effect: [PumpTarget(

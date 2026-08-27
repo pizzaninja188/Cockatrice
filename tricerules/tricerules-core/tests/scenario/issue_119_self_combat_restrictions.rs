@@ -45,7 +45,7 @@ fn self_restriction_count(engine: &GameEngine, source_id: u32) -> usize {
         .filter(|effect| {
             effect.source_id == Some(source_id)
                 && matches!(
-                    effect.kind,
+                    &effect.kind,
                     ContinuousEffectKind::CombatRestriction(restriction)
                         if restriction.cant_block && !restriction.cant_attack
                 )

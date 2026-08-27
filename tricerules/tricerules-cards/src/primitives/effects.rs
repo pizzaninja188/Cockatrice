@@ -951,10 +951,10 @@ impl Default for EffectSubject {
     }
 }
 
-/// Rule-level attack and block restrictions applied by static or resolving effects. Menace stays
-/// a keyword because it constrains a completed blocking assignment rather than one creature or
-/// attacker/blocker pair; both forms meet in the engine's shared block-legality pipeline.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+/// CR 509.1b: cumulative rule-changing restrictions, shared by Argothian Sprite, Verdant
+/// Outrider, Rampaging Ceratops and the Faerie created by Into the Fae Court. Filters describe
+/// creatures, not targets; shroud and hexproof do not participate in blocking legality.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct CombatRestriction {
     #[serde(default)]
     pub cant_attack: bool,
@@ -962,17 +962,183 @@ pub struct CombatRestriction {
     pub cant_block: bool,
     #[serde(default)]
     pub cant_be_blocked: bool,
+    #[serde(default)]
+    pub cant_be_blocked_by: Vec<TargetFilter>,
+    #[serde(default)]
+    pub cant_block_creatures_matching: Vec<TargetFilter>,
+    /// Bounds apply only to nonempty blocker groups. Menace contributes a minimum of two.
+    #[serde(default)]
+    pub minimum_blockers: Option<u32>,
+    #[serde(default)]
+    pub maximum_blockers: Option<u32>,
 }
 
 impl CombatRestriction {
-    pub fn is_empty(self) -> bool {
-        !self.cant_attack && !self.cant_block && !self.cant_be_blocked
+    /// Public descriptions consumed by the existing generic rules-annotation display.
+    pub fn labels(&self) -> Vec<String> {
+        let mut labels = Vec::new();
+        if self.cant_attack {
+            labels.push("Can't attack".into());
+        }
+        if self.cant_block {
+            labels.push("Can't block".into());
+        }
+        if self.cant_be_blocked || self.maximum_blockers == Some(0) {
+            labels.push("Can't be blocked".into());
+        }
+        for filter in &self.cant_be_blocked_by {
+            labels.push(format!(
+                "Can't be blocked by {}",
+                combat_creature_description(filter)
+            ));
+        }
+        for filter in &self.cant_block_creatures_matching {
+            labels.push(format!(
+                "Can't block {}",
+                combat_creature_description(filter)
+            ));
+        }
+        if let Some(minimum) = self.minimum_blockers.filter(|min| *min > 1) {
+            labels.push(format!(
+                "Can't be blocked except by {minimum} or more creatures"
+            ));
+        }
+        if let Some(maximum) = self.maximum_blockers.filter(|max| *max > 0) {
+            labels.push(format!(
+                "Can't be blocked by more than {maximum} {}",
+                if maximum == 1 {
+                    "creature"
+                } else {
+                    "creatures"
+                }
+            ));
+        }
+        let mut unique = Vec::new();
+        for label in labels {
+            if !unique.contains(&label) {
+                unique.push(label);
+            }
+        }
+        unique
     }
 
-    pub fn combine(&mut self, other: Self) {
+    pub fn is_empty(&self) -> bool {
+        !self.cant_attack
+            && !self.cant_block
+            && !self.cant_be_blocked
+            && self.cant_be_blocked_by.is_empty()
+            && self.cant_block_creatures_matching.is_empty()
+            && self.minimum_blockers.is_none()
+            && self.maximum_blockers.is_none()
+    }
+
+    pub fn combine(&mut self, other: &Self) {
         self.cant_attack |= other.cant_attack;
         self.cant_block |= other.cant_block;
         self.cant_be_blocked |= other.cant_be_blocked;
+        self.cant_be_blocked_by
+            .extend(other.cant_be_blocked_by.iter().cloned());
+        self.cant_block_creatures_matching
+            .extend(other.cant_block_creatures_matching.iter().cloned());
+        self.minimum_blockers = self
+            .minimum_blockers
+            .into_iter()
+            .chain(other.minimum_blockers)
+            .max();
+        self.maximum_blockers = self
+            .maximum_blockers
+            .into_iter()
+            .chain(other.maximum_blockers)
+            .min();
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if self.is_empty() {
+            return Err("combat restriction requires at least one restriction".into());
+        }
+        if self.minimum_blockers == Some(0)
+            || self
+                .minimum_blockers
+                .zip(self.maximum_blockers)
+                .is_some_and(|(min, max)| min > max)
+        {
+            return Err("invalid authored blocker count bounds".into());
+        }
+        for filter in self
+            .cant_be_blocked_by
+            .iter()
+            .chain(&self.cant_block_creatures_matching)
+        {
+            filter.validate_characteristic_constraints()?;
+            if !filter.all_terminal_filters_match(|leaf| {
+                leaf.kind == TargetKind::Creature
+                    && leaf.controller == TargetController::Any
+                    && !leaf.exclude_source
+                    && leaf.combat_role.is_none()
+                    && leaf.tapped.is_none()
+            }) {
+                return Err("combat predicates require creature characteristics without controller, source, tapped or combat-role selectors".into());
+            }
+        }
+        Ok(())
+    }
+}
+
+fn combat_creature_description(filter: &TargetFilter) -> String {
+    if let Some(branches) = &filter.any_of {
+        return branches
+            .iter()
+            .map(combat_creature_description)
+            .collect::<Vec<_>>()
+            .join(" or ");
+    }
+    let mut clauses = Vec::new();
+    if !filter.permanent_types.is_empty() {
+        clauses.push(format!(
+            "with type {}",
+            filter
+                .permanent_types
+                .iter()
+                .map(|kind| format!("{kind:?}"))
+                .collect::<Vec<_>>()
+                .join(" or ")
+        ));
+    }
+    if filter.not_artifact {
+        clauses.push("that aren't artifacts".into());
+    }
+    if filter.not_land {
+        clauses.push("that aren't lands".into());
+    }
+    if let Some(color) = filter.is_color {
+        clauses.push(format!("that are {color:?}").to_lowercase());
+    }
+    if let Some(color) = filter.not_color {
+        clauses.push(format!("that aren't {color:?}").to_lowercase());
+    }
+    for subtype in &filter.required_subtypes {
+        clauses.push(format!("with subtype {subtype}"));
+    }
+    for subtype in &filter.excluded_subtypes {
+        clauses.push(format!("without subtype {subtype}"));
+    }
+    for keyword in &filter.required_keywords {
+        clauses.push(format!("with {}", keyword.as_str().to_lowercase()));
+    }
+    for keyword in &filter.excluded_keywords {
+        clauses.push(format!("without {}", keyword.as_str().to_lowercase()));
+    }
+    if let Some(comparison) = filter.power {
+        let (value, bound) = match comparison {
+            super::PowerComparison::AtLeast(value) => (value, "more"),
+            super::PowerComparison::AtMost(value) => (value, "less"),
+        };
+        clauses.push(format!("with power {value} or {bound}"));
+    }
+    if clauses.is_empty() {
+        "creatures".into()
+    } else {
+        format!("creatures {}", clauses.join(" and "))
     }
 }
 
@@ -3250,9 +3416,7 @@ impl SpellEffectKind {
                 }
             }
             SpellEffectKind::ApplyCombatRestriction { scope, restriction } => {
-                if restriction.is_empty() {
-                    return Err("ApplyCombatRestriction requires at least one restriction".into());
-                }
+                restriction.validate()?;
                 match scope {
                     CombatRestrictionScope::Source => Ok(()),
                     CombatRestrictionScope::Chosen(target) => {

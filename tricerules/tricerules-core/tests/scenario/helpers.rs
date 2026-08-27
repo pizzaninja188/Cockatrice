@@ -100,7 +100,8 @@ pub(crate) fn resolve_cleanup_discards_if_any(e: &mut GameEngine) {
             e.state.players[idx].hand.len() > 7,
             "cleanup without over-max hand"
         );
-        e.apply_command(cp, &discard_cleanup(0))
+        let count = e.state.players[idx].hand.len() - 7;
+        e.apply_command(cp, &discard_cleanup_batch((0..count as u32).collect()))
             .expect("discard during cleanup");
     }
 }
@@ -1154,6 +1155,38 @@ pub(crate) fn take_oid_from_library_or_hand(
         return e.state.players[player].hand.remove(pos);
     }
     panic!("missing card {card_id} for P{player}");
+}
+
+/// Enter through the engine so static abilities, replacements and generation bookkeeping run.
+pub(crate) fn move_ready_to_battlefield(e: &mut GameEngine, player: usize, card_id: &str) -> u32 {
+    use tricerules_proto::ruled::v1::{dev_command, DevCommand, DevMoveCard, DevZone};
+    let before = e.state.players[player].battlefield.clone();
+    let player_id = e.state.players[player].id;
+    let name = tricerules_cards::CardRegistry::global()
+        .get(card_id)
+        .unwrap()
+        .name
+        .clone();
+    e.enable_dev_commands();
+    e.apply_command(
+        player_id,
+        &RuledCommand {
+            cmd: Some(Cmd::DevCommand(DevCommand {
+                target_player_id: player_id,
+                dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                    card_name: name,
+                    zone: DevZone::Battlefield as i32,
+                    ready: true,
+                })),
+            })),
+        },
+    )
+    .expect("move ready permanent through engine entry");
+    *e.state.players[player]
+        .battlefield
+        .iter()
+        .find(|oid| !before.contains(oid))
+        .expect("entered permanent")
 }
 
 pub(crate) fn relocate_to_battlefield(

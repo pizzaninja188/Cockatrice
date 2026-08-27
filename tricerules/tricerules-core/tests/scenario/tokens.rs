@@ -1,5 +1,90 @@
 use crate::helpers::*;
 
+#[test]
+fn issue_174_fae_court_draws_then_creates_a_restricted_faerie_and_clone_keeps_it() {
+    let decks = Some(vec![
+        deck_with("island", &["into_the_fae_court", "clone"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut engine = GameEngine::new(174_008, &[0, 1], 20, decks, true).unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, "into_the_fae_court");
+    grant_pool(&mut engine, 0);
+    let slot = hand_index_for_card(&engine, 0, "into_the_fae_court");
+    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    let before_draw = engine.state.players[0].hand.len();
+    engine.apply_command(0, &pass()).unwrap();
+    let batch = engine.apply_command(1, &pass()).unwrap();
+    assert_eq!(engine.state.players[0].hand.len(), before_draw + 3);
+    let created = token_created_events(&batch);
+    assert_eq!(created.len(), 1);
+    let faerie = created[0].object_id;
+    let identity = created[0].identity.as_ref().unwrap();
+    assert_eq!(
+        (&*identity.name, &*identity.pt, &*identity.color),
+        ("Faerie", "1/1", "u")
+    );
+    assert_eq!(identity.keywords, ["Flying"]);
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 0, faerie),
+        ["Can't block creatures without flying"]
+    );
+    ensure_in_hand(&mut engine, 0, "clone");
+    grant_pool(&mut engine, 0);
+    let slot = hand_index_for_card(&engine, 0, "clone");
+    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    pass_both_players(&mut engine);
+    engine
+        .apply_command(0, &submit_resolution_choice(vec![faerie]))
+        .unwrap();
+    let clone = battlefield_object_for_card(&engine, 0, "clone");
+    assert_eq!(
+        zone_view_rules_annotation_labels(&mut engine, 0, clone),
+        ["Can't block creatures without flying"]
+    );
+    end_active_turn(&mut engine, 0);
+    advance_to_main1_from_game_start(&mut engine);
+    let flying = inject_creature_on_battlefield(&mut engine, 1, "storm_crow");
+    let reach = inject_creature_on_battlefield(&mut engine, 1, "giant_spider");
+    let ground = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    engine.apply_command(1, &primitive_yield()).unwrap();
+    pass_both_players(&mut engine);
+    engine
+        .apply_command(1, &declare_attackers(vec![flying, reach, ground]))
+        .unwrap();
+    pass_both_players(&mut engine);
+    let legal = &engine.initial_response_batch().legal_by_player[&0];
+    for blocker in [faerie, clone] {
+        assert_eq!(
+            legal
+                .legal_block_pairs
+                .iter()
+                .filter(|pair| pair.blocker_id == blocker)
+                .map(|pair| pair.attacker_id)
+                .collect::<Vec<_>>(),
+            [flying]
+        );
+    }
+    assert!(engine
+        .apply_command(
+            0,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: reach,
+                blocker_id: faerie
+            }])
+        )
+        .is_err());
+    engine
+        .apply_command(
+            0,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: flying,
+                blocker_id: faerie,
+            }]),
+        )
+        .unwrap();
+}
+
 /// Raise the Alarm makes exactly two 1/1 white Soldier tokens under the caster, summoning-sick,
 /// on the battlefield, and emits a self-describing TokenCreated for each (CR 111.1/111.4).
 #[test]

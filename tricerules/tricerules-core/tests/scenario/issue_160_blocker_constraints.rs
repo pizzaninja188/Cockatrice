@@ -119,7 +119,7 @@ fn blocker_power_evasion_uses_derived_power_and_composes_with_flying() {
     ]);
     let mut engine = GameEngine::new(160_002, &[0, 1], 20, decks, true).expect("engine");
     advance_to_main1_from_game_start(&mut engine);
-    let vinebender = relocate_to_battlefield(&mut engine, 0, "foggy_swamp_vinebender", false);
+    let vinebender = move_ready_to_battlefield(&mut engine, 0, "foggy_swamp_vinebender");
     let low_reach = relocate_to_battlefield(&mut engine, 1, "giant_spider", false);
     let boosted_reach = relocate_to_battlefield(&mut engine, 1, "giant_spider", false);
     let high_reach = relocate_to_battlefield(&mut engine, 1, "elfsworn_giant", false);
@@ -181,7 +181,7 @@ fn maximum_blocker_count_rejects_two_without_mutating_combat() {
     ]);
     let mut engine = GameEngine::new(160_003, &[0, 1], 20, decks, true).expect("engine");
     advance_to_main1_from_game_start(&mut engine);
-    let cavalry = relocate_to_battlefield(&mut engine, 0, "safewright_cavalry", false);
+    let cavalry = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
     let first = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     advance_main1_to_declare_attackers(&mut engine);
@@ -233,7 +233,7 @@ fn maximum_one_plus_menace_makes_blocking_impossible_even_with_requirements() {
     ]);
     let mut engine = GameEngine::new(160_004, &[0, 1], 20, decks, true).expect("engine");
     advance_to_main1_from_game_start(&mut engine);
-    let cavalry = relocate_to_battlefield(&mut engine, 0, "safewright_cavalry", false);
+    let cavalry = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
     let first = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     for blocker in [first, second] {
@@ -281,8 +281,8 @@ fn blocker_caps_are_per_attacker_and_player_ids_are_not_seat_indices() {
     ]);
     let mut engine = GameEngine::new(160_005, &[10, 20], 20, decks, true).expect("engine");
     advance_to_main1_from_game_start(&mut engine);
-    let first_attacker = relocate_to_battlefield(&mut engine, 0, "safewright_cavalry", false);
-    let second_attacker = relocate_to_battlefield(&mut engine, 0, "safewright_cavalry", false);
+    let first_attacker = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
+    let second_attacker = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
     let first_blocker = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let second_blocker = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
 
@@ -319,7 +319,7 @@ fn removing_safewright_cavalrys_abilities_removes_its_blocker_cap() {
     ]);
     let mut engine = GameEngine::new(160_006, &[0, 1], 20, decks, true).expect("engine");
     advance_to_main1_from_game_start(&mut engine);
-    let cavalry = relocate_to_battlefield(&mut engine, 0, "safewright_cavalry", false);
+    let cavalry = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
     let first = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     let second = relocate_to_battlefield(&mut engine, 1, "grizzly_bears", false);
     engine.state.continuous_effects.push(ContinuousEffect {
@@ -365,7 +365,7 @@ fn safewright_cavalry_targets_only_an_elf_with_its_pump_ability() {
     ]);
     let mut engine = GameEngine::new(160_007, &[0, 1], 20, decks, true).expect("engine");
     advance_to_main1_from_game_start(&mut engine);
-    let cavalry = relocate_to_battlefield(&mut engine, 0, "safewright_cavalry", false);
+    let cavalry = move_ready_to_battlefield(&mut engine, 0, "safewright_cavalry");
     let elf = relocate_to_battlefield(&mut engine, 0, "llanowar_elves", false);
     let bear = relocate_to_battlefield(&mut engine, 0, "grizzly_bears", false);
     give_mana(
@@ -379,12 +379,18 @@ fn safewright_cavalry_targets_only_an_elf_with_its_pump_ability() {
 
     let command_before = engine.state.command_index;
     assert!(engine
-        .apply_command(0, &activate_ability(cavalry, 0, target_object(bear)))
+        .apply_command(
+            0,
+            &activate_ability_for(&engine, cavalry, 0, target_object(bear))
+        )
         .is_err());
     assert_eq!(engine.state.command_index, command_before);
     assert_eq!(engine.state.players[0].mana_pool.colorless, 5);
     engine
-        .apply_command(0, &activate_ability(cavalry, 0, target_object(elf)))
+        .apply_command(
+            0,
+            &activate_ability_for(&engine, cavalry, 0, target_object(elf)),
+        )
         .expect("activate targeting an Elf");
     resolve_entire_stack_two_player(&mut engine);
     assert_eq!(engine.characteristics(elf).unwrap().power, Some(3));

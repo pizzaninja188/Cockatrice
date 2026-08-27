@@ -745,7 +745,7 @@ mod tests {
         };
         let source = SpellEffectKind::ApplyCombatRestriction {
             scope: CombatRestrictionScope::Source,
-            restriction: cant_block,
+            restriction: cant_block.clone(),
         };
         assert!(source.validate(EffectContext::Spell).is_err());
         assert!(source.validate(EffectContext::Ability).is_ok());
@@ -755,7 +755,7 @@ mod tests {
                 kind: TargetKind::OpponentPlayer,
                 ..Default::default()
             }),
-            restriction: cant_block,
+            restriction: cant_block.clone(),
         };
         assert!(chosen_player.validate(EffectContext::Spell).is_err());
 
@@ -765,7 +765,7 @@ mod tests {
                 excluded_keywords: vec![Keyword::Flying],
                 ..Default::default()
             }),
-            restriction: cant_block,
+            restriction: cant_block.clone(),
         };
         assert!(matching_creatures.validate(EffectContext::Spell).is_ok());
 
@@ -774,7 +774,7 @@ mod tests {
                 kind: TargetKind::AnyPermanent,
                 ..Default::default()
             }),
-            restriction: cant_block,
+            restriction: cant_block.clone(),
         };
         assert!(matching_permanents.validate(EffectContext::Spell).is_err());
 

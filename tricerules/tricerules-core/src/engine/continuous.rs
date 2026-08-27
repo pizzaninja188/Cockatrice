@@ -406,7 +406,7 @@ impl GameEngine {
                             kind: ContinuousEffectKind::CombatRestriction(CombatRestriction {
                                 cant_attack,
                                 cant_block,
-                                cant_be_blocked: false,
+                                ..Default::default()
                             }),
                             condition: None,
                             duration: EffectDuration::WhileSourceOnBattlefield,
@@ -426,19 +426,15 @@ impl GameEngine {
                     }
                 }
                 StaticAbilityDef::SelfCombatRestriction {
-                    cant_attack,
-                    cant_block,
+                    restriction,
+                    condition,
                 } => {
                     self.state.continuous_effects.push(ContinuousEffect {
                         trigger_grant_origin: None,
                         source_id: Some(object_id),
                         affected: AffectedScope::Single(object_id),
-                        kind: ContinuousEffectKind::CombatRestriction(CombatRestriction {
-                            cant_attack,
-                            cant_block,
-                            cant_be_blocked: false,
-                        }),
-                        condition: None,
+                        kind: ContinuousEffectKind::CombatRestriction(restriction),
+                        condition,
                         duration: EffectDuration::WhileSourceOnBattlefield,
                         timestamp,
                     });
