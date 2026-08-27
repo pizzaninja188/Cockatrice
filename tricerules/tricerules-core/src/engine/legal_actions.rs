@@ -982,6 +982,7 @@ fn hand_action(
         cost_choices: None,
         eligible_restricted_mana_group_ids: vec![],
         generic_cost_reduction: 0,
+        has_convoke: false,
     }
 }
 
@@ -1137,6 +1138,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 action.eligible_restricted_mana_group_ids =
                     eng.eligible_restricted_mana_for_spell(player_index, face);
                 action.cost = face.mana_cost.to_string();
+                action.has_convoke = face.keywords.contains(&Keyword::Convoke);
                 action.generic_cost_reduction =
                     eng.spell_generic_reduction(pid, oid, face, &face.cost_modifiers);
                 if !cost_choices.non_mana_costs_payable {
@@ -1266,6 +1268,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                         &face.cost_modifiers,
                     ),
                     cast_method: cast_method as i32,
+                    has_convoke: face.keywords.contains(&Keyword::Convoke),
                 };
                 if !cost_choices.non_mana_costs_payable {
                     continue;
@@ -1379,6 +1382,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     &face.cost_modifiers,
                 ),
                 cast_method: rv1::CastMethod::Normal as i32,
+                has_convoke: face.keywords.contains(&Keyword::Convoke),
             };
             if !cost_choices.non_mana_costs_payable {
                 continue;

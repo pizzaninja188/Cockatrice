@@ -261,6 +261,97 @@ protected:
 // Identity maps
 // ---------------------------------------------------------------------------------------
 
+TEST_F(RuledClientTest, ConvokePreviewPreservesLegalActionsAndRejectsObsoleteReplies)
+{
+    state->handActions[ruled::v1::HAND_ACTION_CAST_SPELL].handIndices.insert(4);
+    auto &payment = state->spellPayment;
+    payment.begin();
+    const auto old = payment.request({});
+    ASSERT_TRUE(payment.payMana('U'));
+    const auto current = payment.request({});
+    ruled::v1::RuledEventBatch batch;
+    auto *reply = batch.mutable_spell_payment_preview();
+    reply->set_transaction_id(old.transaction_id());
+    reply->set_revision(old.revision());
+    reply->set_valid(true);
+    reply->set_complete(true);
+    QSignalSpy spy(state, &RuledClientState::spellPaymentPreviewReceived);
+    EXPECT_TRUE(dispatcher->processPayload(batch.SerializeAsString()));
+    EXPECT_TRUE(payment.pending);
+    EXPECT_EQ(spy.count(), 0);
+    reply->set_revision(current.revision());
+    *reply->mutable_selection() = payment.selection;
+    EXPECT_TRUE(dispatcher->processPayload(batch.SerializeAsString()));
+    EXPECT_FALSE(payment.pending);
+    EXPECT_EQ(spy.count(), 1);
+    EXPECT_TRUE(state->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, 4));
+    EXPECT_TRUE(dispatcher->processPayload(batch.SerializeAsString()));
+    EXPECT_EQ(spy.count(), 1);
+    payment.clear();
+    EXPECT_TRUE(dispatcher->processPayload(batch.SerializeAsString()));
+    EXPECT_FALSE(payment.active);
+    EXPECT_EQ(spy.count(), 1);
+}
+
+TEST_F(RuledClientTest, ConvokeSelectionUsesPublishedColorAndGeneration)
+{
+    auto &payment = state->spellPayment;
+    payment.begin();
+    auto request = payment.request({});
+    ruled::v1::SpellPaymentPreview response;
+    response.set_transaction_id(request.transaction_id());
+    response.set_revision(request.revision());
+    response.set_valid(true);
+    auto *candidate = response.add_candidates();
+    candidate->mutable_object()->set_object_id(44);
+    candidate->mutable_object()->set_zone_change_generation(7);
+    candidate->add_options(ruled::v1::CONVOKE_PAYMENT_KIND_BLUE);
+    candidate->add_options(ruled::v1::CONVOKE_PAYMENT_KIND_GENERIC);
+    ASSERT_TRUE(payment.apply(response));
+    EXPECT_FALSE(payment.select(44, ruled::v1::CONVOKE_PAYMENT_KIND_RED));
+    EXPECT_TRUE(payment.select(44, ruled::v1::CONVOKE_PAYMENT_KIND_BLUE));
+    EXPECT_FALSE(payment.select(44, ruled::v1::CONVOKE_PAYMENT_KIND_GENERIC));
+    EXPECT_EQ(payment.selection.convoke(0).object().zone_change_generation(), 7u);
+    request = payment.request({});
+    response.set_revision(request.revision());
+    *response.mutable_selection() = payment.selection;
+    ASSERT_TRUE(payment.apply(response));
+    EXPECT_TRUE(payment.remove(44));
+    EXPECT_FALSE(payment.selected(44));
+}
+
+TEST_F(RuledClientTest, ConvokeCompletionSubmitsExactlyOnceAndStateRefreshInvalidatesReplies)
+{
+    auto &payment = state->spellPayment;
+    payment.begin();
+    auto request = payment.request({});
+    ruled::v1::SpellPaymentPreview response;
+    response.set_transaction_id(request.transaction_id());
+    response.set_revision(request.revision());
+    response.set_valid(true);
+    response.set_complete(true);
+    payment.invalidate(); // authoritative gameplay batch, before the queued refresh query
+    EXPECT_FALSE(payment.apply(response));
+    EXPECT_FALSE(payment.beginSubmission());
+    request = payment.request({});
+    response.set_revision(request.revision());
+    response.set_selection_changed(true);
+    response.set_error("Payment changed; stale or unavailable selections were removed.");
+    ASSERT_TRUE(payment.apply(response));
+    EXPECT_FALSE(payment.beginSubmission());
+    request = payment.request({});
+    response.set_revision(request.revision());
+    response.set_selection_changed(false);
+    response.clear_error();
+    ASSERT_TRUE(payment.apply(response));
+    EXPECT_EQ(payment.view.error(), "Payment changed; stale or unavailable selections were removed.");
+    EXPECT_TRUE(payment.beginSubmission());
+    EXPECT_FALSE(payment.beginSubmission());
+    EXPECT_FALSE(payment.apply(response));
+    payment.clear();
+    EXPECT_FALSE(payment.beginSubmission());
+}
+
 TEST_F(RuledClientTest, BattlefieldObjectMapBuildsIdentityMapsBothWays)
 {
     ruled::v1::RuledEventBatch batch;
@@ -4390,6 +4481,8 @@ TEST_F(RuledClientTest, ChooseStartingPlayerAndKeepSendTheirCommands)
 
 TEST_F(RuledClientTest, ClearSessionStateResetsEverythingCarriedBetweenGames)
 {
+    state->spellPayment.begin();
+    const auto obsoletePayment = state->spellPayment.request({});
     ruled::v1::RuledEventBatch batch;
     auto *sp = batch.add_events()->mutable_stack_pushed();
     sp->set_object_id(900);
@@ -4404,13 +4497,22 @@ TEST_F(RuledClientTest, ClearSessionStateResetsEverythingCarriedBetweenGames)
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 0, "Grizzly Bears");
     apply(batch);
+    EXPECT_FALSE(state->spellPayment.active); // a blocking engine choice replaces local staging
+    ruled::v1::SpellPaymentPreview obsoleteReply;
+    obsoleteReply.set_transaction_id(obsoletePayment.transaction_id());
+    obsoleteReply.set_revision(obsoletePayment.revision());
+    EXPECT_FALSE(state->spellPayment.apply(obsoleteReply));
     ASSERT_TRUE(state->hasStackItems());
     ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
 
     QSignalSpy resetSpy(state, &RuledClientState::sessionReset);
+    state->spellPayment.begin();
+    state->spellPayment.payMana('U');
     state->clearSessionState();
 
     EXPECT_EQ(resetSpy.count(), 1);
+    EXPECT_FALSE(state->spellPayment.active);
+    EXPECT_EQ(state->spellPayment.selection.mana().u(), 0u);
     EXPECT_FALSE(state->hasStackItems());
     EXPECT_TRUE(state->stackAnnotation(900).isEmpty());
     EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));

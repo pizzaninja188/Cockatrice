@@ -37,6 +37,7 @@ public:
     /// name resolves; otherwise out.missing_card_names() lists them sorted, deduplicated.
     /// Returns false only on transport failure (sidecar unreachable / bad frame).
     bool validateDeck(const QStringList &cardNames, ruled::v1::IpcResponse &out);
+    bool previewSpellPayment(int playerId, const ruled::v1::PreviewSpellPayment &preview, ruled::v1::IpcResponse &out);
     bool sessionEnd();
 
 private:

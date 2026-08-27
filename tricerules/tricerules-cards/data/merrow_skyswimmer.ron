@@ -1,0 +1,15 @@
+// Oracle and official rulings verified 2026-08-26. CR 702.51; the token is both white and blue.
+(
+  id: "merrow_skyswimmer",
+  name: "Merrow Skyswimmer",
+  mana_cost: "{3}{W/U}{W/U}",
+  types: ["Creature", "Merfolk", "Soldier"],
+  power: 2,
+  toughness: 2,
+  keywords: [Convoke, Flying, Vigilance],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "merfolk_wu_1_1", count: 1)],
+    text: "When this creature enters, create a 1/1 white and blue Merfolk creature token.",
+  )],
+)

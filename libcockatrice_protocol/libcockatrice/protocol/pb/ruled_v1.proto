@@ -82,6 +82,8 @@ message RuledCommand {
     CanonicalGameplayCommand canonical_gameplay = 25;
     // Execute one engine-published special action on a battlefield permanent.
     ExecutePermanentAction execute_permanent_action = 27;
+    // Query only: authenticated relay routes this outside the gameplay/replay path.
+    PreviewSpellPayment preview_spell_payment = 28;
   }
 }
 
@@ -317,6 +319,66 @@ message CastSpell {
   // hand slot or battlefield permanent.
   repeated CastCostGroupSelection cast_cost_group_selections = 11;
   CastMethod cast_method = 12;
+  // Present for engine-previewed payments (Convoke). Ordinary casts retain their existing path.
+  SpellPaymentSelection payment = 13;
+}
+
+// One unit paid by a creature; GENERIC is a demand, never colorless mana.
+enum ConvokePaymentKind {
+  CONVOKE_PAYMENT_KIND_UNSPECIFIED = 0;
+  CONVOKE_PAYMENT_KIND_WHITE = 1;
+  CONVOKE_PAYMENT_KIND_BLUE = 2;
+  CONVOKE_PAYMENT_KIND_BLACK = 3;
+  CONVOKE_PAYMENT_KIND_RED = 4;
+  CONVOKE_PAYMENT_KIND_GREEN = 5;
+  CONVOKE_PAYMENT_KIND_GENERIC = 6;
+}
+
+message SpellPaymentMana {
+  uint32 w = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 u = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 b = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 r = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 g = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 c = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message ConvokeContribution {
+  CostObjectRef object = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  ConvokePaymentKind kind = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message SpellPaymentSelection {
+  uint64 expected_state_revision = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  CostObjectRef source = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated ConvokeContribution convoke = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  SpellPaymentMana mana = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message PreviewSpellPayment {
+  uint64 transaction_id = 1;
+  uint64 revision = 2;
+  CastSpell cast_spell = 3;
+}
+
+message ConvokeCandidate {
+  CostObjectRef object = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated ConvokePaymentKind options = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message SpellPaymentPreview {
+  uint64 transaction_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 revision = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool valid = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string error = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool complete = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string total_cost = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string remaining_cost = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  SpellPaymentSelection selection = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated ConvokeCandidate candidates = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Refresh can retire stale selections; it must never auto-submit a changed selection.
+  bool selection_changed = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated ManaSpendSelection restricted_mana = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message CastCostGroupSelection {
@@ -331,13 +393,13 @@ message CastCostGroupSelection {
 }
 
 message ManaSpendSelection {
-  uint32 restriction_group_id = 1;
-  uint32 w = 2;
-  uint32 u = 3;
-  uint32 b = 4;
-  uint32 r = 5;
-  uint32 g = 6;
-  uint32 c = 7;
+  uint32 restriction_group_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 w = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 u = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 b = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 r = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 g = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 c = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A payment decision for one flexible mana pip (CR 107.4d–f). Currently only Phyrexian pips
@@ -459,6 +521,8 @@ message PreviewDeclareAttackers {
 message RuledEventBatch {
   repeated RuledEvent events = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   map<int32, LegalActions> legal_by_player = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Standalone requester-only query reply: never merged into a gameplay batch.
+  SpellPaymentPreview spell_payment_preview = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Engine-computed targeting data for one spell or activated ability. Clients use this
@@ -574,6 +638,7 @@ message LegalHandAction {
   // Generic reductions are published separately so clients can apply CR 601.2f after X and all
   // cost increases have been added. `cost` remains the raw base or alternative mana cost.
   uint32 generic_cost_reduction = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool has_convoke = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // CR 702.34: a spell the player may cast from their own graveyard using flashback.
@@ -598,6 +663,7 @@ message LegalZoneCastAction {
   repeated uint32 eligible_restricted_mana_group_ids = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 generic_cost_reduction = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   CastMethod cast_method = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool has_convoke = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message ManaPaymentEligibility {
@@ -1697,6 +1763,7 @@ message IpcEnvelope {
     PlayerCommand player_command = 2;
     SessionEnd session_end = 3;
     ValidateDeck validate_deck = 4;
+    SpellPaymentQuery spell_payment_query = 5;
   }
 }
 
@@ -1740,6 +1807,11 @@ message PlayerCommand {
 }
 
 message SessionEnd {}
+
+message SpellPaymentQuery {
+  int32 player_id = 1;
+  PreviewSpellPayment preview = 2;
+}
 
 message IpcResponse {
   bool ok = 1;

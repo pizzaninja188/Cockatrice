@@ -343,6 +343,7 @@ void RuledClientState::teardownPendingChoice()
 
 void RuledClientState::setPendingChoice(RuledPendingChoice choice)
 {
+    spellPayment.clear();
     teardownPendingChoice();
     if (choice.kind == ChoiceKind::TriggerTarget && choice.selectedTriggerTargetsByGroup.isEmpty()) {
         const int groupCount = std::max(1, static_cast<int>(choice.triggerTargets.groups.size()));
@@ -1757,5 +1758,6 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     // the prompt panel still needs telling.
     emit resolutionHandPickUiChanged(-1, -1);
 
+    spellPayment.clear();
     emit sessionReset();
 }

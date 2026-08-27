@@ -120,6 +120,8 @@ impl ProtectionQuality {
 /// such as [`Evasion`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Keyword {
+    /// CR 702.51: Unexpected Assistance and Merrow Skyswimmer.
+    Convoke,
     /// CR 702.9: this creature can only be blocked by creatures with flying or reach.
     Flying,
     /// CR 702.17: this creature can block creatures with flying.
@@ -205,6 +207,7 @@ impl Keyword {
             Keyword::Shroud => "Shroud",
             Keyword::Defender => "Defender",
             Keyword::Flash => "Flash",
+            Keyword::Convoke => "Convoke",
         }
     }
 }

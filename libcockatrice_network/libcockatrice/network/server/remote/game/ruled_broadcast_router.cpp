@@ -529,3 +529,15 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
     }
     return filtered;
 }
+
+void RuledBroadcastRouter::sendSpellPaymentPreview(int playerId, const ruled::v1::SpellPaymentPreview &preview)
+{
+    // Reviewed private-query boundary. Do not inject maps, retain reconnect state, or broadcast.
+    ruled::v1::RuledEventBatch batch;
+    *batch.mutable_spell_payment_preview() = preview;
+    Event_RuledPayload event;
+    event.set_payload(batch.SerializeAsString());
+    GameEventStorage storage;
+    storage.enqueueGameEvent(event, -1, GameEventStorageItem::SendToPrivate, playerId);
+    storage.sendToGame(game);
+}

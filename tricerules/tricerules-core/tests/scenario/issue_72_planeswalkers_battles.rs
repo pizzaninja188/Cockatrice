@@ -417,6 +417,16 @@ fn defeated_siege_casts_back_face_with_exact_physical_identity() {
             chosen_combat_defender: None,
         })),
     };
+    let mut forged_payment = command.clone();
+    if let Some(Cmd::SubmitResolutionChoice(choice)) = &mut forged_payment.cmd {
+        choice.cast_spell.as_mut().unwrap().payment = Some(Default::default());
+    }
+    let before = format!("{:?}", engine.state);
+    assert!(
+        engine.apply_command(0, &forged_payment).is_err(),
+        "a free Siege offer must not ignore an explicit payment payload"
+    );
+    assert_eq!(format!("{:?}", engine.state), before);
     engine
         .apply_command(0, &command)
         .expect("cast transformed back face");

@@ -30,8 +30,16 @@ pub(super) fn pump_target(
         toughness = toughness.saturating_add(scale.toughness_per_unit.saturating_mul(units));
     }
 
-    let tid = resolve_effect_subject(engine, top, targets, &subject);
-    if let Some(tid) = tid {
+    // Appeal to Eirdu and the one-target Giant Growth share this effect. A grouped Chosen
+    // subject applies to every surviving target; Source/Triggered subjects still bind once.
+    let affected = if matches!(subject, EffectSubject::Chosen(_)) {
+        targets.to_vec()
+    } else {
+        resolve_effect_subject(engine, top, targets, &subject)
+            .into_iter()
+            .collect()
+    };
+    for tid in affected {
         let is_valid_target = engine
             .state
             .objects

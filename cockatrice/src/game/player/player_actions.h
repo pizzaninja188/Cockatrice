@@ -39,8 +39,12 @@ class Command_MoveCard;
 class GameEventContext;
 class PendingCommand;
 class Player;
+class RuledSpellPaymentUi;
+
 class PlayerActions : public QObject
 {
+    friend class RuledSpellPaymentUi;
+
     Q_OBJECT
 
 signals:
@@ -74,6 +78,7 @@ public:
     };
 
     explicit PlayerActions(Player *player);
+    ~PlayerActions() override;
 
     void sendGameCommand(PendingCommand *pend);
     void sendGameCommand(const google::protobuf::Message &command);
@@ -426,6 +431,7 @@ private:
     FilterString movingCardsUntilFilter;
     int movingCardsUntilCounter = 0;
     MoveTopCardsUntilOptions movingCardsUntilOptions;
+    std::unique_ptr<RuledSpellPaymentUi> ruledSpellPayment;
     std::unique_ptr<RuledPendingCast> ruledPendingCast;
     PendingRuledSpellCast &pendingRuledSpellCast;
     PendingActivatedAbility &pendingActivatedAbility;

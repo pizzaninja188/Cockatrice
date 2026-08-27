@@ -302,6 +302,25 @@ async fn handle_connection(
                     }
                 }
             }
+            Some(Msg::SpellPaymentQuery(query)) => {
+                if let (Some(eng), Some(preview)) = (engine.as_ref(), query.preview.as_ref()) {
+                    IpcResponse {
+                        ok: true,
+                        batch: Some(tricerules_proto::RuledEventBatch {
+                            spell_payment_preview: Some(
+                                eng.preview_spell_payment(query.player_id, preview),
+                            ),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }
+                } else {
+                    IpcResponse {
+                        error: "payment query requires a session and proposal".into(),
+                        ..Default::default()
+                    }
+                }
+            }
             Some(Msg::SessionEnd(_)) | None => {
                 break;
             }

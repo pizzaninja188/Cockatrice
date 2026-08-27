@@ -1,4 +1,5 @@
 #include "player_actions.h"
+#include "../ruled/ruled_spell_payment_ui.h"
 
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../../interface/widgets/utility/get_text_with_max.h"
@@ -48,11 +49,14 @@
 // milliseconds in between triggers of the move top cards until action
 static constexpr int MOVE_TOP_CARD_UNTIL_INTERVAL = 100;
 
+PlayerActions::~PlayerActions() = default;
+
 PlayerActions::PlayerActions(Player *_player)
     : QObject(_player), player(_player), lastTokenTableRow(0), movingCardsUntil(false),
       ruledPendingCast(std::make_unique<RuledPendingCast>()), pendingRuledSpellCast(ruledPendingCast->spell),
       pendingActivatedAbility(ruledPendingCast->ability)
 {
+    ruledSpellPayment = std::make_unique<RuledSpellPaymentUi>(this);
     moveTopCardTimer = new QTimer(this);
     moveTopCardTimer->setInterval(MOVE_TOP_CARD_UNTIL_INTERVAL);
     moveTopCardTimer->setSingleShot(true);
@@ -510,6 +514,8 @@ int PlayerActions::totalRemainingForCost(const QMap<QChar, int> &fixed, const QV
 
 QString PlayerActions::pendingRuledSpellPromptText() const
 {
+    if (const auto prompt = ruledSpellPayment->prompt(); !prompt.isEmpty())
+        return prompt;
     if (!pendingRuledSpellCast.valid || pendingRuledSpellCast.inDamageAllocationMode) {
         return {};
     }
@@ -561,6 +567,7 @@ QString PlayerActions::pendingRuledSpellPromptText() const
 
 void PlayerActions::clearPendingRuledSpellCast()
 {
+    ruledSpellPayment->clear();
     const bool hadTargeting = pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget;
     const bool hadAllocation = pendingRuledSpellCast.valid && pendingRuledSpellCast.inDamageAllocationMode;
     const bool hadPending = pendingRuledSpellCast.valid;
@@ -771,6 +778,8 @@ void PlayerActions::clearLandTapUndoStack()
 
 bool PlayerActions::completePendingRuledSpellCast()
 {
+    if (ruledSpellPayment->startOrRefresh())
+        return true;
     if (RuledActions::gameplayInputLocked(player->getGame())) {
         return false;
     }
@@ -785,134 +794,12 @@ bool PlayerActions::completePendingRuledSpellCast()
         return false;
     }
 
-    ruled::v1::RuledCommand ruledCommand;
-    auto *cast = ruledCommand.mutable_cast_spell();
-    cast->set_cast_method(pendingRuledSpellCast.castMethod);
-    auto *source = cast->mutable_source();
-    switch (pendingRuledSpellCast.source) {
-        case RuledCastSource::Hand:
-            source->set_hand_index(static_cast<quint32>(pendingRuledSpellCast.handIndex));
-            break;
-        case RuledCastSource::Graveyard:
-            source->set_graveyard_object_id(static_cast<quint32>(pendingRuledSpellCast.handIndex));
-            break;
-        case RuledCastSource::Exile:
-            source->set_exile_object_id(static_cast<quint32>(pendingRuledSpellCast.handIndex));
-            break;
+    auto built = RuledSpellPaymentUi::buildCommand(this);
+    if (!built) {
+        cancelPendingRuledSpellCast();
+        return false;
     }
-    cast->set_x_value(static_cast<quint32>(pendingRuledSpellCast.xValue));
-    // CR 709/712/715: which face of a multi-face card to cast (0 for single-face cards).
-    cast->set_face_index(static_cast<quint32>(pendingRuledSpellCast.faceIndex));
-    RuledClientState *const handler = player->getGame()->getGameEventHandler()->ruled();
-    const int localPlayerId = player->getPlayerInfo()->getId();
-    if (pendingRuledSpellCast.selectedModes.isEmpty()) {
-        const auto targetData =
-            handler ? handler->spellTargetData(pendingRuledSpellCast.handIndex, pendingRuledSpellCast.faceIndex,
-                                               pendingRuledSpellCast.source)
-                    : RuledSpellTargetData{};
-        for (int groupIndex = 0; groupIndex < pendingRuledSpellCast.selectedTargetOidsByGroup.size(); ++groupIndex) {
-            const auto &oids = pendingRuledSpellCast.selectedTargetOidsByGroup.at(groupIndex);
-            const auto &damages = pendingRuledSpellCast.selectedTargetDamagesByGroup.value(groupIndex);
-            const auto group = targetData.groups.value(groupIndex);
-            for (int i = 0; i < oids.size(); ++i) {
-                auto *target = cast->add_targets();
-                target->set_object_id(oids.at(i));
-                target->set_group_index(static_cast<quint32>(groupIndex));
-                target->set_kind(ruledTargetRefKind(group, oids.at(i), localPlayerId));
-                if (i < damages.size()) {
-                    target->set_damage_amount(damages.at(i));
-                }
-            }
-        }
-    } else {
-        for (const auto &mode : pendingRuledSpellCast.selectedModes) {
-            auto *selectedMode = cast->add_selected_modes();
-            selectedMode->set_mode_index(static_cast<quint32>(mode.modeIndex));
-            for (int groupIndex = 0; groupIndex < mode.selectedTargetOidsByGroup.size(); ++groupIndex) {
-                const auto &oids = mode.selectedTargetOidsByGroup.at(groupIndex);
-                const auto &damages = mode.selectedTargetDamagesByGroup.value(groupIndex);
-                for (int i = 0; i < oids.size(); ++i) {
-                    auto *target = selectedMode->add_targets();
-                    target->set_object_id(oids.at(i));
-                    target->set_group_index(static_cast<quint32>(groupIndex));
-                    target->set_kind(
-                        ruledTargetRefKind(mode.targets.groups.value(groupIndex), oids.at(i), localPlayerId));
-                    if (i < damages.size()) {
-                        target->set_damage_amount(damages.at(i));
-                    }
-                }
-            }
-        }
-    }
-    // CR 107.4f: Phyrexian pips the player chose to pay with life.
-    for (const quint32 pipIndex : pendingRuledSpellCast.lifePipIndices) {
-        auto *flex = cast->add_flex_payments();
-        flex->set_pip_index(pipIndex);
-        flex->set_pay_life(true);
-    }
-    for (const auto &selection : pendingRuledSpellCast.costSelections) {
-        auto *costSelection = cast->add_cost_selections();
-        costSelection->set_cost_index(static_cast<quint32>(selection.costIndex));
-        if (selection.zone == RuledCostChoiceZone::Hand) {
-            const int handSlot =
-                handler ? handler->engineHandSlotForServerCard(localPlayerId, static_cast<int>(selection.selectedIds.value(0)))
-                        : -1;
-            if (handSlot < 0) {
-                cancelPendingRuledSpellCast();
-                return false;
-            }
-            costSelection->set_hand_index(static_cast<quint32>(handSlot));
-        } else if (selection.zone == RuledCostChoiceZone::Graveyard) {
-            auto *graveyard = costSelection->mutable_graveyard_object_ids();
-            for (const quint32 objectId : selection.selectedIds) {
-                graveyard->add_object_ids(objectId);
-            }
-        } else if (const auto choice = std::find_if(
-                       pendingRuledSpellCast.costChoices.cbegin(), pendingRuledSpellCast.costChoices.cend(),
-                       [&selection](const auto &entry) { return entry.costIndex == selection.costIndex; });
-                   choice != pendingRuledSpellCast.costChoices.cend() && choice->kind == RuledCostChoiceKind::Tap) {
-            auto *objects = costSelection->mutable_battlefield_objects();
-            for (int i = 0; i < selection.selectedIds.size(); ++i) {
-                const quint32 objectId = selection.selectedIds.at(i);
-                auto *object = objects->add_objects();
-                object->set_object_id(objectId);
-                object->set_zone_change_generation(selection.selectedGenerations.value(i));
-            }
-        } else {
-            costSelection->set_permanent_id(selection.selectedIds.value(0));
-        }
-    }
-    for (const auto &selection : pendingRuledSpellCast.castCostSelections) {
-        auto *castSelection = cast->add_cast_cost_group_selections();
-        castSelection->set_group_index(static_cast<quint32>(selection.groupIndex));
-        castSelection->set_option_index(static_cast<quint32>(selection.optionIndex));
-        if (selection.objectKind == RuledPendingCastCostSelection::ObjectKind::Hand) {
-            const int handSlot = handler
-                                     ? handler->engineHandSlotForServerCard(localPlayerId,
-                                                                            static_cast<int>(selection.selectedId))
-                                     : -1;
-            if (handSlot < 0) {
-                cancelPendingRuledSpellCast();
-                return false;
-            }
-            castSelection->set_hand_index(static_cast<quint32>(handSlot));
-        } else if (selection.objectKind == RuledPendingCastCostSelection::ObjectKind::Permanent) {
-            castSelection->set_permanent_id(selection.selectedId);
-            castSelection->set_expected_zone_change_generation(selection.expectedZoneChangeGeneration);
-        }
-    }
-    for (auto groupIt = restrictedManaPaymentSelections.constBegin();
-         groupIt != restrictedManaPaymentSelections.constEnd(); ++groupIt) {
-        auto *selection = cast->add_restricted_mana();
-        selection->set_restriction_group_id(groupIt.key());
-        const auto &counts = groupIt.value();
-        selection->set_w(static_cast<quint32>(counts.value(QLatin1Char('W'))));
-        selection->set_u(static_cast<quint32>(counts.value(QLatin1Char('U'))));
-        selection->set_b(static_cast<quint32>(counts.value(QLatin1Char('B'))));
-        selection->set_r(static_cast<quint32>(counts.value(QLatin1Char('R'))));
-        selection->set_g(static_cast<quint32>(counts.value(QLatin1Char('G'))));
-        selection->set_c(static_cast<quint32>(counts.value(QLatin1Char('C'))));
-    }
+    const auto &ruledCommand = *built;
     std::string payload;
     if (!ruledCommand.SerializeToString(&payload)) {
         clearPendingRuledSpellCast();
@@ -1025,6 +912,7 @@ bool PlayerActions::completeActivateAbility()
     std::string payload;
     if (!cmd.SerializeToString(&payload)) {
         ruledPendingCast->clearAbility();
+        ruledSpellPayment->resumeAfterManaAbility();
         return false;
     }
     Command_RuledPayload ruledPayload;
@@ -1037,6 +925,7 @@ bool PlayerActions::completeActivateAbility()
     emit ruledAbilityActivationPendingChanged(false);
     emit ruledAbilityCostPromptChanged();
     ruledPendingCast->clearAbility();
+    ruledSpellPayment->resumeAfterManaAbility();
     return true;
 }
 
@@ -1185,6 +1074,8 @@ void PlayerActions::continuePendingSpellAfterChoice()
         return;
     }
     pendingRuledSpellCast.waitingForCost = false;
+    if (ruledSpellPayment->startOrRefresh())
+        return;
     if (!resolvePendingSpellFlexiblePips()) {
         return;
     }
@@ -1276,6 +1167,8 @@ bool PlayerActions::tryReducePendingSpellRemainingCostOnePip(bool colorlessMana,
 
 void PlayerActions::finishPendingSpellManaPaymentStep()
 {
+    if (ruledSpellPayment->startOrRefresh())
+        return;
     if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
         completePendingRuledSpellCast();
         return;
@@ -1335,6 +1228,8 @@ bool PlayerActions::tryPayRuledAbilityWithCounter(const QString &counterName)
 
 bool PlayerActions::tryPayRuledRestrictedMana(quint32 groupId, QChar symbol)
 {
+    if (ruledSpellPayment->payMana(QString(symbol), groupId))
+        return true;
     if (!player->getPlayerInfo()->getLocal() || RuledActions::gameplayInputLocked(player->getGame())) {
         return false;
     }
@@ -1408,6 +1303,7 @@ void PlayerActions::cancelPendingActivatedAbility()
     emit ruledAbilityCostPromptChanged();
     emit ruledGraveyardCostSelectionChanged(false, 0, 0);
     ruledPendingCast->clearAbility();
+    ruledSpellPayment->resumeAfterManaAbility();
     emit landTapUndoAvailableChanged(landTapUndoCurrentlyAvailable());
     player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
         tr("Canceled activating %1.").arg(cardName.isEmpty() ? abilityText : cardName));
@@ -1484,6 +1380,8 @@ Command_RuledPayload *PlayerActions::newRuledPayloadActivateManaAbilityForLand(C
 
 bool PlayerActions::tryPayRuledSpellWithCounter(const QString &counterName)
 {
+    if (ruledSpellPayment->payMana(counterName))
+        return true;
     if (!pendingRuledSpellCast.valid) {
         return false;
     }
@@ -1837,6 +1735,8 @@ void PlayerActions::cancelRuledGraveyardCostSelection()
 
 void PlayerActions::resumePendingRuledPaymentAfterEngineCommand()
 {
+    if (ruledSpellPayment->startOrRefresh())
+        return;
     if (RuledActions::gameplayInputLocked(player->getGame())) {
         return;
     }
@@ -2306,6 +2206,13 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     pendingRuledSpellCast.source = source;
     pendingRuledSpellCast.castMethod = castMethod;
     pendingRuledSpellCast.faceIndex = faceIndex;
+    const auto paymentFaces = source == RuledCastSource::Hand
+        ? geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex)
+        : geh->zoneActionFaceOptions(ruledHandIndex, source);
+    for (const auto &face : paymentFaces)
+        if (face.faceIndex == faceIndex && face.castMethod == castMethod)
+            pendingRuledSpellCast.hasConvoke = face.hasConvoke;
+
     pendingRuledSpellCast.selectedTargetOids.clear();
     pendingRuledSpellCast.selectedTargetOidsByGroup.clear();
     pendingRuledSpellCast.selectedTargetDamagesByGroup.clear();
@@ -2925,6 +2832,11 @@ void PlayerActions::autoApplyRestrictedManaToPendingCost(quint32 groupId, QChar 
     }
     const QChar normalized = symbol.toUpper() == QLatin1Char('X') ? QLatin1Char('C') : symbol.toUpper();
     if (!QStringLiteral("WUBRGC").contains(normalized)) {
+        return;
+    }
+    if (ruledSpellPayment->payMana(QString(normalized), groupId)) {
+        for (int i = 1; i < amount; ++i)
+            ruledSpellPayment->payMana(QString(normalized), groupId);
         return;
     }
     const auto *state = player->getGame()->getGameEventHandler()->ruled();
@@ -5111,6 +5023,8 @@ PendingCommand *PlayerActions::prepareGameCommand(const QList<const ::google::pr
 
 bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 {
+    if (ruledSpellPayment->click(card, leftClick))
+        return true;
     if (!card || !card->getZone()) {
         return false;
     }
@@ -5351,6 +5265,7 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return true;
     }
     const int abilityIndex = selectedOption.index;
+    ruledSpellPayment->suspendForManaAbility(oid, abilityIndex);
 
     // Engine-authoritative: ability slot key present in valid_targets_by_ability means it needs a target.
     const bool needsTarget = handler->abilityNeedsTarget(oid, abilityIndex);

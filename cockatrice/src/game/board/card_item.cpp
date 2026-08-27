@@ -1,3 +1,4 @@
+#include "../ruled/ruled_spell_payment_ui.h"
 #include "card_item.h"
 
 #include "../../client/settings/cache_settings.h"
@@ -298,6 +299,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             painter->drawPath(shape());
             painter->restore();
         }
+        RuledSpellPaymentUi::paint(this, painter);
         if (zone && zone->getName() == ZoneNames::TABLE && ruledTargetSelectionOid != 0 &&
             RuledActions::isSelectedCastCostPermanent(ruledGame, ruledTargetSelectionOid)) {
             painter->save();

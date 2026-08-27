@@ -21,6 +21,7 @@ class RuledBroadcastRouter
 public:
     RuledBroadcastRouter(Server_Game *game, RuledBatchSynchronizer *synchronizer);
 
+    void sendSpellPaymentPreview(int playerId, const ruled::v1::SpellPaymentPreview &preview);
     void resetForNewGame();
     void broadcast(const ruled::v1::IpcResponse &response, bool authoritative = true);
     void enqueuePendingResolutionChoiceForParticipant(Server_AbstractParticipant *participant, ResponseContainer &rc);

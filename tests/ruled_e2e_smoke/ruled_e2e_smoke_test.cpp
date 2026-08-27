@@ -177,6 +177,8 @@ public:
     QByteArray inBuf;
     bool sawHandshakeGarbage = false;
     quint64 nextCmdId = 1;
+    int spellPaymentPreviewCount = 0;
+    ruled::v1::SpellPaymentPreview spellPaymentPreview;
 
     // Session / pregame state
     int roomId = -1;
@@ -985,6 +987,13 @@ public:
 
     void applyRuledBatch(const ruled::v1::RuledEventBatch &batch)
     {
+        if (batch.has_spell_payment_preview()) {
+            EXPECT_TRUE(batch.events().empty());
+            EXPECT_TRUE(batch.legal_by_player().empty());
+            ++spellPaymentPreviewCount;
+            spellPaymentPreview = batch.spell_payment_preview();
+            return;
+        }
         ++stateVersion;
         const ruled::v1::PhaseId previousPhase = phase;
         int phaseEvents = 0;
@@ -5742,6 +5751,147 @@ TEST_F(RuledE2ESmokeTest, TappedOrdinaryTokenReachesBothClientsWithoutCombatStat
     EXPECT_EQ(p1Robot->oid, tokenOid);
     EXPECT_EQ(p2Robot->oid, tokenOid);
     EXPECT_TRUE(p1Robot->tapped && p2Robot->tapped);
+}
+
+TEST_F(RuledE2ESmokeTest, ConvokePreviewsArePrivateReadOnlyAndCommitExactPhysicalTaps)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("convokep1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("convokep2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "issue 145 game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "issue 145 game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto putPermanent = [&](const char *name, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(name);
+        put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        put->set_ready(ready);
+        return send(p1, command, QStringLiteral("issue 145 put %1").arg(name));
+    };
+    auto findPermanent = [](const SmokeClient &client, int controller,
+                            const QString &cardId) -> std::optional<SmokeClient::Permanent> {
+        const auto battlefield = client.battlefieldByPlayer.find(controller);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return std::nullopt;
+        }
+        const auto permanent = std::find_if(
+            battlefield->second.begin(), battlefield->second.end(),
+            [&cardId](const SmokeClient::Permanent &candidate) { return candidate.cardId == cardId; });
+        return permanent == battlefield->second.end() ? std::nullopt : std::optional(*permanent);
+    };
+
+    ASSERT_TRUE(putPermanent("Grizzly Bears", false));
+    const auto bear = findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears"));
+    ASSERT_TRUE(bear.has_value());
+    ruled::v1::RuledCommand putSpell;
+    auto *put = putSpell.mutable_dev_command();
+    put->set_target_player_id(p1.myId);
+    put->mutable_put_card_in_zone()->set_card_name("Unexpected Assistance");
+    put->mutable_put_card_in_zone()->set_zone(ruled::v1::DEV_ZONE_HAND);
+    ASSERT_TRUE(send(p1, putSpell, QStringLiteral("put Convoke spell")));
+    ruled::v1::RuledCommand mana;
+    mana.mutable_dev_command()->set_target_player_id(p1.myId);
+    mana.mutable_dev_command()->mutable_add_mana()->set_u(2);
+    mana.mutable_dev_command()->mutable_add_mana()->set_c(2);
+    ASSERT_TRUE(send(p1, mana, QStringLiteral("mixed Convoke mana")));
+    const auto *hand = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Unexpected Assistance"));
+    ASSERT_NE(hand, nullptr);
+    EXPECT_TRUE(hand->has_convoke());
+    ruled::v1::RuledCommand query;
+    auto *preview = query.mutable_preview_spell_payment();
+    preview->set_transaction_id(145);
+    preview->set_revision(1);
+    auto *cast = preview->mutable_cast_spell();
+    cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    cast->mutable_source()->set_hand_index(hand->hand_index());
+    auto *selection = cast->mutable_payment();
+    selection->mutable_mana()->set_u(2);
+    selection->mutable_mana()->set_c(2);
+    auto *creature = selection->add_convoke();
+    creature->mutable_object()->set_object_id(bear->oid);
+    creature->mutable_object()->set_zone_change_generation(bear->generation);
+    creature->set_kind(ruled::v1::CONVOKE_PAYMENT_KIND_GENERIC);
+    const auto before1 = p1.stateVersion;
+    const auto before2 = p2.stateVersion;
+    const auto legal = p1.latestLegal.SerializeAsString();
+    p1.sendRuled(query, QStringLiteral("private Convoke preview"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.spellPaymentPreviewCount == 1; }, 10000, "Convoke preview"));
+    p2.pump(200);
+    ASSERT_TRUE(p1.spellPaymentPreview.valid()) << p1.spellPaymentPreview.error();
+    ASSERT_TRUE(p1.spellPaymentPreview.complete());
+    EXPECT_EQ(p1.stateVersion, before1);
+    EXPECT_EQ(p2.stateVersion, before2);
+    EXPECT_EQ(p2.spellPaymentPreviewCount, 0);
+    EXPECT_EQ(p1.latestLegal.SerializeAsString(), legal);
+    EXPECT_FALSE(findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears"))->tapped);
+    EXPECT_FALSE(findPermanent(p2, p1.myId, QStringLiteral("grizzly_bears"))->tapped);
+    const auto authoritativeRevision = p1.spellPaymentPreview.selection().expected_state_revision();
+    preview->set_revision(2);
+    p1.sendRuled(query, QStringLiteral("repeat read-only preview"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.spellPaymentPreviewCount == 2; }, 10000, "repeat preview"));
+    EXPECT_EQ(p1.spellPaymentPreview.selection().expected_state_revision(), authoritativeRevision);
+    ruled::v1::RuledCommand commit;
+    *commit.mutable_cast_spell() = *cast;
+    *commit.mutable_cast_spell()->mutable_payment() = p1.spellPaymentPreview.selection();
+    ASSERT_TRUE(send(p1, commit, QStringLiteral("commit mixed Convoke")));
+    EXPECT_TRUE(findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears"))->tapped);
+    EXPECT_TRUE(findPermanent(p2, p1.myId, QStringLiteral("grizzly_bears"))->tapped);
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(bear->oid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(bear->oid));
+    EXPECT_EQ(p1.serverCardByEngineOid[bear->oid], p2.serverCardByEngineOid[bear->oid]);
+    EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[bear->oid]));
+    EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[bear->oid]));
+    EXPECT_EQ(p1.myPool.total(), 0);
 }
 
 TEST_F(RuledE2ESmokeTest, SelectableTapPaymentPublishesGenerationAndMovesExactCardsForBothClients)

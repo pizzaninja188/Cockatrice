@@ -1,0 +1,10 @@
+// Oracle and official rulings verified 2026-08-26. CR 702.51 and grouped targets.
+(
+  id: "appeal_to_eirdu",
+  name: "Appeal to Eirdu",
+  mana_cost: "{3}{W}",
+  types: ["Instant"],
+  keywords: [Convoke],
+  spell_effect: [PumpTarget(power: 2, toughness: 1, subject: Chosen((kind: Creature)))],
+  targeting: Some((groups: [(min: 1, max: 2, prompt: "Choose one or two target creatures", effect_indices: [0])])),
+)

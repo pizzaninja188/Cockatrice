@@ -22,6 +22,7 @@
 #ifndef COCKATRICE_RULED_CLIENT_STATE_H
 #define COCKATRICE_RULED_CLIENT_STATE_H
 
+#include "ruled_spell_payment.h"
 #include "ruled_pick_surface.h"
 
 #include <QHash>
@@ -286,6 +287,7 @@ struct RuledFaceOption
     QString manaCost;
     int genericCostReduction = 0;
     ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL;
+    bool hasConvoke = false;
 };
 
 struct RuledExilePlayPermissionGroup
@@ -337,6 +339,8 @@ class RuledClientState : public QObject
     Q_OBJECT
 
 public:
+    RuledSpellPayment spellPayment;
+
     enum class RuledCombatPhase
     {
         None,
@@ -1710,6 +1714,8 @@ public:
     }
 
 signals:
+    void spellPaymentPreviewReceived();
+
     /// Emitted when ruled game-session state is cleared (game stopped or new game started).
     /// Listeners should reset any UI state derived from the previous game's engine events.
     void sessionReset();

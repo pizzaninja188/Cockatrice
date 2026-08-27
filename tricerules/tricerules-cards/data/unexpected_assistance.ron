@@ -1,0 +1,9 @@
+// Oracle and official rulings verified 2026-08-26. CR 702.51; sequential draw then private discard.
+(
+  id: "unexpected_assistance",
+  name: "Unexpected Assistance",
+  mana_cost: "{3}{U}{U}",
+  types: ["Instant"],
+  keywords: [Convoke],
+  spell_effect: [Draw(count: 3), Discard(who: Controller, count: 1)],
+)

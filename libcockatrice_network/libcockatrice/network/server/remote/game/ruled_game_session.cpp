@@ -122,7 +122,7 @@ QByteArray RuledGameSession::canonicalGameplayCommand(int playerId, const ruled:
 {
     if (!game || !game->getPlayers().contains(playerId) || command.cmd_case() == ruled::v1::RuledCommand::CMD_NOT_SET ||
         command.has_set_auto_pass_policy() || command.has_canonical_gameplay() ||
-        command.has_preview_declare_attackers() || command.has_preview_declare_blockers()) {
+        command.has_preview_spell_payment() || command.has_preview_declare_attackers() || command.has_preview_declare_blockers()) {
         return {};
     }
     std::string innerBytes;
@@ -386,4 +386,9 @@ void RuledGameSession::notifyEngineUnreachable()
     sendEngineNotice(QStringLiteral("Cannot start ruled game"),
                      QStringLiteral("Cannot start ruled game — the rules engine is unreachable. "
                                     "Make sure the rules engine (tricerules) is running, then ready up again."));
+}
+
+bool RuledGameSession::previewSpellPayment(int playerId, const ruled::v1::PreviewSpellPayment &preview, ruled::v1::IpcResponse &response)
+{
+    return relay && relay->previewSpellPayment(playerId, preview, response);
 }

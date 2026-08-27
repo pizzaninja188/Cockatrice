@@ -4,6 +4,8 @@
 //! trigger staging, priority, and legal-action publication. This module owns only the reusable
 //! resource transaction.
 
+pub(super) mod convoke;
+pub(super) mod demand;
 pub(super) mod mana;
 pub(super) mod transaction;
 

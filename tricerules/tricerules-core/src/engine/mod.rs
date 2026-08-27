@@ -1267,7 +1267,11 @@ impl GameEngine {
         }
         if matches!(
             cmd.cmd.as_ref(),
-            Some(Cmd::PreviewDeclareBlockers(_) | Cmd::PreviewDeclareAttackers(_))
+            Some(
+                Cmd::PreviewDeclareBlockers(_)
+                    | Cmd::PreviewDeclareAttackers(_)
+                    | Cmd::PreviewSpellPayment(_)
+            )
         ) {
             return Err(EngineError::Illegal("preview is not a game command"));
         }
@@ -1630,7 +1634,11 @@ impl GameEngine {
         }
         let res = match cmd.cmd.as_ref() {
             None => return Err(EngineError::Illegal("empty command")),
-            Some(Cmd::PreviewDeclareBlockers(_) | Cmd::PreviewDeclareAttackers(_)) => {
+            Some(
+                Cmd::PreviewDeclareBlockers(_)
+                | Cmd::PreviewDeclareAttackers(_)
+                | Cmd::PreviewSpellPayment(_),
+            ) => {
                 unreachable!("preview rejected before command_index bump")
             }
             Some(Cmd::SetAutoPassPolicy(_) | Cmd::CanonicalGameplay(_)) => {

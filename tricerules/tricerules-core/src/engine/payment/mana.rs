@@ -373,6 +373,63 @@ pub(in crate::engine) fn plan_mana_payment_with_restricted_reduction(
     })
 }
 
+/// Exact ordinary mana selections are used by the Convoke preview and commit path. Creatures
+/// never enter this pool; the caller has already matched them against the normalized demand.
+pub(in crate::engine) fn plan_exact_mana_payment(
+    state: &GameState,
+    player_idx: usize,
+    ordinary: [u32; 6],
+    restricted: &[rv1::ManaSpendSelection],
+    eligible: &[u32],
+    life: u32,
+) -> Result<ManaPaymentPlan, EngineError> {
+    let player = &state.players[player_idx];
+    let pool = &player.mana_pool;
+    let available = [
+        pool.white,
+        pool.blue,
+        pool.black,
+        pool.red,
+        pool.green,
+        pool.colorless,
+    ];
+    if ordinary
+        .iter()
+        .zip(available)
+        .any(|(used, have)| *used > have)
+        || i64::from(life) > i64::from(player.life)
+    {
+        return Err(EngineError::Illegal("selected mana or life is unavailable"));
+    }
+    let total = ordinary
+        .into_iter()
+        .chain(
+            restricted
+                .iter()
+                .flat_map(|m| [m.w, m.u, m.b, m.r, m.g, m.c]),
+        )
+        .try_fold(0u32, |sum, n| sum.checked_add(n))
+        .ok_or(EngineError::Illegal("payment overflow"))?;
+    // A generic demand validates the selected restricted groups using the common rules. Replace
+    // the automatic ordinary-pool allocation with the exact already-validated selection.
+    let mut plan = plan_mana_payment_with_restricted_reduction(
+        state,
+        player_idx,
+        &ManaCost::default(),
+        0,
+        total,
+        0,
+        &[],
+        restricted,
+        eligible,
+    )?;
+    plan.remaining = std::array::from_fn(|i| available[i] - ordinary[i]);
+    plan.remaining_retained_combat =
+        std::array::from_fn(|i| plan.expected_retained_combat[i].min(plan.remaining[i]));
+    plan.life_cost = life;
+    Ok(plan)
+}
+
 pub(super) fn mana_payment_still_valid(
     state: &GameState,
     player_idx: usize,

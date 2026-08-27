@@ -342,6 +342,7 @@ fn keyword_ident(token: &str) -> Option<Keyword> {
         .as_str()
     {
         "flying" => Some(Keyword::Flying),
+        "convoke" => Some(Keyword::Convoke),
         "reach" => Some(Keyword::Reach),
         "intimidate" => Some(Keyword::Intimidate),
         "vigilance" => Some(Keyword::Vigilance),
@@ -549,6 +550,7 @@ fn parse_mana_ability_recipe(text: &str) -> Option<(ActivatedAbilityDef, &'stati
     }
     Some((
         ActivatedAbilityDef {
+            cost_modifiers: Vec::new(),
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![AbilityCost::Tap],
             effect: vec![SpellEffectKind::ProduceMana {
@@ -1441,6 +1443,21 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn convoke_keyword_is_exact_and_never_accepts_unimplemented_clauses() {
+        assert_eq!(
+            french_vanilla_keywords(
+                "Convoke (Your creatures can help cast this spell.)\nVigilance"
+            ),
+            Some(vec![Keyword::Convoke, Keyword::Vigilance])
+        );
+        assert_eq!(
+            french_vanilla_keywords("Convoke\nWhen this enters, draw a card."),
+            None
+        );
+        assert_eq!(keyword_ident("Superconvoke"), None);
+    }
     use flate2::write::GzEncoder;
     use flate2::Compression;
     use ron::extensions::Extensions;

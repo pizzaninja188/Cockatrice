@@ -44,6 +44,24 @@ fn command_satisfies_cast_cost_condition(
     }) == condition.expected_selected
 }
 
+pub(in crate::engine) struct PreparedSpellCast {
+    idx: usize,
+    pub oid: ObjectId,
+    card_id: String,
+    face_name: String,
+    has_x: bool,
+    chosen_x: u32,
+    has_multiple_cast_options: bool,
+    cast_method: SpellCastMethod,
+    public_targets: Vec<rv1::TargetRef>,
+    chosen_modes: Vec<ChosenMode>,
+    chosen_mode_indices: Vec<u32>,
+    chosen_mode_labels: Vec<String>,
+    mana_value: u32,
+    pub convoke: bool,
+    pub payment: super::payment::transaction::PreparedSpellCosts,
+}
+
 impl GameEngine {
     pub(super) fn cast_siege_defeat_offer(
         &mut self,
@@ -60,6 +78,7 @@ impl GameEngine {
             || !command.flex_payments.is_empty()
             || !command.cost_selections.is_empty()
             || !command.restricted_mana.is_empty()
+            || command.payment.is_some()
             || !command.cast_cost_group_selections.is_empty()
         {
             return Err(EngineError::Illegal(
@@ -208,11 +227,11 @@ impl GameEngine {
         Ok(())
     }
 
-    pub(super) fn cast_spell(
-        &mut self,
+    pub(in crate::engine) fn prepare_spell_cast(
+        &self,
         player: PlayerId,
         command: &rv1::CastSpell,
-    ) -> Result<RuledEventBatch, EngineError> {
+    ) -> Result<PreparedSpellCast, EngineError> {
         let targets = command.targets.as_slice();
         let x_value = command.x_value;
         let flex_payments = command.flex_payments.as_slice();
@@ -556,7 +575,7 @@ impl GameEngine {
                 &public_targets,
                 &cost_modifiers,
             ));
-        let payment_plan = self.plan_spell_costs(
+        let payment_plan = self.prepare_spell_costs(
             player,
             idx,
             oid,
@@ -573,6 +592,64 @@ impl GameEngine {
             &eligible_restricted_mana,
             cast_method,
         )?;
+
+        Ok(PreparedSpellCast {
+            idx,
+            oid,
+            card_id,
+            face_name,
+            has_x,
+            chosen_x,
+            has_multiple_cast_options,
+            cast_method,
+            public_targets,
+            chosen_modes,
+            chosen_mode_indices,
+            chosen_mode_labels,
+            mana_value: face.mana_cost.mana_value().saturating_add(
+                (face
+                    .mana_cost
+                    .pips
+                    .iter()
+                    .filter(|pip| matches!(pip, ManaSymbol::X))
+                    .count() as u32)
+                    .saturating_mul(x_value),
+            ),
+            convoke: face.keywords.contains(&Keyword::Convoke),
+            payment: payment_plan,
+        })
+    }
+
+    pub(super) fn cast_spell(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::CastSpell,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let PreparedSpellCast {
+            idx,
+            oid,
+            card_id,
+            face_name,
+            has_x,
+            chosen_x,
+            has_multiple_cast_options,
+            cast_method,
+            public_targets,
+            chosen_modes,
+            chosen_mode_indices,
+            chosen_mode_labels,
+            mana_value,
+            payment,
+            convoke,
+        } = self.prepare_spell_cast(player, command)?;
+        let face_index = command.face_index as usize;
+        let payment_plan = if let Some(selection) = &command.payment {
+            let life =
+                self.validate_explicit_spell_payment(player, oid, convoke, &payment, selection)?;
+            payment.finish_explicit(&self.state, selection, life)?
+        } else {
+            payment.finish(&self.state)?
+        };
 
         let trefs: Vec<ObjectId> = public_targets
             .iter()
@@ -729,24 +806,13 @@ impl GameEngine {
         let ordinal = self.record_spell_cast(player);
         target_triggers
             .extend(self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed));
-        target_triggers.extend(
-            self.collect_event_triggers(&[GameEvent::SpellCast {
-                caster: player,
-                card_id: cast_card_id,
-                ordinal,
-                face_index,
-                mana_value: face.mana_cost.mana_value().saturating_add(
-                    face.mana_cost
-                        .pips
-                        .iter()
-                        .filter(|pip| matches!(pip, ManaSymbol::X))
-                        .count()
-                        .try_into()
-                        .unwrap_or(u32::MAX)
-                        .saturating_mul(x_value),
-                ),
-            }]),
-        );
+        target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
+            caster: player,
+            card_id: cast_card_id,
+            ordinal,
+            face_index,
+            mana_value,
+        }]));
         // Both kinds of triggers are waiting when the cast completes, so they form one CR 603.3b
         // ordering group rather than forcing an artificial target-trigger/cast-trigger order.
         self.stage_triggers(target_triggers);

@@ -200,6 +200,8 @@ template <typename PendingPayment>
 
 struct PendingRuledSpellCast
 {
+    bool hasConvoke = false;
+
     struct SelectedMode
     {
         int modeIndex = -1;

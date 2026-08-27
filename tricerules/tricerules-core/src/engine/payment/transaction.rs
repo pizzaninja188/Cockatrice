@@ -143,7 +143,75 @@ pub(in crate::engine) struct CostTransactionPlan {
     cast_cost_receipts: Vec<CastCostReceipt>,
 }
 
+pub(in crate::engine) struct PreparedSpellCosts {
+    pub transaction: CostTransactionPlan,
+    pub mana: ManaCost,
+    pub x_value: u32,
+    pub extra_generic: u32,
+    pub generic_reduction: u32,
+    pub flex_payments: Vec<rv1::FlexPipPayment>,
+    pub restricted_mana: Vec<rv1::ManaSpendSelection>,
+    pub eligible_restricted_mana: Vec<u32>,
+}
+
+impl PreparedSpellCosts {
+    pub fn can_convoke(&self, oid: ObjectId) -> bool {
+        !self
+            .transaction
+            .debits
+            .iter()
+            .any(|d| matches!(d, CostDebit::Tap { object_id, .. } if *object_id == oid))
+    }
+
+    pub fn finish_explicit(
+        mut self,
+        state: &GameState,
+        selection: &rv1::SpellPaymentSelection,
+        life: u32,
+    ) -> Result<CostTransactionPlan, EngineError> {
+        let mana = super::mana::plan_exact_mana_payment(
+            state,
+            self.transaction.player_idx,
+            super::convoke::mana_counts(selection.mana.as_ref()),
+            &self.restricted_mana,
+            &self.eligible_restricted_mana,
+            life,
+        )?;
+        let taps = selection
+            .convoke
+            .iter()
+            .filter_map(|c| c.object.as_ref())
+            .map(|c| CostDebit::Tap {
+                object_id: c.object_id,
+                generation: c.zone_change_generation,
+            })
+            .collect::<Vec<_>>();
+        // CR 601.2h permits tapping for Convoke before sacrificing the same creature as another
+        // cost. A second tap is forbidden by can_convoke; sacrifice is deliberately not excluded.
+        self.transaction.debits.splice(0..0, taps);
+        self.transaction.debits.insert(0, CostDebit::Mana(mana));
+        Ok(self.transaction)
+    }
+
+    pub fn finish(mut self, state: &GameState) -> Result<CostTransactionPlan, EngineError> {
+        let mana = plan_mana_payment_with_restricted_reduction(
+            state,
+            self.transaction.player_idx,
+            &self.mana,
+            self.x_value,
+            self.extra_generic,
+            self.generic_reduction,
+            &self.flex_payments,
+            &self.restricted_mana,
+            &self.eligible_restricted_mana,
+        )?;
+        self.transaction.debits.insert(0, CostDebit::Mana(mana));
+        Ok(self.transaction)
+    }
+}
+
 impl GameEngine {
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(in crate::engine) fn plan_spell_costs(
         &self,
@@ -163,6 +231,45 @@ impl GameEngine {
         eligible_restricted_mana: &[u32],
         cast_method: SpellCastMethod,
     ) -> Result<CostTransactionPlan, EngineError> {
+        self.prepare_spell_costs(
+            player,
+            player_idx,
+            source_oid,
+            mana_cost,
+            x_value,
+            extra_generic,
+            generic_reduction,
+            flex_payments,
+            costs,
+            selections,
+            cast_cost_groups,
+            cast_cost_group_selections,
+            restricted_mana,
+            eligible_restricted_mana,
+            cast_method,
+        )?
+        .finish(&self.state)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::engine) fn prepare_spell_costs(
+        &self,
+        player: PlayerId,
+        player_idx: usize,
+        source_oid: ObjectId,
+        mana_cost: &ManaCost,
+        x_value: u32,
+        extra_generic: u32,
+        generic_reduction: u32,
+        flex_payments: &[rv1::FlexPipPayment],
+        costs: &[AdditionalCost],
+        selections: &[rv1::CostSelection],
+        cast_cost_groups: &[CastCostGroupDef],
+        cast_cost_group_selections: &[rv1::CastCostGroupSelection],
+        restricted_mana: &[rv1::ManaSpendSelection],
+        eligible_restricted_mana: &[u32],
+        cast_method: SpellCastMethod,
+    ) -> Result<PreparedSpellCosts, EngineError> {
         use rv1::cost_selection::Selection;
 
         let mut by_index = HashMap::new();
@@ -482,25 +589,20 @@ impl GameEngine {
             return Err(EngineError::Illegal("unexpected cost selection"));
         }
 
-        debits.insert(
-            0,
-            CostDebit::Mana(plan_mana_payment_with_restricted_reduction(
-                &self.state,
+        Ok(PreparedSpellCosts {
+            transaction: CostTransactionPlan {
+                player,
                 player_idx,
-                &combined_mana,
-                x_value,
-                extra_generic,
-                generic_reduction.saturating_add(harmonize_reduction),
-                flex_payments,
-                restricted_mana,
-                eligible_restricted_mana,
-            )?),
-        );
-        Ok(CostTransactionPlan {
-            player,
-            player_idx,
-            debits,
-            cast_cost_receipts,
+                debits,
+                cast_cost_receipts,
+            },
+            mana: combined_mana,
+            x_value,
+            extra_generic,
+            generic_reduction: generic_reduction.saturating_add(harmonize_reduction),
+            flex_payments: flex_payments.to_vec(),
+            restricted_mana: restricted_mana.to_vec(),
+            eligible_restricted_mana: eligible_restricted_mana.to_vec(),
         })
     }
 
@@ -1167,5 +1269,118 @@ impl GameEngine {
                 .is_some_and(|value| value.is_creature()),
             died: false,
         })
+    }
+}
+
+#[cfg(test)]
+mod convoke_transaction_tests {
+    use super::*;
+
+    #[test]
+    fn convoke_can_tap_then_sacrifice_but_not_pay_a_second_tap_cost() {
+        let mut engine = GameEngine::new(
+            145,
+            &[0, 1],
+            20,
+            Some(vec![
+                vec!["grizzly_bears".into(); 12],
+                vec!["island".into(); 12],
+            ]),
+            true,
+        )
+        .unwrap();
+        let source = engine.state.players[0].hand[0];
+        let bear = engine.state.players[0].hand[1];
+        crate::engine::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            bear,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .unwrap();
+        let reference = rv1::CostObjectRef {
+            object_id: bear,
+            zone_change_generation: engine.state.zone_change_generation[&bear],
+        };
+        let costs = [AdditionalCost::SacrificePermanent {
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                ..Default::default()
+            },
+        }];
+        let selections = [rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::PermanentId(bear)),
+        }];
+        let prepared = engine
+            .prepare_spell_costs(
+                0,
+                0,
+                source,
+                &ManaCost::parse("{1}").unwrap(),
+                0,
+                0,
+                0,
+                &[],
+                &costs,
+                &selections,
+                &[],
+                &[],
+                &[],
+                &[],
+                SpellCastMethod::Normal,
+            )
+            .unwrap();
+        assert!(prepared.can_convoke(bear));
+        let payment = rv1::SpellPaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(rv1::CostObjectRef {
+                object_id: source,
+                zone_change_generation: engine
+                    .state
+                    .zone_change_generation
+                    .get(&source)
+                    .copied()
+                    .unwrap_or(0),
+            }),
+            convoke: vec![rv1::ConvokeContribution {
+                object: Some(reference),
+                kind: rv1::ConvokePaymentKind::Generic as i32,
+            }],
+            mana: None,
+        };
+        let life = engine
+            .validate_explicit_spell_payment(0, source, true, &prepared, &payment)
+            .unwrap();
+        let plan = prepared
+            .finish_explicit(&engine.state, &payment, life)
+            .unwrap();
+        // The debit order carries the rule, and revalidation happens before either mutation.
+        assert!(matches!(plan.debits[1], CostDebit::Tap { object_id, .. } if object_id == bear));
+        assert!(matches!(plan.debits[2], CostDebit::Sacrifice { .. }));
+        let probe = PreparedSpellCosts {
+            transaction: CostTransactionPlan {
+                player: 0,
+                player_idx: 0,
+                debits: vec![CostDebit::Tap {
+                    object_id: bear,
+                    generation: reference.zone_change_generation,
+                }],
+                cast_cost_receipts: vec![],
+            },
+            mana: ManaCost::default(),
+            x_value: 0,
+            extra_generic: 0,
+            generic_reduction: 0,
+            flex_payments: vec![],
+            restricted_mana: vec![],
+            eligible_restricted_mana: vec![],
+        };
+        assert!(!probe.can_convoke(bear));
+        let committed = engine.commit_cost_transaction(plan).unwrap();
+        assert_eq!(committed.tap_events.len(), 1);
+        assert_eq!(committed.sacrificed.len(), 1);
+        assert_eq!(engine.state.objects[&bear].zone, Zone::Graveyard);
     }
 }

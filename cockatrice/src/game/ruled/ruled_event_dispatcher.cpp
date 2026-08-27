@@ -238,7 +238,8 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         const QString cardName = QString::fromStdString(action.card_name());
         set.indicesByCardName.insert(cardName, handIndex);
         set.faceOptionsByIndex[handIndex].append({faceIndex, cardName, QString::fromStdString(action.cost()),
-                                                  static_cast<int>(action.generic_cost_reduction())});
+                                               static_cast<int>(action.generic_cost_reduction()),
+                                               ruled::v1::CAST_METHOD_NORMAL, action.has_convoke()});
         if (action.has_cost_choices()) {
             set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices()));
         }
@@ -276,11 +277,18 @@ RuledEventDispatcher::RuledEventDispatcher(RuledClientState *_state, RuledClient
 
 bool RuledEventDispatcher::processPayload(const std::string &payload)
 {
-    resetPerBatchLegalActions();
     ruled::v1::RuledEventBatch batch;
     if (!batch.ParseFromString(payload)) {
         return false;
     }
+    if (batch.has_spell_payment_preview()) {
+        if (batch.events_size() != 0 || !batch.legal_by_player().empty())
+            return false;
+        if (state->spellPayment.apply(batch.spell_payment_preview()))
+            emit state->spellPaymentPreviewReceived();
+        return true;
+    }
+    resetPerBatchLegalActions();
     processBatch(batch);
     return true;
 }
@@ -1487,7 +1495,7 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         state->zoneCastActions.faceOptionsByIndex[objectId].append({faceIndex, displayName,
                                                                     QString::fromStdString(action.cost()),
                                                                     static_cast<int>(action.generic_cost_reduction()),
-                                                                    castMethod});
+                                                                    castMethod, action.has_convoke()});
         state->zoneCastSourceByOid.insert(objectId, source);
         if (action.needs_target()) {
             state->zoneCastActions.needsTargetIndices.insert(objectId);
