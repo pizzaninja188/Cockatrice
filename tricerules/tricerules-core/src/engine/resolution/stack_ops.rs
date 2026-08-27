@@ -29,7 +29,14 @@ pub(super) fn counter_target_spell(
                 conditional.otherwise
             }
         });
-        if let Some(generic_mana_cost) = unless_controller_pays.or(receipt_payment) {
+        let payment = unless_controller_pays.as_ref().map(|amount| {
+            engine.resolve_amount(
+                amount,
+                AmountContext::for_stack_item(cx.top, cx.controller)
+                    .with_previous_effect_result(cx.previous_effect_result),
+            )
+        });
+        if let Some(generic_mana_cost) = payment.or(receipt_payment) {
             let Some(target) = engine
                 .state
                 .stack

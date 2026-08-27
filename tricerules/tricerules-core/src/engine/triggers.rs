@@ -1451,6 +1451,10 @@ impl GameEngine {
             AttachmentRecipient::Player(player_id) => AttachmentSnapshot::Player(player_id),
         });
         Some(TriggerSourceSnapshot {
+            power_toughness: self
+                .characteristics(source_id)
+                .map(|c| (c.signed_power, c.signed_toughness))
+                .unwrap_or_default(),
             event_conditions_checked: false,
             object_id: source_id,
             triggered_abilities: self
@@ -2359,6 +2363,7 @@ mod tests {
             .triggered_abilities[0]
             .clone();
         let source = TriggerSourceSnapshot {
+            power_toughness: (None, None),
             event_conditions_checked: false,
             object_id: 100,
             card_id: "wandertale_mentor".into(),
@@ -2602,6 +2607,7 @@ mod tests {
     fn attached_player_attack_trigger_fires_once_for_the_declaration_group() {
         let engine = GameEngine::new(6303, &[0, 1], 20, None, true).expect("engine");
         let source = TriggerSourceSnapshot {
+            power_toughness: (None, None),
             event_conditions_checked: false,
             object_id: 100,
             card_id: "curse_of_disturbance".into(),

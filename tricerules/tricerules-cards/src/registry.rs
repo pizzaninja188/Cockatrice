@@ -114,6 +114,12 @@ fn validate_effect_payment_results(
 ) -> Result<(), String> {
     let amount = match effect {
         SpellEffectKind::DamageTarget { amount, .. }
+        | SpellEffectKind::DamageAll { amount, .. }
+        | SpellEffectKind::Scry { count: amount }
+        | SpellEffectKind::CounterTargetSpell {
+            unless_controller_pays: Some(amount),
+            ..
+        }
         | SpellEffectKind::DamagePlayer { amount, .. }
         | SpellEffectKind::Draw { count: amount, .. }
         | SpellEffectKind::GainLife { amount }
@@ -258,12 +264,12 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             amount, condition, ..
         } = ability
         {
-            if *amount == 0 {
-                return Err(RegistryError::InvalidCard {
+            amount
+                .validate_cost(true)
+                .map_err(|reason| RegistryError::InvalidCard {
                     id: card.id.clone(),
-                    reason: "SpellGenericReduction amount must be nonzero".into(),
-                });
-            }
+                    reason,
+                })?;
             if let Some(condition) = condition {
                 condition
                     .validate_live()
@@ -331,13 +337,13 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             }
         }
         if let StaticAbilityDef::CountScaledSelfPt {
-            filter,
+            count,
             power_per_match,
             toughness_per_match,
         } = ability
         {
-            filter
-                .validate()
+            count
+                .validate_static_count()
                 .map_err(|reason| RegistryError::InvalidCard {
                     id: card.id.clone(),
                     reason,
@@ -346,14 +352,6 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 return Err(RegistryError::InvalidCard {
                     id: card.id.clone(),
                     reason: "CountScaledSelfPt must modify power or toughness".into(),
-                });
-            }
-            if !filter.required_keywords.is_empty() {
-                return Err(RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason:
-                        "CountScaledSelfPt keyword filters require CR 613.8 dependency ordering"
-                            .into(),
                 });
             }
         }
@@ -413,6 +411,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             }
             amount
                 .validate_live()
+                .and_then(|()| amount.validate_source_context(false))
                 .map_err(|reason| RegistryError::InvalidCard {
                     id: card.id.clone(),
                     reason,

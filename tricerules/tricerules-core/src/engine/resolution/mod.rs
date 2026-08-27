@@ -2204,6 +2204,13 @@ pub(crate) fn move_object_to_zone(
             state.last_known_tapped.insert(oid, was_tapped);
         }
         if let Some(characteristics) = last_known_characteristics {
+            state.last_known_pt_by_generation.insert(
+                (oid, prior_generation),
+                (
+                    characteristics.signed_power,
+                    characteristics.signed_toughness,
+                ),
+            );
             state
                 .last_known_controller_by_generation
                 .insert((oid, prior_generation), characteristics.controller);
@@ -2714,6 +2721,274 @@ mod attached_subject_tests {
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
+        }
+    }
+
+    fn quantity_item(source: ObjectId, effects: Vec<SpellEffectKind>) -> StackItem {
+        let mut item = triggered_item(source, 0);
+        let mut ability = tricerules_cards::CardRegistry::global()
+            .get("brambleguard_captain")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .clone();
+        ability.effect = effects;
+        item.triggered_ability = Some(ability);
+        item
+    }
+
+    #[test]
+    fn issue_165_dynamic_scry_freezes_private_candidates_and_resumes_tail_once() {
+        fn run(power: u32) -> Vec<rv1::RuledEvent> {
+            let mut engine = GameEngine::new_with_default_decks(165_201, &[0, 1], 20).unwrap();
+            let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+            engine.state.objects.get_mut(&source).unwrap().power = Some(power);
+            let item = quantity_item(
+                source,
+                vec![
+                    SpellEffectKind::Scry {
+                        count: Amount::Count(CountExpression::SourcePower),
+                    },
+                    SpellEffectKind::Draw {
+                        count: Amount::Fixed(1),
+                        who: PlayerRecipient::Controller,
+                    },
+                ],
+            );
+            let hand = engine.state.players[0].hand.len();
+            let library: Vec<_> = engine.state.players[0].library.iter().copied().collect();
+            let (effects, label) = engine.build_resolution_effects(&item);
+            let mut events = Vec::new();
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut events)
+                .unwrap();
+            if power > 0 {
+                let candidates = engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .presentation
+                    .candidates
+                    .clone();
+                assert_eq!(candidates, library[..power as usize]);
+                let choice = events
+                    .iter()
+                    .find_map(|event| match &event.ev {
+                        Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
+                            Some(choice)
+                        }
+                        _ => None,
+                    })
+                    .unwrap();
+                assert_eq!(choice.deciding_player_id, 0);
+                assert_eq!(choice.reveal_audience, 0);
+                assert_eq!(choice.candidate_object_ids, candidates);
+                engine.state.objects.get_mut(&source).unwrap().power = Some(7);
+                let answer = rv1::SubmitResolutionChoice {
+                    chosen_object_ids: candidates,
+                    ..Default::default()
+                };
+                assert!(engine.submit_resolution_choice(1, &answer).is_err());
+                assert_eq!(
+                    engine
+                        .state
+                        .pending_resolution
+                        .as_ref()
+                        .unwrap()
+                        .presentation
+                        .max,
+                    power
+                );
+                events.extend(engine.submit_resolution_choice(0, &answer).unwrap().events);
+                assert_eq!(
+                    engine.state.players[0].hand.last(),
+                    Some(&library[power as usize])
+                );
+            } else {
+                assert!(
+                    !events.iter().any(|event| matches!(&event.ev,
+                    Some(rv1::ruled_event::Ev::Log(log)) if log.text.contains("scries"))),
+                    "scry zero does nothing and must not claim the library was empty"
+                );
+            }
+            assert_eq!(engine.state.players[0].hand.len(), hand + 1);
+            assert!(engine.state.pending_resolution.is_none());
+            events
+        }
+        for power in [0, 2] {
+            assert_eq!(
+                run(power),
+                run(power),
+                "same seed and choices reproduce the same events"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_165_dynamic_soft_counter_freezes_payment_and_allows_zero_or_decline() {
+        for (power, decline, spend_treasures) in [
+            (0, false, false),
+            (0, true, false),
+            (2, false, false),
+            (2, false, true),
+        ] {
+            let mut engine = GameEngine::new_with_default_decks(165_202, &[0, 1], 20).unwrap();
+            let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+            engine.state.objects.get_mut(&source).unwrap().power = Some(power);
+            let mut target = triggered_item(source, 0);
+            target.id += 1;
+            target.controller = 1;
+            let target_id = target.id;
+            engine.state.stack.push(target);
+            let treasures: Vec<_> = (0..if spend_treasures { power } else { 0 })
+                .map(|_| add_battlefield_object(&mut engine, 1, "treasure"))
+                .collect();
+            let mut effect = engine
+                .registry
+                .get("convolute")
+                .unwrap()
+                .primary_face()
+                .spell_effect[0]
+                .clone();
+            if let SpellEffectKind::CounterTargetSpell {
+                unless_controller_pays,
+                ..
+            } = &mut effect
+            {
+                let quantity = if spend_treasures {
+                    CountExpression::BattlefieldPermanents {
+                        filter: BattlefieldPermanentFilter {
+                            controllers: RelativePlayerSet::Opponents,
+                            card_type: Some(CardTypeFilter::Artifact),
+                            any_of: None,
+                            color: None,
+                            name: None,
+                            required_subtypes: vec![],
+                            exclude_source: false,
+                        },
+                    }
+                } else {
+                    CountExpression::BattlefieldMaximum {
+                        filter: BattlefieldPermanentFilter {
+                            controllers: RelativePlayerSet::Controller,
+                            card_type: Some(CardTypeFilter::Creature),
+                            any_of: None,
+                            color: None,
+                            name: None,
+                            required_subtypes: vec![],
+                            exclude_source: false,
+                        },
+                        characteristic: tricerules_cards::PowerToughnessCharacteristic::Power,
+                    }
+                };
+                *unless_controller_pays = Some(Amount::Count(quantity));
+            } else {
+                panic!("Convolute soft counter");
+            }
+            let mut item = quantity_item(
+                source,
+                vec![
+                    effect,
+                    SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(1),
+                    },
+                ],
+            );
+            item.targets = vec![StackTarget {
+                object_id: target_id,
+                group_index: 0,
+                damage_amount: 0,
+                kind: 0,
+                zone_change_generation: None,
+            }];
+            let (effects, label) = engine.build_resolution_effects(&item);
+            let mut events = Vec::new();
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut events)
+                .unwrap();
+            assert_eq!(
+                engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .continuation
+                    .mana_payment()
+                    .unwrap()
+                    .generic_mana_cost,
+                power
+            );
+            engine.state.objects.get_mut(&source).unwrap().power = Some(8);
+            let answer = rv1::SubmitResolutionChoice {
+                decision: if decline {
+                    rv1::ResolutionChoiceDecision::Decline
+                } else {
+                    rv1::ResolutionChoiceDecision::PayMana
+                } as i32,
+                ..Default::default()
+            };
+            if power > 0 {
+                assert!(engine.submit_resolution_choice(1, &answer).is_err());
+                assert!(engine
+                    .state
+                    .stack
+                    .iter()
+                    .any(|object| object.id == target_id));
+            }
+            if spend_treasures {
+                // This unit fixture runs the effect directly, bypassing the normal pass sequence.
+                engine.state.priority_idx = 1;
+                for (index, treasure) in treasures.iter().enumerate() {
+                    engine
+                        .apply_command(
+                            1,
+                            &RuledCommand {
+                                cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                                    rv1::ActivateAbility {
+                                        source_object_id: *treasure,
+                                        ..Default::default()
+                                    },
+                                )),
+                            },
+                        )
+                        .unwrap();
+                    assert!(!engine.state.players[1].battlefield.contains(treasure));
+                    assert_eq!(
+                        engine
+                            .state
+                            .pending_resolution
+                            .as_ref()
+                            .unwrap()
+                            .continuation
+                            .mana_payment()
+                            .unwrap()
+                            .generic_mana_cost,
+                        power
+                    );
+                    if index == 0 {
+                        assert!(
+                            engine.submit_resolution_choice(1, &answer).is_err(),
+                            "the cheaper live count must not replace the locked payment"
+                        );
+                    }
+                }
+            } else {
+                engine.state.players[1].mana_pool.colorless = power;
+            }
+            engine.submit_resolution_choice(1, &answer).unwrap();
+            assert_eq!(engine.state.players[1].mana_pool.colorless, 0);
+            assert_eq!(engine.state.players[1].mana_pool.white, 0);
+            assert_eq!(
+                engine
+                    .state
+                    .stack
+                    .iter()
+                    .any(|object| object.id == target_id),
+                !decline
+            );
+            assert_eq!(engine.state.players[0].life, 21);
+            assert!(engine.state.pending_resolution.is_none());
         }
     }
 

@@ -1512,6 +1512,8 @@ pub struct GameState {
     /// Last-known derived controller keyed by source object and generation. Resolving abilities
     /// use this for source-controller wording after the source leaves the battlefield.
     pub last_known_controller_by_generation: HashMap<(ObjectId, u64), PlayerId>,
+    /// Signed departure P/T for source-relative quantities (CR 608.2h).
+    pub(crate) last_known_pt_by_generation: HashMap<(ObjectId, u64), (Option<i64>, Option<i64>)>,
     /// The object an Aura or Equipment source was attached to as that source last left the
     /// battlefield, keyed by the source generation. The value carries the attached object's
     /// generation so an old ability cannot affect a card that left and returned under the same

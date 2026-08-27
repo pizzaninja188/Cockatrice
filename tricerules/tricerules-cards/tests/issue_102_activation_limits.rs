@@ -163,6 +163,11 @@ fn mardu_devotee_reuses_the_generic_scry_trigger() {
     assert_eq!(face.triggered_abilities.len(), 1);
     let trigger = &face.triggered_abilities[0];
     assert_eq!(trigger.trigger, TriggerCondition::WhenSelfEntersBattlefield);
-    assert_eq!(trigger.effect, [SpellEffectKind::Scry { count: 2 }]);
+    assert_eq!(
+        trigger.effect,
+        [SpellEffectKind::Scry {
+            count: tricerules_cards::Amount::Fixed(2)
+        }]
+    );
     assert_eq!(trigger.text, "When this creature enters, scry 2.");
 }

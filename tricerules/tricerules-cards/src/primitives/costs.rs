@@ -179,6 +179,8 @@ fn default_true() -> bool {
 /// modifier with the existing creature-deaths-this-turn condition.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellCostModifier {
+    /// Automatic public quantities, e.g. Witchstalker Frenzy's attackers and affinity cohorts.
+    GenericReduction { amount: super::Amount },
     /// Reduce only the generic component of the selected normal or alternative mana cost.
     ConditionalGenericReduction {
         amount: u32,
@@ -222,6 +224,7 @@ impl ActivatedCostModifier {
 impl SpellCostModifier {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::GenericReduction { amount } => amount.validate_cost(false),
             Self::ConditionalGenericReduction { amount, condition } => {
                 if *amount == 0 {
                     return Err("conditional generic cost reduction must be nonzero".into());

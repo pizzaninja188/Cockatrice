@@ -1,6 +1,53 @@
 use super::helpers::*;
 use tricerules_core::GameEngine;
 
+#[test]
+fn issue_165_witchstalker_reduction_is_published_and_cannot_pay_colored_mana() {
+    let mut engine = GameEngine::new(
+        165_201,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("island", &["witchstalker_frenzy"]),
+            forest_only_deck(),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_declare_attackers(&mut engine);
+    ensure_in_hand(&mut engine, 0, "witchstalker_frenzy");
+    let attackers: Vec<_> = (0..4)
+        .map(|_| inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears"))
+        .collect();
+    let target = inject_creature_with_stats(&mut engine, 1, "grizzly_bears", 6, 6);
+    engine
+        .apply_command(0, &declare_attackers(attackers))
+        .unwrap();
+    assert_eq!(
+        hand_action_reduction(&mut engine, 0, "witchstalker_frenzy", "after attacks"),
+        4
+    );
+    let command = cast_spell(
+        hand_index_for_card(&engine, 0, "witchstalker_frenzy"),
+        target_object(target),
+    );
+    let index = engine.state.command_index;
+    assert!(engine.apply_command(0, &command).is_err());
+    assert_eq!(engine.state.command_index, index);
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    engine.apply_command(0, &command).unwrap();
+    assert_eq!(engine.state.players[0].mana_pool.red, 0);
+    pass_both_players(&mut engine);
+    assert_eq!(engine.state.objects[&target].damage, 5);
+}
+
 #[track_caller]
 fn hand_action_reduction(
     engine: &mut GameEngine,

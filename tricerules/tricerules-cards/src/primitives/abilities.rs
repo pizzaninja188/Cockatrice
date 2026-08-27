@@ -1244,7 +1244,7 @@ pub enum StaticAbilityDef {
         casters: RelativePlayerSet,
         #[serde(default)]
         spell_type: Option<CardTypeFilter>,
-        amount: u32,
+        amount: Amount,
         #[serde(default)]
         condition: Option<GameCondition>,
     },
@@ -1369,9 +1369,9 @@ pub enum StaticAbilityDef {
         can_attack_as_though_without_defender: bool,
     },
     /// CR 613 layer 7c: this permanent gets a signed amount for each matching battlefield
-    /// creature. The count uses pre-layer-7 type/subtype and physical-state facts.
+    /// permanent. The count uses pre-layer-7 type/subtype and physical-state facts.
     CountScaledSelfPt {
-        filter: BattlefieldCreatureCountFilter,
+        count: super::CountExpression,
         power_per_match: i32,
         toughness_per_match: i32,
     },

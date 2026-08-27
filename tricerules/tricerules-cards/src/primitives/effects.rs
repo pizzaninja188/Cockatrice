@@ -542,6 +542,33 @@ impl BattlefieldCreatureCountFilter {
 /// creation share one authoritative evaluator.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CountExpression {
+    /// Flow of Knowledge and Gold Rush count derived public permanent cohorts.
+    BattlefieldPermanents { filter: BattlefieldPermanentFilter },
+    /// Chupacabra Echo and Calamitous Cave-In count printed public-zone characteristics.
+    GraveyardCards {
+        owners: RelativePlayerSet,
+        #[serde(default)]
+        filter: Option<ZoneCardFilter>,
+    },
+    /// Repulsive Mutation and Glint Weaver use the greatest power/toughness respectively.
+    BattlefieldMaximum {
+        filter: BattlefieldPermanentFilter,
+        characteristic: PowerToughnessCharacteristic,
+    },
+    /// Brambleguard Captain and Boulderbranch Golem use the original source's power.
+    SourcePower,
+    /// Witchstalker Frenzy and Search Party Captain count distinct declared creatures.
+    DeclaredAttackers {
+        players: RelativePlayerSet,
+        #[serde(default)]
+        filter: CreatureEventFilter,
+    },
+    /// A flat, signed affine sum (Calamitous Cave-In, Thunder Salvo). Nested sums are invalid.
+    Affine {
+        #[serde(default)]
+        constant: i32,
+        terms: Vec<QuantityTerm>,
+    },
     /// Count battlefield creatures using their fully derived characteristics at evaluation time.
     BattlefieldCreatures {
         filter: BattlefieldCreatureCountFilter,
@@ -560,9 +587,63 @@ pub enum CountExpression {
     CardsMatchingResult { filter: CardResultFilter },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PowerToughnessCharacteristic {
+    Power,
+    Toughness,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuantityTerm {
+    pub coefficient: i32,
+    pub quantity: CountExpression,
+}
+
 impl CountExpression {
-    fn validate(&self) -> Result<(), String> {
+    fn requires_source_power(&self) -> bool {
         match self {
+            Self::SourcePower => true,
+            Self::Affine { terms, .. } => terms
+                .iter()
+                .any(|term| term.quantity.requires_source_power()),
+            _ => false,
+        }
+    }
+    pub(crate) fn validate_static_count(&self) -> Result<(), String> {
+        self.validate()?;
+        match self {
+            Self::BattlefieldPermanents { .. } => Ok(()),
+            Self::BattlefieldCreatures { filter } if filter.required_keywords.is_empty() => Ok(()),
+            _ => Err("static P/T scaling requires a pre-layer-7 battlefield count; other quantities require CR 613.8 dependency ordering".into()),
+        }
+    }
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::BattlefieldPermanents { filter } | Self::BattlefieldMaximum { filter, .. } => {
+                filter.validate()
+            }
+            Self::GraveyardCards { filter, .. } => {
+                filter.as_ref().map_or(Ok(()), ZoneCardFilter::validate)
+            }
+            Self::SourcePower => Ok(()),
+            Self::DeclaredAttackers { filter, .. } => filter.validate(),
+            Self::Affine { terms, .. } => {
+                if terms.is_empty() {
+                    return Err("affine quantity requires at least one term".into());
+                }
+                for term in terms {
+                    if term.coefficient == 0
+                        || matches!(
+                            term.quantity,
+                            Self::Affine { .. } | Self::CardsMatchingResult { .. }
+                        )
+                    {
+                        return Err("affine quantity requires nonzero coefficients and public, non-affine leaves".into());
+                    }
+                    term.quantity.validate()?;
+                }
+                Ok(())
+            }
             CountExpression::BattlefieldCreatures { filter } => filter.validate(),
             CountExpression::GraveyardCardsNamed { name, .. } if name.trim().is_empty() => {
                 Err("graveyard card count name cannot be empty".into())
@@ -570,6 +651,16 @@ impl CountExpression {
             CountExpression::GraveyardCardsNamed { .. }
             | CountExpression::CreatureDeathsThisTurn
             | CountExpression::CardsMatchingResult { .. } => Ok(()),
+        }
+    }
+
+    fn card_result_filter(&self) -> Option<&CardResultFilter> {
+        match self {
+            Self::CardsMatchingResult { filter } => Some(filter),
+            Self::Affine { terms, .. } => terms
+                .iter()
+                .find_map(|term| term.quantity.card_result_filter()),
+            _ => None,
         }
     }
 }
@@ -602,6 +693,28 @@ pub enum Amount {
 }
 
 impl Amount {
+    pub(crate) fn validate_source_context(&self, has_source: bool) -> Result<(), String> {
+        if !has_source
+            && matches!(self, Self::Count(expression) if expression.requires_source_power())
+        {
+            return Err("source power requires an ability bound to a battlefield source".into());
+        }
+        Ok(())
+    }
+
+    pub(crate) fn validate_cost(&self, has_source: bool) -> Result<(), String> {
+        self.validate_live()?;
+        self.validate_source_context(has_source)?;
+        if matches!(self, Self::X | Self::Fixed(0)) || self.card_result_filter().is_some() {
+            return Err("generic reduction requires a nonzero literal or a public quantity available at cost determination".into());
+        }
+        Ok(())
+    }
+
+    fn validate_effect(&self, context: EffectContext) -> Result<(), String> {
+        self.validate()?;
+        self.validate_source_context(context == EffectContext::Ability)
+    }
     pub(crate) fn validate_cast_snapshot_references(&self, count: usize) -> Result<(), String> {
         if let Self::Conditional { condition, .. } = self {
             condition.validate_cast_snapshot_reference(count)?;
@@ -635,7 +748,7 @@ impl Amount {
 
     pub(crate) fn card_result_filter(&self) -> Option<&CardResultFilter> {
         match self {
-            Amount::Count(CountExpression::CardsMatchingResult { filter }) => Some(filter),
+            Amount::Count(expression) => expression.card_result_filter(),
             _ => None,
         }
     }
@@ -1466,7 +1579,7 @@ pub enum SpellEffectKind {
     /// declared after it resumes via `PendingResolution::resume_effect_index`; `[Scry, Draw]` is
     /// Preordain and Opt.
     Scry {
-        count: u32,
+        count: Amount,
     },
     /// Look at the top `count` cards, put a bounded number back on top in any order, and put the
     /// rest into the graveyard in any order. The player selects the graveyard cohort first; when
@@ -1575,7 +1688,7 @@ pub enum SpellEffectKind {
         #[serde(default)]
         spell_filter: Option<CardTypeFilter>,
         #[serde(default)]
-        unless_controller_pays: Option<u32>,
+        unless_controller_pays: Option<Amount>,
         /// Receipt-conditioned soft-counter amount. Dispelling Exhale uses `{4}` when a Dragon
         /// was beheld and `{2}` otherwise. Mutually exclusive with `unless_controller_pays`.
         #[serde(default)]
@@ -1847,10 +1960,10 @@ pub enum SpellEffectKind {
         subject: EffectSubject,
     },
     /// Deal `amount` damage to every battlefield permanent matching `kind` (CR 119). Untargeted.
-    /// `Creature` covers Pyroclasm / Pestilence-style sweeps; `AnyPermanent` is reserved for
-    /// future "damage to each permanent" effects. Only object kinds are legal (validated at load).
+    /// `Creature` covers Pyroclasm / Pestilence-style sweeps; a disjunction with planeswalkers
+    /// covers Calamitous Cave-In. Only object kinds are legal (validated at load).
     DamageAll {
-        amount: u32,
+        amount: Amount,
         #[serde(default = "TargetFilter::default_creature")]
         kind: TargetFilter,
     },
@@ -2599,6 +2712,12 @@ impl SpellEffectKind {
     pub(crate) fn validate_cast_snapshot_references(&self, count: usize) -> Result<(), String> {
         match self {
             Self::DamageTarget { amount, .. }
+            | Self::DamageAll { amount, .. }
+            | Self::Scry { count: amount }
+            | Self::CounterTargetSpell {
+                unless_controller_pays: Some(amount),
+                ..
+            }
             | Self::DamageTargets { amount, .. }
             | Self::DamagePlayer { amount, .. }
             | Self::DamageAttackedPlayerOrPlaneswalker { amount }
@@ -2707,6 +2826,12 @@ impl SpellEffectKind {
         for (index, effect) in effects.iter().enumerate() {
             let amount = match effect {
                 SpellEffectKind::DamageTarget { amount, .. }
+                | SpellEffectKind::DamageAll { amount, .. }
+                | SpellEffectKind::Scry { count: amount }
+                | SpellEffectKind::CounterTargetSpell {
+                    unless_controller_pays: Some(amount),
+                    ..
+                }
                 | SpellEffectKind::DamagePlayer { amount, .. }
                 | SpellEffectKind::Draw { count: amount, .. }
                 | SpellEffectKind::GainLife { amount }
@@ -2779,15 +2904,23 @@ impl SpellEffectKind {
         match self {
             SpellEffectKind::DamageTarget { amount, .. }
             | SpellEffectKind::DamagePlayer { amount, .. }
+            | SpellEffectKind::DamageAll { amount, .. }
+            | SpellEffectKind::Scry { count: amount }
+            | SpellEffectKind::CounterTargetSpell {
+                unless_controller_pays: Some(amount),
+                ..
+            }
             | SpellEffectKind::Draw { count: amount, .. }
             | SpellEffectKind::GainLife { amount }
             | SpellEffectKind::Mill { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. }
             | SpellEffectKind::CreateTokenCopies { count: amount, .. }
-            | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => amount.validate()?,
+            | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => {
+                amount.validate_effect(context)?
+            }
             SpellEffectKind::PumpTarget {
                 scale: Some(scale), ..
-            } => scale.amount.validate()?,
+            } => scale.amount.validate_effect(context)?,
             SpellEffectKind::DamageTargets { amount, .. } => {
                 amount.validate()?;
                 if amount.requires_game_state() {
@@ -3489,7 +3622,7 @@ impl SpellEffectKind {
                 Err("receipt-conditioned CounterTargetSpell payments must be at least 1".into())
             }
             SpellEffectKind::CounterTargetSpell {
-                unless_controller_pays: Some(0),
+                unless_controller_pays: Some(Amount::Fixed(0)),
                 ..
             } => Err("CounterTargetSpell unless_controller_pays must be at least 1".into()),
             SpellEffectKind::CounterTriggeringStackObjectUnlessPays { cost } => match cost {
@@ -3547,9 +3680,10 @@ impl SpellEffectKind {
             }
             SpellEffectKind::ChooseGraveyardCard { filter, .. } => filter.validate(),
             // CR 701.18: scry is legal on spells and on abilities alike (scry lands, Sensei's
-            // Divining Top-style activations), so the only malformed case is scrying zero cards.
+            // Divining Top-style activations). Reject a useless literal zero; a dynamic amount
+            // may evaluate to zero and then does nothing.
             SpellEffectKind::Scry { count } => {
-                if *count == 0 {
+                if matches!(count, Amount::Fixed(0)) {
                     Err("Scry requires a count of at least 1".into())
                 } else {
                     Ok(())
@@ -3725,9 +3859,9 @@ pub enum ContinuousEffectKind {
         delta_power: i32,
         delta_toughness: i32,
     },
-    /// CR 613 layer 7c dynamic self modifier from a battlefield-creature count.
-    PtModifyByCreatureCount {
-        filter: BattlefieldCreatureCountFilter,
+    /// CR 613 layer 7c dynamic self modifier from a safe pre-layer-7 battlefield count.
+    PtModifyByCount {
+        count: CountExpression,
         power_per_match: i32,
         toughness_per_match: i32,
     },

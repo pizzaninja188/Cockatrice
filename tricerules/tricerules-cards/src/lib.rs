@@ -21,10 +21,10 @@ pub use primitives::{
     ConditionalSearchDestination, ContinuousEffectKind, ControllerReference, CountExpression,
     CounterKind, DelayedTokenSacrificeTiming, EffectContext, EffectDuration, Evasion,
     GameCondition, GraveyardAggregate, Keyword, LibraryPartitionKind, ManaAmount, ManaSpendFilter,
-    ManaSpendingRestriction, PermanentTypeFilter, PowerComparison, PtScale, RelativePlayerSet,
-    SearchDestination, SearchZoneSelection, SpecialActionManaPurpose, SpellCostModifier,
-    SpellEffectKind, TriggerCondition, TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
-    ZoneCardFilter,
+    ManaSpendingRestriction, PermanentTypeFilter, PowerComparison, PowerToughnessCharacteristic,
+    PtScale, QuantityTerm, RelativePlayerSet, SearchDestination, SearchZoneSelection,
+    SpecialActionManaPurpose, SpellCostModifier, SpellEffectKind, TriggerCondition,
+    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

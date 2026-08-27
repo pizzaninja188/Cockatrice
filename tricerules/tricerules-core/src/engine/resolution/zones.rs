@@ -1665,6 +1665,14 @@ pub(super) fn scry(
     let SpellEffectKind::Scry { count } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let count = cx.engine.resolve_amount(
+        &count,
+        AmountContext::for_stack_item(cx.top, cx.controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
+    if count == 0 {
+        return Ok(EffectOutcome::Continue);
+    }
     begin_library_partition(cx, count, 0, None, PendingLibraryPartitionKind::Scry)
 }
 

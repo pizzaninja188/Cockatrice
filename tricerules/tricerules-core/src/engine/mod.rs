@@ -99,6 +99,17 @@ struct AmountContext<'a> {
 }
 
 impl<'a> AmountContext<'a> {
+    fn from_condition(context: ConditionContext<'a>) -> Self {
+        Self {
+            stack_item: context.stack_item,
+            controller: context.controller,
+            source_object_id: context.source_object_id,
+            source_zone_change: context.source_zone_change,
+            resolving_spell_id: context.resolving_spell_id,
+            chosen_x: 0,
+            previous_effect_result: None,
+        }
+    }
     fn for_stack_item(item: &'a StackItem, controller: PlayerId) -> Self {
         Self {
             stack_item: Some(item),
@@ -297,6 +308,7 @@ pub enum EngineError {
 /// (CR 603.2). Each variant carries the minimum data needed to identify which triggers match.
 #[derive(Clone, Debug)]
 struct TriggerSourceSnapshot {
+    power_toughness: (Option<i64>, Option<i64>),
     object_id: ObjectId,
     card_id: String,
     controller: PlayerId,
@@ -874,6 +886,7 @@ impl GameEngine {
             last_known_colors_by_generation: HashMap::new(),
             last_known_types_by_generation: HashMap::new(),
             last_known_controller_by_generation: HashMap::new(),
+            last_known_pt_by_generation: HashMap::new(),
             last_known_attached_object_by_generation: HashMap::new(),
             zone_change_generation: HashMap::new(),
             face_change_generation: HashMap::new(),

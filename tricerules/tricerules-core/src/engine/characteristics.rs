@@ -43,6 +43,9 @@ pub struct Characteristics {
     pub evasions: Vec<Evasion>,
     pub power: Option<u32>,
     pub toughness: Option<u32>,
+    /// Signed rules values for quantity arithmetic; the existing wire projection stays unsigned.
+    pub(crate) signed_power: Option<i64>,
+    pub(crate) signed_toughness: Option<i64>,
 }
 
 impl Characteristics {
@@ -113,6 +116,8 @@ impl CharacteristicsEvaluator<'_> {
         let face = effective_face_from(self.state, self.registry, oid)?;
 
         let mut result = Characteristics {
+            signed_power: None,
+            signed_toughness: None,
             // CR 110.2 base value set by the instruction that put the object onto the battlefield.
             // Layer 2 below applies control-changing continuous effects on top.
             controller: object.base_controller,
@@ -159,6 +164,8 @@ impl CharacteristicsEvaluator<'_> {
         self.apply_layer_3_text(oid, &mut result);
         self.apply_layer_4_type(oid, &mut result);
         self.apply_layer_5_color(oid, &mut result);
+        result.signed_power = result.power.map(i64::from);
+        result.signed_toughness = result.toughness.map(i64::from);
         Some(result)
     }
 
@@ -367,7 +374,7 @@ impl CharacteristicsEvaluator<'_> {
                         | ContinuousEffectKind::Layer6AddProtection(_)
                         | ContinuousEffectKind::Layer7bSetPt { .. }
                         | ContinuousEffectKind::PtModify { .. }
-                        | ContinuousEffectKind::PtModifyByCreatureCount { .. }
+                        | ContinuousEffectKind::PtModifyByCount { .. }
                 )
             })
             .filter(|(_, effect)| {
@@ -1071,16 +1078,16 @@ impl CharacteristicsEvaluator<'_> {
     ) {
         // CR 613.4a/613.3: characteristic-defining abilities. None modeled yet.
         // CR 613.4b: apply setters in timestamp order; the last one wins.
-        let mut power = result.power.map(|value| value as i32);
-        let mut toughness = result.toughness.map(|value| value as i32);
+        let mut power = result.power.map(i64::from);
+        let mut toughness = result.toughness.map(i64::from);
         for effect in effects {
             if let ContinuousEffectKind::Layer7bSetPt {
                 power: set_power,
                 toughness: set_toughness,
             } = effect.kind
             {
-                power = Some(set_power as i32);
-                toughness = Some(set_toughness as i32);
+                power = Some(set_power as i64);
+                toughness = Some(set_toughness as i64);
             }
         }
 
@@ -1093,14 +1100,14 @@ impl CharacteristicsEvaluator<'_> {
             } = effect.kind
             {
                 if let Some(value) = &mut power {
-                    *value += delta_power;
+                    *value = value.saturating_add(delta_power as i64);
                 }
                 if let Some(value) = &mut toughness {
-                    *value += delta_toughness;
+                    *value = value.saturating_add(delta_toughness as i64);
                 }
             }
-            if let ContinuousEffectKind::PtModifyByCreatureCount {
-                ref filter,
+            if let ContinuousEffectKind::PtModifyByCount {
+                ref count,
                 power_per_match,
                 toughness_per_match,
             } = effect.kind
@@ -1109,53 +1116,29 @@ impl CharacteristicsEvaluator<'_> {
                     continue;
                 };
                 let source_controller = self.layer_2_controller(source_id, &mut Vec::new());
-                let count = self
-                    .state
-                    .players
-                    .iter()
-                    .flat_map(|player| player.battlefield.iter().copied())
-                    .filter(|candidate| !filter.exclude_source || *candidate != source_id)
-                    .filter_map(|candidate| {
-                        let characteristics = self.characteristics_through_layer_5(candidate)?;
-                        Some((candidate, characteristics))
+                let context = ConditionContext {
+                    controller: source_controller,
+                    source_object_id: source_id,
+                    source_zone_change: self
+                        .state
+                        .zone_change_generation
+                        .get(&source_id)
+                        .copied()
+                        .unwrap_or(0),
+                    resolving_spell_id: None,
+                    stack_item: None,
+                };
+                let count =
+                    super::history::battlefield_quantity_value(self.state, count, context, |oid| {
+                        self.characteristics_through_layer_5(oid)
                     })
-                    .filter(|(candidate, characteristics)| {
-                        relative_player_set_contains(
-                            self.state,
-                            filter.controllers,
-                            source_controller,
-                            characteristics.controller,
-                        ) && characteristics.is_creature()
-                            && filter
-                                .subtype
-                                .as_ref()
-                                .is_none_or(|subtype| characteristics.has_type(subtype))
-                            && filter.tapped.is_none_or(|tapped| {
-                                self.state
-                                    .objects
-                                    .get(candidate)
-                                    .is_some_and(|object| object.tapped == tapped)
-                            })
-                            && (!filter.requires_any_counter
-                                || self
-                                    .state
-                                    .objects
-                                    .get(candidate)
-                                    .is_some_and(GameObject::has_any_counter))
-                            && filter.required_counter.is_none_or(|counter| {
-                                self.state
-                                    .objects
-                                    .get(candidate)
-                                    .is_some_and(|object| object.counter_count(counter) > 0)
-                            })
-                    })
-                    .count();
-                let count = i32::try_from(count).unwrap_or(i32::MAX);
+                    .unwrap_or(0);
                 if let Some(value) = &mut power {
-                    *value = value.saturating_add(power_per_match.saturating_mul(count));
+                    *value = value.saturating_add((power_per_match as i64).saturating_mul(count));
                 }
                 if let Some(value) = &mut toughness {
-                    *value = value.saturating_add(toughness_per_match.saturating_mul(count));
+                    *value =
+                        value.saturating_add((toughness_per_match as i64).saturating_mul(count));
                 }
             }
         }
@@ -1163,15 +1146,17 @@ impl CharacteristicsEvaluator<'_> {
         // +1/+1 and -1/-1 counters remain in layer 7c in the current rules.
         let counter_delta = object.counter_pt_delta();
         if let Some(value) = &mut power {
-            *value += counter_delta;
+            *value = value.saturating_add(counter_delta as i64);
         }
         if let Some(value) = &mut toughness {
-            *value += counter_delta;
+            *value = value.saturating_add(counter_delta as i64);
         }
         // CR 613.4d: P/T-switching effects. None modeled yet.
 
-        result.power = power.map(|value| value.max(0) as u32);
-        result.toughness = toughness.map(|value| value.max(0) as u32);
+        result.signed_power = power;
+        result.signed_toughness = toughness;
+        result.power = power.map(|value| value.clamp(0, u32::MAX as i64) as u32);
+        result.toughness = toughness.map(|value| value.clamp(0, u32::MAX as i64) as u32);
     }
 }
 

@@ -7,7 +7,7 @@
   power: 2,
   toughness: 4,
   static_abilities: [CountScaledSelfPt(
-    filter: (controllers: Controller, subtype: Some("Goblin"), exclude_source: true),
+    count: BattlefieldCreatures(filter: (controllers: Controller, subtype: Some("Goblin"), exclude_source: true)),
     power_per_match: 2,
     toughness_per_match: 0,
   )],

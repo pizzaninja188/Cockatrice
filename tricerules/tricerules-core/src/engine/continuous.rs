@@ -530,7 +530,7 @@ impl GameEngine {
                     }
                 }
                 StaticAbilityDef::CountScaledSelfPt {
-                    filter,
+                    count,
                     power_per_match,
                     toughness_per_match,
                 } => {
@@ -538,8 +538,8 @@ impl GameEngine {
                         trigger_grant_origin: None,
                         source_id: Some(object_id),
                         affected: AffectedScope::Single(object_id),
-                        kind: ContinuousEffectKind::PtModifyByCreatureCount {
-                            filter,
+                        kind: ContinuousEffectKind::PtModifyByCount {
+                            count,
                             power_per_match,
                             toughness_per_match,
                         },

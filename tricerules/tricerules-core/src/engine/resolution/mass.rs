@@ -237,6 +237,11 @@ pub(super) fn damage_all(
     let SpellEffectKind::DamageAll { amount, kind } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let amount = cx.engine.resolve_amount(
+        &amount,
+        AmountContext::for_stack_item(cx.top, cx.controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
     let source_has_deathtouch = cx
         .engine
         .resolving_source_has_keyword(cx.top, Keyword::Deathtouch);

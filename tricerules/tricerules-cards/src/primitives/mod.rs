@@ -18,6 +18,101 @@ pub use targeting::*;
 #[cfg(test)]
 mod tests {
     #[test]
+    fn issue_165_dynamic_consumers_reject_unavailable_result_contexts() {
+        for template in [
+            "Scry(count: AMOUNT)",
+            "DamageAll(amount: AMOUNT)",
+            "CounterTargetSpell(unless_controller_pays: Some(AMOUNT))",
+        ] {
+            let previous = template.replace("AMOUNT", "Count(CardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: Controller)))");
+            let effect: super::SpellEffectKind = ron::from_str(&previous).unwrap();
+            assert!(
+                super::SpellEffectKind::validate_list(&[effect]).is_err(),
+                "missing previous effect: {template}"
+            );
+            let payment = template.replace("AMOUNT", "Count(CardsMatchingResult(filter: (source: Payment, action: Discard, players: Controller)))");
+            let card = format!(
+                r#"(id: "test", name: "Test", types: ["Instant"], spell_effect: [{payment}])"#
+            );
+            assert!(
+                crate::CardRegistry::from_chunks_and_tokens(&[&card], &[]).is_err(),
+                "missing payment: {template}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_165_quantities_reject_unsupported_shapes_and_source_contexts() {
+        for source in [
+            "Affine(terms: [])",
+            "Affine(terms: [(coefficient: 0, quantity: SourcePower)])",
+            "Affine(terms: [(coefficient: 1, quantity: Affine(terms: [(coefficient: 1, quantity: SourcePower)]))])",
+            "Affine(terms: [(coefficient: 1, quantity: CardsMatchingResult(filter: (source: Payment, action: Discard, players: Controller)))])",
+        ] {
+            let expression: super::CountExpression = ron::from_str(source).unwrap();
+            assert!(expression.validate().is_err(), "{source}");
+        }
+        let amount = super::Amount::Count(super::CountExpression::SourcePower);
+        assert!(super::SpellEffectKind::GainLife {
+            amount: amount.clone()
+        }
+        .validate(super::EffectContext::Spell)
+        .is_err());
+        assert!(super::SpellCostModifier::GenericReduction { amount }
+            .validate()
+            .is_err());
+        for count in [
+            "SourcePower",
+            "BattlefieldMaximum(filter: (controllers: Controller), characteristic: Power)",
+        ] {
+            let expression: super::CountExpression = ron::from_str(count).unwrap();
+            assert!(expression.validate_static_count().is_err());
+        }
+        let card = r#"(id: "test", name: "Test", types: ["Creature"], power: 1, toughness: 2,
+            static_abilities: [EntersWithCounters(counter: PlusOnePlusOne, amount: Count(SourcePower))])"#;
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_err(),
+            "entry replacement has no battlefield source power"
+        );
+    }
+
+    #[test]
+    fn issue_165_dynamic_consumers_accept_quantities() {
+        for effect in [
+            "Scry(count: Count(SourcePower))",
+            "DamageAll(amount: Count(GraveyardCards(owners: Controller)))",
+            "CounterTargetSpell(unless_controller_pays: Some(Count(BattlefieldMaximum(filter: (controllers: Controller, card_type: Some(Creature)), characteristic: Power))))",
+        ] {
+            let effect: super::SpellEffectKind = ron::from_str(effect).expect("dynamic consumer");
+            effect.validate(super::EffectContext::Ability).expect("valid dynamic consumer");
+        }
+    }
+    #[test]
+    fn issue_165_static_quantity_accepts_permanents_without_pt_recursion() {
+        let card = r#"(id: "test", name: "Test", types: ["Creature"], power: 1, toughness: 2,
+            static_abilities: [CountScaledSelfPt(count: BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Desert"])),
+                power_per_match: 1, toughness_per_match: 1)])"#;
+        assert!(crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_ok());
+    }
+    #[test]
+    fn issue_165_public_quantities_roundtrip() {
+        for source in [
+            "Count(BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: [\"Island\"])))",
+            "Count(GraveyardCards(owners: Controller, filter: Some((subtype: Some(\"Cave\")))))",
+            "Count(BattlefieldMaximum(filter: (controllers: Controller, card_type: Some(Creature)), characteristic: Toughness))",
+            "Count(SourcePower)",
+            "Count(DeclaredAttackers(players: All))",
+            "Count(Affine(constant: 2, terms: [(coefficient: 2, quantity: SourcePower)]))",
+        ] {
+            let amount: super::Amount = ron::from_str(source)
+                .unwrap_or_else(|error| panic!("quantity must deserialize: {source}: {error}"));
+            amount.validate().expect("valid public quantity");
+            let encoded = ron::to_string(&amount).unwrap();
+            assert_eq!(ron::from_str::<super::Amount>(&encoded).unwrap(), amount);
+        }
+    }
+
+    #[test]
     fn issue_169_tap_trigger_cardinalities_are_typed() {
         for cardinality in ["EachObject", "OneOrMorePerAction"] {
             let definition = format!(
@@ -102,13 +197,13 @@ mod tests {
     fn soft_counter_payment_must_be_nonzero() {
         let invalid = SpellEffectKind::CounterTargetSpell {
             spell_filter: None,
-            unless_controller_pays: Some(0),
+            unless_controller_pays: Some(Amount::Fixed(0)),
             unless_controller_pays_by_cast_cost: None,
         };
         assert!(invalid.validate(EffectContext::Spell).is_err());
         let mana_leak_shape = SpellEffectKind::CounterTargetSpell {
             spell_filter: None,
-            unless_controller_pays: Some(3),
+            unless_controller_pays: Some(Amount::Fixed(3)),
             unless_controller_pays_by_cast_cost: None,
         };
         assert!(mana_leak_shape.validate(EffectContext::Spell).is_ok());
@@ -714,7 +809,7 @@ mod tests {
         .validate(EffectContext::Spell)
         .is_err());
         assert!(SpellEffectKind::DamageAll {
-            amount: 2,
+            amount: Amount::Fixed(2),
             kind: scoped,
         }
         .validate(EffectContext::Spell)

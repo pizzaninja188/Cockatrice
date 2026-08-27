@@ -1,5 +1,114 @@
 use super::*;
 
+/// Shared public-cohort matcher. The caller supplies the characteristic layer appropriate to
+/// its consumer, so layer-7 static counts never recursively evaluate layer 7.
+pub(super) fn battlefield_permanent_matches(
+    state: &GameState,
+    filter: &BattlefieldPermanentFilter,
+    oid: ObjectId,
+    c: &Characteristics,
+    context: ConditionContext<'_>,
+) -> bool {
+    relative_player_set_contains(state, filter.controllers, context.controller, c.controller)
+        && (!filter.exclude_source
+            || oid != context.source_object_id
+            || state.zone_change_generation.get(&oid).copied().unwrap_or(0)
+                != context.source_zone_change)
+        && filter.card_type.is_none_or(|kind| match kind {
+            CardTypeFilter::BasicLand => {
+                c.has_type("Land") && c.supertypes.iter().any(|s| s == "Basic")
+            }
+            CardTypeFilter::Land => c.has_type("Land"),
+            CardTypeFilter::Enchantment => c.has_type("Enchantment"),
+            CardTypeFilter::Instant => c.has_type("Instant"),
+            CardTypeFilter::Sorcery => c.has_type("Sorcery"),
+            CardTypeFilter::InstantOrSorcery => c.has_type("Instant") || c.has_type("Sorcery"),
+            CardTypeFilter::Creature => c.is_creature(),
+            CardTypeFilter::Artifact => c.is_artifact(),
+            CardTypeFilter::Planeswalker => c.has_type("Planeswalker"),
+            CardTypeFilter::Battle => c.has_type("Battle"),
+            CardTypeFilter::Nonland => !c.has_type("Land"),
+            CardTypeFilter::Noncreature => !c.is_creature(),
+        })
+        && filter.color.is_none_or(|color| c.colors.contains(&color))
+        && filter
+            .required_subtypes
+            .iter()
+            .all(|subtype| c.has_type(subtype))
+        && filter.name.as_ref().is_none_or(|name| c.has_name(name))
+        && filter.any_of.as_ref().is_none_or(|branches| {
+            branches
+                .iter()
+                .any(|branch| battlefield_permanent_matches(state, branch, oid, c, context))
+        })
+}
+
+pub(super) fn battlefield_quantity_value(
+    state: &GameState,
+    expression: &CountExpression,
+    context: ConditionContext<'_>,
+    characteristics: impl Fn(ObjectId) -> Option<Characteristics>,
+) -> Option<i64> {
+    if !matches!(
+        expression,
+        CountExpression::BattlefieldPermanents { .. }
+            | CountExpression::BattlefieldCreatures { .. }
+            | CountExpression::BattlefieldMaximum { .. }
+    ) {
+        return None;
+    }
+    let mut values = state
+        .players
+        .iter()
+        .flat_map(|player| player.battlefield.iter().copied())
+        .filter_map(|oid| characteristics(oid).map(|c| (oid, c)))
+        .filter(|(oid, c)| match expression {
+            CountExpression::BattlefieldPermanents { filter }
+            | CountExpression::BattlefieldMaximum { filter, .. } => {
+                battlefield_permanent_matches(state, filter, *oid, c, context)
+            }
+            CountExpression::BattlefieldCreatures { filter } => {
+                relative_player_set_contains(
+                    state,
+                    filter.controllers,
+                    context.controller,
+                    c.controller,
+                ) && c.is_creature()
+                    && (!filter.exclude_source
+                        || *oid != context.source_object_id
+                        || state.zone_change_generation.get(oid).copied().unwrap_or(0)
+                            != context.source_zone_change)
+                    && filter
+                        .subtype
+                        .as_ref()
+                        .is_none_or(|subtype| c.has_type(subtype))
+                    && filter
+                        .required_keywords
+                        .iter()
+                        .all(|keyword| c.has_keyword(*keyword))
+                    && state.objects.get(oid).is_some_and(|object| {
+                        filter.tapped.is_none_or(|tapped| object.tapped == tapped)
+                            && (!filter.requires_any_counter || object.has_any_counter())
+                            && filter
+                                .required_counter
+                                .is_none_or(|counter| object.counter_count(counter) > 0)
+                    })
+            }
+            _ => false,
+        })
+        .map(|(_, c)| c);
+    Some(match expression {
+        CountExpression::BattlefieldMaximum { characteristic, .. } => values
+            .filter_map(|c| match characteristic {
+                tricerules_cards::PowerToughnessCharacteristic::Power => c.signed_power,
+                tricerules_cards::PowerToughnessCharacteristic::Toughness => c.signed_toughness,
+            })
+            .max()
+            .unwrap_or(0),
+        _ => values.by_ref().count().try_into().unwrap_or(i64::MAX),
+    })
+}
+
 /// Commit an already authorized life change. Star Charter and Flamecache Gecko need actual
 /// gains/losses, including damage and payments, rather than the net change or emitted UI events.
 /// Callers own prevention/prohibition and transaction validation; trigger dispatch never records
@@ -295,6 +404,14 @@ impl GameEngine {
 
         for event in events {
             match event {
+                GameEvent::LeavesBattlefield { source } => {
+                    // All members of a simultaneous departure set were captured before any move.
+                    // Restore that snapshot over the individual move's sequential bookkeeping.
+                    self.state.last_known_pt_by_generation.insert(
+                        (source.object_id, source.zone_change_generation),
+                        source.power_toughness,
+                    );
+                }
                 GameEvent::CrimeCommitted { player } => {
                     let record = self.state.turn_history.current.player_mut(*player);
                     record.crimes_committed = record.crimes_committed.saturating_add(1);
@@ -714,64 +831,12 @@ impl GameEngine {
             .unwrap_or(u32::MAX)
     }
 
-    pub(super) fn battlefield_aggregate_value(
+    fn battlefield_matching_characteristics(
         &self,
         filter: &BattlefieldPermanentFilter,
-        aggregate: BattlefieldAggregate,
         context: ConditionContext,
-    ) -> u32 {
-        fn leaf_matches(
-            engine: &GameEngine,
-            filter: &BattlefieldPermanentFilter,
-            characteristics: &Characteristics,
-            context: ConditionContext,
-        ) -> bool {
-            let leaf = relative_player_set_contains(
-                &engine.state,
-                filter.controllers,
-                context.controller,
-                characteristics.controller,
-            ) && filter.card_type.is_none_or(|card_type| match card_type {
-                CardTypeFilter::BasicLand => {
-                    characteristics.has_type("Land")
-                        && characteristics
-                            .supertypes
-                            .iter()
-                            .any(|value| value == "Basic")
-                }
-                CardTypeFilter::Land => characteristics.has_type("Land"),
-                CardTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
-                CardTypeFilter::Instant => characteristics.has_type("Instant"),
-                CardTypeFilter::Sorcery => characteristics.has_type("Sorcery"),
-                CardTypeFilter::InstantOrSorcery => {
-                    characteristics.has_type("Instant") || characteristics.has_type("Sorcery")
-                }
-                CardTypeFilter::Creature => characteristics.is_creature(),
-                CardTypeFilter::Artifact => characteristics.is_artifact(),
-                CardTypeFilter::Planeswalker => characteristics.has_type("Planeswalker"),
-                CardTypeFilter::Battle => characteristics.has_type("Battle"),
-                CardTypeFilter::Nonland => !characteristics.has_type("Land"),
-                CardTypeFilter::Noncreature => !characteristics.is_creature(),
-            }) && filter
-                .color
-                .is_none_or(|color| characteristics.colors.contains(&color))
-                && filter
-                    .required_subtypes
-                    .iter()
-                    .all(|subtype| characteristics.has_type(subtype))
-                && filter
-                    .name
-                    .as_ref()
-                    .is_none_or(|name| characteristics.has_name(name));
-            leaf && filter.any_of.as_ref().is_none_or(|branches| {
-                branches
-                    .iter()
-                    .any(|branch| leaf_matches(engine, branch, characteristics, context))
-            })
-        }
-
-        let matching: Vec<_> = self
-            .state
+    ) -> Vec<(ObjectId, Characteristics)> {
+        self.state
             .players
             .iter()
             .flat_map(|player| player.battlefield.iter().copied())
@@ -790,9 +855,19 @@ impl GameEngine {
                 self.characteristics(oid)
                     .map(|characteristics| (oid, characteristics))
             })
-            .filter(|(_, characteristics)| leaf_matches(self, filter, characteristics, context))
-            .collect();
+            .filter(|(oid, characteristics)| {
+                battlefield_permanent_matches(&self.state, filter, *oid, characteristics, context)
+            })
+            .collect()
+    }
 
+    pub(super) fn battlefield_aggregate_value(
+        &self,
+        filter: &BattlefieldPermanentFilter,
+        aggregate: BattlefieldAggregate,
+        context: ConditionContext,
+    ) -> u32 {
+        let matching = self.battlefield_matching_characteristics(filter, context);
         match aggregate {
             BattlefieldAggregate::Count => clamp_public_count(matching.len()),
             BattlefieldAggregate::DistinctNames => clamp_public_count(
@@ -894,9 +969,91 @@ impl GameEngine {
                     *otherwise
                 }
             }
-            Amount::Count(CountExpression::BattlefieldCreatures { filter }) => self
-                .battlefield_creature_count(filter, context.controller, context.source_object_id),
-            Amount::Count(CountExpression::GraveyardCardsNamed { owners, name }) => {
+            Amount::Count(expression) => self
+                .resolve_quantity(expression, context)
+                .clamp(0, u32::MAX as i64) as u32,
+        }
+    }
+
+    /// Signed intermediates are retained until the final nonnegative Amount conversion (CR 107.1b).
+    fn resolve_quantity(&self, expression: &CountExpression, context: AmountContext<'_>) -> i64 {
+        let condition_context = ConditionContext {
+            controller: context.controller,
+            source_object_id: context.source_object_id,
+            source_zone_change: context.source_zone_change,
+            resolving_spell_id: context.resolving_spell_id,
+            stack_item: context.stack_item,
+        };
+        match expression {
+            CountExpression::BattlefieldPermanents { .. }
+            | CountExpression::BattlefieldMaximum { .. }
+            | CountExpression::BattlefieldCreatures { .. } => {
+                battlefield_quantity_value(&self.state, expression, condition_context, |oid| {
+                    self.characteristics(oid)
+                })
+                .unwrap_or(0)
+            }
+            CountExpression::GraveyardCards { owners, filter } => graveyard_aggregate_value(
+                &self.state,
+                self.registry,
+                *owners,
+                GraveyardAggregate::CardCount,
+                filter.as_ref(),
+                context.controller,
+                context.resolving_spell_id,
+            ) as i64,
+            CountExpression::SourcePower => {
+                let oid = context.source_object_id;
+                if self
+                    .state
+                    .objects
+                    .get(&oid)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+                    && self
+                        .state
+                        .zone_change_generation
+                        .get(&oid)
+                        .copied()
+                        .unwrap_or(0)
+                        == context.source_zone_change
+                {
+                    self.characteristics(oid)
+                        .and_then(|c| c.signed_power)
+                        .unwrap_or(0)
+                } else {
+                    self.state
+                        .last_known_pt_by_generation
+                        .get(&(oid, context.source_zone_change))
+                        .and_then(|pt| pt.0)
+                        .unwrap_or(0)
+                }
+            }
+            CountExpression::DeclaredAttackers { players, filter } => self
+                .state
+                .turn_history
+                .current
+                .declared_attackers
+                .iter()
+                .filter(|fact| {
+                    relative_player_set_contains(
+                        &self.state,
+                        *players,
+                        context.controller,
+                        fact.controller,
+                    ) && creature_event_fact_matches(filter, fact)
+                })
+                .map(|fact| (fact.object_id, fact.zone_change_generation))
+                .collect::<HashSet<_>>()
+                .len() as i64,
+            CountExpression::Affine { constant, terms } => {
+                terms.iter().fold(*constant as i64, |value, term| {
+                    value.saturating_add(
+                        (term.coefficient as i64)
+                            .saturating_mul(self.resolve_quantity(&term.quantity, context)),
+                    )
+                })
+            }
+            CountExpression::GraveyardCardsNamed { owners, name } => {
                 let count = self
                     .state
                     .players
@@ -921,17 +1078,17 @@ impl GameEngine {
                                 .is_some_and(|definition| definition.has_name_outside_stack(name))
                     })
                     .count();
-                clamp_public_count(count)
+                clamp_public_count(count) as i64
             }
-            Amount::Count(CountExpression::CreatureDeathsThisTurn) => {
-                self.state.turn_history.current.creatures_died
+            CountExpression::CreatureDeathsThisTurn => {
+                self.state.turn_history.current.creatures_died as i64
             }
-            Amount::Count(CountExpression::CardsMatchingResult { filter }) => context
+            CountExpression::CardsMatchingResult { filter } => context
                 .previous_effect_result
                 .zip(context.stack_item)
                 .map_or(0, |(previous, top)| {
                     super::resolution::card_result_count(self, top, previous, filter)
-                }),
+                }) as i64,
         }
     }
 }
@@ -939,6 +1096,385 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn quantity_context(source: ObjectId) -> AmountContext<'static> {
+        AmountContext {
+            stack_item: None,
+            controller: 0,
+            source_object_id: source,
+            source_zone_change: 0,
+            resolving_spell_id: None,
+            chosen_x: 0,
+            previous_effect_result: None,
+        }
+    }
+
+    fn quantity_engine() -> GameEngine {
+        GameEngine::new(
+            165_001,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with_cards(&["grizzly_bears", "serra_angel"], "island"),
+                deck_with_cards(&[], "forest"),
+            ]),
+            true,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn issue_165_maxima_use_derived_signed_values_and_all_opponents() {
+        let mut engine = quantity_engine();
+        let mut filter = BattlefieldPermanentFilter {
+            any_of: None,
+            controllers: RelativePlayerSet::Controller,
+            card_type: Some(CardTypeFilter::Creature),
+            color: None,
+            name: None,
+            required_subtypes: vec![],
+            exclude_source: false,
+        };
+        let maximum = |filter, characteristic| {
+            Amount::Count(CountExpression::BattlefieldMaximum {
+                filter,
+                characteristic,
+            })
+        };
+        use tricerules_cards::PowerToughnessCharacteristic::{Power, Toughness};
+        assert_eq!(
+            engine.resolve_amount(&maximum(filter.clone(), Power), quantity_context(0)),
+            0
+        );
+        let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        let other = move_to_battlefield(&mut engine, 0, "serra_angel");
+        engine.state.objects.get_mut(&source).unwrap().toughness = Some(7);
+        assert_eq!(
+            engine.resolve_amount(&maximum(filter.clone(), Power), quantity_context(source)),
+            4
+        );
+        assert_eq!(
+            engine.resolve_amount(
+                &maximum(filter.clone(), Toughness),
+                quantity_context(source)
+            ),
+            7
+        );
+        for oid in [source, other] {
+            engine.state.continuous_effects.push(ContinuousEffect {
+                source_id: None,
+                affected: AffectedScope::Single(oid),
+                kind: ContinuousEffectKind::PtModify {
+                    delta_power: -5,
+                    delta_toughness: 0,
+                },
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 1,
+                trigger_grant_origin: None,
+            });
+        }
+        let quantity = CountExpression::BattlefieldMaximum {
+            filter: filter.clone(),
+            characteristic: Power,
+        };
+        assert_eq!(
+            engine.resolve_amount(&Amount::Count(quantity.clone()), quantity_context(source)),
+            0
+        );
+        assert_eq!(
+            engine.resolve_amount(
+                &Amount::Count(CountExpression::Affine {
+                    constant: 2,
+                    terms: vec![tricerules_cards::QuantityTerm {
+                        coefficient: -1,
+                        quantity
+                    }]
+                }),
+                quantity_context(source)
+            ),
+            3,
+            "max(-3, -1) remains signed until the final amount"
+        );
+        engine.state.players.push(PlayerState::new(19, 20));
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            other,
+            Zone::Hand,
+            None,
+        )
+        .unwrap();
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            other,
+            Zone::Battlefield,
+            Some(19),
+        )
+        .unwrap();
+        filter.controllers = RelativePlayerSet::Opponents;
+        assert_eq!(
+            engine.resolve_amount(&maximum(filter, Toughness), quantity_context(source)),
+            4
+        );
+    }
+
+    #[test]
+    fn issue_165_cave_and_permanent_graveyard_counts_use_printed_cards_once() {
+        let mut engine = quantity_engine();
+        let source = move_to_graveyard(&mut engine, 0, "grizzly_bears");
+        let cave = move_to_graveyard(&mut engine, 0, "island");
+        let artifact = move_to_graveyard(&mut engine, 0, "island");
+        let copied = move_to_graveyard(&mut engine, 0, "island");
+        let token = move_to_graveyard(&mut engine, 0, "island");
+        let instant = move_to_graveyard(&mut engine, 0, "island");
+        let opponent = move_to_graveyard(&mut engine, 1, "forest");
+        let registry = Box::leak(Box::new(CardRegistry::from_chunks_and_tokens(&[
+            r#"(id: "test_cave", name: "Test Cave", types: ["Land", "Cave"])"#,
+            r#"(id: "test_artifact", name: "Test Artifact", types: ["Artifact", "Creature"], power: 1, toughness: 1)"#,
+            r#"(id: "test_instant", name: "Test Instant", types: ["Instant"] , spell_effect: [GainLife(amount: 1)])"#,
+            include_str!("../../../tricerules-cards/data/island.ron"),
+            include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+        ], &[]).unwrap()));
+        let values = CopiableValues {
+            source_card_id: "test_cave".into(),
+            source_face_index: 0,
+            face: registry.get("test_cave").unwrap().primary_face().clone(),
+            room_faces: None,
+            display_name: "Test Cave".into(),
+        };
+        for oid in [cave, opponent] {
+            engine.state.objects.get_mut(&oid).unwrap().card_id = "test_cave".into();
+        }
+        engine.state.objects.get_mut(&artifact).unwrap().card_id = "test_artifact".into();
+        engine.state.objects.get_mut(&instant).unwrap().card_id = "test_instant".into();
+        engine
+            .state
+            .objects
+            .get_mut(&copied)
+            .unwrap()
+            .copiable_values = Some(values.clone());
+        engine.state.objects.get_mut(&token).unwrap().token_origin = Some(values);
+        engine.registry = registry;
+        let global = CardRegistry::global();
+        let SpellEffectKind::DamageAll { amount, .. } = &global
+            .get("calamitous_cave-in")
+            .unwrap()
+            .primary_face()
+            .spell_effect[0]
+        else {
+            panic!("Cave-In amount");
+        };
+        assert_eq!(
+            engine.resolve_amount(amount, quantity_context(source)),
+            1,
+            "only the printed Cave in our graveyard counts"
+        );
+        let SpellEffectKind::PumpTarget {
+            scale: Some(scale), ..
+        } = &global
+            .get("chupacabra_echo")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .effect[0]
+        else {
+            panic!("Echo amount");
+        };
+        assert_eq!(
+            engine.resolve_amount(&scale.amount, quantity_context(source)),
+            4,
+            "artifact creature counts once, tokens and instants never count"
+        );
+    }
+
+    #[test]
+    fn issue_165_source_quantity_retains_signed_intermediates() {
+        let mut engine = quantity_engine();
+        let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::PtModify {
+                delta_power: -5,
+                delta_toughness: 0,
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+            trigger_grant_origin: None,
+        });
+        let amount = Amount::Count(CountExpression::Affine {
+            constant: 2,
+            terms: vec![tricerules_cards::QuantityTerm {
+                coefficient: -1,
+                quantity: CountExpression::SourcePower,
+            }],
+        });
+        assert_eq!(engine.resolve_amount(&amount, quantity_context(source)), 5);
+        assert_eq!(
+            engine.resolve_amount(
+                &Amount::Count(CountExpression::SourcePower),
+                quantity_context(source)
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn issue_165_source_quantity_uses_departure_not_returned_generation() {
+        let mut engine = quantity_engine();
+        let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::PtModify {
+                delta_power: 3,
+                delta_toughness: 0,
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+            trigger_grant_origin: None,
+        });
+        let amount = Amount::Count(CountExpression::SourcePower);
+        let context = quantity_context(source);
+        assert_eq!(engine.resolve_amount(&amount, context), 5);
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Hand,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            engine.resolve_amount(&amount, context),
+            5,
+            "departure snapshots include modifiers"
+        );
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .unwrap();
+        engine.state.objects.get_mut(&source).unwrap().power = Some(9);
+        assert_eq!(
+            engine.resolve_amount(&amount, context),
+            5,
+            "a new generation cannot supply the old trigger's power"
+        );
+    }
+
+    #[test]
+    fn issue_165_simultaneous_departures_retain_pre_move_power() {
+        let mut engine = quantity_engine();
+        let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        let grantor = move_to_battlefield(&mut engine, 0, "serra_angel");
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: Some(grantor),
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::PtModify {
+                delta_power: 3,
+                delta_toughness: 0,
+            },
+            condition: None,
+            duration: EffectDuration::WhileSourceOnBattlefield,
+            timestamp: 1,
+            trigger_grant_origin: None,
+        });
+        let events: Vec<_> = [grantor, source]
+            .into_iter()
+            .map(|oid| engine.battlefield_leave_event(oid).unwrap())
+            .collect();
+        for oid in [grantor, source] {
+            super::super::resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                oid,
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+        }
+        engine.record_committed_events(&events);
+        assert_eq!(
+            engine.resolve_amount(
+                &Amount::Count(CountExpression::SourcePower),
+                quantity_context(source)
+            ),
+            5
+        );
+    }
+
+    #[test]
+    fn issue_165_public_cohorts_sum_deduplicate_and_exclude_resolving_card() {
+        let mut engine = quantity_engine();
+        let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        move_to_battlefield(&mut engine, 0, "island");
+        move_to_battlefield(&mut engine, 1, "forest");
+        let graveyard_card = move_to_graveyard(&mut engine, 0, "island");
+        let filter = BattlefieldPermanentFilter {
+            any_of: None,
+            controllers: RelativePlayerSet::Controller,
+            card_type: Some(CardTypeFilter::Land),
+            color: None,
+            name: None,
+            required_subtypes: vec![],
+            exclude_source: false,
+        };
+        let mut union = filter.clone();
+        union.any_of = Some(vec![filter.clone(), filter]);
+        let battlefield = CountExpression::BattlefieldPermanents { filter: union };
+        let graveyard = CountExpression::GraveyardCards {
+            owners: RelativePlayerSet::Controller,
+            filter: None,
+        };
+        let amount = Amount::Count(CountExpression::Affine {
+            constant: 0,
+            terms: vec![
+                tricerules_cards::QuantityTerm {
+                    coefficient: 1,
+                    quantity: battlefield,
+                },
+                tricerules_cards::QuantityTerm {
+                    coefficient: 1,
+                    quantity: graveyard,
+                },
+            ],
+        });
+        let mut context = quantity_context(source);
+        assert_eq!(engine.resolve_amount(&amount, context), 2);
+        context.resolving_spell_id = Some(graveyard_card);
+        assert_eq!(engine.resolve_amount(&amount, context), 1);
+        engine.state.turn_history.current.declared_attackers = vec![
+            TurnObjectFact {
+                object_id: source,
+                zone_change_generation: 0,
+                controller: 0,
+                types: vec!["Creature".into()],
+                all_creature_types: false,
+                keywords: vec![],
+                power: Some(2)
+            };
+            2
+        ];
+        let attackers = Amount::Count(CountExpression::DeclaredAttackers {
+            players: RelativePlayerSet::All,
+            filter: Default::default(),
+        });
+        assert_eq!(
+            engine.resolve_amount(&attackers, context),
+            1,
+            "repeat combat does not duplicate one creature"
+        );
+        engine.state.turn_history.finish_turn();
+        assert_eq!(engine.resolve_amount(&attackers, context), 0);
+    }
 
     #[test]
     fn issue_172_new_turn_record_resets_spending_even_for_the_same_active_player() {

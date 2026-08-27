@@ -1,0 +1,12 @@
+// Oracle and rulings fetched 2026-08-27. CR 107.1b, 608.2h: resolve once, use LKI,
+// and use zero for negative source power.
+(
+  id: "brambleguard_captain", name: "Brambleguard Captain", mana_cost: "{3}{R}",
+  types: ["Creature", "Mouse", "Soldier"], power: 2, toughness: 3,
+  triggered_abilities: [(
+    trigger: AtBeginningOfCombat(player: Controller),
+    effect: [PumpTarget(power: 0, toughness: 0, subject: Chosen((kind: Creature, controller: You)),
+      scale: Some((amount: Count(SourcePower), power_per_unit: 1, toughness_per_unit: 0)))],
+    text: "At the beginning of combat on your turn, target creature you control gets +X/+0 until end of turn, where X is this creature's power.",
+  )],
+)

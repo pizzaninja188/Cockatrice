@@ -1,0 +1,18 @@
+// Oracle and rulings fetched 2026-08-27. CR 608.2h, 611.2d, 613.4c.
+(
+  id: "slumbering_keepguard", name: "Slumbering Keepguard", mana_cost: "{W}",
+  types: ["Creature", "Human", "Knight"], power: 1, toughness: 1,
+  triggered_abilities: [(
+    trigger: WheneverPermanentEntersBattlefield(controller: Controller, permanent_type: Some(Enchantment)),
+    effect: [Scry(count: 1)],
+    text: "Whenever an enchantment you control enters, scry 1.",
+  )],
+  activated_abilities: [(
+    costs: [Mana("{2}{W}")],
+    effect: [PumpTarget(power: 0, toughness: 0, subject: Source, scale: Some((
+      amount: Count(BattlefieldPermanents(filter: (controllers: Controller, card_type: Some(Enchantment)))),
+      power_per_unit: 1, toughness_per_unit: 1,
+    )))],
+    text: "{2}{W}: This creature gets +1/+1 until end of turn for each enchantment you control.",
+  )],
+)

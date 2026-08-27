@@ -51,7 +51,9 @@ fn second_event_cards_use_shared_ordinal_triggers() {
         poised.triggered_abilities[0].effect.as_slice(),
         [
             SpellEffectKind::PutCounters { .. },
-            SpellEffectKind::Scry { count: 1 }
+            SpellEffectKind::Scry {
+                count: tricerules_cards::Amount::Fixed(1)
+            }
         ]
     ));
 

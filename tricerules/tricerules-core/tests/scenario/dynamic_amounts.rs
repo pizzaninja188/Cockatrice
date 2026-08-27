@@ -1,5 +1,304 @@
 use crate::helpers::*;
 
+fn quantity_game(card: &str) -> GameEngine {
+    let mut engine = GameEngine::new(
+        165_100,
+        &[0, 1],
+        20,
+        Some(vec![deck_with("island", &[card]), forest_only_deck()]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, card);
+    engine
+}
+
+fn quantity_cast(engine: &mut GameEngine, card: &str, targets: Vec<TargetRef>) {
+    if !engine.state.players[0]
+        .hand
+        .iter()
+        .any(|id| engine.state.objects[id].card_id == card)
+    {
+        inject_card_into_hand(engine, 0, card);
+    }
+    grant_pool(engine, 0);
+    engine
+        .apply_command(
+            0,
+            &cast_spell(hand_index_for_card(engine, 0, card), targets),
+        )
+        .unwrap();
+    pass_both_players(engine);
+}
+
+fn quantity_land(engine: &mut GameEngine, player: usize, subtype: &str) -> u32 {
+    // A copied test land exercises derived subtype selection without adding unrelated card data.
+    let id = inject_permanent_on_battlefield(engine, player, "forest");
+    let definition = tricerules_cards::CardRegistry::global()
+        .get("forest")
+        .unwrap();
+    let mut face = definition.primary_face().clone();
+    face.types = vec!["Land".into(), subtype.into()];
+    face.supertypes.clear();
+    engine.state.objects.get_mut(&id).unwrap().copiable_values =
+        Some(tricerules_core::state::CopiableValues {
+            source_card_id: "forest".into(),
+            source_face_index: 0,
+            face,
+            room_faces: None,
+            display_name: "Test land".into(),
+        });
+    id
+}
+
+fn quantity_trigger_target(engine: &mut GameEngine, target: u32) {
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                    targets: target_object(target),
+                    ..Default::default()
+                })),
+            },
+        )
+        .unwrap();
+}
+
+#[test]
+fn issue_165_flow_draws_for_islands_then_discards_even_at_zero() {
+    for islands in [0, 3] {
+        let mut engine = quantity_game("flow_of_knowledge");
+        for _ in 0..islands {
+            inject_permanent_on_battlefield(&mut engine, 0, "island");
+        }
+        inject_permanent_on_battlefield(&mut engine, 1, "island");
+        let library = engine.state.players[0].library.len();
+        let hand = engine.state.players[0].hand.len();
+        quantity_cast(&mut engine, "flow_of_knowledge", vec![]);
+        assert_eq!(engine.state.players[0].library.len(), library - islands);
+        let choices = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .candidates[..2]
+            .to_vec();
+        engine
+            .apply_command(0, &submit_resolution_choice(choices))
+            .unwrap();
+        assert_eq!(engine.state.players[0].hand.len(), hand + islands - 3);
+        assert!(engine.state.pending_resolution.is_none());
+    }
+}
+
+#[test]
+fn issue_165_keepguard_counts_enchantments_at_activation_resolution() {
+    let mut engine = quantity_game("slumbering_keepguard");
+    quantity_cast(&mut engine, "slumbering_keepguard", vec![]);
+    let source = battlefield_object_for_card(&engine, 0, "slumbering_keepguard");
+    inject_permanent_on_battlefield(&mut engine, 0, "glorious_anthem");
+    grant_pool(&mut engine, 0);
+    apply_ability(&mut engine, 0, source, 0, vec![]).unwrap();
+    inject_permanent_on_battlefield(&mut engine, 0, "glorious_anthem");
+    inject_permanent_on_battlefield(&mut engine, 1, "glorious_anthem");
+    pass_both_players(&mut engine);
+    assert_eq!(engine.effective_power(source), Some(3));
+    quantity_cast(&mut engine, "holy_strength", target_object(source));
+    pass_both_players(&mut engine);
+    assert!(
+        engine.state.pending_resolution.is_some(),
+        "controlled enchantment entry triggers scry"
+    );
+    engine
+        .apply_command(0, &submit_resolution_choice(vec![]))
+        .unwrap();
+    assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn issue_165_deserts_due_scales_negative_pump_from_controlled_deserts() {
+    let mut engine = quantity_game("deserts_due");
+    let target = inject_creature_with_stats(&mut engine, 1, "grizzly_bears", 8, 8);
+    quantity_land(&mut engine, 0, "Desert");
+    quantity_land(&mut engine, 0, "Desert");
+    quantity_land(&mut engine, 1, "Desert");
+    quantity_cast(&mut engine, "deserts_due", target_object(target));
+    assert_eq!(engine.effective_power(target), Some(4));
+    quantity_land(&mut engine, 0, "Desert");
+    assert_eq!(
+        engine.effective_power(target),
+        Some(4),
+        "resolved bonus is fixed"
+    );
+}
+
+#[test]
+fn issue_165_gold_rush_counts_new_treasure_and_respects_optional_target_fizzle() {
+    for mode in [0, 1, 2] {
+        let mut engine = quantity_game("gold_rush");
+        let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+        grant_pool(&mut engine, 0);
+        engine
+            .apply_command(
+                0,
+                &cast_spell(
+                    hand_index_for_card(&engine, 0, "gold_rush"),
+                    if mode == 0 {
+                        vec![]
+                    } else {
+                        target_object(target)
+                    },
+                ),
+            )
+            .unwrap();
+        if mode == 2 {
+            engine.state.players[0]
+                .battlefield
+                .retain(|id| *id != target);
+            engine.state.players[0].hand.push(target);
+            engine.state.objects.get_mut(&target).unwrap().zone = tricerules_core::Zone::Hand;
+            engine.state.zone_change_generation.insert(target, 1);
+        }
+        pass_both_players(&mut engine);
+        let treasures = engine.state.players[0]
+            .battlefield
+            .iter()
+            .filter(|id| engine.state.objects[id].card_id == "treasure")
+            .count();
+        assert_eq!(treasures, usize::from(mode != 2));
+        if mode == 1 {
+            assert_eq!(engine.effective_power(target), Some(4));
+            inject_permanent_on_battlefield(&mut engine, 0, "treasure");
+            assert_eq!(engine.effective_power(target), Some(4));
+        }
+    }
+}
+
+#[test]
+fn issue_165_outcaster_searches_and_continuously_counts_deserts() {
+    let mut engine = quantity_game("outcaster_greenblade");
+    let desert = quantity_land(&mut engine, 0, "Desert");
+    quantity_land(&mut engine, 1, "Desert");
+    quantity_cast(&mut engine, "outcaster_greenblade", vec![]);
+    let source = battlefield_object_for_card(&engine, 0, "outcaster_greenblade");
+    assert_eq!(engine.effective_power(source), Some(2));
+    pass_both_players(&mut engine);
+    let choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap()
+        .presentation
+        .candidates[0];
+    engine
+        .apply_command(0, &submit_resolution_choice(vec![choice]))
+        .unwrap();
+    assert!(engine.state.players[0].hand.contains(&choice));
+    engine
+        .state
+        .objects
+        .get_mut(&desert)
+        .unwrap()
+        .copiable_values = None;
+    assert_eq!(
+        engine.effective_power(source),
+        Some(1),
+        "losing the subtype removes the bonus"
+    );
+}
+
+#[test]
+fn issue_165_brambleguard_uses_power_when_combat_trigger_resolves() {
+    let mut engine = quantity_game("brambleguard_captain");
+    quantity_cast(&mut engine, "brambleguard_captain", vec![]);
+    let source = battlefield_object_for_card(&engine, 0, "brambleguard_captain");
+    let target = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    engine.apply_command(0, &primitive_yield()).unwrap();
+    quantity_trigger_target(&mut engine, target);
+    quantity_cast(&mut engine, "giant_growth", target_object(source));
+    pass_both_players(&mut engine);
+    assert_eq!(engine.effective_power(target), Some(7));
+}
+
+#[test]
+fn issue_165_cave_in_uses_derived_caves_and_damages_each_creature() {
+    let mut engine = quantity_game("calamitous_cave-in");
+    quantity_land(&mut engine, 0, "Cave");
+    quantity_land(&mut engine, 0, "Cave");
+    quantity_land(&mut engine, 1, "Cave");
+    let a = inject_creature_with_stats(&mut engine, 0, "grizzly_bears", 4, 4);
+    let b = inject_creature_with_stats(&mut engine, 1, "grizzly_bears", 4, 4);
+    quantity_cast(&mut engine, "calamitous_cave-in", vec![]);
+    assert_eq!(engine.state.objects[&a].damage, 2);
+    assert_eq!(engine.state.objects[&b].damage, 2);
+}
+
+#[test]
+fn issue_165_cave_in_freezes_whole_damage_batch_across_prevention_choice() {
+    let mut engine = quantity_game("calamitous_cave-in");
+    for _ in 0..3 {
+        quantity_land(&mut engine, 0, "Cave");
+    }
+    let protected = inject_creature_with_stats(&mut engine, 0, "grizzly_bears", 5, 5);
+    let other = inject_creature_with_stats(&mut engine, 1, "grizzly_bears", 5, 5);
+    let walker = inject_permanent_on_battlefield(&mut engine, 1, "jace_beleren");
+    engine
+        .state
+        .objects
+        .get_mut(&walker)
+        .unwrap()
+        .counters
+        .insert(tricerules_cards::CounterKind::Loyalty, 5);
+    engine.state.add_damage_prevention_shield(protected, 1);
+    engine.state.add_damage_prevention_shield(protected, 1);
+    quantity_cast(&mut engine, "calamitous_cave-in", vec![]);
+    let choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .unwrap()
+        .presentation
+        .candidates[0];
+    assert_eq!(
+        engine.state.objects[&other].damage, 0,
+        "the whole batch is parked"
+    );
+    let index = engine.state.command_index;
+    assert!(engine
+        .apply_command(1, &submit_resolution_choice(vec![choice]))
+        .is_err());
+    assert_eq!(engine.state.command_index, index);
+    // State changed after computation must not cause a second quantity evaluation on resume.
+    quantity_land(&mut engine, 0, "Cave");
+    engine
+        .apply_command(0, &submit_resolution_choice(vec![choice]))
+        .unwrap();
+    assert_eq!(engine.state.objects[&protected].damage, 1);
+    assert_eq!(engine.state.objects[&other].damage, 3);
+    assert_eq!(
+        engine.state.objects[&walker].counter_count(tricerules_cards::CounterKind::Loyalty),
+        2
+    );
+    assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn issue_165_chupacabra_counts_permanent_cards_not_instant_or_tokens() {
+    let mut engine = quantity_game("chupacabra_echo");
+    inject_graveyard_card(&mut engine, 0, "forest");
+    inject_graveyard_card(&mut engine, 0, "grizzly_bears");
+    inject_graveyard_card(&mut engine, 0, "lightning_bolt");
+    inject_graveyard_card(&mut engine, 1, "forest");
+    let target = inject_creature_with_stats(&mut engine, 1, "grizzly_bears", 5, 5);
+    quantity_cast(&mut engine, "chupacabra_echo", vec![]);
+    quantity_trigger_target(&mut engine, target);
+    pass_both_players(&mut engine);
+    assert_eq!(engine.effective_power(target), Some(3));
+}
+
 #[test]
 fn dwarven_priest_counts_controlled_creatures_when_its_trigger_resolves() {
     let decks = Some(vec![

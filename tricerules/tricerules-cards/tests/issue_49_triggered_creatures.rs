@@ -402,7 +402,9 @@ fn issue_49_untargeted_etbs_compose_existing_effects() {
     );
     assert_eq!(
         trigger("wall_of_runes").effect,
-        [SpellEffectKind::Scry { count: 1 }]
+        [SpellEffectKind::Scry {
+            count: tricerules_cards::Amount::Fixed(1)
+        }]
     );
     assert_eq!(
         trigger("inspiring_captain").effect,
@@ -510,6 +512,8 @@ fn issue_49_attack_triggers_use_existing_ordered_effects() {
     );
     assert_eq!(
         trigger("spined_megalodon").effect,
-        [SpellEffectKind::Scry { count: 1 }]
+        [SpellEffectKind::Scry {
+            count: tricerules_cards::Amount::Fixed(1)
+        }]
     );
 }

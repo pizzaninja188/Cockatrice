@@ -538,6 +538,9 @@ impl GameEngine {
         let intrinsic = modifiers
             .iter()
             .fold(0u32, |total, modifier| match modifier {
+                SpellCostModifier::GenericReduction { amount } => total.saturating_add(
+                    self.resolve_amount(amount, AmountContext::from_condition(context)),
+                ),
                 SpellCostModifier::ConditionalGenericReduction { amount, condition }
                     if self.condition_holds(condition, context) =>
                 {
@@ -612,7 +615,9 @@ impl GameEngine {
                     {
                         return total;
                     }
-                    total.saturating_add(*amount)
+                    total.saturating_add(
+                        self.resolve_amount(amount, AmountContext::from_condition(ability_context)),
+                    )
                 })
         })
     }
