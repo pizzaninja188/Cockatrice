@@ -2444,6 +2444,7 @@ TEST_F(RuledBatchTest, RulesEffectsAnnotateOnlyTheBoundBattlefieldCardAndClearCl
         auto *evZv = resp.mutable_batch()->add_events()->mutable_zone_view();
         auto view = buildPerPlayerView(p1, {910u, 911u}, {false, false});
         auto *object = view.mutable_battlefield_objects(1);
+        object->add_rules_annotation_labels("Loses all abilities");
         object->add_rules_annotation_labels("Deathtouch");
         object->add_rules_annotation_labels("Can't be blocked");
         *evZv->add_per_player() = view;
@@ -2457,7 +2458,8 @@ TEST_F(RuledBatchTest, RulesEffectsAnnotateOnlyTheBoundBattlefieldCardAndClearCl
     ASSERT_NE(enhanced, nullptr);
     ASSERT_NE(unaffected, enhanced);
     EXPECT_FALSE(unaffected->getAnnotation().contains(QStringLiteral("Effects:")));
-    EXPECT_EQ(enhanced->getAnnotation(), QStringLiteral("Keep me\nEffects: Deathtouch, Can't be blocked"));
+    EXPECT_EQ(enhanced->getAnnotation(),
+              QStringLiteral("Keep me\nEffects: Loses all abilities, Deathtouch, Can't be blocked"));
     EXPECT_FALSE(enhanced->getAnnotation().contains(QStringLiteral("Granted:")));
 
     {

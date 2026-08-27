@@ -81,6 +81,8 @@ mod issue_110_library_search;
 mod issue_111_turn_history;
 #[path = "scenario/issue_112_spell_cost_reductions.rs"]
 mod issue_112_spell_cost_reductions;
+#[path = "scenario/issue_113_characteristic_setting.rs"]
+mod issue_113_characteristic_setting;
 #[path = "scenario/issue_114_disjunctive_filters.rs"]
 mod issue_114_disjunctive_filters;
 #[path = "scenario/issue_115_attachment_observers.rs"]

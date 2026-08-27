@@ -808,6 +808,9 @@ impl CardRegistry {
                     if let StaticAbilityDef::AttachedModifier {
                         condition,
                         add_types,
+                        set_types,
+                        set_name,
+                        set_colors,
                         delta_power,
                         delta_toughness,
                         set_power,
@@ -834,6 +837,9 @@ impl CardRegistry {
                             && set_toughness.is_none()
                             && !remove_all_abilities
                             && add_types.is_empty()
+                            && set_types.is_none()
+                            && set_name.is_none()
+                            && set_colors.is_none()
                             && keywords.is_empty()
                             && triggered_abilities.is_empty()
                             && activated_abilities.is_empty()
@@ -851,6 +857,44 @@ impl CardRegistry {
                                 id: card.id.clone(),
                                 reason: "AttachedModifier must set both power and toughness".into(),
                             });
+                        }
+                        if !add_types.is_empty() && set_types.is_some() {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "AttachedModifier cannot both add and replace types".into(),
+                            });
+                        }
+                        if !add_types.is_empty() {
+                            add_types
+                                .validate()
+                                .map_err(|reason| RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                })?;
+                        }
+                        if let Some(replacement) = set_types {
+                            replacement.validate().map_err(|reason| {
+                                RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason,
+                                }
+                            })?;
+                        }
+                        if set_name.as_ref().is_some_and(|name| name.trim().is_empty()) {
+                            return Err(RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason: "AttachedModifier set_name cannot be empty".into(),
+                            });
+                        }
+                        if let Some(colors) = set_colors {
+                            let unique: std::collections::HashSet<_> =
+                                colors.iter().copied().collect();
+                            if unique.len() != colors.len() {
+                                return Err(RegistryError::InvalidCard {
+                                    id: card.id.clone(),
+                                    reason: "AttachedModifier set_colors repeats a color".into(),
+                                });
+                            }
                         }
                         if let Some(condition) = condition {
                             condition
@@ -891,14 +935,6 @@ impl CardRegistry {
                                         .into(),
                                 });
                             }
-                        }
-                        if !add_types.is_empty() {
-                            add_types
-                                .validate()
-                                .map_err(|reason| RegistryError::InvalidCard {
-                                    id: card.id.clone(),
-                                    reason,
-                                })?;
                         }
                         for granted in triggered_abilities {
                             if granted.trigger.is_delayed_only() {
@@ -3435,6 +3471,59 @@ mod tests {
                     Err(RegistryError::InvalidCard { .. })
                 ),
                 "expected malformed type addition to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_113_rejects_malformed_characteristic_replacements() {
+        let invalid = [
+            r#"(
+                id: "empty_replacement_name",
+                name: "Empty Replacement Name",
+                mana_cost: "{U}",
+                types: ["Enchantment", "Aura"],
+                spell_effect: [AuraAttach(target: (kind: Creature))],
+                static_abilities: [AttachedModifier(set_name: Some(" "))],
+            )"#,
+            r#"(
+                id: "duplicate_replacement_color",
+                name: "Duplicate Replacement Color",
+                mana_cost: "{U}",
+                types: ["Enchantment", "Aura"],
+                spell_effect: [AuraAttach(target: (kind: Creature))],
+                static_abilities: [AttachedModifier(set_colors: Some([White, White]))],
+            )"#,
+            r#"(
+                id: "conflicting_type_operations",
+                name: "Conflicting Type Operations",
+                mana_cost: "{U}",
+                types: ["Enchantment", "Aura"],
+                spell_effect: [AuraAttach(target: (kind: Creature))],
+                static_abilities: [AttachedModifier(
+                    add_types: (card_types: [Artifact]),
+                    set_types: Some((card_types: [Creature])),
+                )],
+            )"#,
+            r#"(
+                id: "creature_subtype_without_creature_type",
+                name: "Creature Subtype Without Creature Type",
+                mana_cost: "{U}",
+                types: ["Enchantment", "Aura"],
+                spell_effect: [AuraAttach(target: (kind: Creature))],
+                static_abilities: [AttachedModifier(set_types: Some(
+                    (card_types: [Artifact], creature_types: ["Citizen"])
+                ))],
+            )"#,
+        ];
+
+        for card in invalid {
+            assert!(
+                matches!(
+                    CardRegistry::from_chunks(&[card]),
+                    Err(RegistryError::InvalidCard { .. })
+                ),
+                "expected malformed characteristic replacement to be rejected"
             );
         }
     }

@@ -507,7 +507,6 @@ impl GameEngine {
         fn leaf_matches(
             engine: &GameEngine,
             filter: &BattlefieldPermanentFilter,
-            oid: ObjectId,
             characteristics: &Characteristics,
             context: ConditionContext,
         ) -> bool {
@@ -544,15 +543,14 @@ impl GameEngine {
                     .required_subtypes
                     .iter()
                     .all(|subtype| characteristics.has_type(subtype))
-                && filter.name.as_ref().is_none_or(|name| {
-                    engine
-                        .effective_face(oid)
-                        .is_some_and(|face| face.name == *name)
-                });
+                && filter
+                    .name
+                    .as_ref()
+                    .is_none_or(|name| characteristics.has_name(name));
             leaf && filter.any_of.as_ref().is_none_or(|branches| {
                 branches
                     .iter()
-                    .any(|branch| leaf_matches(engine, branch, oid, characteristics, context))
+                    .any(|branch| leaf_matches(engine, branch, characteristics, context))
             })
         }
 
@@ -576,9 +574,7 @@ impl GameEngine {
                 self.characteristics(oid)
                     .map(|characteristics| (oid, characteristics))
             })
-            .filter(|(oid, characteristics)| {
-                leaf_matches(self, filter, *oid, characteristics, context)
-            })
+            .filter(|(_, characteristics)| leaf_matches(self, filter, characteristics, context))
             .collect();
 
         match aggregate {
@@ -586,7 +582,9 @@ impl GameEngine {
             BattlefieldAggregate::DistinctNames => clamp_public_count(
                 matching
                     .iter()
-                    .filter_map(|(oid, _)| self.effective_face(*oid).map(|face| face.name.clone()))
+                    .filter_map(|(_, characteristics)| {
+                        characteristics.primary_name().map(str::to_string)
+                    })
                     .collect::<HashSet<_>>()
                     .len(),
             ),

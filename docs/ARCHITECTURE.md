@@ -261,12 +261,12 @@ Do not re-derive this per card.
   applies summoning sickness, and removes transitioned permanents from combat. Servatrice mirrors
   the same authoritative membership by moving the existing physical card between player TABLE zones.
 - **Characteristics.** `GameEngine::characteristics(oid)` (`engine/characteristics.rs`) is the
-  **single** entry point for derived controller, types, supertypes, colors, keywords, and P/T. It
+  **single** entry point for derived names, controller, types, supertypes, colors, keywords, and P/T. It
   walks the CR 613 layers explicitly: 1 copy → 2 control → 3 text → 4 type → 5 color → 6
   ability adding/removing → 7 P/T (CDA, setters, modifiers, counters, switches). Layers 1–5 and
-  the unused layer-7 sublayers are explicit stages (layers 1 and 2 are implemented; 3–5 remain
-  named identity stages) — implementing the first effect in a layer means filling its slot, not
-  adding another characteristics path. The calculation is pure
+  the unused layer subparts are explicit stages. Layers 3–5 currently support name, type-line,
+  and color replacement effects; implementing another effect in a layer means filling its slot,
+  not adding another characteristics path. The calculation is pure
   (state + registry + oid), so it can be memoized without touching callers.
 - **Timestamps.** Continuous effects carry CR 613.7 timestamps stamped from `command_index`;
   `ordered_effects` sorts by timestamp with the vector index as a deterministic tiebreak. That

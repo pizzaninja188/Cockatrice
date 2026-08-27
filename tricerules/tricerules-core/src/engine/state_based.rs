@@ -468,7 +468,7 @@ impl GameEngine {
             if !characteristics.is_legendary() {
                 continue;
             }
-            let Some(n) = self.effective_face(id).map(|face| face.name.clone()) else {
+            let Some(n) = characteristics.primary_name().map(str::to_string) else {
                 continue;
             };
             by_controller_name

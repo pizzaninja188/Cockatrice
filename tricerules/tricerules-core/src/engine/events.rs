@@ -9,18 +9,24 @@ impl GameEngine {
         characteristics: Option<&Characteristics>,
         face: Option<&CardFace>,
     ) -> Vec<String> {
-        let mut labels: Vec<String> = characteristics
-            .zip(face)
-            .map(|(effective, intrinsic)| {
-                effective
-                    .keywords
-                    .iter()
-                    .copied()
-                    .filter(|keyword| !intrinsic.keywords.contains(keyword))
-                    .map(|keyword| keyword.as_str().to_string())
-                    .collect()
-            })
-            .unwrap_or_default();
+        let mut labels = Vec::new();
+        if super::characteristics::latest_remove_all_abilities_timestamp(&self.state, oid).is_some()
+        {
+            labels.push("Loses all abilities".to_string());
+        }
+        labels.extend(
+            characteristics
+                .zip(face)
+                .into_iter()
+                .flat_map(|(effective, intrinsic)| {
+                    effective
+                        .keywords
+                        .iter()
+                        .copied()
+                        .filter(|keyword| !intrinsic.keywords.contains(keyword))
+                        .map(|keyword| keyword.as_str().to_string())
+                }),
+        );
 
         if let Some(characteristics) = characteristics {
             labels.extend(
@@ -506,6 +512,12 @@ impl GameEngine {
                         .collect();
                         let effective_display_name = if object.face_down {
                             "Face-down creature".to_string()
+                        } else if let Some(name) = characteristics.as_ref().and_then(|value| {
+                            let derived = value.primary_name()?;
+                            let printed = face.as_deref().map(|current| current.name.as_str());
+                            (Some(derived) != printed).then(|| derived.to_string())
+                        }) {
+                            name
                         } else {
                             object
                                 .copiable_values
@@ -720,13 +732,21 @@ pub(super) fn color_string(colors: &[Color]) -> String {
 
 pub(super) fn object_display_name(
     state: &GameState,
-    registry: &CardRegistry,
+    registry: &'static CardRegistry,
     oid: ObjectId,
 ) -> String {
     state
         .objects
         .get(&oid)
         .and_then(|object| {
+            if object.zone == Zone::Battlefield {
+                if let Some(name) =
+                    super::characteristics::characteristics_from(state, registry, oid)
+                        .and_then(|value| value.primary_name().map(str::to_string))
+                {
+                    return Some(name);
+                }
+            }
             object
                 .copiable_values
                 .as_ref()
@@ -736,7 +756,11 @@ pub(super) fn object_display_name(
         .unwrap_or_else(|| format!("[object {}]", oid))
 }
 
-fn describe_target_for_log(state: &GameState, registry: &CardRegistry, tid: ObjectId) -> String {
+fn describe_target_for_log(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    tid: ObjectId,
+) -> String {
     if state.player_idx(tid as i32).is_some() {
         format!("P{tid}")
     } else {
@@ -746,7 +770,7 @@ fn describe_target_for_log(state: &GameState, registry: &CardRegistry, tid: Obje
 
 pub(super) fn format_spell_targets_log(
     state: &GameState,
-    registry: &CardRegistry,
+    registry: &'static CardRegistry,
     targets: &[ObjectId],
 ) -> String {
     if targets.is_empty() {

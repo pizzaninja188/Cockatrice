@@ -1323,3 +1323,24 @@ pub(crate) fn zone_view_rules_annotation_labels(
         .map(|object| object.rules_annotation_labels.clone())
         .unwrap_or_default()
 }
+
+/// Engine-authored effective name for battlefield object `oid` in a recipient's zone view.
+pub(crate) fn zone_view_effective_display_name(
+    e: &mut GameEngine,
+    player: usize,
+    oid: u32,
+) -> Option<String> {
+    e.initial_response_batch()
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ZoneView(view)) => Some(view),
+            _ => None,
+        })
+        .and_then(|view| view.per_player.get(player))
+        .into_iter()
+        .flat_map(|p| p.battlefield_objects.iter())
+        .find(|object| object.object_id == oid)
+        .map(|object| object.effective_display_name.clone())
+        .filter(|name| !name.is_empty())
+}

@@ -23,7 +23,7 @@ pub use primitives::{
     GameCondition, GraveyardAggregate, Keyword, LibraryPartitionKind, ManaAmount, ManaSpendFilter,
     ManaSpendingRestriction, PermanentTypeFilter, PowerComparison, PtScale, RelativePlayerSet,
     SearchDestination, SearchZoneSelection, SpellCostModifier, SpellEffectKind, TriggerCondition,
-    TriggeredAbilityDef, TypeLineAddition, ZoneCardFilter,
+    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

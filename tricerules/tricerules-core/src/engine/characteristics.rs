@@ -12,7 +12,7 @@
 //! 6. ability-adding/removing effects;
 //! 7. power/toughness CDAs, setters, modifiers, counters, then switches.
 //!
-//! Layers 1-3, layer 5, and the unimplemented layer-7 sublayers are explicit identity stages.
+//! Unused layer subparts remain explicit identity stages.
 //! CR 613.8 dependency ordering is intentionally deferred until the first effect that needs it;
 //! the `ordered_effects` boundary is the insertion point. Replacement/prevention choice ordering
 //! (CR 616) is the separate shared pipeline in `engine/replacement.rs`.
@@ -30,6 +30,9 @@ use super::*;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Characteristics {
     pub controller: PlayerId,
+    /// Rules-visible names after copy, face-down, and layer-3 text-changing effects. The vector
+    /// preserves nameless and future multi-name objects without conflating names with card ids.
+    pub names: Vec<String>,
     pub types: Vec<String>,
     /// CR 702.73 Changeling without materializing the entire CR 205.3m list per snapshot.
     pub all_creature_types: bool,
@@ -43,6 +46,14 @@ pub struct Characteristics {
 }
 
 impl Characteristics {
+    pub fn has_name(&self, name: &str) -> bool {
+        self.names.iter().any(|candidate| candidate == name)
+    }
+
+    pub fn primary_name(&self) -> Option<&str> {
+        self.names.first().map(String::as_str)
+    }
+
     pub fn has_type(&self, card_type: &str) -> bool {
         self.types.iter().any(|t| t == card_type)
             || (self.all_creature_types && is_creature_type(card_type))
@@ -105,6 +116,10 @@ impl CharacteristicsEvaluator<'_> {
             // CR 110.2 base value set by the instruction that put the object onto the battlefield.
             // Layer 2 below applies control-changing continuous effects on top.
             controller: object.base_controller,
+            names: (!face.name.is_empty())
+                .then(|| face.name.clone())
+                .into_iter()
+                .collect(),
             types: face.types.to_vec(),
             all_creature_types: face
                 .characteristic_defining_abilities
@@ -138,9 +153,9 @@ impl CharacteristicsEvaluator<'_> {
         self.apply_layer_1_copy(&mut result);
         self.apply_layer_1b_face_down(object, &mut result);
         self.apply_layer_2_control(oid, &mut result);
-        self.apply_layer_3_text(&mut result);
+        self.apply_layer_3_text(oid, &mut result);
         self.apply_layer_4_type(oid, &mut result);
-        self.apply_layer_5_color(&mut result);
+        self.apply_layer_5_color(oid, &mut result);
         Some(result)
     }
 
@@ -223,7 +238,24 @@ impl CharacteristicsEvaluator<'_> {
         controller
     }
 
-    fn apply_layer_3_text(&self, _result: &mut Characteristics) {}
+    fn apply_layer_3_text(&self, oid: ObjectId, result: &mut Characteristics) {
+        let mut effects: Vec<(usize, &ContinuousEffect)> = self
+            .state
+            .continuous_effects
+            .iter()
+            .enumerate()
+            .filter(|(_, effect)| matches!(effect.kind, ContinuousEffectKind::Layer3SetName(_)))
+            .filter(|(_, effect)| effect_affects(self.state, self.registry, effect, oid, result))
+            .filter(|(_, effect)| self.characteristic_effect_condition_holds(effect, oid, result))
+            .collect();
+        effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
+        for (_, effect) in effects {
+            let ContinuousEffectKind::Layer3SetName(name) = &effect.kind else {
+                unreachable!("filtered to layer-3 name effects");
+            };
+            result.names = vec![name.clone()];
+        }
+    }
 
     /// CR 205.1b / 613.1d: additive type-changing effects retain every printed and previously
     /// added type. Equal timestamps use insertion order so replay remains deterministic.
@@ -237,6 +269,7 @@ impl CharacteristicsEvaluator<'_> {
                 matches!(
                     effect.kind,
                     ContinuousEffectKind::Layer4AddTypes(_)
+                        | ContinuousEffectKind::Layer4SetTypeLine(_)
                         | ContinuousEffectKind::Layer4SetCreatureTypes(_)
                 )
             })
@@ -262,6 +295,19 @@ impl CharacteristicsEvaluator<'_> {
                         }
                     }
                 }
+                ContinuousEffectKind::Layer4SetTypeLine(replacement) => {
+                    result.all_creature_types = false;
+                    result.types.clear();
+                    result.types.extend(
+                        replacement
+                            .card_types
+                            .iter()
+                            .map(|card_type| card_type.as_str().to_string()),
+                    );
+                    result
+                        .types
+                        .extend(replacement.creature_types.iter().cloned());
+                }
                 ContinuousEffectKind::Layer4SetCreatureTypes(creature_types) => {
                     result.all_creature_types = false;
                     result.types.retain(|value| !is_creature_type(value));
@@ -278,7 +324,24 @@ impl CharacteristicsEvaluator<'_> {
         }
     }
 
-    fn apply_layer_5_color(&self, _result: &mut Characteristics) {}
+    fn apply_layer_5_color(&self, oid: ObjectId, result: &mut Characteristics) {
+        let mut effects: Vec<(usize, &ContinuousEffect)> = self
+            .state
+            .continuous_effects
+            .iter()
+            .enumerate()
+            .filter(|(_, effect)| matches!(effect.kind, ContinuousEffectKind::Layer5SetColors(_)))
+            .filter(|(_, effect)| effect_affects(self.state, self.registry, effect, oid, result))
+            .filter(|(_, effect)| self.characteristic_effect_condition_holds(effect, oid, result))
+            .collect();
+        effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
+        for (_, effect) in effects {
+            let ContinuousEffectKind::Layer5SetColors(colors) = &effect.kind else {
+                unreachable!("filtered to layer-5 color effects");
+            };
+            result.colors.clone_from(colors);
+        }
+    }
 
     /// Active effects in CR 613.7 timestamp order. The original vector index makes equal
     /// timestamps deterministic. Layer-2 source-controller dependencies are handled by
@@ -478,7 +541,7 @@ impl CharacteristicsEvaluator<'_> {
                 fn filter_matches(
                     evaluator: &CharacteristicsEvaluator<'_>,
                     filter: &BattlefieldPermanentFilter,
-                    candidate_oid: ObjectId,
+                    _candidate_oid: ObjectId,
                     characteristics: &Characteristics,
                     controller: PlayerId,
                 ) -> bool {
@@ -495,17 +558,16 @@ impl CharacteristicsEvaluator<'_> {
                             .required_subtypes
                             .iter()
                             .all(|subtype| characteristics.has_type(subtype))
-                        && filter.name.as_ref().is_none_or(|name| {
-                            evaluator
-                                .effective_face(candidate_oid)
-                                .is_some_and(|face| face.name == *name)
-                        })
+                        && filter
+                            .name
+                            .as_ref()
+                            .is_none_or(|name| characteristics.has_name(name))
                         && filter.any_of.as_ref().is_none_or(|branches| {
                             branches.iter().any(|branch| {
                                 filter_matches(
                                     evaluator,
                                     branch,
-                                    candidate_oid,
+                                    _candidate_oid,
                                     characteristics,
                                     controller,
                                 )
@@ -590,16 +652,13 @@ impl CharacteristicsEvaluator<'_> {
             )),
         }
     }
-
-    fn effective_face(&self, oid: ObjectId) -> Option<Cow<'_, CardFace>> {
-        effective_face_from(self.state, self.registry, oid)
-    }
 }
 
 /// Apply the CR 708.2 battlefield characteristics to a snapshot. Battlefield-entry replacement
 /// effects use this helper while the physical object is still in its source zone but has already
 /// been designated to enter face down.
 pub(super) fn apply_face_down_values(result: &mut Characteristics) {
+    result.names.clear();
     result.types = vec!["Creature".to_string()];
     result.all_creature_types = false;
     result.supertypes.clear();
@@ -886,7 +945,7 @@ pub(super) fn permanent_matches_filter_characteristics(
 
 pub(super) fn creature_matches_scope(
     state: &GameState,
-    registry: &'static CardRegistry,
+    _registry: &'static CardRegistry,
     filter: &CreatureScopeFilter,
     reference_player: PlayerId,
     exclude: Option<ObjectId>,
@@ -896,19 +955,10 @@ pub(super) fn creature_matches_scope(
     let Some(object) = state.objects.get(&oid) else {
         return false;
     };
-    let name_matches = filter.name.as_ref().is_none_or(|required_name| {
-        object
-            .copiable_values
-            .as_ref()
-            .map(|values| values.face.name.as_str())
-            .or_else(|| {
-                registry
-                    .get(&object.card_id)
-                    .and_then(|definition| definition.face(object.face_up_index))
-                    .map(|face| face.name.as_str())
-            })
-            == Some(required_name.as_str())
-    });
+    let name_matches = filter
+        .name
+        .as_ref()
+        .is_none_or(|required_name| characteristics.has_name(required_name));
 
     exclude != Some(oid)
         && (!filter.attacking || super::combat::is_attacking(state, oid))

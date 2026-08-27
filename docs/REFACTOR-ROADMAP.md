@@ -579,7 +579,8 @@ timestamps, layers 6/7c/7d apply in explicit order, a CR 704.4 fixed-point SBA l
 per-rule passes (704.5f/g/h/j/m/p), and prevention shields (CR 614.1a) and regeneration are
 modeled. The gaps are the ones that turn into rewrites if retrofitted late:
 
-- Layers 3–5 (text-change, type-change, color-change) remain identity stages.
+- Layers 3–5 now support name, type-line, and color replacement effects; general text changes and
+  additional operations within those layers remain backlog work.
 - Generic CR 613.8 dependency ordering outside the shipped source-controller layer-2 dependency
   and CR 613.3 CDA handling remain deferred.
 

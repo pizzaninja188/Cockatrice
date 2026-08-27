@@ -43,6 +43,9 @@ fn glaring_aegis_has_complete_oracle_behavior() {
         [StaticAbilityDef::AttachedModifier {
             condition: None,
             add_types: Default::default(),
+            set_types: None,
+            set_name: None,
+            set_colors: None,
             set_power: None,
             set_toughness: None,
             delta_power: 1,

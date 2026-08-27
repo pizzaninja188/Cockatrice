@@ -757,6 +757,37 @@ impl TypeLineAddition {
     }
 }
 
+/// A replacement CR 205.1a type-line change. Supertypes remain separate and are preserved;
+/// every card type and subtype in the ordinary `types` snapshot is replaced by these values.
+/// Witness Protection and Frogify exercise this shape.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TypeLineReplacement {
+    pub card_types: Vec<PermanentTypeFilter>,
+    #[serde(default)]
+    pub creature_types: Vec<String>,
+}
+
+impl TypeLineReplacement {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if self.card_types.is_empty() {
+            return Err("type-line replacement must set at least one card type".into());
+        }
+        TypeLineAddition {
+            card_types: self.card_types.clone(),
+            creature_types: self.creature_types.clone(),
+        }
+        .validate()?;
+        if !self.creature_types.is_empty()
+            && !self.card_types.contains(&PermanentTypeFilter::Creature)
+        {
+            return Err(
+                "type-line replacement creature types require the Creature card type".into(),
+            );
+        }
+        Ok(())
+    }
+}
+
 /// Which player's spell casts trigger a `WheneverPlayerCastsSpell` ability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CastTriggerPlayer {
@@ -1195,6 +1226,15 @@ pub enum StaticAbilityDef {
         condition: Option<GameCondition>,
         #[serde(default)]
         add_types: TypeLineAddition,
+        /// CR 205.1a: replace all card types and subtypes while preserving supertypes.
+        #[serde(default)]
+        set_types: Option<TypeLineReplacement>,
+        /// CR 612.8: replace every name the attached object has.
+        #[serde(default)]
+        set_name: Option<String>,
+        /// CR 613 layer 5: replace every color. `Some([])` means colorless.
+        #[serde(default)]
+        set_colors: Option<Vec<Color>>,
         #[serde(default)]
         delta_power: i32,
         #[serde(default)]

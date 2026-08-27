@@ -194,6 +194,9 @@ impl GameEngine {
                 StaticAbilityDef::AttachedModifier {
                     condition,
                     add_types,
+                    set_types,
+                    set_name,
+                    set_colors,
                     delta_power,
                     delta_toughness,
                     set_power,
@@ -207,11 +210,41 @@ impl GameEngine {
                     doesnt_untap_during_untap_step,
                 } => {
                     let affected = AffectedScope::AttachedTo(object_id);
+                    if let Some(name) = set_name {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer3SetName(name),
+                            condition: condition.clone(),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
                     if !add_types.is_empty() {
                         self.state.continuous_effects.push(ContinuousEffect {
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer4AddTypes(add_types),
+                            condition: condition.clone(),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    if let Some(replacement) = set_types {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer4SetTypeLine(replacement),
+                            condition: condition.clone(),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    if let Some(colors) = set_colors {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer5SetColors(colors),
                             condition: condition.clone(),
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
