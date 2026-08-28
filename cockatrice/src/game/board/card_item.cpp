@@ -1,4 +1,3 @@
-#include "../ruled/ruled_spell_payment_ui.h"
 #include "card_item.h"
 
 #include "../../client/settings/cache_settings.h"
@@ -12,6 +11,7 @@
 #include "../player/player_manager.h"
 #include "../ruled/ruled_actions.h"
 #include "../ruled/ruled_client_state.h"
+#include "../ruled/ruled_payment_ui.h"
 #include "../ruled/ruled_token_display.h"
 #include "../zones/logic/view_zone_logic.h"
 #include "../zones/table_zone.h"
@@ -299,7 +299,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             painter->drawPath(shape());
             painter->restore();
         }
-        RuledSpellPaymentUi::paint(this, painter);
+        RuledPaymentUi::paint(this, painter);
         if (zone && zone->getName() == ZoneNames::TABLE && ruledTargetSelectionOid != 0 &&
             RuledActions::isSelectedCastCostPermanent(ruledGame, ruledTargetSelectionOid)) {
             painter->save();

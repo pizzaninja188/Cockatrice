@@ -76,6 +76,7 @@ pub(super) fn counter_target_spell(
                         revealed_zone_owner_player_id: None,
                         candidate_source_zones: Vec::new(),
                         combat_defender_options: Vec::new(),
+                        waterbend: false,
                     },
                 )),
             });
@@ -94,6 +95,7 @@ pub(super) fn counter_target_spell(
                 continuation: ResolutionContinuation::ManaPayment {
                     stack: ParkedStackResolution::new(cx.top.clone()),
                     payment: PendingManaPayment {
+                        waterbend: false,
                         target_spell_id: tid,
                         generic_mana_cost,
                         mana_cost: ManaCost::default(),
@@ -141,7 +143,8 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
         ResolutionCost::DiscardCard { .. } => {
             format!("Discard a matching card to pay for {ward_text}, or decline.")
         }
-        ResolutionCost::None
+        ResolutionCost::Waterbend(_)
+        | ResolutionCost::None
         | ResolutionCost::Blight { .. }
         | ResolutionCost::SacrificePermanent { .. }
         | ResolutionCost::TapPermanents { .. } => {
@@ -196,6 +199,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
+                waterbend: false,
             };
             (presentation, PendingWardPaymentStage::Mana(payment), event)
         }
@@ -269,6 +273,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
+                waterbend: false,
             };
             (
                 presentation,
@@ -278,7 +283,8 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 event,
             )
         }
-        ResolutionCost::None
+        ResolutionCost::Waterbend(_)
+        | ResolutionCost::None
         | ResolutionCost::Blight { .. }
         | ResolutionCost::SacrificePermanent { .. }
         | ResolutionCost::TapPermanents { .. } => unreachable!(),
@@ -595,6 +601,7 @@ pub(super) fn copy_target_spell(
                                 revealed_zone_owner_player_id: None,
                                 candidate_source_zones: Vec::new(),
                                 combat_defender_options: Vec::new(),
+                                waterbend: false,
                             },
                         )),
                     });

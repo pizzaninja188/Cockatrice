@@ -306,11 +306,11 @@ bool RuledEventDispatcher::processPayload(const std::string &payload)
     if (!batch.ParseFromString(payload)) {
         return false;
     }
-    if (batch.has_spell_payment_preview()) {
+    if (batch.has_payment_preview()) {
         if (batch.events_size() != 0 || !batch.legal_by_player().empty())
             return false;
-        if (state->spellPayment.apply(batch.spell_payment_preview()))
-            emit state->spellPaymentPreviewReceived();
+        if (state->payment.apply(batch.payment_preview()))
+            emit state->paymentPreviewReceived();
         return true;
     }
     resetPerBatchLegalActions();
@@ -341,6 +341,7 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->validTargetsByAbility.clear();
     state->abilityCostData.clear();
     state->eligibleRestrictedManaByAbility.clear();
+    state->waterbendAbilities.clear();
     state->permanentActionsByOid.clear();
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
@@ -778,7 +779,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     // Retire the previous resolution UI before publishing its replacement. A repeated public
     // reveal marks its pending pick as shared, so this does not close the existing popup.
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPick);
-    state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
+    if (!(isDecider && rcr.waterbend() && state->isWaterbendResolutionPayment() &&
+          state->pendingChoice->paymentSourceOid == rcr.source_object_id()))
+        state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
     state->clearPendingChoiceOfKind(ChoiceKind::SiegeCast);
     state->clearPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender);
@@ -858,6 +861,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT) {
         PendingChoice payment;
         payment.kind = ChoiceKind::ResolutionPayment;
+        payment.waterbend = rcr.waterbend();
+        payment.paymentSourceOid = rcr.source_object_id();
         payment.promptText = QString::fromStdString(rcr.prompt_text());
         payment.genericManaCost = static_cast<int>(rcr.generic_mana_cost());
         payment.paymentCurrentlyLegal = rcr.payment_currently_legal();
@@ -1589,7 +1594,10 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         state->abilityCostData.insert(static_cast<quint64>(entry.first), parseCostData(entry.second));
     }
     state->eligibleRestrictedManaByAbility.clear();
+    state->waterbendAbilities.clear();
     for (const auto &entry : actions.mana_payment_by_ability()) {
+        if (entry.second.has_waterbend())
+            state->waterbendAbilities.insert(static_cast<quint64>(entry.first));
         QSet<quint32> eligibleGroups;
         for (const quint32 groupId : entry.second.eligible_restricted_mana_group_ids()) {
             eligibleGroups.insert(groupId);

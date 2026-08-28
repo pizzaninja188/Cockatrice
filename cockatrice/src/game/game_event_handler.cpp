@@ -284,8 +284,8 @@ namespace
 {
 bool isRuledUiOnlyCommand(const ruled::v1::RuledCommand &command)
 {
-    return command.has_preview_spell_payment() || command.has_set_auto_pass_policy() || command.has_preview_declare_attackers() ||
-           command.has_preview_declare_blockers();
+    return command.has_preview_payment() || command.has_set_auto_pass_policy() ||
+           command.has_preview_declare_attackers() || command.has_preview_declare_blockers();
 }
 
 bool containsEngineBoundRuledCommand(const PendingCommand *pending)

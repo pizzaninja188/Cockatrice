@@ -1,16 +1,17 @@
 //! Convoke (CR 702.51), shared by Unexpected Assistance and Merrow Skyswimmer.
 //! Oracle/rulings checked 2026-08-26; CR 601.2f-h, 400.7, 702.51 in the official 2026-08-19 text.
-//! Queries never reserve objects, mutate game state, or advance replay. Only CastSpell commits.
+//! Convoke and Waterbend queries never reserve objects, mutate state, or advance replay.
+//! CastSpell, ActivateAbility and SubmitResolutionChoice commit the same validated payment plan.
 use super::super::*;
 use super::demand::{normalize, Demand};
-use super::transaction::PreparedSpellCosts;
+use super::transaction::PreparedPaymentCosts;
 
-pub(in crate::engine) fn mana_counts(mana: Option<&rv1::SpellPaymentMana>) -> [u32; 6] {
+pub(in crate::engine) fn mana_counts(mana: Option<&rv1::PaymentMana>) -> [u32; 6] {
     mana.map_or([0; 6], |m| [m.w, m.u, m.b, m.r, m.g, m.c])
 }
 
-fn mana_message(v: [u32; 6]) -> rv1::SpellPaymentMana {
-    rv1::SpellPaymentMana {
+fn mana_message(v: [u32; 6]) -> rv1::PaymentMana {
+    rv1::PaymentMana {
         w: v[0],
         u: v[1],
         b: v[2],
@@ -45,8 +46,8 @@ fn slot(kind: i32) -> Option<usize> {
 }
 
 fn residuals(
-    cost: &PreparedSpellCosts,
-    selection: &rv1::SpellPaymentSelection,
+    cost: &PreparedPaymentCosts,
+    selection: &rv1::PaymentSelection,
 ) -> Result<Vec<Demand>, EngineError> {
     let mut mana = mana_counts(selection.mana.as_ref());
     for r in &cost.restricted_mana {
@@ -56,11 +57,12 @@ fn residuals(
                 .ok_or(EngineError::Illegal("payment overflow"))?;
         }
     }
-    let creatures = selection
+    let mut creatures = selection
         .convoke
         .iter()
         .map(|c| slot(c.kind).ok_or(EngineError::Illegal("invalid Convoke contribution")))
         .collect::<Result<Vec<_>, _>>()?;
+    creatures.extend(std::iter::repeat_n(6, selection.waterbend.len()));
     Ok(normalize(
         &cost.mana,
         cost.x_value,
@@ -74,7 +76,7 @@ fn residuals(
 }
 
 impl GameEngine {
-    fn payment_object_ref(&self, oid: ObjectId) -> rv1::CostObjectRef {
+    pub(in crate::engine) fn payment_object_ref(&self, oid: ObjectId) -> rv1::CostObjectRef {
         rv1::CostObjectRef {
             object_id: oid,
             zone_change_generation: self
@@ -89,8 +91,8 @@ impl GameEngine {
     fn convoke_candidate(
         &self,
         player: PlayerId,
-        costs: &PreparedSpellCosts,
-        c: &rv1::ConvokeContribution,
+        costs: &PreparedPaymentCosts,
+        c: &rv1::ObjectPaymentContribution,
     ) -> bool {
         let Some(reference) = c.object.as_ref() else {
             return false;
@@ -126,18 +128,18 @@ impl GameEngine {
         }
     }
 
-    pub(in crate::engine) fn validate_explicit_spell_payment(
+    pub(in crate::engine) fn validate_explicit_payment(
         &self,
         player: PlayerId,
         source: ObjectId,
         has_convoke: bool,
-        costs: &PreparedSpellCosts,
-        selection: &rv1::SpellPaymentSelection,
+        costs: &PreparedPaymentCosts,
+        selection: &rv1::PaymentSelection,
     ) -> Result<u32, EngineError> {
         if selection.expected_state_revision != self.state.command_index
             || selection.source.as_ref() != Some(&self.payment_object_ref(source))
         {
-            return Err(EngineError::Illegal("stale spell payment"));
+            return Err(EngineError::Illegal("stale payment"));
         }
         let mut seen = HashSet::new();
         for c in &selection.convoke {
@@ -150,52 +152,109 @@ impl GameEngine {
                 ));
             }
         }
+        if !selection.waterbend.is_empty() && costs.waterbend_limit.is_none() {
+            return Err(EngineError::Illegal("unexpected Waterbend contribution"));
+        }
+        if selection.waterbend.len() > costs.waterbend_limit.unwrap_or(0) as usize
+            || selection.waterbend.iter().any(|reference| {
+                !self.waterbend_candidate(player, costs, reference)
+                    || !seen.insert(Some(reference.object_id))
+            })
+        {
+            return Err(EngineError::Illegal(
+                "illegal or duplicate Waterbend selection",
+            ));
+        }
         residuals(costs, selection)?
             .into_iter()
             .find(Demand::complete)
             .map(|d| d.life)
-            .ok_or(EngineError::Illegal(
-                "spell payment is incomplete or excessive",
-            ))
+            .ok_or(EngineError::Illegal("payment is incomplete or excessive"))
     }
 
-    pub fn preview_spell_payment(
+    pub fn preview_payment(
         &self,
         player: PlayerId,
-        request: &rv1::PreviewSpellPayment,
-    ) -> rv1::SpellPaymentPreview {
-        let mut response = rv1::SpellPaymentPreview {
+        request: &rv1::PreviewPayment,
+    ) -> rv1::PaymentPreview {
+        let mut response = rv1::PaymentPreview {
             transaction_id: request.transaction_id,
             revision: request.revision,
             ..Default::default()
         };
-        if let Err(error) = self.fill_spell_payment_preview(player, request, &mut response) {
+        if let Err(error) = self.fill_payment_preview(player, request, &mut response) {
             response.error = error.to_string();
         }
         response
     }
 
-    fn fill_spell_payment_preview(
+    fn fill_payment_preview(
         &self,
         player: PlayerId,
-        request: &rv1::PreviewSpellPayment,
-        response: &mut rv1::SpellPaymentPreview,
+        request: &rv1::PreviewPayment,
+        response: &mut rv1::PaymentPreview,
     ) -> Result<(), EngineError> {
-        if self.state.priority_player_id() != player || self.state.blocking_choice().is_some() {
-            return Err(EngineError::Illegal("spell payment is not available now"));
+        if [
+            request.cast_spell.is_some(),
+            request.activate_ability.is_some(),
+            request.resolution_choice.is_some(),
+        ]
+        .into_iter()
+        .filter(|present| *present)
+        .count()
+            != 1
+        {
+            return Err(EngineError::Illegal(
+                "payment preview requires exactly one action",
+            ));
         }
-        let command = request
-            .cast_spell
-            .as_ref()
-            .ok_or(EngineError::Illegal("missing proposed cast"))?;
-        let mut prepared = self.prepare_spell_cast(player, command)?;
-        if !prepared.convoke {
-            return Err(EngineError::Illegal("spell has no Convoke payment"));
-        }
-        let source = self.payment_object_ref(prepared.oid);
-        let mut selection = command.payment.clone().unwrap_or_default();
+        let (mut prepared, source, mut selection) = if let Some(command) = &request.cast_spell {
+            if self.state.priority_player_id() != player || self.state.blocking_choice().is_some() {
+                return Err(EngineError::Illegal("spell payment is not available now"));
+            }
+            let cast = self.prepare_spell_cast(player, command)?;
+            if !cast.convoke {
+                return Err(EngineError::Illegal("spell has no Convoke payment"));
+            }
+            (
+                cast.payment,
+                self.payment_object_ref(cast.oid),
+                command.payment.clone().unwrap_or_default(),
+            )
+        } else if let Some(command) = &request.activate_ability {
+            (
+                self.prepare_activation_payment(player, command)?,
+                self.payment_object_ref(command.source_object_id),
+                command.payment.clone().unwrap_or_default(),
+            )
+        } else {
+            let command = request.resolution_choice.as_ref().unwrap();
+            let pending = self
+                .state
+                .pending_resolution
+                .as_ref()
+                .ok_or(EngineError::Illegal("no resolution payment"))?;
+            let payment = pending
+                .continuation
+                .mana_payment()
+                .filter(|p| p.waterbend)
+                .ok_or(EngineError::Illegal("no Waterbend resolution payment"))?;
+            if pending.deciding_player != player
+                || command.decision != rv1::ResolutionChoiceDecision::PayMana as i32
+                || !command.chosen_object_ids.is_empty()
+                || command.cast_spell.is_some()
+                || command.chosen_combat_defender.is_some()
+            {
+                return Err(EngineError::Illegal("invalid resolution payment proposal"));
+            }
+            (
+                self.prepare_resolution_payment_costs(player, payment, &command.restricted_mana)?,
+                self.payment_object_ref(pending.presentation.source_object_id),
+                command.payment.clone().unwrap_or_default(),
+            )
+        };
         if selection.source.as_ref().is_some_and(|old| *old != source) {
-            return Err(EngineError::Illegal("cast source changed"));
+            return Err(EngineError::Illegal("payment source changed"));
         }
         selection.source = Some(source);
         selection.expected_state_revision = self.state.command_index;
@@ -204,14 +263,14 @@ impl GameEngine {
             .player_idx(player)
             .ok_or(EngineError::UnknownPlayer(player))?;
         let requested_mana = mana_counts(selection.mana.as_ref());
-        let requested_restricted = std::mem::take(&mut prepared.payment.restricted_mana);
+        let requested_restricted = std::mem::take(&mut prepared.restricted_mana);
         selection.mana = Some(mana_message([0; 6]));
         let initial = normalize(
-            &prepared.payment.mana,
-            prepared.payment.x_value,
-            prepared.payment.extra_generic,
-            prepared.payment.generic_reduction,
-            &prepared.payment.flex_payments,
+            &prepared.mana,
+            prepared.x_value,
+            prepared.extra_generic,
+            prepared.generic_reduction,
+            &prepared.flex_payments,
         )?;
         response.total_cost = initial
             .iter()
@@ -219,22 +278,39 @@ impl GameEngine {
             .collect::<Vec<_>>()
             .join(" or ");
         let old_creatures = std::mem::take(&mut selection.convoke);
+        let old_waterbend = std::mem::take(&mut selection.waterbend);
         let mut seen = HashSet::new();
         for c in old_creatures {
-            let valid = self.convoke_candidate(player, &prepared.payment, &c)
+            let valid = prepared.waterbend_limit.is_none()
+                && self.convoke_candidate(player, &prepared, &c)
                 && seen.insert(c.object.as_ref().map(|o| o.object_id));
             if valid {
                 selection.convoke.push(c);
-                if !residuals(&prepared.payment, &selection)?.is_empty() {
+                if !residuals(&prepared, &selection)?.is_empty() {
                     continue;
                 }
                 selection.convoke.pop();
             }
             response.selection_changed = true;
         }
+        for reference in old_waterbend {
+            if prepared
+                .waterbend_limit
+                .is_some_and(|limit| selection.waterbend.len() < limit as usize)
+                && self.waterbend_candidate(player, &prepared, &reference)
+                && seen.insert(Some(reference.object_id))
+            {
+                selection.waterbend.push(reference);
+                if !residuals(&prepared, &selection)?.is_empty() {
+                    continue;
+                }
+                selection.waterbend.pop();
+            }
+            response.selection_changed = true;
+        }
         // Retain creatures first, then only remove unavailable or excess staged mana. The exact
         // resource planner also bounds restricted groups shared by multiple contributions.
-        let fits = |costs: &PreparedSpellCosts, selection: &rv1::SpellPaymentSelection| {
+        let fits = |costs: &PreparedPaymentCosts, selection: &rv1::PaymentSelection| {
             residuals(costs, selection).is_ok_and(|demands| !demands.is_empty())
                 && super::mana::plan_exact_mana_payment(
                     &self.state,
@@ -251,26 +327,22 @@ impl GameEngine {
             let retained = retain_amount(requested_mana[i], |amount| {
                 ordinary[i] = amount;
                 selection.mana = Some(mana_message(ordinary));
-                fits(&prepared.payment, &selection)
+                fits(&prepared, &selection)
             });
             response.selection_changed |= retained != requested_mana[i];
         }
         for requested in requested_restricted {
             if !prepared
-                .payment
                 .eligible_restricted_mana
                 .contains(&requested.restriction_group_id)
             {
                 response.selection_changed = true;
                 continue;
             }
-            prepared
-                .payment
-                .restricted_mana
-                .push(rv1::ManaSpendSelection {
-                    restriction_group_id: requested.restriction_group_id,
-                    ..Default::default()
-                });
+            prepared.restricted_mana.push(rv1::ManaSpendSelection {
+                restriction_group_id: requested.restriction_group_id,
+                ..Default::default()
+            });
             for (i, amount) in [
                 requested.w,
                 requested.u,
@@ -283,7 +355,7 @@ impl GameEngine {
             .enumerate()
             {
                 let retained = retain_amount(amount, |amount| {
-                    let entry = prepared.payment.restricted_mana.last_mut().unwrap();
+                    let entry = prepared.restricted_mana.last_mut().unwrap();
                     match i {
                         0 => entry.w = amount,
                         1 => entry.u = amount,
@@ -292,19 +364,19 @@ impl GameEngine {
                         4 => entry.g = amount,
                         _ => entry.c = amount,
                     }
-                    fits(&prepared.payment, &selection)
+                    fits(&prepared, &selection)
                 });
                 response.selection_changed |= retained != amount;
             }
-            let last = prepared.payment.restricted_mana.last().unwrap();
+            let last = prepared.restricted_mana.last().unwrap();
             if [last.w, last.u, last.b, last.r, last.g, last.c]
                 .iter()
                 .all(|n| *n == 0)
             {
-                prepared.payment.restricted_mana.pop();
+                prepared.restricted_mana.pop();
             }
         }
-        let mut remaining = residuals(&prepared.payment, &selection)?;
+        let mut remaining = residuals(&prepared, &selection)?;
         let life = remaining
             .first()
             .ok_or(EngineError::Illegal("invalid payment selection"))?
@@ -313,8 +385,8 @@ impl GameEngine {
             &self.state,
             idx,
             mana_counts(selection.mana.as_ref()),
-            &prepared.payment.restricted_mana,
-            &prepared.payment.eligible_restricted_mana,
+            &prepared.restricted_mana,
+            &prepared.eligible_restricted_mana,
             life,
         )?;
         response.complete = remaining.iter().any(Demand::complete);
@@ -340,29 +412,46 @@ impl GameEngine {
                 continue;
             }
             let reference = self.payment_object_ref(oid);
+            if let Some(limit) = prepared.waterbend_limit {
+                if selection.waterbend.len() < limit as usize
+                    && !selection.waterbend.iter().any(|r| r.object_id == oid)
+                    && self.waterbend_candidate(player, &prepared, &reference)
+                {
+                    selection.waterbend.push(reference);
+                    let fits = !residuals(&prepared, &selection)?.is_empty();
+                    selection.waterbend.pop();
+                    if fits {
+                        response.candidates.push(rv1::ObjectPaymentCandidate {
+                            object: Some(reference),
+                            options: vec![rv1::ObjectPaymentKind::Waterbend as i32],
+                        });
+                    }
+                }
+                continue;
+            }
             let mut options = Vec::new();
             for kind in 1..=6 {
-                let contribution = rv1::ConvokeContribution {
+                let contribution = rv1::ObjectPaymentContribution {
                     object: Some(reference),
                     kind,
                 };
-                if !self.convoke_candidate(player, &prepared.payment, &contribution) {
+                if !self.convoke_candidate(player, &prepared, &contribution) {
                     continue;
                 }
                 selection.convoke.push(contribution);
-                if !residuals(&prepared.payment, &selection)?.is_empty() {
+                if !residuals(&prepared, &selection)?.is_empty() {
                     options.push(kind);
                 }
                 selection.convoke.pop();
             }
             if !options.is_empty() {
-                response.candidates.push(rv1::ConvokeCandidate {
+                response.candidates.push(rv1::ObjectPaymentCandidate {
                     object: Some(reference),
                     options,
                 });
             }
         }
-        response.restricted_mana = prepared.payment.restricted_mana;
+        response.restricted_mana = prepared.restricted_mana;
         response.selection = Some(selection);
         response.valid = true;
         if response.selection_changed {

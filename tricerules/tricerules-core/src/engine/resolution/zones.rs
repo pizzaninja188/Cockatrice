@@ -96,6 +96,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
+                waterbend: false,
             },
         )),
     });
@@ -354,6 +355,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
+                waterbend: false,
             },
         )),
     });
@@ -739,6 +741,7 @@ pub(super) fn put_target_permanent_in_owners_library(
                         revealed_zone_owner_player_id: None,
                         candidate_source_zones: Vec::new(),
                         combat_defender_options: Vec::new(),
+                        waterbend: false,
                     },
                 )),
             });
@@ -1025,6 +1028,7 @@ fn choose_hand_cards_for_player(
                     .then_some(affected_player),
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
+                waterbend: false,
             },
         )),
     });
@@ -1308,6 +1312,7 @@ pub(super) fn target_player_sacrifices(
                             revealed_zone_owner_player_id: None,
                             candidate_source_zones: Vec::new(),
                             combat_defender_options: Vec::new(),
+                            waterbend: false,
                         },
                     )),
                 });
@@ -1401,6 +1406,7 @@ pub(super) fn choose_graveyard_card(
                     candidates.len()
                 ],
                 combat_defender_options: Vec::new(),
+                waterbend: false,
             },
         )),
     });
@@ -1791,6 +1797,7 @@ fn begin_library_partition(
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
+                waterbend: false,
             },
         )),
     });
@@ -1927,6 +1934,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
+                waterbend: false,
             },
         )),
     });
@@ -2031,6 +2039,7 @@ pub(super) fn look_choose_to_hand(
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
+                waterbend: false,
             },
         )),
     });
@@ -2196,6 +2205,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                     Vec::new()
                 },
                 combat_defender_options: Vec::new(),
+                waterbend: false,
             },
         )),
     });
@@ -2309,6 +2319,7 @@ pub(super) fn search_library(
                         revealed_zone_owner_player_id: None,
                         candidate_source_zones: Vec::new(),
                         combat_defender_options: Vec::new(),
+                        waterbend: false,
                     },
                 )),
             });

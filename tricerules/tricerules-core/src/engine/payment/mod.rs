@@ -8,6 +8,7 @@ pub(super) mod convoke;
 pub(super) mod demand;
 pub(super) mod mana;
 pub(super) mod transaction;
+pub(super) mod waterbend;
 
 #[cfg(test)]
 pub(in crate::engine) use mana::plan_mana_payment_with_reduction;
@@ -131,14 +132,13 @@ impl GameEngine {
         ability: &ActivatedAbilityDef,
     ) -> String {
         let reduction = self.activated_generic_reduction(controller, source_id, ability);
-        let Some(cost) = ability.costs.iter().find_map(|cost| match cost {
-            AbilityCost::Mana(cost) => Some(cost),
-            _ => None,
-        }) else {
-            return String::new();
-        };
+        let mut reduced = ManaCost::default();
+        for cost in &ability.costs {
+            if let AbilityCost::Mana(cost) | AbilityCost::Waterbend(cost) = cost {
+                reduced.pips.extend(cost.pips.iter().cloned());
+            }
+        }
         let mut remaining = reduction;
-        let mut reduced = cost.clone();
         for pip in &mut reduced.pips {
             if let ManaSymbol::Generic(amount) = pip {
                 let applied = (*amount).min(remaining);

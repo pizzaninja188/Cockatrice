@@ -178,8 +178,8 @@ public:
     QByteArray inBuf;
     bool sawHandshakeGarbage = false;
     quint64 nextCmdId = 1;
-    int spellPaymentPreviewCount = 0;
-    ruled::v1::SpellPaymentPreview spellPaymentPreview;
+    int paymentPreviewCount = 0;
+    ruled::v1::PaymentPreview paymentPreview;
 
     // Session / pregame state
     int roomId = -1;
@@ -1032,11 +1032,11 @@ public:
 
     void applyRuledBatch(const ruled::v1::RuledEventBatch &batch)
     {
-        if (batch.has_spell_payment_preview()) {
+        if (batch.has_payment_preview()) {
             EXPECT_TRUE(batch.events().empty());
             EXPECT_TRUE(batch.legal_by_player().empty());
-            ++spellPaymentPreviewCount;
-            spellPaymentPreview = batch.spell_payment_preview();
+            ++paymentPreviewCount;
+            paymentPreview = batch.payment_preview();
             return;
         }
         ++stateVersion;
@@ -6173,7 +6173,7 @@ TEST_F(RuledE2ESmokeTest, TappedOrdinaryTokenReachesBothClientsWithoutCombatStat
     EXPECT_TRUE(p1Robot->tapped && p2Robot->tapped);
 }
 
-TEST_F(RuledE2ESmokeTest, ConvokePreviewsArePrivateReadOnlyAndCommitExactPhysicalTaps)
+TEST_F(RuledE2ESmokeTest, ConvokeAndWaterbendPreviewsArePrivateReadOnlyAndCommitExactPhysicalTaps)
 {
     const auto started = startServers();
     if (!started) {
@@ -6268,7 +6268,7 @@ TEST_F(RuledE2ESmokeTest, ConvokePreviewsArePrivateReadOnlyAndCommitExactPhysica
     ASSERT_NE(hand, nullptr);
     EXPECT_TRUE(hand->has_convoke());
     ruled::v1::RuledCommand query;
-    auto *preview = query.mutable_preview_spell_payment();
+    auto *preview = query.mutable_preview_payment();
     preview->set_transaction_id(145);
     preview->set_revision(1);
     auto *cast = preview->mutable_cast_spell();
@@ -6280,29 +6280,29 @@ TEST_F(RuledE2ESmokeTest, ConvokePreviewsArePrivateReadOnlyAndCommitExactPhysica
     auto *creature = selection->add_convoke();
     creature->mutable_object()->set_object_id(bear->oid);
     creature->mutable_object()->set_zone_change_generation(bear->generation);
-    creature->set_kind(ruled::v1::CONVOKE_PAYMENT_KIND_GENERIC);
+    creature->set_kind(ruled::v1::OBJECT_PAYMENT_KIND_GENERIC);
     const auto before1 = p1.stateVersion;
     const auto before2 = p2.stateVersion;
     const auto legal = p1.latestLegal.SerializeAsString();
     p1.sendRuled(query, QStringLiteral("private Convoke preview"));
-    ASSERT_TRUE(p1.pumpUntil([&] { return p1.spellPaymentPreviewCount == 1; }, 10000, "Convoke preview"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.paymentPreviewCount == 1; }, 10000, "Convoke preview"));
     p2.pump(200);
-    ASSERT_TRUE(p1.spellPaymentPreview.valid()) << p1.spellPaymentPreview.error();
-    ASSERT_TRUE(p1.spellPaymentPreview.complete());
+    ASSERT_TRUE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+    ASSERT_TRUE(p1.paymentPreview.complete());
     EXPECT_EQ(p1.stateVersion, before1);
     EXPECT_EQ(p2.stateVersion, before2);
-    EXPECT_EQ(p2.spellPaymentPreviewCount, 0);
+    EXPECT_EQ(p2.paymentPreviewCount, 0);
     EXPECT_EQ(p1.latestLegal.SerializeAsString(), legal);
     EXPECT_FALSE(findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears"))->tapped);
     EXPECT_FALSE(findPermanent(p2, p1.myId, QStringLiteral("grizzly_bears"))->tapped);
-    const auto authoritativeRevision = p1.spellPaymentPreview.selection().expected_state_revision();
+    const auto authoritativeRevision = p1.paymentPreview.selection().expected_state_revision();
     preview->set_revision(2);
     p1.sendRuled(query, QStringLiteral("repeat read-only preview"));
-    ASSERT_TRUE(p1.pumpUntil([&] { return p1.spellPaymentPreviewCount == 2; }, 10000, "repeat preview"));
-    EXPECT_EQ(p1.spellPaymentPreview.selection().expected_state_revision(), authoritativeRevision);
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.paymentPreviewCount == 2; }, 10000, "repeat preview"));
+    EXPECT_EQ(p1.paymentPreview.selection().expected_state_revision(), authoritativeRevision);
     ruled::v1::RuledCommand commit;
     *commit.mutable_cast_spell() = *cast;
-    *commit.mutable_cast_spell()->mutable_payment() = p1.spellPaymentPreview.selection();
+    *commit.mutable_cast_spell()->mutable_payment() = p1.paymentPreview.selection();
     ASSERT_TRUE(send(p1, commit, QStringLiteral("commit mixed Convoke")));
     EXPECT_TRUE(findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears"))->tapped);
     EXPECT_TRUE(findPermanent(p2, p1.myId, QStringLiteral("grizzly_bears"))->tapped);
@@ -6312,6 +6312,135 @@ TEST_F(RuledE2ESmokeTest, ConvokePreviewsArePrivateReadOnlyAndCommitExactPhysica
     EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[bear->oid]));
     EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[bear->oid]));
     EXPECT_EQ(p1.myPool.total(), 0);
+
+    // Waterbend uses the same private preview and physical-object transaction during activation.
+    // The Convoke spell remains on the stack: Vinebender is allowed throughout its controller's turn.
+    ASSERT_TRUE(putPermanent("Foggy Swamp Vinebender", false));
+    ASSERT_TRUE(putPermanent("Goldvein Pick", false));
+    const auto vine = findPermanent(p1, p1.myId, QStringLiteral("foggy_swamp_vinebender"));
+    const auto pick = findPermanent(p1, p1.myId, QStringLiteral("goldvein_pick"));
+    ASSERT_TRUE(vine && pick);
+    ASSERT_TRUE(vine->sick);
+    const auto eligibility = p1.latestLegal.mana_payment_by_ability().find(static_cast<quint64>(vine->oid) << 32);
+    ASSERT_NE(eligibility, p1.latestLegal.mana_payment_by_ability().end());
+    EXPECT_TRUE(eligibility->second.has_waterbend());
+    mana.mutable_dev_command()->mutable_add_mana()->Clear();
+    mana.mutable_dev_command()->mutable_add_mana()->set_c(3);
+    ASSERT_TRUE(send(p1, mana, QStringLiteral("Waterbend activation mana")));
+    ruled::v1::RuledCommand waterbendQuery;
+    auto *waterbendPreview = waterbendQuery.mutable_preview_payment();
+    waterbendPreview->set_transaction_id(146);
+    waterbendPreview->set_revision(1);
+    auto *activation = waterbendPreview->mutable_activate_ability();
+    p1.setBattlefieldAbilitySource(activation, vine->oid);
+    auto *payment = activation->mutable_payment();
+    payment->mutable_mana()->set_c(3);
+    for (const auto &object : {*vine, *pick}) {
+        auto *ref = payment->add_waterbend();
+        ref->set_object_id(object.oid);
+        ref->set_zone_change_generation(object.generation);
+    }
+    const auto activationVersion = p1.stateVersion;
+    p1.sendRuled(waterbendQuery, QStringLiteral("private Waterbend activation preview"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.paymentPreviewCount == 3; }, 10000, "Waterbend preview"));
+    p2.pump(100);
+    ASSERT_TRUE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+    ASSERT_TRUE(p1.paymentPreview.complete());
+    EXPECT_EQ(p1.stateVersion, activationVersion);
+    EXPECT_EQ(p2.paymentPreviewCount, 0);
+    EXPECT_FALSE(findPermanent(p2, p1.myId, QStringLiteral("goldvein_pick"))->tapped);
+    ruled::v1::RuledCommand activate;
+    *activate.mutable_activate_ability() = *activation;
+    *activate.mutable_activate_ability()->mutable_payment() = p1.paymentPreview.selection();
+    ASSERT_TRUE(send(p1, activate, QStringLiteral("commit mixed Waterbend activation")));
+    for (const auto &object : {*vine, *pick}) {
+        EXPECT_EQ(p1.serverCardByEngineOid[object.oid], p2.serverCardByEngineOid[object.oid]);
+        EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[object.oid]));
+        EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[object.oid]));
+    }
+    EXPECT_EQ(p1.myPool.total(), 0);
+    auto pass = [&]() {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(p1.priorityPlayer == p1.myId ? p1 : p2, command, QStringLiteral("resolve payment scenario"));
+    };
+    ASSERT_TRUE(pass());
+    ASSERT_TRUE(pass());
+    EXPECT_EQ(findPermanent(p1, p1.myId, QStringLiteral("foggy_swamp_vinebender"))->power, 5);
+    EXPECT_EQ(findPermanent(p2, p1.myId, QStringLiteral("foggy_swamp_vinebender"))->power, 5);
+    ASSERT_TRUE(pass());
+    ASSERT_TRUE(pass());
+    ASSERT_TRUE(p1.pendingChoice);
+    ruled::v1::RuledCommand discard;
+    discard.mutable_submit_resolution_choice()->add_chosen_object_ids(p1.pendingChoice->candidate_object_ids(0));
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, discard, QStringLiteral("finish Unexpected Assistance")));
+
+    ASSERT_TRUE(putPermanent("Ornithopter", false));
+    ASSERT_TRUE(putPermanent("Island", true));
+    const auto thopter = findPermanent(p1, p1.myId, QStringLiteral("ornithopter"));
+    const auto island = findPermanent(p1, p1.myId, QStringLiteral("island"));
+    ASSERT_TRUE(thopter && island);
+    putSpell.mutable_dev_command()->mutable_put_card_in_zone()->set_card_name("Waterbending Lesson");
+    ASSERT_TRUE(send(p1, putSpell, QStringLiteral("put Waterbending Lesson")));
+    mana.mutable_dev_command()->mutable_add_mana()->Clear();
+    mana.mutable_dev_command()->mutable_add_mana()->set_u(4);
+    ASSERT_TRUE(send(p1, mana, QStringLiteral("Lesson casting mana")));
+    const auto *lesson = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Waterbending Lesson"));
+    ASSERT_NE(lesson, nullptr);
+    ruled::v1::RuledCommand castLesson;
+    castLesson.mutable_cast_spell()->mutable_source()->set_hand_index(lesson->hand_index());
+    ASSERT_TRUE(send(p1, castLesson, QStringLiteral("cast Waterbending Lesson")));
+    const int handBeforeDraw = p1.handSizeByPlayer[p1.myId];
+    ASSERT_TRUE(pass());
+    ASSERT_TRUE(pass());
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], handBeforeDraw + 3);
+    ASSERT_TRUE(p1.pendingChoice);
+    EXPECT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    ruled::v1::RuledCommand branch;
+    branch.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, branch, QStringLiteral("choose Lesson Waterbend")));
+    ASSERT_TRUE(p1.pendingChoice);
+    EXPECT_TRUE(p1.pendingChoice->waterbend());
+    EXPECT_FALSE(p2.pendingChoice);
+    ASSERT_TRUE(p2.lastResolutionChoice);
+    EXPECT_FALSE(p2.lastResolutionChoice->waterbend());
+    EXPECT_EQ(p2.lastResolutionChoice->generic_mana_cost(), 2u); // The printed cost is public; staging is private.
+    ruled::v1::RuledCommand makeMana;
+    p1.setBattlefieldAbilitySource(makeMana.mutable_activate_ability(), island->oid);
+    ASSERT_TRUE(send(p1, makeMana, QStringLiteral("mana ability during Lesson payment")));
+    ASSERT_TRUE(p1.pendingChoice);
+    EXPECT_TRUE(p1.pendingChoice->waterbend());
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], handBeforeDraw + 3);
+    waterbendQuery.Clear();
+    waterbendPreview = waterbendQuery.mutable_preview_payment();
+    waterbendPreview->set_transaction_id(147);
+    waterbendPreview->set_revision(1);
+    auto *resolution = waterbendPreview->mutable_resolution_choice();
+    resolution->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    resolution->mutable_payment()->mutable_mana()->set_u(1);
+    auto *object = resolution->mutable_payment()->add_waterbend();
+    object->set_object_id(thopter->oid);
+    object->set_zone_change_generation(thopter->generation);
+    const auto resolutionVersion = p1.stateVersion;
+    p1.sendRuled(waterbendQuery, QStringLiteral("private Waterbend resolution preview"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.paymentPreviewCount == 4; }, 10000, "Lesson preview"));
+    p2.pump(100);
+    ASSERT_TRUE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+    ASSERT_TRUE(p1.paymentPreview.complete());
+    EXPECT_EQ(p1.stateVersion, resolutionVersion);
+    EXPECT_EQ(p2.paymentPreviewCount, 0);
+    ruled::v1::RuledCommand pay;
+    *pay.mutable_submit_resolution_choice() = *resolution;
+    *pay.mutable_submit_resolution_choice()->mutable_payment() = p1.paymentPreview.selection();
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, pay, QStringLiteral("commit Lesson mixed Waterbend")));
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], handBeforeDraw + 3);
+    EXPECT_EQ(p1.stackDepth, 0);
+    EXPECT_EQ(p1.myPool.total(), 0);
+    EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[thopter->oid]));
+    EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[thopter->oid]));
 }
 
 TEST_F(RuledE2ESmokeTest, SelectableTapAndBlightPaymentsPreservePrivacyAndExactCardsForBothClients)

@@ -1,4 +1,4 @@
-// Oracle and rulings checked against Scryfall on 2026-08-26.
+// Oracle and rulings checked against Scryfall on 2026-08-28. CR 701.67 Waterbend.
 // CR 509.1b: the blocker's current derived power is checked as blockers are declared.
 (
   id: "foggy_swamp_vinebender",
@@ -8,5 +8,10 @@
   power: 4,
   toughness: 3,
   static_abilities: [SelfCombatRestriction(restriction: (cant_be_blocked_by: [(kind: Creature, power: Some(AtMost(2)))]))],
-  partial: "Waterbend {5} activated ability is not implemented (tracked by #146)",
+  activated_abilities: [(
+    costs: [Waterbend("{5}")],
+    conditions: [GameCondition(ActivePlayer(players: Controller))],
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    text: "Waterbend {5}: Put a +1/+1 counter on this creature. Activate only during your turn.",
+  )],
 )

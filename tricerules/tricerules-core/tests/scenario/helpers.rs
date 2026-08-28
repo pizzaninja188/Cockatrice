@@ -1260,6 +1260,8 @@ pub(crate) fn submit_resolution_choice(chosen: Vec<u32>) -> RuledCommand {
             selected_branch_index: 0,
             cast_spell: None,
             chosen_combat_defender: None,
+            payment: None,
+            restricted_mana: vec![],
         })),
     }
 }
@@ -1272,6 +1274,8 @@ pub(crate) fn submit_resolution_decision(decision: rv1::ResolutionChoiceDecision
             selected_branch_index: 0,
             cast_spell: None,
             chosen_combat_defender: None,
+            payment: None,
+            restricted_mana: vec![],
         })),
     }
 }

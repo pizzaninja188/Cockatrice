@@ -207,6 +207,7 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
             | AbilityCost::RemoveCounters { .. }
             | AbilityCost::TapPermanents { .. }
             | AbilityCost::Mana(_)
+            | AbilityCost::Waterbend(_)
             | AbilityCost::Loyalty(_) => None,
         })
         .collect()
@@ -953,9 +954,9 @@ impl CardRegistry {
                             .into(),
                     });
                 }
-                let spell_payment_actions = additional_cost_result_actions(&face.additional_costs);
+                let payment_actions = additional_cost_result_actions(&face.additional_costs);
                 for effect in &face.spell_effect {
-                    validate_effect_payment_results(&spell_payment_actions, effect).map_err(
+                    validate_effect_payment_results(&payment_actions, effect).map_err(
                         |reason| RegistryError::InvalidCard {
                             id: card.id.clone(),
                             reason,
@@ -997,11 +998,12 @@ impl CardRegistry {
                 if let Some(modal) = &face.modal_spell {
                     for mode in &modal.modes {
                         for effect in &mode.effects {
-                            validate_effect_payment_results(&spell_payment_actions, effect)
-                                .map_err(|reason| RegistryError::InvalidCard {
+                            validate_effect_payment_results(&payment_actions, effect).map_err(
+                                |reason| RegistryError::InvalidCard {
                                     id: card.id.clone(),
                                     reason,
-                                })?;
+                                },
+                            )?;
                             validate_effect_cast_cost_conditions(&face.cast_cost_groups, effect)
                                 .map_err(|reason| RegistryError::InvalidCard {
                                     id: card.id.clone(),
@@ -1563,10 +1565,7 @@ mod tests {
             [StaticAbilityDef::SelfCombatRestriction { restriction, .. }]
                 if restriction.cant_be_blocked_by[0].power == Some(PowerComparison::AtMost(2))
         ));
-        assert!(vinebender
-            .partial
-            .as_deref()
-            .is_some_and(|note| note.contains("#146")));
+        assert!(vinebender.partial.is_none());
 
         let cavalry = registry
             .get("safewright_cavalry")

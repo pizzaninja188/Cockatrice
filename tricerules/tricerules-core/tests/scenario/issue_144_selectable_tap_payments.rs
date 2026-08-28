@@ -1,8 +1,37 @@
 use super::helpers::*;
+use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::{
     cost_selection::Selection, ruled_command::Cmd, CostChoiceKind, CostObjectRef, CostObjectRefs,
     CostSelection, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
 };
+
+#[test]
+fn waterbend_vinebender_all_mana_activation_adds_one_counter() {
+    let mut engine = GameEngine::new(
+        146001,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("forest", &["foggy_swamp_vinebender"]),
+            deck_with("island", &[]),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    let source = relocate_to_battlefield(&mut engine, 0, "foggy_swamp_vinebender", false);
+    engine.state.players[0].mana_pool.colorless = 5;
+    engine
+        .apply_command(0, &activate_ability_with_costs(source, 0, vec![], vec![]))
+        .expect("Waterbend can be paid entirely with mana");
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+    assert!(!engine.state.objects[&source].tapped);
+    assert_eq!(engine.state.stack.len(), 1);
+    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_command(1, &pass()).unwrap();
+    assert_eq!(engine.characteristics(source).unwrap().power, Some(5));
+    assert_eq!(engine.state.stack.len(), 0);
+}
 
 fn tap_selection(cost_index: u32, objects: &[(u32, u64)]) -> CostSelection {
     CostSelection {
@@ -26,6 +55,373 @@ fn select_branch(index: u32) -> RuledCommand {
             selected_branch_index: index,
             ..Default::default()
         })),
+    }
+}
+
+fn waterbend_ref(engine: &GameEngine, object_id: u32) -> CostObjectRef {
+    CostObjectRef {
+        object_id,
+        zone_change_generation: engine
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0),
+    }
+}
+
+#[test]
+fn waterbend_payload_cannot_be_silently_ignored_by_a_mana_ability() {
+    let mut engine = GameEngine::new(
+        146010,
+        &[0, 1],
+        20,
+        Some(vec![deck_with("island", &[]), deck_with("forest", &[])]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    let source = relocate_to_battlefield(&mut engine, 0, "island", false);
+    let mut command = activate_ability_with_costs(source, 0, vec![], vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = command.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.payment = Some(rv1::PaymentSelection::default());
+    let before = format!("{:?}", engine.state);
+    assert!(engine.apply_command(0, &command).is_err());
+    assert_eq!(format!("{:?}", engine.state), before);
+}
+
+#[test]
+fn waterbend_own_turn_timing_and_serialized_replay_ignore_preview_queries() {
+    use prost::Message;
+    fn run(previews: bool) -> (Vec<rv1::RuledEventBatch>, String) {
+        let mut engine = GameEngine::new(
+            146012,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with("forest", &["foggy_swamp_vinebender"]),
+                deck_with("island", &[]),
+            ]),
+            true,
+        )
+        .unwrap();
+        advance_to_main1_from_game_start(&mut engine);
+        let source = relocate_to_battlefield(&mut engine, 0, "foggy_swamp_vinebender", false);
+        engine.state.players[0].mana_pool.colorless = 4;
+        let mut command = rv1::ActivateAbility {
+            source_object_id: source,
+            expected_zone_change_generation: waterbend_ref(&engine, source).zone_change_generation,
+            payment: Some(rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(waterbend_ref(&engine, source)),
+                waterbend: vec![waterbend_ref(&engine, source)],
+                mana: Some(rv1::PaymentMana {
+                    c: 4,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        engine.state.active_player_idx = 1;
+        let before = format!("{:?}", engine.state);
+        assert!(engine
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(Cmd::ActivateAbility(command.clone()))
+                }
+            )
+            .is_err());
+        assert_eq!(format!("{:?}", engine.state), before);
+        engine.state.active_player_idx = 0;
+        engine.state.turn_step = tricerules_core::TurnStep::BeginCombat;
+        if previews {
+            for _ in 0..3 {
+                let response = engine.preview_payment(
+                    0,
+                    &rv1::PreviewPayment {
+                        activate_ability: Some(command.clone()),
+                        ..Default::default()
+                    },
+                );
+                assert!(response.valid && response.complete, "{response:?}");
+                command.payment = response.selection;
+            }
+        }
+        let encoded = RuledCommand {
+            cmd: Some(Cmd::ActivateAbility(command)),
+        }
+        .encode_to_vec();
+        let replayed = RuledCommand::decode(encoded.as_slice()).unwrap();
+        let batches = vec![
+            engine.apply_command(0, &replayed).unwrap(),
+            engine.apply_command(0, &pass()).unwrap(),
+            engine.apply_command(1, &pass()).unwrap(),
+        ];
+        assert_eq!(engine.characteristics(source).unwrap().power, Some(5));
+        // Debug maps are not ordered; compare stable public batches and the serialized command.
+        (batches, format!("{encoded:?}"))
+    }
+    assert_eq!(run(true), run(false));
+}
+
+#[test]
+fn waterbend_lesson_draws_before_payment_and_resumes_once() {
+    for taps in 0..=2 {
+        let mut engine = GameEngine::new(
+            146003,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with("island", &["waterbending_lesson"]),
+                deck_with("forest", &[]),
+            ]),
+            true,
+        )
+        .expect("Waterbending Lesson must be registered");
+        advance_to_main1_from_game_start(&mut engine);
+        let objects = [
+            inject_creature_on_battlefield(&mut engine, 0, "goldvein_pick"),
+            inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears"),
+        ];
+        ensure_in_hand(&mut engine, 0, "waterbending_lesson");
+        engine.state.players[0].mana_pool.blue = 4;
+        let slot = hand_index_for_card(&engine, 0, "waterbending_lesson");
+        engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+        let before_draw = engine.state.players[0].hand.len();
+        engine.apply_command(0, &pass()).unwrap();
+        engine.apply_command(1, &pass()).unwrap();
+        assert_eq!(engine.state.players[0].hand.len(), before_draw + 3);
+        engine.apply_command(0, &select_branch(0)).unwrap();
+        assert!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .continuation
+                .mana_payment()
+                .unwrap()
+                .waterbend
+        );
+        engine.state.players[0].mana_pool.blue = 2;
+        let mut answer = rv1::SubmitResolutionChoice {
+            decision: rv1::ResolutionChoiceDecision::PayMana as i32,
+            payment: Some(rv1::PaymentSelection {
+                waterbend: objects[..taps]
+                    .iter()
+                    .map(|id| waterbend_ref(&engine, *id))
+                    .collect(),
+                mana: Some(rv1::PaymentMana {
+                    u: 2 - taps as u32,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let before = format!("{:?}", engine.state);
+        let preview = engine.preview_payment(
+            0,
+            &rv1::PreviewPayment {
+                resolution_choice: Some(answer.clone()),
+                ..Default::default()
+            },
+        );
+        assert!(preview.valid && preview.complete, "{preview:?}");
+        assert_eq!(format!("{:?}", engine.state), before);
+        answer.payment = preview.selection;
+        let mut stale = answer.clone();
+        stale.payment.as_mut().unwrap().expected_state_revision += 1;
+        assert!(engine
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(Cmd::SubmitResolutionChoice(stale))
+                }
+            )
+            .is_err());
+        assert_eq!(
+            format!("{:?}", engine.state),
+            before,
+            "rejection must preserve the parked choice"
+        );
+        let command = RuledCommand {
+            cmd: Some(Cmd::SubmitResolutionChoice(answer)),
+        };
+        engine.apply_command(0, &command).unwrap();
+        assert_eq!(engine.state.players[0].hand.len(), before_draw + 3);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert!(engine.apply_command(0, &command).is_err());
+    }
+}
+
+#[test]
+fn waterbend_lesson_decline_restores_branch_without_drawing_again() {
+    let mut engine = GameEngine::new(
+        146011,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("island", &["waterbending_lesson"]),
+            deck_with("forest", &[]),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    let island = relocate_to_battlefield(&mut engine, 0, "island", false);
+    ensure_in_hand(&mut engine, 0, "waterbending_lesson");
+    engine.state.players[0].mana_pool.blue = 4;
+    let slot = hand_index_for_card(&engine, 0, "waterbending_lesson");
+    engine.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    let before_draw = engine.state.players[0].hand.len();
+    engine.apply_command(0, &pass()).unwrap();
+    engine.apply_command(1, &pass()).unwrap();
+    engine.apply_command(0, &select_branch(0)).unwrap();
+    engine
+        .apply_command(0, &activate_ability_with_costs(island, 0, vec![], vec![]))
+        .unwrap();
+    assert!(engine.state.objects[&island].tapped);
+    assert_eq!(engine.state.players[0].mana_pool.blue, 1);
+    let decline = RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(rv1::SubmitResolutionChoice {
+            decision: rv1::ResolutionChoiceDecision::Decline as i32,
+            ..Default::default()
+        })),
+    };
+    let branch = engine.apply_command(0, &decline).unwrap();
+    assert_eq!(
+        find_resolution_choice(&branch).unwrap().choice_kind(),
+        rv1::ChoiceKind::ResolutionBranch
+    );
+    assert!(!engine.state.objects[&island].tapped);
+    assert_eq!(engine.state.players[0].mana_pool.blue, 0);
+    assert_eq!(engine.state.players[0].hand.len(), before_draw + 3);
+    let discard = engine.apply_command(0, &select_branch(1)).unwrap();
+    let choice = find_resolution_choice(&discard).unwrap();
+    assert_eq!(choice.choice_kind(), rv1::ChoiceKind::HandCards);
+    let chosen = choice.candidate_object_ids[0];
+    engine
+        .apply_command(0, &submit_resolution_choice(vec![chosen]))
+        .unwrap();
+    assert_eq!(engine.state.players[0].hand.len(), before_draw + 2);
+    assert!(engine.state.pending_resolution.is_none());
+}
+
+#[test]
+fn waterbend_preview_and_commit_share_exact_mixed_payment_and_reject_stale_input() {
+    for tap_count in 0..=5 {
+        let mut engine = GameEngine::new(
+            146002,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with("forest", &["foggy_swamp_vinebender"]),
+                deck_with("island", &[]),
+            ]),
+            true,
+        )
+        .unwrap();
+        advance_to_main1_from_game_start(&mut engine);
+        let source = relocate_to_battlefield(&mut engine, 0, "foggy_swamp_vinebender", false);
+        let objects = [
+            source,
+            inject_creature_on_battlefield(&mut engine, 0, "goldvein_pick"),
+            inject_creature_on_battlefield(&mut engine, 0, "ornithopter"),
+            inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears"),
+            inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears"),
+        ];
+        let opponent = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+        engine.state.players[0].mana_pool.colorless = 5;
+        let mut activation = rv1::ActivateAbility {
+            source_object_id: source,
+            expected_zone_change_generation: waterbend_ref(&engine, source).zone_change_generation,
+            payment: Some(rv1::PaymentSelection {
+                waterbend: objects[..tap_count]
+                    .iter()
+                    .map(|oid| waterbend_ref(&engine, *oid))
+                    .collect(),
+                mana: Some(rv1::PaymentMana {
+                    c: 5 - tap_count as u32,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let before = format!("{:?}", engine.state);
+        let preview = engine.preview_payment(
+            0,
+            &rv1::PreviewPayment {
+                activate_ability: Some(activation.clone()),
+                ..Default::default()
+            },
+        );
+        assert!(
+            preview.valid && preview.complete,
+            "tap count {tap_count}: {preview:?}"
+        );
+        assert_eq!(format!("{:?}", engine.state), before);
+        assert!(!preview
+            .candidates
+            .iter()
+            .any(|c| c.object.as_ref().unwrap().object_id == opponent));
+        activation.payment = preview.selection;
+        let valid = RuledCommand {
+            cmd: Some(Cmd::ActivateAbility(activation.clone())),
+        };
+        for corruption in 0..6 {
+            let mut invalid = activation.clone();
+            let payment = invalid.payment.as_mut().unwrap();
+            match corruption {
+                0 => payment.expected_state_revision += 1,
+                1 => payment.waterbend.push(waterbend_ref(&engine, opponent)),
+                2 => payment.mana.as_mut().unwrap().c += 1,
+                3 => {
+                    payment.waterbend = vec![waterbend_ref(&engine, source); 2];
+                    payment.mana.as_mut().unwrap().c = 3;
+                }
+                4 => {
+                    let mut stale = waterbend_ref(&engine, source);
+                    stale.zone_change_generation += 1;
+                    payment.waterbend = vec![stale];
+                    payment.mana.as_mut().unwrap().c = 4;
+                }
+                _ => {
+                    payment.convoke.push(rv1::ObjectPaymentContribution {
+                        object: Some(waterbend_ref(&engine, source)),
+                        kind: rv1::ObjectPaymentKind::Generic as i32,
+                    });
+                }
+            }
+            assert!(engine
+                .apply_command(
+                    0,
+                    &RuledCommand {
+                        cmd: Some(Cmd::ActivateAbility(invalid))
+                    }
+                )
+                .is_err());
+            assert_eq!(format!("{:?}", engine.state), before);
+        }
+        engine.apply_command(0, &valid).unwrap();
+        for (index, oid) in objects.into_iter().enumerate() {
+            assert_eq!(engine.state.objects[&oid].tapped, index < tap_count);
+        }
+        assert_eq!(
+            engine.state.players[0].mana_pool.colorless,
+            tap_count as u32
+        );
+        assert!(!engine.state.objects[&opponent].tapped);
+        assert_eq!(engine.state.stack.len(), 1);
+        engine.apply_command(0, &pass()).unwrap();
+        engine.apply_command(1, &pass()).unwrap();
+        assert_eq!(engine.characteristics(source).unwrap().power, Some(5));
     }
 }
 

@@ -441,6 +441,9 @@ enum TargetingSourceKind {
 }
 
 enum GameEvent {
+    Waterbent {
+        player: PlayerId,
+    },
     /// CR 701.68d: completion, independently of the resulting counter count.
     Blighted(crate::state::BlightReceipt),
     ZoneChanges(zone_events::ZoneEventBatch),
@@ -1485,7 +1488,7 @@ impl GameEngine {
             Some(
                 Cmd::PreviewDeclareBlockers(_)
                     | Cmd::PreviewDeclareAttackers(_)
-                    | Cmd::PreviewSpellPayment(_)
+                    | Cmd::PreviewPayment(_)
             )
         ) {
             return Err(EngineError::Illegal("preview is not a game command"));
@@ -1852,7 +1855,7 @@ impl GameEngine {
             Some(
                 Cmd::PreviewDeclareBlockers(_)
                 | Cmd::PreviewDeclareAttackers(_)
-                | Cmd::PreviewSpellPayment(_),
+                | Cmd::PreviewPayment(_),
             ) => {
                 unreachable!("preview rejected before command_index bump")
             }

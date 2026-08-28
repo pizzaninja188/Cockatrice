@@ -746,6 +746,8 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
             coloredCost.isEmpty()
                 ? tr("Pay mana: {%1} remaining (click mana counters or activate mana abilities).").arg(remaining)
                 : tr("Pay %1 (click mana counters or activate mana abilities).").arg(coloredCost);
+        if (h->isWaterbendResolutionPayment() && localActions)
+            state.text = localActions->pendingRuledSpellPromptText();
         state.genericManaCost = remaining;
         state.paymentCurrentlyLegal = h->resolutionPaymentCurrentlyLegal();
     } else if (h->hasPendingZoneScopeChoice()) {

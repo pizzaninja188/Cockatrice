@@ -504,6 +504,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
         choice->mutable_candidate_selectable()->CopyFrom(choiceIt.value().candidate_selectable());
         choice->mutable_candidate_source_zones()->CopyFrom(choiceIt.value().candidate_source_zones());
         if (choiceIt.value().deciding_player_id() == participant->getPlayerId()) {
+            choice->set_waterbend(choiceIt.value().waterbend());
             choice->mutable_resolution_branches()->CopyFrom(choiceIt.value().resolution_branches());
             choice->mutable_combat_defender_options()->CopyFrom(choiceIt.value().combat_defender_options());
         }
@@ -530,11 +531,11 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
     return filtered;
 }
 
-void RuledBroadcastRouter::sendSpellPaymentPreview(int playerId, const ruled::v1::SpellPaymentPreview &preview)
+void RuledBroadcastRouter::sendPaymentPreview(int playerId, const ruled::v1::PaymentPreview &preview)
 {
     // Reviewed private-query boundary. Do not inject maps, retain reconnect state, or broadcast.
     ruled::v1::RuledEventBatch batch;
-    *batch.mutable_spell_payment_preview() = preview;
+    *batch.mutable_payment_preview() = preview;
     Event_RuledPayload event;
     event.set_payload(batch.SerializeAsString());
     GameEventStorage storage;

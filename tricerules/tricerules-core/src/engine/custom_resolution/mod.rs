@@ -68,6 +68,22 @@ impl GameEngine {
         player: PlayerId,
         answer: &rv1::SubmitResolutionChoice,
     ) -> Result<RuledEventBatch, EngineError> {
+        if (answer.payment.is_some() || !answer.restricted_mana.is_empty())
+            && !self
+                .state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| {
+                    pending
+                        .continuation
+                        .mana_payment()
+                        .is_some_and(|payment| payment.waterbend)
+                })
+        {
+            return Err(EngineError::Illegal(
+                "unexpected resolution payment payload",
+            ));
+        }
         if let Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry)) =
             &self.state.pending_replacement_event
         {
@@ -699,6 +715,7 @@ impl GameEngine {
                     revealed_zone_owner_player_id: None,
                     candidate_source_zones: Vec::new(),
                     combat_defender_options: Vec::new(),
+                    waterbend: false,
                 },
             )),
         });

@@ -121,8 +121,8 @@ bool RuledGameSession::cacheAutoPassPolicy(int playerId, const ruled::v1::SetAut
 QByteArray RuledGameSession::canonicalGameplayCommand(int playerId, const ruled::v1::RuledCommand &command) const
 {
     if (!game || !game->getPlayers().contains(playerId) || command.cmd_case() == ruled::v1::RuledCommand::CMD_NOT_SET ||
-        command.has_set_auto_pass_policy() || command.has_canonical_gameplay() ||
-        command.has_preview_spell_payment() || command.has_preview_declare_attackers() || command.has_preview_declare_blockers()) {
+        command.has_set_auto_pass_policy() || command.has_canonical_gameplay() || command.has_preview_payment() ||
+        command.has_preview_declare_attackers() || command.has_preview_declare_blockers()) {
         return {};
     }
     std::string innerBytes;
@@ -388,7 +388,9 @@ void RuledGameSession::notifyEngineUnreachable()
                                     "Make sure the rules engine (tricerules) is running, then ready up again."));
 }
 
-bool RuledGameSession::previewSpellPayment(int playerId, const ruled::v1::PreviewSpellPayment &preview, ruled::v1::IpcResponse &response)
+bool RuledGameSession::previewPayment(int playerId,
+                                      const ruled::v1::PreviewPayment &preview,
+                                      ruled::v1::IpcResponse &response)
 {
-    return relay && relay->previewSpellPayment(playerId, preview, response);
+    return relay && relay->previewPayment(playerId, preview, response);
 }

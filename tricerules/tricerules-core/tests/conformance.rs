@@ -176,7 +176,9 @@ fn try_drain_stack(e: &mut GameEngine) {
             let answer = RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
                     chosen_object_ids,
-                    decision: if matches!(
+                    decision: if pending.continuation.mana_payment().is_some() {
+                        ResolutionChoiceDecision::PayMana as i32
+                    } else if matches!(
                         pending.continuation,
                         tricerules_core::state::ResolutionContinuation::AuthoredBranch { .. }
                             | tricerules_core::state::ResolutionContinuation::OwnerLibraryPlacement { .. }
@@ -189,6 +191,8 @@ fn try_drain_stack(e: &mut GameEngine) {
                     selected_branch_index: 0,
                     cast_spell: None,
                     chosen_combat_defender: None,
+                    payment: None,
+                    restricted_mana: vec![],
                 })),
             };
             if e.apply_command(deciding_player, &answer).is_err() {

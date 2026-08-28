@@ -1,4 +1,4 @@
-#include "ruled_spell_payment_ui.h"
+#include "ruled_payment_ui.h"
 
 #include "../abstract_game.h"
 #include "../board/card_item.h"
@@ -16,10 +16,10 @@
 #include <QTimer>
 #include <libcockatrice/utility/zone_names.h>
 
-RuledSpellPaymentUi::RuledSpellPaymentUi(PlayerActions *value) : actions(value)
+RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
 {
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
-    QObject::connect(state, &RuledClientState::spellPaymentPreviewReceived, actions, [this] { received(); });
+    QObject::connect(state, &RuledClientState::paymentPreviewReceived, actions, [this] { received(); });
     QObject::connect(state, &RuledClientState::legalActionsChanged, actions, [this] {
         if (actions->player->getPlayerInfo()->getLocal())
             startOrRefresh();
@@ -27,22 +27,62 @@ RuledSpellPaymentUi::RuledSpellPaymentUi(PlayerActions *value) : actions(value)
     QObject::connect(state, &RuledClientState::sessionReset, actions, [this] { clear(); });
 }
 
-bool RuledSpellPaymentUi::applicable() const
+RuledPaymentUi::Context RuledPaymentUi::context() const
 {
+    if (!RuledActions::isRuledGame(actions->player->getGame()) || !actions->player->getPlayerInfo()->getLocal())
+        return Context::None;
+    const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    const auto &ability = actions->pendingActivatedAbility;
+    if (ability.valid) {
+        const auto key =
+            (static_cast<quint64>(ability.permanentOid) << 32) | static_cast<quint64>(ability.abilityIndex);
+        return !ability.permanentAction && !ability.waitingForTarget && !ability.waitingForCost &&
+                       state->waterbendAbilities.contains(key)
+                   ? Context::Ability
+                   : Context::None;
+    }
+    if (state->isWaterbendResolutionPayment())
+        return Context::Resolution;
     const auto &p = actions->pendingRuledSpellCast;
-    return RuledActions::isRuledGame(actions->player->getGame()) && actions->player->getPlayerInfo()->getLocal() &&
-           p.valid && p.hasConvoke && !p.waitingForTarget && !p.waitingForCost && !p.waitingForCastCostObject &&
-           p.nextCastCostGroup >= p.castCostGroups.size();
+    return p.valid && p.hasConvoke && !p.waitingForTarget && !p.waitingForCost && !p.waitingForCastCostObject &&
+                   p.nextCastCostGroup >= p.castCostGroups.size()
+               ? Context::Spell
+               : Context::None;
 }
 
-void RuledSpellPaymentUi::changed()
+bool RuledPaymentUi::applicable() const
+{
+    return context() != Context::None;
+}
+
+std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildPaymentCommand() const
+{
+    switch (context()) {
+        case Context::Spell:
+            return buildCommand(actions);
+        case Context::Ability:
+            return buildActivationCommand(actions);
+        case Context::Resolution: {
+            ruled::v1::RuledCommand command;
+            command.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+            return command;
+        }
+        case Context::None:
+            return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+void RuledPaymentUi::changed()
 {
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     emit actions->ruledSpellManaPromptChanged();
+    emit actions->ruledAbilityManaPromptChanged();
+    emit actions->ruledResolutionManaPromptChanged();
     state->emitSpellTargetSelectionChanged();
 }
 
-bool RuledSpellPaymentUi::startOrRefresh()
+bool RuledPaymentUi::startOrRefresh()
 {
     const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     if (actions->player->getPlayerInfo()->getLocal() && actions->pendingRuledSpellCast.valid &&
@@ -51,17 +91,33 @@ bool RuledSpellPaymentUi::startOrRefresh()
         actions->cancelPendingRuledSpellCast();
         return true;
     }
-    if (!applicable())
+    const auto nextContext = context();
+    if (nextContext == Context::None) {
+        if (!suspended && !suspendedAbility && !state->isWaterbendResolutionPayment() && activeContext != Context::None)
+            clear();
         return false;
+    }
     if (choosingLifePayment)
         return true;
-    auto &model = actions->player->getGame()->getGameEventHandler()->ruled()->spellPayment;
+    auto &model = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
+    if (activeContext != nextContext) {
+        // A rejected resolution command restores its parked model before emitting the prompt.
+        if (!(activeContext == Context::None && nextContext == Context::Resolution && model.active))
+            model.clear();
+        queuedMana.clear();
+        activeContext = nextContext;
+    }
+    if (nextContext == Context::Ability) {
+        actions->pendingActivatedAbility.waitingForMana = true;
+        emit actions->ruledAbilityActivationPendingChanged(true);
+    }
     if (!model.active) {
-        model.begin();
+        model.begin(nextContext != Context::Spell);
         // Reuse the existing life-payment announcement. Hybrid mana remains flexible in the
         // authoritative preview; only Phyrexian life choices must be fixed before payment.
         QVector<RuledFlexPip> lifeChoices;
-        for (const auto &pip : actions->pendingRuledSpellCast.flexPips)
+        for (const auto &pip :
+             nextContext == Context::Spell ? actions->pendingRuledSpellCast.flexPips : QVector<RuledFlexPip>{})
             if (pip.phyrexian)
                 lifeChoices.append(pip);
         if (!lifeChoices.isEmpty()) {
@@ -90,7 +146,7 @@ bool RuledSpellPaymentUi::startOrRefresh()
     return true;
 }
 
-void RuledSpellPaymentUi::schedule()
+void RuledPaymentUi::schedule()
 {
     if (queued)
         return;
@@ -101,26 +157,29 @@ void RuledSpellPaymentUi::schedule()
     });
 }
 
-void RuledSpellPaymentUi::query()
+void RuledPaymentUi::query()
 {
     auto *game = actions->player->getGame();
-    auto &model = game->getGameEventHandler()->ruled()->spellPayment;
+    auto &model = game->getGameEventHandler()->ruled()->payment;
     if (!applicable() || !model.active || model.submitting || RuledActions::gameplayInputLocked(game))
         return;
-    const auto proposed = buildCommand(actions);
+    const auto proposed = buildPaymentCommand();
     if (!proposed) {
-        actions->cancelPendingRuledSpellCast();
+        if (context() == Context::Ability)
+            actions->cancelPendingActivatedAbility();
+        else if (context() == Context::Spell)
+            actions->cancelPendingRuledSpellCast();
         return;
     }
     ruled::v1::RuledCommand queryCommand;
-    *queryCommand.mutable_preview_spell_payment() = model.request(proposed->cast_spell());
-    const auto transaction = queryCommand.preview_spell_payment().transaction_id();
-    const auto revision = queryCommand.preview_spell_payment().revision();
+    *queryCommand.mutable_preview_payment() = model.requestAction(*proposed);
+    const auto transaction = queryCommand.preview_payment().transaction_id();
+    const auto revision = queryCommand.preview_payment().revision();
     RuledActions::sendRuledCommandExpectingAck(game, queryCommand, [this, transaction, revision](bool accepted) {
         if (accepted || !applicable())
             return;
-        auto &current = actions->player->getGame()->getGameEventHandler()->ruled()->spellPayment;
-        ruled::v1::SpellPaymentPreview failure;
+        auto &current = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
+        ruled::v1::PaymentPreview failure;
         failure.set_transaction_id(transaction);
         failure.set_revision(revision);
         failure.set_error("Payment preview was rejected. Cancel and try again.");
@@ -130,39 +189,54 @@ void RuledSpellPaymentUi::query()
     changed();
 }
 
-void RuledSpellPaymentUi::received()
+void RuledPaymentUi::received()
 {
     if (!applicable())
         return;
     auto *game = actions->player->getGame();
-    auto &model = game->getGameEventHandler()->ruled()->spellPayment;
+    auto &model = game->getGameEventHandler()->ruled()->payment;
     changed();
     if (model.pending || model.submitting || !model.view.valid())
         return;
     if (model.view.selection_changed())
         game->getGameEventHandler()->ruled()->emitLocalLog(QString::fromStdString(model.view.error()));
     if (model.beginSubmission()) {
-        auto command = buildCommand(actions);
-        if (!command) {
-            actions->cancelPendingRuledSpellCast();
+        const auto submittingContext = context();
+        if (submittingContext == Context::Resolution) {
+            queuedMana.clear();
+            game->getGameEventHandler()->ruled()->payResolutionMana();
             return;
         }
-        *command->mutable_cast_spell()->mutable_payment() = model.selection;
-        *command->mutable_cast_spell()->mutable_restricted_mana() = model.restrictedMana;
+        auto command = buildPaymentCommand();
+        if (!command) {
+            model.submitting = false;
+            startOrRefresh();
+            return;
+        }
+        model.writePayment(*command);
         const auto transaction = model.transaction();
         queuedMana.clear();
-        RuledActions::sendRuledCommandExpectingAck(game, *command, [this, transaction](bool accepted) {
-            auto &current = actions->player->getGame()->getGameEventHandler()->ruled()->spellPayment;
-            if (current.transaction() != transaction)
-                return;
-            if (accepted) {
-                actions->clearPendingRuledSpellCast();
-                actions->clearLandTapUndoStack();
-            } else if (current.active) {
-                current.submitting = false;
-                schedule();
-            }
-        });
+        RuledActions::sendRuledCommandExpectingAck(
+            game, *command, [this, transaction, submittingContext](bool accepted) {
+                auto &current = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
+                if (current.transaction() != transaction)
+                    return;
+                if (accepted) {
+                    if (submittingContext == Context::Spell) {
+                        actions->clearPendingRuledSpellCast();
+                    } else {
+                        actions->ruledPendingCast->clearAbility();
+                        clear();
+                        emit actions->ruledAbilityActivationPendingChanged(false);
+                        emit actions->ruledAbilityCostPromptChanged();
+                        changed();
+                    }
+                    actions->clearLandTapUndoStack();
+                } else if (current.active) {
+                    current.submitting = false;
+                    schedule();
+                }
+            });
         return;
     }
     if (!queuedMana.isEmpty()) {
@@ -172,14 +246,14 @@ void RuledSpellPaymentUi::received()
     }
 }
 
-bool RuledSpellPaymentUi::payMana(const QString &name, quint32 groupId)
+bool RuledPaymentUi::payMana(const QString &name, quint32 groupId)
 {
     if (!applicable())
         return false;
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
-    auto &model = state->spellPayment;
+    auto &model = state->payment;
     if (!model.active)
-        model.begin();
+        model.begin(context() != Context::Spell);
     QString symbol = name.trimmed().toUpper();
     if (symbol == QLatin1String("X"))
         symbol = QStringLiteral("C");
@@ -195,14 +269,14 @@ bool RuledSpellPaymentUi::payMana(const QString &name, quint32 groupId)
     return true;
 }
 
-bool RuledSpellPaymentUi::click(CardItem *card, bool leftClick)
+bool RuledPaymentUi::click(CardItem *card, bool leftClick)
 {
     if (!leftClick || !card || !applicable() || !card->getZone() || card->getZone()->getName() != ZoneNames::TABLE)
         return false;
     auto *game = actions->player->getGame();
     auto *state = game->getGameEventHandler()->ruled();
     const auto oid = state->engineOidForCardId(card->getOwner()->getPlayerInfo()->getId(), card->getId());
-    auto &model = state->spellPayment;
+    auto &model = state->payment;
     if (RuledActions::gameplayInputLocked(game) || model.pending || model.submitting)
         return true;
     if (model.remove(oid)) {
@@ -219,8 +293,7 @@ bool RuledSpellPaymentUi::click(CardItem *card, bool leftClick)
     else {
         QMenu menu;
         for (int option : candidate->options()) {
-            auto *action =
-                menu.addAction(QObject::tr("Convoke — pay %1").arg(RuledSpellPayment::contributionLabel(option)));
+            auto *action = menu.addAction(QObject::tr("Convoke — pay %1").arg(RuledPayment::contributionLabel(option)));
             action->setData(option);
         }
         const auto *choice = menu.exec(QCursor::pos());
@@ -235,16 +308,21 @@ bool RuledSpellPaymentUi::click(CardItem *card, bool leftClick)
     return true;
 }
 
-QString RuledSpellPaymentUi::prompt() const
+QString RuledPaymentUi::prompt() const
 {
     if (!applicable())
         return {};
-    const auto &model = actions->player->getGame()->getGameEventHandler()->ruled()->spellPayment;
+    const auto &model = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
     if (!model.active)
         return {};
+    const bool spell = context() == Context::Spell;
+    const auto name = spell                           ? actions->pendingRuledSpellCast.cardName
+                      : context() == Context::Ability ? actions->pendingActivatedAbility.cardName
+                                                      : QObject::tr("Waterbend");
     QString text =
-        QObject::tr("Pay for %1: %2 remaining. Click creatures to convoke or pay mana.")
-            .arg(actions->pendingRuledSpellCast.cardName, QString::fromStdString(model.view.remaining_cost()));
+        QObject::tr("Pay for %1: %2 remaining. ").arg(name, QString::fromStdString(model.view.remaining_cost()));
+    text += spell ? QObject::tr("Click creatures to convoke or pay mana.")
+                  : QObject::tr("Click artifacts or creatures to waterbend, or pay mana.");
     if (model.pending)
         text += QObject::tr(" Checking payment…");
     if (!model.view.error().empty())
@@ -252,40 +330,52 @@ QString RuledSpellPaymentUi::prompt() const
     return text;
 }
 
-void RuledSpellPaymentUi::clear()
+void RuledPaymentUi::clear()
 {
     queuedMana.clear();
     suspended.reset();
+    suspendedAbility.reset();
+    activeContext = Context::None;
     if (!actions->player->getPlayerInfo()->getLocal())
         return;
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
-    state->spellPayment.clear();
+    state->payment.clear();
     state->emitSpellTargetSelectionChanged();
 }
 
-void RuledSpellPaymentUi::suspendForManaAbility(quint32 oid, int abilityIndex)
+void RuledPaymentUi::suspendForManaAbility(quint32 oid, int abilityIndex)
 {
     if (!applicable())
         return;
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     if (state->activatedAbilityManaProducedForOid(oid).value(abilityIndex).isEmpty())
         return;
-    suspended = actions->pendingRuledSpellCast;
-    actions->pendingRuledSpellCast.valid = false;
+    if (context() == Context::Spell) {
+        suspended = actions->pendingRuledSpellCast;
+        actions->pendingRuledSpellCast.valid = false;
+    } else if (context() == Context::Ability) {
+        suspendedAbility = actions->pendingActivatedAbility;
+        actions->pendingActivatedAbility.valid = false;
+    }
 }
 
-void RuledSpellPaymentUi::resumeAfterManaAbility()
+void RuledPaymentUi::resumeAfterManaAbility()
 {
-    if (!suspended)
-        return;
-    actions->ruledPendingCast->spell = *suspended;
-    suspended.reset();
-    emit actions->ruledSpellCastPendingChanged(true);
+    if (suspended) {
+        actions->ruledPendingCast->spell = *suspended;
+        suspended.reset();
+        emit actions->ruledSpellCastPendingChanged(true);
+    }
+    if (suspendedAbility) {
+        actions->ruledPendingCast->ability = *suspendedAbility;
+        suspendedAbility.reset();
+        emit actions->ruledAbilityActivationPendingChanged(true);
+    }
     startOrRefresh();
     changed();
 }
 
-void RuledSpellPaymentUi::paint(CardItem *card, QPainter *painter)
+void RuledPaymentUi::paint(CardItem *card, QPainter *painter)
 {
     if (!card || !card->getOwner() || !card->getZone() || card->getZone()->getName() != ZoneNames::TABLE)
         return;
@@ -293,7 +383,7 @@ void RuledSpellPaymentUi::paint(CardItem *card, QPainter *painter)
     if (!RuledActions::isRuledGame(game))
         return;
     auto *state = game->getGameEventHandler()->ruled();
-    const auto &model = state->spellPayment;
+    const auto &model = state->payment;
     if (!model.active)
         return;
     const auto oid = state->engineOidForCardId(card->getOwner()->getPlayerInfo()->getId(), card->getId());
@@ -313,12 +403,20 @@ void RuledSpellPaymentUi::paint(CardItem *card, QPainter *painter)
             const auto labelRect = QRectF(rect.left(), rect.bottom() - 20, rect.width(), 20);
             painter->fillRect(labelRect, QColor(0, 80, 90, 230));
             painter->drawText(labelRect, Qt::AlignCenter,
-                              QObject::tr("Convoke %1").arg(RuledSpellPayment::contributionLabel(c.kind())));
+                              QObject::tr("Convoke %1").arg(RuledPayment::contributionLabel(c.kind())));
         }
+    for (const auto &object : model.selection.waterbend()) {
+        if (object.object_id() != oid)
+            continue;
+        painter->setPen(Qt::white);
+        const auto labelRect = QRectF(rect.left(), rect.bottom() - 20, rect.width(), 20);
+        painter->fillRect(labelRect, QColor(0, 80, 90, 230));
+        painter->drawText(labelRect, Qt::AlignCenter, QObject::tr("Waterbend {1}"));
+    }
     painter->restore();
 }
 
-std::optional<ruled::v1::RuledCommand> RuledSpellPaymentUi::buildCommand(PlayerActions *actions)
+std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerActions *actions)
 {
     const auto &pendingRuledSpellCast = actions->pendingRuledSpellCast;
     const auto &restrictedManaPaymentSelections = actions->restrictedManaPaymentSelections;
@@ -443,4 +541,88 @@ std::optional<ruled::v1::RuledCommand> RuledSpellPaymentUi::buildCommand(PlayerA
         selection->set_c(static_cast<quint32>(counts.value(QLatin1Char('C'))));
     }
     return ruledCommand;
+}
+
+std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(PlayerActions *actions)
+{
+    auto &pendingActivatedAbility = actions->pendingActivatedAbility;
+    const auto &restrictedManaPaymentSelections = actions->restrictedManaPaymentSelections;
+    auto *player = actions->player;
+    ruled::v1::RuledCommand cmd;
+    ruled::v1::ActivateAbility *aa = nullptr;
+    ruled::v1::ExecutePermanentAction *permanentAction = nullptr;
+    if (pendingActivatedAbility.permanentAction) {
+        permanentAction = cmd.mutable_execute_permanent_action();
+        permanentAction->set_kind(pendingActivatedAbility.permanentActionKind);
+        permanentAction->set_object_id(pendingActivatedAbility.permanentOid);
+        permanentAction->set_expected_zone_change_generation(pendingActivatedAbility.expectedZoneChangeGeneration);
+        if (pendingActivatedAbility.permanentActionFaceIndex.has_value()) {
+            permanentAction->set_face_index(*pendingActivatedAbility.permanentActionFaceIndex);
+        }
+    } else {
+        aa = cmd.mutable_activate_ability();
+        pendingActivatedAbility.writeActivationHeader(*aa);
+    }
+    if (aa && pendingActivatedAbility.needsTarget) {
+        auto *tref = aa->add_targets();
+        tref->set_object_id(pendingActivatedAbility.selectedTargetOid);
+        tref->set_group_index(0);
+        const auto *state = player->getGame()->getGameEventHandler()->ruled();
+        const auto data =
+            state ? state->abilityTargetData(pendingActivatedAbility.permanentOid, pendingActivatedAbility.abilityIndex)
+                  : RuledSpellTargetData{};
+        tref->set_kind(ruledTargetRefKind(data.groups.value(0), pendingActivatedAbility.selectedTargetOid,
+                                          player->getPlayerInfo()->getId()));
+    }
+    // CR 107.4f: Phyrexian pips the player chose to pay with life (via self-portrait click).
+    for (const quint32 pipIndex : pendingActivatedAbility.lifePipIndices) {
+        auto *flex = permanentAction ? permanentAction->add_flex_payments() : aa->add_flex_payments();
+        flex->set_pip_index(pipIndex);
+        flex->set_pay_life(true);
+    }
+    for (const auto &selection : pendingActivatedAbility.costSelections) {
+        if (!aa) {
+            break;
+        }
+        auto *costSelection = aa->add_cost_selections();
+        costSelection->set_cost_index(static_cast<quint32>(selection.costIndex));
+        if (selection.counterOptionId != 0) {
+            ruledWriteCounterRemoval(selection, *costSelection);
+        } else if (selection.zone == RuledCostChoiceZone::Hand) {
+            RuledClientState *const handler = player->getGame()->getGameEventHandler()->ruled();
+            const int handSlot =
+                handler ? handler->engineHandSlotForServerCard(player->getPlayerInfo()->getId(),
+                                                               static_cast<int>(selection.selectedIds.value(0)))
+                        : -1;
+            if (handSlot < 0) {
+                return std::nullopt;
+            }
+            costSelection->set_hand_index(static_cast<quint32>(handSlot));
+        } else if (selection.zone == RuledCostChoiceZone::Graveyard) {
+            auto *graveyard = costSelection->mutable_graveyard_object_ids();
+            for (const quint32 objectId : selection.selectedIds) {
+                graveyard->add_object_ids(objectId);
+            }
+        } else if (const auto choice = std::find_if(
+                       pendingActivatedAbility.costChoices.cbegin(), pendingActivatedAbility.costChoices.cend(),
+                       [&selection](const auto &entry) { return entry.costIndex == selection.costIndex; });
+                   choice != pendingActivatedAbility.costChoices.cend() && ruledCostUsesObjectRefs(choice->kind)) {
+            ruledWriteCostObjectRefs(selection, *costSelection);
+        } else {
+            costSelection->set_permanent_id(selection.selectedIds.value(0));
+        }
+    }
+    for (auto groupIt = restrictedManaPaymentSelections.constBegin();
+         groupIt != restrictedManaPaymentSelections.constEnd(); ++groupIt) {
+        auto *selection = permanentAction ? permanentAction->add_restricted_mana() : aa->add_restricted_mana();
+        selection->set_restriction_group_id(groupIt.key());
+        const auto &counts = groupIt.value();
+        selection->set_w(static_cast<quint32>(counts.value(QLatin1Char('W'))));
+        selection->set_u(static_cast<quint32>(counts.value(QLatin1Char('U'))));
+        selection->set_b(static_cast<quint32>(counts.value(QLatin1Char('B'))));
+        selection->set_r(static_cast<quint32>(counts.value(QLatin1Char('R'))));
+        selection->set_g(static_cast<quint32>(counts.value(QLatin1Char('G'))));
+        selection->set_c(static_cast<quint32>(counts.value(QLatin1Char('C'))));
+    }
+    return cmd;
 }

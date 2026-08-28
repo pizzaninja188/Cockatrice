@@ -1,24 +1,29 @@
-#include "ruled_spell_payment.h"
+#include "ruled_payment.h"
 
 #include <limits>
 
-void RuledSpellPayment::begin()
+void RuledPayment::begin(bool guardSanitized)
 {
     clear();
     active = true;
+    guardSanitizedPayment = guardSanitized;
+    // Opening the action is intentional, including when the engine reports a zero cost.
+    // No pool mana is staged by begin(); a nonzero cost still needs explicit contributions.
+    submissionArmed = true;
 }
 
-void RuledSpellPayment::clear()
+void RuledPayment::clear()
 {
     ++transactionId;
     revision = 0;
     active = pending = submitting = false;
+    guardSanitizedPayment = submissionArmed = false;
     selection.Clear();
     restrictedMana.Clear();
     view.Clear();
 }
 
-void RuledSpellPayment::invalidate()
+void RuledPayment::invalidate()
 {
     if (!active || submitting)
         return;
@@ -26,27 +31,53 @@ void RuledSpellPayment::invalidate()
     pending = true;
 }
 
-bool RuledSpellPayment::beginSubmission()
+bool RuledPayment::beginSubmission()
 {
-    if (!active || pending || submitting || !view.valid() || !view.complete() || view.selection_changed())
+    if (!active || pending || submitting || !view.valid() || !view.complete() || view.selection_changed() ||
+        (guardSanitizedPayment && !submissionArmed))
         return false;
     submitting = true;
     return true;
 }
 
-ruled::v1::PreviewSpellPayment RuledSpellPayment::request(ruled::v1::CastSpell cast)
+ruled::v1::PreviewPayment RuledPayment::request(ruled::v1::CastSpell cast)
 {
-    ruled::v1::PreviewSpellPayment query;
+    ruled::v1::RuledCommand command;
+    *command.mutable_cast_spell() = std::move(cast);
+    return requestAction(std::move(command));
+}
+
+void RuledPayment::writePayment(ruled::v1::RuledCommand &command) const
+{
+    if (command.has_cast_spell()) {
+        *command.mutable_cast_spell()->mutable_payment() = selection;
+        *command.mutable_cast_spell()->mutable_restricted_mana() = restrictedMana;
+    } else if (command.has_activate_ability()) {
+        *command.mutable_activate_ability()->mutable_payment() = selection;
+        *command.mutable_activate_ability()->mutable_restricted_mana() = restrictedMana;
+    } else if (command.has_submit_resolution_choice()) {
+        *command.mutable_submit_resolution_choice()->mutable_payment() = selection;
+        *command.mutable_submit_resolution_choice()->mutable_restricted_mana() = restrictedMana;
+    }
+}
+
+ruled::v1::PreviewPayment RuledPayment::requestAction(ruled::v1::RuledCommand command)
+{
+    ruled::v1::PreviewPayment query;
     query.set_transaction_id(transactionId);
     query.set_revision(++revision);
-    *cast.mutable_payment() = selection;
-    *cast.mutable_restricted_mana() = restrictedMana;
-    *query.mutable_cast_spell() = std::move(cast);
+    writePayment(command);
+    if (command.has_cast_spell())
+        *query.mutable_cast_spell() = command.cast_spell();
+    else if (command.has_activate_ability())
+        *query.mutable_activate_ability() = command.activate_ability();
+    else if (command.has_submit_resolution_choice())
+        *query.mutable_resolution_choice() = command.submit_resolution_choice();
     pending = true;
     return query;
 }
 
-bool RuledSpellPayment::apply(const ruled::v1::SpellPaymentPreview &preview)
+bool RuledPayment::apply(const ruled::v1::PaymentPreview &preview)
 {
     if (!active || submitting || preview.transaction_id() != transactionId || preview.revision() != revision ||
         !pending)
@@ -56,6 +87,8 @@ bool RuledSpellPayment::apply(const ruled::v1::SpellPaymentPreview &preview)
     // visible for this transaction, while completion/validity always come from the newest reply.
     const auto previousNotice = view.valid() ? view.error() : std::string{};
     view = preview;
+    if (guardSanitizedPayment && preview.selection_changed())
+        submissionArmed = false;
     if (view.valid() && view.error().empty())
         view.set_error(previousNotice);
     if (preview.valid()) {
@@ -65,15 +98,18 @@ bool RuledSpellPayment::apply(const ruled::v1::SpellPaymentPreview &preview)
     return true;
 }
 
-bool RuledSpellPayment::selected(quint32 oid) const
+bool RuledPayment::selected(quint32 oid) const
 {
+    for (const auto &object : selection.waterbend())
+        if (object.object_id() == oid)
+            return true;
     for (const auto &c : selection.convoke())
         if (c.object().object_id() == oid)
             return true;
     return false;
 }
 
-const ruled::v1::ConvokeCandidate *RuledSpellPayment::candidate(quint32 oid) const
+const ruled::v1::ObjectPaymentCandidate *RuledPayment::candidate(quint32 oid) const
 {
     if (!active || pending || submitting || !view.valid())
         return nullptr;
@@ -83,10 +119,18 @@ const ruled::v1::ConvokeCandidate *RuledSpellPayment::candidate(quint32 oid) con
     return nullptr;
 }
 
-bool RuledSpellPayment::remove(quint32 oid)
+bool RuledPayment::remove(quint32 oid)
 {
     if (!active || pending || submitting)
         return false;
+    for (int i = 0; i < selection.waterbend_size(); ++i) {
+        if (selection.waterbend(i).object_id() == oid) {
+            selection.mutable_waterbend()->DeleteSubrange(i, 1);
+            submissionArmed = true;
+            invalidate();
+            return true;
+        }
+    }
     for (int i = 0; i < selection.convoke_size(); ++i) {
         if (selection.convoke(i).object().object_id() != oid)
             continue;
@@ -97,7 +141,7 @@ bool RuledSpellPayment::remove(quint32 oid)
     return false;
 }
 
-bool RuledSpellPayment::select(quint32 oid, int kind)
+bool RuledPayment::select(quint32 oid, int kind)
 {
     const auto *c = candidate(oid);
     if (!c || selected(oid))
@@ -107,14 +151,20 @@ bool RuledSpellPayment::select(quint32 oid, int kind)
         allowed |= option == kind;
     if (!allowed)
         return false;
+    submissionArmed = true;
+    if (kind == ruled::v1::OBJECT_PAYMENT_KIND_WATERBEND) {
+        *selection.add_waterbend() = c->object();
+        invalidate();
+        return true;
+    }
     auto *chosen = selection.add_convoke();
     *chosen->mutable_object() = c->object();
-    chosen->set_kind(static_cast<ruled::v1::ConvokePaymentKind>(kind));
+    chosen->set_kind(static_cast<ruled::v1::ObjectPaymentKind>(kind));
     invalidate();
     return true;
 }
 
-bool RuledSpellPayment::payMana(QChar symbol, quint32 groupId)
+bool RuledPayment::payMana(QChar symbol, quint32 groupId)
 {
     if (!active || submitting)
         return false;
@@ -139,12 +189,15 @@ bool RuledSpellPayment::payMana(QChar symbol, quint32 groupId)
     if (amount == std::numeric_limits<quint32>::max())
         return false;
     reflection->SetUInt32(message, field, amount + 1);
+    submissionArmed = true;
     invalidate();
     return true;
 }
 
-QString RuledSpellPayment::contributionLabel(int kind)
+QString RuledPayment::contributionLabel(int kind)
 {
+    if (kind == ruled::v1::OBJECT_PAYMENT_KIND_WATERBEND)
+        return QStringLiteral("{1}");
     const QString symbols = QStringLiteral("WUBRG1");
     return kind >= 1 && kind <= symbols.size() ? QStringLiteral("{%1}").arg(symbols.at(kind - 1)) : QString{};
 }

@@ -35,6 +35,7 @@ impl GameEngine {
                     revealed_zone_owner_player_id: None,
                     candidate_source_zones: Vec::new(),
                     combat_defender_options: Vec::new(),
+                    waterbend: payment.waterbend,
                 },
             )),
         })
@@ -57,25 +58,61 @@ impl GameEngine {
         let mut events = Vec::new();
         match decision {
             rv1::ResolutionChoiceDecision::PayMana => {
-                let payable = if payment.mana_cost.pips.is_empty() {
-                    self.can_pay_generic_mana(player, payment.generic_mana_cost)
+                if payment.waterbend {
+                    let result = (|| {
+                        let costs = self.prepare_resolution_payment_costs(
+                            player,
+                            &payment,
+                            &answer.restricted_mana,
+                        )?;
+                        let plan = if let Some(selection) = &answer.payment {
+                            let life = self.validate_explicit_payment(
+                                player,
+                                pending.presentation.source_object_id,
+                                false,
+                                &costs,
+                                selection,
+                            )?;
+                            costs.finish_explicit(&self.state, selection, life)?
+                        } else {
+                            costs.finish(&self.state)?
+                        };
+                        self.commit_cost_transaction(plan)
+                    })();
+                    let receipt = match result {
+                        Ok(receipt) => receipt,
+                        Err(error) => {
+                            self.state.pending_resolution = Some(pending);
+                            return Err(error);
+                        }
+                    };
+                    self.fire_triggers(&receipt.trigger_events);
+                    events.extend(receipt.move_events);
                 } else {
-                    self.can_pay_resolution_mana(player, &payment.mana_cost)
-                };
-                if !payable {
-                    self.state.pending_resolution = Some(pending);
-                    return Err(EngineError::Illegal(
-                        "resolution mana payment is not affordable",
-                    ));
-                }
-                let paid = if payment.mana_cost.pips.is_empty() {
-                    self.pay_generic_mana(player, payment.generic_mana_cost)
-                } else {
-                    self.pay_resolution_mana(player, &payment.mana_cost)
-                };
-                if let Err(error) = paid {
-                    self.state.pending_resolution = Some(pending);
-                    return Err(error);
+                    if answer.payment.is_some() || !answer.restricted_mana.is_empty() {
+                        self.state.pending_resolution = Some(pending);
+                        return Err(EngineError::Illegal("unexpected mixed payment"));
+                    }
+                    let payable = if payment.mana_cost.pips.is_empty() {
+                        self.can_pay_generic_mana(player, payment.generic_mana_cost)
+                    } else {
+                        self.can_pay_resolution_mana(player, &payment.mana_cost)
+                    };
+                    if !payable {
+                        self.state.pending_resolution = Some(pending);
+                        return Err(EngineError::Illegal(
+                            "resolution mana payment is not affordable",
+                        ));
+                    }
+                    let paid = if payment.mana_cost.pips.is_empty() {
+                        self.pay_generic_mana(player, payment.generic_mana_cost)
+                    } else {
+                        self.pay_resolution_mana(player, &payment.mana_cost)
+                    };
+                    if let Err(error) = paid {
+                        self.state.pending_resolution = Some(pending);
+                        return Err(error);
+                    }
                 }
                 let cost_label = if payment.mana_cost.pips.is_empty() {
                     format!("{{{}}}", payment.generic_mana_cost)
@@ -88,6 +125,10 @@ impl GameEngine {
                 self.state.undoable_mana_abilities.clear();
             }
             rv1::ResolutionChoiceDecision::Decline => {
+                if answer.payment.is_some() || !answer.restricted_mana.is_empty() {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal("decline cannot include a payment"));
+                }
                 while self.state.undoable_mana_abilities.len() > payment.undo_history_start {
                     events.push(
                         self.rewind_last_undoable_mana_ability(player, payment.undo_history_start)?,
@@ -210,7 +251,7 @@ impl GameEngine {
         match cost {
             ResolutionCost::Blight { .. } => self.blight_candidates(player),
             ResolutionCost::None => Vec::new(),
-            ResolutionCost::Mana(_) => Vec::new(),
+            ResolutionCost::Mana(_) | ResolutionCost::Waterbend(_) => Vec::new(),
             ResolutionCost::DiscardCard { filter } => self.state.players[index]
                 .hand
                 .iter()
@@ -345,7 +386,7 @@ impl GameEngine {
         );
         let required_candidates = match branch.cost {
             ResolutionCost::TapPermanents { count, .. } => count as usize,
-            ResolutionCost::None | ResolutionCost::Mana(_) => 0,
+            ResolutionCost::None | ResolutionCost::Mana(_) | ResolutionCost::Waterbend(_) => 0,
             _ => 1,
         };
         if candidates.len() < required_candidates {
@@ -365,6 +406,7 @@ impl GameEngine {
             "P{} chooses: {}.",
             pending.deciding_player, branch.label
         ))];
+        let is_waterbend = matches!(branch.cost, ResolutionCost::Waterbend(_));
         match branch.cost {
             ResolutionCost::None => {
                 let stack = pending
@@ -379,14 +421,15 @@ impl GameEngine {
                     ev,
                 );
             }
-            ResolutionCost::Mana(mana_cost) => {
+            ResolutionCost::Mana(mana_cost) | ResolutionCost::Waterbend(mana_cost) => {
                 pending.presentation.choice_kind = rv1::ChoiceKind::ManaPayment;
                 pending.presentation.prompt = format!("Pay {}?", mana_cost);
-                let payment = PendingManaPayment::from_cost(
+                let mut payment = PendingManaPayment::from_cost(
                     0,
                     mana_cost,
                     self.state.undoable_mana_abilities.len(),
                 );
+                payment.waterbend = is_waterbend;
                 let ResolutionContinuation::AuthoredBranch { branch, .. } =
                     &mut pending.continuation
                 else {
@@ -501,6 +544,7 @@ impl GameEngine {
                             revealed_zone_owner_player_id: None,
                             candidate_source_zones: Vec::new(),
                             combat_defender_options: Vec::new(),
+                            waterbend: false,
                         },
                     )),
                 });
@@ -676,7 +720,7 @@ impl GameEngine {
                 }
                 self.fire_triggers(&tap_events);
             }
-            ResolutionCost::Mana(_) => {
+            ResolutionCost::Mana(_) | ResolutionCost::Waterbend(_) => {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("mana branch requires mana payment"));
             }

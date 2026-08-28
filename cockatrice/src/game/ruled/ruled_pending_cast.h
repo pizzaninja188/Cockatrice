@@ -837,12 +837,12 @@ public:
 
     /// Build one engine-authoritative menu model for alternate actions on a physical card.
     /// Castable faces precede zone abilities so a cycler in hand exposes both Cast and Cycle.
-    static QVector<RuledCardActionMenuOption>
-    cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
-                          const QList<int> &abilityIndices,
-                          const QStringList &abilityLabels,
-                          const QHash<int, bool> &abilityEnabled,
-                          const QStringList &manaProduced = {});
+    static QVector<RuledCardActionMenuOption> cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
+                                                                    const QList<int> &abilityIndices,
+                                                                    const QStringList &abilityLabels,
+                                                                    const QHash<int, bool> &abilityEnabled,
+                                                                    const QStringList &manaProduced = {},
+                                                                    bool manaAbilitiesOnly = false);
 
     /// Spell casts and activated abilities are mutually exclusive local UI transactions.
     PendingRuledSpellCast &beginSpell();

@@ -1,0 +1,14 @@
+// Oracle/rulings checked against Scryfall 2026-08-28; CR 118.12a, 608.2g, 701.67.
+(
+  id: "waterbending_lesson",
+  name: "Waterbending Lesson",
+  mana_cost: "{3}{U}",
+  types: ["Sorcery", "Lesson"],
+  spell_effect: [
+    Draw(count: 3),
+    ChooseResolutionBranch(optional: false, branches: [
+      (label: "Waterbend {2}", cost: Waterbend("{2}"), effects: []),
+      (label: "Discard a card", cost: None, effects: [Discard(count: 1)]),
+    ]),
+  ],
+)

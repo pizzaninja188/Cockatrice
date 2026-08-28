@@ -567,7 +567,7 @@ impl GameEngine {
             GameEvent::ZoneChanges(batch) => self.collect_zone_triggers(batch),
             // The completed operation is available for Blight observers; this delivery adds
             // payment consumers, not a new authored observer condition.
-            GameEvent::Blighted(_) => vec![],
+            GameEvent::Blighted(_) | GameEvent::Waterbent { .. } => vec![],
             GameEvent::EntersBattlefield { object_id } => {
                 let Some(obj) = self.state.objects.get(object_id) else {
                     return vec![];
@@ -1833,6 +1833,7 @@ impl GameEngine {
             GameEvent::Surveilled { player } => Some(*player),
             GameEvent::CrimeCommitted { player } => Some(*player),
             GameEvent::Blighted(receipt) => Some(receipt.player),
+            GameEvent::Waterbent { player } => Some(*player),
             GameEvent::ManaSpentCastingSpell { player, .. } => Some(*player),
             GameEvent::CardDrawn { drawer, .. } => Some(*drawer),
             GameEvent::SpellCast { fact } => Some(fact.caster),

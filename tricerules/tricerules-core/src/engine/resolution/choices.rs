@@ -114,7 +114,7 @@ pub(in crate::engine) fn resolution_branch_is_live(
         }
     };
     let required_candidates = match branch.cost {
-        ResolutionCost::None | ResolutionCost::Mana(_) => 0,
+        ResolutionCost::None | ResolutionCost::Mana(_) | ResolutionCost::Waterbend(_) => 0,
         ResolutionCost::TapPermanents { count, .. } => count as usize,
         _ => 1,
     };
@@ -224,6 +224,10 @@ fn park_resolution_branches_for(
                     rv1::ResolutionBranchCostKind::Blight,
                     format!("Blight {count}"),
                 ),
+                ResolutionCost::Waterbend(cost) => (
+                    rv1::ResolutionBranchCostKind::Waterbend,
+                    format!("Waterbend {cost}"),
+                ),
                 ResolutionCost::Mana(cost) => {
                     (rv1::ResolutionBranchCostKind::Mana, cost.to_string())
                 }
@@ -280,6 +284,7 @@ fn park_resolution_branches_for(
                 revealed_zone_owner_player_id: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
+                waterbend: false,
             },
         )),
     });

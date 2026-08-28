@@ -264,18 +264,18 @@ protected:
 TEST_F(RuledClientTest, ConvokePreviewPreservesLegalActionsAndRejectsObsoleteReplies)
 {
     state->handActions[ruled::v1::HAND_ACTION_CAST_SPELL].handIndices.insert(4);
-    auto &payment = state->spellPayment;
+    auto &payment = state->payment;
     payment.begin();
     const auto old = payment.request({});
     ASSERT_TRUE(payment.payMana('U'));
     const auto current = payment.request({});
     ruled::v1::RuledEventBatch batch;
-    auto *reply = batch.mutable_spell_payment_preview();
+    auto *reply = batch.mutable_payment_preview();
     reply->set_transaction_id(old.transaction_id());
     reply->set_revision(old.revision());
     reply->set_valid(true);
     reply->set_complete(true);
-    QSignalSpy spy(state, &RuledClientState::spellPaymentPreviewReceived);
+    QSignalSpy spy(state, &RuledClientState::paymentPreviewReceived);
     EXPECT_TRUE(dispatcher->processPayload(batch.SerializeAsString()));
     EXPECT_TRUE(payment.pending);
     EXPECT_EQ(spy.count(), 0);
@@ -295,22 +295,22 @@ TEST_F(RuledClientTest, ConvokePreviewPreservesLegalActionsAndRejectsObsoleteRep
 
 TEST_F(RuledClientTest, ConvokeSelectionUsesPublishedColorAndGeneration)
 {
-    auto &payment = state->spellPayment;
+    auto &payment = state->payment;
     payment.begin();
     auto request = payment.request({});
-    ruled::v1::SpellPaymentPreview response;
+    ruled::v1::PaymentPreview response;
     response.set_transaction_id(request.transaction_id());
     response.set_revision(request.revision());
     response.set_valid(true);
     auto *candidate = response.add_candidates();
     candidate->mutable_object()->set_object_id(44);
     candidate->mutable_object()->set_zone_change_generation(7);
-    candidate->add_options(ruled::v1::CONVOKE_PAYMENT_KIND_BLUE);
-    candidate->add_options(ruled::v1::CONVOKE_PAYMENT_KIND_GENERIC);
+    candidate->add_options(ruled::v1::OBJECT_PAYMENT_KIND_BLUE);
+    candidate->add_options(ruled::v1::OBJECT_PAYMENT_KIND_GENERIC);
     ASSERT_TRUE(payment.apply(response));
-    EXPECT_FALSE(payment.select(44, ruled::v1::CONVOKE_PAYMENT_KIND_RED));
-    EXPECT_TRUE(payment.select(44, ruled::v1::CONVOKE_PAYMENT_KIND_BLUE));
-    EXPECT_FALSE(payment.select(44, ruled::v1::CONVOKE_PAYMENT_KIND_GENERIC));
+    EXPECT_FALSE(payment.select(44, ruled::v1::OBJECT_PAYMENT_KIND_RED));
+    EXPECT_TRUE(payment.select(44, ruled::v1::OBJECT_PAYMENT_KIND_BLUE));
+    EXPECT_FALSE(payment.select(44, ruled::v1::OBJECT_PAYMENT_KIND_GENERIC));
     EXPECT_EQ(payment.selection.convoke(0).object().zone_change_generation(), 7u);
     request = payment.request({});
     response.set_revision(request.revision());
@@ -320,12 +320,33 @@ TEST_F(RuledClientTest, ConvokeSelectionUsesPublishedColorAndGeneration)
     EXPECT_FALSE(payment.selected(44));
 }
 
+TEST_F(RuledClientTest, WaterbendUsesSharedPaymentSelectionWithoutConvokeColorChoices)
+{
+    auto &payment = state->payment;
+    payment.begin();
+    const auto request = payment.request({});
+    ruled::v1::PaymentPreview response;
+    response.set_transaction_id(request.transaction_id());
+    response.set_revision(request.revision());
+    response.set_valid(true);
+    auto *candidate = response.add_candidates();
+    candidate->mutable_object()->set_object_id(44);
+    candidate->mutable_object()->set_zone_change_generation(7);
+    candidate->add_options(ruled::v1::OBJECT_PAYMENT_KIND_WATERBEND);
+    ASSERT_TRUE(payment.apply(response));
+    EXPECT_FALSE(payment.select(44, ruled::v1::OBJECT_PAYMENT_KIND_BLUE));
+    ASSERT_TRUE(payment.select(44, ruled::v1::OBJECT_PAYMENT_KIND_WATERBEND));
+    ASSERT_EQ(payment.selection.waterbend_size(), 1);
+    EXPECT_EQ(payment.selection.waterbend(0).zone_change_generation(), 7u);
+    EXPECT_EQ(payment.selection.convoke_size(), 0);
+}
+
 TEST_F(RuledClientTest, ConvokeCompletionSubmitsExactlyOnceAndStateRefreshInvalidatesReplies)
 {
-    auto &payment = state->spellPayment;
+    auto &payment = state->payment;
     payment.begin();
     auto request = payment.request({});
-    ruled::v1::SpellPaymentPreview response;
+    ruled::v1::PaymentPreview response;
     response.set_transaction_id(request.transaction_id());
     response.set_revision(request.revision());
     response.set_valid(true);
@@ -350,6 +371,109 @@ TEST_F(RuledClientTest, ConvokeCompletionSubmitsExactlyOnceAndStateRefreshInvali
     EXPECT_FALSE(payment.apply(response));
     payment.clear();
     EXPECT_FALSE(payment.beginSubmission());
+}
+
+TEST_F(RuledClientTest, WaterbendDisarmsSanitizedPaymentsAndSerializesEachContext)
+{
+    auto &payment = state->payment;
+    payment.begin(true);
+    ruled::v1::RuledCommand ability;
+    ability.mutable_activate_ability()->set_source_object_id(81);
+    auto request = payment.requestAction(ability);
+    EXPECT_TRUE(request.has_activate_ability());
+    EXPECT_FALSE(request.has_cast_spell());
+    ruled::v1::PaymentPreview response;
+    response.set_transaction_id(request.transaction_id());
+    response.set_revision(request.revision());
+    response.set_valid(true);
+    response.set_complete(false);
+    ASSERT_TRUE(payment.apply(response));
+    EXPECT_FALSE(payment.beginSubmission());
+    ASSERT_TRUE(payment.payMana('U'));
+    request = payment.requestAction(ability);
+    response.set_revision(request.revision());
+    response.set_selection_changed(true);
+    response.set_complete(true);
+    ASSERT_TRUE(payment.apply(response));
+    EXPECT_FALSE(payment.beginSubmission());
+    request = payment.requestAction(ability);
+    response.set_revision(request.revision());
+    response.set_selection_changed(false);
+    ASSERT_TRUE(payment.apply(response));
+    EXPECT_FALSE(payment.beginSubmission()); // Sanitizing a stale selection disarms submission.
+    ASSERT_TRUE(payment.payMana('U'));
+    request = payment.requestAction(ability);
+    response.set_revision(request.revision());
+    *response.mutable_selection() = request.activate_ability().payment();
+    ASSERT_TRUE(payment.apply(response));
+    ASSERT_TRUE(payment.beginSubmission());
+    EXPECT_FALSE(payment.beginSubmission());
+    payment.writePayment(ability);
+    EXPECT_EQ(ability.activate_ability().payment().mana().u(), 1u);
+    ruled::v1::RuledCommand resolution;
+    resolution.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    payment.writePayment(resolution);
+    EXPECT_EQ(resolution.submit_resolution_choice().payment().SerializeAsString(),
+              ability.activate_ability().payment().SerializeAsString());
+}
+
+TEST_F(RuledClientTest, ZeroCostWaterbendCompletesWithoutAnImpossibleContribution)
+{
+    auto &payment = state->payment;
+    payment.begin(true); // Opening the activation/payment branch is itself intentional.
+    const auto request = payment.request({});
+    ruled::v1::PaymentPreview response;
+    response.set_transaction_id(request.transaction_id());
+    response.set_revision(request.revision());
+    response.set_valid(true);
+    response.set_complete(true);
+    ASSERT_TRUE(payment.apply(response));
+    EXPECT_TRUE(payment.beginSubmission());
+    EXPECT_FALSE(payment.beginSubmission());
+}
+
+TEST_F(RuledClientTest, WaterbendResolutionRefreshAndRejectedSubmissionPreserveStaging)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_source_object_id(81);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    choice->set_waterbend(true);
+    choice->set_generic_mana_cost(2);
+    apply(batch);
+    ASSERT_TRUE(state->isWaterbendResolutionPayment());
+    auto &payment = state->payment;
+    payment.begin(true);
+    payment.selection.add_waterbend()->set_object_id(44);
+    payment.selection.mutable_waterbend(0)->set_zone_change_generation(7);
+    const auto transaction = payment.transaction();
+    apply(batch); // Mana abilities republish the same parked choice.
+    ASSERT_TRUE(payment.active);
+    EXPECT_EQ(payment.transaction(), transaction);
+    ASSERT_EQ(payment.selection.waterbend_size(), 1);
+    payment.view.set_valid(true);
+    payment.view.set_complete(true);
+    state->payResolutionMana();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().payment().waterbend(0).zone_change_generation(), 7u);
+    host.answerPendingAck(false);
+    ASSERT_TRUE(state->isWaterbendResolutionPayment());
+    ASSERT_EQ(payment.selection.waterbend_size(), 1);
+    EXPECT_FALSE(payment.submitting);
+    EXPECT_FALSE(state->resolutionPaymentCurrentlyLegal());
+    payment.pending = false;
+    state->payResolutionMana();
+    apply(batch); // A same-source refresh can arrive before the rejection acknowledgement.
+    host.answerPendingAck(false);
+    EXPECT_FALSE(payment.submitting);
+    EXPECT_EQ(payment.selection.waterbend_size(), 1);
+    state->declineResolutionMana();
+    EXPECT_FALSE(host.sentCommands.last().submit_resolution_choice().has_payment());
+    host.answerPendingAck(true);
+    choice->set_source_object_id(82);
+    apply(batch);
+    EXPECT_FALSE(payment.active); // A different resolution owns a new transaction.
 }
 
 TEST_F(RuledClientTest, BattlefieldObjectMapBuildsIdentityMapsBothWays)
@@ -3006,6 +3130,22 @@ TEST(RuledPendingCastTest, ManaPaymentMenuRetainsEveryEngineOptionAndItsIndex)
     EXPECT_FALSE(options.at(6).enabled);
 }
 
+TEST(RuledPendingCastTest, NestedPaymentMenuOffersOnlyEnginePublishedManaAbilities)
+{
+    RuledFaceOption face;
+    face.faceName = QStringLiteral("Test spell");
+    const auto options = RuledPendingCast::cardActionMenuOptions(
+        {face}, {0, 1, 2}, {"Waterbend {5}: Put a counter.", "{T}: Add {G}.", "{T}: Add {U} or {G}."},
+        {{0, true}, {1, true}, {2, false}}, {"", "G", "U/G"}, true);
+    ASSERT_EQ(options.size(), 3);
+    EXPECT_EQ(options.at(0).kind, RuledCardActionMenuOption::Kind::ActivateAbility);
+    EXPECT_EQ(options.at(0).index, 1);
+    EXPECT_TRUE(options.at(0).enabled);
+    EXPECT_EQ(options.at(2).index, 2);
+    EXPECT_EQ(options.at(2).manaOptionIndex, 1);
+    EXPECT_FALSE(options.at(2).enabled);
+}
+
 TEST(RuledPendingCastTest, ActivationHeaderPreservesSelectedManaOptionAndSourceIdentity)
 {
     PendingActivatedAbility pending;
@@ -4700,8 +4840,8 @@ TEST_F(RuledClientTest, ChooseStartingPlayerAndKeepSendTheirCommands)
 
 TEST_F(RuledClientTest, ClearSessionStateResetsEverythingCarriedBetweenGames)
 {
-    state->spellPayment.begin();
-    const auto obsoletePayment = state->spellPayment.request({});
+    state->payment.begin();
+    const auto obsoletePayment = state->payment.request({});
     ruled::v1::RuledEventBatch batch;
     auto *sp = batch.add_events()->mutable_stack_pushed();
     sp->set_object_id(900);
@@ -4716,22 +4856,22 @@ TEST_F(RuledClientTest, ClearSessionStateResetsEverythingCarriedBetweenGames)
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 0, "Grizzly Bears");
     apply(batch);
-    EXPECT_FALSE(state->spellPayment.active); // a blocking engine choice replaces local staging
-    ruled::v1::SpellPaymentPreview obsoleteReply;
+    EXPECT_FALSE(state->payment.active); // a blocking engine choice replaces local staging
+    ruled::v1::PaymentPreview obsoleteReply;
     obsoleteReply.set_transaction_id(obsoletePayment.transaction_id());
     obsoleteReply.set_revision(obsoletePayment.revision());
-    EXPECT_FALSE(state->spellPayment.apply(obsoleteReply));
+    EXPECT_FALSE(state->payment.apply(obsoleteReply));
     ASSERT_TRUE(state->hasStackItems());
     ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
 
     QSignalSpy resetSpy(state, &RuledClientState::sessionReset);
-    state->spellPayment.begin();
-    state->spellPayment.payMana('U');
+    state->payment.begin();
+    state->payment.payMana('U');
     state->clearSessionState();
 
     EXPECT_EQ(resetSpy.count(), 1);
-    EXPECT_FALSE(state->spellPayment.active);
-    EXPECT_EQ(state->spellPayment.selection.mana().u(), 0u);
+    EXPECT_FALSE(state->payment.active);
+    EXPECT_EQ(state->payment.selection.mana().u(), 0u);
     EXPECT_FALSE(state->hasStackItems());
     EXPECT_TRUE(state->stackAnnotation(900).isEmpty());
     EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));

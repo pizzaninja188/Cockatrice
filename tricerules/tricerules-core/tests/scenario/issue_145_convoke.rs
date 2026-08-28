@@ -42,19 +42,20 @@ fn setup(card: &str) -> GameEngine {
 fn draft(
     engine: &GameEngine,
     card: &str,
-    contributions: &[(u32, rv1::ConvokePaymentKind)],
-    mana: rv1::SpellPaymentMana,
+    contributions: &[(u32, rv1::ObjectPaymentKind)],
+    mana: rv1::PaymentMana,
 ) -> rv1::CastSpell {
     let hand = hand_index_for_card(engine, 0, card);
     rv1::CastSpell {
         cast_method: rv1::CastMethod::Normal as i32,
         source: Some(hand_cast_source(hand)),
-        payment: Some(rv1::SpellPaymentSelection {
+        payment: Some(rv1::PaymentSelection {
+            waterbend: vec![],
             source: Some(object_ref(engine, engine.state.players[0].hand[hand])),
             expected_state_revision: engine.state.command_index,
             convoke: contributions
                 .iter()
-                .map(|&(oid, kind)| rv1::ConvokeContribution {
+                .map(|&(oid, kind)| rv1::ObjectPaymentContribution {
                     object: Some(object_ref(engine, oid)),
                     kind: kind as i32,
                 })
@@ -65,10 +66,12 @@ fn draft(
     }
 }
 
-fn preview(engine: &GameEngine, cast: &rv1::CastSpell) -> rv1::SpellPaymentPreview {
-    engine.preview_spell_payment(
+fn preview(engine: &GameEngine, cast: &rv1::CastSpell) -> rv1::PaymentPreview {
+    engine.preview_payment(
         0,
-        &rv1::PreviewSpellPayment {
+        &rv1::PreviewPayment {
+            activate_ability: None,
+            resolution_choice: None,
             transaction_id: 13,
             revision: 2,
             cast_spell: Some(cast.clone()),
@@ -96,20 +99,17 @@ fn issue_172_convoke_spends_only_selected_mana_and_previews_never_expend() {
         let mut contributions = vec![];
         for index in 0..convoke_count {
             let (card, kind) = if index < 3 {
-                ("grizzly_bears", rv1::ConvokePaymentKind::Generic)
+                ("grizzly_bears", rv1::ObjectPaymentKind::Generic)
             } else {
-                (
-                    "merfolk_of_the_pearl_trident",
-                    rv1::ConvokePaymentKind::Blue,
-                )
+                ("merfolk_of_the_pearl_trident", rv1::ObjectPaymentKind::Blue)
             };
             let oid = inject_creature_on_battlefield(&mut engine, 0, card);
             contributions.push((oid, kind));
         }
         let mana = if convoke_count == 5 {
-            rv1::SpellPaymentMana::default()
+            rv1::PaymentMana::default()
         } else {
-            rv1::SpellPaymentMana {
+            rv1::PaymentMana {
                 u: 2,
                 c: 3 - convoke_count,
                 ..Default::default()
@@ -168,8 +168,8 @@ fn convoke_serialized_command_replays_identically_without_preview_queries() {
         let cast = draft(
             &engine,
             "unexpected_assistance",
-            &[(bear, rv1::ConvokePaymentKind::Generic)],
-            rv1::SpellPaymentMana {
+            &[(bear, rv1::ObjectPaymentKind::Generic)],
+            rv1::PaymentMana {
                 u: 2,
                 c: 2,
                 ..Default::default()
@@ -232,7 +232,9 @@ fn convoke_preview_is_read_only_and_publishes_only_derived_legal_colors() {
     assert_eq!(format!("{:?}", engine.state), before);
     assert_eq!(preview(&engine, &cast), response);
     let query = rv1::RuledCommand {
-        cmd: Some(Cmd::PreviewSpellPayment(rv1::PreviewSpellPayment {
+        cmd: Some(Cmd::PreviewPayment(rv1::PreviewPayment {
+            activate_ability: None,
+            resolution_choice: None,
             cast_spell: Some(cast),
             ..Default::default()
         })),
@@ -254,8 +256,8 @@ fn convoke_stale_duplicate_excess_invalid_color_and_unavailable_mana_are_atomic(
         let mut cast = draft(
             &engine,
             "unexpected_assistance",
-            &[(bear, rv1::ConvokePaymentKind::Generic)],
-            rv1::SpellPaymentMana {
+            &[(bear, rv1::ObjectPaymentKind::Generic)],
+            rv1::PaymentMana {
                 u: 2,
                 c: 2,
                 ..Default::default()
@@ -272,7 +274,7 @@ fn convoke_stale_duplicate_excess_invalid_color_and_unavailable_mana_are_atomic(
                     .zone_change_generation += 1
             }
             2 => selection.expected_state_revision += 1,
-            3 => selection.convoke[0].kind = rv1::ConvokePaymentKind::Blue as i32,
+            3 => selection.convoke[0].kind = rv1::ObjectPaymentKind::Blue as i32,
             4 => engine.state.players[0].mana_pool.blue = 1,
             5 => selection.mana.as_mut().unwrap().c = 3,
             _ => engine.state.objects.get_mut(&bear).unwrap().tapped = true,
@@ -296,8 +298,8 @@ fn convoke_refresh_keeps_valid_choices_and_removes_a_mana_ability_creature() {
         &engine,
         "unexpected_assistance",
         &[
-            (bear, rv1::ConvokePaymentKind::Generic),
-            (fish, rv1::ConvokePaymentKind::Blue),
+            (bear, rv1::ObjectPaymentKind::Generic),
+            (fish, rv1::ObjectPaymentKind::Blue),
         ],
         Default::default(),
     );
@@ -326,8 +328,8 @@ fn convoke_preview_removes_only_excess_mana_and_retains_creature_selections() {
     let cast = draft(
         &engine,
         "unexpected_assistance",
-        &[(bear, rv1::ConvokePaymentKind::Generic)],
-        rv1::SpellPaymentMana {
+        &[(bear, rv1::ObjectPaymentKind::Generic)],
+        rv1::PaymentMana {
             u: 2,
             c: 3,
             ..Default::default()
@@ -350,7 +352,7 @@ fn convoke_all_mana_resolves_assistance_with_private_discard() {
         &engine,
         "unexpected_assistance",
         &[],
-        rv1::SpellPaymentMana {
+        rv1::PaymentMana {
             u: 2,
             c: 3,
             ..Default::default()
@@ -407,8 +409,8 @@ fn convoke_combines_restricted_mana_and_refreshes_unavailable_group_amounts() {
     let mut cast = draft(
         &engine,
         "unexpected_assistance",
-        &[(bear, rv1::ConvokePaymentKind::Generic)],
-        rv1::SpellPaymentMana {
+        &[(bear, rv1::ObjectPaymentKind::Generic)],
+        rv1::PaymentMana {
             u: 2,
             c: 1,
             ..Default::default()
@@ -444,8 +446,8 @@ fn convoke_hybrid_skyswimmer_creates_a_white_blue_token() {
     let cast = draft(
         &engine,
         "merrow_skyswimmer",
-        &[(fish, rv1::ConvokePaymentKind::Blue)],
-        rv1::SpellPaymentMana {
+        &[(fish, rv1::ObjectPaymentKind::Blue)],
+        rv1::PaymentMana {
             w: 1,
             c: 3,
             ..Default::default()
@@ -477,8 +479,8 @@ fn convoke_appeal_accepts_one_or_two_targets_and_control_not_ownership() {
         let mut cast = draft(
             &engine,
             "appeal_to_eirdu",
-            &[(bear, rv1::ConvokePaymentKind::Generic)],
-            rv1::SpellPaymentMana {
+            &[(bear, rv1::ObjectPaymentKind::Generic)],
+            rv1::PaymentMana {
                 w: 1,
                 c: 2,
                 ..Default::default()
@@ -532,9 +534,9 @@ fn convoke_all_creature_celebrant_resolves_with_vigilance() {
             (
                 oid,
                 if i < 2 {
-                    rv1::ConvokePaymentKind::White
+                    rv1::ObjectPaymentKind::White
                 } else {
-                    rv1::ConvokePaymentKind::Generic
+                    rv1::ObjectPaymentKind::Generic
                 },
             )
         })
@@ -595,7 +597,7 @@ fn convoke_tapping_an_attacker_or_blocker_does_not_remove_it_from_combat() {
             &engine,
             "unexpected_assistance",
             &[],
-            rv1::SpellPaymentMana {
+            rv1::PaymentMana {
                 u: 2,
                 c: 2,
                 ..Default::default()
@@ -616,9 +618,9 @@ fn convoke_tapping_an_attacker_or_blocker_does_not_remove_it_from_combat() {
             .as_mut()
             .unwrap()
             .convoke
-            .push(rv1::ConvokeContribution {
+            .push(rv1::ObjectPaymentContribution {
                 object: Some(object_ref(&engine, oid)),
-                kind: rv1::ConvokePaymentKind::Generic as i32,
+                kind: rv1::ObjectPaymentKind::Generic as i32,
             });
         engine.state.players[payer].mana_pool.blue = 2;
         engine.state.players[payer].mana_pool.colorless = 2;
@@ -663,14 +665,15 @@ fn convoke_mixed_payment_taps_a_summoning_sick_creature_without_making_mana() {
     let Some(rv1::ruled_command::Cmd::CastSpell(cast)) = command.cmd.as_mut() else {
         panic!("cast")
     };
-    cast.payment = Some(rv1::SpellPaymentSelection {
+    cast.payment = Some(rv1::PaymentSelection {
+        waterbend: vec![],
         source: Some(object_ref(&engine, source)),
         expected_state_revision: engine.state.command_index,
-        convoke: vec![rv1::ConvokeContribution {
+        convoke: vec![rv1::ObjectPaymentContribution {
             object: Some(object_ref(&engine, bear)),
-            kind: rv1::ConvokePaymentKind::Generic as i32,
+            kind: rv1::ObjectPaymentKind::Generic as i32,
         }],
-        mana: Some(rv1::SpellPaymentMana {
+        mana: Some(rv1::PaymentMana {
             u: 2,
             c: 2,
             ..Default::default()

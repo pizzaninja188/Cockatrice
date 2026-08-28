@@ -15,6 +15,7 @@ pub(in crate::engine) struct SacrificeSnapshot {
 }
 
 enum CostDebit {
+    Waterbend,
     RemoveCounters {
         object: rv1::CostObjectRef,
         kind: CounterKind,
@@ -167,7 +168,8 @@ pub(in crate::engine) struct CostTransactionPlan {
     cast_cost_receipts: Vec<CastCostReceipt>,
 }
 
-pub(in crate::engine) struct PreparedSpellCosts {
+pub(in crate::engine) struct PreparedPaymentCosts {
+    pub waterbend_limit: Option<u32>,
     pub transaction: CostTransactionPlan,
     pub mana: ManaCost,
     pub x_value: u32,
@@ -178,7 +180,7 @@ pub(in crate::engine) struct PreparedSpellCosts {
     pub eligible_restricted_mana: Vec<u32>,
 }
 
-impl PreparedSpellCosts {
+impl PreparedPaymentCosts {
     pub fn can_convoke(&self, oid: ObjectId) -> bool {
         !self.transaction.debits.iter().any(|d| match d {
             CostDebit::Tap { object_id, .. } => *object_id == oid,
@@ -190,7 +192,7 @@ impl PreparedSpellCosts {
     pub fn finish_explicit(
         mut self,
         state: &GameState,
-        selection: &rv1::SpellPaymentSelection,
+        selection: &rv1::PaymentSelection,
         life: u32,
     ) -> Result<CostTransactionPlan, EngineError> {
         let mana = super::mana::plan_exact_mana_payment(
@@ -205,6 +207,7 @@ impl PreparedSpellCosts {
             .convoke
             .iter()
             .filter_map(|c| c.object.as_ref())
+            .chain(selection.waterbend.iter())
             .map(|c| (c.object_id, c.zone_change_generation))
             .collect::<Vec<_>>();
         // CR 601.2h permits tapping for Convoke before sacrificing the same creature as another
@@ -234,6 +237,49 @@ impl PreparedSpellCosts {
 }
 
 impl GameEngine {
+    pub(in crate::engine) fn prepare_resolution_payment_costs(
+        &self,
+        player: PlayerId,
+        payment: &PendingManaPayment,
+        restricted_mana: &[rv1::ManaSpendSelection],
+    ) -> Result<PreparedPaymentCosts, EngineError> {
+        let idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        let cost = if payment.mana_cost.pips.is_empty() {
+            ManaCost {
+                pips: vec![ManaSymbol::Generic(payment.generic_mana_cost)],
+            }
+        } else {
+            payment.mana_cost.clone()
+        };
+        Ok(PreparedPaymentCosts {
+            waterbend_limit: payment
+                .waterbend
+                .then(|| super::waterbend::generic_component(&cost))
+                .transpose()?,
+            transaction: CostTransactionPlan {
+                purpose: CostPurpose::Ability,
+                player,
+                player_idx: idx,
+                debits: if payment.waterbend {
+                    vec![CostDebit::Waterbend]
+                } else {
+                    vec![]
+                },
+                cast_cost_receipts: vec![],
+            },
+            mana: cost,
+            x_value: 0,
+            extra_generic: 0,
+            generic_reduction: 0,
+            flex_payments: vec![],
+            restricted_mana: restricted_mana.to_vec(),
+            eligible_restricted_mana: vec![],
+        })
+    }
+
     fn plan_blight_selection(
         &self,
         player: PlayerId,
@@ -315,7 +361,7 @@ impl GameEngine {
         restricted_mana: &[rv1::ManaSpendSelection],
         eligible_restricted_mana: &[u32],
         cast_method: SpellCastMethod,
-    ) -> Result<PreparedSpellCosts, EngineError> {
+    ) -> Result<PreparedPaymentCosts, EngineError> {
         use rv1::cost_selection::Selection;
 
         let mut by_index = HashMap::new();
@@ -662,7 +708,8 @@ impl GameEngine {
             return Err(EngineError::Illegal("unexpected cost selection"));
         }
 
-        Ok(PreparedSpellCosts {
+        Ok(PreparedPaymentCosts {
+            waterbend_limit: None,
             transaction: CostTransactionPlan {
                 purpose: CostPurpose::Spell,
                 player,
@@ -680,6 +727,7 @@ impl GameEngine {
         })
     }
 
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(in crate::engine) fn plan_ability_costs(
         &self,
@@ -693,6 +741,33 @@ impl GameEngine {
         extra_generic: u32,
         generic_reduction: u32,
     ) -> Result<CostTransactionPlan, EngineError> {
+        self.prepare_ability_costs(
+            player,
+            idx,
+            permanent_id,
+            costs,
+            flex_payments,
+            selections,
+            restricted_mana,
+            extra_generic,
+            generic_reduction,
+        )?
+        .finish(&self.state)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::engine) fn prepare_ability_costs(
+        &self,
+        player: PlayerId,
+        idx: usize,
+        permanent_id: ObjectId,
+        costs: &[AbilityCost],
+        flex_payments: &[rv1::FlexPipPayment],
+        selections: &[rv1::CostSelection],
+        restricted_mana: &[rv1::ManaSpendSelection],
+        extra_generic: u32,
+        generic_reduction: u32,
+    ) -> Result<PreparedPaymentCosts, EngineError> {
         use rv1::cost_selection::Selection;
 
         let source_card_id = self
@@ -713,6 +788,8 @@ impl GameEngine {
         let mut consumed = HashSet::new();
         let mut expected_selections = 0usize;
         let mut saw_mana = false;
+        let mut mana_cost = ManaCost::default();
+        let mut waterbend_limit = None;
         let mut saw_tap = false;
         let eligible_restricted_mana = self.eligible_restricted_mana_for_ability(idx, permanent_id);
         for (cost_index, cost) in costs.iter().enumerate() {
@@ -855,24 +932,20 @@ impl GameEngine {
                     }
                     debits.push(CostDebit::TapGroup(taps));
                 }
-                AbilityCost::Mana(cost) => {
-                    if saw_mana {
-                        return Err(EngineError::Illegal("multiple mana cost components"));
+                AbilityCost::Mana(cost) | AbilityCost::Waterbend(cost) => {
+                    if matches!(costs[cost_index], AbilityCost::Waterbend(_)) {
+                        if waterbend_limit.is_some() {
+                            return Err(EngineError::Illegal("multiple Waterbend components"));
+                        }
+                        waterbend_limit = Some(super::waterbend::generic_component(cost)?);
+                        debits.push(CostDebit::Waterbend);
+                    } else {
+                        if saw_mana {
+                            return Err(EngineError::Illegal("multiple mana cost components"));
+                        }
+                        saw_mana = true;
                     }
-                    saw_mana = true;
-                    debits.push(CostDebit::Mana(
-                        plan_mana_payment_with_restricted_reduction(
-                            &self.state,
-                            idx,
-                            cost,
-                            0,
-                            extra_generic,
-                            generic_reduction,
-                            flex_payments,
-                            restricted_mana,
-                            &eligible_restricted_mana,
-                        )?,
-                    ));
+                    mana_cost.pips.extend(cost.pips.iter().cloned());
                 }
                 AbilityCost::Discard => {
                     expected_selections += 1;
@@ -1023,36 +1096,35 @@ impl GameEngine {
                 }
             }
         }
-        if !saw_mana && extra_generic > 0 {
-            debits.push(CostDebit::Mana(
-                plan_mana_payment_with_restricted_reduction(
-                    &self.state,
-                    idx,
-                    &ManaCost::default(),
-                    0,
-                    extra_generic,
-                    generic_reduction,
-                    flex_payments,
-                    restricted_mana,
-                    &eligible_restricted_mana,
-                )?,
-            ));
-        }
         if selections.len() != expected_selections {
             return Err(EngineError::Illegal("unexpected cost selection"));
         }
-        if !restricted_mana.is_empty() && !saw_mana && extra_generic == 0 {
+        if !restricted_mana.is_empty()
+            && !saw_mana
+            && waterbend_limit.is_none()
+            && extra_generic == 0
+        {
             return Err(EngineError::Illegal(
                 "restricted mana supplied for an ability with no mana cost",
             ));
         }
 
-        Ok(CostTransactionPlan {
-            purpose: CostPurpose::Ability,
-            player,
-            player_idx: idx,
-            debits,
-            cast_cost_receipts: vec![],
+        Ok(PreparedPaymentCosts {
+            transaction: CostTransactionPlan {
+                purpose: CostPurpose::Ability,
+                player,
+                player_idx: idx,
+                debits,
+                cast_cost_receipts: vec![],
+            },
+            waterbend_limit,
+            mana: mana_cost,
+            x_value: 0,
+            extra_generic,
+            generic_reduction,
+            flex_payments: flex_payments.to_vec(),
+            restricted_mana: restricted_mana.to_vec(),
+            eligible_restricted_mana,
         })
     }
 
@@ -1100,6 +1172,9 @@ impl GameEngine {
             )
             .then(|| self.snapshot_zone_event());
             match debit {
+                CostDebit::Waterbend => payment.trigger_events.push(GameEvent::Waterbent {
+                    player: plan.player,
+                }),
                 CostDebit::RemoveCounters {
                     object,
                     kind,
@@ -1295,6 +1370,7 @@ impl GameEngine {
         let mut counter_debits: BTreeMap<(ObjectId, CounterKind), u64> = BTreeMap::new();
         for debit in &plan.debits {
             let valid = match debit {
+                CostDebit::Waterbend => true,
                 CostDebit::RemoveCounters {
                     object,
                     kind,
@@ -1529,6 +1605,117 @@ impl GameEngine {
 #[cfg(test)]
 mod convoke_transaction_tests {
     use super::*;
+
+    #[test]
+    fn waterbend_cap_modifiers_double_taps_and_completion_use_one_transaction() {
+        for (cost, increase, reduction, taps, mana) in [
+            (2, 2, 0, 2, 2),
+            (2, 0, 1, 1, 0),
+            (2, 0, 0, 0, 2),
+            (0, 0, 0, 0, 0),
+        ] {
+            let mut engine = GameEngine::new(146020, &[0, 1], 20, None, true).unwrap();
+            let objects = engine.state.players[0].hand[..3].to_vec();
+            for &oid in &objects {
+                engine.state.objects.get_mut(&oid).unwrap().card_id = "ornithopter".into();
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    oid,
+                    Zone::Battlefield,
+                    Some(0),
+                )
+                .unwrap();
+                engine.state.objects.get_mut(&oid).unwrap().summoning_sick = true;
+            }
+            let source = objects[0];
+            engine.state.players[0].mana_pool.colorless = 4;
+            let costs = [AbilityCost::Waterbend(
+                ManaCost::parse(&format!("{{{cost}}}")).unwrap(),
+            )];
+            let prepare = |engine: &GameEngine| {
+                engine
+                    .prepare_ability_costs(0, 0, source, &costs, &[], &[], &[], increase, reduction)
+                    .unwrap()
+            };
+            let prepared = prepare(&engine);
+            let selection = rv1::PaymentSelection {
+                expected_state_revision: engine.state.command_index,
+                source: Some(engine.payment_object_ref(source)),
+                waterbend: objects[..taps]
+                    .iter()
+                    .map(|oid| engine.payment_object_ref(*oid))
+                    .collect(),
+                mana: Some(rv1::PaymentMana {
+                    c: mana,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+            if cost == 2 && increase == 2 {
+                let mut excessive = selection.clone();
+                excessive
+                    .waterbend
+                    .push(engine.payment_object_ref(objects[2]));
+                excessive.mana.as_mut().unwrap().c = 1;
+                assert!(
+                    engine
+                        .validate_explicit_payment(0, source, false, &prepared, &excessive)
+                        .is_err(),
+                    "cost increases do not enlarge the Waterbend component"
+                );
+                let tapping = [AbilityCost::Tap, costs[0].clone()];
+                engine
+                    .state
+                    .objects
+                    .get_mut(&source)
+                    .unwrap()
+                    .summoning_sick = false;
+                let tap_costs = engine
+                    .prepare_ability_costs(
+                        0,
+                        0,
+                        source,
+                        &tapping,
+                        &[],
+                        &[],
+                        &[],
+                        increase,
+                        reduction,
+                    )
+                    .unwrap();
+                assert!(
+                    !engine.waterbend_candidate(0, &tap_costs, &engine.payment_object_ref(source)),
+                    "a source cannot pay two tap costs"
+                );
+            }
+            let life = engine
+                .validate_explicit_payment(0, source, false, &prepared, &selection)
+                .unwrap();
+            let plan = prepared
+                .finish_explicit(&engine.state, &selection, life)
+                .unwrap();
+            let receipt = engine.commit_cost_transaction(plan).unwrap();
+            assert_eq!(
+                receipt
+                    .trigger_events
+                    .iter()
+                    .filter(|event| matches!(event, GameEvent::Waterbent { player: 0 }))
+                    .count(),
+                1,
+                "including all-mana and zero-cost payments"
+            );
+            assert_eq!(
+                receipt
+                    .trigger_events
+                    .iter()
+                    .filter(|event| matches!(event, GameEvent::BecameTapped { .. }))
+                    .count(),
+                taps
+            );
+            assert_eq!(engine.state.players[0].mana_pool.colorless, 4 - mana);
+        }
+    }
 
     #[test]
     fn issue_157_counter_debits_aggregate_before_any_payment_and_precede_sacrifice() {
@@ -2011,7 +2198,8 @@ mod convoke_transaction_tests {
             )
             .unwrap();
         assert!(prepared.can_convoke(bear));
-        let payment = rv1::SpellPaymentSelection {
+        let payment = rv1::PaymentSelection {
+            waterbend: vec![],
             expected_state_revision: engine.state.command_index,
             source: Some(rv1::CostObjectRef {
                 object_id: source,
@@ -2022,14 +2210,14 @@ mod convoke_transaction_tests {
                     .copied()
                     .unwrap_or(0),
             }),
-            convoke: vec![rv1::ConvokeContribution {
+            convoke: vec![rv1::ObjectPaymentContribution {
                 object: Some(reference),
-                kind: rv1::ConvokePaymentKind::Generic as i32,
+                kind: rv1::ObjectPaymentKind::Generic as i32,
             }],
             mana: None,
         };
         let life = engine
-            .validate_explicit_spell_payment(0, source, true, &prepared, &payment)
+            .validate_explicit_payment(0, source, true, &prepared, &payment)
             .unwrap();
         let plan = prepared
             .finish_explicit(&engine.state, &payment, life)
@@ -2039,7 +2227,8 @@ mod convoke_transaction_tests {
             matches!(&plan.debits[1], CostDebit::TapGroup(objects) if objects.len() == 1 && objects[0].0 == bear)
         );
         assert!(matches!(plan.debits[2], CostDebit::Sacrifice { .. }));
-        let probe = PreparedSpellCosts {
+        let probe = PreparedPaymentCosts {
+            waterbend_limit: None,
             transaction: CostTransactionPlan {
                 purpose: CostPurpose::Spell,
                 player: 0,

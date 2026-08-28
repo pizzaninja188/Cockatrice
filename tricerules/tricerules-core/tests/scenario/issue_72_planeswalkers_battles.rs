@@ -415,6 +415,8 @@ fn defeated_siege_casts_back_face_with_exact_physical_identity() {
             selected_branch_index: 0,
             cast_spell: Some(announcement),
             chosen_combat_defender: None,
+            payment: None,
+            restricted_mana: vec![],
         })),
     };
     let mut forged_payment = command.clone();

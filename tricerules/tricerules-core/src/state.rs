@@ -580,6 +580,8 @@ pub struct PendingTrigger {
 /// [`ResolutionContinuation`], so unrelated choice families cannot accidentally coexist.
 #[derive(Debug, Clone)]
 pub struct PendingManaPayment {
+    /// Waterbending Lesson shares staged mana/object payment with activated Waterbend costs.
+    pub waterbend: bool,
     /// Stack object the resolving soft counter will counter if the player declines.
     pub target_spell_id: ObjectId,
     /// Pure generic cost, staged by the client's mana-pip picker.
@@ -614,6 +616,7 @@ impl PendingManaPayment {
         };
         Self {
             target_spell_id,
+            waterbend: false,
             generic_mana_cost,
             mana_cost,
             undo_history_start,

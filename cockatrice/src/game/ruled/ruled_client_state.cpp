@@ -344,7 +344,9 @@ void RuledClientState::teardownPendingChoice()
 
 void RuledClientState::setPendingChoice(RuledPendingChoice choice)
 {
-    spellPayment.clear();
+    if (!(isWaterbendResolutionPayment() && choice.kind == ChoiceKind::ResolutionPayment && choice.waterbend &&
+          choice.paymentSourceOid == pendingChoice->paymentSourceOid))
+        payment.clear();
     teardownPendingChoice();
     if (choice.kind == ChoiceKind::TriggerTarget && choice.selectedTriggerTargetsByGroup.isEmpty()) {
         const int groupCount = std::max(1, static_cast<int>(choice.triggerTargets.groups.size()));
@@ -434,16 +436,26 @@ void RuledClientState::submitResolutionPayment(ruled::v1::ResolutionChoiceDecisi
         return;
     }
     const RuledPendingChoice restore = *pendingChoice;
+    const auto restorePayment = payment;
+    ruled::v1::RuledCommand command;
+    command.mutable_submit_resolution_choice()->set_decision(decision);
+    if (restore.waterbend && decision == ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA)
+        payment.writePayment(command);
     clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
     emit resolutionPaymentUiChanged(false);
     emit combatStateChanged();
 
-    ruled::v1::RuledCommand command;
-    command.mutable_submit_resolution_choice()->set_decision(decision);
-    host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
+    host->sendRuledCommandExpectingAck(command, [this, restore, restorePayment](bool accepted) {
         emit resolutionPaymentSubmissionFinished(accepted);
-        if (!accepted && !pendingChoice.has_value()) {
-            setPendingChoice(restore);
+        if (!accepted) {
+            if (!pendingChoice.has_value())
+                setPendingChoice(restore);
+            if (restore.waterbend && isWaterbendResolutionPayment() &&
+                pendingChoice->paymentSourceOid == restore.paymentSourceOid) {
+                payment = restorePayment;
+                payment.submitting = false;
+                payment.invalidate();
+            }
             emit resolutionPaymentUiChanged(true);
             emit combatStateChanged();
         }
@@ -1759,6 +1771,6 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     // the prompt panel still needs telling.
     emit resolutionHandPickUiChanged(-1, -1);
 
-    spellPayment.clear();
+    payment.clear();
     emit sessionReset();
 }

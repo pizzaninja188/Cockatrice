@@ -360,6 +360,8 @@ fn convolute_rejects_stale_or_malformed_payment_atomically() {
             selected_branch_index: 0,
             cast_spell: None,
             chosen_combat_defender: None,
+            payment: None,
+            restricted_mana: vec![],
         })),
     };
     assert!(e.apply_command(0, &malformed).is_err());

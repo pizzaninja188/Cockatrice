@@ -39,11 +39,11 @@ class Command_MoveCard;
 class GameEventContext;
 class PendingCommand;
 class Player;
-class RuledSpellPaymentUi;
+class RuledPaymentUi;
 
 class PlayerActions : public QObject
 {
-    friend class RuledSpellPaymentUi;
+    friend class RuledPaymentUi;
 
     Q_OBJECT
 
@@ -431,7 +431,7 @@ private:
     FilterString movingCardsUntilFilter;
     int movingCardsUntilCounter = 0;
     MoveTopCardsUntilOptions movingCardsUntilOptions;
-    std::unique_ptr<RuledSpellPaymentUi> ruledSpellPayment;
+    std::unique_ptr<RuledPaymentUi> ruledPayment;
     std::unique_ptr<RuledPendingCast> ruledPendingCast;
     PendingRuledSpellCast &pendingRuledSpellCast;
     PendingActivatedAbility &pendingActivatedAbility;

@@ -22,7 +22,7 @@
 #ifndef COCKATRICE_RULED_CLIENT_STATE_H
 #define COCKATRICE_RULED_CLIENT_STATE_H
 
-#include "ruled_spell_payment.h"
+#include "ruled_payment.h"
 #include "ruled_pick_surface.h"
 
 #include <QHash>
@@ -355,7 +355,7 @@ class RuledClientState : public QObject
     Q_OBJECT
 
 public:
-    RuledSpellPayment spellPayment;
+    RuledPayment payment;
 
     enum class RuledCombatPhase
     {
@@ -476,6 +476,8 @@ public:
 
         // --- ResolutionPayment payload -----------------------------------------------
         int genericManaCost = 0;
+        bool waterbend = false;
+        quint32 paymentSourceOid = 0;
         bool paymentCurrentlyLegal = false;
         QString manaCost;
 
@@ -741,6 +743,7 @@ public:
     /// Exact CR 106.6 groups the engine permits for one activated ability, keyed by
     /// `(source oid << 32 | ability index)`.
     QHash<quint64, QSet<quint32>> eligibleRestrictedManaByAbility;
+    QSet<quint64> waterbendAbilities;
 
     /// Public absolute snapshots for every seat. UI groups are ordered by `groupId` and render
     /// as adjacent columns beside the ordinary mana-counter column.
@@ -1609,13 +1612,20 @@ public:
     {
         return hasPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
     }
+    [[nodiscard]] bool isWaterbendResolutionPayment() const
+    {
+        return isResolutionPaymentActive() && pendingChoice->waterbend;
+    }
     [[nodiscard]] int resolutionPaymentGenericCost() const
     {
         return isResolutionPaymentActive() ? pendingChoice->genericManaCost : 0;
     }
     [[nodiscard]] bool resolutionPaymentCurrentlyLegal() const
     {
-        return isResolutionPaymentActive() && pendingChoice->paymentCurrentlyLegal;
+        return isResolutionPaymentActive() &&
+               (pendingChoice->waterbend ? payment.active && !payment.pending && payment.view.valid() &&
+                                               payment.view.complete() && !payment.view.selection_changed()
+                                         : pendingChoice->paymentCurrentlyLegal);
     }
     [[nodiscard]] QString resolutionPaymentPromptText() const
     {
@@ -1730,7 +1740,7 @@ public:
     }
 
 signals:
-    void spellPaymentPreviewReceived();
+    void paymentPreviewReceived();
 
     /// Emitted when ruled game-session state is cleared (game stopped or new game started).
     /// Listeners should reset any UI state derived from the previous game's engine events.

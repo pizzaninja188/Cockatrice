@@ -34,6 +34,9 @@ pub enum AbilityCost {
     },
     /// Pay mana (e.g. `"{4}"`, `"{2}{R}"`). Same brace syntax as `CardDefinition.mana_cost`.
     Mana(ManaCost),
+    /// CR 701.67: Foggy Swamp Vinebender and Watery Grasp permit untapped artifacts or
+    /// creatures to pay the generic component. Shared with Waterbending Lesson at resolution.
+    Waterbend(ManaCost),
     /// Discard one card chosen from the activating player's hand.
     Discard,
     /// Discard the source object itself from its owner's hand (cycling and typecycling).
@@ -60,6 +63,11 @@ pub enum AbilityCost {
 impl AbilityCost {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::Waterbend(cost)
+                if cost.pips.iter().any(|p| matches!(p, crate::ManaSymbol::X)) =>
+            {
+                Err("Waterbend activation cost cannot contain unbound X".into())
+            }
             Self::RemoveCounters { counter, count } => {
                 if *count == 0 || (counter.is_none() && *count != 1) {
                     return Err(
@@ -82,6 +90,18 @@ impl AbilityCost {
             Self::ExileGraveyardCards { filter, .. } => filter.validate(),
             _ => Ok(()),
         }
+    }
+}
+
+#[cfg(test)]
+mod waterbend_tests {
+    #[test]
+    fn waterbend_resolution_cost_is_data_authored() {
+        let cost = ron::from_str::<super::super::ResolutionCost>(r#"Waterbend("{2}")"#);
+        assert!(
+            cost.is_ok(),
+            "Waterbending Lesson needs a typed resolution cost: {cost:?}"
+        );
     }
 }
 

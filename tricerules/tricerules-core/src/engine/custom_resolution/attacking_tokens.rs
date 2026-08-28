@@ -12,6 +12,7 @@ fn defender_choice_event(
     rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                waterbend: false,
                 deciding_player_id: deciding_player,
                 source_object_id,
                 prompt_text: format!(

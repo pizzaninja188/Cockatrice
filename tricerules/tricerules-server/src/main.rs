@@ -302,14 +302,12 @@ async fn handle_connection(
                     }
                 }
             }
-            Some(Msg::SpellPaymentQuery(query)) => {
+            Some(Msg::PaymentQuery(query)) => {
                 if let (Some(eng), Some(preview)) = (engine.as_ref(), query.preview.as_ref()) {
                     IpcResponse {
                         ok: true,
                         batch: Some(tricerules_proto::RuledEventBatch {
-                            spell_payment_preview: Some(
-                                eng.preview_spell_payment(query.player_id, preview),
-                            ),
+                            payment_preview: Some(eng.preview_payment(query.player_id, preview)),
                             ..Default::default()
                         }),
                         ..Default::default()

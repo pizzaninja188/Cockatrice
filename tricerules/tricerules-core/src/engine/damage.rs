@@ -631,6 +631,7 @@ impl GameEngine {
                     revealed_zone_owner_player_id: None,
                     candidate_source_zones: Vec::new(),
                     combat_defender_options: Vec::new(),
+                    waterbend: false,
                 },
             )),
         });

@@ -1481,6 +1481,8 @@ pub enum ProtectionGrant {
 /// sacrifice/discard branches without introducing partial multi-cost payment state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResolutionCost {
+    /// Foggy Swamp Vinebender and Waterbending Lesson share the CR 701.67 payment operation.
+    Waterbend(ManaCost),
     /// Dream Seizer and Blighted Blackthorn: all N counters on one controlled creature.
     Blight {
         count: u32,
@@ -3260,7 +3262,7 @@ impl SpellEffectKind {
                             }
                         }
                         ResolutionCost::None => {}
-                        ResolutionCost::Mana(cost) => {
+                        ResolutionCost::Mana(cost) | ResolutionCost::Waterbend(cost) => {
                             if cost.pips.is_empty()
                                 || cost
                                     .pips
@@ -3918,7 +3920,8 @@ impl SpellEffectKind {
                 ResolutionCost::Mana(_) => {
                     Err("Ward mana cost must be nonempty and cannot contain X".into())
                 }
-                ResolutionCost::None
+                ResolutionCost::Waterbend(_)
+                | ResolutionCost::None
                 | ResolutionCost::Blight { .. }
                 | ResolutionCost::SacrificePermanent { .. }
                 | ResolutionCost::TapPermanents { .. } => {

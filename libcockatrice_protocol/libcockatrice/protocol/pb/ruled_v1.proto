@@ -83,7 +83,7 @@ message RuledCommand {
     // Execute one engine-published special action on a battlefield permanent.
     ExecutePermanentAction execute_permanent_action = 27;
     // Query only: authenticated relay routes this outside the gameplay/replay path.
-    PreviewSpellPayment preview_spell_payment = 28;
+    PreviewPayment preview_payment = 28;
   }
 }
 
@@ -225,6 +225,9 @@ message SubmitResolutionChoice {
   // generation-bound option against the current prompt snapshot; clients must not reconstruct
   // defending-player ownership from battlefield display state.
   CombatDefenderOption chosen_combat_defender = 5;
+  // Exact, previewed mixed payment for the current parked Waterbend cost.
+  PaymentSelection payment = 6;
+  repeated ManaSpendSelection restricted_mana = 7;
 }
 
 // A player's answer to a TriggerOrderRequired (CR 603.3b): put THIS trigger on the stack next.
@@ -320,21 +323,22 @@ message CastSpell {
   repeated CastCostGroupSelection cast_cost_group_selections = 11;
   CastMethod cast_method = 12;
   // Present for engine-previewed payments (Convoke). Ordinary casts retain their existing path.
-  SpellPaymentSelection payment = 13;
+  PaymentSelection payment = 13;
 }
 
 // One unit paid by a creature; GENERIC is a demand, never colorless mana.
-enum ConvokePaymentKind {
-  CONVOKE_PAYMENT_KIND_UNSPECIFIED = 0;
-  CONVOKE_PAYMENT_KIND_WHITE = 1;
-  CONVOKE_PAYMENT_KIND_BLUE = 2;
-  CONVOKE_PAYMENT_KIND_BLACK = 3;
-  CONVOKE_PAYMENT_KIND_RED = 4;
-  CONVOKE_PAYMENT_KIND_GREEN = 5;
-  CONVOKE_PAYMENT_KIND_GENERIC = 6;
+enum ObjectPaymentKind {
+  OBJECT_PAYMENT_KIND_UNSPECIFIED = 0;
+  OBJECT_PAYMENT_KIND_WHITE = 1;
+  OBJECT_PAYMENT_KIND_BLUE = 2;
+  OBJECT_PAYMENT_KIND_BLACK = 3;
+  OBJECT_PAYMENT_KIND_RED = 4;
+  OBJECT_PAYMENT_KIND_GREEN = 5;
+  OBJECT_PAYMENT_KIND_GENERIC = 6;
+  OBJECT_PAYMENT_KIND_WATERBEND = 7;
 }
 
-message SpellPaymentMana {
+message PaymentMana {
   uint32 w = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 u = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 b = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -343,30 +347,34 @@ message SpellPaymentMana {
   uint32 c = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
-message ConvokeContribution {
+message ObjectPaymentContribution {
   CostObjectRef object = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  ConvokePaymentKind kind = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  ObjectPaymentKind kind = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
-message SpellPaymentSelection {
+message PaymentSelection {
   uint64 expected_state_revision = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   CostObjectRef source = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  repeated ConvokeContribution convoke = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  SpellPaymentMana mana = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated ObjectPaymentContribution convoke = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PaymentMana mana = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated CostObjectRef waterbend = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
-message PreviewSpellPayment {
+message PreviewPayment {
   uint64 transaction_id = 1;
   uint64 revision = 2;
   CastSpell cast_spell = 3;
+  // Exactly one proposed action is required. Queries never execute these commands.
+  ActivateAbility activate_ability = 4;
+  SubmitResolutionChoice resolution_choice = 5;
 }
 
-message ConvokeCandidate {
+message ObjectPaymentCandidate {
   CostObjectRef object = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  repeated ConvokePaymentKind options = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated ObjectPaymentKind options = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
-message SpellPaymentPreview {
+message PaymentPreview {
   uint64 transaction_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint64 revision = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool valid = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -374,8 +382,8 @@ message SpellPaymentPreview {
   bool complete = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   string total_cost = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   string remaining_cost = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  SpellPaymentSelection selection = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  repeated ConvokeCandidate candidates = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PaymentSelection selection = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated ObjectPaymentCandidate candidates = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Refresh can retire stale selections; it must never auto-submit a changed selection.
   bool selection_changed = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated ManaSpendSelection restricted_mana = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -522,7 +530,7 @@ message RuledEventBatch {
   repeated RuledEvent events = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   map<int32, LegalActions> legal_by_player = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Standalone requester-only query reply: never merged into a gameplay batch.
-  SpellPaymentPreview spell_payment_preview = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PaymentPreview payment_preview = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Engine-computed targeting data for one spell or activated ability. Clients use this
@@ -668,6 +676,7 @@ message LegalZoneCastAction {
 
 message ManaPaymentEligibility {
   repeated uint32 eligible_restricted_mana_group_ids = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool has_waterbend = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Zone and authoritative candidates for one explicit activated-cost choice. Hand candidates are
@@ -1191,6 +1200,7 @@ enum ResolutionBranchCostKind {
   RESOLUTION_BRANCH_COST_KIND_SACRIFICE_PERMANENT = 3;
   RESOLUTION_BRANCH_COST_KIND_TAP_PERMANENTS = 4;
   RESOLUTION_BRANCH_COST_KIND_BLIGHT = 5;
+  RESOLUTION_BRANCH_COST_KIND_WATERBEND = 6;
 }
 
 message ResolutionBranchOption {
@@ -1265,6 +1275,7 @@ message ResolutionChoiceRequired {
   repeated ChoiceCandidateSourceZone candidate_source_zones = 20 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated CombatDefenderOption combat_defender_options = 21
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool waterbend = 22 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no
@@ -1432,6 +1443,7 @@ message ActivateAbility {
   repeated ManaSpendSelection restricted_mana = 7;
   AbilitySourceZone source_zone = 8;
   uint64 expected_zone_change_generation = 9;
+  PaymentSelection payment = 10;
 }
 
 message ExecutePermanentAction {
@@ -1790,7 +1802,7 @@ message IpcEnvelope {
     PlayerCommand player_command = 2;
     SessionEnd session_end = 3;
     ValidateDeck validate_deck = 4;
-    SpellPaymentQuery spell_payment_query = 5;
+    PaymentQuery payment_query = 5;
   }
 }
 
@@ -1835,9 +1847,9 @@ message PlayerCommand {
 
 message SessionEnd {}
 
-message SpellPaymentQuery {
+message PaymentQuery {
   int32 player_id = 1;
-  PreviewSpellPayment preview = 2;
+  PreviewPayment preview = 2;
 }
 
 message IpcResponse {

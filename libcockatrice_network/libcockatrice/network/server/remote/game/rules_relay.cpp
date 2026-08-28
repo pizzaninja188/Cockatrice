@@ -188,11 +188,11 @@ bool RulesRelay::playerCommand(int playerId, const QByteArray &ruledCommandBytes
     return out.ParseFromArray(frame.constData(), frame.size());
 }
 
-bool RulesRelay::previewSpellPayment(int playerId, const ruled::v1::PreviewSpellPayment &preview, ruled::v1::IpcResponse &out)
+bool RulesRelay::previewPayment(int playerId, const ruled::v1::PreviewPayment &preview, ruled::v1::IpcResponse &out)
 {
     if (!sessionActive || !connectIfNeeded()) return false;
     ruled::v1::IpcEnvelope env;
-    auto *query = env.mutable_spell_payment_query();
+    auto *query = env.mutable_payment_query();
     query->set_player_id(playerId);
     *query->mutable_preview() = preview;
     QByteArray frame;

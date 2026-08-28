@@ -49,7 +49,7 @@ public:
 
     [[nodiscard]] bool isActive() const;
     bool playerCommand(int playerId, const QByteArray &payload, ruled::v1::IpcResponse &response);
-    bool previewSpellPayment(int playerId, const ruled::v1::PreviewSpellPayment &preview, ruled::v1::IpcResponse &response);
+    bool previewPayment(int playerId, const ruled::v1::PreviewPayment &preview, ruled::v1::IpcResponse &response);
     void handleConnectionLost();
 
     bool cacheAutoPassPolicy(int playerId, const ruled::v1::SetAutoPassPolicy &policy);

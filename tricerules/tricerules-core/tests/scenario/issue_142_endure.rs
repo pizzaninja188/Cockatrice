@@ -22,6 +22,8 @@ fn select_branch(index: u32) -> RuledCommand {
             selected_branch_index: index,
             cast_spell: None,
             chosen_combat_defender: None,
+            payment: None,
+            restricted_mana: vec![],
         })),
     }
 }

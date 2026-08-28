@@ -140,15 +140,15 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
         return Response::RespInvalidCommand;
     }
 
-    if (ruledCmd.has_preview_spell_payment()) {
+    if (ruledCmd.has_preview_payment()) {
         ruled::v1::IpcResponse response;
-        if (!session->previewSpellPayment(playerId, ruledCmd.preview_spell_payment(), response)) {
+        if (!session->previewPayment(playerId, ruledCmd.preview_payment(), response)) {
             handleRuledEngineConnectionLost();
             return Response::RespInternalError;
         }
-        if (!response.ok() || !response.has_batch() || !response.batch().has_spell_payment_preview())
+        if (!response.ok() || !response.has_batch() || !response.batch().has_payment_preview())
             return Response::RespContextError;
-        broadcaster->sendSpellPaymentPreview(playerId, response.batch().spell_payment_preview());
+        broadcaster->sendPaymentPreview(playerId, response.batch().payment_preview());
         return Response::RespOk;
     }
     const QByteArray payload = canonicalGameplayCommand(playerId, ruledCmd);

@@ -101,6 +101,10 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     mana_payment_by_ability.insert(
                         key,
                         rv1::ManaPaymentEligibility {
+                            has_waterbend: ability
+                                .costs
+                                .iter()
+                                .any(|c| matches!(c, AbilityCost::Waterbend(_))),
                             eligible_restricted_mana_group_ids: eng
                                 .eligible_restricted_mana_for_ability(idx, poid),
                         },
@@ -138,6 +142,10 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 mana_payment_by_ability.insert(
                     key,
                     rv1::ManaPaymentEligibility {
+                        has_waterbend: ability
+                            .costs
+                            .iter()
+                            .any(|c| matches!(c, AbilityCost::Waterbend(_))),
                         eligible_restricted_mana_group_ids: eng
                             .eligible_restricted_mana_for_ability(idx, action.object_id),
                     },
@@ -338,6 +346,7 @@ fn activated_ability_info(
             AbilityCost::Loyalty(delta) if *delta >= 0 => format!("+{delta}"),
             AbilityCost::Loyalty(delta) => delta.to_string(),
             AbilityCost::Mana(cost) => cost.to_string(),
+            AbilityCost::Waterbend(cost) => format!("Waterbend {cost}"),
             AbilityCost::Discard => "Discard a card".to_string(),
             AbilityCost::DiscardSelf => "Discard this card".to_string(),
             AbilityCost::ExileSelf => "Exile this card".to_string(),
@@ -676,7 +685,10 @@ fn legal_ability_cost_choices(
                     candidate_objects: vec![],
                 });
             }
-            AbilityCost::Tap | AbilityCost::Mana(_) | AbilityCost::Loyalty(_) => {}
+            AbilityCost::Tap
+            | AbilityCost::Mana(_)
+            | AbilityCost::Waterbend(_)
+            | AbilityCost::Loyalty(_) => {}
         }
     }
     structurally_payable &= distinct_assignment_exists(&assignment_candidates, 0, &mut consumed);

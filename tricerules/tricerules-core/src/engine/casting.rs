@@ -59,7 +59,7 @@ pub(in crate::engine) struct PreparedSpellCast {
     chosen_mode_labels: Vec<String>,
     mana_value: u32,
     pub convoke: bool,
-    pub payment: super::payment::transaction::PreparedSpellCosts,
+    pub payment: super::payment::transaction::PreparedPaymentCosts,
 }
 
 impl GameEngine {
@@ -680,8 +680,7 @@ impl GameEngine {
         } = self.prepare_spell_cast(player, command)?;
         let face_index = command.face_index as usize;
         let payment_plan = if let Some(selection) = &command.payment {
-            let life =
-                self.validate_explicit_spell_payment(player, oid, convoke, &payment, selection)?;
+            let life = self.validate_explicit_payment(player, oid, convoke, &payment, selection)?;
             payment.finish_explicit(&self.state, selection, life)?
         } else {
             payment.finish(&self.state)?
@@ -1082,6 +1081,7 @@ impl GameEngine {
                 flex_payments,
                 cost_selections,
                 restricted_mana,
+                command.payment.as_ref(),
             )?;
             if resolving_mana_payment {
                 batch.events.push(
@@ -1091,8 +1091,6 @@ impl GameEngine {
             }
             return Ok(batch);
         }
-
-        self.state.undoable_mana_abilities.clear();
 
         // CR 608.2: an ability's effect list validates exactly like a spell's — same shape,
         // same multi-target handling — so it goes through the list-level entry point.
@@ -1133,7 +1131,7 @@ impl GameEngine {
             self.targeting_cost_increase(player, TargetingCostAction::ActivatedAbilities, targets);
         let generic_reduction = self.activated_generic_reduction(player, permanent_id, &ability);
         let activation_uses = self.limited_activation_uses(permanent_id, ability_index, &ability);
-        let cost_plan = self.plan_ability_costs(
+        let prepared_payment = self.prepare_ability_costs(
             player,
             idx,
             permanent_id,
@@ -1144,7 +1142,14 @@ impl GameEngine {
             targeting_cost,
             generic_reduction,
         )?;
+        let cost_plan = self.finish_ability_payment(
+            player,
+            permanent_id,
+            prepared_payment,
+            command.payment.as_ref(),
+        )?;
         let payment = self.commit_cost_transaction(cost_plan)?;
+        self.state.undoable_mana_abilities.clear();
         self.record_limited_activations(activation_uses);
 
         let ability_text = ability.text.clone();
@@ -1544,6 +1549,7 @@ impl GameEngine {
         flex_payments: &[rv1::FlexPipPayment],
         cost_selections: &[rv1::CostSelection],
         restricted_mana: &[rv1::ManaSpendSelection],
+        selection: Option<&rv1::PaymentSelection>,
     ) -> Result<RuledEventBatch, EngineError> {
         if !targets.is_empty() {
             return Err(EngineError::Illegal("mana ability takes no targets"));
@@ -1557,7 +1563,7 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("invalid mana option"))?;
         let activation_uses = self.limited_activation_uses(permanent_id, ability_index, ability);
 
-        let cost_plan = self.plan_ability_costs(
+        let prepared = self.prepare_ability_costs(
             player,
             idx,
             permanent_id,
@@ -1568,6 +1574,7 @@ impl GameEngine {
             0,
             self.activated_generic_reduction(player, permanent_id, ability),
         )?;
+        let cost_plan = self.finish_ability_payment(player, permanent_id, prepared, selection)?;
         let payment = self.commit_cost_transaction(cost_plan)?;
         self.record_limited_activations(activation_uses);
 

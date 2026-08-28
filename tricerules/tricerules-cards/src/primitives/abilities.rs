@@ -260,6 +260,15 @@ impl ActivatedAbilityDef {
         {
             return Err("activated ability may have at most one mana cost component".into());
         }
+        if self
+            .costs
+            .iter()
+            .filter(|c| matches!(c, AbilityCost::Waterbend(_)))
+            .count()
+            > 1
+        {
+            return Err("activated ability may have at most one Waterbend component".into());
+        }
         for cost in &self.costs {
             cost.validate()?;
             if let AbilityCost::SacrificePermanent { filter }

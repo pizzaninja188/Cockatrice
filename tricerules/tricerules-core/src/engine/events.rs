@@ -456,6 +456,7 @@ impl GameEngine {
                                         }
                                         AbilityCost::Loyalty(delta) => delta.to_string(),
                                         AbilityCost::Mana(cost) => cost.to_string(),
+                                        AbilityCost::Waterbend(cost) => format!("Waterbend {cost}"),
                                         AbilityCost::Discard => "Discard a card".to_string(),
                                         AbilityCost::DiscardSelf => "Discard this card".to_string(),
                                         AbilityCost::ExileSelf => "Exile this card".to_string(),
@@ -806,7 +807,7 @@ pub(super) fn default_deck_list(player_index: usize) -> Vec<String> {
 
 pub(super) fn finish_with_events(eng: &GameEngine, events: Vec<RuledEvent>) -> RuledEventBatch {
     let mut b = RuledEventBatch {
-        spell_payment_preview: None,
+        payment_preview: None,
         events,
         legal_by_player: Default::default(),
     };
