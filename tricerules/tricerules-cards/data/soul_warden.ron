@@ -9,8 +9,7 @@
     (
       trigger: WheneverPermanentEntersBattlefield(
         controller: AnyPlayer,
-        permanent_type: Some(Creature),
-        exclude_self: true,
+        filter: (permanent_type: Some(Creature), exclude_source: true),
       ),
       effect: [GainLife(amount: 1)],
       text: "Whenever another creature enters, you gain 1 life.",

@@ -998,6 +998,16 @@ pub(crate) struct PendingTokenEntryBatch {
     pub delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
 }
 
+/// One simultaneous reanimation instruction, prepared fully before any member moves.
+/// Replacement choices for Zombify/Reanimate use the same continuation as larger cohorts.
+#[derive(Debug, Clone)]
+pub(crate) struct PendingZoneEntryBatch {
+    pub ready: Vec<BattlefieldEntryEvent>,
+    pub remaining: Vec<BattlefieldEntryEvent>,
+    pub generations: Vec<(ObjectId, u64)>,
+    pub spell_label: String,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum BattlefieldEntryCompletion {
     LandPlay {
@@ -1031,6 +1041,7 @@ pub(crate) enum BattlefieldEntryCompletion {
         chosen_library_position: u32,
     },
     TokenBatch(Box<PendingTokenEntryBatch>),
+    ZoneEntryBatch(Box<PendingZoneEntryBatch>),
     DevPlacement {
         target: PlayerId,
         ready: bool,
@@ -1442,6 +1453,8 @@ pub struct TurnObjectFact {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
     pub controller: PlayerId,
+    pub owner: PlayerId,
+    pub is_token: bool,
     pub types: Vec<String>,
     pub all_creature_types: bool,
     pub keywords: Vec<Keyword>,

@@ -9,6 +9,44 @@ use super::{
 use crate::{ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
 
+/// The rules zones used by Three Tree Scribe and Slagstone Refinery's departure predicates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EventZone {
+    Battlefield,
+    Graveyard,
+    Hand,
+    Library,
+    Exile,
+    Stack,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ZoneEventDestination {
+    #[default]
+    Any,
+    OneOf(Vec<EventZone>),
+    Except(Vec<EventZone>),
+}
+
+impl ZoneEventDestination {
+    fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::OneOf(zones) | Self::Except(zones) if zones.is_empty() => {
+                Err("zone event destination list cannot be empty".into())
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+/// CR 603.2c: Three Tree Scribe counts objects, Rot Farm Mortipede counts simultaneous batches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ZoneEventCardinality {
+    #[default]
+    EachObject,
+    OneOrMore,
+}
+
 /// One activated ability on a permanent (RON data tier). Cost + effect compose freely.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActivatedAbilityDef {
@@ -498,13 +536,8 @@ pub enum TriggerCondition {
         /// `AnyPlayer` (the Soul Warden "whenever a creature enters" reading).
         #[serde(default = "any_player_trigger")]
         controller: CastTriggerPlayer,
-        /// If `Some`, only permanents of this type fire the trigger. `None` matches any permanent.
         #[serde(default)]
-        permanent_type: Option<PermanentTypeFilter>,
-        /// If true, the source permanent's own entry does not trigger it (the "another" clause,
-        /// e.g. Soul Warden). If false, the source can trigger off itself entering.
-        #[serde(default)]
-        exclude_self: bool,
+        filter: super::PermanentEventFilter,
         /// Optional event-time filter for creature characteristics. This is evaluated from the
         /// entrant's derived characteristics after entry replacements and continuous effects.
         #[serde(default)]
@@ -521,19 +554,39 @@ pub enum TriggerCondition {
         /// Defaults to `AnyPlayer` ("whenever a creature dies").
         #[serde(default = "any_player_trigger")]
         controller: CastTriggerPlayer,
-        /// If true, the source permanent dying does not trigger it (the "another" clause,
-        /// e.g. Grim Haruspex). If false, the source can trigger off its own death.
         #[serde(default)]
-        exclude_self: bool,
+        filter: super::PermanentEventFilter,
     },
     /// Whenever the selected player sacrifices a permanent. Sacrifice is a semantic action, not
-    /// an inference from a graveyard move; `exclude_self` implements the common "another"
+    /// an inference from a graveyard move; `filter.exclude_source` implements the common "another"
     /// wording. The sacrificed permanent is supplied as `TriggerObject`.
     WheneverPlayerSacrificesPermanent {
         #[serde(default)]
         player: CastTriggerPlayer,
         #[serde(default)]
-        exclude_self: bool,
+        filter: super::PermanentEventFilter,
+    },
+    /// CR 603.6c / 603.10a: Three Tree Scribe and Slagstone Refinery look back at
+    /// each departing permanent, filtered by its actual replacement-adjusted destination.
+    WheneverPermanentLeavesBattlefield {
+        #[serde(default = "any_player_trigger")]
+        controller: CastTriggerPlayer,
+        #[serde(default)]
+        filter: super::PermanentEventFilter,
+        #[serde(default)]
+        destination: ZoneEventDestination,
+        #[serde(default)]
+        cardinality: ZoneEventCardinality,
+    },
+    /// Rot Farm Mortipede and Desecrated Tomb observe cards (never tokens) in the
+    /// graveyard immediately before departure, not their former battlefield appearance.
+    WheneverCardsLeaveGraveyard {
+        #[serde(default)]
+        owner: CastTriggerPlayer,
+        #[serde(default)]
+        filter: super::PermanentEventFilter,
+        #[serde(default)]
+        cardinality: ZoneEventCardinality,
     },
     /// Whenever a player gains life (CR 118.3). The lifegain-payoff analog of
     /// [`Self::WheneverPlayerCastsSpell`]: `player` filters whose life gain counts, relative to
@@ -574,11 +627,11 @@ impl TriggerCondition {
             Self::WheneverSelfBlocksCreature { attacker } => attacker.validate(),
             Self::WheneverSelfBecomesBlockedByCreature { blocker } => blocker.validate(),
             Self::WheneverPermanentEntersBattlefield {
-                permanent_type,
+                filter: event_filter,
                 creature_filter: Some(filter),
                 ..
             } => {
-                if *permanent_type != Some(PermanentTypeFilter::Creature) {
+                if event_filter.permanent_type != Some(PermanentTypeFilter::Creature) {
                     return Err(
                         "permanent-entry creature filter requires permanent_type Creature".into(),
                     );
@@ -586,8 +639,21 @@ impl TriggerCondition {
                 if filter.is_empty() {
                     return Err("permanent-entry creature filter cannot be empty".into());
                 }
+                event_filter.validate()?;
                 filter.validate()
             }
+            Self::WheneverPermanentEntersBattlefield { filter, .. }
+            | Self::WheneverCreatureDies { filter, .. }
+            | Self::WheneverPlayerSacrificesPermanent { filter, .. } => filter.validate(),
+            Self::WheneverPermanentLeavesBattlefield {
+                filter,
+                destination,
+                ..
+            } => {
+                filter.validate()?;
+                destination.validate()
+            }
+            Self::WheneverCardsLeaveGraveyard { filter, .. } => filter.validate(),
             Self::WheneverControllerAttacks {
                 min_attackers,
                 max_attackers,
@@ -636,6 +702,14 @@ impl TriggerCondition {
                 | Self::WheneverSelfBecomesTarget { .. }
                 | Self::WheneverPermanentBecomesTarget { .. }
                 | Self::WheneverPlayerSacrificesPermanent { .. }
+                | Self::WheneverPermanentLeavesBattlefield {
+                    cardinality: ZoneEventCardinality::EachObject,
+                    ..
+                }
+                | Self::WheneverCardsLeaveGraveyard {
+                    cardinality: ZoneEventCardinality::EachObject,
+                    ..
+                }
                 | Self::AtBeginningOfNextEndStep
                 | Self::AtBeginningOfControllerNextTurnEndStep
                 | Self::WhenControllerLosesControlOf

@@ -1,0 +1,18 @@
+// Oracle and rulings checked against Scryfall on 2026-08-27.
+(
+  id: "three_tree_scribe",
+  name: "Three Tree Scribe",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Frog", "Druid"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [(
+    trigger: WheneverPermanentLeavesBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature)),
+      destination: Except([Graveyard]),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature, controller: You)))],
+    text: "Whenever this creature or another creature you control leaves the battlefield without dying, put a +1/+1 counter on target creature you control.",
+  )],
+)

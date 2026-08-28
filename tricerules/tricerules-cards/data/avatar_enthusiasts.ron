@@ -9,8 +9,7 @@
   triggered_abilities: [(
     trigger: WheneverPermanentEntersBattlefield(
       controller: Controller,
-      permanent_type: Some(Creature),
-      exclude_self: true,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
       creature_filter: Some((required_subtypes: ["Ally"])),
     ),
     effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],

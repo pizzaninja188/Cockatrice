@@ -731,7 +731,8 @@ impl GameEngine {
         &mut self,
         event: BattlefieldEntryEvent,
         attached_to: Option<AttachmentRecipient>,
-    ) -> Result<Option<GameEvent>, EngineError> {
+    ) -> Result<Vec<GameEvent>, EngineError> {
+        let zone_snapshot = self.snapshot_zone_event();
         let is_battle = self.battlefield_entry_is_battle(&event);
         if is_battle
             && !event.battle_protector.is_some_and(|protector| {
@@ -791,18 +792,17 @@ impl GameEngine {
                 .battle_protectors
                 .insert(event.object_id, protector);
         }
+        let mut trigger_events = vec![self.finish_zone_event(zone_snapshot)];
         if !is_room {
-            return Ok(None);
+            return Ok(trigger_events);
         }
         self.state
             .room_states
             .insert(event.object_id, RoomState::default());
         if let Some(face_index) = event.unlock_room_door.filter(|_| !enters_as_copy) {
-            return self
-                .transition_room_door(event.object_id, face_index)
-                .map(Some);
+            trigger_events.push(self.transition_room_door(event.object_id, face_index)?);
         }
-        Ok(None)
+        Ok(trigger_events)
     }
 
     pub(super) fn begin_token_entry_batch(
@@ -907,11 +907,7 @@ impl GameEngine {
             trigger_events.push(GameEvent::EntersBattlefield {
                 object_id: entry.event.object_id,
             });
-            if let Some(door_event) =
-                self.commit_battlefield_entry_state(entry.event.clone(), None)?
-            {
-                trigger_events.push(door_event);
-            }
+            trigger_events.extend(self.commit_battlefield_entry_state(entry.event.clone(), None)?);
         }
         let added_assignments = if let Some(attacking) = &attacking {
             self.add_attacking_objects(&object_ids, &attacking.defenders)?
@@ -1182,6 +1178,13 @@ impl GameEngine {
                     *batch,
                     &mut events,
                 )? {
+                    return Ok(finish_with_events(self, events));
+                }
+                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+            }
+            BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
+                batch.ready.push(event);
+                if self.continue_zone_entry_batch(stack.item.clone(), *batch, &mut events)? {
                     return Ok(finish_with_events(self, events));
                 }
                 self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)

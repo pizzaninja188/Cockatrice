@@ -169,6 +169,7 @@ mod resolution;
 mod state_based;
 mod targeting;
 mod triggers;
+mod zone_events;
 
 #[cfg(test)]
 mod face_change_tests {
@@ -310,6 +311,9 @@ pub enum EngineError {
 struct TriggerSourceSnapshot {
     /// Derived event-time types, captured before any member of a simultaneous departure moves.
     types: Vec<String>,
+    owner: PlayerId,
+    is_token: bool,
+    all_creature_types: bool,
     power_toughness: (Option<i64>, Option<i64>),
     object_id: ObjectId,
     card_id: String,
@@ -369,6 +373,7 @@ enum TargetingSourceKind {
 }
 
 enum GameEvent {
+    ZoneChanges(zone_events::ZoneEventBatch),
     EntersBattlefield {
         object_id: ObjectId,
     },

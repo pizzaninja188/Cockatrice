@@ -27,6 +27,7 @@ impl GameEngine {
             .characteristics(oid)
             .is_some_and(|value| value.is_creature());
 
+        let zone_snapshot = self.snapshot_zone_event();
         let died = sacrifice_permanent(&mut self.state, self.registry, oid)?;
 
         let mut ev = vec![
@@ -42,12 +43,10 @@ impl GameEngine {
             )),
         ];
 
-        self.fire_triggers(&sacrifice_events(
-            source,
-            was_creature,
-            pending.deciding_player,
-            died,
-        ));
+        self.fire_zone_triggers(
+            zone_snapshot,
+            sacrifice_events(source, was_creature, pending.deciding_player, died),
+        );
         let _ = self.apply_sbas(&mut ev);
         let result = CardResultCohort {
             cards: vec![payment::card_result_entry(
@@ -77,12 +76,13 @@ impl GameEngine {
         let keep_id = chosen[0];
         let mut ev = vec![];
         let mut trigger_events = vec![];
+        let zone_snapshot = self.snapshot_zone_event();
         for &oid in &pending.presentation.candidates {
             if oid == keep_id {
                 continue;
             }
             let owner = self.state.objects.get(&oid).map(|o| o.owner);
-            let source = self.trigger_source_snapshot(oid);
+            let source = zone_snapshot.source(oid);
             let was_creature = self
                 .characteristics(oid)
                 .is_some_and(|value| value.is_creature());
@@ -100,7 +100,7 @@ impl GameEngine {
                 }
             }
         }
-        self.fire_triggers(&trigger_events);
+        self.fire_zone_triggers(zone_snapshot, trigger_events);
         // Re-run SBAs: triggered abilities may have caused further state changes, and
         // multiple legend conflicts are resolved one at a time.
         if self.state.pending_resolution.is_none() {

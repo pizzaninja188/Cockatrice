@@ -28,6 +28,47 @@ pub(super) struct CollectedTrigger {
 }
 
 impl GameEngine {
+    pub(super) fn event_object_fact(&self, object_id: ObjectId) -> Option<TurnObjectFact> {
+        let object = self.state.objects.get(&object_id)?;
+        let c = self.characteristics(object_id)?;
+        Some(TurnObjectFact {
+            object_id,
+            zone_change_generation: self
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0),
+            owner: object.owner,
+            controller: c.controller,
+            is_token: object.is_token(),
+            types: c.types,
+            all_creature_types: c.all_creature_types,
+            keywords: c.keywords,
+            power: c.power,
+        })
+    }
+
+    pub(super) fn event_filter_matches(
+        &self,
+        filter: &PermanentEventFilter,
+        fact: &TurnObjectFact,
+        source: &TriggerSourceSnapshot,
+    ) -> bool {
+        super::history::permanent_event_fact_matches(
+            &self.state,
+            filter,
+            fact,
+            ConditionContext {
+                controller: source.controller,
+                source_object_id: source.object_id,
+                source_zone_change: source.zone_change_generation,
+                resolving_spell_id: None,
+                stack_item: None,
+            },
+        )
+    }
+
     pub(super) fn battlefield_leave_event(&self, object_id: ObjectId) -> Option<GameEvent> {
         self.state
             .objects
@@ -212,6 +253,23 @@ impl GameEngine {
             let trigger_player = Self::trigger_player_for(event);
             let event_sources = match event {
                 GameEvent::BecameTapped { action, .. } => &action.sources,
+                GameEvent::LeavesBattlefield { source }
+                | GameEvent::Dies { source, .. }
+                | GameEvent::Sacrificed { source, .. } => events
+                    .iter()
+                    .find_map(|event| match event {
+                        GameEvent::ZoneChanges(batch)
+                            if batch.moves.iter().any(|movement| {
+                                movement.before.object_id == source.object_id
+                                    && movement.before.zone_change_generation
+                                        == source.zone_change_generation
+                            }) =>
+                        {
+                            Some(&batch.sources)
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or(&sources),
                 _ => &sources,
             };
             let mut event_triggers = self.collect_triggers(event, event_sources);
@@ -473,6 +531,7 @@ impl GameEngine {
         sources: &[TriggerSourceSnapshot],
     ) -> Vec<CollectedTrigger> {
         match event {
+            GameEvent::ZoneChanges(batch) => self.collect_zone_triggers(batch),
             GameEvent::EntersBattlefield { object_id } => {
                 let Some(obj) = self.state.objects.get(object_id) else {
                     return vec![];
@@ -497,21 +556,16 @@ impl GameEngine {
                 ));
 
                 for source in sources {
-                    let src_id = source.object_id;
                     let src_ctrl = source.controller;
                     out.extend(self.matching_snapshot_abilities(source, |tc| {
                         let TriggerCondition::WheneverPermanentEntersBattlefield {
                             controller,
-                            permanent_type,
-                            exclude_self,
+                            filter,
                             creature_filter,
                         } = tc
                         else {
                             return false;
                         };
-                        if *exclude_self && src_id == entering_id {
-                            return false;
-                        }
                         let rel_ok = self.relative_player_matches(
                             *controller,
                             entering_controller,
@@ -520,28 +574,8 @@ impl GameEngine {
                         if !rel_ok {
                             return false;
                         }
-                        let type_matches = match permanent_type {
-                            Some(tricerules_cards::PermanentTypeFilter::Creature) => {
-                                entering_characteristics.is_creature()
-                            }
-                            Some(tricerules_cards::PermanentTypeFilter::Artifact) => {
-                                entering_characteristics.is_artifact()
-                            }
-                            Some(tricerules_cards::PermanentTypeFilter::Enchantment) => {
-                                entering_characteristics.has_type("Enchantment")
-                            }
-                            Some(tricerules_cards::PermanentTypeFilter::Land) => {
-                                entering_characteristics.has_type("Land")
-                            }
-                            Some(tricerules_cards::PermanentTypeFilter::Planeswalker) => {
-                                entering_characteristics.has_type("Planeswalker")
-                            }
-                            Some(tricerules_cards::PermanentTypeFilter::Battle) => {
-                                entering_characteristics.has_type("Battle")
-                            }
-                            None => true,
-                        };
-                        type_matches
+                        let fact = self.event_object_fact(entering_id).expect("entrant exists");
+                        self.event_filter_matches(filter, &fact, source)
                             && creature_filter.as_ref().is_none_or(|filter| {
                                 Self::creature_event_filter_matches_characteristics(
                                     &entering_characteristics,
@@ -683,14 +717,17 @@ impl GameEngine {
                 }
                 out
             }
-            GameEvent::LeavesBattlefield { source } => self
-                .matching_snapshot_abilities(source, |condition| {
+            GameEvent::LeavesBattlefield { source } => {
+                let source = source.at_event(sources);
+                self.matching_snapshot_abilities(source, |condition| {
                     *condition == TriggerCondition::WhenSelfLeavesBattlefield
-                }),
+                })
+            }
             GameEvent::Sacrificed {
                 source: sacrificed,
                 player,
             } => {
+                let sacrificed = sacrificed.at_event(sources);
                 let observed = TriggerObjectRef {
                     object_id: sacrificed.object_id,
                     zone_change_generation: sacrificed.zone_change_generation,
@@ -701,14 +738,12 @@ impl GameEngine {
                     let mut matching = self.matching_snapshot_abilities(source, |condition| {
                         let TriggerCondition::WheneverPlayerSacrificesPermanent {
                             player: who,
-                            exclude_self,
+                            filter,
                         } = condition
                         else {
                             return false;
                         };
-                        (!*exclude_self
-                            || source.object_id != observed.object_id
-                            || source.zone_change_generation != observed.zone_change_generation)
+                        self.event_filter_matches(filter, &sacrificed.event_fact(), source)
                             && self.relative_player_matches(*who, *player, source.controller)
                     });
                     for trigger in &mut matching {
@@ -722,6 +757,7 @@ impl GameEngine {
                 source: dying,
                 was_creature,
             } => {
+                let dying = dying.at_event(sources);
                 let mut out = self
                     .matching_snapshot_abilities(dying, |tc| *tc == TriggerCondition::WhenSelfDies);
                 if !was_creature {
@@ -748,14 +784,11 @@ impl GameEngine {
                         out.extend(matching);
                     }
                     out.extend(self.matching_snapshot_abilities(source, |tc| {
-                        let TriggerCondition::WheneverCreatureDies {
-                            controller,
-                            exclude_self,
-                        } = tc
+                        let TriggerCondition::WheneverCreatureDies { controller, filter } = tc
                         else {
                             return false;
                         };
-                        if *exclude_self && source.object_id == dying.object_id {
+                        if !self.event_filter_matches(filter, &dying.event_fact(), source) {
                             return false;
                         }
                         self.relative_player_matches(
@@ -1340,7 +1373,7 @@ impl GameEngine {
         }
     }
 
-    fn relative_player_matches(
+    pub(super) fn relative_player_matches(
         &self,
         filter: CastTriggerPlayer,
         player: PlayerId,
@@ -1442,6 +1475,11 @@ impl GameEngine {
             AttachmentRecipient::Player(player_id) => AttachmentSnapshot::Player(player_id),
         });
         Some(TriggerSourceSnapshot {
+            owner: object.owner,
+            is_token: object.is_token(),
+            all_creature_types: characteristics
+                .as_ref()
+                .is_some_and(|c| c.all_creature_types),
             types: characteristics
                 .as_ref()
                 .map(|c| c.types.clone())
@@ -1579,7 +1617,7 @@ impl GameEngine {
         abilities
     }
 
-    fn matching_snapshot_abilities(
+    pub(super) fn matching_snapshot_abilities(
         &self,
         source: &TriggerSourceSnapshot,
         filter: impl Fn(&TriggerCondition) -> bool,
@@ -1932,9 +1970,75 @@ impl GameEngine {
     }
 }
 
+impl TriggerSourceSnapshot {
+    /// Prefer the instruction's pre-event source set to an older cost-preflight snapshot.
+    fn at_event<'a>(&'a self, sources: &'a [Self]) -> &'a Self {
+        sources
+            .iter()
+            .find(|source| {
+                source.object_id == self.object_id
+                    && source.zone_change_generation == self.zone_change_generation
+            })
+            .unwrap_or(self)
+    }
+
+    fn event_fact(&self) -> TurnObjectFact {
+        TurnObjectFact {
+            object_id: self.object_id,
+            zone_change_generation: self.zone_change_generation,
+            owner: self.owner,
+            controller: self.controller,
+            is_token: self.is_token,
+            types: self.types.clone(),
+            all_creature_types: self.all_creature_types,
+            keywords: vec![],
+            power: self.power_toughness.0.map(|p| p.max(0) as u32),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issue_168_entry_observer_uses_shared_subtype_filter() {
+        let data = r#"(id: "entry_probe", name: "Entry Probe", types: ["Creature"],
+            power: 1, toughness: 1, triggered_abilities: [(
+            trigger: WheneverPermanentEntersBattlefield(controller: Controller,
+                filter: (any_subtypes: ["Bird", "Fish"])),
+            effect: [GainLife(amount: 1)], text: "Probe")])"#;
+        let registry = CardRegistry::from_chunks_and_tokens(&[data], &[]).unwrap();
+        let trigger = registry
+            .get("entry_probe")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .trigger
+            .clone();
+        let (mut engine, source) = trigger_limit_source();
+        add_limited_grant(&mut engine, source, trigger);
+        assert!(
+            engine
+                .collect_event_triggers(&[GameEvent::EntersBattlefield { object_id: source }])
+                .is_empty(),
+            "a Bear is neither a Bird nor a Fish"
+        );
+    }
+
+    #[test]
+    fn issue_168_departure_vocabulary_loads() {
+        let data = r#"(id: "departure_probe", name: "Departure Probe", types: ["Creature"],
+            power: 1, toughness: 1, triggered_abilities: [(
+            trigger: WheneverPermanentLeavesBattlefield(controller: Controller,
+                filter: (permanent_type: Some(Creature)), destination: Except([Graveyard])),
+            effect: [GainLife(amount: 1)], text: "Probe"), (
+            trigger: WheneverCardsLeaveGraveyard(owner: Controller,
+                filter: (permanent_type: Some(Creature)), cardinality: OneOrMore),
+            effect: [GainLife(amount: 1)], text: "Probe")])"#;
+        CardRegistry::from_chunks_and_tokens(&[data], &[])
+            .expect("shared zone observer vocabulary");
+    }
 
     fn test_ability_origin(index: usize) -> TriggerAbilityOrigin {
         TriggerAbilityOrigin::Printed(AbilityDefinitionId {
@@ -2360,6 +2464,9 @@ mod tests {
             .triggered_abilities[0]
             .clone();
         let source = TriggerSourceSnapshot {
+            owner: 0,
+            is_token: false,
+            all_creature_types: false,
             types: vec!["Creature".into()],
             power_toughness: (None, None),
             event_conditions_checked: false,
@@ -2605,6 +2712,9 @@ mod tests {
     fn attached_player_attack_trigger_fires_once_for_the_declaration_group() {
         let engine = GameEngine::new(6303, &[0, 1], 20, None, true).expect("engine");
         let source = TriggerSourceSnapshot {
+            owner: 0,
+            is_token: false,
+            all_creature_types: false,
             types: vec!["Enchantment".into()],
             power_toughness: (None, None),
             event_conditions_checked: false,
@@ -2739,5 +2849,354 @@ mod tests {
             wardens.into_iter().collect(),
             "each entering Soul Warden observes the other"
         );
+    }
+    #[test]
+    fn issue_168_group_observer_has_no_arbitrary_trigger_object() {
+        use tricerules_cards::primitives::ZoneEventCardinality;
+        let (mut engine, source) = trigger_limit_source();
+        add_limited_grant(
+            &mut engine,
+            source,
+            TriggerCondition::WheneverCardsLeaveGraveyard {
+                owner: CastTriggerPlayer::Controller,
+                filter: Default::default(),
+                cardinality: ZoneEventCardinality::OneOrMore,
+            },
+        );
+        let cards = engine.state.players[0].hand[..2].to_vec();
+        for &card in &cards {
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                card,
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+        }
+        let snapshot = engine.snapshot_zone_event();
+        for &card in &cards {
+            move_object_to_zone(&mut engine.state, engine.registry, card, Zone::Exile, None)
+                .unwrap();
+        }
+        let GameEvent::ZoneChanges(batch) = engine.finish_zone_event(snapshot) else {
+            panic!("zone event")
+        };
+        let triggers = engine.collect_zone_triggers(&batch);
+        assert_eq!(triggers.len(), 1);
+        assert!(
+            triggers[0].trigger_context.observed_object.is_none(),
+            "a one-or-more group does not name one arbitrary member"
+        );
+    }
+
+    #[test]
+    fn issue_168_departure_intervening_condition_uses_pre_event_state() {
+        for condition in [
+            TriggerCondition::WhenSelfDies,
+            TriggerCondition::WhenSelfLeavesBattlefield,
+            TriggerCondition::WheneverPermanentLeavesBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    source_only: true,
+                    ..Default::default()
+                },
+                destination: Default::default(),
+                cardinality: Default::default(),
+            },
+        ] {
+            let (mut engine, source) = trigger_limit_source();
+            let mut ability = engine
+                .registry
+                .get("ajanis_pridemate")
+                .unwrap()
+                .primary_face()
+                .triggered_abilities[0]
+                .clone();
+            ability.trigger = condition.clone();
+            ability.intervening_if = Some(InterveningIf::GameCondition(
+                GameCondition::SourceCounterCount {
+                    counter: CounterKind::PlusOnePlusOne,
+                    min: Some(1),
+                    max: None,
+                },
+            ));
+            engine.state.add_triggered_ability_grant(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(source),
+                kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 0,
+            });
+            engine.state.objects.get_mut(&source).unwrap().add_counters(
+                CounterKind::PlusOnePlusOne,
+                1,
+                0,
+            );
+            let snapshot = engine.snapshot_zone_event();
+            let old_source = engine.trigger_source_snapshot(source).unwrap();
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                source,
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+            let events = [
+                GameEvent::LeavesBattlefield {
+                    source: old_source.clone(),
+                },
+                GameEvent::Dies {
+                    source: old_source,
+                    was_creature: true,
+                },
+                engine.finish_zone_event(snapshot),
+            ];
+            assert_eq!(
+                engine.collect_event_triggers(&events).len(),
+                1,
+                "{condition:?} looks back before counters disappear"
+            );
+        }
+    }
+
+    fn issue_168_fixture_object(
+        engine: &mut GameEngine,
+        player: usize,
+        card: &str,
+        zone: Zone,
+    ) -> ObjectId {
+        let oid = engine.state.players[player].hand[0];
+        engine.state.objects.get_mut(&oid).unwrap().card_id = card.into();
+        move_object_to_zone(&mut engine.state, engine.registry, oid, zone, None).unwrap();
+        oid
+    }
+
+    #[test]
+    fn issue_168_slagstone_filter_keeps_self_token_exception_and_old_generation() {
+        use tricerules_cards::primitives::{EventZone, ZoneEventDestination};
+        let (mut engine, source) = trigger_limit_source();
+        engine.state.objects.get_mut(&source).unwrap().card_id = "bonesplitter".into();
+        let copy = engine.copiable_values_for(source).unwrap();
+        engine.state.objects.get_mut(&source).unwrap().token_origin = Some(copy.clone());
+        add_limited_grant(
+            &mut engine,
+            source,
+            TriggerCondition::WheneverPermanentLeavesBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    any_of: Some(vec![
+                        PermanentEventFilter {
+                            source_only: true,
+                            ..Default::default()
+                        },
+                        PermanentEventFilter {
+                            permanent_type: Some(PermanentTypeFilter::Artifact),
+                            token: Some(false),
+                            exclude_source: true,
+                            ..Default::default()
+                        },
+                    ]),
+                    ..Default::default()
+                },
+                destination: ZoneEventDestination::OneOf(vec![
+                    EventZone::Graveyard,
+                    EventZone::Exile,
+                ]),
+                cardinality: Default::default(),
+            },
+        );
+        let artifact = issue_168_fixture_object(&mut engine, 0, "bonesplitter", Zone::Battlefield);
+        let token = issue_168_fixture_object(&mut engine, 0, "bonesplitter", Zone::Battlefield);
+        engine.state.objects.get_mut(&token).unwrap().token_origin = Some(copy);
+        let other = issue_168_fixture_object(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+        let snapshot = engine.snapshot_zone_event();
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        for oid in [source, artifact, token, other] {
+            move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Exile, None)
+                .unwrap();
+        }
+        let GameEvent::ZoneChanges(batch) = engine.finish_zone_event(snapshot) else {
+            panic!("zone event")
+        };
+        // The physical id can change zones again before collection without changing the receipt.
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            artifact,
+            Zone::Hand,
+            None,
+        )
+        .unwrap();
+        let triggers = engine.collect_zone_triggers(&batch);
+        assert_eq!(
+            triggers.len(),
+            2,
+            "Slagstone's token copy sees itself plus the other nontoken artifact"
+        );
+        assert!(triggers
+            .iter()
+            .all(|trigger| trigger.source_zone_change == generation));
+        assert_eq!(
+            triggers
+                .iter()
+                .map(|trigger| trigger.trigger_context.observed_object.unwrap().object_id)
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([source, artifact])
+        );
+        assert!(batch
+            .moves
+            .iter()
+            .all(|movement| movement.destination == Zone::Exile));
+    }
+
+    #[test]
+    fn issue_168_mortipede_groups_printed_graveyard_creatures_per_instruction() {
+        use tricerules_cards::primitives::ZoneEventCardinality;
+        let (mut engine, source) = trigger_limit_source();
+        add_limited_grant(
+            &mut engine,
+            source,
+            TriggerCondition::WheneverCardsLeaveGraveyard {
+                owner: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Creature),
+                    ..Default::default()
+                },
+                cardinality: ZoneEventCardinality::OneOrMore,
+            },
+        );
+        let first = issue_168_fixture_object(&mut engine, 0, "grizzly_bears", Zone::Graveyard);
+        let second = issue_168_fixture_object(&mut engine, 0, "hill_giant", Zone::Graveyard);
+        let noncreature = issue_168_fixture_object(&mut engine, 0, "bonesplitter", Zone::Graveyard);
+        // Copied/animated battlefield characteristics must not turn this artifact card into a
+        // creature card in the graveyard (Mortipede and Desecrated Tomb).
+        engine
+            .state
+            .objects
+            .get_mut(&noncreature)
+            .unwrap()
+            .copiable_values = engine.copiable_values_for(source);
+        let enemy = issue_168_fixture_object(&mut engine, 1, "grizzly_bears", Zone::Graveyard);
+        let mut events = vec![];
+        for cohort in [vec![first, noncreature, enemy], vec![second]] {
+            let snapshot = engine.snapshot_zone_event();
+            for oid in cohort {
+                move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Hand, None)
+                    .unwrap();
+            }
+            events.push(engine.finish_zone_event(snapshot));
+        }
+        assert_eq!(
+            engine.collect_event_triggers(&events).len(),
+            2,
+            "two sequential instructions remain two groups in one trigger flush"
+        );
+        let empty = engine.finish_zone_event(engine.snapshot_zone_event());
+        assert!(engine.collect_event_triggers(&[empty]).is_empty());
+        // Returning only a noncreature or only an opponent's creature must not trigger.
+        for oid in [noncreature, enemy] {
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                oid,
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+            let snapshot = engine.snapshot_zone_event();
+            move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Library, None)
+                .unwrap();
+            assert!(engine
+                .collect_event_triggers(&[engine.finish_zone_event(snapshot)])
+                .is_empty());
+        }
+    }
+
+    #[test]
+    fn issue_168_departure_controller_and_owner_are_distinct_snapshots() {
+        use tricerules_cards::primitives::{EventZone, ZoneEventDestination};
+        let (mut engine, source) = trigger_limit_source();
+        add_limited_grant(
+            &mut engine,
+            source,
+            TriggerCondition::WheneverPermanentLeavesBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    owner: Some(CastTriggerPlayer::Opponent),
+                    ..Default::default()
+                },
+                destination: ZoneEventDestination::Except(vec![EventZone::Graveyard]),
+                cardinality: Default::default(),
+            },
+        );
+        let stolen = issue_168_fixture_object(&mut engine, 1, "grizzly_bears", Zone::Battlefield);
+        engine.state.players[1]
+            .battlefield
+            .retain(|oid| *oid != stolen);
+        engine.state.players[0].battlefield.push(stolen);
+        engine
+            .state
+            .objects
+            .get_mut(&stolen)
+            .unwrap()
+            .base_controller = 0;
+        engine.state.objects.get_mut(&stolen).unwrap().controller = 0;
+        let snapshot = engine.snapshot_zone_event();
+        move_object_to_zone(&mut engine.state, engine.registry, stolen, Zone::Hand, None).unwrap();
+        let triggers = engine.collect_event_triggers(&[engine.finish_zone_event(snapshot)]);
+        assert_eq!(triggers.len(), 1);
+        assert_eq!(
+            triggers[0]
+                .trigger_context
+                .observed_object
+                .unwrap()
+                .controller_at_event,
+            0
+        );
+        assert_eq!(
+            engine.state.objects[&stolen].controller, 1,
+            "post-move ownership does not replace event-time control"
+        );
+    }
+
+    #[test]
+    fn issue_168_knightfisher_rejects_token_birds_and_noncontroller_birds() {
+        let (mut engine, source) = trigger_limit_source();
+        engine.state.objects.get_mut(&source).unwrap().card_id = "knightfisher".into();
+        let bird = issue_168_fixture_object(&mut engine, 0, "storm_crow", Zone::Battlefield);
+        let enemy = issue_168_fixture_object(&mut engine, 1, "storm_crow", Zone::Battlefield);
+        let entry = |object_id| GameEvent::EntersBattlefield { object_id };
+        assert_eq!(engine.collect_event_triggers(&[entry(bird)]).len(), 1);
+        assert!(engine.collect_event_triggers(&[entry(enemy)]).is_empty());
+        assert!(engine.collect_event_triggers(&[entry(source)]).is_empty());
+        let copy = engine.copiable_values_for(bird).unwrap();
+        engine.state.objects.get_mut(&bird).unwrap().token_origin = Some(copy);
+        assert!(engine.collect_event_triggers(&[entry(bird)]).is_empty());
+    }
+
+    #[test]
+    fn issue_168_zone_vocabulary_rejects_empty_conflicting_and_group_object_filters() {
+        for trigger in [
+            "WheneverPermanentLeavesBattlefield(filter: (source_only: true, exclude_source: true))",
+            "WheneverPermanentLeavesBattlefield(filter: (permanent_type: Some(Land), excluded_types: [Land]))",
+            "WheneverPermanentLeavesBattlefield(filter: (any_of: Some([])))",
+            "WheneverPermanentLeavesBattlefield(filter: (any_subtypes: [\"\"]))",
+            "WheneverPermanentLeavesBattlefield(destination: OneOf([]))",
+            "WheneverPermanentLeavesBattlefield(destination: Except([]))",
+            "WheneverCardsLeaveGraveyard(cardinality: OneOrMore)",
+        ] {
+            let data = format!(r#"(id: "probe", name: "Probe", types: ["Creature"], power: 1, toughness: 1,
+                triggered_abilities: [(trigger: {trigger}, effect: [PumpTarget(power: 1, toughness: 0, subject: TriggerObject)], text: "Probe")])"#);
+            assert!(CardRegistry::from_chunks_and_tokens(&[&data], &[]).is_err(), "{trigger}");
+        }
     }
 }

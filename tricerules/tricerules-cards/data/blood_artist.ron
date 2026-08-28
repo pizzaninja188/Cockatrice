@@ -9,7 +9,7 @@
     (
       trigger: WheneverCreatureDies(
         controller: AnyPlayer,
-        exclude_self: false,
+        filter: (exclude_source: false),
       ),
       effect: [DrainTarget(
         amount: 1,

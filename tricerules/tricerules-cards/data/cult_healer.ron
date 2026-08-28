@@ -9,7 +9,7 @@
     (
       trigger: WheneverPermanentEntersBattlefield(
         controller: Controller,
-        permanent_type: Some(Enchantment),
+        filter: (permanent_type: Some(Enchantment)),
       ),
       effect: [GrantKeywords(subject: Source, keywords: [Lifelink])],
       text: "Whenever an enchantment you control enters, this creature gains lifelink until end of turn.",

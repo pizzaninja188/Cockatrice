@@ -9,8 +9,7 @@
   triggered_abilities: [(
     trigger: WheneverPermanentEntersBattlefield(
       controller: Controller,
-      permanent_type: Some(Land),
-      exclude_self: false,
+      filter: (permanent_type: Some(Land), exclude_source: false),
     ),
     effect: [CreateTokens(token: "elf_warrior_g_1_1", count: 1, who: SourceController)],
     text: "Landfall — Whenever a land you control enters, create a 1/1 green Elf Warrior creature token.",

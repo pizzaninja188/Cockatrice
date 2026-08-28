@@ -68,6 +68,7 @@ pub(super) fn destroy_attached(
         })
         .collect::<Vec<_>>();
 
+    let zone_snapshot = engine.snapshot_zone_event();
     let mut destroyed = Vec::new();
     let mut tap_events = Vec::new();
     for (oid, name, indestructible, owner, source, was_creature) in snapshots {
@@ -106,7 +107,7 @@ pub(super) fn destroy_attached(
                 leaves_and_dies_events(source, was_creature, died)
             }),
     );
-    engine.fire_triggers(&trigger_events);
+    engine.fire_zone_triggers(zone_snapshot, trigger_events);
 
     Ok(EffectOutcome::Continue)
 }
@@ -140,6 +141,7 @@ pub(super) fn destroy_all(
             (tid, source, was_creature)
         })
         .collect::<Vec<_>>();
+    let zone_snapshot = engine.snapshot_zone_event();
     let mut destroyed: Vec<(TriggerSourceSnapshot, bool, bool)> = Vec::new();
     let mut tap_events = Vec::new();
     for (tid, source, was_creature) in victims {
@@ -183,7 +185,7 @@ pub(super) fn destroy_all(
                 leaves_and_dies_events(source, was_creature, died)
             }),
     );
-    engine.fire_triggers(&trigger_events);
+    engine.fire_zone_triggers(zone_snapshot, trigger_events);
 
     Ok(EffectOutcome::Continue)
 }

@@ -30,6 +30,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
     let controller = cx.top.controller;
     let card_id = object.card_id.clone();
     let label = object_display_name(&cx.engine.state, cx.engine.registry, source_id);
+    let zone_snapshot = cx.engine.snapshot_zone_event();
     let leave_event = cx.engine.battlefield_leave_event(source_id);
     move_object_to_zone(
         &mut cx.engine.state,
@@ -47,7 +48,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
     cx.events
         .push(ev_log(format!("{label} is defeated and exiled.")));
     cx.engine
-        .fire_triggers(&leave_event.into_iter().collect::<Vec<_>>());
+        .fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
 
     let Some(definition) = cx.engine.registry.get(&card_id) else {
         return Ok(EffectOutcome::Continue);
@@ -171,6 +172,7 @@ pub(super) fn exile_until_source_leaves(
     }) else {
         return Ok(EffectOutcome::Continue);
     };
+    let zone_snapshot = cx.engine.snapshot_zone_event();
     let leave_event = cx.engine.battlefield_leave_event(target_id);
     move_object_to_zone(
         &mut cx.engine.state,
@@ -180,7 +182,7 @@ pub(super) fn exile_until_source_leaves(
         None,
     )?;
     cx.engine
-        .fire_triggers(&leave_event.into_iter().collect::<Vec<_>>());
+        .fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
     let exiled = TriggerObjectRef {
         object_id: target_id,
         zone_change_generation: cx
@@ -475,9 +477,10 @@ pub(super) fn exile_target(
     if let Some(&tid) = targets.first() {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
+        let zone_snapshot = engine.snapshot_zone_event();
         let leave_event = engine.battlefield_leave_event(tid);
         move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Exile, None)?;
-        engine.fire_triggers(&leave_event.into_iter().collect::<Vec<_>>());
+        engine.fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
         events.push(ev_log(format!("{spell_label} exiles {tgt}")));
         if let Some(owner_id) = owner {
             events.push(permanent_moved_event(
@@ -550,9 +553,10 @@ pub(super) fn exile_target_gain_life_equal_to_power(
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         let target_controller = engine.state.objects.get(&tid).map(|o| o.controller);
         let target_controller = target_controller.unwrap_or(controller);
+        let zone_snapshot = engine.snapshot_zone_event();
         let leave_event = engine.battlefield_leave_event(tid);
         move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Exile, None)?;
-        engine.fire_triggers(&leave_event.into_iter().collect::<Vec<_>>());
+        engine.fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
         events.push(ev_log(format!("{spell_label} exiles {tgt}")));
         if let Some(owner_id) = owner {
             events.push(permanent_moved_event(
@@ -585,9 +589,10 @@ pub(super) fn return_to_owners_hand(
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         // Transient battlefield state (damage, counters, tap) is reset centrally
         // by move_object_to_zone on leaving the battlefield (CR 400.7 / 121.2).
+        let zone_snapshot = engine.snapshot_zone_event();
         let leave_event = engine.battlefield_leave_event(tid);
         move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Hand, None)?;
-        engine.fire_triggers(&leave_event.into_iter().collect::<Vec<_>>());
+        engine.fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
         events.push(ev_log(format!(
             "{spell_label} returns {tgt} to its owner's hand"
         )));
@@ -619,9 +624,11 @@ pub(in crate::engine) fn move_permanent_to_owners_library(
         .map(|object| object.owner)
         .ok_or(EngineError::Illegal("no target object"))?;
 
+    let zone_snapshot = engine.snapshot_zone_event();
+
     let leave_event = engine.battlefield_leave_event(tid);
     move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Library, None)?;
-    engine.fire_triggers(&leave_event.into_iter().collect::<Vec<_>>());
+    engine.fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
     let owner_idx = engine
         .state
         .player_idx(owner)
@@ -1444,123 +1451,94 @@ pub(super) fn move_graveyard_cards(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let item = cx.top.clone();
-    let engine = &mut *cx.engine;
-    let events = &mut *cx.events;
-    let targets = cx.targets;
-    let controller = cx.controller;
-    let spell_label = cx.spell_label;
-
-    for &tid in targets {
-        let tgt = object_display_name(&engine.state, engine.registry, tid);
-        let is_legal = graveyard_target_legal(engine, &filter, tid, controller);
-        if !is_legal {
-            events.push(ev_log(format!(
-                "{spell_label} fizzles: {tgt} is no longer a legal graveyard target."
-            )));
-        } else {
-            let owner = engine.state.objects.get(&tid).map(|o| o.owner);
-            use tricerules_cards::primitives::GraveyardDestination;
-            let dest_zone = match destination {
-                GraveyardDestination::Hand => Zone::Hand,
-                GraveyardDestination::Battlefield { .. } => Zone::Battlefield,
-                GraveyardDestination::Exile => Zone::Exile,
-                GraveyardDestination::LibraryTop | GraveyardDestination::LibraryBottom => {
-                    Zone::Library
-                }
-            };
-            let dest_proto = match destination {
-                GraveyardDestination::Hand => rv1::permanent_moved::Destination::Hand,
-                GraveyardDestination::Battlefield { .. } => {
-                    rv1::permanent_moved::Destination::Battlefield
-                }
-                GraveyardDestination::Exile => rv1::permanent_moved::Destination::Exile,
-                GraveyardDestination::LibraryTop | GraveyardDestination::LibraryBottom => {
-                    rv1::permanent_moved::Destination::Library
-                }
-            };
-            // CR 110.2: a card put onto the battlefield by an effect enters under the controller
-            // of that effect ("under your control"), not under its owner's control. Irrelevant
-            // for `GraveyardOwner::Controller` cards (Zombify), load-bearing for `AnyPlayer`
-            // reanimation out of an opponent's graveyard.
-            if dest_zone == Zone::Battlefield {
-                let deciding_player = owner.unwrap_or(controller);
-                match engine.begin_battlefield_entry(
-                    item.clone(),
-                    BattlefieldEntryEvent {
-                        object_id: tid,
-                        deciding_player,
-                        destination_controller: controller,
-                        battle_protector: None,
-                        face_index: 0,
-                        unlock_room_door: None,
-                        chosen_x: 0,
-                        cast_cost_receipts: Vec::new(),
-                        player_life_snapshot: engine.player_life_snapshot(),
-                        tapped: matches!(
-                            destination,
-                            GraveyardDestination::Battlefield { tapped: true }
-                        ),
-                        entry_counters: BTreeMap::new(),
-                        applied_effects: Vec::new(),
-                    },
-                    BattlefieldEntryCompletion::ResolutionEffect {
-                        owner: deciding_player,
-                        spell_label: spell_label.to_string(),
-                        object_label: tgt.clone(),
-                    },
-                    events,
-                ) {
-                    super::super::replacement::BattlefieldEntryProgress::Parked => {
-                        return Ok(EffectOutcome::Suspended);
-                    }
-                    super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
-                        engine.commit_battlefield_entry(entry, None)?;
-                    }
-                }
+    use tricerules_cards::primitives::GraveyardDestination;
+    let targets: Vec<_> = cx
+        .targets
+        .iter()
+        .copied()
+        .filter(|oid| graveyard_target_legal(cx.engine, &filter, *oid, cx.controller))
+        .collect();
+    if let GraveyardDestination::Battlefield { tapped } = destination {
+        let entries = targets
+            .into_iter()
+            .map(|oid| BattlefieldEntryEvent {
+                object_id: oid,
+                deciding_player: cx.engine.state.objects[&oid].owner,
+                destination_controller: cx.controller,
+                battle_protector: None,
+                face_index: 0,
+                unlock_room_door: None,
+                chosen_x: 0,
+                cast_cost_receipts: vec![],
+                player_life_snapshot: cx.engine.player_life_snapshot(),
+                tapped,
+                entry_counters: BTreeMap::new(),
+                applied_effects: vec![],
+            })
+            .collect();
+        return Ok(
+            if cx.engine.begin_zone_entry_batch(
+                cx.top.clone(),
+                entries,
+                cx.spell_label,
+                cx.events,
+            )? {
+                EffectOutcome::Suspended
             } else {
-                move_object_to_zone(&mut engine.state, engine.registry, tid, dest_zone, None)?;
-                if destination == GraveyardDestination::LibraryTop {
-                    let owner_id = owner.unwrap_or(controller);
-                    let owner_idx = engine
-                        .state
-                        .player_idx(owner_id)
-                        .ok_or(EngineError::Illegal("graveyard target owner not found"))?;
-                    let library = &mut engine.state.players[owner_idx].library;
-                    library.retain(|object_id| *object_id != tid);
-                    library.push_front(tid);
-                }
-                if destination == GraveyardDestination::Exile {
-                    cx.effect_result.cards.push(payment::card_result_entry(
-                        &engine.state,
-                        engine.registry,
-                        CardResultAction::Exile,
-                        owner.unwrap_or(controller),
-                        tid,
-                    ));
-                }
-            }
-            let dest_name = match destination {
-                GraveyardDestination::Hand => "hand",
-                GraveyardDestination::Battlefield { .. } => "battlefield",
-                GraveyardDestination::Exile => "exile",
-                GraveyardDestination::LibraryTop => "the top of its owner's library",
-                GraveyardDestination::LibraryBottom => "the bottom of its owner's library",
-            };
-            events.push(ev_log(format!(
-                "{spell_label} moves {tgt} from graveyard to {dest_name}."
-            )));
-            if let Some(owner_id) = owner {
-                events.push(permanent_moved_event(
-                    &engine.state,
-                    tid,
-                    owner_id,
-                    dest_proto,
-                ));
-            }
-        }
+                EffectOutcome::Continue
+            },
+        );
     }
-
+    let engine = &mut *cx.engine;
+    let snapshot = engine.snapshot_zone_event();
+    let (zone, proto, label) = match destination {
+        GraveyardDestination::Hand => (Zone::Hand, rv1::permanent_moved::Destination::Hand, "hand"),
+        GraveyardDestination::Exile => (
+            Zone::Exile,
+            rv1::permanent_moved::Destination::Exile,
+            "exile",
+        ),
+        GraveyardDestination::LibraryTop => (
+            Zone::Library,
+            rv1::permanent_moved::Destination::Library,
+            "the top of its owner's library",
+        ),
+        GraveyardDestination::LibraryBottom => (
+            Zone::Library,
+            rv1::permanent_moved::Destination::Library,
+            "the bottom of its owner's library",
+        ),
+        GraveyardDestination::Battlefield { .. } => unreachable!(),
+    };
+    for tid in targets {
+        let owner = engine.state.objects[&tid].owner;
+        let name = object_display_name(&engine.state, engine.registry, tid);
+        move_object_to_zone(&mut engine.state, engine.registry, tid, zone, None)?;
+        if destination == GraveyardDestination::LibraryTop {
+            let idx = engine
+                .state
+                .player_idx(owner)
+                .ok_or(EngineError::Illegal("graveyard target owner not found"))?;
+            engine.state.players[idx].library.retain(|oid| *oid != tid);
+            engine.state.players[idx].library.push_front(tid);
+        }
+        if destination == GraveyardDestination::Exile {
+            cx.effect_result.cards.push(payment::card_result_entry(
+                &engine.state,
+                engine.registry,
+                CardResultAction::Exile,
+                owner,
+                tid,
+            ));
+        }
+        cx.events.push(ev_log(format!(
+            "{} moves {name} from graveyard to {label}.",
+            cx.spell_label
+        )));
+        cx.events
+            .push(permanent_moved_event(&engine.state, tid, owner, proto));
+    }
+    engine.fire_zone_triggers(snapshot, vec![]);
     Ok(EffectOutcome::Continue)
 }
 

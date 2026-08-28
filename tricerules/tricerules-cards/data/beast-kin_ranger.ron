@@ -9,8 +9,7 @@
   triggered_abilities: [(
     trigger: WheneverPermanentEntersBattlefield(
       controller: Controller,
-      permanent_type: Some(Creature),
-      exclude_self: true,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
     ),
     effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
     text: "Whenever another creature you control enters, this creature gets +1/+0 until end of turn.",

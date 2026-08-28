@@ -1,0 +1,13 @@
+// Oracle and rulings checked against Scryfall on 2026-08-27.
+(
+  id: "armory_mice",
+  name: "Armory Mice",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Mouse"],
+  power: 3,
+  toughness: 1,
+  static_abilities: [ConditionalSelfModifier(
+    condition: PermanentsEnteredThisTurn(controllers: Controller, filter: (excluded_types: [Land]), min: Some(2)),
+    delta_toughness: 2,
+  )],
+)

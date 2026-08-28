@@ -416,6 +416,7 @@ pub(super) fn creature_event_fact_matches(
 }
 
 pub(super) fn permanent_event_fact_matches(
+    state: &GameState,
     filter: &PermanentEventFilter,
     fact: &TurnObjectFact,
     context: ConditionContext<'_>,
@@ -425,12 +426,32 @@ pub(super) fn permanent_event_fact_matches(
         .is_none_or(|permanent_type| fact.has_type(permanent_type.as_str()));
     type_matches
         && filter
+            .excluded_types
+            .iter()
+            .all(|kind| !fact.has_type(kind.as_str()))
+        && (filter.any_subtypes.is_empty()
+            || filter.any_subtypes.iter().any(|kind| fact.has_type(kind)))
+        && filter.token.is_none_or(|token| token == fact.is_token)
+        && filter.owner.is_none_or(|owner| match owner {
+            CastTriggerPlayer::Controller => fact.owner == context.controller,
+            CastTriggerPlayer::Opponent => state.are_opponents(fact.owner, context.controller),
+            CastTriggerPlayer::AnyPlayer => true,
+        })
+        && (!filter.source_only
+            || (fact.object_id == context.source_object_id
+                && fact.zone_change_generation == context.source_zone_change))
+        && filter
             .required_subtypes
             .iter()
             .all(|subtype| fact.has_type(subtype))
         && (!filter.exclude_source
             || fact.object_id != context.source_object_id
             || fact.zone_change_generation != context.source_zone_change)
+        && filter.any_of.as_ref().is_none_or(|branches| {
+            branches
+                .iter()
+                .any(|branch| permanent_event_fact_matches(state, branch, fact, context))
+        })
 }
 
 impl GameEngine {
@@ -565,6 +586,8 @@ impl GameEngine {
                                     .copied()
                                     .unwrap_or(0),
                                 controller: characteristics.controller,
+                                owner: self.state.objects[object_id].owner,
+                                is_token: self.state.objects[object_id].is_token(),
                                 types: characteristics.types,
                                 all_creature_types: characteristics.all_creature_types,
                                 keywords: characteristics.keywords,
@@ -594,6 +617,8 @@ impl GameEngine {
                                 object_id: attack.attacker.object_id,
                                 zone_change_generation: attack.attacker.zone_change_generation,
                                 controller: *attacking_player,
+                                owner: self.state.objects[&attack.attacker.object_id].owner,
+                                is_token: self.state.objects[&attack.attacker.object_id].is_token(),
                                 types: characteristics.types,
                                 all_creature_types: characteristics.all_creature_types,
                                 keywords: characteristics.keywords,
@@ -926,7 +951,7 @@ impl GameEngine {
                             *controllers,
                             context.controller,
                             fact.controller,
-                        ) && permanent_event_fact_matches(filter, fact, context)
+                        ) && permanent_event_fact_matches(&self.state, filter, fact, context)
                     })
                     .count();
                 condition.matches_value(clamp_public_count(count))
@@ -1320,6 +1345,39 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issue_168_celebration_excludes_land_entries() {
+        let data = r#"(id: "entry_probe", name: "Entry Probe", types: ["Instant"],
+            cast_conditions: [PermanentsEnteredThisTurn(controllers: Controller,
+                filter: (excluded_types: [Land]), min: Some(2))],
+            spell_effect: [GainLife(amount: 1)])"#;
+        let registry = CardRegistry::from_chunks_and_tokens(&[data], &[]).unwrap();
+        let condition = &registry
+            .get("entry_probe")
+            .unwrap()
+            .primary_face()
+            .cast_conditions[0];
+        let decks = Some(vec![
+            deck_with_cards(&[], "forest"),
+            deck_with_cards(&[], "island"),
+        ]);
+        let mut engine = GameEngine::new(168001, &[0, 1], 20, decks, true).unwrap();
+        let land = move_to_battlefield(&mut engine, 0, "forest");
+        engine.record_committed_events(&[GameEvent::EntersBattlefield { object_id: land }]);
+        engine.record_committed_events(&[GameEvent::EntersBattlefield { object_id: land }]);
+        let context = ConditionContext {
+            controller: 0,
+            source_object_id: land,
+            source_zone_change: 0,
+            resolving_spell_id: None,
+            stack_item: None,
+        };
+        assert!(
+            !engine.condition_holds(condition, context),
+            "lands must not enable Celebration"
+        );
+    }
 
     fn issue_167_condition(
         kind: &str,
@@ -2020,6 +2078,8 @@ mod tests {
                 zone_change_generation: 0,
                 controller: 0,
                 types: vec!["Creature".into()],
+                owner: 0,
+                is_token: false,
                 all_creature_types: false,
                 keywords: vec![],
                 power: Some(2)
@@ -2691,6 +2751,7 @@ mod tests {
                     permanent_type: Some(PermanentTypeFilter::Artifact),
                     required_subtypes: vec![],
                     exclude_source: false,
+                    ..Default::default()
                 },
                 min: Some(1),
                 max: None,

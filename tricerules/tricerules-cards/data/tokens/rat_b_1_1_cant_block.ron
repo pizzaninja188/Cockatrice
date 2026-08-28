@@ -1,0 +1,9 @@
+(
+  id: "rat_b_1_1_cant_block",
+  name: "Rat",
+  types: ["Creature", "Rat"],
+  colors: [Black],
+  power: 1,
+  toughness: 1,
+  static_abilities: [SelfCombatRestriction(restriction: (cant_block: true))],
+)

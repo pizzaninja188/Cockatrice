@@ -37,6 +37,8 @@ enum CostDebit {
         generation: u64,
         owner: PlayerId,
     },
+    /// All cards selected for one exile instruction leave simultaneously.
+    ExileGroup(Vec<(ObjectId, u64, PlayerId)>),
     Sacrifice {
         snapshot: SacrificeSnapshot,
         owner: PlayerId,
@@ -55,7 +57,7 @@ enum CostDebit {
 
 pub(in crate::engine) struct CostPaymentReceipt {
     pub(in crate::engine) move_events: Vec<rv1::RuledEvent>,
-    pub(in crate::engine) tap_events: Vec<GameEvent>,
+    pub(in crate::engine) trigger_events: Vec<GameEvent>,
     pub(in crate::engine) sacrificed: Vec<SacrificeSnapshot>,
     pub(in crate::engine) paid_card_costs: Vec<PaidCardCost>,
     pub(in crate::engine) life_paid: u32,
@@ -890,6 +892,7 @@ impl GameEngine {
                             "incorrect graveyard-card cost selection count",
                         ));
                     }
+                    let mut exiles = Vec::new();
                     for &oid in &selected.object_ids {
                         if (*exclude_source && oid == permanent_id)
                             || !self.state.players[idx].graveyard.contains(&oid)
@@ -908,17 +911,17 @@ impl GameEngine {
                             return Err(EngineError::Illegal("one object cannot pay two costs"));
                         }
                         let object = &self.state.objects[&oid];
-                        debits.push(CostDebit::Exile {
-                            object_id: oid,
-                            generation: self
-                                .state
+                        exiles.push((
+                            oid,
+                            self.state
                                 .zone_change_generation
                                 .get(&oid)
                                 .copied()
                                 .unwrap_or(0),
-                            owner: object.owner,
-                        });
+                            object.owner,
+                        ));
                     }
+                    debits.push(CostDebit::ExileGroup(exiles));
                 }
             }
         }
@@ -963,7 +966,7 @@ impl GameEngine {
 
         let mut payment = CostPaymentReceipt {
             move_events: vec![],
-            tap_events: vec![],
+            trigger_events: vec![],
             sacrificed: vec![],
             paid_card_costs: vec![],
             life_paid: 0,
@@ -973,6 +976,11 @@ impl GameEngine {
             cast_cost_receipts: plan.cast_cost_receipts,
         };
         for debit in plan.debits {
+            let zones = matches!(
+                &debit,
+                CostDebit::Exile { .. } | CostDebit::ExileGroup(_) | CostDebit::Sacrifice { .. }
+            )
+            .then(|| self.snapshot_zone_event());
             match debit {
                 CostDebit::Loyalty {
                     object_id, delta, ..
@@ -995,13 +1003,13 @@ impl GameEngine {
                 }
                 CostDebit::Tap { object_id, .. } => {
                     payment
-                        .tap_events
+                        .trigger_events
                         .extend(self.tap_permanents(plan.player, &[object_id]));
                 }
                 CostDebit::TapGroup(objects) => {
                     let ids = objects.into_iter().map(|(oid, _)| oid).collect::<Vec<_>>();
                     payment
-                        .tap_events
+                        .trigger_events
                         .extend(self.tap_permanents(plan.player, &ids));
                 }
                 CostDebit::Mana(mana) => {
@@ -1049,38 +1057,12 @@ impl GameEngine {
                     payment.paid_card_costs.push(paid_cost);
                 }
                 CostDebit::Exile {
-                    object_id: oid,
-                    owner,
-                    ..
-                } => {
-                    let card_name = object_display_name(&self.state, self.registry, oid);
-                    crate::engine::resolution::move_object_to_zone(
-                        &mut self.state,
-                        self.registry,
-                        oid,
-                        Zone::Exile,
-                        None,
-                    )
-                    .expect("prevalidated exile cost must commit");
-                    payment.move_events.push(permanent_moved_event(
-                        &self.state,
-                        oid,
-                        owner,
-                        rv1::permanent_moved::Destination::Exile,
-                    ));
-                    let paid_cost = PaidCardCost::Exile {
-                        object_id: oid,
-                        card_name,
-                        result: card_result_entry(
-                            &self.state,
-                            self.registry,
-                            CardResultAction::Exile,
-                            owner,
-                            oid,
-                        ),
-                    };
-                    debug_assert_eq!(paid_cost.object_id(), oid);
-                    payment.paid_card_costs.push(paid_cost);
+                    object_id, owner, ..
+                } => self.commit_exile_cost(&mut payment, object_id, owner),
+                CostDebit::ExileGroup(objects) => {
+                    for (oid, _, owner) in objects {
+                        self.commit_exile_cost(&mut payment, oid, owner);
+                    }
                 }
                 CostDebit::Sacrifice { snapshot, owner } => {
                     let mut snapshot = snapshot;
@@ -1111,8 +1093,66 @@ impl GameEngine {
                 }
                 CostDebit::ObserveHand { .. } | CostDebit::ObservePermanent { .. } => {}
             }
+            if let Some(zones) = zones {
+                payment.trigger_events.push(self.finish_zone_event(zones));
+            }
         }
         Ok(payment)
+    }
+
+    fn commit_exile_cost(
+        &mut self,
+        payment: &mut CostPaymentReceipt,
+        oid: ObjectId,
+        owner: PlayerId,
+    ) {
+        let card_name = object_display_name(&self.state, self.registry, oid);
+        crate::engine::resolution::move_object_to_zone(
+            &mut self.state,
+            self.registry,
+            oid,
+            Zone::Exile,
+            None,
+        )
+        .expect("prevalidated exile cost must commit");
+        payment.move_events.push(permanent_moved_event(
+            &self.state,
+            oid,
+            owner,
+            rv1::permanent_moved::Destination::Exile,
+        ));
+        payment.paid_card_costs.push(PaidCardCost::Exile {
+            object_id: oid,
+            card_name,
+            result: card_result_entry(
+                &self.state,
+                self.registry,
+                CardResultAction::Exile,
+                owner,
+                oid,
+            ),
+        });
+    }
+
+    fn exile_cost_object_current(
+        &self,
+        player_idx: usize,
+        oid: ObjectId,
+        generation: u64,
+        owner: PlayerId,
+    ) -> bool {
+        self.state.objects.get(&oid).is_some_and(|object| {
+            object.zone == Zone::Graveyard
+                && object.owner == owner
+                && self.state.player_idx(owner).is_some()
+                && self.state.players[player_idx].graveyard.contains(&oid)
+        }) && self
+            .state
+            .zone_change_generation
+            .get(&oid)
+            .copied()
+            .unwrap_or(0)
+            == generation
     }
 
     fn revalidate_cost_transaction(&self, plan: &CostTransactionPlan) -> Result<(), EngineError> {
@@ -1120,146 +1160,137 @@ impl GameEngine {
             return Err(EngineError::Illegal("cost transaction player changed"));
         }
         for debit in &plan.debits {
-            let valid =
-                match debit {
-                    CostDebit::Loyalty {
-                        object_id,
-                        generation,
-                        delta,
-                    } => {
-                        self.state.objects.get(object_id).is_some_and(|object| {
-                            object.zone == Zone::Battlefield
-                                && object.controller == plan.player
-                                && (*delta >= 0
-                                    || object.counter_count(CounterKind::Loyalty)
-                                        >= delta.unsigned_abs())
-                        }) && self
-                            .characteristics(*object_id)
-                            .is_some_and(|value| value.has_type("Planeswalker"))
-                            && self
-                                .state
-                                .zone_change_generation
-                                .get(object_id)
-                                .copied()
-                                .unwrap_or(0)
-                                == *generation
-                    }
-                    CostDebit::Mana(mana) => {
-                        mana_payment_still_valid(&self.state, plan.player_idx, mana)
-                    }
-                    CostDebit::Tap {
-                        object_id,
-                        generation,
-                    } => {
-                        self.state.objects.get(object_id).is_some_and(|object| {
-                            object.zone == Zone::Battlefield && !object.tapped
-                        }) && self
+            let valid = match debit {
+                CostDebit::Loyalty {
+                    object_id,
+                    generation,
+                    delta,
+                } => {
+                    self.state.objects.get(object_id).is_some_and(|object| {
+                        object.zone == Zone::Battlefield
+                            && object.controller == plan.player
+                            && (*delta >= 0
+                                || object.counter_count(CounterKind::Loyalty)
+                                    >= delta.unsigned_abs())
+                    }) && self
+                        .characteristics(*object_id)
+                        .is_some_and(|value| value.has_type("Planeswalker"))
+                        && self
                             .state
                             .zone_change_generation
                             .get(object_id)
                             .copied()
                             .unwrap_or(0)
                             == *generation
-                    }
-                    CostDebit::TapGroup(objects) => objects.iter().all(|(oid, generation)| {
-                        self.state.objects.get(oid).is_some_and(|object| {
-                            object.zone == Zone::Battlefield
-                                && !object.tapped
-                                && object.controller == plan.player
-                        }) && self
-                            .state
-                            .zone_change_generation
-                            .get(oid)
-                            .copied()
-                            .unwrap_or(0)
-                            == *generation
-                    }),
-                    CostDebit::Discard {
-                        object_id,
-                        generation,
-                        owner,
-                    } => {
-                        self.state.objects.get(object_id).is_some_and(|object| {
-                            object.zone == Zone::Hand
-                                && object.owner == *owner
-                                && self.state.player_idx(*owner).is_some()
-                                && self.state.players[plan.player_idx].hand.contains(object_id)
-                        }) && self
+                }
+                CostDebit::Mana(mana) => {
+                    mana_payment_still_valid(&self.state, plan.player_idx, mana)
+                }
+                CostDebit::Tap {
+                    object_id,
+                    generation,
+                } => {
+                    self.state
+                        .objects
+                        .get(object_id)
+                        .is_some_and(|object| object.zone == Zone::Battlefield && !object.tapped)
+                        && self
                             .state
                             .zone_change_generation
                             .get(object_id)
                             .copied()
                             .unwrap_or(0)
                             == *generation
-                    }
-                    CostDebit::Exile {
-                        object_id,
-                        generation,
-                        owner,
-                    } => {
-                        self.state.objects.get(object_id).is_some_and(|object| {
-                            object.zone == Zone::Graveyard
-                                && object.owner == *owner
-                                && self.state.player_idx(*owner).is_some()
-                                && self.state.players[plan.player_idx]
-                                    .graveyard
-                                    .contains(object_id)
-                        }) && self
-                            .state
-                            .zone_change_generation
-                            .get(object_id)
-                            .copied()
-                            .unwrap_or(0)
-                            == *generation
-                    }
-                    CostDebit::Sacrifice { snapshot, owner } => {
-                        let object_id = snapshot.source.object_id;
-                        self.state.objects.get(&object_id).is_some_and(|object| {
-                            object.zone == Zone::Battlefield
-                                && object.owner == *owner
-                                && self.state.player_idx(*owner).is_some()
-                        }) && self
-                            .state
-                            .zone_change_generation
-                            .get(&object_id)
-                            .copied()
-                            .unwrap_or(0)
-                            == snapshot.source.zone_change_generation
-                    }
-                    CostDebit::ObserveHand {
-                        object_id,
-                        generation,
-                        owner,
-                    } => {
-                        self.state.objects.get(object_id).is_some_and(|object| {
-                            object.zone == Zone::Hand
-                                && object.owner == *owner
-                                && *owner == plan.player
-                                && self.state.players[plan.player_idx].hand.contains(object_id)
-                        }) && self
-                            .state
-                            .zone_change_generation
-                            .get(object_id)
-                            .copied()
-                            .unwrap_or(0)
-                            == *generation
-                    }
-                    CostDebit::ObservePermanent {
-                        object_id,
-                        generation,
-                        controller,
-                    } => {
-                        self.state.objects.get(object_id).is_some_and(|object| {
-                            object.zone == Zone::Battlefield && object.controller == *controller
-                        }) && self
-                            .state
-                            .zone_change_generation
-                            .get(object_id)
-                            .copied()
-                            .unwrap_or(0)
-                            == *generation
-                    }
-                };
+                }
+                CostDebit::TapGroup(objects) => objects.iter().all(|(oid, generation)| {
+                    self.state.objects.get(oid).is_some_and(|object| {
+                        object.zone == Zone::Battlefield
+                            && !object.tapped
+                            && object.controller == plan.player
+                    }) && self
+                        .state
+                        .zone_change_generation
+                        .get(oid)
+                        .copied()
+                        .unwrap_or(0)
+                        == *generation
+                }),
+                CostDebit::Discard {
+                    object_id,
+                    generation,
+                    owner,
+                } => {
+                    self.state.objects.get(object_id).is_some_and(|object| {
+                        object.zone == Zone::Hand
+                            && object.owner == *owner
+                            && self.state.player_idx(*owner).is_some()
+                            && self.state.players[plan.player_idx].hand.contains(object_id)
+                    }) && self
+                        .state
+                        .zone_change_generation
+                        .get(object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == *generation
+                }
+                CostDebit::Exile {
+                    object_id,
+                    generation,
+                    owner,
+                } => {
+                    self.exile_cost_object_current(plan.player_idx, *object_id, *generation, *owner)
+                }
+                CostDebit::ExileGroup(objects) => objects.iter().all(|(oid, generation, owner)| {
+                    self.exile_cost_object_current(plan.player_idx, *oid, *generation, *owner)
+                }),
+                CostDebit::Sacrifice { snapshot, owner } => {
+                    let object_id = snapshot.source.object_id;
+                    self.state.objects.get(&object_id).is_some_and(|object| {
+                        object.zone == Zone::Battlefield
+                            && object.owner == *owner
+                            && self.state.player_idx(*owner).is_some()
+                    }) && self
+                        .state
+                        .zone_change_generation
+                        .get(&object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == snapshot.source.zone_change_generation
+                }
+                CostDebit::ObserveHand {
+                    object_id,
+                    generation,
+                    owner,
+                } => {
+                    self.state.objects.get(object_id).is_some_and(|object| {
+                        object.zone == Zone::Hand
+                            && object.owner == *owner
+                            && *owner == plan.player
+                            && self.state.players[plan.player_idx].hand.contains(object_id)
+                    }) && self
+                        .state
+                        .zone_change_generation
+                        .get(object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == *generation
+                }
+                CostDebit::ObservePermanent {
+                    object_id,
+                    generation,
+                    controller,
+                } => {
+                    self.state.objects.get(object_id).is_some_and(|object| {
+                        object.zone == Zone::Battlefield && object.controller == *controller
+                    }) && self
+                        .state
+                        .zone_change_generation
+                        .get(object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == *generation
+                }
+            };
             if !valid {
                 return Err(EngineError::Illegal("cost transaction became stale"));
             }
@@ -1319,6 +1350,58 @@ mod convoke_transaction_tests {
     use super::*;
 
     #[test]
+    fn issue_168_one_exile_cost_keeps_its_simultaneous_group() {
+        let mut engine = GameEngine::new(168020, &[0, 1], 20, None, true).unwrap();
+        let ids = engine.state.players[0].hand[..3].to_vec();
+        for (i, oid) in ids.iter().enumerate() {
+            engine.state.objects.get_mut(oid).unwrap().card_id = "grizzly_bears".into();
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                *oid,
+                if i == 0 {
+                    Zone::Battlefield
+                } else {
+                    Zone::Graveyard
+                },
+                None,
+            )
+            .unwrap();
+        }
+        let costs = [AbilityCost::ExileGraveyardCards {
+            count: 2,
+            filter: Default::default(),
+            exclude_source: true,
+        }];
+        let selections = [rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::GraveyardObjectIds(
+                rv1::GraveyardObjectIds {
+                    object_ids: ids[1..].to_vec(),
+                },
+            )),
+        }];
+        let plan = engine
+            .plan_ability_costs(0, 0, ids[0], &costs, &[], &selections, &[], 0, 0)
+            .unwrap();
+        let receipt = engine.commit_cost_transaction(plan).unwrap();
+        let batches: Vec<_> = receipt
+            .trigger_events
+            .iter()
+            .filter_map(|event| match event {
+                GameEvent::ZoneChanges(batch) if !batch.moves.is_empty() => Some(batch),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            batches.len(),
+            1,
+            "one instruction must not become per-card events"
+        );
+        assert_eq!(batches[0].moves.len(), 2);
+    }
+
+    #[test]
     fn issue_169_tap_components_keep_action_boundaries_and_stale_groups_are_atomic() {
         let mut engine = GameEngine::new(169030, &[7, 19], 20, None, true).unwrap();
         let objects = engine.state.players[1].hand[..3].to_vec();
@@ -1358,7 +1441,7 @@ mod convoke_transaction_tests {
         assert_eq!(format!("{:?}", engine.state), before);
         let receipt = engine.commit_cost_transaction(plan(false)).unwrap();
         let actions = receipt
-            .tap_events
+            .trigger_events
             .iter()
             .map(|event| {
                 let GameEvent::BecameTapped { action, .. } = event else {
@@ -1668,7 +1751,14 @@ mod convoke_transaction_tests {
         };
         assert!(!probe.can_convoke(bear));
         let committed = engine.commit_cost_transaction(plan).unwrap();
-        assert_eq!(committed.tap_events.len(), 1);
+        assert_eq!(
+            committed
+                .trigger_events
+                .iter()
+                .filter(|e| matches!(e, GameEvent::BecameTapped { .. }))
+                .count(),
+            1
+        );
         assert_eq!(committed.sacrificed.len(), 1);
         assert_eq!(engine.state.objects[&bear].zone, Zone::Graveyard);
     }

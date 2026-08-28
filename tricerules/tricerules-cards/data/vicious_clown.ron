@@ -11,8 +11,7 @@
   triggered_abilities: [(
     trigger: WheneverPermanentEntersBattlefield(
       controller: Controller,
-      permanent_type: Some(Creature),
-      exclude_self: true,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
       creature_filter: Some((power: Some(AtMost(2)))),
     ),
     effect: [PumpTarget(power: 2, toughness: 0, subject: Source)],

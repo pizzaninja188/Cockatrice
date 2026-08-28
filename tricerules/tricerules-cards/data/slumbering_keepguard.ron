@@ -3,7 +3,7 @@
   id: "slumbering_keepguard", name: "Slumbering Keepguard", mana_cost: "{W}",
   types: ["Creature", "Human", "Knight"], power: 1, toughness: 1,
   triggered_abilities: [(
-    trigger: WheneverPermanentEntersBattlefield(controller: Controller, permanent_type: Some(Enchantment)),
+    trigger: WheneverPermanentEntersBattlefield(controller: Controller, filter: (permanent_type: Some(Enchantment)),),
     effect: [Scry(count: 1)],
     text: "Whenever an enchantment you control enters, scry 1.",
   )],

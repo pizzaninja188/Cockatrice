@@ -384,6 +384,7 @@ pub(super) fn sacrifice_observed_objects(
         .observed_object_cohorts
         .remove(&(primary.object_id, primary.zone_change_generation))
         .ok_or(EngineError::Illegal("delayed token cohort missing"))?;
+    let zone_snapshot = cx.engine.snapshot_zone_event();
     let mut dies = Vec::new();
     let mut sacrificed = 0usize;
     let mut departures = Vec::new();
@@ -431,7 +432,7 @@ pub(super) fn sacrifice_observed_objects(
         }
         sacrificed += 1;
     }
-    cx.engine.fire_triggers(&dies);
+    cx.engine.fire_zone_triggers(zone_snapshot, dies);
     cx.events.push(ev_log(format!(
         "P{} sacrifices {sacrificed} delayed token(s).",
         cx.controller

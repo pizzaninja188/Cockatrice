@@ -574,7 +574,9 @@ impl CharacteristicsEvaluator<'_> {
                             *controllers,
                             controller,
                             fact.controller,
-                        ) && super::history::permanent_event_fact_matches(filter, fact, context)
+                        ) && super::history::permanent_event_fact_matches(
+                            self.state, filter, fact, context,
+                        )
                     })
                     .count();
                 condition.matches_value(u32::try_from(count).unwrap_or(u32::MAX))

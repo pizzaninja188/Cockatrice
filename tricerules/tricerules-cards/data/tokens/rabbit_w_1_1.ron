@@ -1,0 +1,8 @@
+(
+  id: "rabbit_w_1_1",
+  name: "Rabbit",
+  types: ["Creature", "Rabbit"],
+  colors: [White],
+  power: 1,
+  toughness: 1,
+)

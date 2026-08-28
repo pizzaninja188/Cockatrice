@@ -116,7 +116,9 @@ impl GameEngine {
         // seat is both owner and controller here. Passed explicitly rather than defaulted so the
         // dev path stays correct if a "give control" verb is ever added.
         if zone != Zone::Battlefield {
+            let zone_snapshot = self.snapshot_zone_event();
             move_object_to_zone(&mut self.state, self.registry, oid, zone, Some(target))?;
+            self.fire_zone_triggers(zone_snapshot, vec![]);
             ev.push(permanent_moved_event(
                 &self.state,
                 oid,

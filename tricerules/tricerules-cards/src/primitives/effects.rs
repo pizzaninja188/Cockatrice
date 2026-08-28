@@ -490,6 +490,23 @@ pub struct PermanentEventFilter {
     /// Exclude the exact source object generation ("another").
     #[serde(default)]
     pub exclude_source: bool,
+    /// Carrot Cake's self-sacrifice and source branches such as Slagstone Refinery.
+    #[serde(default)]
+    pub source_only: bool,
+    /// Celebration excludes lands even when they have another permanent type.
+    #[serde(default)]
+    pub excluded_types: Vec<PermanentTypeFilter>,
+    /// Any one subtype suffices (Rakish Crew and Vial Smasher's outlaws).
+    #[serde(default)]
+    pub any_subtypes: Vec<String>,
+    /// Knightfisher and Slagstone Refinery distinguish cards from tokens.
+    #[serde(default)]
+    pub token: Option<bool>,
+    #[serde(default)]
+    pub owner: Option<super::CastTriggerPlayer>,
+    /// AND with the outer constraints; OR across branches, matching an object only once.
+    #[serde(default)]
+    pub any_of: Option<Vec<PermanentEventFilter>>,
 }
 
 impl PermanentEventFilter {
@@ -497,9 +514,27 @@ impl PermanentEventFilter {
         if self
             .required_subtypes
             .iter()
+            .chain(&self.any_subtypes)
             .any(|subtype| subtype.trim().is_empty())
         {
             return Err("permanent event subtype cannot be empty".into());
+        }
+        if self.source_only && self.exclude_source {
+            return Err("permanent event cannot both require and exclude its source".into());
+        }
+        if self
+            .permanent_type
+            .is_some_and(|kind| self.excluded_types.contains(&kind))
+        {
+            return Err("permanent event cannot both require and exclude a type".into());
+        }
+        if let Some(branches) = &self.any_of {
+            if branches.is_empty() {
+                return Err("permanent event alternatives cannot be empty".into());
+            }
+            for branch in branches {
+                branch.validate()?;
+            }
         }
         Ok(())
     }
@@ -4023,6 +4058,7 @@ mod issue_158_predicate_tests {
                     permanent_type: Some(PermanentTypeFilter::Artifact),
                     required_subtypes: vec![],
                     exclude_source: false,
+                    ..Default::default()
                 },
                 min: Some(1),
                 max: None,

@@ -68,6 +68,7 @@ impl GameEngine {
         if self.state.pending_resolution.is_some() {
             return Ok(changed);
         }
+        let zone_snapshot = self.snapshot_zone_event();
         let mut leaves: Vec<(TriggerSourceSnapshot, bool, bool)> = Vec::new();
         let mut tap_events = Vec::new();
         // CR 122.3: counter annihilation (+1/+1 and -1/-1 pairs cancel).
@@ -211,7 +212,7 @@ impl GameEngine {
             trigger_events.extend(leaves.into_iter().flat_map(|(source, was_creature, died)| {
                 leaves_and_dies_events(source, was_creature, died)
             }));
-            self.fire_triggers(&trigger_events);
+            self.fire_zone_triggers(zone_snapshot, trigger_events);
         }
 
         // CR 704.5n: Equipment attached to an illegal permanent becomes unattached but remains on
@@ -308,9 +309,11 @@ impl GameEngine {
             })
             .map(|(id, _)| *id)
             .collect();
+        let aura_zones = self.snapshot_zone_event();
+        let mut aura_events = Vec::new();
         for id in orphaned_auras {
             let owner = self.state.objects.get(&id).map(|o| o.owner);
-            let snapshot = self.trigger_source_snapshot(id);
+            let snapshot = aura_zones.source(id);
             let was_creature = self
                 .characteristics(id)
                 .is_some_and(|value| value.is_creature());
@@ -325,11 +328,12 @@ impl GameEngine {
                     ));
                 }
                 if let Some(source) = snapshot {
-                    self.fire_triggers(&leaves_and_dies_events(source, was_creature, died));
+                    aura_events.extend(leaves_and_dies_events(source, was_creature, died));
                 }
             }
         }
 
+        self.fire_zone_triggers(aura_zones, aura_events);
         if self.apply_legend_sbas(out)? {
             changed = true;
         }

@@ -447,9 +447,13 @@ fn issue_49_observer_and_dies_triggers_use_existing_subjects() {
         griffin.trigger,
         TriggerCondition::WheneverPermanentEntersBattlefield {
             controller: CastTriggerPlayer::Controller,
-            permanent_type: Some(PermanentTypeFilter::Creature),
-            exclude_self: true,
+
             creature_filter: None,
+            filter: tricerules_cards::primitives::PermanentEventFilter {
+                permanent_type: Some(PermanentTypeFilter::Creature),
+                exclude_source: true,
+                ..Default::default()
+            },
         }
     );
     assert_eq!(

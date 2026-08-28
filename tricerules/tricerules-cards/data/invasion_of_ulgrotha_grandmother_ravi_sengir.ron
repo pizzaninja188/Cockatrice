@@ -26,7 +26,7 @@
       toughness: 3,
       keywords: [Flying],
       triggered_abilities: [(
-        trigger: WheneverCreatureDies(controller: Opponent, exclude_self: false),
+        trigger: WheneverCreatureDies(controller: Opponent, filter: (exclude_source: false),),
         effect: [
           PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source),
           GainLife(amount: 1, who: Controller),

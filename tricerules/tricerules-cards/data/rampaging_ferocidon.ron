@@ -11,8 +11,7 @@
     (
       trigger: WheneverPermanentEntersBattlefield(
         controller: AnyPlayer,
-        permanent_type: Some(Creature),
-        exclude_self: true,
+        filter: (permanent_type: Some(Creature), exclude_source: true),
       ),
       effect: [DamagePlayer(amount: 1, who: TriggerObjectController)],
       text: "Whenever another creature enters, this creature deals 1 damage to that creature's controller.",

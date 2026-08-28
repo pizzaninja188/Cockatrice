@@ -1,0 +1,24 @@
+// Oracle and rulings checked against Scryfall on 2026-08-27.
+(
+  id: "carrot_cake",
+  name: "Carrot Cake",
+  mana_cost: "{1}{W}",
+  types: ["Artifact", "Food"],
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "rabbit_w_1_1", count: 1), Scry(count: 1)],
+      text: "When this artifact enters, create a 1/1 white Rabbit creature token and scry 1.",
+    ),
+    (
+      trigger: WheneverPlayerSacrificesPermanent(player: Controller, filter: (source_only: true)),
+      effect: [CreateTokens(token: "rabbit_w_1_1", count: 1), Scry(count: 1)],
+      text: "When you sacrifice this artifact, create a 1/1 white Rabbit creature token and scry 1.",
+    ),
+  ],
+  activated_abilities: [(
+    costs: [Mana("{2}"), Tap, SacrificeSelf],
+    effect: [GainLife(amount: 3)],
+    text: "{2}, {T}, Sacrifice this artifact: You gain 3 life.",
+  )],
+)

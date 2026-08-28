@@ -616,6 +616,7 @@ impl GameEngine {
                 )));
             }
             ResolutionCost::SacrificePermanent { .. } => {
+                let zone_snapshot = self.snapshot_zone_event();
                 let source = self.trigger_source_snapshot(oid);
                 let was_creature = self
                     .characteristics(oid)
@@ -632,12 +633,10 @@ impl GameEngine {
                     pending.deciding_player
                 )));
                 if let Some(source) = source {
-                    self.fire_triggers(&sacrifice_events(
-                        source,
-                        was_creature,
-                        pending.deciding_player,
-                        died,
-                    ));
+                    self.fire_zone_triggers(
+                        zone_snapshot,
+                        sacrifice_events(source, was_creature, pending.deciding_player, died),
+                    );
                 }
             }
             ResolutionCost::TapPermanents { .. } => {

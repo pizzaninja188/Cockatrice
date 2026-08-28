@@ -1796,13 +1796,12 @@ mod tests {
                     if ability.trigger
                         == TriggerCondition::WheneverPermanentEntersBattlefield {
                             controller: CastTriggerPlayer::Controller,
-                            permanent_type: Some(PermanentTypeFilter::Creature),
-                            exclude_self: true,
+
+
                             creature_filter: Some(CreatureEventFilter {
                                 power: Some(PowerComparison::AtMost(2)),
                                 ..Default::default()
-                            }),
-                        }
+                            }), filter: crate::primitives::PermanentEventFilter { permanent_type: Some(PermanentTypeFilter::Creature), exclude_source: true, ..Default::default() },}
             ));
         }
     }
@@ -1827,7 +1826,7 @@ mod tests {
                     toughness: 1,
                     triggered_abilities: [(
                         trigger: WheneverPermanentEntersBattlefield(
-                            permanent_type: Some({permanent_type}),
+                            filter: (permanent_type: Some({permanent_type})),
                             creature_filter: Some({creature_filter}),
                         ),
                         effect: [Draw(count: 1)],

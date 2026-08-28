@@ -254,7 +254,7 @@ impl GameEngine {
         let card_label = object_display_name(&self.state, self.registry, oid);
         match destination {
             tricerules_cards::primitives::GraveyardDestination::Hand => {
-                move_object_to_zone(&mut self.state, self.registry, oid, Zone::Hand, None)?;
+                self.commit_observed_zone_move(oid, Zone::Hand, None)?;
                 events.push(ev_log(format!(
                     "{spell_label} returns {card_label} from graveyard to hand."
                 )));
@@ -304,7 +304,7 @@ impl GameEngine {
                 ));
             }
             tricerules_cards::primitives::GraveyardDestination::Exile => {
-                move_object_to_zone(&mut self.state, self.registry, oid, Zone::Exile, None)?;
+                self.commit_observed_zone_move(oid, Zone::Exile, None)?;
                 events.push(ev_log(format!(
                     "{spell_label} exiles {card_label} from the graveyard."
                 )));
@@ -319,7 +319,7 @@ impl GameEngine {
             | tricerules_cards::primitives::GraveyardDestination::LibraryBottom => {
                 let top =
                     destination == tricerules_cards::primitives::GraveyardDestination::LibraryTop;
-                move_object_to_zone(&mut self.state, self.registry, oid, Zone::Library, None)?;
+                self.commit_observed_zone_move(oid, Zone::Library, None)?;
                 if top {
                     let player_idx = self
                         .state
@@ -407,7 +407,7 @@ impl GameEngine {
                     let owner = self.state.objects.get(&oid).map(|object| object.owner);
                     let origin = self.state.objects.get(&oid).map(|object| object.zone);
                     if origin != Some(Zone::Hand) {
-                        move_object_to_zone(&mut self.state, self.registry, oid, Zone::Hand, None)?;
+                        self.commit_observed_zone_move(oid, Zone::Hand, None)?;
                         if let Some(owner) = owner {
                             ev.push(permanent_moved_event(
                                 &self.state,
@@ -445,13 +445,7 @@ impl GameEngine {
                     let owner = self.state.objects.get(&oid).map(|object| object.owner);
                     if self.state.objects.get(&oid).map(|object| object.zone) != Some(Zone::Library)
                     {
-                        move_object_to_zone(
-                            &mut self.state,
-                            self.registry,
-                            oid,
-                            Zone::Library,
-                            None,
-                        )?;
+                        self.commit_observed_zone_move(oid, Zone::Library, None)?;
                         if let Some(owner) = owner {
                             ev.push(permanent_moved_event(
                                 &self.state,

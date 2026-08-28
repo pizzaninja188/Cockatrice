@@ -10,7 +10,7 @@
     (
       trigger: WheneverPermanentEntersBattlefield(
         controller: Controller,
-        permanent_type: Some(Enchantment),
+        filter: (permanent_type: Some(Enchantment)),
       ),
       effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
       text: "Whenever an enchantment you control enters, this creature gets +1/+1 until end of turn.",

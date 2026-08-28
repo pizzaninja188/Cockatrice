@@ -211,7 +211,100 @@ fn issue_156_attachment_leave_and_sacrifice_cards_use_shared_shapes() {
         peddlers.triggered_abilities[0].trigger,
         TriggerCondition::WheneverPlayerSacrificesPermanent {
             player: CastTriggerPlayer::Controller,
-            exclude_self: true
+            filter: tricerules_cards::primitives::PermanentEventFilter {
+                exclude_source: true,
+                ..
+            },
         }
     ));
+}
+
+#[test]
+fn issue_168_complete_cohort_has_exact_oracle_characteristics() {
+    let registry = CardRegistry::global();
+    for (id, name, mana, types, stats, keywords) in [
+        (
+            "warehouse_tabby",
+            "Warehouse Tabby",
+            "{B}",
+            vec!["Creature", "Cat"],
+            (Some(1), Some(1)),
+            vec![],
+        ),
+        (
+            "vengeful_tracker",
+            "Vengeful Tracker",
+            "{1}{R}",
+            vec!["Creature", "Human", "Detective"],
+            (Some(2), Some(2)),
+            vec![],
+        ),
+        (
+            "rakish_crew",
+            "Rakish Crew",
+            "{2}{B}",
+            vec!["Enchantment"],
+            (None, None),
+            vec![],
+        ),
+        (
+            "vial_smasher,_gleeful_grenadier",
+            "Vial Smasher, Gleeful Grenadier",
+            "{B}{R}",
+            vec!["Legendary", "Creature", "Goblin", "Mercenary"],
+            (Some(3), Some(2)),
+            vec![],
+        ),
+        (
+            "carrot_cake",
+            "Carrot Cake",
+            "{1}{W}",
+            vec!["Artifact", "Food"],
+            (None, None),
+            vec![],
+        ),
+        (
+            "knightfisher",
+            "Knightfisher",
+            "{3}{U}{U}",
+            vec!["Creature", "Bird", "Knight"],
+            (Some(4), Some(5)),
+            vec![Keyword::Flying],
+        ),
+        (
+            "three_tree_scribe",
+            "Three Tree Scribe",
+            "{1}{G}",
+            vec!["Creature", "Frog", "Druid"],
+            (Some(2), Some(3)),
+            vec![],
+        ),
+        (
+            "armory_mice",
+            "Armory Mice",
+            "{1}{W}",
+            vec!["Creature", "Mouse"],
+            (Some(3), Some(1)),
+            vec![],
+        ),
+        (
+            "gallant_pie-wielder",
+            "Gallant Pie-Wielder",
+            "{2}{W}",
+            vec!["Creature", "Dwarf", "Knight"],
+            (Some(2), Some(3)),
+            vec![Keyword::FirstStrike],
+        ),
+    ] {
+        let card = registry
+            .get(id)
+            .unwrap_or_else(|| panic!("missing complete issue #168 card {id}"));
+        assert!(card.partial.is_none(), "{id}");
+        assert_eq!(card.name, name);
+        let face = card.primary_face();
+        assert_eq!(face.mana_cost.to_string(), mana, "{id}");
+        assert_eq!(face.types, types, "{id}");
+        assert_eq!((face.power, face.toughness), stats, "{id}");
+        assert_eq!(face.keywords, keywords, "{id}");
+    }
 }

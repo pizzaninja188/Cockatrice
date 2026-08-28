@@ -1,0 +1,23 @@
+// Oracle and rulings checked against Scryfall on 2026-08-27.
+(
+  id: "warehouse_tabby",
+  name: "Warehouse Tabby",
+  mana_cost: "{B}",
+  types: ["Creature", "Cat"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    trigger: WheneverPermanentLeavesBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Enchantment)),
+      destination: OneOf([Graveyard]),
+    ),
+    effect: [CreateTokens(token: "rat_b_1_1_cant_block", count: 1)],
+    text: "Whenever an enchantment you control is put into a graveyard from the battlefield, create a 1/1 black Rat creature token with \"This token can't block.\"",
+  )],
+  activated_abilities: [(
+    costs: [Mana("{1}{B}")],
+    effect: [GrantKeywords(subject: Source, keywords: [Deathtouch])],
+    text: "{1}{B}: This creature gains deathtouch until end of turn.",
+  )],
+)

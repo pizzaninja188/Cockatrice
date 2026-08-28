@@ -8,7 +8,7 @@
   toughness: 2,
   keywords: [Deathtouch],
   triggered_abilities: [(
-    trigger: WheneverPlayerSacrificesPermanent(player: Controller, exclude_self: true),
+    trigger: WheneverPlayerSacrificesPermanent(player: Controller, filter: (exclude_source: true),),
     effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
     text: "Whenever you sacrifice another permanent, put a +1/+1 counter on this creature.",
   )],

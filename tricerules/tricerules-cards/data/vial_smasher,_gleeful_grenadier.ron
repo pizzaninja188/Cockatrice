@@ -1,0 +1,17 @@
+// Oracle and rulings checked against Scryfall on 2026-08-27.
+(
+  id: "vial_smasher,_gleeful_grenadier",
+  name: "Vial Smasher, Gleeful Grenadier",
+  mana_cost: "{B}{R}",
+  types: ["Legendary", "Creature", "Goblin", "Mercenary"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (any_subtypes: ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"], exclude_source: true),
+    ),
+    effect: [DamageTarget(amount: 1, target: (kind: OpponentPlayer))],
+    text: "Whenever another outlaw you control enters, Vial Smasher deals 1 damage to target opponent.",
+  )],
+)

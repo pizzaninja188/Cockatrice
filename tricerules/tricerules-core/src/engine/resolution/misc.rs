@@ -46,6 +46,8 @@ pub(super) fn destroy(
     let events = &mut *cx.events;
     let spell_label = cx.spell_label;
 
+    let zone_snapshot = engine.snapshot_zone_event();
+    let mut trigger_events = Vec::new();
     for tid in subjects {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let indestructible = engine.effective_has_keyword(tid, Keyword::Indestructible);
@@ -57,12 +59,12 @@ pub(super) fn destroy(
             let (regenerated, tap_event) = consume_regen_shield(engine, tid, events);
             if regenerated {
                 events.push(ev_log(format!("{tgt} regenerates.")));
-                engine.fire_triggers(&tap_event.into_iter().collect::<Vec<_>>());
+                trigger_events.extend(tap_event);
                 continue;
             }
             events.push(ev_log(format!("{spell_label} destroys {tgt}")));
             let owner = engine.state.objects.get(&tid).map(|o| o.owner);
-            let source = engine.trigger_source_snapshot(tid);
+            let source = zone_snapshot.source(tid);
             let was_creature = engine
                 .characteristics(tid)
                 .is_some_and(|value| value.is_creature());
@@ -76,11 +78,12 @@ pub(super) fn destroy(
                 ));
             }
             if let Some(source) = source {
-                engine.fire_triggers(&leaves_and_dies_events(source, was_creature, died));
+                trigger_events.extend(leaves_and_dies_events(source, was_creature, died));
             }
         }
     }
 
+    engine.fire_zone_triggers(zone_snapshot, trigger_events);
     Ok(EffectOutcome::Continue)
 }
 
@@ -119,6 +122,7 @@ pub(super) fn sacrifice(
             })
         })
         .collect();
+    let zone_snapshot = cx.engine.snapshot_zone_event();
     let mut committed = Vec::new();
     for (oid, owner, name, source) in sacrifices {
         let was_creature = source.types.iter().any(|kind| kind == "Creature");
@@ -133,7 +137,7 @@ pub(super) fn sacrifice(
             .push(ev_log(format!("{} sacrifices {name}", cx.spell_label)));
         committed.extend(sacrifice_events(source, was_creature, cx.controller, died));
     }
-    cx.engine.fire_triggers(&committed);
+    cx.engine.fire_zone_triggers(zone_snapshot, committed);
     Ok(EffectOutcome::Continue)
 }
 

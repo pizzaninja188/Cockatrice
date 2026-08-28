@@ -714,6 +714,7 @@ impl GameEngine {
             .into_iter()
             .collect();
         let origin = self.state.objects[&oid].zone;
+        let cast_departure = (origin == Zone::Graveyard).then(|| self.snapshot_zone_event());
         let payment = self.commit_cost_transaction(payment_plan)?;
         let life_paid = payment.life_paid;
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
@@ -769,6 +770,10 @@ impl GameEngine {
             Zone::Stack,
             None,
         )?;
+        if let Some(snapshot) = cast_departure {
+            let event = self.finish_single_zone_event(snapshot, oid);
+            target_triggers.extend(self.collect_event_triggers(&[event]));
+        }
 
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;
@@ -848,8 +853,9 @@ impl GameEngine {
         let fact = self.record_spell_cast(player, oid, origin, mana_value);
         self.record_committed_events(&crime_events);
         target_triggers.extend(self.collect_event_triggers(&crime_events));
-        target_triggers
-            .extend(self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed));
+        target_triggers.extend(
+            self.collect_committed_cost_triggers(payment.trigger_events, payment.sacrificed),
+        );
         target_triggers.extend(payment.expend_triggers);
         self.snapshot_completed_cast(oid);
         target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast { fact }]));
@@ -1229,8 +1235,9 @@ impl GameEngine {
         // reaching the stack is its signal that a pending trigger target was just answered.
         self.record_committed_events(&crime_events);
         target_triggers.extend(self.collect_event_triggers(&crime_events));
-        target_triggers
-            .extend(self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed));
+        target_triggers.extend(
+            self.collect_committed_cost_triggers(payment.trigger_events, payment.sacrificed),
+        );
         self.stage_triggers(target_triggers);
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
@@ -1587,7 +1594,7 @@ impl GameEngine {
         }
 
         let cost_triggers =
-            self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed);
+            self.collect_committed_cost_triggers(payment.trigger_events, payment.sacrificed);
         if cost_triggers.is_empty() && matches!(ability.costs.as_slice(), [AbilityCost::Tap]) {
             self.state
                 .undoable_mana_abilities
@@ -2699,7 +2706,7 @@ mod mana_payment_tests {
             .plan_ability_costs(0, 0, source, &ability.costs, &[], &selections, &[], 0, 0)
             .expect("valid selected tap payment");
         let receipt = engine.commit_cost_transaction(plan).expect("atomic taps");
-        assert_eq!(receipt.tap_events.len(), 2);
+        assert_eq!(receipt.trigger_events.len(), 2);
         assert!(objects.iter().all(|oid| engine.state.objects[oid].tapped));
     }
 

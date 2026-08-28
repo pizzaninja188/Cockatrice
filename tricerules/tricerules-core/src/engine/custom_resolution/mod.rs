@@ -68,6 +68,15 @@ impl GameEngine {
         player: PlayerId,
         answer: &rv1::SubmitResolutionChoice,
     ) -> Result<RuledEventBatch, EngineError> {
+        if let Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry)) =
+            &self.state.pending_replacement_event
+        {
+            if let BattlefieldEntryCompletion::ZoneEntryBatch(batch) = &entry.completion {
+                if !self.zone_entry_batch_current(batch) {
+                    return Err(EngineError::Illegal("graveyard entry cohort became stale"));
+                }
+            }
+        }
         let pending = self
             .state
             .pending_resolution

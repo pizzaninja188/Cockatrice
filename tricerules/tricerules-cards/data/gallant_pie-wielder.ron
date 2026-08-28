@@ -1,0 +1,14 @@
+// Oracle and rulings checked against Scryfall on 2026-08-27.
+(
+  id: "gallant_pie-wielder",
+  name: "Gallant Pie-Wielder",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Dwarf", "Knight"],
+  power: 2,
+  toughness: 3,
+  keywords: [FirstStrike],
+  static_abilities: [ConditionalSelfModifier(
+    condition: PermanentsEnteredThisTurn(controllers: Controller, filter: (excluded_types: [Land]), min: Some(2)),
+    keywords: [DoubleStrike],
+  )],
+)
