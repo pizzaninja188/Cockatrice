@@ -447,7 +447,7 @@ fn parse_pump_effect(text: &str) -> Option<SpellEffectKind> {
         power: power.parse().ok()?,
         toughness: toughness.parse().ok()?,
         scale: None,
-        subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+        subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
     })
 }
 
@@ -461,7 +461,7 @@ fn parse_spell_recipe(text: &str) -> Option<(SpellEffectKind, &'static str)> {
     if text == "Destroy target creature." {
         return Some((
             SpellEffectKind::Destroy {
-                subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
             },
             "destroy target creature",
         ));
@@ -469,7 +469,7 @@ fn parse_spell_recipe(text: &str) -> Option<(SpellEffectKind, &'static str)> {
     if text == "Return target creature to its owner's hand." {
         return Some((
             SpellEffectKind::ReturnToOwnersHand {
-                subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
             },
             "return target creature",
         ));
@@ -777,12 +777,12 @@ fn render_generated_effect(effect: &SpellEffectKind) -> String {
             amount: Amount::Fixed(amount),
         } => format!("GainLife(amount: {amount})"),
         SpellEffectKind::Destroy { subject }
-            if *subject == EffectSubject::Chosen(TargetFilter::default_creature()) =>
+            if *subject == EffectSubject::Chosen(Box::new(TargetFilter::default_creature())) =>
         {
             "Destroy()".into()
         }
         SpellEffectKind::ReturnToOwnersHand { subject }
-            if *subject == EffectSubject::Chosen(TargetFilter::default_creature()) =>
+            if *subject == EffectSubject::Chosen(Box::new(TargetFilter::default_creature())) =>
         {
             "ReturnToOwnersHand(subject: Chosen((kind: Creature)))".into()
         }
@@ -796,7 +796,7 @@ fn render_generated_effect(effect: &SpellEffectKind) -> String {
             toughness,
             scale: None,
             subject,
-        } if *subject == EffectSubject::Chosen(TargetFilter::default_creature()) => {
+        } if *subject == EffectSubject::Chosen(Box::new(TargetFilter::default_creature())) => {
             format!("PumpTarget(power: {power}, toughness: {toughness})")
         }
         SpellEffectKind::Discard {
@@ -1687,7 +1687,7 @@ mod tests {
                     None,
                 ),
                 SpellEffectKind::Destroy {
-                    subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
                 },
             ),
             (
@@ -1699,7 +1699,7 @@ mod tests {
                     None,
                 ),
                 SpellEffectKind::ReturnToOwnersHand {
-                    subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
                 },
             ),
             (
@@ -1728,7 +1728,7 @@ mod tests {
                     power: 4,
                     toughness: 4,
                     scale: None,
-                    subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
                 },
             ),
         ];

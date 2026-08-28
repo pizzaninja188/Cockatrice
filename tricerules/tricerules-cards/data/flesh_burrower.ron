@@ -9,7 +9,7 @@
   triggered_abilities: [(
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
     effect: [GrantKeywords(
-      subject: Chosen((kind: Creature, controller: You, exclude_source: true)),
+      subject: Chosen((kind: Creature, controller: You, excluded_objects: [Source])),
       keywords: [Deathtouch],
     )],
     text: "Whenever this creature attacks, another target creature you control gains deathtouch until end of turn.",

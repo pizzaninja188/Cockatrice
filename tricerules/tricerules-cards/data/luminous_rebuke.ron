@@ -6,7 +6,7 @@
   mana_cost: "{4}{W}",
   cost_modifiers: [TargetMatchGenericReduction(
     amount: 3,
-    filter: (kind: Creature, tapped: Some(true)),
+    filter: Battlefield((kind: Creature, tapped: Some(true))),
   )],
   types: ["Instant"],
   spell_effect: [Destroy(subject: Chosen((kind: Creature)))],

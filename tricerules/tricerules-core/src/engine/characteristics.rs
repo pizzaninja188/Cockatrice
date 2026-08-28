@@ -29,6 +29,8 @@ use super::*;
 /// The complete rules-visible characteristic snapshot currently modeled for a permanent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Characteristics {
+    /// Rules-only CR 202.3 mana value; not a new wire field.
+    pub mana_value: u32,
     pub controller: PlayerId,
     /// Rules-visible names after copy, face-down, and layer-3 text-changing effects. The vector
     /// preserves nameless and future multi-name objects without conflating names with card ids.
@@ -116,6 +118,21 @@ impl CharacteristicsEvaluator<'_> {
         let face = effective_face_from(self.state, self.registry, oid)?;
 
         let mut result = Characteristics {
+            // CR 202.3b/710.2: original transformed/flip cards retain front mana value.
+            // A copy of a transforming back face has that face's (normally absent) mana cost.
+            mana_value: if object.copiable_values.is_none()
+                && object.token_origin.is_none()
+                && definition
+                    .is_some_and(|def| matches!(def.layout, Layout::Transform | Layout::Flip))
+            {
+                definition
+                    .expect("checked definition")
+                    .primary_face()
+                    .mana_cost
+                    .mana_value()
+            } else {
+                face.mana_cost.mana_value()
+            },
             signed_power: None,
             signed_toughness: None,
             // CR 110.2 base value set by the instruction that put the object onto the battlefield.
@@ -601,65 +618,24 @@ impl CharacteristicsEvaluator<'_> {
                 aggregate: BattlefieldAggregate::Count,
                 ..
             } => {
-                fn filter_matches(
-                    evaluator: &CharacteristicsEvaluator<'_>,
-                    filter: &BattlefieldPermanentFilter,
-                    _candidate_oid: ObjectId,
-                    characteristics: &Characteristics,
-                    controller: PlayerId,
-                ) -> bool {
-                    relative_player_set_contains(
-                        evaluator.state,
-                        filter.controllers,
-                        controller,
-                        characteristics.controller,
-                    ) && battlefield_card_type_matches(filter.card_type, characteristics)
-                        && filter
-                            .color
-                            .is_none_or(|color| characteristics.colors.contains(&color))
-                        && filter
-                            .required_subtypes
-                            .iter()
-                            .all(|subtype| characteristics.has_type(subtype))
-                        && filter
-                            .name
-                            .as_ref()
-                            .is_none_or(|name| characteristics.has_name(name))
-                        && filter.any_of.as_ref().is_none_or(|branches| {
-                            branches.iter().any(|branch| {
-                                filter_matches(
-                                    evaluator,
-                                    branch,
-                                    _candidate_oid,
-                                    characteristics,
-                                    controller,
-                                )
-                            })
-                        })
-                }
-
                 let source_generation = self
                     .state
                     .zone_change_generation
                     .get(&source_oid)
                     .copied()
                     .unwrap_or(0);
+                let context = ConditionContext {
+                    controller,
+                    source_object_id: source_oid,
+                    source_zone_change: source_generation,
+                    resolving_spell_id: None,
+                    stack_item: None,
+                };
                 let count = self
                     .state
                     .players
                     .iter()
                     .flat_map(|player| player.battlefield.iter().copied())
-                    .filter(|candidate_oid| {
-                        !filter.exclude_source
-                            || *candidate_oid != source_oid
-                            || self
-                                .state
-                                .zone_change_generation
-                                .get(candidate_oid)
-                                .copied()
-                                .unwrap_or(0)
-                                != source_generation
-                    })
                     .filter_map(|candidate_oid| {
                         let characteristics = if candidate_oid == queried_oid {
                             queried_pre_layer_6.clone()
@@ -669,7 +645,13 @@ impl CharacteristicsEvaluator<'_> {
                         Some((candidate_oid, characteristics))
                     })
                     .filter(|(candidate_oid, characteristics)| {
-                        filter_matches(self, filter, *candidate_oid, characteristics, controller)
+                        history::battlefield_permanent_matches(
+                            self.state,
+                            filter,
+                            *candidate_oid,
+                            characteristics,
+                            context,
+                        )
                     })
                     .count();
                 condition.matches_value(u32::try_from(count).unwrap_or(u32::MAX))
@@ -721,6 +703,7 @@ impl CharacteristicsEvaluator<'_> {
 /// effects use this helper while the physical object is still in its source zone but has already
 /// been designated to enter face down.
 pub(super) fn apply_face_down_values(result: &mut Characteristics) {
+    result.mana_value = 0;
     result.names.clear();
     result.types = vec!["Creature".to_string()];
     result.all_creature_types = false;
@@ -731,34 +714,6 @@ pub(super) fn apply_face_down_values(result: &mut Characteristics) {
     result.evasions.clear();
     result.power = Some(2);
     result.toughness = Some(2);
-}
-
-fn battlefield_card_type_matches(
-    required: Option<CardTypeFilter>,
-    characteristics: &Characteristics,
-) -> bool {
-    required.is_none_or(|card_type| match card_type {
-        CardTypeFilter::BasicLand => {
-            characteristics.has_type("Land")
-                && characteristics
-                    .supertypes
-                    .iter()
-                    .any(|value| value == "Basic")
-        }
-        CardTypeFilter::Land => characteristics.has_type("Land"),
-        CardTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
-        CardTypeFilter::Instant => characteristics.has_type("Instant"),
-        CardTypeFilter::Sorcery => characteristics.has_type("Sorcery"),
-        CardTypeFilter::InstantOrSorcery => {
-            characteristics.has_type("Instant") || characteristics.has_type("Sorcery")
-        }
-        CardTypeFilter::Creature => characteristics.is_creature(),
-        CardTypeFilter::Artifact => characteristics.is_artifact(),
-        CardTypeFilter::Planeswalker => characteristics.has_type("Planeswalker"),
-        CardTypeFilter::Battle => characteristics.has_type("Battle"),
-        CardTypeFilter::Nonland => !characteristics.has_type("Land"),
-        CardTypeFilter::Noncreature => !characteristics.is_creature(),
-    })
 }
 
 /// Whether an effect applies, evaluated from the relevant characteristic snapshot and direct
@@ -893,7 +848,10 @@ fn permanent_matches_target_scope(
         TargetController::NotYou => characteristics.controller != reference_player,
         TargetController::DefendingPlayer => false,
     };
-    (!filter.exclude_source || source != Some(oid))
+    (!filter
+        .excluded_objects
+        .contains(&tricerules_cards::TargetObjectExclusion::Source)
+        || source != Some(oid))
         && kind_matches
         && controller_matches
         && permanent_matches_filter_characteristics(state, filter, oid, characteristics)
@@ -916,6 +874,35 @@ pub(super) fn permanent_matches_filter_characteristics(
     let Some(object) = state.objects.get(&oid) else {
         return false;
     };
+    if filter.token.is_some_and(|token| object.is_token() != token)
+        || filter
+            .min_mana_value
+            .is_some_and(|min| characteristics.mana_value < min)
+        || filter
+            .max_mana_value
+            .is_some_and(|max| characteristics.mana_value > max)
+        || filter.excluded_permanent_types.iter().any(|kind| {
+            characteristics.has_type(match kind {
+                PermanentTypeFilter::Creature => "Creature",
+                PermanentTypeFilter::Artifact => "Artifact",
+                PermanentTypeFilter::Enchantment => "Enchantment",
+                PermanentTypeFilter::Land => "Land",
+                PermanentTypeFilter::Planeswalker => "Planeswalker",
+                PermanentTypeFilter::Battle => "Battle",
+            })
+        })
+        || filter.was_dealt_damage_this_turn.is_some_and(|required| {
+            let generation = state.zone_change_generation.get(&oid).copied().unwrap_or(0);
+            state
+                .turn_history
+                .current
+                .damaged_objects
+                .contains(&(oid, generation))
+                != required
+        })
+    {
+        return false;
+    }
     if !filter.permanent_types.is_empty()
         && !filter.permanent_types.iter().any(|kind| match kind {
             PermanentTypeFilter::Creature => characteristics.is_creature(),

@@ -1456,7 +1456,16 @@ pub(super) fn move_graveyard_cards(
         .targets
         .iter()
         .copied()
-        .filter(|oid| graveyard_target_legal(cx.engine, &filter, *oid, cx.controller))
+        .filter(|oid| {
+            graveyard_target_legal(
+                cx.engine,
+                &filter,
+                *oid,
+                cx.controller,
+                super::super::targeting::TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+                cx.top.trigger_context,
+            )
+        })
         .collect();
     if let GraveyardDestination::Battlefield { tapped } = destination {
         let entries = targets

@@ -1,0 +1,19 @@
+// Oracle/rulings verified 2026-08-28. CR 601.2/602.2: target before paying sacrifice cost.
+(
+  id: "haywire_mite",
+  name: "Haywire Mite",
+  mana_cost: "{1}",
+  types: ["Artifact", "Creature", "Insect"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    trigger: WhenSelfDies,
+    effect: [GainLife(amount: 2)],
+    text: "When this creature dies, you gain 2 life.",
+  )],
+  activated_abilities: [(
+    costs: [Mana("{G}"), SacrificeSelf],
+    effect: [ExileTarget(target: (kind: AnyPermanent, permanent_types: [Artifact, Enchantment], excluded_permanent_types: [Creature]))],
+    text: "{G}, Sacrifice this creature: Exile target noncreature artifact or noncreature enchantment.",
+  )],
+)

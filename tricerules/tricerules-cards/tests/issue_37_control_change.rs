@@ -45,7 +45,7 @@ fn control_auras_use_the_shared_source_relative_layer_2_primitive() {
 fn temporary_control_spells_preserve_their_oracle_effect_order() {
     let registry = CardRegistry::global();
     let target = TargetFilter::default_creature();
-    let chosen = EffectSubject::Chosen(target.clone());
+    let chosen = EffectSubject::Chosen(Box::new(target.clone()));
     let control = SpellEffectKind::GainControlUntilEndOfTurn {
         target: target.clone(),
     };

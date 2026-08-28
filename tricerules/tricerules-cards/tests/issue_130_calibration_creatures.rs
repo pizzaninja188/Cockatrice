@@ -368,7 +368,7 @@ fn issue_130_target_choice_and_condition_shapes_use_generic_vocabulary() {
     assert!(matches!(
         felidar.effect.as_slice(),
         [SpellEffectKind::PutCounters { subject: EffectSubject::Chosen(target), .. }]
-            if target.controller == TargetController::You && target.exclude_source
+            if target.controller == TargetController::You && target.excluded_objects.contains(&tricerules_cards::TargetObjectExclusion::Source)
     ));
 
     let apothecary = &face("apothecary_stomper").triggered_abilities[0];

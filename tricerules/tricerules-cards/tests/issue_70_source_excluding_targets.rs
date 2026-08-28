@@ -33,12 +33,12 @@ fn pegasus_courser_has_complete_oracle_behavior() {
     assert_eq!(
         face.triggered_abilities[0].effect,
         [SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
                 kind: TargetKind::Creature,
                 combat_role: Some(tricerules_cards::primitives::CombatRole::AttackingOrBlocking),
-                exclude_source: true,
+                excluded_objects: vec![tricerules_cards::TargetObjectExclusion::Source],
                 ..TargetFilter::default()
-            }),
+            })),
             keywords: vec![Keyword::Flying],
         }]
     );
@@ -71,11 +71,11 @@ fn legion_guildmage_has_complete_oracle_behavior() {
     assert_eq!(
         face.activated_abilities[1].effect,
         [SpellEffectKind::Tap {
-            subject: EffectSubject::Chosen(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
                 kind: TargetKind::Creature,
-                exclude_source: true,
+                excluded_objects: vec![tricerules_cards::TargetObjectExclusion::Source],
                 ..TargetFilter::default()
-            }),
+            })),
         }]
     );
 }

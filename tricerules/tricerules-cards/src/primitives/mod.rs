@@ -18,6 +18,11 @@ pub use targeting::*;
 #[cfg(test)]
 mod tests {
     #[test]
+    fn issue_176_graveyard_cost_reduction_is_a_typed_target_filter() {
+        let card = r#"(id: "test", name: "Test", mana_cost: "{4}{B}", types: ["Sorcery"], cost_modifiers: [TargetMatchGenericReduction(amount: 3, filter: Graveyard((card_type: Some(Creature), max_mana_value: Some(3))))], spell_effect: [MoveGraveyardCards(filter: (card_type: Some(Creature)), destination: Battlefield())])"#;
+        assert!(crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_ok());
+    }
+    #[test]
     fn issue_153_cast_cost_amount_roundtrips_and_checks_references() {
         let source =
             "CastCost(cast_cost: (group_index: 0, option_index: 0), when_true: 4, otherwise: 2)";
@@ -891,11 +896,11 @@ mod tests {
 
         let fight_from_source = SpellEffectKind::Fight {
             first: EffectSubject::Source,
-            second: EffectSubject::Chosen(TargetFilter {
+            second: EffectSubject::Chosen(Box::new(TargetFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::NotYou,
                 ..Default::default()
-            }),
+            })),
         };
         assert_eq!(fight_from_source.target_filters().len(), 1);
         assert!(fight_from_source.validate(EffectContext::Spell).is_err());
@@ -903,10 +908,10 @@ mod tests {
 
         let invalid_fight = SpellEffectKind::Fight {
             first: EffectSubject::Source,
-            second: EffectSubject::Chosen(TargetFilter {
+            second: EffectSubject::Chosen(Box::new(TargetFilter {
                 kind: TargetKind::AnyPermanent,
                 ..Default::default()
-            }),
+            })),
         };
         assert!(invalid_fight.validate(EffectContext::Ability).is_err());
     }
@@ -962,20 +967,20 @@ mod tests {
     #[test]
     fn return_to_owners_hand_uses_a_validated_permanent_subject() {
         let opponent_creature = SpellEffectKind::ReturnToOwnersHand {
-            subject: EffectSubject::Chosen(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::Opponent,
                 ..Default::default()
-            }),
+            })),
         };
         assert_eq!(opponent_creature.target_filters().len(), 1);
         assert!(opponent_creature.validate(EffectContext::Ability).is_ok());
 
         let player = SpellEffectKind::ReturnToOwnersHand {
-            subject: EffectSubject::Chosen(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
                 kind: TargetKind::OpponentPlayer,
                 ..Default::default()
-            }),
+            })),
         };
         assert!(player.validate(EffectContext::Ability).is_err());
 
@@ -990,7 +995,7 @@ mod tests {
     fn chosen_subject_defaults_to_creature_target() {
         assert_eq!(
             EffectSubject::default(),
-            EffectSubject::Chosen(TargetFilter::default_creature())
+            EffectSubject::Chosen(Box::new(TargetFilter::default_creature()))
         );
     }
 
@@ -1036,7 +1041,7 @@ mod tests {
                 amount: 1,
                 target: TargetFilter {
                     kind,
-                    exclude_source: true,
+                    excluded_objects: vec![crate::TargetObjectExclusion::Source],
                     ..TargetFilter::default()
                 },
             };
@@ -1047,7 +1052,7 @@ mod tests {
             amount: Amount::Fixed(1),
             target: TargetFilter {
                 kind: TargetKind::AnyTarget,
-                exclude_source: true,
+                excluded_objects: vec![crate::TargetObjectExclusion::Source],
                 ..TargetFilter::default()
             },
         };
@@ -1058,7 +1063,7 @@ mod tests {
     fn untargeted_filters_reject_source_exclusion() {
         let filter = TargetFilter {
             kind: TargetKind::Creature,
-            exclude_source: true,
+            excluded_objects: vec![crate::TargetObjectExclusion::Source],
             ..TargetFilter::default()
         };
         assert!(SpellEffectKind::DestroyAll {

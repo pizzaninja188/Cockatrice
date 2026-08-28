@@ -24,8 +24,8 @@ pub use primitives::{
     ManaSpendFilter, ManaSpendingRestriction, PermanentTypeFilter, PowerComparison,
     PowerToughnessCharacteristic, PtScale, QuantityTerm, RelativePlayerSet, SearchDestination,
     SearchZoneSelection, SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin,
-    SpellCostModifier, SpellEffectKind, TriggerCondition, TriggeredAbilityDef, TypeLineAddition,
-    TypeLineReplacement, ZoneCardFilter,
+    SpellCostModifier, SpellEffectKind, TargetMatchFilter, TargetObjectExclusion, TriggerCondition,
+    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

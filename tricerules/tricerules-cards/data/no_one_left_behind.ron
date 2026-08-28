@@ -1,0 +1,9 @@
+// Oracle/ruling verified 2026-08-28. CR 202.3e/601.2f: graveyard X is zero; lock casting cost.
+(
+  id: "no_one_left_behind",
+  name: "No One Left Behind",
+  mana_cost: "{4}{B}",
+  types: ["Sorcery"],
+  cost_modifiers: [TargetMatchGenericReduction(amount: 3, filter: Graveyard((card_type: Some(Creature), max_mana_value: Some(3))))],
+  spell_effect: [MoveGraveyardCards(filter: (card_type: Some(Creature)), destination: Battlefield())],
+)

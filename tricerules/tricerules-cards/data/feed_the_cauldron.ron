@@ -1,0 +1,11 @@
+// Oracle/rulings verified 2026-08-28. CR 608.2b: an illegal sole target stops the entire spell.
+(
+  id: "feed_the_cauldron",
+  name: "Feed the Cauldron",
+  mana_cost: "{2}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: Creature, max_mana_value: Some(3)))),
+    CreateTokens(token: "food", count: Conditional(condition: ActivePlayer(players: Controller), when_true: 1, otherwise: 0)),
+  ],
+)

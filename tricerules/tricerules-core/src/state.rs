@@ -114,6 +114,9 @@ pub struct StackObjectRef {
 /// reconstructing relationships after objects detach, change controller, or leave a zone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TriggerContext {
+    /// CR 400.7e public-zone incarnation reached by a self zone-change trigger.
+    /// Hoarding Recluse and Myr Retriever exclude this card, not every later incarnation.
+    pub source_after_zone_change: Option<TriggerObjectRef>,
     pub affected_player: Option<PlayerId>,
     pub observed_object: Option<TriggerObjectRef>,
     pub targeting_stack_object: Option<StackObjectRef>,

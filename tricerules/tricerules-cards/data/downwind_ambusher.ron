@@ -1,0 +1,18 @@
+// Oracle/rulings verified 2026-08-28. Damage eligibility uses committed turn history.
+(
+  id: "downwind_ambusher",
+  name: "Downwind Ambusher",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Skunk", "Assassin"],
+  power: 4,
+  toughness: 2,
+  keywords: [Flash],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    modal: Some((min_modes: 1, max_modes: 1, modes: [
+      (label: "Target creature an opponent controls gets -1/-1", effects: [PumpTarget(power: -1, toughness: -1, subject: Chosen((kind: Creature, controller: Opponent)))]),
+      (label: "Destroy a damaged creature an opponent controls", effects: [Destroy(subject: Chosen((kind: Creature, controller: Opponent, was_dealt_damage_this_turn: Some(true))))]),
+    ])),
+    text: "When this creature enters, choose one — Target creature an opponent controls gets -1/-1 until end of turn; or destroy target creature an opponent controls that was dealt damage this turn.",
+  )],
+)

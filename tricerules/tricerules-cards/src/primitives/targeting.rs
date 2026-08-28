@@ -387,12 +387,56 @@ pub enum GraveyardOwner {
     Controller,
     /// Any player's graveyard ("a graveyard" — Grim Return, Beacon of Unrest).
     AnyPlayer,
+    /// Carrion Locust and Disposal Mummy: a card owned by any opponent.
+    Opponent,
+}
+
+/// Relative object identities, shared by Pegasus Courser/Myr Retriever (Source) and
+/// Due Diligence (AttachedObject). These are exclusions, never additional targets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetObjectExclusion {
+    Source,
+    AttachedObject,
+}
+
+/// Shared typed target predicate for cost modifiers: Luminous Rebuke inspects a permanent,
+/// while No One Left Behind inspects a graveyard card.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TargetMatchFilter {
+    Battlefield(TargetFilter),
+    Graveyard(GraveyardFilter),
+}
+
+impl TargetMatchFilter {
+    pub fn role(&self) -> TargetRole<'_> {
+        match self {
+            Self::Battlefield(filter) => TargetRole::Filtered(filter),
+            Self::Graveyard(filter) => TargetRole::GraveyardCard(filter),
+        }
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::Battlefield(filter) => {
+                filter.validate_target_constraints()?;
+                if !filter.is_permanent_only() {
+                    return Err(
+                        "target-matching reduction requires permanent or graveyard targets".into(),
+                    );
+                }
+                Ok(())
+            }
+            Self::Graveyard(filter) => filter.validate(),
+        }
+    }
 }
 
 /// Filter for graveyard-zone targets (cards in a graveyard, not battlefield permanents).
 /// Parallel to [`TargetFilter`] but for a different zone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct GraveyardFilter {
+    #[serde(default)]
+    pub excluded_objects: Vec<TargetObjectExclusion>,
     /// A pure disjunction of two or more recursively validated filters. When present, every
     /// leaf field on this node must retain its default value.
     #[serde(default)]
@@ -406,6 +450,19 @@ pub struct GraveyardFilter {
     /// Card types a matching card must not have.
     #[serde(default)]
     pub excluded_card_types: Vec<CardTypeFilter>,
+    /// No One Left Behind and Recommission use inclusive printed mana-value bounds.
+    #[serde(default)]
+    pub min_mana_value: Option<u32>,
+    #[serde(default)]
+    pub max_mana_value: Option<u32>,
+    /// March of the Drowned and Ghoulcaller's Chant select subtypes outside the battlefield.
+    #[serde(default)]
+    pub required_subtypes: Vec<String>,
+    #[serde(default)]
+    pub excluded_subtypes: Vec<String>,
+    /// Edgewall Inn and Seek Thrills inspect the card's alternative Adventure characteristics.
+    #[serde(default)]
+    pub has_adventure: Option<bool>,
 }
 
 impl GraveyardFilter {
@@ -435,6 +492,15 @@ impl GraveyardFilter {
             return Ok(());
         }
 
+        validate_mana_value_bounds(self.min_mana_value, self.max_mana_value)?;
+        if has_duplicates(&self.excluded_objects)
+            || self
+                .excluded_objects
+                .contains(&TargetObjectExclusion::AttachedObject)
+        {
+            return Err("graveyard filter requires unique Source exclusions".into());
+        }
+        validate_subtype_predicates(&self.required_subtypes, &self.excluded_subtypes)?;
         if has_duplicates(&self.excluded_card_types) {
             return Err("graveyard filter has a duplicate excluded card type".into());
         }
@@ -540,7 +606,7 @@ pub struct TargetFilter {
     /// compares full object identity (ObjectId plus zone-change generation), so a card that leaves
     /// and returns is a new object under CR 400.7 and is no longer excluded.
     #[serde(default)]
-    pub exclude_source: bool,
+    pub excluded_objects: Vec<TargetObjectExclusion>,
     /// Optional OR-combined permanent type restriction. For example, Icy Manipulator uses
     /// `[Artifact, Creature, Land]`; an empty list means no additional type restriction.
     #[serde(default)]
@@ -565,6 +631,20 @@ pub struct TargetFilter {
     /// to `required_keywords` and is shared by targets and untargeted selections.
     #[serde(default)]
     pub excluded_keywords: Vec<Keyword>,
+    /// Kraul Whipcracker / Hivespine Wolverine and token sacrifice costs.
+    #[serde(default)]
+    pub token: Option<bool>,
+    /// Haywire Mite and Crush exclude creature artifacts from otherwise matching targets.
+    #[serde(default)]
+    pub excluded_permanent_types: Vec<super::PermanentTypeFilter>,
+    /// Feed the Cauldron and Fatal Push use current mana value, including copy and face rules.
+    #[serde(default)]
+    pub min_mana_value: Option<u32>,
+    #[serde(default)]
+    pub max_mana_value: Option<u32>,
+    /// Rooftop Assassin / Downwind Ambusher observe actual damage to this incarnation.
+    #[serde(default)]
+    pub was_dealt_damage_this_turn: Option<bool>,
 }
 
 impl TargetFilter {
@@ -602,7 +682,7 @@ impl TargetFilter {
                 self.kind
             ));
         }
-        if self.exclude_source && self.is_player() {
+        if !self.excluded_objects.is_empty() && self.is_player() {
             return Err(format!(
                 "source-excluding target filter requires an object-capable kind, got {:?}",
                 self.kind
@@ -642,6 +722,40 @@ impl TargetFilter {
     }
 
     fn validate_characteristic_leaf(&self) -> Result<(), String> {
+        if self.kind == TargetKind::AnyTarget
+            && (self.token.is_some()
+                || !self.excluded_permanent_types.is_empty()
+                || self.min_mana_value.is_some()
+                || self.max_mana_value.is_some()
+                || self.was_dealt_damage_this_turn.is_some()
+                || self
+                    .excluded_objects
+                    .contains(&TargetObjectExclusion::AttachedObject))
+        {
+            return Err(
+                "zone characteristic and attachment predicates require a permanent-only kind"
+                    .into(),
+            );
+        }
+        if has_duplicates(&self.excluded_objects) {
+            return Err("target filter cannot repeat an object exclusion".into());
+        }
+        validate_mana_value_bounds(self.min_mana_value, self.max_mana_value)?;
+        if has_duplicates(&self.excluded_permanent_types) {
+            return Err("target filter cannot repeat an excluded permanent type".into());
+        }
+        if (self.kind == TargetKind::Creature
+            && self
+                .excluded_permanent_types
+                .contains(&super::PermanentTypeFilter::Creature))
+            || (!self.permanent_types.is_empty()
+                && self
+                    .permanent_types
+                    .iter()
+                    .all(|kind| self.excluded_permanent_types.contains(kind)))
+        {
+            return Err("target filter excludes every required permanent type".into());
+        }
         if self.is_player() && self.has_permanent_only_constraints() {
             return Err(format!(
                 "player-only target filter cannot carry permanent-only constraints, got {:?}",
@@ -712,14 +826,19 @@ impl TargetFilter {
     }
 
     fn has_permanent_only_constraints(&self) -> bool {
-        self.not_artifact
+        self.token.is_some()
+            || !self.excluded_permanent_types.is_empty()
+            || self.min_mana_value.is_some()
+            || self.max_mana_value.is_some()
+            || self.was_dealt_damage_this_turn.is_some()
+            || self.not_artifact
             || self.not_land
             || self.tapped.is_some()
             || self.combat_role.is_some()
             || self.not_color.is_some()
             || self.is_color.is_some()
             || self.controller != TargetController::Any
-            || self.exclude_source
+            || !self.excluded_objects.is_empty()
             || !self.permanent_types.is_empty()
             || !self.required_subtypes.is_empty()
             || !self.excluded_subtypes.is_empty()
@@ -796,6 +915,27 @@ fn has_duplicates<T: PartialEq>(values: &[T]) -> bool {
         .any(|(index, value)| values[..index].contains(value))
 }
 
+fn validate_mana_value_bounds(min: Option<u32>, max: Option<u32>) -> Result<(), String> {
+    if min.zip(max).is_some_and(|(min, max)| min > max) {
+        return Err("filter minimum mana value exceeds maximum".into());
+    }
+    Ok(())
+}
+
+fn validate_subtype_predicates(required: &[String], excluded: &[String]) -> Result<(), String> {
+    if required
+        .iter()
+        .chain(excluded)
+        .any(|value| value.trim().is_empty())
+        || has_duplicates(required)
+        || has_duplicates(excluded)
+        || required.iter().any(|value| excluded.contains(value))
+    {
+        return Err("filter has empty, duplicate, or contradictory subtype predicates".into());
+    }
+    Ok(())
+}
+
 fn terminal_filters_have_duplicates<T: PartialEq>(leaves: &[&T]) -> bool {
     leaves
         .iter()
@@ -805,6 +945,45 @@ fn terminal_filters_have_duplicates<T: PartialEq>(leaves: &[&T]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn issue_176_rejects_contradictory_characteristic_filters() {
+        for source in [
+            "(min_mana_value: Some(3), max_mana_value: Some(2))",
+            "(kind: Creature, excluded_permanent_types: [Creature])",
+            "(kind: AnyPlayer, token: Some(true))",
+            "(kind: AnyPlayer, was_dealt_damage_this_turn: Some(true))",
+            "(kind: AnyTarget, token: Some(true))",
+            "(kind: AnyTarget, max_mana_value: Some(3))",
+            "(kind: AnyTarget, excluded_objects: [AttachedObject])",
+            "(excluded_objects: [Source, Source])",
+            "(token: Some(true), any_of: Some([(kind: Creature), (kind: AnyPermanent)]))",
+        ] {
+            let filter: TargetFilter = ron::from_str(source).unwrap();
+            assert!(filter.validate_target_constraints().is_err(), "{source}");
+        }
+        for source in [
+            "(min_mana_value: Some(3), max_mana_value: Some(2))",
+            "(required_subtypes: [\"Bear\"], excluded_subtypes: [\"Bear\"])",
+            "(required_subtypes: [\"\"])",
+            "(excluded_objects: [AttachedObject])",
+            "(excluded_objects: [Source, Source])",
+            "(has_adventure: Some(true), any_of: Some([(card_type: Some(Creature)), (card_type: Some(Land))]))",
+        ] {
+            let filter: GraveyardFilter = ron::from_str(source).unwrap();
+            assert!(filter.validate().is_err(), "{source}");
+        }
+    }
+    #[test]
+    fn issue_176_rejects_unbound_object_exclusions() {
+        for body in [
+            "spell_effect: [ApplyCombatRestriction(scope: Matching((kind: Creature, excluded_objects: [AttachedObject])), restriction: (cant_block: true))]",
+            "static_abilities: [ProhibitSpecialAction(action: TurnFaceUp, affected: Permanents((kind: AnyPermanent, excluded_objects: [AttachedObject])))]",
+        ] {
+            let card = format!(r#"(id: "test", name: "Test", types: ["Enchantment"], {body})"#);
+            let error = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[]).unwrap_err();
+            assert!(matches!(error, crate::registry::RegistryError::InvalidCard { .. }), "{error}");
+        }
+    }
     use super::*;
     use crate::primitives::{Amount, PermanentTypeFilter, PlayerRecipient};
 
@@ -1060,7 +1239,7 @@ mod tests {
             amount: crate::primitives::Amount::Fixed(1),
             target: TargetFilter::default_creature(),
         };
-        let creature = SpellEffectKind::ExileTarget;
+        let creature = SpellEffectKind::ExileTargetGainLifeEqualToPower;
         let stack = SpellEffectKind::CounterTargetSpell {
             spell_filter: Some(CardTypeFilter::Creature),
             unless_controller_pays: None,

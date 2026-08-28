@@ -13,7 +13,7 @@
     ),
     (
       costs: [Mana("{2}{W}"), Tap],
-      effect: [Tap(subject: Chosen((kind: Creature, exclude_source: true)))],
+      effect: [Tap(subject: Chosen((kind: Creature, excluded_objects: [Source])))],
       text: "{2}{W}, {T}: Tap another target creature.",
     ),
   ],

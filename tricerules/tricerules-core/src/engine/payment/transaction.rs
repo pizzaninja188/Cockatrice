@@ -1406,7 +1406,15 @@ impl GameEngine {
                 .iter()
                 .any(|branch| self.ability_cost_permanent_matches(player, source, oid, branch));
         }
-        if filter.exclude_source && source == Some(oid) {
+        if source.is_some_and(|source| {
+            super::super::targeting::object_is_excluded(
+                &self.state,
+                &filter.excluded_objects,
+                oid,
+                super::super::targeting::TargetSourceIdentity::current(self, source),
+                TriggerContext::default(),
+            )
+        }) {
             return false;
         }
         let Some(object) = self.state.objects.get(&oid) else {

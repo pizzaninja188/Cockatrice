@@ -1,0 +1,14 @@
+// Oracle/rulings verified 2026-08-28. CR 613: count any controlled token, not only creatures.
+(
+  id: "druid_of_the_spade",
+  name: "Druid of the Spade",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Rabbit", "Druid"],
+  power: 2,
+  toughness: 3,
+  static_abilities: [ConditionalSelfModifier(
+    condition: BattlefieldAggregate(filter: (controllers: Controller, token: Some(true)), aggregate: Count, min: Some(1)),
+    delta_power: 2,
+    keywords: [Trample],
+  )],
+)

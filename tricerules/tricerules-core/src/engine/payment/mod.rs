@@ -397,7 +397,18 @@ impl GameEngine {
     ) -> Vec<rv1::TargetedCostReductionApplication> {
         let mut candidates = groups
             .iter()
-            .flat_map(|group| group.valid_permanent_ids.iter().copied())
+            .flat_map(|group| {
+                group
+                    .valid_permanent_ids
+                    .iter()
+                    .map(|oid| (rv1::TargetRefKind::Permanent as i32, *oid))
+                    .chain(
+                        group
+                            .valid_graveyard_ids
+                            .iter()
+                            .map(|oid| (rv1::TargetRefKind::Graveyard as i32, *oid)),
+                    )
+            })
             .collect::<Vec<_>>();
         candidates.sort_unstable();
         candidates.dedup();
@@ -413,20 +424,12 @@ impl GameEngine {
                 let qualifying_targets = candidates
                     .iter()
                     .copied()
-                    .filter(|candidate| {
-                        super::targeting::target_filter_legal_at_resolution(
-                            self,
-                            filter,
-                            *candidate,
-                            actor,
-                            source,
-                            TriggerContext::default(),
+                    .filter(|(kind, candidate)| {
+                        super::targeting::cost_target_matches(
+                            self, filter, *kind, *candidate, actor, source,
                         )
                     })
-                    .map(|object_id| rv1::TargetCandidateRef {
-                        kind: rv1::TargetRefKind::Permanent as i32,
-                        object_id,
-                    })
+                    .map(|(kind, object_id)| rv1::TargetCandidateRef { kind, object_id })
                     .collect::<Vec<_>>();
                 (!qualifying_targets.is_empty()).then_some(rv1::TargetedCostReductionApplication {
                     application_id: (u64::from(source.object_id()) << 32) | modifier_index as u64,
@@ -634,13 +637,13 @@ impl GameEngine {
                 return total;
             };
             if targets.iter().any(|target| {
-                super::targeting::target_filter_legal_at_resolution(
+                super::targeting::cost_target_matches(
                     self,
                     filter,
+                    target.kind,
                     target.object_id,
                     player,
                     source,
-                    TriggerContext::default(),
                 )
             }) {
                 total.saturating_add(*amount)

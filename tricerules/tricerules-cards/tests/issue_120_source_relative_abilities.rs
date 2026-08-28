@@ -19,7 +19,9 @@ fn issue_120_creatures_use_source_excluding_sacrifice_costs() {
         assert_eq!(mana.to_string(), activation_mana);
         assert_eq!(filter.kind, TargetKind::Creature);
         assert_eq!(filter.controller, TargetController::You);
-        assert!(filter.exclude_source);
+        assert!(filter
+            .excluded_objects
+            .contains(&tricerules_cards::TargetObjectExclusion::Source));
         assert!(matches!(
             ability.effect.as_slice(),
             [SpellEffectKind::PutCounters {

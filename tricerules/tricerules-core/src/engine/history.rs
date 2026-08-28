@@ -10,6 +10,12 @@ pub(super) fn battlefield_permanent_matches(
     context: ConditionContext<'_>,
 ) -> bool {
     relative_player_set_contains(state, filter.controllers, context.controller, c.controller)
+        && filter.token.is_none_or(|token| {
+            state
+                .objects
+                .get(&oid)
+                .is_some_and(|object| object.is_token() == token)
+        })
         && (!filter.exclude_source
             || oid != context.source_object_id
             || state.zone_change_generation.get(&oid).copied().unwrap_or(0)
@@ -1758,6 +1764,7 @@ mod tests {
     fn issue_165_maxima_use_derived_signed_values_and_all_opponents() {
         let mut engine = quantity_engine();
         let mut filter = BattlefieldPermanentFilter {
+            token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
             card_type: Some(CardTypeFilter::Creature),
@@ -2050,6 +2057,7 @@ mod tests {
         move_to_battlefield(&mut engine, 1, "forest");
         let graveyard_card = move_to_graveyard(&mut engine, 0, "island");
         let filter = BattlefieldPermanentFilter {
+            token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
             card_type: Some(CardTypeFilter::Land),
@@ -2852,8 +2860,10 @@ mod tests {
         };
 
         let union = BattlefieldPermanentFilter {
+            token: None,
             any_of: Some(vec![
                 BattlefieldPermanentFilter {
+                    token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
                     card_type: Some(CardTypeFilter::Land),
@@ -2863,6 +2873,7 @@ mod tests {
                     exclude_source: false,
                 },
                 BattlefieldPermanentFilter {
+                    token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
                     card_type: Some(CardTypeFilter::BasicLand),
@@ -3028,6 +3039,7 @@ mod tests {
         let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
         let angel = move_to_battlefield(&mut engine, 0, "serra_angel");
         let filter = BattlefieldPermanentFilter {
+            token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
             card_type: Some(CardTypeFilter::Creature),

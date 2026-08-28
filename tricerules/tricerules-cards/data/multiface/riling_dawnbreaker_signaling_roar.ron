@@ -16,7 +16,7 @@
         effect: [PumpTarget(
           power: 1,
           toughness: 0,
-          subject: Chosen((kind: Creature, controller: You, exclude_source: true)),
+          subject: Chosen((kind: Creature, controller: You, excluded_objects: [Source])),
         )],
         text: "At the beginning of combat on your turn, another target creature you control gets +1/+0 until end of turn.",
       )],

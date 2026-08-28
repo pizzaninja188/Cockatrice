@@ -44,7 +44,7 @@ fn issue_85_cards_share_the_grouped_creature_damage_primitive() {
                 subject: EffectSubject::Chosen(source_for_counter),
             },
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target },
-        ] if source_for_counter == source
+        ] if source_for_counter.as_ref() == source
             && source.kind == TargetKind::Creature
             && source.controller == TargetController::You
             && target.kind == TargetKind::Creature

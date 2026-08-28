@@ -521,7 +521,7 @@ mod damage_source_tests {
             &mut cx,
             SpellEffectKind::Fight {
                 first: EffectSubject::Source,
-                second: EffectSubject::Chosen(TargetFilter::default_creature()),
+                second: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
             },
         )
     }

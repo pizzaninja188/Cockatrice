@@ -1,6 +1,6 @@
 //! Costs paid to activate abilities.
 
-use super::{BattlefieldPermanentFilter, GameCondition, TargetFilter, TargetKind, ZoneCardFilter};
+use super::{BattlefieldPermanentFilter, GameCondition, TargetFilter, ZoneCardFilter};
 use crate::mana::ManaCost;
 use serde::{Deserialize, Serialize};
 
@@ -198,9 +198,12 @@ pub enum SpellCostModifier {
         amount: u32,
         condition: GameCondition,
     },
-    /// Reduce this spell's generic cost once when at least one announced permanent target
-    /// matches `filter`. Luminous Rebuke and Seized from Slumber share the tapped-creature form.
-    TargetMatchGenericReduction { amount: u32, filter: TargetFilter },
+    /// Reduce this spell's generic cost once when an announced target matches `filter`.
+    /// Luminous Rebuke inspects battlefield creatures; No One Left Behind inspects graveyard cards.
+    TargetMatchGenericReduction {
+        amount: u32,
+        filter: super::TargetMatchFilter,
+    },
     /// Reduce this spell's generic cost for each matching battlefield permanent. Affinity for
     /// creatures and future affinity-style cohorts share this counted form.
     BattlefieldCountGenericReduction {
@@ -247,15 +250,7 @@ impl SpellCostModifier {
                 if *amount == 0 {
                     return Err("target-matching generic cost reduction must be nonzero".into());
                 }
-                filter.validate_target_constraints()?;
-                if !filter.all_terminal_filters_match(|leaf| {
-                    matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
-                }) {
-                    return Err(
-                        "target-matching generic cost reduction requires permanent targets".into(),
-                    );
-                }
-                Ok(())
+                filter.validate()
             }
             Self::BattlefieldCountGenericReduction {
                 amount_per_match,

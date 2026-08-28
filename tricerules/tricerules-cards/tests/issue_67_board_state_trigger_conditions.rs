@@ -35,6 +35,7 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
         battlefield_condition("scholar_of_stars"),
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
+                token: None,
                 controllers: RelativePlayerSet::Controller,
                 card_type: Some(CardTypeFilter::Artifact),
                 color: None,
@@ -51,6 +52,7 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
         battlefield_condition("faerie_miscreant"),
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
+                token: None,
                 card_type: Some(CardTypeFilter::Creature),
                 name: Some(name),
                 exclude_source: true,
@@ -65,6 +67,7 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
         battlefield_condition("ornery_dilophosaur"),
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
+                token: None,
                 exclude_source: false,
                 ..
             },
@@ -77,6 +80,7 @@ fn issue_67_cards_use_one_validated_battlefield_condition_vocabulary() {
         battlefield_condition("turret_ogre"),
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
+                token: None,
                 exclude_source: true,
                 ..
             },
@@ -130,6 +134,7 @@ fn issue_67_card_characteristics_and_effects_match_oracle() {
 fn battlefield_aggregate_conditions_reject_invalid_bounds_and_names() {
     let condition = |name: Option<&str>, min, max| GameCondition::BattlefieldAggregate {
         filter: BattlefieldPermanentFilter {
+            token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
             card_type: None,

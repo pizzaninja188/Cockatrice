@@ -30,7 +30,9 @@ fn issue_128_cards_are_complete_registry_definitions() {
     };
     assert_eq!((*power, *toughness), (1, 0));
     assert_eq!(target.controller, TargetController::You);
-    assert!(target.exclude_source);
+    assert!(target
+        .excluded_objects
+        .contains(&tricerules_cards::TargetObjectExclusion::Source));
 
     let cheerleader = registry
         .get("acrobatic_cheerleader")

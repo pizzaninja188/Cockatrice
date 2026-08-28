@@ -401,26 +401,11 @@ fn resolve_effect_subject(
         }
         EffectSubject::AttachedObject => {
             let source_oid = top.source_permanent_id?;
-            let (target_oid, expected_generation) = if engine.source_is_current_object(top) {
-                let source = engine.state.objects.get(&source_oid)?;
-                let AttachmentRecipient::Object(target_oid) = source.attached_to? else {
-                    return None;
-                };
-                (
-                    target_oid,
-                    engine
-                        .state
-                        .zone_change_generation
-                        .get(&target_oid)
-                        .copied()
-                        .unwrap_or(0),
-                )
-            } else {
-                *engine
-                    .state
-                    .last_known_attached_object_by_generation
-                    .get(&(source_oid, top.source_zone_change))?
-            };
+            let (target_oid, expected_generation) = super::targeting::attached_object_identity(
+                &engine.state,
+                source_oid,
+                top.source_zone_change,
+            )?;
             let current_generation = engine
                 .state
                 .zone_change_generation
@@ -1303,7 +1288,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::DrainTarget { .. } => {
                         life::drain_target(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::ExileTarget => zones::exile_target(&mut cx, effect)?,
+                    effect @ SpellEffectKind::ExileTarget { .. } => {
+                        zones::exile_target(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::ExileTargetGainLifeEqualToPower => {
                         zones::exile_target_gain_life_equal_to_power(&mut cx, effect)?
                     }
@@ -3239,6 +3226,7 @@ mod attached_subject_tests {
                 let quantity = if spend_treasures {
                     CountExpression::BattlefieldPermanents {
                         filter: BattlefieldPermanentFilter {
+                            token: None,
                             controllers: RelativePlayerSet::Opponents,
                             card_type: Some(CardTypeFilter::Artifact),
                             any_of: None,
@@ -3251,6 +3239,7 @@ mod attached_subject_tests {
                 } else {
                     CountExpression::BattlefieldMaximum {
                         filter: BattlefieldPermanentFilter {
+                            token: None,
                             controllers: RelativePlayerSet::Controller,
                             card_type: Some(CardTypeFilter::Creature),
                             any_of: None,

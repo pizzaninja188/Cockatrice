@@ -70,11 +70,11 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
         aerial.spell_effect,
         [
             SpellEffectKind::Destroy {
-                subject: EffectSubject::Chosen(TargetFilter {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
                     kind: TargetKind::Creature,
                     tapped: Some(true),
                     ..TargetFilter::default()
-                }),
+                })),
             },
             SpellEffectKind::GainLife {
                 amount: Amount::Count(CountExpression::BattlefieldCreatures {
@@ -107,7 +107,7 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
                 power_per_unit: 2,
                 toughness_per_unit: 2,
             }),
-            subject: EffectSubject::Chosen(creature_target()),
+            subject: EffectSubject::Chosen(Box::new(creature_target())),
         }]
     );
 

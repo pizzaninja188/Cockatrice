@@ -1306,7 +1306,7 @@ pub enum SpecialActionKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpecialActionAffected {
     AttachedPermanent,
-    Permanents(#[serde(default)] TargetFilter),
+    Permanents(#[serde(default)] Box<TargetFilter>),
 }
 
 /// Counter prohibitions on Tatterkite itself and the permanent enchanted by Blossombind.

@@ -6,6 +6,7 @@
 //! token, or the console silently lies to whoever is using it to test a card.
 
 use crate::helpers::*;
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::dev_command::Dev;
 use tricerules_proto::ruled::v1::{
     permanent_moved, DevAddMana, DevCommand, DevMoveCard, DevPutCardInZone, DevZone,
@@ -65,6 +66,73 @@ fn power_of(e: &GameEngine, oid: u32) -> u32 {
         .expect("object exists")
         .power
         .expect("creature has power")
+}
+
+#[test]
+fn issue_176_graveyard_payment_and_stale_target_replay() {
+    for (card, name, generic, stale) in [
+        ("grizzly_bears", "Grizzly Bears", 1, false),
+        ("serra_angel", "Serra Angel", 4, false),
+        ("grizzly_bears", "Grizzly Bears", 1, true),
+    ] {
+        let mut engine = basics_engine(176_200);
+        let mut commands = vec![
+            (0, put(0, DevZone::Hand, "No One Left Behind")),
+            (0, put(0, DevZone::Hand, name)),
+            (0, mv(0, DevZone::Graveyard, name)),
+            (0, add_mana(0, 0, 0, 1, 0, 0, generic)),
+        ];
+        let mut batches = Vec::new();
+        for (actor, command) in &commands {
+            batches.push(engine.apply_command(*actor, command).unwrap());
+        }
+        let target = *engine.state.players[0]
+            .graveyard
+            .iter()
+            .find(|oid| engine.state.objects[oid].card_id == card)
+            .unwrap();
+        let command = cast_spell(
+            hand_index_for_card(&engine, 0, "no_one_left_behind"),
+            vec![TargetRef {
+                object_id: target,
+                kind: TargetRefKind::Graveyard as i32,
+                ..Default::default()
+            }],
+        );
+        batches.push(engine.apply_command(0, &command).unwrap());
+        commands.push((0, command));
+        if stale {
+            for zone in [DevZone::Hand, DevZone::Graveyard] {
+                let command = mv(0, zone, name);
+                batches.push(engine.apply_command(0, &command).unwrap());
+                commands.push((0, command));
+            }
+        }
+        while !engine.state.stack.is_empty() {
+            let actor = engine.state.priority_player_id();
+            let command = pass();
+            batches.push(engine.apply_command(actor, &command).unwrap());
+            commands.push((actor, command));
+        }
+        assert_eq!(
+            engine.state.objects[&target].zone,
+            if stale {
+                Zone::Graveyard
+            } else {
+                Zone::Battlefield
+            }
+        );
+        assert_eq!(engine.state.players[0].mana_pool.black, 0);
+        assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+        let mut replay = basics_engine(176_200);
+        for ((actor, command), expected) in commands.iter().zip(&batches) {
+            assert_eq!(&replay.apply_command(*actor, command).unwrap(), expected);
+        }
+        assert_eq!(
+            replay.state.objects[&target].zone,
+            engine.state.objects[&target].zone
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -6,7 +6,7 @@
   mana_cost: "{3}{B}",
   types: ["Instant"],
   spell_effect: [
-    ExileTarget,
+    ExileTarget(),
     ChooseResolutionBranch(
       selection: FirstApplicable,
       branches: [

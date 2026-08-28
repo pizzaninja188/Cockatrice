@@ -413,6 +413,9 @@ pub enum PlayerQuantifier {
 /// uses the effective copiable face name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BattlefieldPermanentFilter {
+    /// Druid of the Spade and token-based sacrifice/activation cohorts use real token identity.
+    #[serde(default)]
+    pub token: Option<bool>,
     /// Optional recursive disjunction. The leaf predicates on this node still apply to every
     /// branch; a permanent that matches more than one branch is returned only once.
     #[serde(default)]
@@ -1129,7 +1132,7 @@ pub enum EffectSubject {
     /// The distinct permanent named by the trigger event. This is an untargeted rules reference
     /// (for example, the blocking creature affected by flanking), not a CR 115 target.
     TriggerObject,
-    Chosen(TargetFilter),
+    Chosen(Box<TargetFilter>),
 }
 
 /// A battlefield attachment subtype that an effect may enumerate through the authoritative
@@ -1186,7 +1189,7 @@ pub enum FaceChangeAction {
 
 impl Default for EffectSubject {
     fn default() -> Self {
-        Self::Chosen(TargetFilter::default_creature())
+        Self::Chosen(Box::new(TargetFilter::default_creature()))
     }
 }
 
@@ -1312,7 +1315,7 @@ impl CombatRestriction {
             if !filter.all_terminal_filters_match(|leaf| {
                 leaf.kind == TargetKind::Creature
                     && leaf.controller == TargetController::Any
-                    && !leaf.exclude_source
+                    && leaf.excluded_objects.is_empty()
                     && leaf.combat_role.is_none()
                     && leaf.tapped.is_none()
             }) {
@@ -1982,7 +1985,11 @@ pub enum SpellEffectKind {
     EachOpponentLosesLifeYouGainEqual {
         amount: u32,
     },
-    ExileTarget,
+    /// Haywire Mite and Oblivion Strike: exile one chosen permanent using the shared filter.
+    ExileTarget {
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
+    },
     ExileTargetGainLifeEqualToPower,
     /// Exile the top card of the named player's library and let that player play the exact
     /// resulting object until the end of their next turn. Clockwork Percussionist and Impossible
@@ -2287,7 +2294,7 @@ fn default_true() -> bool {
 }
 
 fn default_destroy_subject() -> EffectSubject {
-    EffectSubject::Chosen(TargetFilter::default_creature())
+    EffectSubject::Chosen(Box::new(TargetFilter::default_creature()))
 }
 
 /// Printed characteristics required of a card in a nonbattlefield zone. Leaf predicates compose
@@ -2749,6 +2756,7 @@ impl SpellEffectKind {
                 CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_) => Vec::new(),
             },
             SpellEffectKind::DamageTarget { target, .. }
+            | SpellEffectKind::ExileTarget { target }
             | SpellEffectKind::CreateTokenCopies { target, .. }
             | SpellEffectKind::ExileIfWouldDieThisTurn { target }
             | SpellEffectKind::DamageTargets { target, .. }
@@ -2771,7 +2779,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target } => {
                 vec![TargetRole::Filtered(target)]
             }
-            SpellEffectKind::ExileTarget | SpellEffectKind::ExileTargetGainLifeEqualToPower => {
+            SpellEffectKind::ExileTargetGainLifeEqualToPower => {
                 vec![TargetRole::CreaturePermanent]
             }
             SpellEffectKind::CounterTargetSpell { spell_filter, .. }
@@ -3039,6 +3047,11 @@ impl SpellEffectKind {
                 return Err("CreateTokenCopies requires a permanent source".into());
             }
         }
+        if let SpellEffectKind::ExileTarget { target } = self {
+            if !target.is_permanent_only() {
+                return Err("ExileTarget requires a permanent target".into());
+            }
+        }
 
         match self {
             SpellEffectKind::DamageTarget { amount, .. }
@@ -3185,7 +3198,9 @@ impl SpellEffectKind {
                         } => {
                             filter.validate_target_constraints()?;
                             if *source_only
-                                && filter.any_terminal_filter_matches(|leaf| leaf.exclude_source)
+                                && filter.any_terminal_filter_matches(|leaf| {
+                                    !leaf.excluded_objects.is_empty()
+                                })
                             {
                                 return Err(
                                     "source-only sacrifice cannot exclude its source".into()
@@ -3454,8 +3469,17 @@ impl SpellEffectKind {
             // CR 701.19/701.20: tapping and chosen-subject untapping act on permanents, never
             // players. A source subject is already constrained to a permanent ability above.
             SpellEffectKind::SkipNextUntap { target }
-            | SpellEffectKind::GainControlUntilEndOfTurn { target }
-            | SpellEffectKind::Tap {
+            | SpellEffectKind::GainControlUntilEndOfTurn { target } => {
+                if !target.is_permanent_only() {
+                    Err(format!(
+                        "permanent effect cannot target players, got {:?}",
+                        target.kind
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            SpellEffectKind::Tap {
                 subject: EffectSubject::Chosen(target),
             }
             | SpellEffectKind::Untap {
@@ -3514,7 +3538,7 @@ impl SpellEffectKind {
                             .into(),
                     );
                 }
-                if filter.any_terminal_filter_matches(|leaf| leaf.exclude_source) {
+                if filter.any_terminal_filter_matches(|leaf| !leaf.excluded_objects.is_empty()) {
                     return Err(
                         "TargetPlayerSacrifices.filter cannot exclude the effect source".into(),
                     );
@@ -3547,7 +3571,7 @@ impl SpellEffectKind {
                             .into(),
                     );
                 }
-                if kind.any_terminal_filter_matches(|leaf| leaf.exclude_source) {
+                if kind.any_terminal_filter_matches(|leaf| !leaf.excluded_objects.is_empty()) {
                     return Err("mass effect filter cannot exclude the effect source".into());
                 }
                 Ok(())
@@ -3684,7 +3708,9 @@ impl SpellEffectKind {
                         "GrantKeywordsAllPermanents does not support opponent scope; use the dedicated untargeted player scope"
                             .into(),
                     )
-                } else if filter.any_terminal_filter_matches(|leaf| leaf.exclude_source) {
+                } else if filter
+                    .any_terminal_filter_matches(|leaf| !leaf.excluded_objects.is_empty())
+                {
                     Err("GrantKeywordsAllPermanents filter cannot exclude the effect source".into())
                 } else if keywords.is_empty() {
                     Err("GrantKeywordsAllPermanents requires at least one keyword".into())
@@ -3708,6 +3734,15 @@ impl SpellEffectKind {
                     }
                     CombatRestrictionScope::Matching(filter) => {
                         filter.validate_characteristic_constraints()?;
+                        if filter.any_terminal_filter_matches(|leaf| {
+                            leaf.excluded_objects
+                                .contains(&super::TargetObjectExclusion::AttachedObject)
+                        }) {
+                            return Err(
+                                "matching combat restrictions do not bind attachment identity"
+                                    .into(),
+                            );
+                        }
                         if !filter
                             .all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature)
                         {
@@ -4041,8 +4076,10 @@ mod issue_158_predicate_tests {
     fn richer_public_predicates_validate_composable_filters() {
         let union = GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
+                token: None,
                 any_of: Some(vec![
                     BattlefieldPermanentFilter {
+                        token: None,
                         any_of: None,
                         controllers: RelativePlayerSet::Controller,
                         card_type: Some(CardTypeFilter::Land),
@@ -4052,6 +4089,7 @@ mod issue_158_predicate_tests {
                         exclude_source: false,
                     },
                     BattlefieldPermanentFilter {
+                        token: None,
                         any_of: None,
                         controllers: RelativePlayerSet::Controller,
                         card_type: None,

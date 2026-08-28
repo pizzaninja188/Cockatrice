@@ -2908,7 +2908,7 @@ mod mana_payment_tests {
         let leaf = TargetFilter {
             kind: TargetKind::AnyPermanent,
             controller: TargetController::You,
-            exclude_source: true,
+            excluded_objects: vec![tricerules_cards::TargetObjectExclusion::Source],
             ..TargetFilter::default()
         };
         let filter = TargetFilter {

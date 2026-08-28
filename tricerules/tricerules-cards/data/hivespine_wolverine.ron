@@ -1,0 +1,18 @@
+// Oracle/rulings verified 2026-08-28. CR 700.2/701.14: source fights the chosen creature token.
+(
+  id: "hivespine_wolverine",
+  name: "Hivespine Wolverine",
+  mana_cost: "{3}{G}{G}",
+  types: ["Creature", "Elemental", "Wolverine"],
+  power: 5,
+  toughness: 4,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    modal: Some((min_modes: 1, max_modes: 1, modes: [
+      (label: "Put a +1/+1 counter on target creature you control", effects: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature, controller: You)))]),
+      (label: "Fight target creature token", effects: [Fight(first: Source, second: Chosen((kind: Creature, token: Some(true))))]),
+      (label: "Destroy target artifact or enchantment", effects: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Enchantment])))]),
+    ])),
+    text: "When this creature enters, choose one — Put a +1/+1 counter on target creature you control; this creature fights target creature token; or destroy target artifact or enchantment.",
+  )],
+)

@@ -210,6 +210,71 @@ mod face_change_tests {
     }
 
     #[test]
+    fn issue_176_mana_value_tracks_faces_copies_rooms_and_face_down() {
+        let mut engine = engine_with(&[
+            "village_ironsmith_ironfang",
+            "akki_lavarunner_tok-tok,_volcano_born",
+            "derelict_attic_widows_walk",
+            "cragcrown_pathway_timbercrown_pathway",
+            "grizzly_bears",
+        ]);
+        let bear = put_on_battlefield(&mut engine, "grizzly_bears");
+        let transformed = put_on_battlefield(&mut engine, "village_ironsmith_ironfang");
+        engine
+            .state
+            .objects
+            .get_mut(&transformed)
+            .unwrap()
+            .face_up_index = 1;
+        assert_eq!(engine.characteristics(transformed).unwrap().mana_value, 2);
+        let values = engine.copiable_values_for(transformed).unwrap();
+        engine.state.objects.get_mut(&bear).unwrap().copiable_values = Some(values);
+        assert_eq!(
+            engine.characteristics(bear).unwrap().mana_value,
+            0,
+            "copy of a back face has no mana cost"
+        );
+
+        let flip = put_on_battlefield(&mut engine, "akki_lavarunner_tok-tok,_volcano_born");
+        engine.state.objects.get_mut(&flip).unwrap().face_up_index = 1;
+        assert_eq!(engine.characteristics(flip).unwrap().mana_value, 4);
+        let values = engine.copiable_values_for(flip).unwrap();
+        engine.state.objects.get_mut(&bear).unwrap().copiable_values = Some(values);
+        assert_eq!(
+            engine.characteristics(bear).unwrap().mana_value,
+            4,
+            "flip copies retain the mana cost"
+        );
+        engine.state.objects.get_mut(&bear).unwrap().face_down = true;
+        assert_eq!(engine.characteristics(bear).unwrap().mana_value, 0);
+        let face_down = engine.copiable_values_for(bear).unwrap();
+        let object = engine.state.objects.get_mut(&bear).unwrap();
+        object.face_down = false;
+        object.copiable_values = None;
+        object.token_origin = Some(face_down);
+        assert_eq!(engine.characteristics(bear).unwrap().mana_value, 0);
+        let values = engine.copiable_values_for(flip).unwrap();
+        engine.state.objects.get_mut(&bear).unwrap().token_origin = Some(values);
+        assert_eq!(
+            engine.characteristics(bear).unwrap().mana_value,
+            4,
+            "token status does not erase a copied mana cost"
+        );
+
+        let room = put_on_battlefield(&mut engine, "derelict_attic_widows_walk");
+        engine.state.room_states.insert(room, RoomState::default());
+        assert_eq!(engine.characteristics(room).unwrap().mana_value, 0);
+        engine.transition_room_door(room, 0).unwrap();
+        assert_eq!(engine.characteristics(room).unwrap().mana_value, 3);
+        engine.transition_room_door(room, 1).unwrap();
+        assert_eq!(engine.characteristics(room).unwrap().mana_value, 7);
+
+        let land = put_on_battlefield(&mut engine, "cragcrown_pathway_timbercrown_pathway");
+        engine.state.objects.get_mut(&land).unwrap().face_up_index = 1;
+        assert_eq!(engine.characteristics(land).unwrap().mana_value, 0);
+    }
+
+    #[test]
     fn runtime_token_room_keeps_both_doors_and_starts_locked() {
         let mut engine = engine_with(&["derelict_attic_widows_walk"]);
         let oid = put_on_battlefield(&mut engine, "derelict_attic_widows_walk");
@@ -1028,6 +1093,8 @@ impl GameEngine {
         let definition = self.registry.get(&object.card_id)?;
         let mut face = definition.face(object.face_up_index)?.clone();
         if definition.layout == Layout::Flip && object.face_up_index > 0 {
+            // Flipping replaces only the alternative characteristics; mana cost is retained.
+            face.mana_cost = definition.primary_face().mana_cost.clone();
             face.colors_override = Some(definition.primary_face().colors());
         }
         Some(CopiableValues {

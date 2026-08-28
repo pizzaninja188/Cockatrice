@@ -341,7 +341,7 @@ fn issue_49_targeted_etbs_use_one_existing_target_group() {
     assert_eq!(
         trigger("gale_swooper").effect,
         [SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(creature_target(TargetController::Any)),
+            subject: EffectSubject::Chosen(Box::new(creature_target(TargetController::Any))),
             keywords: vec![Keyword::Flying],
         }]
     );
@@ -351,7 +351,7 @@ fn issue_49_targeted_etbs_use_one_existing_target_group() {
             power: 2,
             toughness: 0,
             scale: None,
-            subject: EffectSubject::Chosen(creature_target(TargetController::Any)),
+            subject: EffectSubject::Chosen(Box::new(creature_target(TargetController::Any))),
         }]
     );
     assert_eq!(
@@ -371,10 +371,10 @@ fn issue_49_targeted_etbs_use_one_existing_target_group() {
                 power: 2,
                 toughness: 0,
                 scale: None,
-                subject: EffectSubject::Chosen(creature_target(TargetController::Any)),
+                subject: EffectSubject::Chosen(Box::new(creature_target(TargetController::Any))),
             },
             SpellEffectKind::GrantKeywords {
-                subject: EffectSubject::Chosen(creature_target(TargetController::Any)),
+                subject: EffectSubject::Chosen(Box::new(creature_target(TargetController::Any))),
                 keywords: vec![Keyword::FirstStrike],
             },
         ]
@@ -475,7 +475,7 @@ fn issue_49_observer_and_dies_triggers_use_existing_subjects() {
         [SpellEffectKind::PutCounters {
             counter: CounterKind::PlusOnePlusOne,
             count: 1,
-            subject: EffectSubject::Chosen(creature_target(TargetController::You)),
+            subject: EffectSubject::Chosen(Box::new(creature_target(TargetController::You))),
         }]
     );
     assert_eq!(

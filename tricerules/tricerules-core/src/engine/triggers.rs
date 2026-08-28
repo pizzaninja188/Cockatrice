@@ -763,6 +763,15 @@ impl GameEngine {
                 let dying = dying.at_event(sources);
                 let mut out = self
                     .matching_snapshot_abilities(dying, |tc| *tc == TriggerCondition::WhenSelfDies);
+                // The committed battlefield-to-graveyard move advances exactly one generation.
+                // Derive from the event snapshot, never the possibly newer current object.
+                for trigger in &mut out {
+                    trigger.trigger_context.source_after_zone_change = Some(TriggerObjectRef {
+                        object_id: dying.object_id,
+                        zone_change_generation: dying.zone_change_generation + 1,
+                        controller_at_event: dying.controller,
+                    });
+                }
                 if !was_creature {
                     return out;
                 }

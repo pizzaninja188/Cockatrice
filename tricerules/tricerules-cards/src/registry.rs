@@ -391,7 +391,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             if !filter.all_terminal_filters_match(|leaf| {
                 matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
                     && leaf.controller == TargetController::Any
-                    && !leaf.exclude_source
+                    && leaf.excluded_objects.is_empty()
             }) {
                 return Err(RegistryError::InvalidCard {
                     id: card.id.clone(),
@@ -626,6 +626,12 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 });
             }
             if let SpecialActionAffected::Permanents(filter) = affected {
+                if filter.any_terminal_filter_matches(|leaf| !leaf.excluded_objects.is_empty()) {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "special-action scopes do not bind object exclusions".into(),
+                    });
+                }
                 filter
                     .validate_characteristic_constraints()
                     .map_err(|reason| RegistryError::InvalidCard {
@@ -1200,7 +1206,7 @@ impl CardRegistry {
                         if !filter.all_terminal_filters_match(|leaf| {
                             matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
                                 && leaf.controller == TargetController::You
-                                && !leaf.exclude_source
+                                && leaf.excluded_objects.is_empty()
                         }) {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
@@ -1536,10 +1542,10 @@ mod tests {
             dark_endurance.cost_modifiers.as_slice(),
             [SpellCostModifier::TargetMatchGenericReduction {
                 amount: 1,
-                filter: TargetFilter {
+                filter: crate::TargetMatchFilter::Battlefield(TargetFilter {
                     combat_role: Some(CombatRole::Blocking),
                     ..
-                },
+                }),
             }]
         ));
 
@@ -2270,7 +2276,7 @@ mod tests {
                 .spell_effect,
             vec![
                 SpellEffectKind::Tap {
-                    subject: EffectSubject::Chosen(TargetFilter::default_creature()),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
                 },
                 SpellEffectKind::SkipNextUntap {
                     target: TargetFilter::default_creature(),

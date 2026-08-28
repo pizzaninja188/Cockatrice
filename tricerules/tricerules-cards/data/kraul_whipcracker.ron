@@ -1,0 +1,15 @@
+// Oracle/rulings verified 2026-08-28. Tokens include noncreature permanents and copied tokens.
+(
+  id: "kraul_whipcracker",
+  name: "Kraul Whipcracker",
+  mana_cost: "{B}{G}",
+  types: ["Creature", "Insect", "Assassin"],
+  power: 3,
+  toughness: 2,
+  keywords: [Reach],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Destroy(subject: Chosen((kind: AnyPermanent, controller: Opponent, token: Some(true))))],
+    text: "When this creature enters, destroy target token an opponent controls.",
+  )],
+)

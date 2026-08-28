@@ -293,7 +293,7 @@ impl GameEngine {
                         SpecialActionAffected::Permanents(filter) => {
                             AffectedScope::PermanentsMatching {
                                 reference_player: controller,
-                                filter,
+                                filter: *filter,
                                 exclude: None,
                             }
                         }

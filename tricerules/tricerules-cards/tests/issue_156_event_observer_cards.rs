@@ -155,7 +155,7 @@ fn issue_156_tap_cards_use_shared_trigger_and_effect_shapes() {
         [SpellEffectKind::PumpTarget { power: 2, toughness: 0, subject: EffectSubject::Chosen(filter), .. }]
             if filter.kind == TargetKind::Creature
                 && filter.controller == TargetController::You
-                && filter.exclude_source
+                && filter.excluded_objects.contains(&tricerules_cards::TargetObjectExclusion::Source)
                 && filter.required_subtypes == ["Merfolk"]
     ));
 }

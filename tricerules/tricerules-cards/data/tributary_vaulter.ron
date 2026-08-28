@@ -12,7 +12,7 @@
     effect: [PumpTarget(
       power: 2,
       toughness: 0,
-      subject: Chosen((kind: Creature, controller: You, required_subtypes: ["Merfolk"], exclude_source: true)),
+      subject: Chosen((kind: Creature, controller: You, required_subtypes: ["Merfolk"], excluded_objects: [Source])),
     )],
     text: "Whenever this creature becomes tapped, another target Merfolk you control gets +2/+0 until end of turn.",
   )],

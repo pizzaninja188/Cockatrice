@@ -1,0 +1,11 @@
+// CR 111.10b predefined Food token (Feed the Cauldron / Bake into a Pie), verified 2026-08-28.
+(
+  id: "food",
+  name: "Food",
+  types: ["Artifact", "Food"],
+  activated_abilities: [(
+    costs: [Mana("{2}"), Tap, SacrificeSelf],
+    effect: [GainLife(amount: 3)],
+    text: "{2}, {T}, Sacrifice this token: You gain 3 life.",
+  )],
+)

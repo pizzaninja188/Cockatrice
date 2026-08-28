@@ -1,5 +1,68 @@
 use super::helpers::*;
 use tricerules_core::{GameEngine, Zone};
+use tricerules_proto::ruled::v1 as rv1;
+
+#[test]
+fn issue_176_no_one_left_behind_publishes_graveyard_reduction_and_pays_it() {
+    let mut engine = GameEngine::new(
+        176_101,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with(
+                "swamp",
+                &["no_one_left_behind", "grizzly_bears", "serra_angel"],
+            ),
+            deck_with("forest", &[]),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut engine);
+    ensure_in_hand(&mut engine, 0, "no_one_left_behind");
+    let small = relocate_to_hand(&mut engine, 0, "grizzly_bears");
+    let large = relocate_to_hand(&mut engine, 0, "serra_angel");
+    for oid in [small, large] {
+        engine.state.players[0].hand.retain(|id| *id != oid);
+        engine.state.players[0].graveyard.push(oid);
+        engine.state.objects.get_mut(&oid).unwrap().zone = Zone::Graveyard;
+    }
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let slot = hand_index_for_card(&engine, 0, "no_one_left_behind");
+    let batch = engine.initial_response_batch();
+    let targets = &batch.legal_by_player[&0].valid_targets_by_hand_slot[&((slot as u32) << 8)];
+    assert_eq!(targets.targeted_cost_reduction_applications.len(), 1);
+    let qualifying = &targets.targeted_cost_reduction_applications[0].qualifying_targets;
+    assert_eq!(qualifying.len(), 1);
+    assert_eq!(qualifying[0].object_id, small);
+    assert_eq!(qualifying[0].kind, rv1::TargetRefKind::Graveyard as i32);
+    let target = |oid| {
+        vec![TargetRef {
+            kind: rv1::TargetRefKind::Graveyard as i32,
+            object_id: oid,
+            ..Default::default()
+        }]
+    };
+    assert!(engine
+        .apply_command(0, &cast_spell(slot, target(large)))
+        .is_err());
+    engine
+        .apply_command(0, &cast_spell(slot, target(small)))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut engine);
+    assert_eq!(engine.state.objects[&small].zone, Zone::Battlefield);
+    assert_eq!(engine.state.objects[&large].zone, Zone::Graveyard);
+    assert_eq!(engine.state.players[0].mana_pool.black, 0);
+    assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+}
 
 fn winged_words_action_cost(engine: &mut GameEngine) -> (String, u32) {
     let hand_index = hand_index_for_card(engine, 0, "winged_words") as u32;

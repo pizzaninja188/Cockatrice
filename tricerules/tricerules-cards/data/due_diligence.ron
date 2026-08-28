@@ -1,0 +1,17 @@
+// Oracle/ruling verified 2026-08-28. CR 608.2b: recheck the current enchanted creature.
+(
+  id: "due_diligence",
+  name: "Due Diligence",
+  mana_cost: "{2}{W}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  static_abilities: [AttachedModifier(delta_power: 2, delta_toughness: 2, keywords: [Vigilance])],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature, controller: You, excluded_objects: [AttachedObject]))),
+      GrantKeywords(subject: Chosen((kind: Creature, controller: You, excluded_objects: [AttachedObject])), keywords: [Vigilance]),
+    ],
+    text: "When this Aura enters, target creature you control other than enchanted creature gets +2/+2 and gains vigilance until end of turn.",
+  )],
+)

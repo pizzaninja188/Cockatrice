@@ -15,7 +15,7 @@
         min: Some(1),
       ),
     )],
-    effect: [Tap(subject: Chosen((kind: Creature, exclude_source: true)))],
+    effect: [Tap(subject: Chosen((kind: Creature, excluded_objects: [Source])))],
     text: "{3}{W}, {T}: Tap another target creature. This ability costs {2} less to activate if you control a creature with a +1/+1 counter on it.",
   )],
 )

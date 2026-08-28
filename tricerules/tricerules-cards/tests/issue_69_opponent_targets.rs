@@ -31,11 +31,11 @@ fn glaring_aegis_has_complete_oracle_behavior() {
     assert_eq!(
         face.triggered_abilities[0].effect,
         [SpellEffectKind::Tap {
-            subject: EffectSubject::Chosen(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::Opponent,
                 ..TargetFilter::default()
-            }),
+            })),
         }]
     );
     assert_eq!(
@@ -81,7 +81,7 @@ fn rambunctious_mutt_has_complete_oracle_behavior() {
     assert_eq!(
         face.triggered_abilities[0].effect,
         [SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(TargetFilter {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
                 kind: TargetKind::AnyPermanent,
                 controller: TargetController::Opponent,
                 permanent_types: vec![
@@ -89,7 +89,7 @@ fn rambunctious_mutt_has_complete_oracle_behavior() {
                     PermanentTypeFilter::Enchantment,
                 ],
                 ..TargetFilter::default()
-            }),
+            })),
         }]
     );
 }

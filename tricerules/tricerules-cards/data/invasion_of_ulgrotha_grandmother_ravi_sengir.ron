@@ -11,7 +11,7 @@
       triggered_abilities: [(
         trigger: WhenSelfEntersBattlefield,
         effect: [
-          DamageTarget(amount: 3, target: (kind: AnyTarget, exclude_source: true)),
+          DamageTarget(amount: 3, target: (kind: AnyTarget, excluded_objects: [Source])),
           GainLife(amount: 3, who: Controller),
         ],
         text: "When this permanent enters, it deals 3 damage to any other target and you gain 3 life.",

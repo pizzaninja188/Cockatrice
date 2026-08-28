@@ -6,7 +6,7 @@
   mana_cost: "{1}{B}",
   cost_modifiers: [TargetMatchGenericReduction(
     amount: 1,
-    filter: (kind: Creature, combat_role: Blocking),
+    filter: Battlefield((kind: Creature, combat_role: Blocking)),
   )],
   types: ["Instant"],
   spell_effect: [

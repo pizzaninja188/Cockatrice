@@ -1,7 +1,92 @@
 use super::*;
 use tricerules_cards::primitives::{
-    GraveyardFilter, GraveyardOwner, TargetRole, TargetSchema, TargetingDef,
+    GraveyardFilter, GraveyardOwner, TargetObjectExclusion, TargetRole, TargetSchema, TargetingDef,
 };
+
+/// CR 608.2b/h: current attachment, or generation-scoped LKI after the source leaves.
+/// Shared by Due Diligence's target exclusion and untargeted attached-object effects.
+pub(super) fn attached_object_identity(
+    state: &GameState,
+    source_id: ObjectId,
+    source_generation: u64,
+) -> Option<(ObjectId, u64)> {
+    if state
+        .zone_change_generation
+        .get(&source_id)
+        .copied()
+        .unwrap_or(0)
+        == source_generation
+        && state
+            .objects
+            .get(&source_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield)
+    {
+        let AttachmentRecipient::Object(oid) = state.objects.get(&source_id)?.attached_to? else {
+            return None;
+        };
+        Some((
+            oid,
+            state.zone_change_generation.get(&oid).copied().unwrap_or(0),
+        ))
+    } else {
+        state
+            .last_known_attached_object_by_generation
+            .get(&(source_id, source_generation))
+            .copied()
+    }
+}
+
+pub(super) fn object_is_excluded(
+    state: &GameState,
+    exclusions: &[TargetObjectExclusion],
+    candidate: ObjectId,
+    source: TargetSourceIdentity,
+    context: TriggerContext,
+) -> bool {
+    let generation = state
+        .zone_change_generation
+        .get(&candidate)
+        .copied()
+        .unwrap_or(0);
+    exclusions.iter().any(|exclusion| match exclusion {
+        TargetObjectExclusion::Source => {
+            let identity = context
+                .source_after_zone_change
+                .map(|object| (object.object_id, Some(object.zone_change_generation)))
+                .unwrap_or((source.object_id, source.zone_change_generation));
+            identity.0 == candidate && identity.1.is_none_or(|expected| expected == generation)
+        }
+        TargetObjectExclusion::AttachedObject => {
+            source
+                .zone_change_generation
+                .and_then(|expected| attached_object_identity(state, source.object_id, expected))
+                == Some((candidate, generation))
+        }
+    })
+}
+
+pub(super) fn cost_target_matches(
+    engine: &GameEngine,
+    filter: &tricerules_cards::TargetMatchFilter,
+    kind: i32,
+    oid: ObjectId,
+    actor: PlayerId,
+    source: TargetSourceIdentity,
+) -> bool {
+    let expected_kind = match filter {
+        tricerules_cards::TargetMatchFilter::Battlefield(_) => rv1::TargetRefKind::Permanent,
+        tricerules_cards::TargetMatchFilter::Graveyard(_) => rv1::TargetRefKind::Graveyard,
+    };
+    (kind == rv1::TargetRefKind::Unspecified as i32 || kind == expected_kind as i32)
+        && target_role_legal_at_resolution(
+            engine,
+            filter.role(),
+            oid,
+            actor,
+            source,
+            TriggerContext::default(),
+        )
+}
 
 pub(super) fn target_schema<'effects, 'targeting>(
     effects: &'effects [SpellEffectKind],
@@ -214,21 +299,6 @@ impl TargetSourceIdentity {
         }
     }
 
-    fn is_current_object(self, engine: &GameEngine, candidate_id: ObjectId) -> bool {
-        if self.object_id != candidate_id {
-            return false;
-        }
-        self.zone_change_generation.is_none_or(|generation| {
-            engine
-                .state
-                .zone_change_generation
-                .get(&candidate_id)
-                .copied()
-                .unwrap_or(0)
-                == generation
-        })
-    }
-
     fn qualities(self, engine: &GameEngine) -> Option<SourceQualities> {
         if let Some(qualities) = self.locked_qualities {
             return Some(qualities);
@@ -319,16 +389,27 @@ pub(super) fn graveyard_target_legal(
     filter: &GraveyardFilter,
     oid: ObjectId,
     caster: PlayerId,
+    source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
 ) -> bool {
     if let Some(branches) = &filter.any_of {
-        return branches
-            .iter()
-            .any(|branch| graveyard_target_legal(engine, branch, oid, caster));
+        return branches.iter().any(|branch| {
+            graveyard_target_legal(engine, branch, oid, caster, source, trigger_context)
+        });
     }
     let Some(obj) = engine.state.objects.get(&oid) else {
         return false;
     };
-    if obj.zone != Zone::Graveyard {
+    if obj.zone != Zone::Graveyard || obj.is_token() {
+        return false;
+    }
+    if object_is_excluded(
+        &engine.state,
+        &filter.excluded_objects,
+        oid,
+        source,
+        trigger_context,
+    ) {
         return false;
     }
     // Owner restriction: "your graveyard" vs. any player's graveyard.
@@ -339,6 +420,31 @@ pub(super) fn graveyard_target_legal(
             }
         }
         GraveyardOwner::AnyPlayer => {}
+        GraveyardOwner::Opponent => {
+            if !engine.state.are_opponents(caster, obj.owner) {
+                return false;
+            }
+        }
+    }
+    let Some(definition) = engine.registry.get(&obj.card_id) else {
+        return false;
+    };
+    let mana_value = definition.mana_value_outside_stack();
+    if filter.min_mana_value.is_some_and(|min| mana_value < min)
+        || filter.max_mana_value.is_some_and(|max| mana_value > max)
+        || !filter
+            .required_subtypes
+            .iter()
+            .all(|subtype| definition.has_subtype_outside_stack(subtype))
+        || filter
+            .excluded_subtypes
+            .iter()
+            .any(|subtype| definition.has_subtype_outside_stack(subtype))
+        || filter
+            .has_adventure
+            .is_some_and(|required| (definition.layout == Layout::Adventure) != required)
+    {
+        return false;
     }
     // Card-type restriction.
     if let Some(card_type) = filter.card_type {
@@ -411,7 +517,7 @@ fn object_targetable_by(
 ///   permanents normally, so only the targeted caller applies it;
 /// - `controller` — needs an activating player, which untargeted mass selection does not have
 ///   (non-`Any` values are rejected in a mass filter at registry load);
-/// - `exclude_source` — needs the source object's captured CR 400.7 identity, which untargeted
+/// - `excluded_objects` — needs the source object's captured CR 400.7 identity, which untargeted
 ///   mass selection does not have (and registry validation rejects on mass filters);
 /// - the [`TargetKind`] mapping — the two paths accept different kinds and check zone differently.
 pub(super) fn filter_characteristics_match(
@@ -495,7 +601,7 @@ fn target_role_legality_error(
             "target must be a spell of the required type on the stack",
         ),
         TargetRole::GraveyardCard(filter) => (
-            graveyard_target_legal(engine, filter, tid, caster),
+            graveyard_target_legal(engine, filter, tid, caster, source, trigger_context),
             "target must be a matching card in the correct graveyard",
         ),
     };
@@ -570,7 +676,13 @@ pub(super) fn attachment_filter_legal(
     };
     kind_ok
         && attachment_protection_legal(engine, recipient, attachment_id)
-        && (!filter.exclude_source || oid != attachment_id)
+        && !object_is_excluded(
+            &engine.state,
+            &filter.excluded_objects,
+            oid,
+            TargetSourceIdentity::current(engine, attachment_id),
+            TriggerContext::default(),
+        )
         && filter_characteristics_match(engine, filter, oid)
         && target_controller_matches(
             &engine.state,
@@ -750,7 +862,15 @@ fn target_filter_legal_with_context(
     // player-only kinds; `AnyTarget` is decided per target, since the same filter accepts both a
     // creature and a player (Lightning Bolt) and a player carries no characteristics.
     let target_is_player = engine.state.player_idx(tid as i32).is_some();
-    if !target_is_player && filter.exclude_source && source.is_current_object(engine, tid) {
+    if !target_is_player
+        && object_is_excluded(
+            &engine.state,
+            &filter.excluded_objects,
+            tid,
+            source,
+            trigger_context,
+        )
+    {
         return false;
     }
     if !filter.is_player() && !target_is_player {
@@ -851,14 +971,18 @@ fn validate_effect_targets(
             ));
         }
         SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
         }
         | SpellEffectKind::Sacrifice {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
         }
-        | SpellEffectKind::ExileUntilSourceLeaves { target: filter }
-        | SpellEffectKind::DestroyAttached { target: filter, .. }
-        | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: filter, .. } => {
+        | SpellEffectKind::ExileUntilSourceLeaves { target: _ }
+        | SpellEffectKind::DestroyAttached { target: _, .. }
+        | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: _, .. } => {
+            let roles = effect.target_roles();
+            let [TargetRole::Filtered(filter)] = roles.as_slice() else {
+                return Err(EngineError::Illegal("effect requires one filtered target role"));
+            };
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
@@ -875,14 +999,18 @@ fn validate_effect_targets(
                 ));
             }
         }
-        SpellEffectKind::SkipNextUntap { target: filter }
-        | SpellEffectKind::GainControlUntilEndOfTurn { target: filter }
+        SpellEffectKind::SkipNextUntap { target: _ }
+        | SpellEffectKind::GainControlUntilEndOfTurn { target: _ }
         | SpellEffectKind::Tap {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
         }
         | SpellEffectKind::Untap {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
         } => {
+            let roles = effect.target_roles();
+            let [TargetRole::Filtered(filter)] = roles.as_slice() else {
+                return Err(EngineError::Illegal("effect requires one filtered target role"));
+            };
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
@@ -1021,7 +1149,12 @@ fn validate_effect_targets(
                 }
             }
         },
-        SpellEffectKind::ExileTarget | SpellEffectKind::ExileTargetGainLifeEqualToPower => {
+        SpellEffectKind::ExileTarget { target } => {
+            if targets.len() != 1 || !target_filter_legal_with_context(engine, target, targets[0].object_id, caster, source, trigger_context) {
+                return Err(EngineError::Illegal("illegal exile target"));
+            }
+        }
+        SpellEffectKind::ExileTargetGainLifeEqualToPower => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one creature target"));
             }
@@ -1134,7 +1267,7 @@ fn validate_effect_targets(
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one graveyard card target"));
             }
-            if !graveyard_target_legal(engine, filter, targets[0].object_id, caster) {
+            if !graveyard_target_legal(engine, filter, targets[0].object_id, caster, source, trigger_context) {
                 return Err(EngineError::Illegal(
                     "target must be a matching card in the correct graveyard",
                 ));
@@ -1472,65 +1605,71 @@ fn spell_target_legality_error_with_context(
         // Filter-based targeted effects share one legality path; the filter carries any
         // characteristic restriction (creature/player, `tapped`, `not_artifact`, hexproof/shroud).
         SpellEffectKind::Destroy {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
         }
         | SpellEffectKind::Sacrifice {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
         }
-        | SpellEffectKind::DestroyAttached { target: filter, .. }
-        | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: filter, .. }
-        | SpellEffectKind::DamageTarget { target: filter, .. }
-        | SpellEffectKind::ExileIfWouldDieThisTurn { target: filter }
-        | SpellEffectKind::DamageTargets { target: filter, .. }
-        | SpellEffectKind::SkipNextUntap { target: filter }
-        | SpellEffectKind::GainControlUntilEndOfTurn { target: filter }
+        | SpellEffectKind::DestroyAttached { target: _, .. }
+        | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: _, .. }
+        | SpellEffectKind::DamageTarget { target: _, .. }
+        | SpellEffectKind::ExileIfWouldDieThisTurn { target: _ }
+        | SpellEffectKind::DamageTargets { target: _, .. }
+        | SpellEffectKind::SkipNextUntap { target: _ }
+        | SpellEffectKind::GainControlUntilEndOfTurn { target: _ }
         | SpellEffectKind::Tap {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
         }
         | SpellEffectKind::Untap {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
         }
         | SpellEffectKind::PumpTarget {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
             ..
         }
         | SpellEffectKind::GrantKeywords {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
             ..
         }
         | SpellEffectKind::GrantKeywordChoice {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
             ..
         }
         | SpellEffectKind::GrantProtection {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
             ..
         }
         | SpellEffectKind::GrantTriggeredAbility {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
             ..
         }
         | SpellEffectKind::CreateDelayedTrigger {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
             ..
         }
         | SpellEffectKind::AddTypes {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
             ..
         }
         | SpellEffectKind::ApplyCombatRestriction {
-            scope: CombatRestrictionScope::Chosen(filter),
+            scope: CombatRestrictionScope::Chosen(_),
             ..
         }
         | SpellEffectKind::PutCounters {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
             ..
         }
         | SpellEffectKind::ReturnToOwnersHand {
-            subject: EffectSubject::Chosen(filter),
+            subject: EffectSubject::Chosen(_),
         }
-        | SpellEffectKind::PreventNextDamage { target: filter, .. }
-        | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target: filter } => {
+        | SpellEffectKind::PreventNextDamage { target: _, .. }
+        | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target: _ } => {
+            let roles = effect.target_roles();
+            let [TargetRole::Filtered(filter)] = roles.as_slice() else {
+                return Err(EngineError::Illegal(
+                    "effect requires one filtered target role",
+                ));
+            };
             if !target_filter_legal_with_context(
                 engine,
                 filter,
@@ -1574,7 +1713,19 @@ fn spell_target_legality_error_with_context(
                 "source-bound effects are only valid on activated or triggered abilities",
             ));
         }
-        SpellEffectKind::ExileTarget | SpellEffectKind::ExileTargetGainLifeEqualToPower => {
+        SpellEffectKind::ExileTarget { target } => {
+            if !target_filter_legal_with_context(
+                engine,
+                target,
+                tid,
+                caster,
+                source,
+                trigger_context,
+            ) {
+                return Err(EngineError::Illegal("illegal exile target"));
+            }
+        }
+        SpellEffectKind::ExileTargetGainLifeEqualToPower => {
             if !destroy_spell_target_legal(engine, tid) {
                 return Err(EngineError::Illegal(
                     "target must be a creature on the battlefield",
@@ -1635,7 +1786,7 @@ fn spell_target_legality_error_with_context(
             }
         }
         SpellEffectKind::MoveGraveyardCards { filter, .. } => {
-            if !graveyard_target_legal(engine, filter, tid, caster) {
+            if !graveyard_target_legal(engine, filter, tid, caster, source, trigger_context) {
                 return Err(EngineError::Illegal(
                     "target must be a matching card in the correct graveyard",
                 ));
@@ -1859,6 +2010,358 @@ fn compute_targets_with_context(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn issue_176_exile_role_accepts_noncreature_artifacts() {
+        let card = r#"(id: "test", name: "Test", types: ["Instant"], spell_effect: [ExileTarget(target: (kind: AnyPermanent, permanent_types: [Artifact], excluded_permanent_types: [Creature]))])"#;
+        let registry = CardRegistry::from_chunks_and_tokens(&[card], &[]).unwrap();
+        let effect = &registry.get("test").unwrap().primary_face().spell_effect[0];
+        let decks = Some(vec![
+            vec!["short_sword".into(); 7],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(176005, &[0, 1], 20, decks, true).unwrap();
+        let artifact = engine.state.players[0].hand.remove(0);
+        engine.state.players[0].battlefield.push(artifact);
+        engine.state.objects.get_mut(&artifact).unwrap().zone = Zone::Battlefield;
+        assert!(target_role_legal_at_resolution(
+            &engine,
+            effect.target_roles()[0],
+            artifact,
+            0,
+            TargetSourceIdentity::current(&engine, 999),
+            TriggerContext::default()
+        ));
+    }
+    #[test]
+    fn issue_176_attached_exclusion_tracks_current_relation_and_lki() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(176003, &[0, 1], 20, decks, true).unwrap();
+        let ids = engine.state.players[0].hand[..3].to_vec();
+        for &oid in &ids {
+            engine.state.players[0].hand.retain(|id| *id != oid);
+            engine.state.players[0].battlefield.push(oid);
+            engine.state.objects.get_mut(&oid).unwrap().zone = Zone::Battlefield;
+        }
+        let [source_id, first, second] = ids[..] else {
+            unreachable!()
+        };
+        engine
+            .state
+            .objects
+            .get_mut(&source_id)
+            .unwrap()
+            .attached_to = Some(AttachmentRecipient::Object(first));
+        let source = TargetSourceIdentity::current(&engine, source_id);
+        let filter = issue_176_target("(kind: Creature, excluded_objects: [AttachedObject])");
+        let legal = |engine: &GameEngine, oid| {
+            target_filter_legal_with_context(
+                engine,
+                &filter,
+                oid,
+                0,
+                source,
+                TriggerContext::default(),
+            )
+        };
+        assert!(!legal(&engine, first));
+        assert!(legal(&engine, second));
+        engine
+            .state
+            .objects
+            .get_mut(&source_id)
+            .unwrap()
+            .attached_to = Some(AttachmentRecipient::Object(second));
+        assert!(legal(&engine, first));
+        assert!(!legal(&engine, second));
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source_id,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        assert!(
+            !legal(&engine, second),
+            "departed source retains attachment LKI"
+        );
+        *engine
+            .state
+            .zone_change_generation
+            .entry(second)
+            .or_default() += 1;
+        assert!(
+            legal(&engine, second),
+            "LKI must not exclude a new incarnation"
+        );
+    }
+
+    #[test]
+    fn issue_176_graveyard_excludes_exact_source() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(176004, &[0, 1], 20, decks, true).unwrap();
+        let bear = engine.state.players[0].hand.remove(0);
+        engine.state.players[0].graveyard.push(bear);
+        engine.state.objects.get_mut(&bear).unwrap().zone = Zone::Graveyard;
+        let source = TargetSourceIdentity::current(&engine, bear);
+        let filter = issue_176_graveyard("(excluded_objects: [Source])");
+        assert!(!target_role_legal_at_resolution(
+            &engine,
+            TargetRole::GraveyardCard(&filter),
+            bear,
+            0,
+            source,
+            TriggerContext::default()
+        ));
+        *engine.state.zone_change_generation.entry(bear).or_default() += 1;
+        assert!(target_role_legal_at_resolution(
+            &engine,
+            TargetRole::GraveyardCard(&filter),
+            bear,
+            0,
+            source,
+            TriggerContext::default()
+        ));
+        let context = TriggerContext {
+            source_after_zone_change: Some(TriggerObjectRef {
+                object_id: bear,
+                zone_change_generation: 1,
+                controller_at_event: 0,
+            }),
+            ..Default::default()
+        };
+        assert!(!target_role_legal_at_resolution(
+            &engine,
+            TargetRole::GraveyardCard(&filter),
+            bear,
+            0,
+            source,
+            context
+        ));
+        *engine.state.zone_change_generation.entry(bear).or_default() += 1;
+        assert!(
+            target_role_legal_at_resolution(
+                &engine,
+                TargetRole::GraveyardCard(&filter),
+                bear,
+                0,
+                source,
+                context
+            ),
+            "the death event must not exclude a later incarnation"
+        );
+    }
+    fn issue_176_target(source: &str) -> TargetFilter {
+        let card = format!(
+            r#"(id: "test", name: "Test", types: ["Instant"], spell_effect: [DamageTarget(target: {source}, amount: 1)])"#
+        );
+        let registry = CardRegistry::from_chunks_and_tokens(&[&card], &[]).unwrap();
+        let SpellEffectKind::DamageTarget { target, .. } =
+            &registry.get("test").unwrap().primary_face().spell_effect[0]
+        else {
+            panic!("target filter")
+        };
+        target.clone()
+    }
+
+    fn issue_176_graveyard(source: &str) -> GraveyardFilter {
+        let card = format!(
+            r#"(id: "test", name: "Test", types: ["Instant"], spell_effect: [MoveGraveyardCards(filter: {source}, destination: Hand)])"#
+        );
+        let registry = CardRegistry::from_chunks_and_tokens(&[&card], &[]).unwrap();
+        let SpellEffectKind::MoveGraveyardCards { filter, .. } =
+            &registry.get("test").unwrap().primary_face().spell_effect[0]
+        else {
+            panic!("graveyard filter")
+        };
+        filter.clone()
+    }
+    #[test]
+    fn issue_176_battlefield_predicates_use_identity_and_characteristics() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(176001, &[0, 1], 20, decks, true).unwrap();
+        let bear = engine.state.players[0].hand.remove(0);
+        engine.state.players[0].battlefield.push(bear);
+        engine.state.objects.get_mut(&bear).unwrap().zone = Zone::Battlefield;
+        for predicate in [
+            "token: Some(true)",
+            "excluded_permanent_types: [Creature]",
+            "max_mana_value: Some(1)",
+            "min_mana_value: Some(3)",
+            "was_dealt_damage_this_turn: Some(true)",
+        ] {
+            let filter = issue_176_target(&format!("(kind: AnyPermanent, {predicate})"));
+            assert!(
+                !filter_characteristics_match(&engine, &filter, bear),
+                "{predicate}"
+            );
+        }
+        let filter = issue_176_target("(kind: Creature, token: Some(false), min_mana_value: Some(2), max_mana_value: Some(2))");
+        assert!(filter_characteristics_match(&engine, &filter, bear));
+        let damaged = issue_176_target("(kind: Creature, was_dealt_damage_this_turn: Some(true))");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&bear)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .turn_history
+            .current
+            .damaged_objects
+            .push((bear, generation));
+        assert!(filter_characteristics_match(&engine, &damaged, bear));
+        engine.state.turn_history.finish_turn();
+        assert!(
+            !filter_characteristics_match(&engine, &damaged, bear),
+            "turn history expires"
+        );
+        engine
+            .state
+            .turn_history
+            .current
+            .damaged_objects
+            .push((bear, generation));
+        *engine.state.zone_change_generation.entry(bear).or_default() += 1;
+        assert!(!filter_characteristics_match(&engine, &damaged, bear));
+    }
+
+    #[test]
+    fn issue_176_graveyard_predicates_use_card_characteristics() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(176002, &[0, 1], 20, decks, true).unwrap();
+        let bear = engine.state.players[0].hand.remove(0);
+        engine.state.players[0].graveyard.push(bear);
+        engine.state.objects.get_mut(&bear).unwrap().zone = Zone::Graveyard;
+        for predicate in [
+            "max_mana_value: Some(1)",
+            "min_mana_value: Some(3)",
+            "required_subtypes: [\"Zombie\"]",
+            "excluded_subtypes: [\"Bear\"]",
+            "has_adventure: Some(true)",
+        ] {
+            let filter = issue_176_graveyard(&format!("({predicate})"));
+            assert!(
+                !graveyard_target_legal(
+                    &engine,
+                    &filter,
+                    bear,
+                    0,
+                    TargetSourceIdentity::current(&engine, 999),
+                    TriggerContext::default()
+                ),
+                "{predicate}"
+            );
+        }
+        let filter = issue_176_graveyard("(min_mana_value: Some(2), max_mana_value: Some(2), required_subtypes: [\"Bear\"], has_adventure: Some(false))");
+        assert!(graveyard_target_legal(
+            &engine,
+            &filter,
+            bear,
+            0,
+            TargetSourceIdentity::current(&engine, 999),
+            TriggerContext::default()
+        ));
+    }
+    #[test]
+    fn issue_176_graveyard_filters_ignore_battlefield_faces_and_use_all_opponents() {
+        let cards = [
+            "bonecrusher_giant_stomp",
+            "changeling_wayfinder",
+            "endless_one",
+            "village_ironsmith_ironfang",
+        ];
+        let mut deck = cards.iter().map(|id| id.to_string()).collect::<Vec<_>>();
+        deck.extend(vec!["forest".into(); 3]);
+        let mut engine = GameEngine::new(
+            176006,
+            &[0, 1],
+            20,
+            Some(vec![deck, vec!["forest".into(); 7]]),
+            true,
+        )
+        .unwrap();
+        engine
+            .state
+            .players
+            .push(crate::state::PlayerState::new(20, 20));
+        let mut ids = Vec::new();
+        for card in cards {
+            let oid = engine
+                .state
+                .objects
+                .values()
+                .find(|object| object.card_id == card)
+                .unwrap()
+                .id;
+            super::super::resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                oid,
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+            engine.state.players[0].graveyard.retain(|id| *id != oid);
+            engine.state.players[2].graveyard.push(oid);
+            let object = engine.state.objects.get_mut(&oid).unwrap();
+            object.owner = 20;
+            object.controller = 0;
+            object.face_up_index = 1;
+            ids.push(oid);
+        }
+        let legal = |filter: &str, oid, actor| {
+            graveyard_target_legal(
+                &engine,
+                &issue_176_graveyard(filter),
+                oid,
+                actor,
+                TargetSourceIdentity::current(&engine, 999),
+                TriggerContext::default(),
+            )
+        };
+        assert!(legal("(owner: Opponent, has_adventure: Some(true), min_mana_value: Some(3), max_mana_value: Some(3), required_subtypes: [\"Giant\"])", ids[0], 0));
+        assert!(!legal(
+            "(owner: Opponent, has_adventure: Some(true))",
+            ids[0],
+            20
+        ));
+        assert!(
+            legal(
+                "(owner: Opponent, required_subtypes: [\"Giant\"])",
+                ids[1],
+                1
+            ),
+            "changeling works in a graveyard belonging to a third seat"
+        );
+        assert!(!legal(
+            "(owner: AnyPlayer, excluded_subtypes: [\"Giant\"])",
+            ids[1],
+            0
+        ));
+        assert!(
+            legal(
+                "(owner: AnyPlayer, card_type: Some(Creature), max_mana_value: Some(0))",
+                ids[2],
+                0
+            ),
+            "X is zero outside the stack"
+        );
+        assert!(legal("(owner: AnyPlayer, min_mana_value: Some(2), max_mana_value: Some(2), required_subtypes: [\"Human\"])", ids[3], 0));
+    }
     use super::*;
     use tricerules_cards::{primitives::TargetGroupDef, CounterKind};
 
@@ -2090,7 +2593,7 @@ mod tests {
 
         let filter = TargetFilter {
             kind: TargetKind::Creature,
-            exclude_source: true,
+            excluded_objects: vec![tricerules_cards::TargetObjectExclusion::Source],
             ..TargetFilter::default()
         };
         let original_source = TargetSourceIdentity::current(&engine, bear);
