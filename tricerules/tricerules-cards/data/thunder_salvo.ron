@@ -1,0 +1,15 @@
+// Oracle/rulings: https://scryfall.com/card/otj/150/thunder-salvo (verified 2026-08-27).
+// CR 608.2h-i, 707.10: resolve the count once; an uncast copy excludes no cast occurrence.
+(
+  id: "thunder_salvo",
+  name: "Thunder Salvo",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(
+    target: (kind: Creature),
+    amount: Count(Affine(constant: 2, terms: [(
+      coefficient: 1,
+      quantity: SpellsCastThisTurn(players: Relative(Controller), exclude_source: true),
+    )])),
+  )],
+)

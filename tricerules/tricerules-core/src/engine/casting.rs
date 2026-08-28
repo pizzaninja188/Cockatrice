@@ -215,6 +215,7 @@ impl GameEngine {
             chosen_x: 0,
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
+            cast_occurrence: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
@@ -251,17 +252,12 @@ impl GameEngine {
                 chosen_cast_cost_labels: vec!["Siege defeat".into()],
             })),
         });
-        let ordinal = self.record_spell_cast(player);
+        let fact =
+            self.record_spell_cast(player, source_oid, Zone::Exile, face.mana_cost.mana_value());
         self.record_committed_events(&crime_events);
         triggers.extend(self.collect_event_triggers(&crime_events));
         self.snapshot_completed_cast(source_oid);
-        triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
-            caster: player,
-            card_id,
-            ordinal,
-            face_index: expected_face_index,
-            mana_value: face.mana_cost.mana_value(),
-        }]));
+        triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast { fact }]));
         self.stage_triggers(triggers);
         Ok(())
     }
@@ -717,6 +713,7 @@ impl GameEngine {
             .crime_event(player, &public_targets)
             .into_iter()
             .collect();
+        let origin = self.state.objects[&oid].zone;
         let payment = self.commit_cost_transaction(payment_plan)?;
         let life_paid = payment.life_paid;
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
@@ -757,6 +754,7 @@ impl GameEngine {
             face_index,
             chosen_modes,
             cast_condition_results: Vec::new(),
+            cast_occurrence: None,
             cast_cost_receipts,
             payment_result,
             resolution_branch_choices: Default::default(),
@@ -847,20 +845,14 @@ impl GameEngine {
                 chosen_cast_cost_labels,
             })),
         });
-        let ordinal = self.record_spell_cast(player);
+        let fact = self.record_spell_cast(player, oid, origin, mana_value);
         self.record_committed_events(&crime_events);
         target_triggers.extend(self.collect_event_triggers(&crime_events));
         target_triggers
             .extend(self.collect_committed_cost_triggers(payment.tap_events, payment.sacrificed));
         target_triggers.extend(payment.expend_triggers);
         self.snapshot_completed_cast(oid);
-        target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast {
-            caster: player,
-            card_id: cast_card_id,
-            ordinal,
-            face_index,
-            mana_value,
-        }]));
+        target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast { fact }]));
         // Both kinds of triggers are waiting when the cast completes, so they form one CR 603.3b
         // ordering group rather than forcing an artificial target-trigger/cast-trigger order.
         self.stage_triggers(target_triggers);
@@ -1177,6 +1169,7 @@ impl GameEngine {
             face_index: face_up_index,
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
+            cast_occurrence: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort {
                 cards: payment
@@ -1844,6 +1837,7 @@ impl GameEngine {
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),
+            cast_occurrence: None,
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
@@ -1889,11 +1883,58 @@ impl GameEngine {
 mod cast_snapshot_tests {
     use super::*;
 
+    #[test]
+    fn issue_166_only_successful_casts_record_generation_bound_facts() {
+        let mut e = engine("spell_effect: [GainLife(amount: 1)]");
+        let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+        assert!(e.apply_command(0, &command(&e, spell)).is_err());
+        assert!(e.state.turn_history.current.spell_casts.is_empty());
+        e.state.players[0].mana_pool.black = 1;
+        e.apply_command(0, &command(&e, spell)).unwrap();
+        assert_eq!(e.state.turn_history.current.spell_casts.len(), 1);
+        let first = e.state.turn_history.current.spell_casts[0].clone();
+        assert_eq!(first.origin, Zone::Hand);
+        assert_eq!(first.caster, 0);
+        assert_eq!(first.types, ["Instant"]);
+        assert_eq!(first.mana_value, 1);
+        assert_eq!(first.ordinal, 1);
+        assert_eq!(
+            e.state.stack.last().unwrap().cast_occurrence,
+            Some(first.occurrence)
+        );
+        resolve(&mut e);
+        assert_eq!(
+            e.state.turn_history.current.spell_casts,
+            std::slice::from_ref(&first)
+        );
+        super::super::resolution::move_object_to_zone(
+            &mut e.state,
+            e.registry,
+            spell,
+            Zone::Hand,
+            None,
+        )
+        .unwrap();
+        e.state.players[0].mana_pool.black = 1;
+        e.apply_command(0, &command(&e, spell)).unwrap();
+        let second = &e.state.turn_history.current.spell_casts[1];
+        assert_eq!(second.ordinal, 2);
+        assert_ne!(first.occurrence, second.occurrence);
+        assert_eq!(first.occurrence.object_id, second.occurrence.object_id);
+        e.state.turn_history.finish_turn();
+        assert!(e.state.turn_history.current.spell_casts.is_empty());
+        assert_eq!(e.state.turn_history.previous.spell_casts.len(), 2);
+    }
+
     fn engine(spell_fields: &str) -> GameEngine {
+        engine_with_extra(spell_fields, &[])
+    }
+
+    fn engine_with_extra(spell_fields: &str, extra: &[&str]) -> GameEngine {
         let spell = format!(
             r#"(id: "snapshot_spell", name: "Snapshot Spell", mana_cost: "{{B}}", types: ["Instant"], {spell_fields})"#
         );
-        let registry = CardRegistry::from_chunks_and_tokens(&[
+        let mut chunks = vec![
             include_str!("../../../tricerules-cards/data/forest.ron"),
             r#"(id: "snapshot_faerie", name: "Snapshot Faerie", types: ["Creature", "Faerie", "Mount"], power: 2, toughness: 2)"#,
             r#"(id: "snapshot_kindred", name: "Snapshot Kindred", types: ["Kindred", "Artifact", "Faerie"],)"#,
@@ -1905,7 +1946,9 @@ mod cast_snapshot_tests {
                  spell_effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 1))]),
             ])"#,
             &spell,
-        ], &[]).unwrap();
+        ];
+        chunks.extend_from_slice(extra);
+        let registry = CardRegistry::from_chunks_and_tokens(&chunks, &[]).unwrap();
         let mut e = GameEngine::new(
             173010,
             &[0, 1],
@@ -1918,6 +1961,278 @@ mod cast_snapshot_tests {
         e.state.turn_step = TurnStep::Main1;
         e.state.priority_idx = 0;
         e
+    }
+
+    #[test]
+    fn issue_166_filters_deduplicate_and_distinguish_event_time_ordinals() {
+        let mut e = engine_with_extra(
+            "spell_effect: [GainLife(amount: 1)]",
+            &[
+                r#"(id: "history_watcher", name: "History Watcher", types: ["Creature"], power: 1, toughness: 4,
+                triggered_abilities: [
+                    (trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (card_type: Some(Noncreature)), ordinal: Some(2)), effect: [GainLife(amount: 1)], text: "All spells"),
+                    (trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (card_type: Some(Noncreature)), ordinal: Some(2), ordinal_scope: MatchingFilter), effect: [GainLife(amount: 1)], text: "Matching spells"),
+                    (trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (any_of: Some([(card_type: Some(Noncreature)), (required_subtypes: ["Otter"])]))), effect: [GainLife(amount: 1)], text: "Noncreature or Otter"),
+                ])"#,
+                r#"(id: "history_otter", name: "History Otter", types: ["Kindred", "Artifact", "Otter"])"#,
+            ],
+        );
+        // The watcher arrives after these casts; matching ordinals still include all prior casts.
+        for card in ["snapshot_faerie", "snapshot_spell", "history_otter"] {
+            let oid = add(&mut e, 0, card, Zone::Hand);
+            e.state.players[0].mana_pool.black = 1;
+            e.apply_command(0, &command(&e, oid)).unwrap();
+            resolve(&mut e);
+        }
+        let watcher = add(&mut e, 1, "history_watcher", Zone::Battlefield);
+        e.state.objects.get_mut(&watcher).unwrap().owner = 0;
+        let source = e.trigger_source_snapshot(watcher).unwrap();
+        let facts = e.state.turn_history.current.spell_casts.clone();
+        for (index, expected) in [(0, vec![]), (1, vec![0, 2]), (2, vec![1, 2])] {
+            let event = GameEvent::SpellCast {
+                fact: facts[index].clone(),
+            };
+            let collected = e.collect_triggers(&event, std::slice::from_ref(&source));
+            assert!(collected.iter().all(|trigger| trigger.controller == 1));
+            assert_eq!(
+                collected
+                    .iter()
+                    .map(|t| t.ability_index)
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            assert!(e
+                .collect_event_triggers(&[event])
+                .iter()
+                .all(|t| t.trigger_context.affected_player == Some(0)));
+        }
+        let union = SpellCastFilter {
+            any_of: Some(vec![
+                SpellCastFilter {
+                    card_type: Some(CardTypeFilter::Noncreature),
+                    ..Default::default()
+                },
+                SpellCastFilter {
+                    required_subtypes: vec!["Otter".into()],
+                    ..Default::default()
+                },
+            ]),
+            ..Default::default()
+        };
+        assert_eq!(
+            super::super::history::spell_cast_count(
+                &e.state,
+                ConditionPlayerSet::Relative(RelativePlayerSet::All),
+                &union,
+                0,
+                None,
+                false
+            ),
+            2
+        );
+        assert_eq!(
+            super::super::history::spell_cast_count(
+                &e.state,
+                ConditionPlayerSet::AffectedPlayer,
+                &union,
+                0,
+                None,
+                false
+            ),
+            0,
+            "missing affected-player context cannot fall back to the controller"
+        );
+    }
+
+    #[test]
+    fn issue_166_history_preserves_cast_faces_origins_and_subtypes() {
+        let mut e = engine_with_extra(
+            r#"flashback_cost: Some("{B}"),
+                cast_conditions: [SpellsCastThisTurn(players: Controller, filter: (origin: Some(Graveyard)), min: Some(1))],
+                spell_effect: [GainLife(amount: 1)]"#,
+            &[
+                include_str!(
+                    "../../../tricerules-cards/data/multiface/bonecrusher_giant_stomp.ron"
+                ),
+                r#"(id: "history_shifter", name: "History Shifter", types: ["Creature", "Shapeshifter"], power: 1, toughness: 1, characteristic_defining_abilities: [Changeling])"#,
+                r#"(id: "history_static", name: "History Static", types: ["Creature"], power: 1, toughness: 1,
+                    static_abilities: [ConditionalSelfModifier(condition: SpellsCastThisTurn(players: Controller, filter: (origin: Some(Graveyard)), min: Some(1)), delta_power: 2)])"#,
+            ],
+        );
+        let permanent = add(&mut e, 0, "history_static", Zone::Battlefield);
+        e.fire_triggers(&[GameEvent::EntersBattlefield {
+            object_id: permanent,
+        }]);
+        let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+        e.state.players[0].mana_pool.black = 2;
+        e.apply_command(0, &command(&e, spell)).unwrap();
+        assert_eq!(
+            e.state.stack.last().unwrap().cast_condition_results,
+            [false]
+        );
+        resolve(&mut e);
+        assert_eq!(e.effective_power(permanent), Some(1));
+        let flashback = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                cast_method: rv1::CastMethod::Flashback as i32,
+                source: Some(rv1::CastSource {
+                    location: Some(rv1::cast_source::Location::GraveyardObjectId(spell)),
+                }),
+                ..Default::default()
+            })),
+        };
+        e.apply_command(0, &flashback).unwrap();
+        assert_eq!(e.state.stack.last().unwrap().cast_condition_results, [true]);
+        resolve(&mut e);
+        assert_eq!(e.effective_power(permanent), Some(3));
+        let before = e.state.turn_history.clone();
+        assert!(e.apply_command(0, &flashback).is_err());
+        assert_eq!(
+            e.state.turn_history, before,
+            "stale source contributes nothing"
+        );
+
+        let adventure = add(&mut e, 0, "bonecrusher_giant_stomp", Zone::Hand);
+        let mut cast = command(&e, adventure);
+        let Some(rv1::ruled_command::Cmd::CastSpell(cs)) = cast.cmd.as_mut() else {
+            unreachable!()
+        };
+        cs.face_index = 1;
+        cs.targets = vec![rv1::TargetRef {
+            object_id: 1,
+            kind: rv1::TargetRefKind::Player as i32,
+            ..Default::default()
+        }];
+        e.state.players[0].mana_pool.red = 5;
+        e.apply_command(0, &cast).unwrap();
+        resolve(&mut e);
+        let creature_cast = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                cast_method: rv1::CastMethod::Normal as i32,
+                source: Some(rv1::CastSource {
+                    location: Some(rv1::cast_source::Location::ExileObjectId(adventure)),
+                }),
+                ..Default::default()
+            })),
+        };
+        e.apply_command(0, &creature_cast).unwrap();
+        resolve(&mut e);
+        let shifter = add(&mut e, 0, "history_shifter", Zone::Hand);
+        e.apply_command(0, &command(&e, shifter)).unwrap();
+        resolve(&mut e);
+        let facts = &e.state.turn_history.current.spell_casts;
+        assert_eq!(
+            facts.iter().map(|f| f.origin).collect::<Vec<_>>(),
+            [
+                Zone::Hand,
+                Zone::Graveyard,
+                Zone::Hand,
+                Zone::Exile,
+                Zone::Hand
+            ]
+        );
+        assert_eq!(facts[2].face_index, 1);
+        assert_eq!(facts[3].face_index, 0);
+        assert_ne!(facts[2].occurrence, facts[3].occurrence);
+        let count = |filter: SpellCastFilter| {
+            super::super::history::spell_cast_count(
+                &e.state,
+                ConditionPlayerSet::Relative(RelativePlayerSet::Controller),
+                &filter,
+                0,
+                None,
+                false,
+            )
+        };
+        assert_eq!(
+            count(SpellCastFilter {
+                card_type: Some(CardTypeFilter::Noncreature),
+                ..Default::default()
+            }),
+            3
+        );
+        assert_eq!(
+            count(SpellCastFilter {
+                required_subtypes: vec!["Adventure".into()],
+                ..Default::default()
+            }),
+            1
+        );
+        assert_eq!(
+            count(SpellCastFilter {
+                required_subtypes: vec!["Otter".into()],
+                ..Default::default()
+            }),
+            1
+        );
+        assert_eq!(
+            count(SpellCastFilter {
+                min_mana_value: Some(2),
+                max_mana_value: Some(2),
+                origin: Some(SpellCastOrigin::Hand),
+                ..Default::default()
+            }),
+            1
+        );
+        assert_eq!(
+            count(SpellCastFilter {
+                origin: Some(SpellCastOrigin::Graveyard),
+                ..Default::default()
+            }),
+            1
+        );
+        assert_eq!(
+            count(SpellCastFilter {
+                origin: Some(SpellCastOrigin::Exile),
+                ..Default::default()
+            }),
+            1
+        );
+        // History rollover is independent of seat changes, including a subsequent turn
+        // belonging to the same player; adding extra-turn scheduling is outside this issue.
+        let active = e.state.active_player_id();
+        e.state.turn_history.finish_turn();
+        assert_eq!(e.state.active_player_id(), active);
+        assert_eq!(e.effective_power(permanent), Some(1));
+    }
+
+    #[test]
+    fn issue_166_cast_copy_commit_is_distinct_from_direct_copy_placement() {
+        let mut e = engine("spell_effect: [GainLife(amount: 1)]");
+        e.state.players.push(PlayerState::new(7, 20));
+        let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+        e.state.players[0].mana_pool.black = 1;
+        e.apply_command(0, &command(&e, spell)).unwrap();
+        let mut copy = e.state.stack.last().unwrap().clone();
+        copy.id = e.state.next_object_id;
+        e.state.next_object_id += 1;
+        copy.controller = 7;
+        copy.is_copy = true;
+        copy.cast_occurrence = None;
+        let copy_id = copy.id;
+        e.state.stack.push(copy);
+        assert_eq!(e.state.turn_history.current.spell_casts.len(), 1);
+        // Exercise the commit seam, not a new cast-copy permission or gameplay flow.
+        let fact = e.record_spell_cast(7, copy_id, Zone::Exile, 1);
+        assert_eq!(fact.occurrence.zone_change_generation, None);
+        assert_eq!(
+            e.state.stack.last().unwrap().cast_occurrence,
+            Some(fact.occurrence)
+        );
+        assert_eq!(e.state.turn_history.current.player(7).spells_cast, 1);
+        assert_eq!(e.state.turn_history.current.player(1).spells_cast, 0);
+        let quantity = CountExpression::SpellsCastThisTurn {
+            players: ConditionPlayerSet::Relative(RelativePlayerSet::Opponents),
+            filter: Default::default(),
+            exclude_source: false,
+        };
+        assert_eq!(
+            e.resolve_amount(
+                &Amount::Count(quantity),
+                AmountContext::for_stack_item(&e.state.stack[0], 0)
+            ),
+            1
+        );
     }
 
     fn add(e: &mut GameEngine, player: usize, card: &str, zone: Zone) -> ObjectId {
@@ -2177,6 +2492,11 @@ mod cast_snapshot_tests {
             e.state.stack.last().unwrap().cast_condition_results,
             vec![true]
         );
+        let fact = &e.state.turn_history.current.spell_casts[0];
+        assert_eq!(fact.origin, Zone::Exile);
+        assert_eq!(fact.face_index, 1);
+        assert_eq!(fact.types, ["Sorcery"]);
+        assert_eq!(fact.occurrence.zone_change_generation, Some(generation + 1));
         resolve(&mut e);
         assert_eq!(e.state.players[0].life, 24);
     }

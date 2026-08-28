@@ -2117,7 +2117,7 @@ mod tests {
             power: 1,
             toughness: 1,
             triggered_abilities: [(
-                trigger: WheneverPlayerCastsSpell(caster: Controller, spell_type: Some(Noncreature)),
+                trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
                 effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
                 text: "",
             )],
@@ -2137,7 +2137,7 @@ mod tests {
             power: 1,
             toughness: 1,
             triggered_abilities: [(
-                trigger: WheneverPlayerCastsSpell(caster: Controller, spell_type: Some(Noncreature)),
+                trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
                 effect: [],
                 text: "Prowess",
             )],

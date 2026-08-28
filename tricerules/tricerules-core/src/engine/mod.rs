@@ -35,9 +35,9 @@ use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivatedCostModifier, AdditionalCost,
     Amount, AttachmentFilter, AttachmentKind, BattlefieldAggregate, BattlefieldPermanentFilter,
     CardResultAction, CardSearchZone, CardTypeFilter, CastCostGroupDef, CastCostOptionDef,
-    CastCostReceiptCondition, CastTriggerPlayer, Color, CombatRestriction, CombatRestrictionScope,
-    ConditionObjectRef, ConditionPlayerSet, ConditionalSearchDestination, ContinuousEffectKind,
-    ControllerReference, CountExpression, CounterKind, CreatureEventFilter,
+    CastCostReceiptCondition, CastOrdinalScope, CastTriggerPlayer, Color, CombatRestriction,
+    CombatRestrictionScope, ConditionObjectRef, ConditionPlayerSet, ConditionalSearchDestination,
+    ContinuousEffectKind, ControllerReference, CountExpression, CounterKind, CreatureEventFilter,
     CreatureScopeController, CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect,
     DamagePreventionSubject, DelayedTokenSacrificeTiming, DiscardChooser, DrawDiscardOrder,
     EffectDuration, EffectSubject, EntersTappedAffected, EntersWithCountersAffected, Evasion,
@@ -47,11 +47,11 @@ use tricerules_cards::primitives::{
     PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison, PreventionAmountBasis,
     ProtectionCardType, ProtectionGrant, ProtectionQuality, RelativePlayerSet, ResolutionBranchDef,
     ResolutionCost, ReturnController, SearchDestination, SearchZoneSelection,
-    SpecialActionAffected, SpecialActionKind, SpecialActionManaPurpose, SpellCostModifier,
-    SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount, TapTriggerCardinality,
-    TargetController, TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected,
-    TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef, TriggeredCardReference,
-    ZoneCardFilter,
+    SpecialActionAffected, SpecialActionKind, SpecialActionManaPurpose, SpellCastFilter,
+    SpellCastOrigin, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
+    StaticDamagePreventionAmount, TapTriggerCardinality, TargetController, TargetFilter,
+    TargetKind, TargetingCostAction, TargetingCostProtected, TargetingSourceFilter,
+    TriggerCondition, TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
 };
 use tricerules_cards::{
     is_creature_type, CardDefinition, CardFace, CardRegistry, CharacteristicDefiningAbility,
@@ -451,17 +451,9 @@ enum GameEvent {
     CrimeCommitted {
         player: PlayerId,
     },
-    /// Fired when a spell is put on the stack (CR 601.2; triggers on cast, not resolution).
+    /// CR 601.2i: a completed cast with immutable event-time characteristics.
     SpellCast {
-        caster: PlayerId,
-        card_id: String,
-        /// That player's one-based committed cast number in the current turn.
-        ordinal: u32,
-        /// CR 709/712: the half/face that was cast. On the stack a multi-face spell has only that
-        /// face's characteristics, so cast triggers filter on it rather than on the whole card.
-        face_index: usize,
-        /// Mana value of the cast face on the stack, including the announced value of X.
-        mana_value: u32,
+        fact: crate::state::SpellCastFact,
     },
     /// CR 700.14: one committed spell mana debit. No protocol event or client spending ledger.
     ManaSpentCastingSpell {

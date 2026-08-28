@@ -133,6 +133,104 @@ fn clamp_public_count(count: usize) -> u32 {
     u32::try_from(count).unwrap_or(u32::MAX)
 }
 
+pub(super) fn spell_cast_matches(
+    filter: &SpellCastFilter,
+    fact: &crate::state::SpellCastFact,
+) -> bool {
+    filter
+        .card_type
+        .is_none_or(|kind| fact.matched_card_types.contains(&kind))
+        && filter.required_subtypes.iter().all(|subtype| {
+            fact.types.contains(subtype)
+                || (fact.all_creature_types && tricerules_cards::is_creature_type(subtype))
+        })
+        && filter
+            .min_mana_value
+            .is_none_or(|min| fact.mana_value >= min)
+        && filter
+            .max_mana_value
+            .is_none_or(|max| fact.mana_value <= max)
+        && filter.origin.is_none_or(|origin| {
+            matches!(
+                (origin, fact.origin),
+                (SpellCastOrigin::Hand, Zone::Hand)
+                    | (SpellCastOrigin::Graveyard, Zone::Graveyard)
+                    | (SpellCastOrigin::Exile, Zone::Exile)
+            )
+        })
+        && filter.any_of.as_ref().is_none_or(|branches| {
+            branches
+                .iter()
+                .any(|branch| spell_cast_matches(branch, fact))
+        })
+}
+
+/// One count per committed occurrence, not per matching OR branch or live stack object.
+pub(super) fn spell_cast_count(
+    state: &GameState,
+    players: ConditionPlayerSet,
+    filter: &SpellCastFilter,
+    controller: PlayerId,
+    item: Option<&StackItem>,
+    exclude_source: bool,
+) -> u32 {
+    let chosen = selected_condition_player(
+        players,
+        item.map(|item| item.targets.as_slice()),
+        item.and_then(|item| item.trigger_context.affected_player),
+    );
+    let excluded = exclude_source
+        .then(|| item.and_then(|item| item.cast_occurrence))
+        .flatten();
+    clamp_public_count(
+        state
+            .turn_history
+            .current
+            .spell_casts
+            .iter()
+            .filter(|fact| {
+                let selected = match players {
+                    ConditionPlayerSet::Relative(set) => {
+                        relative_player_set_contains(state, set, controller, fact.caster)
+                    }
+                    _ => chosen == Some(fact.caster),
+                };
+                selected && excluded != Some(fact.occurrence) && spell_cast_matches(filter, fact)
+            })
+            .count(),
+    )
+}
+
+fn selected_condition_player(
+    players: ConditionPlayerSet,
+    targets: Option<&[StackTarget]>,
+    affected_player: Option<PlayerId>,
+) -> Option<PlayerId> {
+    match players {
+        ConditionPlayerSet::Relative(_) => None,
+        ConditionPlayerSet::AffectedPlayer => affected_player,
+        ConditionPlayerSet::ChosenTarget {
+            group_index,
+            target_index,
+        } => {
+            let target = targets?
+                .iter()
+                .filter(|target| target.group_index == group_index)
+                .nth(target_index as usize)?;
+            // Unspecified presentation kinds may still identify an authoritative player,
+            // but explicit object kinds and generation-bound objects never do.
+            if !matches!(
+                rv1::TargetRefKind::try_from(target.kind),
+                Ok(rv1::TargetRefKind::Player | rv1::TargetRefKind::Unspecified)
+            ) || target.zone_change_generation.is_some()
+            {
+                return None;
+            }
+            PlayerId::try_from(target.object_id).ok()
+        }
+    }
+}
+
 pub(super) fn life_changed_this_turn(
     state: &GameState,
     players: ConditionPlayerSet,
@@ -140,37 +238,9 @@ pub(super) fn life_changed_this_turn(
     quantifier: PlayerQuantifier,
     controller: PlayerId,
     targets: Option<&[StackTarget]>,
+    affected_player: Option<PlayerId>,
 ) -> bool {
-    let chosen = match players {
-        ConditionPlayerSet::Relative(_) => None,
-        ConditionPlayerSet::ChosenTarget {
-            group_index,
-            target_index,
-        } => {
-            let Some(target) = targets.and_then(|targets| {
-                targets
-                    .iter()
-                    .filter(|target| target.group_index == group_index)
-                    .nth(target_index as usize)
-            }) else {
-                return false;
-            };
-            // Accepted older commands may omit the presentation kind. As in target admission,
-            // identify those solely from authoritative player membership and absence of an
-            // object generation. Explicit non-player or unknown kinds must never be inferred.
-            if !matches!(
-                rv1::TargetRefKind::try_from(target.kind),
-                Ok(rv1::TargetRefKind::Player | rv1::TargetRefKind::Unspecified)
-            ) || target.zone_change_generation.is_some()
-            {
-                return false;
-            }
-            let Ok(player) = PlayerId::try_from(target.object_id) else {
-                return false;
-            };
-            Some(player)
-        }
-    };
+    let chosen = selected_condition_player(players, targets, affected_player);
     let mut selected = state
         .players
         .iter()
@@ -180,7 +250,8 @@ pub(super) fn life_changed_this_turn(
                     ConditionPlayerSet::Relative(set) => {
                         relative_player_set_contains(state, set, controller, player.id)
                     }
-                    ConditionPlayerSet::ChosenTarget { .. } => chosen == Some(player.id),
+                    ConditionPlayerSet::ChosenTarget { .. }
+                    | ConditionPlayerSet::AffectedPlayer => chosen == Some(player.id),
                 }
         })
         .peekable();
@@ -507,7 +578,64 @@ impl GameEngine {
         }
     }
 
-    pub(super) fn record_spell_cast(&mut self, caster: PlayerId) -> u32 {
+    /// Only actual casts enter this path, including a copy that is actually cast (CR 707.12).
+    /// Directly created stack copies never call it. Origin is captured before stack entry.
+    pub(super) fn record_spell_cast(
+        &mut self,
+        caster: PlayerId,
+        object_id: ObjectId,
+        origin: Zone,
+        mana_value: u32,
+    ) -> crate::state::SpellCastFact {
+        let item = self
+            .state
+            .stack
+            .iter_mut()
+            .find(|item| item.id == object_id)
+            .expect("committed cast has a stack item");
+        let occurrence = StackObjectRef {
+            object_id,
+            zone_change_generation: self.state.objects.contains_key(&object_id).then(|| {
+                self.state
+                    .zone_change_generation
+                    .get(&object_id)
+                    .copied()
+                    .unwrap_or(0)
+            }),
+        };
+        item.cast_occurrence = Some(occurrence);
+        let definition = self
+            .registry
+            .get(&item.card_id)
+            .expect("committed cast has a validated definition");
+        let face = definition
+            .face(item.face_index)
+            .expect("committed cast has a validated face");
+        let mut types = face.types.clone();
+        // CR 715.3b: existing Adventure data encodes the alternative face through layout,
+        // even when its type list omits the Adventure spell subtype (e.g. Stomp).
+        if definition.layout == tricerules_cards::Layout::Adventure
+            && item.face_index == 1
+            && !types.iter().any(|kind| kind == "Adventure")
+        {
+            types.push("Adventure".into());
+        }
+        let mut fact = crate::state::SpellCastFact {
+            occurrence,
+            caster,
+            origin,
+            face_index: item.face_index,
+            types,
+            all_creature_types: face
+                .characteristic_defining_abilities
+                .contains(&tricerules_cards::CharacteristicDefiningAbility::Changeling),
+            mana_value,
+            matched_card_types: CardTypeFilter::ALL
+                .into_iter()
+                .filter(|filter| face.matches_card_type(*filter))
+                .collect(),
+            ordinal: 0,
+        };
         self.state.turn_history.current.spells_cast = self
             .state
             .turn_history
@@ -516,7 +644,13 @@ impl GameEngine {
             .saturating_add(1);
         let record = self.state.turn_history.current.player_mut(caster);
         record.spells_cast = record.spells_cast.saturating_add(1);
-        record.spells_cast
+        fact.ordinal = record.spells_cast;
+        self.state
+            .turn_history
+            .current
+            .spell_casts
+            .push(fact.clone());
+        fact
     }
 
     /// CR 700.14: record only committed mana payments for spells. Independent of watcher presence.
@@ -566,6 +700,9 @@ impl GameEngine {
                 *quantifier,
                 context.controller,
                 context.stack_item.map(|item| item.targets.as_slice()),
+                context
+                    .stack_item
+                    .and_then(|item| item.trigger_context.affected_player),
             ),
             GameCondition::ActivePlayer { players } => relative_player_set_contains(
                 &self.state,
@@ -592,30 +729,16 @@ impl GameEngine {
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }
-            GameCondition::SpellsCastThisTurn { players, .. } => {
-                let count = self
-                    .state
-                    .players
-                    .iter()
-                    .filter(|player| {
-                        relative_player_set_contains(
-                            &self.state,
-                            *players,
-                            context.controller,
-                            player.id,
-                        )
-                    })
-                    .fold(0u32, |total, player| {
-                        total.saturating_add(
-                            self.state
-                                .turn_history
-                                .current
-                                .player(player.id)
-                                .spells_cast,
-                        )
-                    });
-                condition.matches_value(count)
-            }
+            GameCondition::SpellsCastThisTurn {
+                players, filter, ..
+            } => condition.matches_value(super::history::spell_cast_count(
+                &self.state,
+                ConditionPlayerSet::Relative(*players),
+                filter,
+                context.controller,
+                None,
+                false,
+            )),
             GameCondition::CrimesCommittedThisTurn { players, .. } => {
                 let count = self
                     .state
@@ -985,6 +1108,18 @@ impl GameEngine {
             stack_item: context.stack_item,
         };
         match expression {
+            CountExpression::SpellsCastThisTurn {
+                players,
+                filter,
+                exclude_source,
+            } => spell_cast_count(
+                &self.state,
+                *players,
+                filter,
+                context.controller,
+                context.stack_item,
+                *exclude_source,
+            ) as i64,
             CountExpression::BattlefieldPermanents { .. }
             | CountExpression::BattlefieldMaximum { .. }
             | CountExpression::BattlefieldCreatures { .. } => {
@@ -1656,6 +1791,7 @@ mod tests {
             chosen_modes: vec![],
             cast_cost_receipts: vec![],
             cast_condition_results: vec![],
+            cast_occurrence: None,
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
             trigger_context: TriggerContext::default(),
@@ -1865,7 +2001,8 @@ mod tests {
                     LifeChangeKind::Loss,
                     PlayerQuantifier::Any,
                     10,
-                    Some(&[target])
+                    Some(&[target]),
+                    None,
                 ),
                 expected
             );
@@ -1877,7 +2014,8 @@ mod tests {
                 LifeChangeKind::Loss,
                 PlayerQuantifier::All,
                 10,
-                targets
+                targets,
+                None,
             ));
         }
         e.state.players[1].has_lost = true;
@@ -1887,7 +2025,8 @@ mod tests {
             LifeChangeKind::Loss,
             PlayerQuantifier::Any,
             10,
-            Some(&[valid])
+            Some(&[valid]),
+            None,
         ));
         e.state.players.truncate(1);
         for quantifier in [PlayerQuantifier::Any, PlayerQuantifier::All] {
@@ -1897,7 +2036,8 @@ mod tests {
                 LifeChangeKind::Either,
                 quantifier,
                 10,
-                None
+                None,
+                None,
             ));
         }
     }

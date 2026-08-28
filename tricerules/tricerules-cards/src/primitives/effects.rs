@@ -4,8 +4,8 @@ use super::{
     ActivatedAbilityDef, CardTypeFilter, CastCostReceiptCondition, Color, CreatureEventFilter,
     CreatureScopeFilter, GraveyardDestination, GraveyardFilter, Keyword, PermanentTypeFilter,
     PowerComparison, ProtectionQuality, ReflexiveTriggeredAbilityDef, SpecialActionKind,
-    TargetController, TargetFilter, TargetKind, TargetRole, TriggeredAbilityDef, TypeLineAddition,
-    TypeLineReplacement,
+    SpellCastFilter, TargetController, TargetFilter, TargetKind, TargetRole, TriggeredAbilityDef,
+    TypeLineAddition, TypeLineReplacement,
 };
 use crate::ManaCost;
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
@@ -61,6 +61,8 @@ pub enum GameCondition {
     /// contribute. Focus the Mind and flurry cards share this per-player history.
     SpellsCastThisTurn {
         players: RelativePlayerSet,
+        #[serde(default)]
+        filter: SpellCastFilter,
         #[serde(default)]
         min: Option<u32>,
         #[serde(default)]
@@ -235,6 +237,9 @@ impl GameCondition {
                 if let GameCondition::PermanentsEnteredThisTurn { filter, .. } = self {
                     filter.validate()?;
                 }
+                if let GameCondition::SpellsCastThisTurn { filter, .. } = self {
+                    filter.validate()?;
+                }
                 if let GameCondition::SourceCounterCount { counter, .. } = self {
                     counter.validate()?;
                 }
@@ -360,7 +365,13 @@ pub enum LifeChangeKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConditionPlayerSet {
     Relative(RelativePlayerSet),
-    ChosenTarget { group_index: u32, target_index: u32 },
+    /// Event-time player, for cast counts (Magebane Lizard) and life-history conditions.
+    /// Without trigger context this selects nobody, never the controller as a fallback.
+    AffectedPlayer,
+    ChosenTarget {
+        group_index: u32,
+        target_index: u32,
+    },
 }
 
 /// Distinguishes existential and universal player conditions without summing players' facts.
@@ -542,6 +553,15 @@ impl BattlefieldCreatureCountFilter {
 /// creation share one authoritative evaluator.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CountExpression {
+    /// Magebane Lizard counts the caster's noncreature spells; Thunder Salvo excludes
+    /// only the resolving spell's own committed occurrence, not an uncast copy's original.
+    SpellsCastThisTurn {
+        players: ConditionPlayerSet,
+        #[serde(default)]
+        filter: SpellCastFilter,
+        #[serde(default)]
+        exclude_source: bool,
+    },
     /// Flow of Knowledge and Gold Rush count derived public permanent cohorts.
     BattlefieldPermanents { filter: BattlefieldPermanentFilter },
     /// Chupacabra Echo and Calamitous Cave-In count printed public-zone characteristics.
@@ -619,6 +639,7 @@ impl CountExpression {
     }
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::SpellsCastThisTurn { filter, .. } => filter.validate(),
             Self::BattlefieldPermanents { filter } | Self::BattlefieldMaximum { filter, .. } => {
                 filter.validate()
             }

@@ -1,0 +1,18 @@
+// Oracle/rulings: https://scryfall.com/card/otj/134/magebane-lizard (verified 2026-08-27).
+// CR 601.2i, 603, 608.2h-i: count committed casts when the damage instruction resolves.
+(
+  id: "magebane_lizard",
+  name: "Magebane Lizard",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Lizard"],
+  power: 1,
+  toughness: 4,
+  triggered_abilities: [(
+    trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (card_type: Some(Noncreature))),
+    effect: [DamagePlayer(
+      amount: Count(SpellsCastThisTurn(players: AffectedPlayer, filter: (card_type: Some(Noncreature)))),
+      who: AffectedPlayer,
+    )],
+    text: "Whenever a player casts a noncreature spell, this creature deals damage to that player equal to the number of noncreature spells they've cast this turn.",
+  )],
+)

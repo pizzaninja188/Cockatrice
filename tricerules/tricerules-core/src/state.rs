@@ -1171,6 +1171,9 @@ pub struct StackItem {
     /// declaration order. Retained while parked, but not copied under CR 707.10: copies were
     /// never cast. Empty for abilities and directly created spell copies.
     pub cast_condition_results: Vec<bool>,
+    /// The actual committed cast, not a copiable choice (Magebane Lizard, Thunder Salvo).
+    /// Physical spells use their stack-entry generation; virtual cast copies use their unique ID.
+    pub cast_occurrence: Option<StackObjectRef>,
     /// Exact card objects used to pay this spell or ability's costs. Copies retain the original
     /// cohort under CR 707.10.
     pub(crate) payment_result: CardResultCohort,
@@ -1455,11 +1458,27 @@ impl TurnObjectFact {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TurnRecord {
     pub spells_cast: u32,
+    pub spell_casts: Vec<SpellCastFact>,
     pub creatures_died: u32,
     pub by_player: BTreeMap<PlayerId, PlayerTurnRecord>,
     pub declared_attackers: Vec<TurnObjectFact>,
     pub permanents_entered: Vec<TurnObjectFact>,
     pub damaged_objects: Vec<(ObjectId, u64)>,
+}
+
+/// Internal CR 601.2i history, shared by Magebane Lizard and Thunder Salvo. Characteristics
+/// belong to the cast face at the event, not the card's later zone or face.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpellCastFact {
+    pub occurrence: StackObjectRef,
+    pub caster: PlayerId,
+    pub origin: Zone,
+    pub face_index: usize,
+    pub types: Vec<String>,
+    pub all_creature_types: bool,
+    pub mana_value: u32,
+    pub matched_card_types: Vec<CardTypeFilter>,
+    pub ordinal: u32,
 }
 
 impl TurnRecord {

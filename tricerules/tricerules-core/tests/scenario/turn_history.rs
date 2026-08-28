@@ -1,6 +1,294 @@
 use super::helpers::*;
 
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::TargetRef;
+
+fn issue_166_cast(e: &mut GameEngine, player: usize, card: &str, targets: Vec<TargetRef>) -> u32 {
+    ensure_in_hand(e, player, card);
+    if e.state.priority_player_id() != player as i32 {
+        e.apply_command(e.state.priority_player_id(), &pass())
+            .unwrap();
+    }
+    grant_pool(e, player);
+    let index = hand_index_for_card(e, player, card);
+    let id = e.state.players[player].hand[index];
+    e.apply_command(player as i32, &cast_spell(index, targets))
+        .unwrap();
+    id
+}
+
+#[test]
+fn issue_166_magebane_counts_earlier_casts_responses_and_keeps_caster_after_departure() {
+    let mut e = GameEngine::new(
+        166001,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("island", &["magebane_lizard", "unsummon"]),
+            deck_with("mountain", &["life_goes_on", "shock", "shock"]),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    issue_166_cast(&mut e, 1, "life_goes_on", vec![]);
+    resolve_entire_stack_two_player(&mut e);
+    let lizard = relocate_to_battlefield(&mut e, 0, "magebane_lizard", false);
+    issue_166_cast(&mut e, 1, "shock", target_player(0));
+    assert_eq!(
+        e.state
+            .stack
+            .last()
+            .unwrap()
+            .trigger_context
+            .affected_player,
+        Some(1)
+    );
+    assert!(
+        e.state.stack.last().unwrap().targets.is_empty(),
+        "that player is not a target"
+    );
+    issue_166_cast(&mut e, 1, "shock", target_player(0));
+    issue_166_cast(&mut e, 0, "unsummon", target_object(lizard));
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.players[0].life, 15,
+        "one own cast trigger and two Shocks"
+    );
+    assert_eq!(
+        e.state.players[1].life, 18,
+        "24 life minus two triggers each counting three casts"
+    );
+    assert_eq!(e.state.objects[&lizard].zone, Zone::Hand);
+    assert_eq!(e.state.turn_history.current.player(1).spells_cast, 3);
+}
+
+#[test]
+fn issue_166_thunder_salvo_copies_exclude_only_their_own_actual_cast() {
+    for copier in [0, 1] {
+        let mut e = GameEngine::new(
+            166002,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with("island", &["thunder_salvo", "twincast"]),
+                deck_with("mountain", &["wall_of_stone", "twincast"]),
+            ]),
+            true,
+        )
+        .unwrap();
+        advance_to_main1_from_game_start(&mut e);
+        let wall = relocate_to_battlefield(&mut e, 1, "wall_of_stone", false);
+        let salvo = issue_166_cast(&mut e, 0, "thunder_salvo", target_object(wall));
+        issue_166_cast(&mut e, copier, "twincast", target_object(salvo));
+        pass_both_players(&mut e);
+        assert!(e.state.pending_resolution.is_some());
+        e.apply_command(copier as i32, &submit_resolution_choice(vec![wall]))
+            .unwrap();
+        let copy = e.state.stack.last().unwrap();
+        assert!(copy.is_copy);
+        assert_eq!(copy.cast_occurrence, None);
+        assert_eq!(e.state.turn_history.current.spell_casts.len(), 2);
+        pass_both_players(&mut e);
+        assert_eq!(
+            e.state.objects[&wall].damage,
+            if copier == 0 { 4 } else { 3 }
+        );
+        pass_both_players(&mut e);
+        assert_eq!(
+            e.state.objects[&wall].damage,
+            if copier == 0 { 7 } else { 5 }
+        );
+        assert_eq!(e.state.objects[&salvo].zone, Zone::Graveyard);
+        assert!(e.state.stack.is_empty());
+    }
+}
+
+#[test]
+fn issue_166_countered_casts_still_count_and_illegal_targets_do_not() {
+    let mut e = GameEngine::new(
+        166003,
+        &[0, 1],
+        20,
+        Some(vec![
+            deck_with("mountain", &["magebane_lizard", "thunder_salvo", "negate"]),
+            deck_with("island", &["shock", "wall_of_stone"]),
+        ]),
+        true,
+    )
+    .unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    relocate_to_battlefield(&mut e, 0, "magebane_lizard", false);
+    let wall = relocate_to_battlefield(&mut e, 1, "wall_of_stone", false);
+    let shock = issue_166_cast(&mut e, 1, "shock", target_player(0));
+    issue_166_cast(&mut e, 0, "negate", target_object(shock));
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.players[0].life, 19,
+        "Negate trigger, but no countered Shock damage"
+    );
+    assert_eq!(
+        e.state.players[1].life, 19,
+        "countering the spell does not erase its trigger or count"
+    );
+    ensure_in_hand(&mut e, 0, "thunder_salvo");
+    grant_pool(&mut e, 0);
+    let index = hand_index_for_card(&e, 0, "thunder_salvo");
+    let before = e.state.turn_history.clone();
+    let mana = e.state.players[0].mana_pool;
+    assert!(e
+        .apply_command(0, &cast_spell(index, target_player(1)))
+        .is_err());
+    assert_eq!(e.state.turn_history, before);
+    assert_eq!(e.state.players[0].mana_pool, mana);
+    issue_166_cast(&mut e, 0, "thunder_salvo", target_object(wall));
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.objects[&wall].damage, 3,
+        "the earlier Negate counts"
+    );
+    assert_eq!(
+        e.state.players[0].life, 17,
+        "second noncreature cast counts both spells"
+    );
+}
+
+#[test]
+fn issue_166_cast_history_replays_accepted_commands_and_rolls_at_turn_boundary() {
+    use prost::Message;
+    use tricerules_proto::ruled::v1::{
+        dev_command, DevAddMana, DevCommand, DevPutCardInZone, DevZone,
+    };
+    fn engine() -> GameEngine {
+        let mut e = GameEngine::new(
+            166004,
+            &[0, 1],
+            20,
+            Some(vec![vec!["mountain".into(); 30]; 2]),
+            true,
+        )
+        .unwrap();
+        e.enable_dev_commands();
+        e
+    }
+    fn send(
+        e: &mut GameEngine,
+        log: &mut Vec<(i32, RuledCommand, Vec<u8>)>,
+        player: i32,
+        command: RuledCommand,
+    ) {
+        let bytes = e.apply_command(player, &command).unwrap().encode_to_vec();
+        log.push((player, command, bytes));
+    }
+    fn dev(player: i32, payload: dev_command::Dev) -> RuledCommand {
+        RuledCommand {
+            cmd: Some(Cmd::DevCommand(DevCommand {
+                target_player_id: player,
+                dev: Some(payload),
+            })),
+        }
+    }
+    let mut e = engine();
+    let mut log = vec![];
+    while e.state.turn_step != tricerules_core::TurnStep::Main1 {
+        let actor = e.state.priority_player_id();
+        send(&mut e, &mut log, actor, pass());
+    }
+    for (player, name, zone) in [
+        (0, "Magebane Lizard", DevZone::Battlefield),
+        (1, "Wall of Stone", DevZone::Battlefield),
+        (0, "Thunder Salvo", DevZone::Hand),
+        (1, "Twincast", DevZone::Hand),
+    ] {
+        send(
+            &mut e,
+            &mut log,
+            0,
+            dev(
+                player,
+                dev_command::Dev::PutCardInZone(DevPutCardInZone {
+                    card_name: name.into(),
+                    zone: zone as i32,
+                    ready: true,
+                }),
+            ),
+        );
+    }
+    for player in [0, 1] {
+        send(
+            &mut e,
+            &mut log,
+            0,
+            dev(
+                player,
+                dev_command::Dev::AddMana(DevAddMana {
+                    r: 5,
+                    u: 5,
+                    ..Default::default()
+                }),
+            ),
+        );
+    }
+    let wall = battlefield_object_for_card(&e, 1, "wall_of_stone");
+    let index = hand_index_for_card(&e, 0, "thunder_salvo");
+    let salvo = e.state.players[0].hand[index];
+    send(&mut e, &mut log, 0, cast_spell(index, target_object(wall)));
+    send(&mut e, &mut log, 0, pass());
+    let index = hand_index_for_card(&e, 1, "twincast");
+    send(&mut e, &mut log, 1, cast_spell(index, target_object(salvo)));
+    while e.state.pending_resolution.is_none() {
+        let actor = e.state.priority_player_id();
+        send(&mut e, &mut log, actor, pass());
+    }
+    send(&mut e, &mut log, 1, submit_resolution_choice(vec![wall]));
+    while !e.state.stack.is_empty() {
+        let actor = e.state.priority_player_id();
+        send(&mut e, &mut log, actor, pass());
+    }
+    assert_eq!(e.state.turn_history.current.spell_casts.len(), 2);
+    assert_eq!(e.state.objects[&wall].damage, 5);
+    let finished = e.state.turn_history.current.clone();
+    let turn = e.state.turn_instance;
+    for _ in 0..40 {
+        if e.state.turn_instance != turn {
+            break;
+        }
+        if let Some(player) = e.state.cleanup_discard_player {
+            let count = e.state.players[e.state.player_idx(player).unwrap()]
+                .hand
+                .len()
+                - 7;
+            send(
+                &mut e,
+                &mut log,
+                player,
+                discard_cleanup_batch((0..count as u32).collect()),
+            );
+        } else {
+            let actor = e.state.priority_player_id();
+            send(&mut e, &mut log, actor, pass());
+        }
+    }
+    assert_ne!(e.state.turn_instance, turn);
+    assert!(e.state.turn_history.current.spell_casts.is_empty());
+    assert_eq!(
+        e.state.turn_history.previous.spell_casts,
+        finished.spell_casts
+    );
+    let mut replay = engine();
+    for (actor, command, expected) in &log {
+        assert_eq!(
+            replay
+                .apply_command(*actor, command)
+                .unwrap()
+                .encode_to_vec(),
+            *expected
+        );
+    }
+    assert_eq!(replay.state.turn_history, e.state.turn_history);
+    assert_eq!(replay.state.command_index, e.state.command_index);
+    assert_eq!(replay.state.turn_instance, e.state.turn_instance);
+}
 
 fn issue_170_engine() -> GameEngine {
     let mut e = GameEngine::new(

@@ -10,7 +10,7 @@
     (
       trigger: WheneverPlayerCastsSpell(
         caster: Controller,
-        spell_type: Some(Noncreature),
+        filter: (card_type: Some(Noncreature)),
       ),
       effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
       text: "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)",

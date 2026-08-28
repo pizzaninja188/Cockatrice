@@ -1230,59 +1230,49 @@ impl GameEngine {
                 })
                 })
                 .collect(),
-            GameEvent::SpellCast {
-                caster,
-                card_id: cast_card_id,
-                ordinal,
-                face_index,
-                mana_value,
-            } => {
-                // CR 709.4/712.4: a spell on the stack has the characteristics of the cast face.
-                let cast_face = self
-                    .registry
-                    .get(cast_card_id)
-                    .and_then(|d| d.face(*face_index));
-
-                sources
-                    .iter()
-                    .flat_map(|source| {
-                        self.matching_snapshot_abilities(source, |tc| {
-                            let TriggerCondition::WheneverPlayerCastsSpell {
-                                caster: caster_filter,
-                                spell_type,
-                                ordinal: trigger_ordinal,
-                                min_mana_value,
-                                max_mana_value,
-                            } = tc
-                            else {
-                                return false;
-                            };
-                            let caster_ok = self.relative_player_matches(
-                                *caster_filter,
-                                *caster,
-                                source.controller,
-                            );
-                            if !caster_ok {
-                                return false;
-                            }
-                            if trigger_ordinal.is_some_and(|expected| expected != *ordinal) {
-                                return false;
-                            }
-                            if min_mana_value.is_some_and(|minimum| *mana_value < minimum)
-                                || max_mana_value.is_some_and(|maximum| *mana_value > maximum)
-                            {
-                                return false;
-                            }
-                            match spell_type {
-                                None => true,
-                                Some(filter) => {
-                                    cast_face.is_some_and(|face| face.matches_card_type(*filter))
+            GameEvent::SpellCast { fact } => sources
+                .iter()
+                .flat_map(|source| {
+                    self.matching_snapshot_abilities(source, |tc| {
+                        let TriggerCondition::WheneverPlayerCastsSpell {
+                            caster: caster_filter,
+                            filter,
+                            ordinal,
+                            ordinal_scope,
+                        } = tc
+                        else {
+                            return false;
+                        };
+                        if !self.relative_player_matches(
+                            *caster_filter,
+                            fact.caster,
+                            source.controller,
+                        ) || !super::history::spell_cast_matches(filter, fact)
+                        {
+                            return false;
+                        }
+                        ordinal.is_none_or(|expected| {
+                            let actual = match ordinal_scope {
+                                CastOrdinalScope::AllSpells => fact.ordinal,
+                                CastOrdinalScope::MatchingFilter => {
+                                    self.state
+                                        .turn_history
+                                        .current
+                                        .spell_casts
+                                        .iter()
+                                        .filter(|prior| {
+                                            prior.caster == fact.caster
+                                                && prior.ordinal <= fact.ordinal
+                                                && super::history::spell_cast_matches(filter, prior)
+                                        })
+                                        .count() as u32
                                 }
-                            }
+                            };
+                            expected == actual
                         })
                     })
-                    .collect()
-            }
+                })
+                .collect(),
         }
     }
 
@@ -1755,6 +1745,7 @@ impl GameEngine {
             GameEvent::CrimeCommitted { player } => Some(*player),
             GameEvent::ManaSpentCastingSpell { player, .. } => Some(*player),
             GameEvent::CardDrawn { drawer, .. } => Some(*drawer),
+            GameEvent::SpellCast { fact } => Some(fact.caster),
             GameEvent::TargetsChosen { controller, .. } => Some(*controller),
             _ => None,
         }
@@ -1908,6 +1899,7 @@ impl GameEngine {
                 face_index: source_face_index,
                 chosen_modes: vec![],
                 cast_condition_results: Vec::new(),
+                cast_occurrence: None,
                 cast_cost_receipts: vec![],
                 payment_result: CardResultCohort::default(),
                 resolution_branch_choices: Default::default(),

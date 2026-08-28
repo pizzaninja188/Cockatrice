@@ -452,6 +452,7 @@ fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> S
         chosen_x: 0,
         chosen_modes: Vec::new(),
         cast_condition_results: Vec::new(),
+        cast_occurrence: None,
         cast_cost_receipts: Vec::new(),
         payment_result: CardResultCohort::default(),
         resolution_branch_choices: Default::default(),

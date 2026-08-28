@@ -415,6 +415,7 @@ impl CharacteristicsEvaluator<'_> {
                 *quantifier,
                 controller,
                 None,
+                None,
             ),
             GameCondition::ActivePlayer { players } => relative_player_set_contains(
                 self.state,
@@ -441,25 +442,16 @@ impl CharacteristicsEvaluator<'_> {
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }
-            GameCondition::SpellsCastThisTurn { players, .. } => {
-                let count = self
-                    .state
-                    .players
-                    .iter()
-                    .filter(|player| {
-                        relative_player_set_contains(self.state, *players, controller, player.id)
-                    })
-                    .fold(0u32, |total, player| {
-                        total.saturating_add(
-                            self.state
-                                .turn_history
-                                .current
-                                .player(player.id)
-                                .spells_cast,
-                        )
-                    });
-                condition.matches_value(count)
-            }
+            GameCondition::SpellsCastThisTurn {
+                players, filter, ..
+            } => condition.matches_value(super::history::spell_cast_count(
+                self.state,
+                ConditionPlayerSet::Relative(*players),
+                filter,
+                controller,
+                None,
+                false,
+            )),
             GameCondition::CardsDrawnThisTurn { players, .. } => {
                 let count = self
                     .state

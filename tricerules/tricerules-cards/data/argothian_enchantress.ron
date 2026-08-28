@@ -8,7 +8,7 @@
   keywords: [Shroud],
   triggered_abilities: [
     (
-      trigger: WheneverPlayerCastsSpell(spell_type: Some(Enchantment)),
+      trigger: WheneverPlayerCastsSpell(filter: (card_type: Some(Enchantment))),
       effect: [Draw(count: 1)],
       text: "Whenever you cast an enchantment spell, draw a card.",
     ),

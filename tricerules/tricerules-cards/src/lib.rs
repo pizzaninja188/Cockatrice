@@ -17,14 +17,15 @@ pub use primitives::{
     AdditionalCost, Amount, BattlefieldAggregate, BattlefieldCreatureCountFilter,
     BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
     CardSearchZone, CastCostConditionalAmount, CastCostGroupDef, CastCostOptionDef,
-    CastCostReceiptCondition, CastTriggerPlayer, Color, CombatRole, ConditionalManaOutput,
-    ConditionalSearchDestination, ContinuousEffectKind, ControllerReference, CountExpression,
-    CounterKind, DelayedTokenSacrificeTiming, EffectContext, EffectDuration, Evasion,
-    GameCondition, GraveyardAggregate, Keyword, LibraryPartitionKind, ManaAmount, ManaSpendFilter,
-    ManaSpendingRestriction, PermanentTypeFilter, PowerComparison, PowerToughnessCharacteristic,
-    PtScale, QuantityTerm, RelativePlayerSet, SearchDestination, SearchZoneSelection,
-    SpecialActionManaPurpose, SpellCostModifier, SpellEffectKind, TriggerCondition,
-    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
+    CastCostReceiptCondition, CastOrdinalScope, CastTriggerPlayer, Color, CombatRole,
+    ConditionalManaOutput, ConditionalSearchDestination, ContinuousEffectKind, ControllerReference,
+    CountExpression, CounterKind, DelayedTokenSacrificeTiming, EffectContext, EffectDuration,
+    Evasion, GameCondition, GraveyardAggregate, Keyword, LibraryPartitionKind, ManaAmount,
+    ManaSpendFilter, ManaSpendingRestriction, PermanentTypeFilter, PowerComparison,
+    PowerToughnessCharacteristic, PtScale, QuantityTerm, RelativePlayerSet, SearchDestination,
+    SearchZoneSelection, SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin,
+    SpellCostModifier, SpellEffectKind, TriggerCondition, TriggeredAbilityDef, TypeLineAddition,
+    TypeLineReplacement, ZoneCardFilter,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

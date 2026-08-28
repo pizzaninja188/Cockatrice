@@ -41,10 +41,12 @@ fn second_event_cards_use_shared_ordinal_triggers() {
         poised.triggered_abilities[0].trigger,
         TriggerCondition::WheneverPlayerCastsSpell {
             caster: CastTriggerPlayer::Controller,
-            spell_type: None,
+            filter: tricerules_cards::SpellCastFilter {
+                card_type: None,
+                ..Default::default()
+            },
             ordinal: Some(2),
-            min_mana_value: None,
-            max_mana_value: None,
+            ordinal_scope: Default::default(),
         }
     );
     assert!(matches!(
@@ -68,10 +70,12 @@ fn second_event_cards_use_shared_ordinal_triggers() {
         jeskai.triggered_abilities[0].trigger,
         TriggerCondition::WheneverPlayerCastsSpell {
             caster: CastTriggerPlayer::Controller,
-            spell_type: None,
+            filter: tricerules_cards::SpellCastFilter {
+                card_type: None,
+                ..Default::default()
+            },
             ordinal: Some(2),
-            min_mana_value: None,
-            max_mana_value: None,
+            ordinal_scope: Default::default(),
         }
     );
     assert!(matches!(
@@ -116,6 +120,7 @@ fn focus_the_mind_uses_per_player_cast_history_for_its_complete_effect() {
             amount: 2,
             condition: GameCondition::SpellsCastThisTurn {
                 players: RelativePlayerSet::Controller,
+                filter: Default::default(),
                 min: Some(1),
                 max: None,
             },

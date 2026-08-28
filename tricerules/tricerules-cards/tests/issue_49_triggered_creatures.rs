@@ -286,10 +286,12 @@ fn issue_49_cast_trigger_cards_use_existing_filters_and_source_effects() {
         spellgorger.trigger,
         TriggerCondition::WheneverPlayerCastsSpell {
             caster: CastTriggerPlayer::Controller,
-            spell_type: Some(CardTypeFilter::Noncreature),
+            filter: tricerules_cards::SpellCastFilter {
+                card_type: Some(CardTypeFilter::Noncreature),
+                ..Default::default()
+            },
             ordinal: None,
-            min_mana_value: None,
-            max_mana_value: None,
+            ordinal_scope: Default::default(),
         }
     );
     assert_eq!(
@@ -312,10 +314,12 @@ fn issue_49_cast_trigger_cards_use_existing_filters_and_source_effects() {
             ability.trigger,
             TriggerCondition::WheneverPlayerCastsSpell {
                 caster: CastTriggerPlayer::Controller,
-                spell_type: Some(spell_type),
+                filter: tricerules_cards::SpellCastFilter {
+                    card_type: Some(spell_type),
+                    ..Default::default()
+                },
                 ordinal: None,
-                min_mana_value: None,
-                max_mana_value: None,
+                ordinal_scope: Default::default(),
             },
             "{id}"
         );

@@ -18,6 +18,32 @@ pub use targeting::*;
 #[cfg(test)]
 mod tests {
     #[test]
+    fn issue_166_cast_quantity_and_filter_validate() {
+        let amount: super::Amount = ron::from_str(
+            "Count(SpellsCastThisTurn(players: AffectedPlayer, filter: (any_of: Some([(card_type: Some(Noncreature)), (required_subtypes: [\"Otter\"])]))))"
+        ).expect("cast history is a shared quantity");
+        let effects = [super::SpellEffectKind::DamagePlayer {
+            amount,
+            who: super::PlayerRecipient::AffectedPlayer,
+        }];
+        assert!(super::SpellEffectKind::validate_list(&effects).is_ok());
+    }
+
+    #[test]
+    fn issue_166_invalid_cast_filters_are_rejected() {
+        for filter in [
+            "(min_mana_value: Some(4), max_mana_value: Some(2))",
+            "(required_subtypes: [\"\"])",
+            "(any_of: Some([]))",
+            "(any_of: Some([()]))",
+        ] {
+            let trigger: super::TriggerCondition =
+                ron::from_str(&format!("WheneverPlayerCastsSpell(filter: {filter})")).unwrap();
+            assert!(trigger.validate().is_err(), "{filter}");
+        }
+    }
+
+    #[test]
     fn issue_165_dynamic_consumers_reject_unavailable_result_contexts() {
         for template in [
             "Scry(count: AMOUNT)",
@@ -452,6 +478,7 @@ mod tests {
         .is_ok());
         assert!(GameCondition::SpellsCastThisTurn {
             players: RelativePlayerSet::Controller,
+            filter: Default::default(),
             min: None,
             max: None,
         }
@@ -459,6 +486,7 @@ mod tests {
         .is_err());
         assert!(GameCondition::SpellsCastThisTurn {
             players: RelativePlayerSet::Controller,
+            filter: Default::default(),
             min: Some(1),
             max: None,
         }
@@ -539,10 +567,12 @@ mod tests {
     fn turn_history_trigger_ordinals_must_be_positive() {
         assert!(TriggerCondition::WheneverPlayerCastsSpell {
             caster: CastTriggerPlayer::Controller,
-            spell_type: None,
+            filter: crate::SpellCastFilter {
+                card_type: None,
+                ..Default::default()
+            },
             ordinal: Some(0),
-            min_mana_value: None,
-            max_mana_value: None,
+            ordinal_scope: Default::default(),
         }
         .validate()
         .is_err());

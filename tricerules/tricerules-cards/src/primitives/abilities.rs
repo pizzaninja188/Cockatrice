@@ -431,18 +431,16 @@ pub enum TriggerCondition {
         /// Defaults to `Controller` ("whenever you cast").
         #[serde(default)]
         caster: CastTriggerPlayer,
-        /// If `Some`, only spells of this type fire the trigger. `None` matches any spell.
+        /// Shared event-time predicate; overlapping OR branches match once.
         #[serde(default)]
-        spell_type: Option<CardTypeFilter>,
+        filter: SpellCastFilter,
         /// If present, only that player's Nth committed cast of the turn triggers. This is the
         /// shared flurry vocabulary used by Poised Practitioner and Jeskai Devotee.
         #[serde(default)]
         ordinal: Option<u32>,
-        /// Inclusive mana-value bounds for the spell as cast, including announced X.
+        /// Existing flurry cards count all spells; filtered ordinals opt in explicitly.
         #[serde(default)]
-        min_mana_value: Option<u32>,
-        #[serde(default)]
-        max_mana_value: Option<u32>,
+        ordinal_scope: CastOrdinalScope,
     },
     /// CR 700.14: the selected player's actual spell spending crosses this threshold once a turn.
     /// Covers Bark-Knuckle Boxer, Teapot Slinger, and Wandertale Mentor; not a trigger-use cap.
@@ -609,16 +607,7 @@ impl TriggerCondition {
             | Self::WheneverPlayerDrawsNthCard { ordinal: 0, .. } => {
                 Err("turn-history trigger ordinal must be at least one".into())
             }
-            Self::WheneverPlayerCastsSpell {
-                min_mana_value,
-                max_mana_value,
-                ..
-            } if min_mana_value
-                .zip(*max_mana_value)
-                .is_some_and(|(minimum, maximum)| minimum > maximum) =>
-            {
-                Err("cast trigger mana-value minimum cannot exceed maximum".into())
-            }
+            Self::WheneverPlayerCastsSpell { filter, .. } => filter.validate(),
             _ => Ok(()),
         }
     }
@@ -813,6 +802,72 @@ impl TypeLineReplacement {
             return Err(
                 "type-line replacement creature types require the Creature card type".into(),
             );
+        }
+        Ok(())
+    }
+}
+
+/// Distinguishes all-spell ordinals (flurry) from ordinals within an authored spell cohort.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum CastOrdinalScope {
+    /// Flurry counts all spells, independently of the event filter.
+    #[default]
+    AllSpells,
+    /// The Nth qualifying spell, rather than the Nth spell of any kind.
+    MatchingFilter,
+}
+
+/// Cast-origin predicates for Emergent Haunting and graveyard/exile cast-history mechanics.
+/// This describes the actual source zone, not an alternative cost or permission.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SpellCastOrigin {
+    Hand,
+    Graveyard,
+    Exile,
+}
+
+/// Event-time spell predicates shared by Magebane Lizard, Harnesser of Storms and
+/// Chancellor of Tales. Fields combine with AND; any_of is a deduplicated OR.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SpellCastFilter {
+    #[serde(default)]
+    pub any_of: Option<Vec<Self>>,
+    #[serde(default)]
+    pub card_type: Option<CardTypeFilter>,
+    #[serde(default)]
+    pub required_subtypes: Vec<String>,
+    #[serde(default)]
+    pub min_mana_value: Option<u32>,
+    #[serde(default)]
+    pub max_mana_value: Option<u32>,
+    #[serde(default)]
+    pub origin: Option<SpellCastOrigin>,
+}
+
+impl SpellCastFilter {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        if self
+            .min_mana_value
+            .zip(self.max_mana_value)
+            .is_some_and(|(min, max)| min > max)
+        {
+            return Err("cast filter mana-value minimum cannot exceed maximum".into());
+        }
+        if self
+            .required_subtypes
+            .iter()
+            .any(|subtype| subtype.trim().is_empty())
+        {
+            return Err("cast filter subtype cannot be empty".into());
+        }
+        if let Some(branches) = &self.any_of {
+            if branches.len() < 2 {
+                return Err("cast filter any_of requires at least two branches".into());
+            }
+            for branch in branches {
+                branch.validate()?;
+            }
         }
         Ok(())
     }

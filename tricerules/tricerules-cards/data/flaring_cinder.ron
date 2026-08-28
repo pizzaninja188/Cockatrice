@@ -21,7 +21,7 @@
       text: "When this creature enters, you may discard a card. If you do, draw a card.",
     ),
     (
-      trigger: WheneverPlayerCastsSpell(caster: Controller, min_mana_value: Some(4)),
+      trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (min_mana_value: Some(4))),
       effect: [ChooseResolutionBranch(
         optional: true,
         branches: [(
