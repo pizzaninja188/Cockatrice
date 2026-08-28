@@ -149,6 +149,7 @@ impl<'a> ConditionContext<'a> {
     }
 }
 
+mod blight;
 mod casting;
 mod characteristics;
 mod combat;
@@ -373,6 +374,8 @@ enum TargetingSourceKind {
 }
 
 enum GameEvent {
+    /// CR 701.68d: completion, independently of the resulting counter count.
+    Blighted(crate::state::BlightReceipt),
     ZoneChanges(zone_events::ZoneEventBatch),
     EntersBattlefield {
         object_id: ObjectId,

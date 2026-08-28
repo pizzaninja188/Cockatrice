@@ -7,6 +7,52 @@ use super::resolution::resolve_creature_scope;
 use super::*;
 
 impl GameEngine {
+    /// Tatterkite / Blossombind: consult live copied abilities and attachment membership.
+    /// This also runs after an entrant's face is established, before its entry counters.
+    pub(super) fn can_receive_counters(&self, target: ObjectId) -> bool {
+        if !self
+            .state
+            .objects
+            .get(&target)
+            .is_some_and(|o| o.zone == Zone::Battlefield)
+        {
+            return false;
+        }
+        !self.state.objects.iter().any(|(&source, object)| {
+            if object.zone != Zone::Battlefield || object.face_down
+                || super::characteristics::latest_remove_all_abilities_timestamp(&self.state, source).is_some()
+            {
+                return false;
+            }
+            self.effective_face(source).is_some_and(|face| face.static_abilities.iter().any(|ability| {
+                match ability {
+                    StaticAbilityDef::ProhibitCounters { affected: tricerules_cards::primitives::CounterPlacementAffected::Self_ } => source == target,
+                    StaticAbilityDef::ProhibitCounters { affected: tricerules_cards::primitives::CounterPlacementAffected::AttachedPermanent } => object.attached_to == Some(AttachmentRecipient::Object(target)),
+                    _ => false,
+                }
+            }))
+        })
+    }
+
+    /// The sole gameplay counter-placement funnel. Removal and fixture construction are separate.
+    pub(super) fn place_counters(
+        &mut self,
+        target: ObjectId,
+        kind: CounterKind,
+        count: u32,
+    ) -> u32 {
+        if count == 0 || !self.can_receive_counters(target) {
+            return 0;
+        }
+        let timestamp = self.state.command_index;
+        self.state
+            .objects
+            .get_mut(&target)
+            .expect("validated counter recipient")
+            .add_counters(kind, count, timestamp);
+        count
+    }
+
     /// CR 119.7 / 614.17: query the prohibition before committing a life-gain event.
     /// Printed and copied abilities are live only on the battlefield and while not blanked
     /// in layer 6. There is no historical source binding to retain after a zone change.
@@ -155,7 +201,8 @@ impl GameEngine {
 
         for (definition, static_ability) in statics {
             match static_ability {
-                StaticAbilityDef::ProhibitLifeGain { .. } => {
+                StaticAbilityDef::ProhibitLifeGain { .. }
+                | StaticAbilityDef::ProhibitCounters { .. } => {
                     // Queried at each life-gain event; no independent effect record is needed.
                 }
                 StaticAbilityDef::EntersAsCopy { .. } => {

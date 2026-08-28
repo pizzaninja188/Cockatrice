@@ -121,6 +121,8 @@ mod issue_145_convoke;
 mod issue_151_firebending;
 #[path = "scenario/issue_152_exhaust.rs"]
 mod issue_152_exhaust;
+#[path = "scenario/issue_153_blight.rs"]
+mod issue_153_blight;
 #[path = "scenario/issue_154_changeling.rs"]
 mod issue_154_changeling;
 #[path = "scenario/issue_156_event_observers.rs"]

@@ -687,6 +687,7 @@ enum CostChoiceKind {
   COST_CHOICE_KIND_SACRIFICE = 2;
   COST_CHOICE_KIND_EXILE = 3;
   COST_CHOICE_KIND_TAP = 4;
+  COST_CHOICE_KIND_BLIGHT = 5;
 }
 
 // A public-zone object choice bound to the exact zone-change generation that was published.
@@ -725,6 +726,8 @@ message LegalCostChoice {
   uint32 max = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   CostChoiceKind kind = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated CostObjectRef candidate_objects = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Blight selects one creature, independently of how many counters are placed on it.
+  uint32 blight_count = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalCostChoices {
@@ -740,6 +743,7 @@ enum CastCostOptionKind {
   CAST_COST_OPTION_KIND_MANA = 1;
   CAST_COST_OPTION_KIND_BEHOLD = 2;
   CAST_COST_OPTION_KIND_TAP_PERMANENT_FOR_GENERIC_REDUCTION = 3;
+  CAST_COST_OPTION_KIND_BLIGHT = 4;
 }
 
 message LegalCastCostOption {
@@ -1166,6 +1170,7 @@ enum ResolutionBranchCostKind {
   RESOLUTION_BRANCH_COST_KIND_DISCARD_CARD = 2;
   RESOLUTION_BRANCH_COST_KIND_SACRIFICE_PERMANENT = 3;
   RESOLUTION_BRANCH_COST_KIND_TAP_PERMANENTS = 4;
+  RESOLUTION_BRANCH_COST_KIND_BLIGHT = 5;
 }
 
 message ResolutionBranchOption {

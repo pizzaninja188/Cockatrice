@@ -151,6 +151,7 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
         }
         parsed.min = static_cast<int>(choice.min());
         parsed.max = static_cast<int>(choice.max());
+        parsed.blightCount = choice.blight_count();
         switch (choice.kind()) {
             case ruled::v1::COST_CHOICE_KIND_DISCARD:
                 parsed.kind = RuledCostChoiceKind::Discard;
@@ -163,6 +164,9 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
                 break;
             case ruled::v1::COST_CHOICE_KIND_TAP:
                 parsed.kind = RuledCostChoiceKind::Tap;
+                break;
+            case ruled::v1::COST_CHOICE_KIND_BLIGHT:
+                parsed.kind = RuledCostChoiceKind::Blight;
                 break;
             default:
                 parsed.kind = RuledCostChoiceKind::Unspecified;
@@ -194,12 +198,18 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
                 case ruled::v1::CAST_COST_OPTION_KIND_TAP_PERMANENT_FOR_GENERIC_REDUCTION:
                     parsedOption.kind = RuledCastCostOptionKind::TapPermanentForGenericReduction;
                     break;
-                default:
+                case ruled::v1::CAST_COST_OPTION_KIND_BLIGHT:
+                    parsedOption.kind = RuledCastCostOptionKind::Blight;
+                    break;
+                case ruled::v1::CAST_COST_OPTION_KIND_MANA:
                     parsedOption.kind = RuledCastCostOptionKind::Mana;
+                    break;
+                default:
+                    parsedOption.kind = RuledCastCostOptionKind::Unspecified;
                     break;
             }
             parsedOption.additionalManaCost = QString::fromStdString(option.additional_mana_cost());
-            parsedOption.selectable = option.selectable();
+            parsedOption.selectable = option.selectable() && parsedOption.kind != RuledCastCostOptionKind::Unspecified;
             for (const quint32 candidate : option.valid_hand_indices()) {
                 parsedOption.validHandIndices.insert(candidate);
             }

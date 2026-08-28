@@ -458,6 +458,7 @@ fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> S
         cast_cost_receipts: Vec::new(),
         payment_result: CardResultCohort::default(),
         resolution_branch_choices: Default::default(),
+        blight_receipts: Vec::new(),
         trigger_context: TriggerContext::default(),
     }
 }

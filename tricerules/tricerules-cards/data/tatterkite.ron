@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-08-27. CR 122: counters cannot be placed on this object.
+(
+  id: "tatterkite",
+  name: "Tatterkite",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Scarecrow"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  static_abilities: [ProhibitCounters(affected: Self_)],
+)

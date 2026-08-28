@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 /// `{1}, {T}` filter land, and a sacrifice-for-mana rock all use these same cost kinds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AbilityCost {
+    /// CR 701.68: Gristle Glutton and Spiral into Solitude put all counters on one creature.
+    Blight { count: u32 },
     /// CR 606.4: add (positive), remove (negative), or leave unchanged (zero) loyalty counters
     /// as the cost of activating a planeswalker's loyalty ability.
     Loyalty(i32),
@@ -52,6 +54,7 @@ pub enum AbilityCost {
 impl AbilityCost {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::Blight { count: 0 } => Err("blight cost requires a positive count".into()),
             Self::TapPermanents { count: 0, .. } => {
                 Err("permanent tap cost requires a positive count".into())
             }
@@ -71,6 +74,8 @@ impl AbilityCost {
 /// the single mana component, while this ordered list supplies authored nonmana choices.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AdditionalCost {
+    /// Mandatory Blight payment, sharing the cast-option and activated-cost operation.
+    Blight { count: u32 },
     /// Discard one other card chosen from the caster's hand.
     DiscardCard,
     /// Sacrifice one permanent the caster controls that matches `filter`.
@@ -104,6 +109,8 @@ fn default_one() -> u32 {
 /// One mutually distinguishable option in a cast-cost group.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CastCostOptionDef {
+    /// Cinder Strike's optional payment and Wild Unraveling's Blight-or-mana group.
+    Blight { label: String, count: u32 },
     /// Pay this additional mana as part of the spell's single total cost. Grow from the Ashes and
     /// Gnarlid Colony use this for kicker.
     Mana { label: String, cost: ManaCost },
@@ -127,14 +134,19 @@ impl CastCostGroupDef {
         let mut labels = std::collections::HashSet::new();
         for option in &self.options {
             let label = match option {
-                CastCostOptionDef::Mana { label, .. } | CastCostOptionDef::Behold { label, .. } => {
-                    label
-                }
+                CastCostOptionDef::Mana { label, .. }
+                | CastCostOptionDef::Behold { label, .. }
+                | CastCostOptionDef::Blight { label, .. } => label,
             };
             if !labels.insert(label.trim()) {
                 return Err("cast cost group option labels must be unique".into());
             }
             match option {
+                CastCostOptionDef::Blight { label, count } => {
+                    if label.trim().is_empty() || *count == 0 {
+                        return Err("blight option requires a label and positive count".into());
+                    }
+                }
                 CastCostOptionDef::Mana { label, cost } => {
                     if label.trim().is_empty() || cost.is_empty() {
                         return Err("cast mana option requires a label and nonempty cost".into());

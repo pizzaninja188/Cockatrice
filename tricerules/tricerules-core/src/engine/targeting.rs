@@ -1143,6 +1143,7 @@ fn validate_effect_targets(
         // Non-targeted effects require no targets.
         SpellEffectKind::Draw { .. }
         | SpellEffectKind::Discard { .. }
+        | SpellEffectKind::Blight { .. }
         | SpellEffectKind::DrawDiscard { .. }
         | SpellEffectKind::GainLife { .. }
         | SpellEffectKind::Mill { .. }

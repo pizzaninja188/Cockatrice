@@ -541,14 +541,12 @@ impl GameEngine {
                 if let DamageRecipient::Permanent(recipient) = event.recipient {
                     let recipient_label =
                         object_display_name(&self.state, self.registry, recipient);
-                    let timestamp = self.state.command_index;
-                    if let Some(object) = self.state.objects.get_mut(&recipient) {
-                        object.add_counters(counter, amount, timestamp);
+                    if self.place_counters(recipient, counter, amount) > 0 {
+                        events.push(ev_log(format!(
+                            "{source_label} puts {amount} {} counter(s) on {recipient_label}.",
+                            counter.label()
+                        )));
                     }
-                    events.push(ev_log(format!(
-                        "{source_label} puts {amount} {} counter(s) on {recipient_label}.",
-                        counter.label()
-                    )));
                 }
             }
         }
@@ -704,6 +702,7 @@ impl GameEngine {
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
         };
         let result = self.process_or_park_damage_event(&item, event, source_has_deathtouch, events);
@@ -867,6 +866,7 @@ impl GameEngine {
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
         };
         let completed = self.process_or_park_damage_batch(&item, damage, events);

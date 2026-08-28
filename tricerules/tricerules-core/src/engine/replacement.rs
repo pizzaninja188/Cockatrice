@@ -776,16 +776,15 @@ impl GameEngine {
             Zone::Battlefield,
             Some(event.destination_controller),
         )?;
-        let timestamp = self.state.command_index;
         if let Some(object) = self.state.objects.get_mut(&event.object_id) {
             object.face_up_index = event.face_index;
             object.tapped = event.tapped;
             object.counters.clear();
             object.counter_timestamps.clear();
-            for (counter, count) in event.entry_counters {
-                object.add_counters(counter, count, timestamp);
-            }
             object.attached_to = attached_to;
+        }
+        for (counter, count) in event.entry_counters {
+            self.place_counters(event.object_id, counter, count);
         }
         if let Some(protector) = battle_protector {
             self.state
@@ -1367,6 +1366,33 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issue_153_tatterkite_enters_without_proposed_counters() {
+        let mut engine = GameEngine::new(153_008, &[0, 1], 20, None, true).unwrap();
+        let object_id = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&object_id).unwrap().card_id = "tatterkite".into();
+        let event = BattlefieldEntryEvent {
+            object_id,
+            deciding_player: 0,
+            destination_controller: 0,
+            battle_protector: None,
+            face_index: 0,
+            unlock_room_door: None,
+            chosen_x: 0,
+            cast_cost_receipts: Vec::new(),
+            player_life_snapshot: engine.player_life_snapshot(),
+            tapped: false,
+            entry_counters: BTreeMap::from([
+                (CounterKind::PlusOnePlusOne, 3),
+                (CounterKind::Stun, 2),
+            ]),
+            applied_effects: Vec::new(),
+        };
+        engine.commit_battlefield_entry(event, None).unwrap();
+        assert_eq!(engine.state.objects[&object_id].zone, Zone::Battlefield);
+        assert!(engine.state.objects[&object_id].counters.is_empty());
+    }
 
     #[test]
     fn entry_counter_accumulation_saturates_and_omits_zero_entries() {

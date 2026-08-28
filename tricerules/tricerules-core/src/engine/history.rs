@@ -1184,6 +1184,16 @@ impl GameEngine {
 
     pub(super) fn resolve_amount(&self, amount: &Amount, context: AmountContext<'_>) -> u32 {
         match amount {
+            Amount::CastCost(value) => {
+                if context
+                    .stack_item
+                    .is_some_and(|item| item.cast_cost_condition_matches(value.condition))
+                {
+                    value.if_selected
+                } else {
+                    value.otherwise
+                }
+            }
             Amount::Fixed(value) => *value,
             Amount::X => context.chosen_x,
             Amount::Conditional {
@@ -2282,6 +2292,7 @@ mod tests {
             cast_occurrence: None,
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
         });
         for (kind, oid, expected) in [

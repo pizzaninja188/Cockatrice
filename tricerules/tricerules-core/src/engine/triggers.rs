@@ -532,6 +532,9 @@ impl GameEngine {
     ) -> Vec<CollectedTrigger> {
         match event {
             GameEvent::ZoneChanges(batch) => self.collect_zone_triggers(batch),
+            // The completed operation is available for Blight observers; this delivery adds
+            // payment consumers, not a new authored observer condition.
+            GameEvent::Blighted(_) => vec![],
             GameEvent::EntersBattlefield { object_id } => {
                 let Some(obj) = self.state.objects.get(object_id) else {
                     return vec![];
@@ -1786,6 +1789,7 @@ impl GameEngine {
             GameEvent::Sacrificed { player, .. } => Some(*player),
             GameEvent::Surveilled { player } => Some(*player),
             GameEvent::CrimeCommitted { player } => Some(*player),
+            GameEvent::Blighted(receipt) => Some(receipt.player),
             GameEvent::ManaSpentCastingSpell { player, .. } => Some(*player),
             GameEvent::CardDrawn { drawer, .. } => Some(*drawer),
             GameEvent::SpellCast { fact } => Some(fact.caster),
@@ -1946,6 +1950,7 @@ impl GameEngine {
                 cast_cost_receipts: vec![],
                 payment_result: CardResultCohort::default(),
                 resolution_branch_choices: Default::default(),
+                blight_receipts: Vec::new(),
                 trigger_context,
                 cast_method: SpellCastMethod::Normal,
             });

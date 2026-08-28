@@ -71,21 +71,6 @@ impl GameEngine {
         let zone_snapshot = self.snapshot_zone_event();
         let mut leaves: Vec<(TriggerSourceSnapshot, bool, bool)> = Vec::new();
         let mut tap_events = Vec::new();
-        // CR 122.3: counter annihilation (+1/+1 and -1/-1 pairs cancel).
-        for o in self.state.objects.values_mut() {
-            if o.zone != Zone::Battlefield {
-                continue;
-            }
-            let plus = o.counter_count(CounterKind::PlusOnePlusOne);
-            let minus = o.counter_count(CounterKind::MinusOneMinusOne);
-            let pairs = plus.min(minus);
-            if pairs > 0 {
-                o.set_counter(CounterKind::PlusOnePlusOne, plus - pairs);
-                o.set_counter(CounterKind::MinusOneMinusOne, minus - pairs);
-                changed = true;
-            }
-        }
-
         let candidate_ids: Vec<ObjectId> = self
             .state
             .objects
@@ -150,6 +135,22 @@ impl GameEngine {
                     .map(|snapshot| (id, (snapshot, was_creature)))
             })
             .collect();
+        // Counter cancellation and deaths are one simultaneous SBA set. Capture all death decisions
+        // and last-known characteristics before removing either kind of counter.
+        for o in self.state.objects.values_mut() {
+            if o.zone != Zone::Battlefield {
+                continue;
+            }
+            let plus = o.counter_count(CounterKind::PlusOnePlusOne);
+            let minus = o.counter_count(CounterKind::MinusOneMinusOne);
+            let pairs = plus.min(minus);
+            if pairs > 0 {
+                o.set_counter(CounterKind::PlusOnePlusOne, plus - pairs);
+                o.set_counter(CounterKind::MinusOneMinusOne, minus - pairs);
+                changed = true;
+            }
+        }
+
         // Toughness-0: bypass regeneration (CR 704.5f — not a "destroy" trigger).
         // CR 702.2b / 704.5h look only for deathtouch damage dealt since the previous SBA
         // check. Preserve the decisions collected above, then expire the history bit on every
@@ -595,6 +596,40 @@ mod sba_tests {
         let idx = e.state.player_idx(owner).unwrap();
         e.state.players[idx].battlefield.push(id);
         id
+    }
+
+    #[test]
+    fn issue_153_counter_annihilation_and_death_use_the_same_snapshot() {
+        let mut e = engine();
+        let creature = add_creature(&mut e, 0, 2, 0);
+        let object = e.state.objects.get_mut(&creature).unwrap();
+        object.add_counters(CounterKind::PlusOnePlusOne, 1, 0);
+        object.add_counters(CounterKind::MinusOneMinusOne, 1, 0);
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: Some(creature),
+            affected: AffectedScope::Single(creature),
+            kind: ContinuousEffectKind::PtModify {
+                delta_power: 0,
+                delta_toughness: -2,
+            },
+            condition: Some(
+                tricerules_cards::primitives::GameCondition::SourceCounterCount {
+                    counter: CounterKind::PlusOnePlusOne,
+                    min: Some(1),
+                    max: None,
+                },
+            ),
+            duration: EffectDuration::WhileSourceOnBattlefield,
+            timestamp: 0,
+        });
+        assert_eq!(e.effective_toughness(creature), Some(0));
+        e.apply_sbas_once(&mut Vec::new()).unwrap();
+        assert_eq!(
+            e.state.objects[&creature].zone,
+            Zone::Graveyard,
+            "annihilation must not alter the simultaneous death decision"
+        );
     }
 
     fn anthem(source: ObjectId, dt: i32, duration: EffectDuration) -> ContinuousEffect {

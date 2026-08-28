@@ -1,0 +1,12 @@
+(
+  id: "chaos_spewer", name: "Chaos Spewer", mana_cost: "{2}{B/R}",
+  types: ["Creature", "Goblin", "Warlock"], power: 5, toughness: 4,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    text: "When this creature enters, blight 2 unless you pay {2}.",
+    effect: [ChooseResolutionBranch(optional: false, branches: [
+      (label: "Pay {2}", cost: Mana("{2}"), effects: []),
+      (label: "Blight 2", cost: None, effects: [Blight(count: 2)]),
+    ])],
+  )],
+)

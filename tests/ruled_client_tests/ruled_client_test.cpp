@@ -3338,6 +3338,77 @@ TEST_F(RuledClientTest, AppliesExileLandActionsAndStablePermissionGroupSnapshots
     EXPECT_EQ(changed.count(), 2);
 }
 
+TEST_F(RuledClientTest, BlightCostsUseAnAuthoritativeCreaturePicker)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *hand = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
+    hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_hand_index(3);
+    auto *choice = hand->mutable_cost_choices()->add_choices();
+    choice->set_cost_index(1);
+    choice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
+    choice->set_kind(ruled::v1::COST_CHOICE_KIND_BLIGHT);
+    choice->set_blight_count(2);
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->add_candidate_ids(900);
+    auto *ref = choice->add_candidate_objects();
+    ref->set_object_id(900);
+    ref->set_zone_change_generation(12);
+    auto *group = hand->mutable_cost_choices()->add_cast_cost_groups();
+    group->set_group_index(0);
+    group->set_max(1);
+    auto *option = group->add_options();
+    option->set_kind(ruled::v1::CAST_COST_OPTION_KIND_BLIGHT);
+    option->set_label("Blight 2");
+    option->set_selectable(true);
+    option->add_valid_permanent_ids(900);
+    option->add_valid_permanent_generations(12);
+    apply(batch);
+    const auto costs = state->spellCostData(3, 0, RuledCastSource::Hand);
+    ASSERT_EQ(costs.choices.size(), 1);
+    EXPECT_EQ(costs.choices[0].kind, RuledCostChoiceKind::Blight);
+    EXPECT_EQ(costs.choices[0].blightCount, 2u);
+    EXPECT_TRUE(ruledCostSelectionPrompt(costs.choices[0], QStringLiteral("Wild Unraveling")).contains("Blight 2"));
+    PendingRuledSpellCast pending;
+    pending.valid = true;
+    pending.waitingForCost = true;
+    pending.costChoices = costs.choices;
+    EXPECT_TRUE(ruledPendingGraveyardCostSelectionProgress(pending).has_value());
+    pending.costSelections = {{1, RuledCostChoiceZone::Battlefield, {900}, {12}}};
+    EXPECT_TRUE(ruledPendingGraveyardCostSelectionProgress(pending)->confirmable);
+    ruled::v1::CostSelection command;
+    ruledWriteCostObjectRefs(pending.costSelections[0], command);
+    ASSERT_EQ(command.battlefield_objects().objects_size(), 1);
+    EXPECT_EQ(command.battlefield_objects().objects(0).object_id(), 900u);
+    EXPECT_EQ(command.battlefield_objects().objects(0).zone_change_generation(), 12u);
+    pending.costSelections[0].selectedGenerations[0] = 11;
+    EXPECT_FALSE(ruledPendingGraveyardCostSelectionProgress(pending)->confirmable);
+    pending.waitingForCastCostObject = true;
+    pending.activeCastCostOption = 0;
+    pending.castCostGroups = costs.castCostGroups;
+    EXPECT_EQ(ruledCastCostObjectEligibility(pending, RuledCastCostCandidateKind::Permanent, 900),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledCastCostObjectEligibility(pending, RuledCastCostCandidateKind::Permanent, 901),
+              RuledTargetClickEligibility::Illegal);
+    EXPECT_EQ(ruledCastCostObjectEligibility(pending, RuledCastCostCandidateKind::Hand, 900),
+              RuledTargetClickEligibility::Illegal);
+}
+
+TEST(RuledPendingCostSelectionTest, BlightCanShareACreatureWithTapAndSacrifice)
+{
+    RuledCostChoice blight;
+    blight.costIndex = 1;
+    blight.kind = RuledCostChoiceKind::Blight;
+    RuledCostChoice sacrifice;
+    sacrifice.costIndex = 2;
+    sacrifice.kind = RuledCostChoiceKind::Sacrifice;
+    const QVector<RuledCostChoice> choices{blight, sacrifice};
+    EXPECT_FALSE(
+        ruledCostSelectionConflicts(sacrifice, choices, {1, RuledCostChoiceZone::Battlefield, {900}, {12}}, 900));
+    EXPECT_FALSE(ruledCostSelectionConflicts(blight, choices, {2, RuledCostChoiceZone::Battlefield, {900}}, 900));
+}
+
 TEST_F(RuledClientTest, ParsesEngineAuthoredOptionalCastCostGroups)
 {
     ruled::v1::RuledEventBatch batch;
@@ -4316,13 +4387,38 @@ TEST_F(RuledClientTest, ResolutionCostObjectsToggleAsABoundedCohortBeforeSubmiss
     EXPECT_TRUE(host.sentCommands.isEmpty());
 
     state->toggleResolutionCostObject(101);
+    QSignalSpy repaintSpy(state, &RuledClientState::combatStateChanged);
     state->submitResolutionCostObjects();
+    EXPECT_EQ(repaintSpy.count(), 1);
+    EXPECT_FALSE(state->isResolutionCostObjectSelected(100));
     ASSERT_EQ(host.sentCommands.size(), 1);
     const auto &chosen = host.sentCommands[0].submit_resolution_choice().chosen_object_ids();
     ASSERT_EQ(chosen.size(), 2);
     EXPECT_EQ(chosen.Get(0), 100u);
     EXPECT_EQ(chosen.Get(1), 101u);
     EXPECT_EQ(progressSpy.count(), 3); // two selections and clearing the submitted choice
+}
+
+TEST_F(RuledClientTest, CancellingResolutionCostObjectsRepaintsClearedSelectionImmediately)
+{
+    RuledClientState::RuledPendingChoice choice;
+    choice.kind = RuledClientState::ChoiceKind::CostObjects;
+    choice.mayDecline = true;
+    choice.min = 0;
+    choice.max = 1;
+    choice.candidateOids = {100};
+    state->setPendingChoice(choice);
+    state->toggleResolutionCostObject(100);
+    ASSERT_TRUE(state->isResolutionCostObjectSelected(100));
+
+    QSignalSpy repaintSpy(state, &RuledClientState::combatStateChanged);
+    QObject::connect(state, &RuledClientState::combatStateChanged, state,
+                     [this]() { EXPECT_FALSE(state->isResolutionCostObjectSelected(100)); });
+    state->declinePendingClickChoice();
+
+    EXPECT_EQ(repaintSpy.count(), 1);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 0);
 }
 
 TEST_F(RuledClientTest, AuraReturnChoicesUseTypedPermanentAndPlayerClickSurfaces)

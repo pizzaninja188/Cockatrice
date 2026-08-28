@@ -15,6 +15,10 @@ pub(in crate::engine) struct SacrificeSnapshot {
 }
 
 enum CostDebit {
+    Blight {
+        object: rv1::CostObjectRef,
+        count: u32,
+    },
     Loyalty {
         object_id: ObjectId,
         generation: u64,
@@ -56,6 +60,7 @@ enum CostDebit {
 }
 
 pub(in crate::engine) struct CostPaymentReceipt {
+    pub(in crate::engine) blight_receipts: Vec<crate::state::BlightReceipt>,
     pub(in crate::engine) move_events: Vec<rv1::RuledEvent>,
     pub(in crate::engine) trigger_events: Vec<GameEvent>,
     pub(in crate::engine) sacrificed: Vec<SacrificeSnapshot>,
@@ -224,6 +229,29 @@ impl PreparedSpellCosts {
 }
 
 impl GameEngine {
+    fn plan_blight_selection(
+        &self,
+        player: PlayerId,
+        count: u32,
+        selection: &rv1::CostSelection,
+    ) -> Result<CostDebit, EngineError> {
+        let Some(rv1::cost_selection::Selection::BattlefieldObjects(objects)) =
+            &selection.selection
+        else {
+            return Err(EngineError::Illegal(
+                "Blight requires a generation-bound creature",
+            ));
+        };
+        let [object] = objects.objects.as_slice() else {
+            return Err(EngineError::Illegal("Blight requires exactly one creature"));
+        };
+        self.validate_blight(player, count, object)?;
+        Ok(CostDebit::Blight {
+            object: *object,
+            count,
+        })
+    }
+
     #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(in crate::engine) fn plan_spell_costs(
@@ -324,6 +352,31 @@ impl GameEngine {
                 .get(selection.option_index as usize)
                 .ok_or(EngineError::Illegal("invalid cast cost option"))?;
             let object = match option {
+                CastCostOptionDef::Blight { count, .. } => {
+                    let Some(rv1::cast_cost_group_selection::SelectedObject::PermanentId(
+                        object_id,
+                    )) = selection.selected_object
+                    else {
+                        return Err(EngineError::Illegal(
+                            "Blight requires one battlefield creature",
+                        ));
+                    };
+                    let reference = rv1::CostObjectRef {
+                        object_id,
+                        zone_change_generation: selection.expected_zone_change_generation,
+                    };
+                    self.validate_blight(player, *count, &reference)?;
+                    debits.push(CostDebit::Blight {
+                        object: reference,
+                        count: *count,
+                    });
+                    Some(CastCostObjectReceipt::ChosenPermanent {
+                        object_id,
+                        zone_change_generation: selection.expected_zone_change_generation,
+                        card_id: self.state.objects[&object_id].card_id.clone(),
+                        card_name: object_display_name(&self.state, self.registry, object_id),
+                    })
+                }
                 CastCostOptionDef::Mana { cost, .. } => {
                     if selection.selected_object.is_some() {
                         return Err(EngineError::Illegal(
@@ -425,9 +478,9 @@ impl GameEngine {
                 }
             };
             let label = match option {
-                CastCostOptionDef::Mana { label, .. } | CastCostOptionDef::Behold { label, .. } => {
-                    label.clone()
-                }
+                CastCostOptionDef::Mana { label, .. }
+                | CastCostOptionDef::Behold { label, .. }
+                | CastCostOptionDef::Blight { label, .. } => label.clone(),
             };
             cast_cost_receipts.push(CastCostReceipt {
                 group_index: group_index as u32,
@@ -504,6 +557,9 @@ impl GameEngine {
                 return Err(EngineError::Illegal("missing additional cost selection"));
             };
             match cost {
+                AdditionalCost::Blight { count } => {
+                    debits.push(self.plan_blight_selection(player, *count, selection)?);
+                }
                 AdditionalCost::DiscardCard => {
                     let Some(Selection::HandIndex(hand_index)) = selection.selection else {
                         return Err(EngineError::Illegal("discard cost requires a hand card"));
@@ -656,6 +712,13 @@ impl GameEngine {
         let eligible_restricted_mana = self.eligible_restricted_mana_for_ability(idx, permanent_id);
         for (cost_index, cost) in costs.iter().enumerate() {
             match cost {
+                AbilityCost::Blight { count } => {
+                    expected_selections += 1;
+                    let selection = by_index
+                        .get(&cost_index)
+                        .ok_or(EngineError::Illegal("missing Blight selection"))?;
+                    debits.push(self.plan_blight_selection(player, *count, selection)?);
+                }
                 AbilityCost::Loyalty(delta) => {
                     let object = self
                         .state
@@ -672,8 +735,9 @@ impl GameEngine {
                             "loyalty cost requires a planeswalker you control",
                         ));
                     }
-                    if *delta < 0
-                        && object.counter_count(CounterKind::Loyalty) < delta.unsigned_abs()
+                    if (*delta > 0 && !self.can_receive_counters(permanent_id))
+                        || (*delta < 0
+                            && object.counter_count(CounterKind::Loyalty) < delta.unsigned_abs())
                     {
                         return Err(EngineError::Illegal("not enough loyalty counters"));
                     }
@@ -960,11 +1024,30 @@ impl GameEngine {
 
     pub(in crate::engine) fn commit_cost_transaction(
         &mut self,
-        plan: CostTransactionPlan,
+        mut plan: CostTransactionPlan,
     ) -> Result<CostPaymentReceipt, EngineError> {
         self.revalidate_cost_transaction(&plan)?;
 
+        // Counter placement is nonconsuming. Complete it before any selected zone departure,
+        // including when the same creature also pays a sacrifice cost (CR 601.2h).
+        if plan
+            .debits
+            .iter()
+            .any(|debit| matches!(debit, CostDebit::Blight { .. }))
+        {
+            plan.debits.sort_by_key(|debit| {
+                matches!(
+                    debit,
+                    CostDebit::Sacrifice { .. }
+                        | CostDebit::Exile { .. }
+                        | CostDebit::ExileGroup(_)
+                        | CostDebit::Discard { .. }
+                )
+            });
+        }
+
         let mut payment = CostPaymentReceipt {
+            blight_receipts: vec![],
             move_events: vec![],
             trigger_events: vec![],
             sacrificed: vec![],
@@ -982,18 +1065,24 @@ impl GameEngine {
             )
             .then(|| self.snapshot_zone_event());
             match debit {
+                CostDebit::Blight { object, count } => {
+                    let receipt = self.complete_blight(plan.player, count, Some(object.object_id));
+                    payment.trigger_events.push(GameEvent::Blighted(receipt));
+                    payment.blight_receipts.push(receipt);
+                }
                 CostDebit::Loyalty {
                     object_id, delta, ..
                 } => {
-                    let timestamp = self.state.command_index;
+                    if delta > 0 {
+                        self.place_counters(object_id, CounterKind::Loyalty, delta as u32);
+                        continue;
+                    }
                     let object = self
                         .state
                         .objects
                         .get_mut(&object_id)
                         .expect("prevalidated loyalty source must commit");
-                    if delta >= 0 {
-                        object.add_counters(CounterKind::Loyalty, delta as u32, timestamp);
-                    } else {
+                    if delta < 0 {
                         let current = object.counter_count(CounterKind::Loyalty);
                         object.set_counter(
                             CounterKind::Loyalty,
@@ -1065,8 +1154,10 @@ impl GameEngine {
                     }
                 }
                 CostDebit::Sacrifice { snapshot, owner } => {
-                    let mut snapshot = snapshot;
                     let oid = snapshot.source.object_id;
+                    let mut snapshot = self
+                        .sacrifice_snapshot(oid)
+                        .expect("prevalidated sacrifice source");
                     let card_name = object_display_name(&self.state, self.registry, oid);
                     snapshot.died = sacrifice_permanent(&mut self.state, self.registry, oid)
                         .expect("prevalidated sacrifice cost must commit");
@@ -1161,20 +1252,25 @@ impl GameEngine {
         }
         for debit in &plan.debits {
             let valid = match debit {
+                CostDebit::Blight { object, count } => {
+                    self.validate_blight(plan.player, *count, object).is_ok()
+                }
                 CostDebit::Loyalty {
                     object_id,
                     generation,
                     delta,
                 } => {
-                    self.state.objects.get(object_id).is_some_and(|object| {
-                        object.zone == Zone::Battlefield
-                            && object.controller == plan.player
-                            && (*delta >= 0
-                                || object.counter_count(CounterKind::Loyalty)
-                                    >= delta.unsigned_abs())
-                    }) && self
-                        .characteristics(*object_id)
-                        .is_some_and(|value| value.has_type("Planeswalker"))
+                    (*delta <= 0 || self.can_receive_counters(*object_id))
+                        && self.state.objects.get(object_id).is_some_and(|object| {
+                            object.zone == Zone::Battlefield
+                                && object.controller == plan.player
+                                && (*delta >= 0
+                                    || object.counter_count(CounterKind::Loyalty)
+                                        >= delta.unsigned_abs())
+                        })
+                        && self
+                            .characteristics(*object_id)
+                            .is_some_and(|value| value.has_type("Planeswalker"))
                         && self
                             .state
                             .zone_change_generation
@@ -1348,6 +1444,67 @@ impl GameEngine {
 #[cfg(test)]
 mod convoke_transaction_tests {
     use super::*;
+
+    #[test]
+    fn issue_153_blight_then_sacrifice_preserves_post_counter_lki_and_one_event() {
+        let mut engine = GameEngine::new(153020, &[0, 1], 20, None, true).unwrap();
+        let oid = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&oid).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            oid,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        let generation = engine.state.zone_change_generation[&oid];
+        let snapshot = engine.sacrifice_snapshot(oid).unwrap();
+        // Authored order is deliberately reversed: all counters must be placed before departure.
+        let plan = CostTransactionPlan {
+            purpose: CostPurpose::Ability,
+            player: 0,
+            player_idx: 0,
+            cast_cost_receipts: vec![],
+            debits: vec![
+                CostDebit::Sacrifice { snapshot, owner: 0 },
+                CostDebit::Blight {
+                    object: rv1::CostObjectRef {
+                        object_id: oid,
+                        zone_change_generation: generation,
+                    },
+                    count: 2,
+                },
+                CostDebit::Tap {
+                    object_id: oid,
+                    generation,
+                },
+            ],
+        };
+        let receipt = engine.commit_cost_transaction(plan).unwrap();
+        assert_eq!(receipt.blight_receipts.len(), 1);
+        assert_eq!(
+            receipt
+                .trigger_events
+                .iter()
+                .filter(|event| matches!(event, GameEvent::Blighted(_)))
+                .count(),
+            1
+        );
+        assert_eq!(
+            receipt.sacrificed[0].source.power_toughness,
+            (Some(0), Some(0))
+        );
+        assert_eq!(
+            receipt.blight_receipts[0]
+                .creature
+                .unwrap()
+                .zone_change_generation,
+            generation
+        );
+        assert_eq!(engine.state.objects[&oid].zone, Zone::Graveyard);
+        assert!(engine.state.zone_change_generation[&oid] > generation);
+    }
 
     #[test]
     fn issue_168_one_exile_cost_keeps_its_simultaneous_group() {

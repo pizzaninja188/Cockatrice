@@ -1309,12 +1309,25 @@ pub enum SpecialActionAffected {
     Permanents(#[serde(default)] TargetFilter),
 }
 
+/// Counter prohibitions on Tatterkite itself and the permanent enchanted by Blossombind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum CounterPlacementAffected {
+    #[default]
+    Self_,
+    AttachedPermanent,
+}
+
 /// One static ability on a permanent (CR 604). Most entries generate a continuous effect while
 /// its source is on the battlefield. An ability that modifies how its own object enters is the
 /// CR 113.6h/614.12 exception and is inspected during the proposed entry event. Static abilities
 /// do not use the stack, unlike triggered and activated abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// CR 122: a prohibition, not a replacement; existing counters are unaffected.
+    ProhibitCounters {
+        #[serde(default)]
+        affected: CounterPlacementAffected,
+    },
     /// CR 119.7 / 614.17: selected players cannot gain life while this ability is active.
     /// Giant Cindermaw and Rampaging Ferocidon affect all players. This is a prohibition,
     /// not damage prevention or a replacement effect, and is queried at each attempted gain.

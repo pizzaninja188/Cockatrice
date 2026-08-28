@@ -219,6 +219,7 @@ impl GameEngine {
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
         });
         super::resolution::move_object_to_zone(
@@ -759,6 +760,7 @@ impl GameEngine {
             cast_cost_receipts,
             payment_result,
             resolution_branch_choices: Default::default(),
+            blight_receipts: payment.blight_receipts.clone(),
             // A spell's effects always act on its controller.
             trigger_context: TriggerContext::default(),
             cast_method,
@@ -1185,6 +1187,7 @@ impl GameEngine {
                     .collect(),
             },
             resolution_branch_choices: Default::default(),
+            blight_receipts: payment.blight_receipts.clone(),
             // An activated ability's effects act on the player who activated it.
             trigger_context: TriggerContext::default(),
             cast_method: SpellCastMethod::Normal,
@@ -1326,7 +1329,9 @@ impl GameEngine {
             {
                 return false;
             }
-            if delta < 0 && object.counter_count(CounterKind::Loyalty) < delta.unsigned_abs() {
+            if (delta > 0 && !self.can_receive_counters(permanent_id))
+                || (delta < 0 && object.counter_count(CounterKind::Loyalty) < delta.unsigned_abs())
+            {
                 return false;
             }
         }
@@ -1848,6 +1853,7 @@ impl GameEngine {
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
         };
         match self.begin_battlefield_entry(

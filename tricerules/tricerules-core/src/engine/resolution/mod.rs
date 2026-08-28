@@ -18,6 +18,7 @@ use tricerules_cards::primitives::{ManaRetention, TargetRole, TargetingDef};
 mod choices;
 pub(in crate::engine) use choices::card_result_count;
 pub(super) use choices::resolution_branch_is_live;
+mod blight;
 mod damage;
 /// `pub(super)` so the combat damage step can reach `life::apply_life_gain` — lifelink is the one
 /// life-gain edge outside stack resolution, and it must go through the same funnel.
@@ -166,6 +167,7 @@ pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum EffectOutcome {
     Continue,
+    Blighted(crate::state::BlightReceipt),
     Suspended,
     RestartResolutionBranch(Option<usize>),
 }
@@ -1269,6 +1271,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::ApplyCombatRestriction { .. } => {
                         restrictions::apply_combat_restriction(&mut cx, effect)?
                     }
+                    SpellEffectKind::Blight { count } => blight::blight(&mut cx, count)?,
                     effect @ SpellEffectKind::PutCounters { .. } => {
                         pump_counters::put_counters(&mut cx, effect)?
                     }
@@ -1411,13 +1414,28 @@ impl GameEngine {
                     }
                 }
             };
-            let mut observer_stack = ParkedStackResolution::new(top.clone());
+            let mut completed_item = top.clone();
+            if let EffectOutcome::Blighted(receipt) = outcome {
+                completed_item.blight_receipts.push(receipt);
+            }
+            let mut observer_stack = ParkedStackResolution::new(completed_item.clone());
             observer_stack.resume_effect_index = Some(index as u32 + 1);
             observer_stack.previous_result = effect_result.clone();
             if self.drain_immediate_observer_actions(Some(observer_stack), events)? {
                 return Ok(());
             }
             match outcome {
+                EffectOutcome::Blighted(_) => {
+                    let (effects, label) = self.build_resolution_effects(&completed_item);
+                    return self.run_effect_list_with_previous(
+                        &completed_item,
+                        &label,
+                        effects,
+                        index + 1,
+                        effect_result,
+                        events,
+                    );
+                }
                 EffectOutcome::Suspended => {
                     // The handler parked a `PendingResolution` for a player choice; stamp where to
                     // pick this list back up so `complete_parked_resolution` runs the tail (CR
@@ -1728,6 +1746,7 @@ impl GameEngine {
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: BTreeMap::new(),
+            blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
         }
     }
@@ -2798,6 +2817,7 @@ mod attached_subject_tests {
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
         }
     }
@@ -3768,6 +3788,136 @@ mod attached_subject_tests {
     }
 
     #[test]
+    fn issue_153_tatterkite_cannot_pay_a_counter_placement() {
+        let mut engine = GameEngine::new_with_default_decks(153_001, &[0, 1], 20).expect("engine");
+        let source = add_battlefield_object(&mut engine, 0, "tatterkite");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let item = triggered_item(source, generation);
+        assert!(
+            !pump_counters::can_put_counters(&engine, &item, &[], &EffectSubject::Source,),
+            "Tatterkite cannot receive counters as an optional payment"
+        );
+        for kind in [
+            CounterKind::MinusOneMinusOne,
+            CounterKind::PlusOnePlusOne,
+            CounterKind::Loyalty,
+            CounterKind::Stun,
+        ] {
+            assert_eq!(engine.place_counters(source, kind, 2), 0);
+            assert_eq!(engine.state.objects[&source].counter_count(kind), 0);
+        }
+        let item = quantity_item(
+            source,
+            vec![
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: 1,
+                    subject: EffectSubject::Source,
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                },
+            ],
+        );
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        assert_eq!(
+            engine.state.players[0].life, 22,
+            "prohibition does not counter the effect tail"
+        );
+        assert_eq!(
+            engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
+            0
+        );
+    }
+
+    #[test]
+    fn issue_153_counter_prohibition_tracks_attachment_and_ability_removal() {
+        use tricerules_cards::primitives::CounterPlacementAffected;
+        let mut engine = GameEngine::new_with_default_decks(153_002, &[0, 1], 20).unwrap();
+        let aura = add_battlefield_object(&mut engine, 0, "pacifism");
+        let first = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let second = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        engine.place_counters(first, CounterKind::PlusOnePlusOne, 1);
+        let mut values = engine.copiable_values_for(aura).unwrap();
+        values.face.static_abilities = vec![StaticAbilityDef::ProhibitCounters {
+            affected: CounterPlacementAffected::AttachedPermanent,
+        }];
+        engine.state.objects.get_mut(&aura).unwrap().copiable_values = Some(values);
+        engine.state.objects.get_mut(&aura).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(first));
+        assert!(!engine.can_receive_counters(first));
+        assert_eq!(
+            engine.state.objects[&first].counter_count(CounterKind::PlusOnePlusOne),
+            1
+        );
+        engine.state.objects.get_mut(&aura).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(second));
+        assert!(engine.can_receive_counters(first));
+        assert!(!engine.can_receive_counters(second));
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            trigger_grant_origin: None,
+            affected: AffectedScope::Single(aura),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+        assert!(engine.can_receive_counters(second));
+        engine.state.continuous_effects.clear();
+        assert!(!engine.can_receive_counters(second));
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            aura,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        assert!(engine.can_receive_counters(second));
+    }
+
+    #[test]
+    fn issue_153_forced_impossible_blight_records_receipt_before_a_parked_tail() {
+        let mut engine = GameEngine::new_with_default_decks(153_003, &[0, 1], 20).unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "tatterkite");
+        let item = quantity_item(
+            source,
+            vec![
+                SpellEffectKind::Blight { count: 2 },
+                SpellEffectKind::Discard {
+                    who: PlayerRecipient::EachOpponent,
+                    count: 1,
+                },
+            ],
+        );
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(pending.deciding_player, 1);
+        assert_eq!(pending.presentation.choice_kind, rv1::ChoiceKind::HandCards);
+        let receipts = &pending.continuation.stack().unwrap().item.blight_receipts;
+        assert_eq!(
+            receipts,
+            &[crate::state::BlightReceipt {
+                player: 0,
+                count: 2,
+                creature: None
+            }]
+        );
+    }
+
+    #[test]
     fn forced_resolution_branch_runs_its_tail_exactly_once() {
         let mut engine = GameEngine::new_with_default_decks(142_102, &[0, 1], 20).expect("engine");
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
@@ -4052,6 +4202,7 @@ mod source_keyword_tests {
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
         }
     }
@@ -4080,6 +4231,7 @@ mod source_keyword_tests {
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
         }
     }

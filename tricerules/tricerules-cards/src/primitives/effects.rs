@@ -758,6 +758,8 @@ impl CountExpression {
 /// (`DamageTarget { amount: "X" }`) and Blue Sun's Zenith (`Draw { count: "X" }`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Amount {
+    /// Cinder Strike / Burst Lightning: one instruction whose amount reads a committed cost.
+    CastCost(CastCostConditionalAmount),
     /// A literal count baked into the card data.
     Fixed(u32),
     /// The spell's cast-time X value (CR 107.3); resolved at resolution from `chosen_x`.
@@ -795,6 +797,9 @@ impl Amount {
 
     fn validate_effect(&self, context: EffectContext) -> Result<(), String> {
         self.validate()?;
+        if context == EffectContext::Ability && matches!(self, Self::CastCost(_)) {
+            return Err("cast-cost amount requires a spell's cast receipt".into());
+        }
         self.validate_source_context(context == EffectContext::Ability)
     }
     pub(crate) fn validate_cast_snapshot_references(&self, count: usize) -> Result<(), String> {
@@ -805,6 +810,9 @@ impl Amount {
     }
 
     pub(crate) fn validate_live(&self) -> Result<(), String> {
+        if matches!(self, Self::CastCost(_)) {
+            return Err("cast-cost amount requires a resolving stack item".into());
+        }
         self.validate_cast_snapshot_references(0)?;
         self.validate()
     }
@@ -815,7 +823,7 @@ impl Amount {
         match self {
             Amount::Fixed(n) => Some(*n),
             Amount::X => Some(x),
-            Amount::Conditional { .. } | Amount::Count(_) => None,
+            Amount::Conditional { .. } | Amount::Count(_) | Amount::CastCost(_) => None,
         }
     }
 
@@ -825,7 +833,10 @@ impl Amount {
     }
 
     pub fn requires_game_state(&self) -> bool {
-        matches!(self, Amount::Conditional { .. } | Amount::Count(_))
+        matches!(
+            self,
+            Amount::Conditional { .. } | Amount::Count(_) | Amount::CastCost(_)
+        )
     }
 
     pub(crate) fn card_result_filter(&self) -> Option<&CardResultFilter> {
@@ -839,7 +850,7 @@ impl Amount {
         match self {
             Amount::Conditional { condition, .. } => condition.validate(),
             Amount::Count(expression) => expression.validate(),
-            Amount::Fixed(_) | Amount::X => Ok(()),
+            Amount::Fixed(_) | Amount::X | Amount::CastCost(_) => Ok(()),
         }
     }
 }
@@ -854,6 +865,13 @@ impl Serialize for Amount {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         match self {
             Amount::Fixed(n) => s.serialize_u32(*n),
+            Amount::CastCost(value) => {
+                let mut variant = s.serialize_struct_variant("Amount", 2, "CastCost", 3)?;
+                variant.serialize_field("cast_cost", &value.condition)?;
+                variant.serialize_field("when_true", &value.if_selected)?;
+                variant.serialize_field("otherwise", &value.otherwise)?;
+                variant.end()
+            }
             Amount::X => s.serialize_str("X"),
             Amount::Conditional {
                 condition,
@@ -875,6 +893,7 @@ impl Serialize for Amount {
 
 #[derive(Deserialize)]
 enum AmountVariant {
+    CastCost,
     Conditional,
     Count,
 }
@@ -882,6 +901,7 @@ enum AmountVariant {
 #[derive(Deserialize)]
 #[serde(field_identifier, rename_all = "snake_case")]
 enum ConditionalField {
+    CastCost,
     Condition,
     WhenTrue,
     Otherwise,
@@ -898,10 +918,17 @@ impl<'de> serde::de::Visitor<'de> for ConditionalAmountVisitor {
 
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
         let mut condition = None;
+        let mut cast_cost = None;
         let mut when_true = None;
         let mut otherwise = None;
         while let Some(field) = map.next_key()? {
             match field {
+                ConditionalField::CastCost => {
+                    if cast_cost.is_some() {
+                        return Err(serde::de::Error::duplicate_field("cast_cost"));
+                    }
+                    cast_cost = Some(map.next_value()?);
+                }
                 ConditionalField::Condition => {
                     if condition.is_some() {
                         return Err(serde::de::Error::duplicate_field("condition"));
@@ -921,6 +948,19 @@ impl<'de> serde::de::Visitor<'de> for ConditionalAmountVisitor {
                     otherwise = Some(map.next_value()?);
                 }
             }
+        }
+        if let Some(condition_value) = cast_cost {
+            if condition.is_some() {
+                return Err(serde::de::Error::custom(
+                    "amount cannot combine live and cast-cost conditions",
+                ));
+            }
+            return Ok(Amount::CastCost(CastCostConditionalAmount {
+                condition: condition_value,
+                if_selected: when_true
+                    .ok_or_else(|| serde::de::Error::missing_field("when_true"))?,
+                otherwise: otherwise.ok_or_else(|| serde::de::Error::missing_field("otherwise"))?,
+            }));
         }
         Ok(Amount::Conditional {
             condition: condition.ok_or_else(|| serde::de::Error::missing_field("condition"))?,
@@ -970,6 +1010,10 @@ impl<'de> Deserialize<'de> for Amount {
             fn visit_enum<A: EnumAccess<'de>>(self, data: A) -> Result<Amount, A::Error> {
                 let (variant, access) = data.variant::<AmountVariant>()?;
                 match variant {
+                    AmountVariant::CastCost => access.struct_variant(
+                        &["cast_cost", "when_true", "otherwise"],
+                        ConditionalAmountVisitor,
+                    ),
                     AmountVariant::Conditional => access.struct_variant(
                         &["condition", "when_true", "otherwise"],
                         ConditionalAmountVisitor,
@@ -1427,6 +1471,10 @@ pub enum ProtectionGrant {
 /// sacrifice/discard branches without introducing partial multi-cost payment state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResolutionCost {
+    /// Dream Seizer and Blighted Blackthorn: all N counters on one controlled creature.
+    Blight {
+        count: u32,
+    },
     /// A labeled mandatory/optional branch with no payment. Used by generic resolution choices
     /// whose consequence is encoded by the parent effect, such as choosing a protection quality.
     None,
@@ -2097,6 +2145,11 @@ pub enum SpellEffectKind {
     /// variant. Use `Source` for an ability that puts counters on its own source
     /// (modular/graft/outlast self-buffs). Counter *removal* spells are deferred — counter
     /// removal in MTG is almost always an ability cost (see the plan's `AbilityCost` phase).
+    /// Mandatory CR 701.68 instruction. Unlike a Blight payment, it completes even when
+    /// no creature can receive counters (Chaos Spewer; the same operation backs Dream Seizer).
+    Blight {
+        count: u32,
+    },
     PutCounters {
         counter: CounterKind,
         count: u32,
@@ -2733,6 +2786,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Draw { .. }
             | SpellEffectKind::Discard { .. }
             | SpellEffectKind::DrawDiscard { .. }
+            | SpellEffectKind::Blight { .. }
             | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
             | SpellEffectKind::ChooseResolutionBranch { .. }
             | SpellEffectKind::CreateReflexiveTrigger { .. }
@@ -2977,6 +3031,9 @@ impl SpellEffectKind {
         if let SpellEffectKind::PutCounters { counter, .. } = self {
             counter.validate()?;
         }
+        if matches!(self, SpellEffectKind::Blight { count: 0 }) {
+            return Err("Blight requires a positive counter count".into());
+        }
         if let SpellEffectKind::CreateTokenCopies { target, .. } = self {
             if !target.is_permanent_only() {
                 return Err("CreateTokenCopies requires a permanent source".into());
@@ -3102,6 +3159,11 @@ impl SpellEffectKind {
                         );
                     }
                     match &branch.cost {
+                        ResolutionCost::Blight { count } => {
+                            if *count == 0 {
+                                return Err("blight cost requires a positive count".into());
+                            }
+                        }
                         ResolutionCost::None => {}
                         ResolutionCost::Mana(cost) => {
                             if cost.pips.is_empty()
@@ -3722,6 +3784,7 @@ impl SpellEffectKind {
                     Err("Ward mana cost must be nonempty and cannot contain X".into())
                 }
                 ResolutionCost::None
+                | ResolutionCost::Blight { .. }
                 | ResolutionCost::SacrificePermanent { .. }
                 | ResolutionCost::TapPermanents { .. } => {
                     Err("Ward supports only mana and discard-card costs".into())

@@ -169,6 +169,7 @@ impl GameEngine {
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
             trigger_context,
             cast_method: SpellCastMethod::Normal,
         });

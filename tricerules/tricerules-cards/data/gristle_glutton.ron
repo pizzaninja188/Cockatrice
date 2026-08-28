@@ -1,0 +1,14 @@
+// Oracle and rulings checked 2026-08-27. CR 701.68, 602, 608.2.
+(
+  id: "gristle_glutton",
+  name: "Gristle Glutton",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Goblin", "Scout"],
+  power: 1,
+  toughness: 3,
+  activated_abilities: [(
+    text: "{T}, Blight 1: Discard a card. If you do, draw a card.",
+    costs: [Tap, Blight(count: 1)],
+    effect: [DrawDiscard(draw_count: 1, discard_count: 1, order: DiscardThenDraw)],
+  )],
+)

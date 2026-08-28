@@ -328,6 +328,7 @@ fn activated_ability_info(
         .map(|cost| match cost {
             AbilityCost::Tap => "{T}".to_string(),
             AbilityCost::TapPermanents { count, .. } => format!("Tap {count} permanents"),
+            AbilityCost::Blight { count } => format!("Blight {count}"),
             AbilityCost::Loyalty(delta) if *delta >= 0 => format!("+{delta}"),
             AbilityCost::Loyalty(delta) => delta.to_string(),
             AbilityCost::Mana(cost) => cost.to_string(),
@@ -531,6 +532,11 @@ fn legal_ability_cost_choices(
 
     for (cost_index, cost) in ability.costs.iter().enumerate() {
         match cost {
+            AbilityCost::Blight { count } => {
+                let choice = eng.blight_cost_choice(player, cost_index, *count);
+                structurally_payable &= !choice.candidate_ids.is_empty();
+                choices.push(choice);
+            }
             AbilityCost::Discard => {
                 let candidate_ids: Vec<u32> = (0..eng.state.players[player_idx].hand.len())
                     .map(|slot| slot as u32)
@@ -542,6 +548,7 @@ fn legal_ability_cost_choices(
                     candidate_ids: candidate_ids.clone(),
                     min: 1,
                     max: 1,
+                    blight_count: 0,
                     kind: rv1::CostChoiceKind::Discard as i32,
                     candidate_objects: vec![],
                 });
@@ -566,6 +573,7 @@ fn legal_ability_cost_choices(
                     candidate_ids: candidate_ids.clone(),
                     min: 1,
                     max: 1,
+                    blight_count: 0,
                     kind: rv1::CostChoiceKind::Sacrifice as i32,
                     candidate_objects: candidate_ids
                         .iter()
@@ -606,6 +614,7 @@ fn legal_ability_cost_choices(
                     candidate_ids: candidate_ids.clone(),
                     min: *count,
                     max: *count,
+                    blight_count: 0,
                     kind: rv1::CostChoiceKind::Tap as i32,
                     candidate_objects: candidate_ids
                         .iter()
@@ -649,6 +658,7 @@ fn legal_ability_cost_choices(
                     candidate_ids,
                     min: *count,
                     max: *count,
+                    blight_count: 0,
                     kind: rv1::CostChoiceKind::Exile as i32,
                     candidate_objects: vec![],
                 });
@@ -678,6 +688,9 @@ fn legal_spell_cost_choices(
     let mut assignment_candidates = vec![];
     for (cost_index, cost) in costs.iter().enumerate() {
         match cost {
+            AdditionalCost::Blight { count } => {
+                choices.push(eng.blight_cost_choice(player, cost_index, *count))
+            }
             AdditionalCost::DiscardCard => {
                 let candidates: Vec<(u32, ObjectId)> = eng.state.players[player_idx]
                     .hand
@@ -694,6 +707,7 @@ fn legal_spell_cost_choices(
                     candidate_ids: candidates.into_iter().map(|(slot, _)| slot).collect(),
                     min: 1,
                     max: 1,
+                    blight_count: 0,
                     kind: rv1::CostChoiceKind::Discard as i32,
                     candidate_objects: vec![],
                 });
@@ -713,6 +727,7 @@ fn legal_spell_cost_choices(
                     candidate_ids: candidate_ids.clone(),
                     min: 1,
                     max: 1,
+                    blight_count: 0,
                     kind: rv1::CostChoiceKind::Sacrifice as i32,
                     candidate_objects: candidate_ids
                         .iter()
@@ -753,6 +768,7 @@ fn legal_spell_cost_choices(
                     candidate_ids: candidate_ids.clone(),
                     min: *count,
                     max: *count,
+                    blight_count: 0,
                     kind: rv1::CostChoiceKind::Tap as i32,
                     candidate_objects: candidate_ids
                         .iter()
@@ -771,7 +787,10 @@ fn legal_spell_cost_choices(
         }
     }
     let mut non_mana_costs_payable =
-        distinct_assignment_exists(&assignment_candidates, 0, &mut HashSet::new());
+        distinct_assignment_exists(&assignment_candidates, 0, &mut HashSet::new())
+            && choices
+                .iter()
+                .all(|choice| !choice.candidate_ids.is_empty());
     let legal_cast_cost_groups = cast_cost_groups
         .iter()
         .enumerate()
@@ -789,6 +808,27 @@ fn legal_spell_cost_choices(
                         selectable: true,
                         ..Default::default()
                     },
+                    CastCostOptionDef::Blight { label, .. } => {
+                        let candidates = eng.blight_candidates(player);
+                        rv1::LegalCastCostOption {
+                            option_index: option_index as u32,
+                            label: label.clone(),
+                            kind: rv1::CastCostOptionKind::Blight as i32,
+                            selectable: !candidates.is_empty(),
+                            valid_permanent_generations: candidates
+                                .iter()
+                                .map(|oid| {
+                                    eng.state
+                                        .zone_change_generation
+                                        .get(oid)
+                                        .copied()
+                                        .unwrap_or(0)
+                                })
+                                .collect(),
+                            valid_permanent_ids: candidates,
+                            ..Default::default()
+                        }
+                    }
                     CastCostOptionDef::Behold {
                         label,
                         hand_filter,

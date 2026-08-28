@@ -8,11 +8,20 @@ use tricerules_cards::primitives::{
     ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
-use tricerules_cards::{is_creature_type, CardFace, ManaCost};
+use tricerules_cards::{is_creature_type, CardFace, ManaCost, ManaSymbol};
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
 pub type PlayerId = i32;
 pub type ObjectId = u32;
+
+/// Committed CR 701.68 operation. A forced instruction can complete without a recipient;
+/// optional payments always have one. Never infer payment from the surviving counter bag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlightReceipt {
+    pub player: PlayerId,
+    pub count: u32,
+    pub creature: Option<TriggerObjectRef>,
+}
 
 /// Private rules-only snapshot of one card that was actually moved by a cost or instruction.
 /// `matched_card_types` is captured at the action boundary, so later predicates never inspect a
@@ -570,14 +579,43 @@ pub struct PendingTrigger {
 pub struct PendingManaPayment {
     /// Stack object the resolving soft counter will counter if the player declines.
     pub target_spell_id: ObjectId,
-    /// Generic mana required to preserve that spell.
+    /// Pure generic cost, staged by the client's mana-pip picker.
     pub generic_mana_cost: u32,
-    /// Printed colored/colorless cost for a resolution branch. Empty for legacy generic soft
-    /// counters, whose requirement remains in `generic_mana_cost`.
+    /// Printed cost when it is not purely generic. Empty for generic costs, whose requirement
+    /// remains in `generic_mana_cost`.
     pub mana_cost: ManaCost,
     /// First entry in `undoable_mana_abilities` created while this payment prompt was active.
     /// Undo and Decline may rewind entries at or after this boundary, never earlier float.
     pub undo_history_start: usize,
+}
+
+impl PendingManaPayment {
+    /// Share the staged generic payment contract across Ward and authored resolution branches
+    /// (for example Chaos Spewer and Mentor of the Meek). Do not publish a generic cost as a
+    /// structured cost with a zero remainder: the client would mistake it for a finished payment.
+    pub(crate) fn from_cost(
+        target_spell_id: ObjectId,
+        mana_cost: ManaCost,
+        undo_history_start: usize,
+    ) -> Self {
+        let generic = mana_cost
+            .pips
+            .iter()
+            .try_fold(0u32, |total, pip| match pip {
+                ManaSymbol::Generic(amount) => total.checked_add(*amount),
+                _ => None,
+            });
+        let (generic_mana_cost, mana_cost) = match generic {
+            Some(amount) => (amount, ManaCost::default()),
+            None => (0, mana_cost),
+        };
+        Self {
+            target_spell_id,
+            generic_mana_cost,
+            mana_cost,
+            undo_history_start,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -768,6 +806,11 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         candidate_generations: Vec<(ObjectId, u64)>,
     },
+    Blight {
+        stack: ParkedStackResolution,
+        count: u32,
+        candidate_generations: Vec<(ObjectId, u64)>,
+    },
     EntryReplacement {
         stack: ParkedStackResolution,
     },
@@ -818,6 +861,7 @@ impl ResolutionContinuation {
             | Self::ManifestDread { stack, .. }
             | Self::EntryCopySource { stack }
             | Self::Populate { stack, .. }
+            | Self::Blight { stack, .. }
             | Self::EntryReplacement { stack }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
@@ -847,6 +891,7 @@ impl ResolutionContinuation {
             | Self::ManifestDread { stack, .. }
             | Self::EntryCopySource { stack }
             | Self::Populate { stack, .. }
+            | Self::Blight { stack, .. }
             | Self::EntryReplacement { stack }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
@@ -1191,6 +1236,7 @@ pub struct StackItem {
     /// Resolution branches already answered, keyed by their index in the original effect list.
     /// `None` records an optional decline; `Some(i)` records the chosen authored branch.
     pub resolution_branch_choices: BTreeMap<u32, Option<usize>>,
+    pub blight_receipts: Vec<BlightReceipt>,
     /// Event-time player and object identity for triggered abilities. This includes an affected
     /// player (Howling Mine), an observed object distinct from CR 115 targets, and attack
     /// participants. Empty for spells and activated abilities. Trigger context never changes who

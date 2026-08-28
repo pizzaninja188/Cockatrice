@@ -12,6 +12,7 @@
 #define COCKATRICE_RULED_PENDING_CAST_H
 
 #include "ruled_client_state.h"
+#include "ruled_cost_selection.h"
 
 #include <QChar>
 #include <QHash>
@@ -64,6 +65,37 @@ struct RuledPendingCostSelection
     /// Parallel generation snapshot for typed public-zone choices; zero/empty for concealed slots.
     QVector<quint64> selectedGenerations;
 };
+
+inline void ruledWriteCostObjectRefs(const RuledPendingCostSelection &selection, ruled::v1::CostSelection &command)
+{
+    auto *objects = command.mutable_battlefield_objects();
+    for (int i = 0; i < selection.selectedIds.size(); ++i) {
+        auto *object = objects->add_objects();
+        object->set_object_id(selection.selectedIds.at(i));
+        object->set_zone_change_generation(selection.selectedGenerations.value(i));
+    }
+}
+
+/// Local duplicate prevention must not rule out paying non-consuming costs on a creature that
+/// is also sacrificed. The engine validates the full transaction, including changed generations.
+inline bool ruledCostSelectionConflicts(const RuledCostChoice &choice,
+                                        const QVector<RuledCostChoice> &choices,
+                                        const RuledPendingCostSelection &already,
+                                        quint32 id)
+{
+    if (already.costIndex == choice.costIndex || already.zone != choice.zone || !already.selectedIds.contains(id))
+        return false;
+    const auto previous = std::find_if(choices.cbegin(), choices.cend(),
+                                       [&already](const auto &entry) { return entry.costIndex == already.costIndex; });
+    if (previous == choices.cend())
+        return true;
+    if (choice.kind == RuledCostChoiceKind::Blight || previous->kind == RuledCostChoiceKind::Blight)
+        return false;
+    if ((choice.kind == RuledCostChoiceKind::Tap && previous->kind == RuledCostChoiceKind::Sacrifice) ||
+        (choice.kind == RuledCostChoiceKind::Sacrifice && previous->kind == RuledCostChoiceKind::Tap))
+        return false;
+    return true;
+}
 
 struct RuledPendingCastCostSelection
 {
@@ -139,7 +171,7 @@ ruledPendingGraveyardCostSelectionProgress(const PendingPayment &pending)
         return std::nullopt;
     }
     const auto &choice = pending.costChoices.at(pending.nextCostChoice);
-    if (choice.zone != RuledCostChoiceZone::Graveyard && choice.kind != RuledCostChoiceKind::Tap) {
+    if (!ruledCostNeedsConfirmation(choice)) {
         return std::nullopt;
     }
 
@@ -150,6 +182,12 @@ ruledPendingGraveyardCostSelectionProgress(const PendingPayment &pending)
         });
     if (selection != pending.costSelections.cend()) {
         for (const quint32 objectId : selection->selectedIds) {
+            if (ruledCostUsesObjectRefs(choice.kind)) {
+                const int index = selection->selectedIds.indexOf(objectId);
+                if (!choice.candidateGenerations.contains(objectId) || index >= selection->selectedGenerations.size() ||
+                    selection->selectedGenerations.at(index) != choice.candidateGenerations.value(objectId))
+                    continue;
+            }
             if (choice.candidateIds.contains(objectId) && !validSelectedIds.contains(objectId)) {
                 validSelectedIds.append(objectId);
             }
@@ -327,9 +365,7 @@ ruledCastCostObjectEligibility(const PendingRuledSpellCast &spell, RuledCastCost
     const auto option = std::find_if(group.options.cbegin(), group.options.cend(), [&spell](const auto &entry) {
         return entry.optionIndex == spell.activeCastCostOption;
     });
-    if (option == group.options.cend() || !option->selectable ||
-        (option->kind != RuledCastCostOptionKind::Behold &&
-         option->kind != RuledCastCostOptionKind::TapPermanentForGenericReduction)) {
+    if (option == group.options.cend() || !option->selectable || !ruledCastCostUsesPermanent(option->kind)) {
         return RuledTargetClickEligibility::Illegal;
     }
     const bool legal = kind == RuledCastCostCandidateKind::Hand

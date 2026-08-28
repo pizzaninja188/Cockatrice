@@ -83,6 +83,31 @@ fn validate_effect_cast_cost_conditions(
     groups: &[CastCostGroupDef],
     effect: &SpellEffectKind,
 ) -> Result<(), String> {
+    let amount = match effect {
+        SpellEffectKind::DamageTarget { amount, .. }
+        | SpellEffectKind::DamageAll { amount, .. }
+        | SpellEffectKind::DamageTargets { amount, .. }
+        | SpellEffectKind::DamagePlayer { amount, .. }
+        | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { amount }
+        | SpellEffectKind::Scry { count: amount }
+        | SpellEffectKind::CounterTargetSpell {
+            unless_controller_pays: Some(amount),
+            ..
+        }
+        | SpellEffectKind::Draw { count: amount, .. }
+        | SpellEffectKind::GainLife { amount }
+        | SpellEffectKind::Mill { count: amount, .. }
+        | SpellEffectKind::CreateTokens { count: amount, .. }
+        | SpellEffectKind::CreateTokenCopies { count: amount, .. }
+        | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
+        SpellEffectKind::PumpTarget {
+            scale: Some(scale), ..
+        } => Some(&scale.amount),
+        _ => None,
+    };
+    if let Some(Amount::CastCost(value)) = amount {
+        validate_cast_cost_condition(groups, value.condition)?;
+    }
     match effect {
         SpellEffectKind::CounterTargetSpell {
             unless_controller_pays_by_cast_cost: Some(conditional),
@@ -159,7 +184,7 @@ fn additional_cost_result_actions(costs: &[AdditionalCost]) -> Vec<CardResultAct
         .filter_map(|cost| match cost {
             AdditionalCost::DiscardCard => Some(CardResultAction::Discard),
             AdditionalCost::SacrificePermanent { .. } => Some(CardResultAction::Sacrifice),
-            AdditionalCost::TapPermanents { .. } => None,
+            AdditionalCost::TapPermanents { .. } | AdditionalCost::Blight { .. } => None,
         })
         .collect()
 }
@@ -176,6 +201,7 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
                 Some(CardResultAction::Sacrifice)
             }
             AbilityCost::Tap
+            | AbilityCost::Blight { .. }
             | AbilityCost::TapPermanents { .. }
             | AbilityCost::Mana(_)
             | AbilityCost::Loyalty(_) => None,
@@ -1151,10 +1177,15 @@ impl CardRegistry {
                     }
                 }
                 for cost in &face.additional_costs {
-                    if matches!(cost, AdditionalCost::TapPermanents { count: 0, .. }) {
+                    if matches!(
+                        cost,
+                        AdditionalCost::TapPermanents { count: 0, .. }
+                            | AdditionalCost::Blight { count: 0 }
+                    ) {
                         return Err(RegistryError::InvalidCard {
                             id: card.id.clone(),
-                            reason: "additional tap cost requires a positive count".into(),
+                            reason: "additional tap or Blight cost requires a positive count"
+                                .into(),
                         });
                     }
                     if let AdditionalCost::SacrificePermanent { filter }

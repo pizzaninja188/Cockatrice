@@ -249,6 +249,9 @@ impl GameEngine {
             ResolutionContinuation::Populate { .. } => {
                 return self.finish_populate_choice(pending, chosen[0]);
             }
+            ResolutionContinuation::Blight { .. } => {
+                return self.finish_blight_choice(pending, chosen[0]);
+            }
             ResolutionContinuation::EntryReplacement { .. } => {
                 return self.finish_battlefield_entry_replacement_choice(pending, chosen[0]);
             }

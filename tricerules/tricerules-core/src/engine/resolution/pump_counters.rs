@@ -542,9 +542,9 @@ pub(super) fn put_counters(
         }
 
         let tgt = object_display_name(&engine.state, engine.registry, tid);
-        let timestamp = engine.state.command_index;
-        if let Some(t) = engine.state.objects.get_mut(&tid) {
-            t.add_counters(counter, count, timestamp);
+        let placed = engine.place_counters(tid, counter, count);
+        if placed == 0 {
+            continue;
         }
         events.push(ev_log(format!(
             "{spell_label} puts {count} {} counter{} on {tgt}",
@@ -564,11 +564,6 @@ pub(super) fn can_put_counters(
     targets: &[ObjectId],
     subject: &EffectSubject,
 ) -> bool {
-    resolve_effect_subject(engine, top, targets, subject).is_some_and(|object_id| {
-        engine
-            .state
-            .objects
-            .get(&object_id)
-            .is_some_and(|object| object.zone == Zone::Battlefield)
-    })
+    resolve_effect_subject(engine, top, targets, subject)
+        .is_some_and(|object_id| engine.can_receive_counters(object_id))
 }

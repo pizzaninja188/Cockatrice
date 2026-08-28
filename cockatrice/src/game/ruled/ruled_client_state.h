@@ -168,6 +168,7 @@ enum class RuledCostChoiceKind : int
     Sacrifice,
     Exile,
     Tap,
+    Blight,
 };
 
 struct RuledCostChoice
@@ -179,20 +180,23 @@ struct RuledCostChoice
     int max = 1;
     RuledCostChoiceKind kind = RuledCostChoiceKind::Unspecified;
     QHash<quint32, quint64> candidateGenerations;
+    quint32 blightCount = 0;
 };
 
 enum class RuledCastCostOptionKind : int
 {
+    Unspecified,
     Mana,
     Behold,
     TapPermanentForGenericReduction,
+    Blight,
 };
 
 struct RuledCastCostOption
 {
     int optionIndex = -1;
     QString label;
-    RuledCastCostOptionKind kind = RuledCastCostOptionKind::Mana;
+    RuledCastCostOptionKind kind = RuledCastCostOptionKind::Unspecified;
     QString additionalManaCost;
     QSet<quint32> validHandIndices;
     QSet<quint32> validPermanentIds;

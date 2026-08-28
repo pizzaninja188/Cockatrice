@@ -407,14 +407,8 @@ std::optional<ruled::v1::RuledCommand> RuledSpellPaymentUi::buildCommand(PlayerA
         } else if (const auto choice = std::find_if(
                        pendingRuledSpellCast.costChoices.cbegin(), pendingRuledSpellCast.costChoices.cend(),
                        [&selection](const auto &entry) { return entry.costIndex == selection.costIndex; });
-                   choice != pendingRuledSpellCast.costChoices.cend() && choice->kind == RuledCostChoiceKind::Tap) {
-            auto *objects = costSelection->mutable_battlefield_objects();
-            for (int i = 0; i < selection.selectedIds.size(); ++i) {
-                const quint32 objectId = selection.selectedIds.at(i);
-                auto *object = objects->add_objects();
-                object->set_object_id(objectId);
-                object->set_zone_change_generation(selection.selectedGenerations.value(i));
-            }
+                   choice != pendingRuledSpellCast.costChoices.cend() && ruledCostUsesObjectRefs(choice->kind)) {
+            ruledWriteCostObjectRefs(selection, *costSelection);
         } else {
             costSelection->set_permanent_id(selection.selectedIds.value(0));
         }

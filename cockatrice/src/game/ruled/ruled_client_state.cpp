@@ -338,6 +338,7 @@ void RuledClientState::teardownPendingChoice()
     pendingChoice.reset();
     if (wasCostSelection) {
         emit resolutionCostSelectionChanged();
+        emit combatStateChanged();
     }
 }
 

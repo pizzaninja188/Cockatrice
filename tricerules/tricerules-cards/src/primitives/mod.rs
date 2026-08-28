@@ -18,6 +18,27 @@ pub use targeting::*;
 #[cfg(test)]
 mod tests {
     #[test]
+    fn issue_153_cast_cost_amount_roundtrips_and_checks_references() {
+        let source =
+            "CastCost(cast_cost: (group_index: 0, option_index: 0), when_true: 4, otherwise: 2)";
+        let amount: super::Amount = ron::from_str(source).unwrap();
+        let encoded = ron::to_string(&amount).unwrap();
+        assert_eq!(ron::from_str::<super::Amount>(&encoded).unwrap(), amount);
+        let invalid = format!(
+            r#"(id: "test", name: "Test", types: ["Instant"], spell_effect: [DamageAll(amount: {source})])"#
+        );
+        assert!(crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[]).is_err());
+        let ability = format!(
+            r#"(id: "test", name: "Test", types: ["Creature"], power: 1, toughness: 1, activated_abilities: [(text: "Draw", costs: [Tap], effect: [Draw(count: {source})])])"#
+        );
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&ability], &[]).is_err(),
+            "cast cost receipts are not an ability context"
+        );
+        let zero = r#"(id: "test", name: "Test", types: ["Creature"], power: 1, toughness: 1, activated_abilities: [(text: "Blight", costs: [Blight(count: 0)], effect: [Draw(count: 1)])])"#;
+        assert!(crate::CardRegistry::from_chunks_and_tokens(&[zero], &[]).is_err());
+    }
+    #[test]
     fn issue_166_cast_quantity_and_filter_validate() {
         let amount: super::Amount = ron::from_str(
             "Count(SpellsCastThisTurn(players: AffectedPlayer, filter: (any_of: Some([(card_type: Some(Noncreature)), (required_subtypes: [\"Otter\"])]))))"

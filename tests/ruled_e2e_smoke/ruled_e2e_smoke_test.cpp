@@ -252,6 +252,7 @@ public:
     int specialActionManaSteps = 0;
     int specialActionRestrictedPayments = 0;
     std::optional<ruled::v1::ResolutionChoiceRequired> pendingChoice;
+    std::optional<ruled::v1::ResolutionChoiceRequired> lastResolutionChoice;
     // CR 603.3b: the engine blocks on this until it is answered, so the bot must handle it or the
     // whole game deadlocks — every simultaneous multi-trigger board reaches it.
     std::optional<ruled::v1::TriggerOrderRequired> pendingTriggerOrder;
@@ -1214,6 +1215,7 @@ public:
                 }
             } else if (ev.has_resolution_choice_required()) {
                 const auto &rcr = ev.resolution_choice_required();
+                lastResolutionChoice = rcr;
                 if (wardDiscardFlowActive && rcr.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS) {
                     if (rcr.deciding_player_id() == myId) {
                         bool sawBear = false;
@@ -6107,7 +6109,7 @@ TEST_F(RuledE2ESmokeTest, ConvokePreviewsArePrivateReadOnlyAndCommitExactPhysica
     EXPECT_EQ(p1.myPool.total(), 0);
 }
 
-TEST_F(RuledE2ESmokeTest, SelectableTapPaymentPublishesGenerationAndMovesExactCardsForBothClients)
+TEST_F(RuledE2ESmokeTest, SelectableTapAndBlightPaymentsPreservePrivacyAndExactCardsForBothClients)
 {
     const auto started = startServers();
     if (!started) {
@@ -6236,6 +6238,97 @@ TEST_F(RuledE2ESmokeTest, SelectableTapPaymentPublishesGenerationAndMovesExactCa
     EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[gene->oid]));
     EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[bear->oid]));
     EXPECT_EQ(p1.myPool.total(), 1);
+
+    // Blight reuses the same physical picker, but accepts the already tapped, summoning-sick bear.
+    ASSERT_TRUE(putPermanent("Gristle Glutton", true));
+    ASSERT_TRUE(putPermanent("Tatterkite", false));
+    const auto glutton = findPermanent(p1, p1.myId, QStringLiteral("gristle_glutton"));
+    const auto kite = findPermanent(p1, p1.myId, QStringLiteral("tatterkite"));
+    ASSERT_TRUE(glutton && kite);
+    const auto blightCosts = p1.latestLegal.cost_choices_by_ability().find(static_cast<quint64>(glutton->oid) << 32);
+    ASSERT_NE(blightCosts, p1.latestLegal.cost_choices_by_ability().end());
+    ASSERT_EQ(blightCosts->second.choices_size(), 1);
+    const auto &blight = blightCosts->second.choices(0);
+    EXPECT_EQ(blight.kind(), ruled::v1::COST_CHOICE_KIND_BLIGHT);
+    EXPECT_EQ(blight.blight_count(), 1u);
+    EXPECT_EQ(blight.min(), 1u);
+    EXPECT_EQ(blight.max(), 1u);
+    EXPECT_TRUE(std::find(blight.candidate_ids().begin(), blight.candidate_ids().end(), bear->oid) !=
+                blight.candidate_ids().end());
+    EXPECT_TRUE(std::find(blight.candidate_ids().begin(), blight.candidate_ids().end(), kite->oid) ==
+                blight.candidate_ids().end());
+    ruled::v1::RuledCommand blightActivation;
+    auto *blightAbility = blightActivation.mutable_activate_ability();
+    p1.setBattlefieldAbilitySource(blightAbility, glutton->oid);
+    blightAbility->set_ability_index(0);
+    auto *blightSelection = blightAbility->add_cost_selections();
+    blightSelection->set_cost_index(blight.cost_index());
+    auto *blighted = blightSelection->mutable_battlefield_objects()->add_objects();
+    blighted->set_object_id(bear->oid);
+    blighted->set_zone_change_generation(bear->generation);
+    ASSERT_TRUE(send(p1, blightActivation, QStringLiteral("Blight with tapped bear")));
+    EXPECT_EQ(findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears"))->toughness, 1);
+    EXPECT_EQ(findPermanent(p2, p1.myId, QStringLiteral("grizzly_bears"))->toughness, 1);
+    auto resolveToChoice = [&]() {
+        for (int i = 0; i < 8 && !p1.pendingChoice && !p2.pendingChoice; ++i) {
+            ruled::v1::RuledCommand pass;
+            pass.mutable_pass_priority();
+            if (!send(p1.priorityPlayer == p1.myId ? p1 : p2, pass, QStringLiteral("resolve Blight ability")))
+                return false;
+        }
+        return p1.pendingChoice.has_value() || p2.pendingChoice.has_value();
+    };
+    ASSERT_TRUE(resolveToChoice());
+    ASSERT_TRUE(p1.pendingChoice);
+    EXPECT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_HAND_CARDS);
+    EXPECT_FALSE(p2.pendingChoice);
+    ASSERT_TRUE(p2.lastResolutionChoice);
+    EXPECT_EQ(p2.lastResolutionChoice->candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2.lastResolutionChoice->candidate_names_size(), 0);
+    const int handBefore = p1.handSizeByPlayer[p1.myId];
+    ruled::v1::RuledCommand discard;
+    discard.mutable_submit_resolution_choice()->add_chosen_object_ids(p1.pendingChoice->candidate_object_ids(0));
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, discard, QStringLiteral("Gristle discard then draw")));
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], handBefore);
+
+    ASSERT_TRUE(putPermanent("Dream Seizer", false));
+    ASSERT_TRUE(resolveToChoice());
+    ASSERT_TRUE(p1.pendingChoice);
+    EXPECT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    ruled::v1::RuledCommand branch;
+    branch.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
+    branch.mutable_submit_resolution_choice()->set_selected_branch_index(0);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, branch, QStringLiteral("Dream Seizer choose Blight")));
+    ASSERT_TRUE(p1.pendingChoice);
+    EXPECT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_COST_OBJECTS);
+    EXPECT_EQ(p1.pendingChoice->candidate_server_card_ids_size(), p1.pendingChoice->candidate_object_ids_size());
+    EXPECT_FALSE(p2.pendingChoice);
+    ASSERT_TRUE(p2.lastResolutionChoice);
+    EXPECT_EQ(p2.lastResolutionChoice->candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2.lastResolutionChoice->candidate_server_card_ids_size(), 0);
+    const int physicalBear = p1.serverCardByEngineOid[bear->oid];
+    ruled::v1::RuledCommand lethalBlight;
+    lethalBlight.mutable_submit_resolution_choice()->add_chosen_object_ids(bear->oid);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, lethalBlight, QStringLiteral("Dream Seizer lethal Blight")));
+    ASSERT_TRUE(p2.pendingChoice);
+    EXPECT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_HAND_CARDS);
+    EXPECT_FALSE(p1.pendingChoice);
+    ASSERT_TRUE(findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears")));
+    ASSERT_TRUE(findPermanent(p2, p1.myId, QStringLiteral("grizzly_bears")));
+    EXPECT_EQ(p1.serverCardByEngineOid[bear->oid], physicalBear);
+    EXPECT_EQ(p2.serverCardByEngineOid[bear->oid], physicalBear);
+    ruled::v1::RuledCommand opponentDiscard;
+    opponentDiscard.mutable_submit_resolution_choice()->add_chosen_object_ids(
+        p2.pendingChoice->candidate_object_ids(0));
+    p2.pendingChoice.reset();
+    ASSERT_TRUE(send(p2, opponentDiscard, QStringLiteral("finish Dream Seizer discard")));
+    EXPECT_FALSE(findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears")));
+    EXPECT_FALSE(findPermanent(p2, p1.myId, QStringLiteral("grizzly_bears")));
+    EXPECT_EQ(p1.graveyardOwnerByEngineOid[bear->oid], p1.myId);
+    EXPECT_EQ(p2.graveyardOwnerByEngineOid[bear->oid], p1.myId);
 }
 
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can

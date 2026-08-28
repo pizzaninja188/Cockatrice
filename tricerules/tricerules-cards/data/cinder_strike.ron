@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-08-27. CR 701.68, 601.2, 118.11.
+(
+  id: "cinder_strike",
+  name: "Cinder Strike",
+  mana_cost: "{R}",
+  types: ["Sorcery"],
+  cast_cost_groups: [(
+    prompt: "Blight 1?", min: 0, max: 1,
+    options: [Blight(label: "Blight 1", count: 1)],
+  )],
+  spell_effect: [DamageTarget(
+    amount: CastCost(cast_cost: (group_index: 0, option_index: 0), when_true: 4, otherwise: 2),
+    target: (kind: Creature),
+  )],
+)

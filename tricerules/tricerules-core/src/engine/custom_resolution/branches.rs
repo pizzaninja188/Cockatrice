@@ -111,7 +111,16 @@ impl GameEngine {
                             "resolution branch continuation missing",
                         ))?;
                     let mut item = stack.item.clone();
-                    item.resolution_branch_choices.insert(effect_index, None);
+                    if let ResolutionContinuation::AuthoredBranch { branch, .. } =
+                        &pending.continuation
+                    {
+                        if branch.optional {
+                            item.resolution_branch_choices.insert(effect_index, None);
+                        } else {
+                            // Cancelling a payment is not permission to omit a mandatory choice.
+                            item.resolution_branch_choices.remove(&effect_index);
+                        }
+                    }
                     return self.complete_parked_resolution_with_previous(
                         item,
                         Some(effect_index),
@@ -199,6 +208,7 @@ impl GameEngine {
             return Vec::new();
         };
         match cost {
+            ResolutionCost::Blight { .. } => self.blight_candidates(player),
             ResolutionCost::None => Vec::new(),
             ResolutionCost::Mana(_) => Vec::new(),
             ResolutionCost::DiscardCard { filter } => self.state.players[index]
@@ -372,12 +382,11 @@ impl GameEngine {
             ResolutionCost::Mana(mana_cost) => {
                 pending.presentation.choice_kind = rv1::ChoiceKind::ManaPayment;
                 pending.presentation.prompt = format!("Pay {}?", mana_cost);
-                let payment = PendingManaPayment {
-                    target_spell_id: 0,
-                    generic_mana_cost: 0,
+                let payment = PendingManaPayment::from_cost(
+                    0,
                     mana_cost,
-                    undo_history_start: self.state.undoable_mana_abilities.len(),
-                };
+                    self.state.undoable_mana_abilities.len(),
+                );
                 let ResolutionContinuation::AuthoredBranch { branch, .. } =
                     &mut pending.continuation
                 else {
@@ -395,6 +404,7 @@ impl GameEngine {
             }
             ResolutionCost::DiscardCard { .. }
             | ResolutionCost::SacrificePermanent { .. }
+            | ResolutionCost::Blight { .. }
             | ResolutionCost::TapPermanents { .. } => {
                 let is_discard = matches!(branch.cost, ResolutionCost::DiscardCard { .. });
                 let is_tap = matches!(branch.cost, ResolutionCost::TapPermanents { .. });
@@ -404,7 +414,7 @@ impl GameEngine {
                 };
                 pending.presentation.choice_kind = if is_discard {
                     rv1::ChoiceKind::HandCards
-                } else if is_tap {
+                } else if is_tap || matches!(branch.cost, ResolutionCost::Blight { .. }) {
                     rv1::ChoiceKind::CostObjects
                 } else {
                     rv1::ChoiceKind::TargetObjects
@@ -412,7 +422,17 @@ impl GameEngine {
                 pending.presentation.candidates = candidates.clone();
                 pending.presentation.min = if branch_state.optional { 0 } else { count };
                 pending.presentation.max = count;
-                pending.presentation.prompt = if is_discard {
+                pending.presentation.prompt = if let ResolutionCost::Blight { count } = branch.cost
+                {
+                    format!(
+                        "Blight {count}: choose one creature you control{}.",
+                        if branch_state.optional {
+                            ", or decline"
+                        } else {
+                            ""
+                        }
+                    )
+                } else if is_discard {
                     "Choose a card to discard, or decline.".into()
                 } else if is_tap {
                     let plural = if count == 1 { "" } else { "s" };
@@ -495,30 +515,30 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[ObjectId],
     ) -> Result<RuledEventBatch, EngineError> {
-        let (stack, branch_state, branch_index, candidate_generations) = match &pending.continuation
-        {
-            ResolutionContinuation::AuthoredBranch { stack, branch } => match branch.stage {
-                PendingResolutionBranchStage::PayingObjects {
-                    selected_branch,
-                    ref candidate_generations,
-                } => (
-                    stack.clone(),
-                    branch.clone(),
-                    selected_branch,
-                    candidate_generations.clone(),
-                ),
+        let (mut stack, branch_state, branch_index, candidate_generations) =
+            match &pending.continuation {
+                ResolutionContinuation::AuthoredBranch { stack, branch } => match branch.stage {
+                    PendingResolutionBranchStage::PayingObjects {
+                        selected_branch,
+                        ref candidate_generations,
+                    } => (
+                        stack.clone(),
+                        branch.clone(),
+                        selected_branch,
+                        candidate_generations.clone(),
+                    ),
+                    _ => {
+                        self.state.pending_resolution = Some(pending);
+                        return Err(EngineError::Illegal("resolution branch was not selected"));
+                    }
+                },
                 _ => {
                     self.state.pending_resolution = Some(pending);
-                    return Err(EngineError::Illegal("resolution branch was not selected"));
+                    return Err(EngineError::Illegal(
+                        "resolution branch continuation missing",
+                    ));
                 }
-            },
-            _ => {
-                self.state.pending_resolution = Some(pending);
-                return Err(EngineError::Illegal(
-                    "resolution branch continuation missing",
-                ));
-            }
-        };
+            };
         let branch = branch_state
             .branches
             .get(branch_index)
@@ -590,6 +610,15 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("resolution payment object missing"))?;
         let mut ev = Vec::new();
         match &branch.cost {
+            ResolutionCost::Blight { count } => {
+                let receipt = self.complete_blight(pending.deciding_player, *count, Some(oid));
+                self.fire_triggers(&[GameEvent::Blighted(receipt)]);
+                stack.item.blight_receipts.push(receipt);
+                ev.push(ev_log(format!(
+                    "P{} blights {count} using {name}.",
+                    pending.deciding_player
+                )));
+            }
             ResolutionCost::None => {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal(

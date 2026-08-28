@@ -142,6 +142,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
             format!("Discard a matching card to pay for {ward_text}, or decline.")
         }
         ResolutionCost::None
+        | ResolutionCost::Blight { .. }
         | ResolutionCost::SacrificePermanent { .. }
         | ResolutionCost::TapPermanents { .. } => {
             return Err(EngineError::Illegal("unsupported Ward cost"));
@@ -150,27 +151,13 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
 
     let (presentation, stage, event) = match cost {
         ResolutionCost::Mana(mana_cost) => {
-            // Pure generic resolution costs use the established staged-pip transaction: pool
-            // clicks and newly produced mana reduce the remainder, the last pip auto-submits, and
-            // Decline rewinds payment-time mana abilities. Keeping Ward {2} in `mana_cost` would
-            // bypass that flow and require an explicit Pay action.
-            let generic_mana_cost = mana_cost
-                .pips
-                .iter()
-                .try_fold(0u32, |total, pip| match pip {
-                    ManaSymbol::Generic(amount) => total.checked_add(*amount),
-                    _ => None,
-                });
-            let (generic_mana_cost, payment_mana_cost) = match generic_mana_cost {
-                Some(amount) => (amount, ManaCost::default()),
-                None => (0, mana_cost.clone()),
-            };
-            let payment = PendingManaPayment {
-                target_spell_id: target.object_id,
-                generic_mana_cost,
-                mana_cost: payment_mana_cost.clone(),
-                undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
-            };
+            let payment = PendingManaPayment::from_cost(
+                target.object_id,
+                mana_cost.clone(),
+                cx.engine.state.undoable_mana_abilities.len(),
+            );
+            let generic_mana_cost = payment.generic_mana_cost;
+            let payment_mana_cost = &payment.mana_cost;
             let presentation = PendingResolutionPresentation {
                 source_object_id: cx.top.id,
                 candidates: Vec::new(),
@@ -203,7 +190,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                         .can_pay_generic_mana(deciding_player, generic_mana_cost)
                 } else {
                     cx.engine
-                        .can_pay_resolution_mana(deciding_player, &payment_mana_cost)
+                        .can_pay_resolution_mana(deciding_player, payment_mana_cost)
                 },
                 reveal_audience: 0,
                 revealed_zone_owner_player_id: None,
@@ -292,6 +279,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
             )
         }
         ResolutionCost::None
+        | ResolutionCost::Blight { .. }
         | ResolutionCost::SacrificePermanent { .. }
         | ResolutionCost::TapPermanents { .. } => unreachable!(),
     };
@@ -494,6 +482,7 @@ pub(super) fn copy_target_spell(
                     cast_cost_receipts: src.cast_cost_receipts.clone(),
                     payment_result: src.payment_result.clone(),
                     resolution_branch_choices: Default::default(),
+                    blight_receipts: src.blight_receipts.clone(),
                     // CR 707.2: the copy has the original's characteristics and choices. `None`
                     // for every spell today, but copying inherits it rather than dropping it.
                     trigger_context: src.trigger_context,

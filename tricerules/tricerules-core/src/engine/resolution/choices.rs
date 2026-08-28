@@ -220,6 +220,10 @@ fn park_resolution_branches_for(
         .map(|(index, branch)| {
             let (kind, cost_text) = match &branch.cost {
                 ResolutionCost::None => (rv1::ResolutionBranchCostKind::Unspecified, String::new()),
+                ResolutionCost::Blight { count } => (
+                    rv1::ResolutionBranchCostKind::Blight,
+                    format!("Blight {count}"),
+                ),
                 ResolutionCost::Mana(cost) => {
                     (rv1::ResolutionBranchCostKind::Mana, cost.to_string())
                 }

@@ -441,6 +441,7 @@ impl GameEngine {
                                     .iter()
                                     .map(|cost| match cost {
                                         AbilityCost::Tap => "{T}".to_string(),
+                                        AbilityCost::Blight { count } => format!("Blight {count}"),
                                         AbilityCost::TapPermanents { count, .. } => {
                                             format!("Tap {count} permanents")
                                         }
