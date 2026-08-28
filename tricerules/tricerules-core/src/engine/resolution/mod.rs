@@ -1372,8 +1372,11 @@ impl GameEngine {
                     effect @ SpellEffectKind::ChooseGraveyardCard { .. } => {
                         zones::choose_graveyard_card(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. } => {
-                        zones::return_triggered_card_from_graveyard(&mut cx, effect)?
+                    SpellEffectKind::Earthbend { count } => {
+                        pump_counters::earthbend(&mut cx, count)?
+                    }
+                    effect @ SpellEffectKind::ReturnTriggeredCard { .. } => {
+                        zones::return_triggered_card(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::ProduceMana { .. } => {
                         misc::produce_mana(&mut cx, effect)?

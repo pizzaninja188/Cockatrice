@@ -321,13 +321,15 @@ pub enum CardTypeFilter {
     /// Matches any card that does not have the land card type (Coercion, Thoughtseize, and
     /// Cracked Skull).
     Nonland,
+    /// Dai Li Indoctrination and Auntie's Sentence exclude both lands and instant/sorcery cards.
+    NonlandPermanent,
     /// Matches any object that does not have the creature card type.
     Noncreature,
 }
 
 impl CardTypeFilter {
     /// Exhaustive list used when an action snapshots the card types it matched at that moment.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::BasicLand,
         Self::Land,
         Self::Enchantment,
@@ -339,6 +341,7 @@ impl CardTypeFilter {
         Self::Planeswalker,
         Self::Battle,
         Self::Nonland,
+        Self::NonlandPermanent,
         Self::Noncreature,
     ];
 }

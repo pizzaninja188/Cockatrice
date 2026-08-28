@@ -34,6 +34,18 @@ pub(super) fn battlefield_permanent_matches(
             CardTypeFilter::Planeswalker => c.has_type("Planeswalker"),
             CardTypeFilter::Battle => c.has_type("Battle"),
             CardTypeFilter::Nonland => !c.has_type("Land"),
+            CardTypeFilter::NonlandPermanent => {
+                !c.has_type("Land")
+                    && [
+                        "Artifact",
+                        "Battle",
+                        "Creature",
+                        "Enchantment",
+                        "Planeswalker",
+                    ]
+                    .iter()
+                    .any(|kind| c.has_type(kind))
+            }
             CardTypeFilter::Noncreature => !c.is_creature(),
         })
         && filter.color.is_none_or(|color| c.colors.contains(&color))

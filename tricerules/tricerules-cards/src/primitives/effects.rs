@@ -2,10 +2,10 @@
 
 use super::{
     ActivatedAbilityDef, CardTypeFilter, CastCostReceiptCondition, Color, CreatureEventFilter,
-    CreatureScopeFilter, GraveyardDestination, GraveyardFilter, Keyword, PermanentTypeFilter,
-    PowerComparison, ProtectionQuality, ReflexiveTriggeredAbilityDef, SpecialActionKind,
-    SpellCastFilter, TargetController, TargetFilter, TargetKind, TargetRole, TriggeredAbilityDef,
-    TypeLineAddition, TypeLineReplacement,
+    CreatureScopeFilter, EventZone, GraveyardDestination, GraveyardFilter, Keyword,
+    PermanentTypeFilter, PowerComparison, ProtectionQuality, ReflexiveTriggeredAbilityDef,
+    SpecialActionKind, SpellCastFilter, TargetController, TargetFilter, TargetKind, TargetRole,
+    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
 };
 use crate::ManaCost;
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
@@ -1586,6 +1586,11 @@ pub enum DelayedTokenSacrificeTiming {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
+    /// CR 701.66: persistent land animation followed by a generation-bound delayed return.
+    /// Rebellious Captives, Dai Li Indoctrination, and Badgermole share this action.
+    Earthbend {
+        count: Amount,
+    },
     DamageTarget {
         amount: Amount,
         target: TargetFilter,
@@ -1906,11 +1911,12 @@ pub enum SpellEffectKind {
         subject: EffectSubject,
         ability: Box<TriggeredAbilityDef>,
     },
-    /// Return the card referenced by this death trigger, but only while it remains the immediate
-    /// graveyard object produced by that death. Abnormal Endurance references the granted
-    /// ability's source; Unholy Indenture references the enchanted creature observed by its Aura.
-    ReturnTriggeredCardFromGraveyard {
+    /// Return the event-bound card only from the immediate destination generation in `from`.
+    /// Abnormal Endurance references the granted ability's source; Unholy Indenture and
+    /// Earthbend reference the observed object. Later zone changes invalidate the return.
+    ReturnTriggeredCard {
         reference: TriggeredCardReference,
+        from: Vec<EventZone>,
         #[serde(default)]
         tapped: bool,
         #[serde(default)]
@@ -2573,6 +2579,17 @@ pub enum PlayerRecipient {
     EachPlayer,
 }
 
+/// The fixed target contract of Earthbend (Badgermole and Dai Li Indoctrination).
+pub fn earthbend_target_filter() -> &'static TargetFilter {
+    static FILTER: std::sync::LazyLock<TargetFilter> = std::sync::LazyLock::new(|| TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        controller: TargetController::You,
+        permanent_types: vec![PermanentTypeFilter::Land],
+        ..TargetFilter::default()
+    });
+    &FILTER
+}
+
 impl SpellEffectKind {
     pub(crate) fn uses_attached_object_subject(&self) -> bool {
         matches!(
@@ -2670,7 +2687,7 @@ impl SpellEffectKind {
             } | SpellEffectKind::Mill {
                 who: PlayerRecipient::TriggerObjectController,
                 ..
-            } | SpellEffectKind::ReturnTriggeredCardFromGraveyard {
+            } | SpellEffectKind::ReturnTriggeredCard {
                 reference: TriggeredCardReference::TriggerObject,
                 ..
             }
@@ -2720,6 +2737,9 @@ impl SpellEffectKind {
     /// them). Group cardinality and role binding are compiled by [`super::TargetSchema`].
     pub fn target_roles(&self) -> Vec<TargetRole<'_>> {
         match self {
+            SpellEffectKind::Earthbend { .. } => {
+                vec![TargetRole::Filtered(earthbend_target_filter())]
+            }
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target } => {
                 vec![TargetRole::Filtered(source), TargetRole::Filtered(target)]
             }
@@ -2806,7 +2826,7 @@ impl SpellEffectKind {
             | SpellEffectKind::UntapAll { .. }
             | SpellEffectKind::PumpAll { .. }
             | SpellEffectKind::GrantKeywordsAll { .. }
-            | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
+            | SpellEffectKind::ReturnTriggeredCard { .. }
             | SpellEffectKind::SacrificeObservedObjects
             | SpellEffectKind::ChooseGraveyardCard { .. }
             | SpellEffectKind::GrantKeywordsAllPermanents { .. }
@@ -2858,6 +2878,7 @@ impl SpellEffectKind {
             Self::DamageTarget { amount, .. }
             | Self::DamageAll { amount, .. }
             | Self::Scry { count: amount }
+            | Self::Earthbend { count: amount }
             | Self::CounterTargetSpell {
                 unless_controller_pays: Some(amount),
                 ..
@@ -2972,6 +2993,7 @@ impl SpellEffectKind {
                 SpellEffectKind::DamageTarget { amount, .. }
                 | SpellEffectKind::DamageAll { amount, .. }
                 | SpellEffectKind::Scry { count: amount }
+                | SpellEffectKind::Earthbend { count: amount }
                 | SpellEffectKind::CounterTargetSpell {
                     unless_controller_pays: Some(amount),
                     ..
@@ -3058,6 +3080,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DamagePlayer { amount, .. }
             | SpellEffectKind::DamageAll { amount, .. }
             | SpellEffectKind::Scry { count: amount }
+            | SpellEffectKind::Earthbend { count: amount }
             | SpellEffectKind::CounterTargetSpell {
                 unless_controller_pays: Some(amount),
                 ..
@@ -3125,7 +3148,20 @@ impl SpellEffectKind {
             }
             SpellEffectKind::PumpAll { filter, .. }
             | SpellEffectKind::GrantKeywordsAll { filter, .. } => filter.validate()?,
-            SpellEffectKind::ReturnTriggeredCardFromGraveyard { entry_counters, .. } => {
+            SpellEffectKind::ReturnTriggeredCard {
+                from,
+                entry_counters,
+                ..
+            } => {
+                if from.is_empty()
+                    || from
+                        .iter()
+                        .any(|zone| !matches!(zone, EventZone::Graveyard | EventZone::Exile))
+                {
+                    return Err(
+                        "ReturnTriggeredCard requires graveyard and/or exile source zones".into(),
+                    );
+                }
                 let mut kinds = std::collections::HashSet::new();
                 for placement in entry_counters {
                     placement.counter.validate()?;
@@ -3422,7 +3458,7 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
             } | SpellEffectKind::ChangeSourceFace { .. }
-                | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
+                | SpellEffectKind::ReturnTriggeredCard { .. }
                 | SpellEffectKind::ApplyCombatRestriction {
                     scope: CombatRestrictionScope::Source,
                     ..
@@ -3972,6 +4008,9 @@ mod attachment_filter_tests {
 /// How long a continuous effect lasts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EffectDuration {
+    /// CR 611.2a: no stated duration. Earthbend from Badgermole and Rebellious Captives
+    /// lasts across turns, independently of its source; Single scopes end on zone change.
+    Indefinite,
     /// Expires at the next cleanup step (CR 514.2). One-shot effects created by a resolving
     /// spell or ability (Giant Growth, firebreathing) — independent of their source once made
     /// (CR 611.2g), so they persist even if the source permanent later leaves the battlefield.
@@ -3999,7 +4038,7 @@ pub enum ReturnController {
     AbilityController,
 }
 
-/// Which event-bound card a graveyard-return trigger follows through its first zone change.
+/// Which event-bound card a return trigger follows through its first zone change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TriggeredCardReference {
     AbilitySource,

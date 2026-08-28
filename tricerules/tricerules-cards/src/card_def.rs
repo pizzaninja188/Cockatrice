@@ -682,6 +682,7 @@ impl CardFace {
             CardTypeFilter::Planeswalker => self.types.iter().any(|value| value == "Planeswalker"),
             CardTypeFilter::Battle => self.types.iter().any(|value| value == "Battle"),
             CardTypeFilter::Nonland => !self.is_land,
+            CardTypeFilter::NonlandPermanent => !self.is_land && self.is_permanent(),
             CardTypeFilter::Noncreature => !self.is_creature,
         }
     }
@@ -1009,6 +1010,10 @@ impl CardDefinition {
 
         match filter {
             CardTypeFilter::Nonland => self.faces_iter().all(|face| !face.is_land),
+            CardTypeFilter::NonlandPermanent => {
+                self.faces_iter().all(|face| !face.is_land)
+                    && self.faces_iter().any(|face| face.is_permanent())
+            }
             CardTypeFilter::Noncreature => self.faces_iter().all(|face| !face.is_creature),
             _ => self.faces_iter().any(|face| face.matches_card_type(filter)),
         }

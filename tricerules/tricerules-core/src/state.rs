@@ -1346,6 +1346,8 @@ pub struct ContinuousEffect {
 /// The stack-bound payload of a one-shot delayed triggered ability (CR 603.7).
 #[derive(Debug, Clone)]
 pub struct DelayedTriggerPayload {
+    /// Creating source, distinct from the watched object (Earthbend, delayed token sacrifice).
+    pub source: TriggerObjectRef,
     pub controller: PlayerId,
     pub card_id: String,
     pub card_name: String,
@@ -1364,6 +1366,7 @@ pub enum EventObserverMatcher {
         target_turn_instance: Option<u64>,
     },
     WhenWatchedObjectDiesThisTurn,
+    WhenWatchedObjectDiesOrIsExiled,
     WhenWatchedObjectLeavesBattlefield,
     WhenControllerLosesControlOf,
 }
@@ -1400,6 +1403,12 @@ pub(crate) enum ObservedGameEvent {
     },
     Dies(TriggerObjectRef),
     LeavesBattlefield(TriggerObjectRef),
+    /// Committed departure after replacement, used by Earthbend from spells and abilities.
+    BattlefieldDeparture {
+        object: TriggerObjectRef,
+        destination: Zone,
+        was_creature: bool,
+    },
     ControllerChanged {
         object: TriggerObjectRef,
         old_controller: PlayerId,
@@ -1867,6 +1876,18 @@ impl GameState {
             let mut expired = false;
             let matched = match (&mut observer.matcher, event) {
                 (
+                    EventObserverMatcher::WhenWatchedObjectDiesOrIsExiled,
+                    ObservedGameEvent::BattlefieldDeparture {
+                        object,
+                        destination,
+                        was_creature,
+                    },
+                ) if identity_matches(object) => {
+                    expired = destination != Zone::Exile
+                        && !(destination == Zone::Graveyard && was_creature);
+                    !expired
+                }
+                (
                     EventObserverMatcher::AtBeginningOfNextEndStep,
                     ObservedGameEvent::BeginningOfEndStep { .. },
                 ) => true,
@@ -1961,9 +1982,9 @@ impl GameState {
                 self.next_object_id += 1;
                 StagedTrigger {
                     object_id,
-                    source_permanent_id: watched.object_id,
+                    source_permanent_id: delayed.source.object_id,
                     source_face_index: delayed.source_face_index,
-                    source_zone_change: watched.zone_change_generation,
+                    source_zone_change: delayed.source.zone_change_generation,
                     source_face_change: 0,
                     card_id: delayed.card_id,
                     card_name: delayed.card_name,

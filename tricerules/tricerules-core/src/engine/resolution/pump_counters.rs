@@ -403,6 +403,84 @@ pub(super) fn grant_triggered_ability(
     Ok(EffectOutcome::Continue)
 }
 
+/// CR 701.66a / 611.2a / 613: Badgermole and Rebellious Captives resolve one
+/// inseparable action; SBAs cannot see the intermediate 0/0 before its counters.
+pub(super) fn earthbend(
+    cx: &mut EffectCx<'_>,
+    count: Amount,
+) -> Result<EffectOutcome, EngineError> {
+    use tricerules_cards::primitives::{
+        earthbend_target_filter, EventZone, ReturnController, TriggerCondition,
+        TriggeredAbilityDef, TriggeredCardReference, TypeLineAddition,
+    };
+    let filter = earthbend_target_filter();
+    let Some(oid) = cx.targets.first().copied().filter(|oid| {
+        target_filter_legal_at_resolution(
+            cx.engine,
+            filter,
+            *oid,
+            cx.controller,
+            TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+            cx.top.trigger_context,
+        )
+    }) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let count = cx.engine.resolve_amount(
+        &count,
+        AmountContext::for_stack_item(cx.top, cx.controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
+    for kind in [
+        ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            card_types: vec![
+                tricerules_cards::primitives::PermanentTypeFilter::Land,
+                tricerules_cards::primitives::PermanentTypeFilter::Creature,
+            ],
+            creature_types: vec![],
+        }),
+        ContinuousEffectKind::Layer6AddKeyword(Keyword::Haste),
+        ContinuousEffectKind::Layer7bSetPt {
+            power: 0,
+            toughness: 0,
+        },
+    ] {
+        cx.engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: Some(cx.top.id),
+            affected: AffectedScope::Single(oid),
+            kind,
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: cx.engine.state.command_index,
+        });
+    }
+    cx.engine.place_counters(
+        oid,
+        tricerules_cards::primitives::CounterKind::PlusOnePlusOne,
+        count,
+    );
+    super::misc::create_delayed_trigger(cx, SpellEffectKind::CreateDelayedTrigger {
+        subject: EffectSubject::Chosen(Box::new(filter.clone())),
+        ability: Box::new(TriggeredAbilityDef {
+            trigger: TriggerCondition::WhenWatchedObjectDiesOrIsExiled,
+            effect: vec![SpellEffectKind::ReturnTriggeredCard {
+                reference: TriggeredCardReference::TriggerObject,
+                from: vec![EventZone::Graveyard, EventZone::Exile],
+                tapped: true, controller: ReturnController::AbilityController, entry_counters: vec![],
+            }],
+            modal: None, targeting: None,
+            text: "When that land dies or is put into exile, return it to the battlefield tapped under your control.".into(),
+            may: false, intervening_if: None, max_triggers_per_turn: None, triggers_only_once: false,
+        }),
+    })?;
+    cx.events.push(ev_log(format!(
+        "{} earthbends {oid} for {count}.",
+        cx.spell_label
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn add_types(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

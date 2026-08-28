@@ -69,6 +69,61 @@ fn power_of(e: &GameEngine, oid: u32) -> u32 {
 }
 
 #[test]
+fn earthbend_logged_animation_and_return_replay_identically() {
+    let mut engine = basics_engine(150_200);
+    let mut commands = vec![
+        (0, put(0, DevZone::Battlefield, "Plains")),
+        (0, put(0, DevZone::Battlefield, "Rebellious Captives")),
+        (0, add_mana(0, 0, 0, 0, 0, 0, 6)),
+    ];
+    let mut batches = Vec::new();
+    for (actor, command) in &commands {
+        batches.push(engine.apply_command(*actor, command).unwrap());
+    }
+    let battlefield = &engine.state.players[0].battlefield;
+    let land = *battlefield
+        .iter()
+        .find(|oid| engine.state.objects[oid].card_id == "plains")
+        .unwrap();
+    let source = *battlefield
+        .iter()
+        .find(|oid| engine.state.objects[oid].card_id == "rebellious_captives")
+        .unwrap();
+    let command = activate_ability_for(&engine, source, 0, target_object(land));
+    batches.push(engine.apply_command(0, &command).unwrap());
+    commands.push((0, command));
+    for returning in [false, true] {
+        if returning {
+            let command = mv(0, DevZone::Exile, "Plains");
+            batches.push(engine.apply_command(0, &command).unwrap());
+            commands.push((0, command));
+            assert_eq!(engine.state.stack.len(), 1);
+        }
+        while !engine.state.stack.is_empty() {
+            let actor = engine.state.priority_player_id();
+            let command = pass();
+            batches.push(engine.apply_command(actor, &command).unwrap());
+            commands.push((actor, command));
+        }
+        assert_eq!(
+            engine.characteristics(land).unwrap().is_creature(),
+            !returning
+        );
+    }
+    assert!(engine.state.objects[&land].tapped);
+    let mut replay = basics_engine(150_200);
+    for ((actor, command), expected) in commands.iter().zip(&batches) {
+        assert_eq!(&replay.apply_command(*actor, command).unwrap(), expected);
+    }
+    assert_eq!(
+        replay.state.zone_change_generation[&land],
+        engine.state.zone_change_generation[&land]
+    );
+    assert!(replay.state.objects[&land].tapped);
+    assert!(replay.state.active_event_observers.is_empty());
+}
+
+#[test]
 fn issue_176_graveyard_payment_and_stale_target_replay() {
     for (card, name, generic, stale) in [
         ("grizzly_bears", "Grizzly Bears", 1, false),

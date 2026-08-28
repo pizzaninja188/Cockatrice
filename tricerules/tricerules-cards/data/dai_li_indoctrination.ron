@@ -1,0 +1,27 @@
+(
+  id: "dai_li_indoctrination",
+  name: "Dai Li Indoctrination",
+  mana_cost: "{1}{B}",
+  types: ["Sorcery", "Lesson"],
+  // Scryfall Oracle/rulings checked 2026-08-28; CR 701.66.
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (
+        label: "Reveal target opponent's hand and discard a nonland permanent card",
+        effects: [DiscardCards(
+          count: 1,
+          target: (kind: OpponentPlayer),
+          chooser: Controller,
+          card_filter: Some(NonlandPermanent),
+          visibility: PublicReveal,
+        )],
+      ),
+      (
+        label: "Earthbend 2",
+        effects: [Earthbend(count: 2)],
+      ),
+    ],
+  ),
+)

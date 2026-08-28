@@ -10,7 +10,8 @@
       ability: (
         trigger: WhenSelfDies,
         effect: [
-          ReturnTriggeredCardFromGraveyard(
+        ReturnTriggeredCard(
+          from: [Graveyard],
             reference: AbilitySource,
             tapped: true,
             controller: Owner,

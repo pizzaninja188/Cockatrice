@@ -90,6 +90,7 @@ fn validate_effect_cast_cost_conditions(
         | SpellEffectKind::DamagePlayer { amount, .. }
         | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { amount }
         | SpellEffectKind::Scry { count: amount }
+        | SpellEffectKind::Earthbend { count: amount }
         | SpellEffectKind::CounterTargetSpell {
             unless_controller_pays: Some(amount),
             ..
@@ -141,6 +142,7 @@ fn validate_effect_payment_results(
         SpellEffectKind::DamageTarget { amount, .. }
         | SpellEffectKind::DamageAll { amount, .. }
         | SpellEffectKind::Scry { count: amount }
+        | SpellEffectKind::Earthbend { count: amount }
         | SpellEffectKind::CounterTargetSpell {
             unless_controller_pays: Some(amount),
             ..
@@ -1983,7 +1985,8 @@ mod tests {
                     spell_effect: [AuraAttach(target: (kind: Creature))],
                     triggered_abilities: [(
                         trigger: WheneverAttachedObjectDies,
-                        effect: [ReturnTriggeredCardFromGraveyard(
+                        effect: [ReturnTriggeredCard(
+                            from: [Graveyard],
                             reference: TriggerObject,
                             controller: AbilityController,
                             entry_counters: {entry_counters},

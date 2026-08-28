@@ -181,6 +181,27 @@ impl GameEngine {
         let mut delayed = Vec::new();
         for event in events {
             match event {
+                GameEvent::ZoneChanges(batch) => {
+                    for movement in &batch.moves {
+                        if movement.origin == Zone::Battlefield
+                            && movement.destination != Zone::Battlefield
+                        {
+                            delayed.extend(self.state.dispatch_event_observers(
+                                ObservedGameEvent::BattlefieldDeparture {
+                                    object: TriggerObjectRef {
+                                        object_id: movement.before.object_id,
+                                        zone_change_generation:
+                                            movement.before.zone_change_generation,
+                                        controller_at_event: movement.before.controller,
+                                    },
+                                    destination: movement.destination,
+                                    was_creature:
+                                        movement.before.types.iter().any(|kind| kind == "Creature"),
+                                },
+                            ));
+                        }
+                    }
+                }
                 GameEvent::PhaseBegan {
                     phase: rv1::PhaseId::EndStep,
                     active_player,
@@ -207,10 +228,10 @@ impl GameEngine {
             delayed
                 .into_iter()
                 .map(|(watched, delayed)| CollectedTrigger {
-                    source_id: watched.object_id,
+                    source_id: delayed.source.object_id,
                     card_id: delayed.card_id,
                     face_index: delayed.source_face_index,
-                    source_zone_change: watched.zone_change_generation,
+                    source_zone_change: delayed.source.zone_change_generation,
                     source_face_change: 0,
                     controller: delayed.controller,
                     ability_index: 0,

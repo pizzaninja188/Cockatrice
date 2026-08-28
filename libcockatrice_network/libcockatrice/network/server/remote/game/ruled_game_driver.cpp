@@ -167,7 +167,7 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
     }
     synchronizer->applyAcceptedCommandVisuals(playerId, ruledCmd);
     const RuledBatchSynchronizer::BatchApplyResult batchResult = synchronizer->applyBatch(resp);
-    if ((batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) ||
+    if ((batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged || batchResult.publicZoneOrderChanged)) ||
         batchResult.battlefieldDisplayChanged) {
         game->sendGameStateToPlayers();
     }
@@ -203,7 +203,7 @@ void RuledGameDriver::relayRuledPayloadAndBroadcast(int playerId, const QByteArr
         return;
     }
     const RuledBatchSynchronizer::BatchApplyResult batchResult = synchronizer->applyBatch(resp);
-    if ((batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged)) ||
+    if ((batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged || batchResult.publicZoneOrderChanged)) ||
         batchResult.battlefieldDisplayChanged) {
         game->sendGameStateToPlayers();
     }

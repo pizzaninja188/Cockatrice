@@ -1551,12 +1551,13 @@ pub(super) fn move_graveyard_cards(
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn return_triggered_card_from_graveyard(
+pub(super) fn return_triggered_card(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::ReturnTriggeredCardFromGraveyard {
+    let SpellEffectKind::ReturnTriggeredCard {
         reference,
+        from,
         tapped,
         controller,
         entry_counters,
@@ -1588,7 +1589,12 @@ pub(super) fn return_triggered_card_from_graveyard(
     let Some(object) = cx.engine.state.objects.get(&source_id) else {
         return Ok(EffectOutcome::Continue);
     };
-    if object.zone != Zone::Graveyard || current_generation != event_generation.saturating_add(1) {
+    let origin = match object.zone {
+        Zone::Graveyard => tricerules_cards::primitives::EventZone::Graveyard,
+        Zone::Exile => tricerules_cards::primitives::EventZone::Exile,
+        _ => return Ok(EffectOutcome::Continue),
+    };
+    if !from.contains(&origin) || current_generation != event_generation.saturating_add(1) {
         return Ok(EffectOutcome::Continue);
     }
 
@@ -1629,7 +1635,7 @@ pub(super) fn return_triggered_card_from_graveyard(
         super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
             cx.engine.commit_battlefield_entry(entry, None)?;
             cx.events.push(ev_log(format!(
-                "{} returns {object_label} from graveyard to battlefield.",
+                "{} returns {object_label} to the battlefield.",
                 cx.spell_label
             )));
             cx.events.push(permanent_moved_event(

@@ -1229,6 +1229,47 @@ TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
     EXPECT_EQ(findCardByEngineOid(p1, 999u), nullptr);
 }
 
+TEST_F(RuledBatchTest, EarthbendUpdatesBadgeAndRowOnAnExistingLand)
+{
+    seedCardCatalog({"Forest"});
+    Server_Card *land = addCardToTable(p1, "Forest");
+    const int physicalId = land->getId();
+    auto view = buildPerPlayerView(p1, {101u}, {false});
+    auto *object = view.mutable_battlefield_objects(0);
+    object->set_is_land(true);
+    object->set_is_creature(false);
+    GameEventStorage events;
+    applyZoneView(p1, view, &events);
+    EXPECT_EQ(land->getY(), 2);
+    EXPECT_TRUE(land->getPT().isEmpty());
+
+    object->set_is_creature(true);
+    object->set_power(2);
+    object->set_toughness(2);
+    object->add_keywords("Haste");
+    EXPECT_TRUE(applyZoneView(p1, view, &events).battlefieldOrderChanged);
+    EXPECT_EQ(land->getY(), 0);
+    EXPECT_EQ(land->getPT(), QStringLiteral("2/2"));
+
+    object->set_tapped(true);
+    object->set_power(4);
+    object->set_toughness(5);
+    applyZoneView(p1, view, &events);
+    EXPECT_TRUE(land->getTapped());
+    EXPECT_EQ(land->getPT(), QStringLiteral("4/5"));
+
+    object->set_is_creature(false);
+    object->set_power(0);
+    object->set_toughness(0);
+    object->clear_keywords();
+    EXPECT_TRUE(applyZoneView(p1, view, &events).battlefieldOrderChanged);
+    EXPECT_EQ(land->getY(), 2);
+    EXPECT_TRUE(land->getPT().isEmpty()) << "a former creature must lose its rendered P/T badge";
+    EXPECT_TRUE(land->getTapped());
+    EXPECT_EQ(land->getId(), physicalId);
+    EXPECT_EQ(findCardByEngineOid(p1, 101u), land);
+}
+
 TEST_F(RuledBatchTest, ZoneViewPlacesPermanentsByAuthoritativeEffectiveType)
 {
     seedCardCatalog({"Forest", "Sol Ring"});
@@ -1367,6 +1408,30 @@ TEST_F(RuledBatchTest, ExileOidMapReversesEngineAndPhysicalPileOrder)
     EXPECT_EQ(binding.findExileCardByEngineOid(p1, 701u), oldest);
     EXPECT_EQ(binding.findExileCardByEngineOid(p1, 702u), newest);
     EXPECT_EQ(binding.findExileCardByEngineOid(p1, 999u), nullptr);
+}
+
+TEST_F(RuledBatchTest, PublicPileReorderingPreservesBoundDuplicateIdentities)
+{
+    for (const bool exile : {false, true}) {
+        Server_Card *first = exile ? addCardToExile(p1, "Forest") : addCardToGraveyard(p1, "Forest");
+        Server_Card *second = exile ? addCardToExile(p1, "Forest") : addCardToGraveyard(p1, "Forest");
+        ruled::v1::RuledPerPlayerView view = buildPerPlayerView(p1, {}, {});
+        auto *oids = exile ? view.mutable_exile_object_ids() : view.mutable_graveyard_object_ids();
+        oids->Add(701u);
+        oids->Add(702u);
+        GameEventStorage ges;
+        applyZoneView(p1, view, &ges);
+        oids->SwapElements(0, 1);
+        const auto result = applyZoneView(p1, view, &ges);
+        EXPECT_TRUE(result.publicZoneOrderChanged);
+        auto *zone = p1->getZones().value(exile ? ZoneNames::EXILE : ZoneNames::GRAVE);
+        EXPECT_EQ(zone->getCards().first(), first);
+        const auto &binding = bindingFor(p1);
+        EXPECT_EQ(exile ? binding.findExileCardByEngineOid(p1, 701u)
+                        : binding.findGraveyardCardByEngineOid(p1, 701u), first);
+        EXPECT_EQ(exile ? binding.findExileCardByEngineOid(p1, 702u)
+                        : binding.findGraveyardCardByEngineOid(p1, 702u), second);
+    }
 }
 
 TEST_F(RuledBatchTest, PermanentMovedFromExileUsesTheExactBoundPhysicalCard)

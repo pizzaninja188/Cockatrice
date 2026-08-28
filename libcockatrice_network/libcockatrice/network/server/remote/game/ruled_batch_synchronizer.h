@@ -31,6 +31,7 @@ public:
         bool zoneViewApplied = false;
         bool handOrLibraryChanged = false;
         bool battlefieldOrderChanged = false;
+        bool publicZoneOrderChanged = false;
         bool battlefieldDisplayChanged = false;
         bool tapStateEventsQueued = false;
         bool phaseChanged = false;

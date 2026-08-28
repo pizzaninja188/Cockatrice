@@ -50,6 +50,18 @@ fn mana_filter_matches_characteristics(
         CardTypeFilter::Planeswalker => characteristics.has_type("Planeswalker"),
         CardTypeFilter::Battle => characteristics.has_type("Battle"),
         CardTypeFilter::Nonland => !characteristics.has_type("Land"),
+        CardTypeFilter::NonlandPermanent => {
+            !characteristics.has_type("Land")
+                && [
+                    "Artifact",
+                    "Battle",
+                    "Creature",
+                    "Enchantment",
+                    "Planeswalker",
+                ]
+                .iter()
+                .any(|kind| characteristics.has_type(kind))
+        }
         CardTypeFilter::Noncreature => !characteristics.is_creature(),
     }) && filter
         .subtype

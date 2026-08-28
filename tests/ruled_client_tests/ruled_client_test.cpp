@@ -381,6 +381,39 @@ TEST_F(RuledClientTest, BattlefieldObjectMapBuildsIdentityMapsBothWays)
     EXPECT_EQ(state->playerIdForEngineOid(999), -1);
 }
 
+TEST_F(RuledClientTest, EarthbendAnimationAndReturnReplaceDerivedCharacteristics)
+{
+    auto publish = [&](bool creature, quint64 generation) {
+        ruled::v1::RuledEventBatch batch;
+        auto *entry = addPermanent(batch.add_events(), kLocalPlayer, 100, 7);
+        entry->set_is_creature(creature);
+        if (creature) {
+            entry->add_keywords("Haste");
+        }
+        auto *player = batch.add_events()->mutable_zone_view()->add_per_player();
+        player->set_player_id(kLocalPlayer);
+        auto *object = player->add_battlefield_objects();
+        object->set_object_id(100);
+        object->set_zone_change_generation(generation);
+        object->set_power(creature ? 2 : 0);
+        object->set_toughness(creature ? 2 : 0);
+        apply(batch);
+    };
+    publish(false, 0);
+    EXPECT_FALSE(state->isEngineOidCreature(100));
+    publish(true, 0);
+    EXPECT_TRUE(state->isEngineOidCreature(100));
+    EXPECT_TRUE(state->isEngineOidHaste(100));
+    EXPECT_EQ(state->combatPowerForCreatureOid(100), 2);
+    EXPECT_EQ(state->combatToughnessForCreatureOid(100), 2);
+    publish(false, 2);
+    EXPECT_FALSE(state->isEngineOidCreature(100));
+    EXPECT_FALSE(state->isEngineOidHaste(100));
+    EXPECT_EQ(state->battlefieldGenerationByOid.value(100), 2u);
+    EXPECT_EQ(state->cardIdForEngineOid(100), 7);
+    EXPECT_EQ(state->combatPowerForCreatureOid(100), 0);
+}
+
 TEST(RuledAutoPassPolicyTest, MapsToolbarStopsAndSharesCombatDamageStop)
 {
     std::array<bool, 11> own{};

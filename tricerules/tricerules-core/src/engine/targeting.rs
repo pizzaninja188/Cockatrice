@@ -976,6 +976,7 @@ fn validate_effect_targets(
         | SpellEffectKind::Sacrifice {
             subject: EffectSubject::Chosen(_),
         }
+        | SpellEffectKind::Earthbend { .. }
         | SpellEffectKind::ExileUntilSourceLeaves { target: _ }
         | SpellEffectKind::DestroyAttached { target: _, .. }
         | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: _, .. } => {
@@ -1337,7 +1338,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ChooseResolutionBranch { .. }
         | SpellEffectKind::CreateReflexiveTrigger { .. }
         | SpellEffectKind::ChangeSourceFace { .. }
-        | SpellEffectKind::ReturnTriggeredCardFromGraveyard { .. }
+        | SpellEffectKind::ReturnTriggeredCard { .. }
         | SpellEffectKind::SiegeDefeat
         | SpellEffectKind::None => {
             if !targets.is_empty() {

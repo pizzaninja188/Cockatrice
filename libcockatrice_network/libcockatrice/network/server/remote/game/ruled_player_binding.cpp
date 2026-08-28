@@ -612,18 +612,18 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                     const auto tgh = static_cast<uint32_t>(battlefieldObject.toughness());
                     const auto dmg = static_cast<uint32_t>(battlefieldObject.damage());
 
-                    if (isCreature) {
-                        const QString newPt = QStringLiteral("%1/%2").arg(pwr).arg(tgh);
-                        if (card->getPT() != newPt) {
-                            card->setPT(newPt);
-                            result.tapStateChanged = true;
-                            Event_SetCardAttr ptEv;
-                            ptEv.set_zone_name(std::string(ZoneNames::TABLE));
-                            ptEv.set_card_id(card->getId());
-                            ptEv.set_attribute(AttrPT);
-                            ptEv.set_attr_value(newPt.toStdString());
-                            tapGes->enqueueGameEvent(ptEv, playerId);
-                        }
+                    // Earthbend and other type-changing effects must also remove a former
+                    // creature's badge. Printed Oracle P/T is not authoritative in ruled mode.
+                    const QString newPt = isCreature ? QStringLiteral("%1/%2").arg(pwr).arg(tgh) : QString();
+                    if (card->getPT() != newPt) {
+                        card->setPT(newPt);
+                        result.tapStateChanged = true;
+                        Event_SetCardAttr ptEv;
+                        ptEv.set_zone_name(std::string(ZoneNames::TABLE));
+                        ptEv.set_card_id(card->getId());
+                        ptEv.set_attribute(AttrPT);
+                        ptEv.set_attr_value(newPt.toStdString());
+                        tapGes->enqueueGameEvent(ptEv, playerId);
                     }
 
                     const QString counterAnn = QString::fromStdString(battlefieldObject.counters_annotation());
@@ -727,40 +727,59 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         }
     }
 
-    // Graveyard OIDs: build a position-based map from the graveyard_object_id parallel array.
-    // The two sides run in *opposite* directions and must be walked as such: the engine's
-    // graveyard vector is oldest-first (each card is pushed on entry), while the physical
-    // Cockatrice pile is newest-first (each arrival is inserted at position 0 so the pile renders
-    // the most recent card — see PileZone::paint, which draws index 0). Pairing them by equal
-    // index silently mismaps every card, which makes graveyard cards resolve to the wrong target
-    // when clicked. Sizes still have to agree for positions to mean anything.
-    Server_CardZone *graveZone = zones.value(ZoneNames::GRAVE);
-    if (graveZone && v.graveyard_object_ids_size() == graveZone->getCards().size()) {
-        graveyardEngineOidToServerCardId.clear();
+    // Move passes can reach a public pile in a different order from engine resolution
+    // (Lightning Bolt and its victim, or simultaneous mill/discard). Preserve recorded
+    // identities, then arrange the physical pile newest-first from the engine's order.
+    auto reconcilePublicZone = [&](Server_CardZone *zone, const auto &oids, QHash<quint32, int> &bindings) {
+        if (!zone || oids.size() != zone->getCards().size()) {
+            return false;
+        }
+        QList<Server_Card *> pool = zone->getCards();
+        QList<Server_Card *> oldestFirst(oids.size(), nullptr);
+        for (int i = 0; i < oids.size(); ++i) {
+            const auto bound = bindings.constFind(static_cast<quint32>(oids.Get(i)));
+            if (bound == bindings.constEnd()) {
+                continue;
+            }
+            for (int j = 0; j < pool.size(); ++j) {
+                if (pool[j]->getId() == *bound) {
+                    oldestFirst[i] = pool.takeAt(j);
+                    break;
+                }
+            }
+        }
+        // A first snapshot may seed previously unbound cards by pile position. Reserve
+        // every known identity first so an unbound slot cannot steal a moved card.
+        for (Server_Card *&card : oldestFirst) {
+            if (!card) {
+                card = pool.takeLast();
+            }
+        }
+        const QList<Server_Card *> newestFirst(oldestFirst.crbegin(), oldestFirst.crend());
+        if (newestFirst != zone->getCards()) {
+            const auto previous = zone->getCards();
+            for (Server_Card *card : previous) {
+                zone->removeCard(card);
+            }
+            for (Server_Card *card : newestFirst) {
+                zone->insertCard(card, -1, 0);
+            }
+            result.publicZoneOrderChanged = true;
+        }
+        bindings.clear();
+        for (int i = 0; i < oids.size(); ++i) {
+            bindings.insert(static_cast<quint32>(oids.Get(i)), oldestFirst[i]->getId());
+        }
+        return true;
+    };
+    if (reconcilePublicZone(zones.value(ZoneNames::GRAVE), v.graveyard_object_ids(),
+                            graveyardEngineOidToServerCardId)) {
         graveyardEngineOidsOldestFirst.clear();
-        const int graveyardSize = v.graveyard_object_ids_size();
-        for (int i = 0; i < graveyardSize; ++i) {
-            const quint32 oid = static_cast<quint32>(v.graveyard_object_ids(i));
-            Server_Card *card = graveZone->getCards().at(graveyardSize - 1 - i);
-            graveyardEngineOidToServerCardId.insert(oid, card->getId());
-            graveyardEngineOidsOldestFirst.append(oid);
+        for (const auto oid : v.graveyard_object_ids()) {
+            graveyardEngineOidsOldestFirst.append(static_cast<quint32>(oid));
         }
     }
-
-    // Exile is a public pile with the same newest-first physical ordering as the graveyard, while
-    // the engine vector is oldest-first. Bind by reversed position so an Adventure cast selects
-    // the exact card even when several copies share a name.
-    Server_CardZone *exileZone = zones.value(ZoneNames::EXILE);
-    if (exileZone && v.exile_object_ids_size() == exileZone->getCards().size()) {
-        exileEngineOidToServerCardId.clear();
-        const int exileSize = v.exile_object_ids_size();
-        for (int i = 0; i < exileSize; ++i) {
-            const quint32 oid = static_cast<quint32>(v.exile_object_ids(i));
-            Server_Card *card = exileZone->getCards().at(exileSize - 1 - i);
-            exileEngineOidToServerCardId.insert(oid, card->getId());
-        }
-    }
-
+    reconcilePublicZone(zones.value(ZoneNames::EXILE), v.exile_object_ids(), exileEngineOidToServerCardId);
     result.engineOidToServerCardId = engineOidToServerCardId;
     return result;
 }

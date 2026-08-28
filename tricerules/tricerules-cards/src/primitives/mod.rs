@@ -18,6 +18,29 @@ pub use targeting::*;
 #[cfg(test)]
 mod tests {
     #[test]
+    fn earthbend_nonland_permanent_discard_filter_is_shared() {
+        let filter: super::CardTypeFilter = ron::from_str("NonlandPermanent")
+            .expect("Dai Li Indoctrination and Auntie's Sentence need this filter");
+        let registry = crate::CardRegistry::global();
+        for (card, expected) in [
+            ("grizzly_bears", true),
+            ("liquimetal_coating", true),
+            ("unholy_indenture", true),
+            ("forest", false),
+            ("lightning_bolt", false),
+            ("divination", false),
+        ] {
+            assert_eq!(
+                registry
+                    .get(card)
+                    .unwrap()
+                    .matches_card_type_outside_stack(filter),
+                expected,
+                "{card}"
+            );
+        }
+    }
+    #[test]
     fn issue_176_graveyard_cost_reduction_is_a_typed_target_filter() {
         let card = r#"(id: "test", name: "Test", mana_cost: "{4}{B}", types: ["Sorcery"], cost_modifiers: [TargetMatchGenericReduction(amount: 3, filter: Graveyard((card_type: Some(Creature), max_mana_value: Some(3))))], spell_effect: [MoveGraveyardCards(filter: (card_type: Some(Creature)), destination: Battlefield())])"#;
         assert!(crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_ok());

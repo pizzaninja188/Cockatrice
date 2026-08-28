@@ -1,0 +1,22 @@
+(
+  id: "badgermole",
+  name: "Badgermole",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Badger", "Mole"],
+  power: 4,
+  toughness: 4,
+  // Scryfall Oracle/rulings checked 2026-08-28; CR 701.66.
+  triggered_abilities: [
+    (
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Earthbend(count: 2)],
+      text: "When this creature enters, earthbend 2.",
+    ),
+  ],
+  static_abilities: [
+    AnthemKeyword(
+      filter: (controller: YouControl, required_counter: PlusOnePlusOne),
+      keyword: Trample,
+    ),
+  ],
+)

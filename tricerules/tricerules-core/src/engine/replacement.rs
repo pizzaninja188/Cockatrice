@@ -982,6 +982,14 @@ impl GameEngine {
                     matcher,
                     payload: EventObserverPayload::StageDelayedTrigger(Box::new(
                         DelayedTriggerPayload {
+                            source: TriggerObjectRef {
+                                object_id: item.source_permanent_id.unwrap_or(item.id),
+                                zone_change_generation: item
+                                    .cast_occurrence
+                                    .and_then(|cast| cast.zone_change_generation)
+                                    .unwrap_or(item.source_zone_change),
+                                controller_at_event: item.controller,
+                            },
                             controller: item.controller,
                             card_id: item.card_id.clone(),
                             card_name,

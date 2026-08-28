@@ -379,6 +379,9 @@ pub(super) fn create_delayed_trigger(
         TriggerCondition::WhenWatchedObjectDiesThisTurn => {
             EventObserverMatcher::WhenWatchedObjectDiesThisTurn
         }
+        TriggerCondition::WhenWatchedObjectDiesOrIsExiled => {
+            EventObserverMatcher::WhenWatchedObjectDiesOrIsExiled
+        }
         _ => {
             return Err(EngineError::Illegal(
                 "delayed trigger has a non-delayed condition",
@@ -392,6 +395,15 @@ pub(super) fn create_delayed_trigger(
             watched,
             matcher,
             payload: EventObserverPayload::StageDelayedTrigger(Box::new(DelayedTriggerPayload {
+                source: TriggerObjectRef {
+                    object_id: cx.top.source_permanent_id.unwrap_or(cx.top.id),
+                    zone_change_generation: cx
+                        .top
+                        .cast_occurrence
+                        .and_then(|cast| cast.zone_change_generation)
+                        .unwrap_or(cx.top.source_zone_change),
+                    controller_at_event: cx.controller,
+                },
                 controller: cx.controller,
                 card_id: cx.top.card_id.clone(),
                 card_name,

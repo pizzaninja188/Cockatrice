@@ -149,6 +149,13 @@ engine. `CardDatabaseQuerier` answers "what does it look like", nothing more.
 | `GraveyardObjectMap` | **Servatrice**, every batch | `(player_id, oid)` → `Server_Card.id` | Graveyard targeting (`ReturnFromGraveyard`). Fills `graveyardEngineOidToServerCardId`. |
 | `RuledPlayerBinding` | **Servatrice**, per player, from each `ZoneViewSync` | `oid` ↔ `Server_Card.id` (battlefield + hand + stack), separately for the graveyard | The server-side source the three maps above are generated from. |
 
+Public graveyard and exile moves record their post-move physical IDs immediately. A zone view
+preserves those bindings and reorders the physical pile to the reverse of the engine's
+oldest-first vector; it must not reassign known IDs by position. For example, a resolving
+Lightning Bolt and its dying target can reach the relay's graveyard in a different order from
+the engine because physical moves and stack resolution run in separate passes. A changed
+public-pile order requires a full recipient-filtered game-state refresh.
+
 **One trap worth naming.** For the concealed-zone resolution choices (`LIBRARY_SEARCH`,
 `REVEALED`, `OPPONENT_HAND`) there is no real `Server_Card.id` to hand out, so the relay emits
 **sequential indices 0, 1, 2 …** in `candidate_server_card_ids`. Those collide head-on with the

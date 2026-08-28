@@ -67,6 +67,7 @@
 #include <libcockatrice/protocol/pb/command_ready_start.pb.h>
 #include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/commands.pb.h>
+#include <libcockatrice/protocol/pb/event_create_token.pb.h>
 #include <libcockatrice/protocol/pb/event_flip_card.pb.h>
 #include <libcockatrice/protocol/pb/event_game_joined.pb.h>
 #include <libcockatrice/protocol/pb/event_game_state_changed.pb.h>
@@ -238,6 +239,8 @@ public:
     quint32 tappedOrdinaryTokenOid = 0;
     std::set<int> physicallyTappedCardIds;
     std::set<int> physicallyAttackingCardIds;
+    // Actual legacy card presentation delivered to Qt, keyed by seat and physical id.
+    std::map<std::pair<int, int>, std::pair<int, QString>> physicalRowAndPt;
     struct Pool
     {
         int w = 0, u = 0, b = 0, r = 0, g = 0, c = 0;
@@ -742,6 +745,31 @@ public:
                 if (gsc.has_game_started()) {
                     gameStarted = gsc.game_started();
                 }
+                for (const auto &player : gsc.player_list()) {
+                    for (const auto &zone : player.zone_list()) {
+                        if (zone.name() != ZoneNames::TABLE) {
+                            continue;
+                        }
+                        const int playerId = player.properties().player_id();
+                        for (auto it = physicalRowAndPt.begin(); it != physicalRowAndPt.end();) {
+                            if (it->first.first == playerId) {
+                                it = physicalRowAndPt.erase(it);
+                            } else {
+                                ++it;
+                            }
+                        }
+                        for (const auto &card : zone.card_list()) {
+                            physicalRowAndPt[{playerId, card.id()}] = {card.y(), QString::fromStdString(card.pt())};
+                        }
+                    }
+                }
+            }
+            if (ev.HasExtension(Event_CreateToken::ext)) {
+                const auto &created = ev.GetExtension(Event_CreateToken::ext);
+                if (created.zone_name() == ZoneNames::TABLE) {
+                    physicalRowAndPt[{ev.player_id(), created.card_id()}] = {created.y(),
+                                                                             QString::fromStdString(created.pt())};
+                }
             }
             if (ev.HasExtension(Event_MoveCard::ext)) {
                 const auto &mc = ev.GetExtension(Event_MoveCard::ext);
@@ -755,6 +783,14 @@ public:
                 const QLatin1String exile(ZoneNames::EXILE);
                 const QLatin1String table(ZoneNames::TABLE);
                 const QLatin1String deck(ZoneNames::DECK);
+                const auto oldKey = std::make_pair(mc.start_player_id(), mc.card_id());
+                const QString oldPt = physicalRowAndPt.count(oldKey) ? physicalRowAndPt.at(oldKey).second : QString();
+                if (from == table) {
+                    physicalRowAndPt.erase(oldKey);
+                }
+                if (to == table) {
+                    physicalRowAndPt[{mc.target_player_id(), mc.new_card_id()}] = {mc.y(), oldPt};
+                }
                 const int omenOwnerId = role == Role::Aggressor ? myId : oppId;
                 if (wardDiscardFlowActive && from == hand && to == grave) {
                     wardDiscardMovedServerCardId = mc.card_id();
@@ -944,6 +980,10 @@ public:
             }
             if (ev.HasExtension(Event_SetCardAttr::ext)) {
                 const auto &attr = ev.GetExtension(Event_SetCardAttr::ext);
+                if (attr.attribute() == AttrPT) {
+                    physicalRowAndPt[{ev.player_id(), attr.card_id()}].second =
+                        QString::fromStdString(attr.attr_value());
+                }
                 if (attr.attribute() == AttrTapped) {
                     sawPhysicalTap = sawPhysicalTap || attr.attr_value() == "1";
                     sawPhysicalUntap = sawPhysicalUntap || attr.attr_value() == "0";
@@ -5850,6 +5890,171 @@ TEST_F(RuledE2ESmokeTest, TokenCopiesAndPopulatePreserveBothClientsPhysicalIdent
     }
 }
 
+TEST_F(RuledE2ESmokeTest, EarthbendBadgeRowsAndGenerationBoundReturnReachBothClients)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("earthbendp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("earthbendp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Mountain")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "issue 150 game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "issue 150 game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto pass = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(client, command, QStringLiteral("issue 150 pass"));
+    };
+    auto put = [&](const char *name, ruled::v1::DevZone zone = ruled::v1::DEV_ZONE_BATTLEFIELD) {
+        ruled::v1::RuledCommand command;
+        command.mutable_dev_command()->set_target_player_id(p1.myId);
+        auto *placement = command.mutable_dev_command()->mutable_put_card_in_zone();
+        placement->set_card_name(name);
+        placement->set_zone(zone);
+        placement->set_ready(true);
+        return send(p1, command, QStringLiteral("earthbend put %1").arg(name));
+    };
+    auto find = [&](const SmokeClient &client, const char *cardId) -> std::optional<SmokeClient::Permanent> {
+        const auto &objects = client.battlefieldByPlayer.at(p1.myId);
+        const auto found = std::find_if(objects.begin(), objects.end(), [cardId](const auto &object) {
+            return object.cardId == QLatin1String(cardId);
+        });
+        return found == objects.end() ? std::nullopt : std::optional(*found);
+    };
+    ASSERT_TRUE(put("Forest"));
+    const auto forest = find(p1, "forest");
+    ASSERT_TRUE(forest.has_value());
+    const quint32 oid = forest->oid;
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(oid));
+    const int physicalId = p1.serverCardByEngineOid.at(oid);
+    const auto key = std::make_pair(p1.myId, physicalId);
+    for (SmokeClient *client : {&p1, &p2}) {
+        ASSERT_TRUE(client->physicalRowAndPt.count(key));
+        EXPECT_EQ(client->physicalRowAndPt.at(key).first, 2);
+        EXPECT_TRUE(client->physicalRowAndPt.at(key).second.isEmpty());
+    }
+    for (const auto destination : {ruled::v1::DEV_ZONE_GRAVEYARD, ruled::v1::DEV_ZONE_EXILE}) {
+        ASSERT_TRUE(put("Rebellious Captives"));
+        const auto captives = find(p1, "rebellious_captives");
+        ASSERT_TRUE(captives.has_value());
+        ruled::v1::RuledCommand mana;
+        mana.mutable_dev_command()->set_target_player_id(p1.myId);
+        mana.mutable_dev_command()->mutable_add_mana()->set_c(6);
+        ASSERT_TRUE(send(p1, mana, QStringLiteral("earthbend mana")));
+        ruled::v1::RuledCommand activate;
+        p1.setBattlefieldAbilitySource(activate.mutable_activate_ability(), captives->oid);
+        activate.mutable_activate_ability()->set_ability_index(0);
+        auto *target = activate.mutable_activate_ability()->add_targets();
+        target->set_object_id(oid);
+        target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        ASSERT_TRUE(send(p1, activate, QStringLiteral("earthbend exhaust")));
+        ASSERT_TRUE(pass(p1));
+        ASSERT_TRUE(pass(p2));
+        for (SmokeClient *client : {&p1, &p2}) {
+            const auto animated = find(*client, "forest");
+            ASSERT_TRUE(animated.has_value());
+            EXPECT_TRUE(animated->creature && animated->haste);
+            EXPECT_EQ(animated->power, 2);
+            EXPECT_EQ(animated->toughness, 2);
+            EXPECT_EQ(client->serverCardByEngineOid.at(oid), physicalId);
+            ASSERT_TRUE(client->physicalRowAndPt.count(key));
+            EXPECT_EQ(client->physicalRowAndPt.at(key).first, 0);
+            EXPECT_EQ(client->physicalRowAndPt.at(key).second, QStringLiteral("2/2"));
+        }
+        const quint64 beforeGeneration = find(p1, "forest")->generation;
+        auto move = [&](const char *name, ruled::v1::DevZone zone) {
+            ruled::v1::RuledCommand command;
+            command.mutable_dev_command()->set_target_player_id(p1.myId);
+            auto *movement = command.mutable_dev_command()->mutable_move_card();
+            movement->set_card_name(name);
+            movement->set_zone(zone);
+            return send(p1, command, QStringLiteral("earthbend move %1").arg(name));
+        };
+        ASSERT_TRUE(move("Rebellious Captives", ruled::v1::DEV_ZONE_GRAVEYARD));
+        // Use real spells: their own stack-to-graveyard move shares the batch with
+        // the land's departure and must not swap the two physical identities.
+        const char *removal = destination == ruled::v1::DEV_ZONE_GRAVEYARD ? "Lightning Bolt" : "Swords to Plowshares";
+        ASSERT_TRUE(put(removal, ruled::v1::DEV_ZONE_HAND));
+        ruled::v1::RuledCommand removalMana;
+        removalMana.mutable_dev_command()->set_target_player_id(p1.myId);
+        auto *gift = removalMana.mutable_dev_command()->mutable_add_mana();
+        gift->set_r(1);
+        gift->set_w(1);
+        ASSERT_TRUE(send(p1, removalMana, QStringLiteral("earthbend removal mana")));
+        const auto *action = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QString::fromLatin1(removal));
+        ASSERT_NE(action, nullptr);
+        ruled::v1::RuledCommand cast;
+        cast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        cast.mutable_cast_spell()->mutable_source()->set_hand_index(action->hand_index());
+        auto *removalTarget = cast.mutable_cast_spell()->add_targets();
+        removalTarget->set_object_id(oid);
+        removalTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        ASSERT_TRUE(send(p1, cast, QStringLiteral("earthbend cast removal")));
+        ASSERT_TRUE(pass(p1));
+        ASSERT_TRUE(pass(p2));
+        EXPECT_EQ(p1.stackDepth, 1);
+        EXPECT_EQ(p2.stackDepth, 1);
+        EXPECT_FALSE(find(p1, "forest").has_value());
+        EXPECT_FALSE(find(p2, "forest").has_value());
+        ASSERT_TRUE(pass(p1));
+        ASSERT_TRUE(pass(p2));
+        for (SmokeClient *client : {&p1, &p2}) {
+            const auto returned = find(*client, "forest");
+            ASSERT_TRUE(returned.has_value());
+            EXPECT_EQ(returned->generation, beforeGeneration + 2);
+            EXPECT_TRUE(returned->tapped);
+            EXPECT_FALSE(returned->creature || returned->haste);
+            EXPECT_EQ(client->serverCardByEngineOid.at(oid), physicalId);
+            ASSERT_TRUE(client->physicalRowAndPt.count(key));
+            EXPECT_EQ(client->physicalRowAndPt.at(key).first, 2);
+            EXPECT_TRUE(client->physicalRowAndPt.at(key).second.isEmpty());
+        }
+    }
+}
 TEST_F(RuledE2ESmokeTest, TappedOrdinaryTokenReachesBothClientsWithoutCombatState)
 {
     const auto started = startServers();

@@ -393,6 +393,11 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
         },
         matcher: EventObserverMatcher::AtBeginningOfNextEndStep,
         payload: EventObserverPayload::StageDelayedTrigger(Box::new(DelayedTriggerPayload {
+            source: TriggerObjectRef {
+                object_id: creature,
+                zone_change_generation: generation,
+                controller_at_event: 0,
+            },
             controller: 0,
             card_id: "grizzly_bears".into(),
             card_name: "Grizzly Bears".into(),

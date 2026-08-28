@@ -9,7 +9,8 @@
     (
       trigger: WheneverAttachedObjectDies,
       effect: [
-        ReturnTriggeredCardFromGraveyard(
+        ReturnTriggeredCard(
+          from: [Graveyard],
           reference: TriggerObject,
           controller: AbilityController,
           entry_counters: [(counter: PlusOnePlusOne, count: 1)],

@@ -497,6 +497,10 @@ void RuledBatchSynchronizer::applyStackResolvedEvent(const ruled::v1::StackResol
                 // before the ZoneView reconcile so duplicate-name library cards cannot swap OIDs.
                 card->setFaceDown(true);
                 playerBinding(destPlayer->getPlayerId()).registerLibraryEngineOid(resolvedOidLocal, card->getId());
+            } else if (goesToExile) {
+                playerBinding(destPlayer->getPlayerId()).exileEngineOidToServerCardId.insert(resolvedOidLocal, card->getId());
+            } else if (!goesToBattlefield) {
+                playerBinding(destPlayer->getPlayerId()).graveyardEngineOidToServerCardId.insert(resolvedOidLocal, card->getId());
             }
             moveGes.sendToGame(game);
             return true;
@@ -957,6 +961,16 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
         if (ruledApplyMove(mover, permanentMoveGes, startZone, targetZone, cardToMove, destX, destY,
                            "permanentMoved")) {
             permanentMoveGesHasEvents = true;
+            // Capture the post-move physical identity before any positional reconciliation.
+            // Tokens destroyed on departure are no longer in the destination zone.
+            if (targetZone->getCards().contains(card)) {
+                auto &binding = playerBinding(destPlayer->getPlayerId());
+                if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD) {
+                    binding.graveyardEngineOidToServerCardId.insert(oid, card->getId());
+                } else if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_EXILE) {
+                    binding.exileEngineOidToServerCardId.insert(oid, card->getId());
+                }
+            }
             // A cross-player move reissues Server_Card::id from the destination player's space
             // (server_abstract_player.cpp), and the engine oid is absent from the destination
             // seat's binding until the next zone-view sync. Register it now: otherwise
@@ -1217,6 +1231,7 @@ void RuledBatchSynchronizer::applyPhaseStackAndZoneViews(const ruled::v1::RuledE
                                                   &engineUntappedOids, e.zone_view().battlefields_unchanged());
                 result.handOrLibraryChanged = result.handOrLibraryChanged || sync.handOrLibraryChanged;
                 result.battlefieldOrderChanged = result.battlefieldOrderChanged || sync.battlefieldOrderChanged;
+                result.publicZoneOrderChanged = result.publicZoneOrderChanged || sync.publicZoneOrderChanged;
                 result.tapStateEventsQueued = result.tapStateEventsQueued || sync.tapStateChanged;
                 result.zoneViewApplied = true;
             }

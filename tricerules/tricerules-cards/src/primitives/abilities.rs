@@ -353,6 +353,8 @@ pub enum TriggerCondition {
     /// current turn. The stored zone-change generation prevents a leave-and-return object from
     /// satisfying the old watch (Turn Inside Out).
     WhenWatchedObjectDiesThisTurn,
+    /// Earthbend's one-shot observer (Badgermole, Rebellious Captives), without a turn expiry.
+    WhenWatchedObjectDiesOrIsExiled,
     /// CR 508.1m / 508.3a: whenever this creature attacks, optionally requiring a minimum number
     /// of *other* creatures in the same declaration group. Zero is an ordinary self-attack
     /// trigger; two is Battalion (Makeshift Battalion, Firefist Striker, Haazda Marshal).
@@ -619,6 +621,7 @@ impl TriggerCondition {
                 | Self::AtBeginningOfControllerNextTurnEndStep
                 | Self::WhenControllerLosesControlOf
                 | Self::WhenWatchedObjectDiesThisTurn
+                | Self::WhenWatchedObjectDiesOrIsExiled
         )
     }
 
@@ -714,6 +717,7 @@ impl TriggerCondition {
                 | Self::AtBeginningOfControllerNextTurnEndStep
                 | Self::WhenControllerLosesControlOf
                 | Self::WhenWatchedObjectDiesThisTurn
+                | Self::WhenWatchedObjectDiesOrIsExiled
         )
     }
 
