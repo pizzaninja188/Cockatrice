@@ -99,16 +99,29 @@ pub(super) fn sacrifice(
                 .collect()
         }
     };
-    for oid in subjects {
-        let Some(owner) = cx.engine.state.objects.get(&oid).map(|object| object.owner) else {
-            continue;
-        };
-        let name = object_display_name(&cx.engine.state, cx.engine.registry, oid);
-        let source = cx.engine.trigger_source_snapshot(oid);
-        let was_creature = cx
-            .engine
-            .characteristics(oid)
-            .is_some_and(|value| value.is_creature());
+    // CR 701.21a: the instructed player cannot sacrifice a permanent they no longer control.
+    // Capture every event's types before any member of this instruction moves.
+    let sacrifices: Vec<_> = subjects
+        .into_iter()
+        .filter_map(|oid| {
+            let object = cx.engine.state.objects.get(&oid)?;
+            if object.zone != Zone::Battlefield {
+                return None;
+            }
+            let source = cx.engine.trigger_source_snapshot(oid)?;
+            (source.controller == cx.controller).then(|| {
+                (
+                    oid,
+                    object.owner,
+                    object_display_name(&cx.engine.state, cx.engine.registry, oid),
+                    source,
+                )
+            })
+        })
+        .collect();
+    let mut committed = Vec::new();
+    for (oid, owner, name, source) in sacrifices {
+        let was_creature = source.types.iter().any(|kind| kind == "Creature");
         let died = sacrifice_permanent(&mut cx.engine.state, cx.engine.registry, oid)?;
         cx.events.push(permanent_moved_event(
             &cx.engine.state,
@@ -118,15 +131,9 @@ pub(super) fn sacrifice(
         ));
         cx.events
             .push(ev_log(format!("{} sacrifices {name}", cx.spell_label)));
-        if let Some(source) = source {
-            cx.engine.fire_triggers(&sacrifice_events(
-                source,
-                was_creature,
-                cx.top.controller,
-                died,
-            ));
-        }
+        committed.extend(sacrifice_events(source, was_creature, cx.controller, died));
     }
+    cx.engine.fire_triggers(&committed);
     Ok(EffectOutcome::Continue)
 }
 

@@ -1417,6 +1417,36 @@ mod tests {
     }
 
     #[test]
+    fn issue_167_history_bounds_and_permanent_types_are_validated() {
+        for kind in [
+            "PermanentCardsEnteredGraveyardThisTurn",
+            "PermanentsSacrificedThisTurn",
+        ] {
+            for (fields, valid) in [
+                ("min: Some(1)", true),
+                ("max: Some(0), permanent_type: Some(Creature)", true),
+                (
+                    "min: Some(1), max: Some(1), permanent_type: Some(Artifact)",
+                    true,
+                ),
+                ("min: Some(2), max: Some(1)", false),
+                ("min: Some(1), permanent_type: Some(Instant)", false),
+                ("", false),
+            ] {
+                let data = format!(
+                    r#"(id: "history_probe", name: "History Probe", types: ["Instant"],
+                    cast_conditions: [{kind}(players: Controller, {fields})], spell_effect: [GainLife(amount: 1)])"#
+                );
+                assert_eq!(
+                    CardRegistry::from_chunks(&[&data]).is_ok(),
+                    valid,
+                    "{kind}: {fields}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn issue_164_rejects_zero_trigger_caps_in_printed_and_granted_abilities() {
         let ability = r#"(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "Gain life.", max_triggers_per_turn: Some(0))"#;
         for fields in [

@@ -752,17 +752,34 @@ impl GameEngine {
                         owner_player_id: self.state.objects.get(&top.id).map(|object| object.owner),
                     })),
                 });
-                move_object_to_zone(
-                    &mut self.state,
-                    self.registry,
-                    top.id,
-                    if top.cast_method.exiles_on_leave_stack() || adventure_resolves_to_exile {
-                        Zone::Exile
-                    } else {
-                        Zone::Graveyard
-                    },
-                    None,
-                )?;
+                let zone = if top.cast_method.exiles_on_leave_stack() || adventure_resolves_to_exile
+                {
+                    Zone::Exile
+                } else {
+                    Zone::Graveyard
+                };
+                if custom_key.is_some() {
+                    let occurrence = crate::state::StackObjectRef {
+                        object_id: top.id,
+                        zone_change_generation: Some(
+                            self.state
+                                .zone_change_generation
+                                .get(&top.id)
+                                .copied()
+                                .unwrap_or(0),
+                        ),
+                    };
+                    let fact = move_object_to_zone_with_entry_receipt(
+                        &mut self.state,
+                        self.registry,
+                        top.id,
+                        zone,
+                        None,
+                    )?;
+                    self.state.deferred_graveyard_entry = fact.map(|entry| (occurrence, entry));
+                } else {
+                    move_object_to_zone(&mut self.state, self.registry, top.id, zone, None)?;
+                }
             }
             if adventure_resolves_to_exile {
                 let source_label = self
@@ -2025,9 +2042,29 @@ pub(crate) fn move_object_to_zone(
     state: &mut GameState,
     registry: &'static CardRegistry,
     oid: ObjectId,
-    mut z: Zone,
+    z: Zone,
     controller: Option<PlayerId>,
 ) -> Result<(), EngineError> {
+    if let Some(fact) = move_object_to_zone_with_entry_receipt(state, registry, oid, z, controller)?
+    {
+        state
+            .turn_history
+            .current
+            .permanent_cards_entered_graveyard
+            .push(fact);
+    }
+    Ok(())
+}
+
+/// Ordinary moves commit the returned history receipt immediately. The sole exception is
+/// early custom-resolution bookkeeping, whose receipt belongs to the resolution completion.
+fn move_object_to_zone_with_entry_receipt(
+    state: &mut GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+    mut z: Zone,
+    controller: Option<PlayerId>,
+) -> Result<Option<crate::state::PermanentHistoryFact>, EngineError> {
     let owner = state
         .objects
         .get(&oid)
@@ -2045,7 +2082,7 @@ pub(crate) fn move_object_to_zone(
             .get(&oid)
             .is_some_and(|object| object.token_origin.is_some())
     {
-        return Ok(());
+        return Ok(None);
     }
     if old_zone == Some(Zone::Battlefield)
         && z == Zone::Graveyard
@@ -2277,7 +2314,44 @@ pub(crate) fn move_object_to_zone(
             o.summoning_sick = true;
         }
     }
-    Ok(())
+    Ok((old_zone != Some(Zone::Graveyard))
+        .then(|| super::history::graveyard_entry_fact(state, registry, oid))
+        .flatten())
+}
+
+/// CR 608.2n: finish a custom spell's history without changing its physical projection.
+pub(super) fn finish_deferred_graveyard_entry(state: &mut GameState, item: &StackItem) {
+    if !state
+        .deferred_graveyard_entry
+        .as_ref()
+        .is_some_and(|(occurrence, _)| {
+            occurrence.object_id == item.id
+                && item.cast_occurrence.is_none_or(|cast| cast == *occurrence)
+        })
+    {
+        return;
+    }
+    let (_, fact) = state
+        .deferred_graveyard_entry
+        .take()
+        .expect("matched receipt");
+    if state
+        .objects
+        .get(&fact.object_id)
+        .is_some_and(|object| object.zone == Zone::Graveyard)
+        && state
+            .zone_change_generation
+            .get(&fact.object_id)
+            .copied()
+            .unwrap_or(0)
+            == fact.zone_change_generation
+    {
+        state
+            .turn_history
+            .current
+            .permanent_cards_entered_graveyard
+            .push(fact);
+    }
 }
 
 pub(super) fn destroy_permanent(
@@ -2307,32 +2381,34 @@ pub(super) fn put_permanent_in_graveyard(
         .is_some_and(|object| object.zone == Zone::Graveyard))
 }
 
-/// Sacrifice a permanent (CR 701.17). Unlike destroy, sacrifice bypasses indestructible and
-/// regeneration — it is always a cost, never a triggered or replacement effect that can be
-/// redirected.
+/// Sacrifice a permanent (CR 701.21). Both costs and effects use this seam. Sacrifice bypasses
+/// indestructible and regeneration, but a zone-change replacement can change its destination.
 pub(super) fn sacrifice_permanent(
     state: &mut GameState,
     registry: &'static CardRegistry,
     oid: ObjectId,
 ) -> Result<bool, EngineError> {
+    if !state
+        .objects
+        .get(&oid)
+        .is_some_and(|object| object.zone == Zone::Battlefield)
+    {
+        return Err(EngineError::Illegal(
+            "only a battlefield permanent can be sacrificed",
+        ));
+    }
     put_permanent_in_graveyard(state, registry, oid)
 }
 
-/// CR 608.2m: "As the final part of an instant or sorcery spell's resolution, the spell is put
-/// into its owner's graveyard" — that is, *after* its own effects have been applied. A
+/// CR 608.2n: the spell enters its owner's graveyard after its effects have been applied. A
 /// self-targeted Tome Scour must therefore end up beneath the five cards it milled, not on top
 /// of them.
 ///
-/// The spell object is moved out of the stack up front, before its effects run, and that is
-/// deliberately left alone: resolution can suspend on a player choice at several points (tier-3
-/// custom effects, copy-target, legend-keep, library search), and deferring the move would strand
-/// an already-popped stack item in a zone-less limbo on every one of those paths. Instead this
-/// re-seats the already-moved card at the back of its owner's graveyard once resolution finishes,
-/// which is what graveyard-order-sensitive cards actually read.
+/// Authored spells defer their actual stack exit. Custom spells retain early physical movement;
+/// this re-seats their already-moved card at the back of its owner's graveyard at completion.
 ///
-/// Intentional simplification: the placement *timing* is still early, so an effect that scans its
-/// own controller's graveyard mid-resolution can see the resolving spell. No card in the registry
-/// does that today; revisit if one lands.
+/// Custom physical placement timing remains a simplification. History accounting is separately
+/// deferred by `finish_deferred_graveyard_entry`; reseating must never manufacture another entry.
 ///
 /// A no-op unless `oid` is currently in a graveyard and not already last, so it is safe to call
 /// on any resolution path, including ones that end with the spell on the battlefield.
@@ -2737,6 +2813,288 @@ mod attached_subject_tests {
         ability.effect = effects;
         item.triggered_ability = Some(ability);
         item
+    }
+
+    #[test]
+    fn issue_167_custom_resolution_commits_graveyard_history_only_when_complete() {
+        for (moved_again, initialized_generation) in
+            [(false, false), (false, true), (true, false), (true, true)]
+        {
+            let mut engine = GameEngine::new_with_default_decks(167201, &[0, 1], 20).unwrap();
+            // A permanent-front MDFC using the existing Brainstorm algorithm on its instant face
+            // exercises destination card types and the custom park/resume boundary together.
+            engine.registry = Box::leak(Box::new(
+                CardRegistry::from_chunks_and_tokens(
+                    &[
+                        r#"(id: "brainstorm", name: "Brainstorm", layout: ModalDfc, faces: [
+                (name: "Body", types: ["Creature"], power: 2, toughness: 2),
+                (name: "Thought", types: ["Instant"], custom_effect: "brainstorm")])"#,
+                        include_str!("../../../../tricerules-cards/data/island.ron"),
+                        include_str!("../../../../tricerules-cards/data/forest.ron"),
+                    ],
+                    &[],
+                )
+                .unwrap(),
+            ));
+            let oid = add_battlefield_object(&mut engine, 0, "brainstorm");
+            move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Stack, None)
+                .unwrap();
+            if !initialized_generation {
+                engine.state.zone_change_generation.remove(&oid);
+            }
+            let mut item = triggered_item(oid, 0);
+            item.id = oid;
+            item.card_id = "brainstorm".into();
+            item.ability_text = None;
+            item.is_triggered = false;
+            item.source_permanent_id = None;
+            item.face_index = 1;
+            item.cast_occurrence = Some(crate::state::StackObjectRef {
+                object_id: oid,
+                zone_change_generation: Some(
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&oid)
+                        .copied()
+                        .unwrap_or(0),
+                ),
+            });
+            engine.state.stack.push(item);
+            let mut events = Vec::new();
+            engine.resolve_top_of_stack(&mut events).unwrap();
+            assert!(engine.state.pending_resolution.is_some());
+            assert_eq!(
+                engine.state.objects[&oid].zone,
+                Zone::Graveyard,
+                "physical bookkeeping is unchanged"
+            );
+            assert!(
+                engine
+                    .state
+                    .turn_history
+                    .current
+                    .permanent_cards_entered_graveyard
+                    .is_empty(),
+                "bookkeeping is not a committed rules event"
+            );
+            if moved_again {
+                // The pending receipt must not attach to a new incarnation of the physical card.
+                move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Hand, None)
+                    .unwrap();
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    oid,
+                    Zone::Graveyard,
+                    None,
+                )
+                .unwrap();
+            }
+            let chosen: Vec<_> = engine.state.players[0]
+                .hand
+                .iter()
+                .take(2)
+                .copied()
+                .collect();
+            let command = rv1::RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        chosen_object_ids: chosen,
+                        ..Default::default()
+                    },
+                )),
+            };
+            let history = engine.state.turn_history.clone();
+            let command_index = engine.state.command_index;
+            assert!(engine.apply_command(1, &command).is_err());
+            assert_eq!(engine.state.turn_history, history);
+            assert_eq!(engine.state.command_index, command_index);
+            engine.apply_command(0, &command).unwrap();
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.state.deferred_graveyard_entry.is_none());
+            assert_eq!(
+                engine
+                    .state
+                    .turn_history
+                    .current
+                    .permanent_cards_entered_graveyard
+                    .len(),
+                1
+            );
+            assert!(engine.apply_command(0, &command).is_err());
+            assert_eq!(
+                engine
+                    .state
+                    .turn_history
+                    .current
+                    .permanent_cards_entered_graveyard
+                    .len(),
+                1
+            );
+        }
+    }
+
+    #[test]
+    fn issue_167_source_sacrifice_cannot_sacrifice_a_stolen_permanent() {
+        let mut engine = GameEngine::new_with_default_decks(167202, &[0, 1], 20).unwrap();
+        let oid = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        let item = quantity_item(
+            oid,
+            vec![SpellEffectKind::Sacrifice {
+                subject: EffectSubject::Source,
+            }],
+        );
+        assert_eq!(item.controller, 0);
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        assert_eq!(
+            engine.state.objects[&oid].zone,
+            Zone::Battlefield,
+            "an old ability's controller cannot sacrifice the stolen source"
+        );
+        assert!(engine
+            .state
+            .turn_history
+            .current
+            .permanents_sacrificed
+            .is_empty());
+    }
+
+    #[test]
+    fn issue_167_mill_discard_and_countered_spell_routes_record_destination_cards() {
+        let mut engine = GameEngine::new(
+            167203,
+            &[0, 1],
+            20,
+            Some(vec![vec!["island".into(); 30], vec!["forest".into(); 30]]),
+            true,
+        )
+        .unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let item = quantity_item(
+            source,
+            vec![SpellEffectKind::Mill {
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+            }],
+        );
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .current
+                .permanent_cards_entered_graveyard
+                .len(),
+            2
+        );
+        let discard = engine.state.players[0].hand[0];
+        perform_discard(&mut engine.state, engine.registry, 0, discard).unwrap();
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .current
+                .permanent_cards_entered_graveyard
+                .len(),
+            3
+        );
+        let history = engine.state.turn_history.clone();
+        assert!(perform_discard(&mut engine.state, engine.registry, 0, discard).is_err());
+        assert_eq!(engine.state.turn_history, history);
+        for (card, face, method, count) in [
+            ("grizzly_bears", 0, SpellCastMethod::Normal, 4),
+            ("bonecrusher_giant_stomp", 1, SpellCastMethod::Normal, 5),
+            ("bonecrusher_giant_stomp", 1, SpellCastMethod::Flashback, 5),
+            ("shock", 0, SpellCastMethod::Normal, 5),
+        ] {
+            let oid = add_battlefield_object(&mut engine, 0, card);
+            move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Stack, None)
+                .unwrap();
+            let mut spell = triggered_item(oid, 0);
+            spell.id = oid;
+            spell.card_id = card.into();
+            spell.ability_text = None;
+            spell.is_triggered = false;
+            spell.face_index = face;
+            spell.cast_method = method;
+            engine.state.stack.push(spell);
+            counter_stack_spell(&mut engine, oid, "test counter", &mut Vec::new()).unwrap();
+            assert_eq!(
+                engine
+                    .state
+                    .turn_history
+                    .current
+                    .permanent_cards_entered_graveyard
+                    .len(),
+                count,
+                "{card}: {method:?}"
+            );
+        }
+        assert!(engine
+            .state
+            .turn_history
+            .current
+            .permanents_sacrificed
+            .is_empty());
+        assert_eq!(engine.state.turn_history.current.creatures_died, 0);
+    }
+
+    #[test]
+    fn issue_167_simultaneous_sacrifices_keep_predeparture_types() {
+        let mut engine = GameEngine::new_with_default_decks(167204, &[0, 1], 20).unwrap();
+        let first = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let second = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: Some(first),
+            affected: AffectedScope::Single(second),
+            kind: ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+                card_types: vec![PermanentTypeFilter::Artifact],
+                creature_types: vec![],
+            }),
+            condition: None,
+            duration: EffectDuration::WhileSourceOnBattlefield,
+            timestamp: 1,
+            trigger_grant_origin: None,
+        });
+        let refs: Vec<_> = [first, second]
+            .into_iter()
+            .map(|object_id| crate::state::TriggerObjectRef {
+                object_id,
+                zone_change_generation: 0,
+                controller_at_event: 0,
+            })
+            .collect();
+        let mut item = quantity_item(first, vec![SpellEffectKind::SacrificeObservedObjects]);
+        item.trigger_context.observed_object = Some(refs[0]);
+        engine
+            .state
+            .observed_object_cohorts
+            .insert((first, 0), refs);
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        let facts = &engine.state.turn_history.current.permanents_sacrificed;
+        assert_eq!(facts.len(), 2);
+        assert!(
+            facts[1].types.iter().any(|kind| kind == "Artifact"),
+            "the granting source left in the same instruction"
+        );
+        assert!(!engine
+            .state
+            .turn_history
+            .current
+            .permanent_cards_entered_graveyard[1]
+            .types
+            .iter()
+            .any(|kind| kind == "Artifact"));
     }
 
     #[test]

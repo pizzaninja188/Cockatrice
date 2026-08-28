@@ -4,6 +4,163 @@ use crate::helpers::*;
 use tricerules_cards::CounterKind;
 use tricerules_proto::ruled::v1::RuledEventBatch;
 
+#[test]
+fn issue_167_descend_cards_observe_earlier_card_entries_but_not_tokens() {
+    for card_entry in [false, true] {
+        let mut engine = end_step_engine(167301);
+        for card in ["deep_goblin_skulltaker", "enterprising_scallywag"] {
+            assert!(
+                tricerules_cards::CardRegistry::global().get(card).is_some(),
+                "missing {card}"
+            );
+        }
+        let sacrifice = inject_creature_on_battlefield(
+            &mut engine,
+            0,
+            if card_entry {
+                "bottle_gnomes"
+            } else {
+                "treasure"
+            },
+        );
+        apply_ability(&mut engine, 0, sacrifice, 0, vec![]).unwrap();
+        resolve_stack_collecting_batches(&mut engine);
+        // These observers arrived after the entry, so per-source booleans cannot implement this.
+        let skulltaker = inject_creature_on_battlefield(&mut engine, 0, "deep_goblin_skulltaker");
+        inject_creature_on_battlefield(&mut engine, 0, "enterprising_scallywag");
+        advance_to_end_step(&mut engine, 0);
+        answer_trigger_order_in_engine_order(&mut engine);
+        resolve_stack_collecting_batches(&mut engine);
+        assert_eq!(
+            engine.state.objects[&skulltaker].counter_count(CounterKind::PlusOnePlusOne),
+            u32::from(card_entry)
+        );
+        assert_eq!(
+            battlefield_token_oids(&engine, 0, "treasure").len(),
+            usize::from(card_entry)
+        );
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .current
+                .permanents_sacrificed
+                .len(),
+            1
+        );
+    }
+}
+
+#[test]
+fn issue_167_canonized_targeting_and_sacrifice_activation_are_authoritative() {
+    let mut engine = end_step_engine(167302);
+    assert!(tricerules_cards::CardRegistry::global()
+        .get("canonized_in_blood")
+        .is_some());
+    let enchantment = inject_permanent_on_battlefield(&mut engine, 0, "canonized_in_blood");
+    let ours = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let theirs = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let gnomes = inject_creature_on_battlefield(&mut engine, 0, "bottle_gnomes");
+    apply_ability(&mut engine, 0, gnomes, 0, vec![]).unwrap();
+    resolve_stack_collecting_batches(&mut engine);
+    advance_to_end_step(&mut engine, 0);
+    assert_eq!(engine.state.pending_triggers.len(), 1);
+    let choose = |oid| RuledCommand {
+        cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+            targets: target_object(oid),
+            ..Default::default()
+        })),
+    };
+    let history = engine.state.turn_history.clone();
+    let index = engine.state.command_index;
+    assert!(engine.apply_command(0, &choose(theirs)).is_err());
+    assert_eq!(engine.state.command_index, index);
+    assert_eq!(engine.state.turn_history, history);
+    engine.apply_command(0, &choose(ours)).unwrap();
+    resolve_stack_collecting_batches(&mut engine);
+    assert_eq!(
+        engine.state.objects[&ours].counter_count(CounterKind::PlusOnePlusOne),
+        1
+    );
+    let command = activate_ability_for(&engine, enchantment, 0, vec![]);
+    assert!(
+        engine.apply_command(0, &command).is_err(),
+        "insufficient mana cannot sacrifice the source"
+    );
+    assert_eq!(engine.state.turn_history, history);
+    assert_eq!(
+        engine.state.objects[&enchantment].zone,
+        tricerules_core::Zone::Battlefield
+    );
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            b: 7,
+            ..Default::default()
+        },
+    );
+    engine.apply_command(0, &command).unwrap();
+    assert_eq!(
+        engine
+            .state
+            .turn_history
+            .current
+            .permanents_sacrificed
+            .len(),
+        2
+    );
+    assert_eq!(
+        engine
+            .state
+            .turn_history
+            .current
+            .permanent_cards_entered_graveyard
+            .len(),
+        2
+    );
+    resolve_stack_collecting_batches(&mut engine);
+    let tokens = battlefield_token_oids(&engine, 0, "vampire_demon_wb_4_3_flying");
+    assert_eq!(tokens.len(), 1);
+    let token = engine.characteristics(tokens[0]).unwrap();
+    assert_eq!((token.power, token.toughness), (Some(4), Some(3)));
+    assert!(token.keywords.contains(&tricerules_cards::Keyword::Flying));
+    assert!(token.colors.contains(&tricerules_cards::Color::White));
+    assert!(token.colors.contains(&tricerules_cards::Color::Black));
+}
+
+#[test]
+fn issue_167_descending_during_the_end_step_does_not_create_a_retroactive_trigger() {
+    let mut engine = end_step_engine(167303);
+    let skulltaker = inject_creature_on_battlefield(&mut engine, 0, "deep_goblin_skulltaker");
+    let gnomes = inject_creature_on_battlefield(&mut engine, 0, "bottle_gnomes");
+    advance_to_end_step(&mut engine, 0);
+    assert!(engine.state.stack.is_empty());
+    apply_ability(&mut engine, 0, gnomes, 0, vec![]).unwrap();
+    resolve_stack_collecting_batches(&mut engine);
+    assert_eq!(
+        engine
+            .state
+            .turn_history
+            .current
+            .permanent_cards_entered_graveyard
+            .len(),
+        1
+    );
+    assert_eq!(
+        engine.state.objects[&skulltaker].counter_count(CounterKind::PlusOnePlusOne),
+        0
+    );
+    engine.apply_command(0, &primitive_yield()).unwrap();
+    resolve_cleanup_discards_if_any(&mut engine);
+    assert!(engine
+        .state
+        .turn_history
+        .current
+        .permanent_cards_entered_graveyard
+        .is_empty());
+}
+
 fn end_step_engine(seed: u64) -> GameEngine {
     let decks = Some(vec![deck_with("forest", &[]), deck_with("island", &[])]);
     let mut engine = GameEngine::new(seed, &[0, 1], 20, decks, true).expect("new");

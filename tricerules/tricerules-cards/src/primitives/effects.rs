@@ -50,6 +50,28 @@ pub enum GameCondition {
         #[serde(default)]
         max: Option<i32>,
     },
+    /// Descend (Deep Goblin Skulltaker, Enterprising Scallywag): destination-zone permanent
+    /// cards, not battlefield creatures that died or cards still present in the graveyard.
+    PermanentCardsEnteredGraveyardThisTurn {
+        players: RelativePlayerSet,
+        #[serde(default)]
+        permanent_type: Option<PermanentTypeFilter>,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
+    /// Suspicious Detonation and Goblin Blast-Runner share committed sacrifice history.
+    /// Tokens count; types belong to the permanent immediately before the sacrifice.
+    PermanentsSacrificedThisTurn {
+        players: RelativePlayerSet,
+        #[serde(default)]
+        permanent_type: Option<PermanentTypeFilter>,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
     CreatureDeathsThisTurn {
         #[serde(default)]
         min: Option<u32>,
@@ -216,6 +238,8 @@ impl GameCondition {
                 Ok(())
             }
             GameCondition::SpellsCastThisTurn { min, max, .. }
+            | GameCondition::PermanentCardsEnteredGraveyardThisTurn { min, max, .. }
+            | GameCondition::PermanentsSacrificedThisTurn { min, max, .. }
             | GameCondition::CrimesCommittedThisTurn { min, max, .. }
             | GameCondition::CardsDrawnThisTurn { min, max, .. }
             | GameCondition::AttackersDeclaredThisTurn { min, max, .. }
@@ -317,6 +341,8 @@ impl GameCondition {
             | GameCondition::AttackedThisTurn { .. }
             | GameCondition::ObjectWasDealtDamageThisTurn { .. } => false,
             GameCondition::CreatureDeathsThisTurn { min, max }
+            | GameCondition::PermanentCardsEnteredGraveyardThisTurn { min, max, .. }
+            | GameCondition::PermanentsSacrificedThisTurn { min, max, .. }
             | GameCondition::SpellsCastThisTurn { min, max, .. }
             | GameCondition::CrimesCommittedThisTurn { min, max, .. }
             | GameCondition::CardsDrawnThisTurn { min, max, .. }

@@ -1,0 +1,15 @@
+// Oracle/rulings fetched 2026-08-27. CR 700.11: sacrificing a Treasure is not Descend.
+(
+    id: "enterprising_scallywag",
+    name: "Enterprising Scallywag",
+    mana_cost: "{1}{R}",
+    types: ["Creature", "Goblin", "Pirate"],
+    power: 2,
+    toughness: 2,
+    triggered_abilities: [(
+        trigger: AtBeginningOfEndStep(player: Controller),
+        intervening_if: Some(GameCondition(PermanentCardsEnteredGraveyardThisTurn(players: Controller, min: Some(1)))),
+        effect: [CreateTokens(token: "treasure", count: 1)],
+        text: "At the beginning of your end step, if you descended this turn, create a Treasure token.",
+    )],
+)

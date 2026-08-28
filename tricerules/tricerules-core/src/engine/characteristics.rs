@@ -442,6 +442,32 @@ impl CharacteristicsEvaluator<'_> {
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }
+            GameCondition::PermanentCardsEnteredGraveyardThisTurn {
+                players,
+                permanent_type,
+                ..
+            } => condition.matches_value(super::history::permanent_history_count(
+                self.state,
+                &self
+                    .state
+                    .turn_history
+                    .current
+                    .permanent_cards_entered_graveyard,
+                *players,
+                *permanent_type,
+                controller,
+            )),
+            GameCondition::PermanentsSacrificedThisTurn {
+                players,
+                permanent_type,
+                ..
+            } => condition.matches_value(super::history::permanent_history_count(
+                self.state,
+                &self.state.turn_history.current.permanents_sacrificed,
+                *players,
+                *permanent_type,
+                controller,
+            )),
             GameCondition::SpellsCastThisTurn {
                 players, filter, ..
             } => condition.matches_value(super::history::spell_cast_count(

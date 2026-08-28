@@ -196,6 +196,7 @@ fn issue_166_cast_history_replays_accepted_commands_and_rolls_at_turn_boundary()
     }
     for (player, name, zone) in [
         (0, "Magebane Lizard", DevZone::Battlefield),
+        (0, "Bottle Gnomes", DevZone::Battlefield),
         (1, "Wall of Stone", DevZone::Battlefield),
         (0, "Thunder Salvo", DevZone::Hand),
         (1, "Twincast", DevZone::Hand),
@@ -230,6 +231,22 @@ fn issue_166_cast_history_replays_accepted_commands_and_rolls_at_turn_boundary()
         );
     }
     let wall = battlefield_object_for_card(&e, 1, "wall_of_stone");
+    let gnomes = battlefield_object_for_card(&e, 0, "bottle_gnomes");
+    let sacrifice = activate_ability_for(&e, gnomes, 0, vec![]);
+    send(&mut e, &mut log, 0, sacrifice);
+    while !e.state.stack.is_empty() {
+        let actor = e.state.priority_player_id();
+        send(&mut e, &mut log, actor, pass());
+    }
+    assert_eq!(e.state.turn_history.current.permanents_sacrificed.len(), 1);
+    assert_eq!(
+        e.state
+            .turn_history
+            .current
+            .permanent_cards_entered_graveyard
+            .len(),
+        1
+    );
     let index = hand_index_for_card(&e, 0, "thunder_salvo");
     let salvo = e.state.players[0].hand[index];
     send(&mut e, &mut log, 0, cast_spell(index, target_object(wall)));
@@ -271,6 +288,29 @@ fn issue_166_cast_history_replays_accepted_commands_and_rolls_at_turn_boundary()
     }
     assert_ne!(e.state.turn_instance, turn);
     assert!(e.state.turn_history.current.spell_casts.is_empty());
+    assert!(e
+        .state
+        .turn_history
+        .current
+        .permanents_sacrificed
+        .is_empty());
+    assert!(e
+        .state
+        .turn_history
+        .current
+        .permanent_cards_entered_graveyard
+        .is_empty());
+    assert_eq!(
+        e.state.turn_history.previous.permanents_sacrificed,
+        finished.permanents_sacrificed
+    );
+    // Cleanup may also discard lands after the earlier snapshot was captured.
+    assert!(e
+        .state
+        .turn_history
+        .previous
+        .permanent_cards_entered_graveyard
+        .starts_with(&finished.permanent_cards_entered_graveyard));
     assert_eq!(
         e.state.turn_history.previous.spell_casts,
         finished.spell_casts

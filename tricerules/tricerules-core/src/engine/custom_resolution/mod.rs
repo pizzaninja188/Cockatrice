@@ -631,11 +631,12 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) {
         let interrupt = match step {
-            // CR 608.2m: this is the single point where a tier-3 resolution completes, whether it
+            // CR 608.2n: this is the single point where a tier-3 resolution completes, whether it
             // ran straight through in `begin` or came back here from a later `resume`, so it is
             // where the spell takes its place beneath whatever its resolution put in the
             // graveyard — e.g. Gifts Ungiven under the two cards it puts there.
             ResolutionStep::Done => {
+                super::resolution::finish_deferred_graveyard_entry(&mut self.state, &item);
                 seat_resolved_spell_last_in_graveyard(&mut self.state, item.id);
                 return;
             }

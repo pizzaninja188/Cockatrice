@@ -1460,10 +1460,23 @@ pub struct TurnRecord {
     pub spells_cast: u32,
     pub spell_casts: Vec<SpellCastFact>,
     pub creatures_died: u32,
+    pub permanent_cards_entered_graveyard: Vec<PermanentHistoryFact>,
+    pub permanents_sacrificed: Vec<PermanentHistoryFact>,
     pub by_player: BTreeMap<PlayerId, PlayerTurnRecord>,
     pub declared_attackers: Vec<TurnObjectFact>,
     pub permanents_entered: Vec<TurnObjectFact>,
     pub damaged_objects: Vec<(ObjectId, u64)>,
+}
+
+/// One committed occurrence, retained independently of the object's subsequent zone or types.
+/// `player` is the graveyard owner for an entry and the acting controller for a sacrifice.
+/// Entry types describe the destination card; sacrifice types describe the pre-move permanent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PermanentHistoryFact {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub player: PlayerId,
+    pub types: Vec<String>,
 }
 
 /// Internal CR 601.2i history, shared by Magebane Lizard and Thunder Salvo. Characteristics
@@ -1582,6 +1595,9 @@ pub struct GameState {
     pub active_exile_play_permissions: Vec<ActiveExilePlayPermission>,
     pub next_exile_play_permission_group_id: u64,
     pub turn_history: TurnHistory,
+    /// A custom resolution may move its physical card early. Only its completed resolution
+    /// commits this generation-bound receipt to rules history; it is never a published field.
+    pub(crate) deferred_graveyard_entry: Option<(StackObjectRef, PermanentHistoryFact)>,
     /// Active combat, if in declare/damage
     pub combat: Option<CombatState>,
     /// If set, game is over; winning player

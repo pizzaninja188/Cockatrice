@@ -308,6 +308,8 @@ pub enum EngineError {
 /// (CR 603.2). Each variant carries the minimum data needed to identify which triggers match.
 #[derive(Clone, Debug)]
 struct TriggerSourceSnapshot {
+    /// Derived event-time types, captured before any member of a simultaneous departure moves.
+    types: Vec<String>,
     power_toughness: (Option<i64>, Option<i64>),
     object_id: ObjectId,
     card_id: String,
@@ -911,6 +913,7 @@ impl GameEngine {
             active_exile_play_permissions: Vec::new(),
             next_exile_play_permission_group_id: 1,
             turn_history: TurnHistory::default(),
+            deferred_graveyard_entry: None,
             combat: None,
             winner: None,
             cleanup_discard_player: None,

@@ -133,6 +133,59 @@ fn clamp_public_count(count: usize) -> u32 {
     u32::try_from(count).unwrap_or(u32::MAX)
 }
 
+/// Shared by live conditions and static characteristics; never re-query the departed object.
+pub(super) fn permanent_history_count(
+    state: &GameState,
+    facts: &[crate::state::PermanentHistoryFact],
+    players: RelativePlayerSet,
+    permanent_type: Option<PermanentTypeFilter>,
+    controller: PlayerId,
+) -> u32 {
+    clamp_public_count(
+        facts
+            .iter()
+            .filter(|fact| {
+                relative_player_set_contains(state, players, controller, fact.player)
+                    && permanent_type
+                        .is_none_or(|kind| fact.types.iter().any(|t| t == kind.as_str()))
+            })
+            .count(),
+    )
+}
+
+/// Snapshot after replacement handling using the printed destination-zone card, not its
+/// former animation, copied values, face-down status, or Adventure spell face (CR 700.11).
+pub(super) fn graveyard_entry_fact(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+) -> Option<crate::state::PermanentHistoryFact> {
+    let object = state.objects.get(&oid)?;
+    if object.zone != Zone::Graveyard || object.is_token() {
+        return None;
+    }
+    let types: Vec<String> = registry
+        .get(&object.card_id)?
+        .card_types_outside_stack()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    if !types.iter().any(|t| {
+        matches!(
+            t.as_str(),
+            "Artifact" | "Battle" | "Creature" | "Enchantment" | "Land" | "Planeswalker"
+        )
+    }) {
+        return None;
+    }
+    Some(crate::state::PermanentHistoryFact {
+        object_id: oid,
+        zone_change_generation: state.zone_change_generation.get(&oid).copied().unwrap_or(0),
+        player: object.owner,
+        types,
+    })
+}
+
 pub(super) fn spell_cast_matches(
     filter: &SpellCastFilter,
     fact: &crate::state::SpellCastFact,
@@ -475,6 +528,16 @@ impl GameEngine {
 
         for event in events {
             match event {
+                GameEvent::Sacrificed { source, player } => {
+                    self.state.turn_history.current.permanents_sacrificed.push(
+                        crate::state::PermanentHistoryFact {
+                            object_id: source.object_id,
+                            zone_change_generation: source.zone_change_generation,
+                            player: *player,
+                            types: source.types.clone(),
+                        },
+                    );
+                }
                 GameEvent::LeavesBattlefield { source } => {
                     // All members of a simultaneous departure set were captured before any move.
                     // Restore that snapshot over the individual move's sequential bookkeeping.
@@ -729,6 +792,32 @@ impl GameEngine {
             GameCondition::CreatureDeathsThisTurn { .. } => {
                 condition.matches_value(self.state.turn_history.current.creatures_died)
             }
+            GameCondition::PermanentCardsEnteredGraveyardThisTurn {
+                players,
+                permanent_type,
+                ..
+            } => condition.matches_value(permanent_history_count(
+                &self.state,
+                &self
+                    .state
+                    .turn_history
+                    .current
+                    .permanent_cards_entered_graveyard,
+                *players,
+                *permanent_type,
+                context.controller,
+            )),
+            GameCondition::PermanentsSacrificedThisTurn {
+                players,
+                permanent_type,
+                ..
+            } => condition.matches_value(permanent_history_count(
+                &self.state,
+                &self.state.turn_history.current.permanents_sacrificed,
+                *players,
+                *permanent_type,
+                context.controller,
+            )),
             GameCondition::SpellsCastThisTurn {
                 players, filter, ..
             } => condition.matches_value(super::history::spell_cast_count(
@@ -1231,6 +1320,345 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn issue_167_condition(
+        kind: &str,
+        players: &str,
+        card_type: &str,
+        count: u32,
+    ) -> GameCondition {
+        let data = format!(
+            r#"(id: "history_probe", name: "History Probe", types: ["Instant"],
+            cast_conditions: [{kind}(players: {players}, permanent_type: {card_type}, min: Some({count}), max: Some({count}))],
+            spell_effect: [GainLife(amount: 1)])"#
+        );
+        let registry =
+            CardRegistry::from_chunks_and_tokens(&[&data], &[]).expect("history vocabulary");
+        registry
+            .get("history_probe")
+            .unwrap()
+            .primary_face()
+            .cast_conditions[0]
+            .clone()
+    }
+
+    fn issue_167_holds(
+        engine: &GameEngine,
+        kind: &str,
+        players: &str,
+        card_type: &str,
+        count: u32,
+    ) -> bool {
+        engine.condition_holds(
+            &issue_167_condition(kind, players, card_type, count),
+            ConditionContext {
+                controller: 0,
+                source_object_id: 0,
+                source_zone_change: 0,
+                resolving_spell_id: None,
+                stack_item: None,
+            },
+        )
+    }
+
+    #[test]
+    fn issue_167_graveyard_entries_remember_occurrences_and_destination_card_types() {
+        let mut engine = quantity_engine();
+        let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        let land = move_to_battlefield(&mut engine, 0, "island");
+        let kind = "PermanentCardsEnteredGraveyardThisTurn";
+        assert!(issue_167_holds(&engine, kind, "Controller", "None", 0));
+        for oid in [bear, land] {
+            super::super::resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                oid,
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+        }
+        assert!(issue_167_holds(&engine, kind, "Controller", "None", 2));
+        assert!(issue_167_holds(
+            &engine,
+            kind,
+            "Controller",
+            "Some(Creature)",
+            1
+        ));
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            bear,
+            Zone::Hand,
+            None,
+        )
+        .unwrap();
+        assert!(issue_167_holds(&engine, kind, "Controller", "None", 2));
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            bear,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        assert!(issue_167_holds(
+            &engine,
+            kind,
+            "Controller",
+            "Some(Creature)",
+            2
+        ));
+        assert_eq!(
+            engine.state.turn_history.current.creatures_died, 0,
+            "entries do not manufacture death events"
+        );
+        engine.state.turn_history.finish_turn();
+        assert!(issue_167_holds(&engine, kind, "Controller", "None", 0));
+    }
+
+    #[test]
+    fn issue_167_sacrifice_history_is_actor_relative_and_uses_event_types() {
+        let mut engine = quantity_engine();
+        engine.state.players.push(PlayerState::new(2, 20));
+        let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            bear,
+            Zone::Battlefield,
+            Some(2),
+        )
+        .unwrap();
+        let source = engine.trigger_source_snapshot(bear).unwrap();
+        let died =
+            super::super::resolution::sacrifice_permanent(&mut engine.state, engine.registry, bear)
+                .unwrap();
+        engine.fire_triggers(&sacrifice_events(source, true, 2, died));
+        let kind = "PermanentsSacrificedThisTurn";
+        assert!(issue_167_holds(&engine, kind, "Controller", "None", 0));
+        assert!(issue_167_holds(
+            &engine,
+            kind,
+            "Opponents",
+            "Some(Creature)",
+            1
+        ));
+        assert!(issue_167_holds(&engine, kind, "All", "Some(Artifact)", 0));
+        assert!(issue_167_holds(
+            &engine,
+            "PermanentCardsEnteredGraveyardThisTurn",
+            "Controller",
+            "Some(Creature)",
+            1
+        ));
+        assert_eq!(engine.state.turn_history.current.creatures_died, 1);
+        engine.state.turn_history.finish_turn();
+        assert!(issue_167_holds(&engine, kind, "All", "None", 0));
+    }
+
+    #[test]
+    fn issue_167_tokens_replacements_and_nonsacrifice_moves_remain_distinct() {
+        for token in [false, true] {
+            for replaced in [false, true] {
+                let mut engine = quantity_engine();
+                let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+                if token {
+                    let face = engine
+                        .registry
+                        .get("grizzly_bears")
+                        .unwrap()
+                        .primary_face()
+                        .clone();
+                    engine.state.objects.get_mut(&bear).unwrap().token_origin =
+                        Some(CopiableValues {
+                            source_card_id: "grizzly_bears".into(),
+                            source_face_index: 0,
+                            face,
+                            room_faces: None,
+                            display_name: "Grizzly Bears".into(),
+                        });
+                }
+                if replaced {
+                    engine.state.death_replacement_effects.push(
+                        crate::state::ActiveDeathReplacement {
+                            object_id: bear,
+                            zone_change_generation: 0,
+                        },
+                    );
+                }
+                let source = engine.trigger_source_snapshot(bear).unwrap();
+                // Prospective trigger collection must not record history.
+                engine.collect_event_triggers(&sacrifice_events(
+                    source.clone(),
+                    true,
+                    0,
+                    !replaced,
+                ));
+                assert!(issue_167_holds(
+                    &engine,
+                    "PermanentsSacrificedThisTurn",
+                    "Controller",
+                    "None",
+                    0
+                ));
+                let died = super::super::resolution::sacrifice_permanent(
+                    &mut engine.state,
+                    engine.registry,
+                    bear,
+                )
+                .unwrap();
+                engine.fire_triggers(&sacrifice_events(source, true, 0, died));
+                assert!(issue_167_holds(
+                    &engine,
+                    "PermanentsSacrificedThisTurn",
+                    "Controller",
+                    "Some(Creature)",
+                    1
+                ));
+                assert!(issue_167_holds(
+                    &engine,
+                    "PermanentCardsEnteredGraveyardThisTurn",
+                    "Controller",
+                    "None",
+                    u32::from(!token && !replaced)
+                ));
+                assert_eq!(
+                    engine.state.turn_history.current.creatures_died,
+                    u32::from(!replaced)
+                );
+                let land = move_to_battlefield(&mut engine, 0, "island");
+                super::super::resolution::put_permanent_in_graveyard(
+                    &mut engine.state,
+                    engine.registry,
+                    land,
+                )
+                .unwrap();
+                assert!(
+                    issue_167_holds(
+                        &engine,
+                        "PermanentsSacrificedThisTurn",
+                        "Controller",
+                        "None",
+                        1
+                    ),
+                    "legend/direct moves are not sacrifices"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn issue_167_animation_and_copy_types_do_not_leak_into_destination_history() {
+        let mut engine = quantity_engine();
+        let land = move_to_battlefield(&mut engine, 0, "island");
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            affected: AffectedScope::Single(land),
+            kind: ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+                card_types: vec![PermanentTypeFilter::Artifact, PermanentTypeFilter::Creature],
+                creature_types: vec![],
+            }),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+            trigger_grant_origin: None,
+        });
+        let source = engine.trigger_source_snapshot(land).unwrap();
+        let died =
+            super::super::resolution::sacrifice_permanent(&mut engine.state, engine.registry, land)
+                .unwrap();
+        engine.fire_triggers(&sacrifice_events(source, true, 0, died));
+        assert!(issue_167_holds(
+            &engine,
+            "PermanentsSacrificedThisTurn",
+            "Controller",
+            "Some(Artifact)",
+            1
+        ));
+        assert!(issue_167_holds(
+            &engine,
+            "PermanentCardsEnteredGraveyardThisTurn",
+            "Controller",
+            "Some(Creature)",
+            0
+        ));
+        assert!(issue_167_holds(
+            &engine,
+            "PermanentCardsEnteredGraveyardThisTurn",
+            "Controller",
+            "Some(Land)",
+            1
+        ));
+
+        let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        engine.state.objects.get_mut(&bear).unwrap().copiable_values = Some(CopiableValues {
+            source_card_id: "island".into(),
+            source_face_index: 0,
+            face: engine
+                .registry
+                .get("island")
+                .unwrap()
+                .primary_face()
+                .clone(),
+            room_faces: None,
+            display_name: "Island".into(),
+        });
+        let source = engine.trigger_source_snapshot(bear).unwrap();
+        let died =
+            super::super::resolution::sacrifice_permanent(&mut engine.state, engine.registry, bear)
+                .unwrap();
+        engine.fire_triggers(&sacrifice_events(source, false, 0, died));
+        assert!(issue_167_holds(
+            &engine,
+            "PermanentsSacrificedThisTurn",
+            "Controller",
+            "Some(Land)",
+            2
+        ));
+        assert!(issue_167_holds(
+            &engine,
+            "PermanentCardsEnteredGraveyardThisTurn",
+            "Controller",
+            "Some(Creature)",
+            1
+        ));
+        assert_eq!(engine.state.turn_history.current.creatures_died, 1);
+    }
+
+    #[test]
+    fn issue_167_static_conditions_share_live_history_queries() {
+        let mut engine = quantity_engine();
+        let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        let land = move_to_battlefield(&mut engine, 0, "island");
+        for kind in [
+            "PermanentCardsEnteredGraveyardThisTurn",
+            "PermanentsSacrificedThisTurn",
+        ] {
+            engine.state.continuous_effects.push(ContinuousEffect {
+                source_id: Some(bear),
+                affected: AffectedScope::Single(bear),
+                kind: ContinuousEffectKind::PtModify {
+                    delta_power: 1,
+                    delta_toughness: 0,
+                },
+                condition: Some(issue_167_condition(kind, "Controller", "None", 1)),
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 1,
+                trigger_grant_origin: None,
+            });
+        }
+        assert_eq!(engine.effective_power(bear), Some(2));
+        let source = engine.trigger_source_snapshot(land).unwrap();
+        let died =
+            super::super::resolution::sacrifice_permanent(&mut engine.state, engine.registry, land)
+                .unwrap();
+        engine.fire_triggers(&sacrifice_events(source, false, 0, died));
+        assert_eq!(engine.effective_power(bear), Some(4));
+        engine.state.turn_history.finish_turn();
+        assert_eq!(engine.effective_power(bear), Some(2));
+    }
 
     fn quantity_context(source: ObjectId) -> AmountContext<'static> {
         AmountContext {

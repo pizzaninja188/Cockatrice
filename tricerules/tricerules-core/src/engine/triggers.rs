@@ -1417,8 +1417,9 @@ impl GameEngine {
             .effective_card_identity(source_id)
             .map(|(card_id, face_index)| (card_id.to_string(), face_index))
             .unwrap_or_else(|| (object.card_id.clone(), object.face_up_index));
-        let controller = self
-            .characteristics(source_id)
+        let characteristics = self.characteristics(source_id);
+        let controller = characteristics
+            .as_ref()
             .map(|characteristics| characteristics.controller)
             .unwrap_or(object.controller);
         let attached_to = object.attached_to.map(|recipient| match recipient {
@@ -1441,8 +1442,12 @@ impl GameEngine {
             AttachmentRecipient::Player(player_id) => AttachmentSnapshot::Player(player_id),
         });
         Some(TriggerSourceSnapshot {
-            power_toughness: self
-                .characteristics(source_id)
+            types: characteristics
+                .as_ref()
+                .map(|c| c.types.clone())
+                .unwrap_or_default(),
+            power_toughness: characteristics
+                .as_ref()
                 .map(|c| (c.signed_power, c.signed_toughness))
                 .unwrap_or_default(),
             event_conditions_checked: false,
@@ -2355,6 +2360,7 @@ mod tests {
             .triggered_abilities[0]
             .clone();
         let source = TriggerSourceSnapshot {
+            types: vec!["Creature".into()],
             power_toughness: (None, None),
             event_conditions_checked: false,
             object_id: 100,
@@ -2599,6 +2605,7 @@ mod tests {
     fn attached_player_attack_trigger_fires_once_for_the_declaration_group() {
         let engine = GameEngine::new(6303, &[0, 1], 20, None, true).expect("engine");
         let source = TriggerSourceSnapshot {
+            types: vec!["Enchantment".into()],
             power_toughness: (None, None),
             event_conditions_checked: false,
             object_id: 100,

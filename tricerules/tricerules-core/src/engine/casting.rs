@@ -2291,7 +2291,7 @@ mod cast_snapshot_tests {
             let mut e = engine(&format!(
                 r#"
                 additional_costs: [SacrificePermanent(filter: (kind: Creature, controller: You))],
-                cast_conditions: [{FAERIE}, CreatureDeathsThisTurn(min: Some(1)), SpellsCastThisTurn(players: Controller, min: Some(1))],
+                cast_conditions: [{FAERIE}, CreatureDeathsThisTurn(min: Some(1)), SpellsCastThisTurn(players: Controller, min: Some(1)), PermanentCardsEnteredGraveyardThisTurn(players: Controller, min: Some(1)), PermanentsSacrificedThisTurn(players: Controller, permanent_type: Some(Creature), min: Some(1))],
                 spell_effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))],
             "#
             ));
@@ -2314,11 +2314,23 @@ mod cast_snapshot_tests {
                 assert_eq!(e.state.objects[&spell].zone, Zone::Hand);
                 assert!(e.state.stack.is_empty());
                 assert_eq!(e.state.turn_history.current.creatures_died, 0);
+                assert!(e
+                    .state
+                    .turn_history
+                    .current
+                    .permanent_cards_entered_graveyard
+                    .is_empty());
+                assert!(e
+                    .state
+                    .turn_history
+                    .current
+                    .permanents_sacrificed
+                    .is_empty());
             }
             e.state.players[0].mana_pool.black = 1;
             let mut batches = vec![e.apply_command(0, &cast).unwrap()];
             let snapshots = e.state.stack.last().unwrap().cast_condition_results.clone();
-            assert_eq!(snapshots, vec![false, true, true]);
+            assert_eq!(snapshots, vec![false, true, true, true, true]);
             assert_eq!(e.state.objects[&faerie].zone, Zone::Graveyard);
             while !e.state.stack.is_empty() {
                 let player = e.state.priority_player_id();

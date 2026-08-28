@@ -386,6 +386,7 @@ pub(super) fn sacrifice_observed_objects(
         .ok_or(EngineError::Illegal("delayed token cohort missing"))?;
     let mut dies = Vec::new();
     let mut sacrificed = 0usize;
+    let mut departures = Vec::new();
     for reference in observed {
         let generation = cx
             .engine
@@ -409,6 +410,11 @@ pub(super) fn sacrifice_observed_objects(
             .engine
             .characteristics(reference.object_id)
             .is_some_and(|value| value.is_creature());
+        departures.push((reference, owner, source, was_creature));
+    }
+    // The cohort is one simultaneous instruction. Its first departure may remove a static
+    // type-granting effect, so all sacrifice snapshots must precede the first move.
+    for (reference, owner, source, was_creature) in departures {
         let died = sacrifice_permanent(
             &mut cx.engine.state,
             cx.engine.registry,

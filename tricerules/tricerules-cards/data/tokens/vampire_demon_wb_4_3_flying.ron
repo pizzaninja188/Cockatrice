@@ -1,0 +1,10 @@
+// Canonized in Blood's token, per Oracle fetched 2026-08-27.
+(
+    id: "vampire_demon_wb_4_3_flying",
+    name: "Vampire Demon",
+    types: ["Creature", "Vampire", "Demon"],
+    colors: [White, Black],
+    power: 4,
+    toughness: 3,
+    keywords: [Flying],
+)
