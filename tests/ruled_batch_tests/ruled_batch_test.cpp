@@ -583,6 +583,13 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     auto *p1Cast = p1Legal.add_hand_actions();
     p1Cast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
     p1Cast->mutable_cost_choices()->add_choices()->add_candidate_ids(7);
+    auto *counterChoice = (*p1Legal.mutable_cost_choices_by_ability())[101].add_choices();
+    counterChoice->set_kind(ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS);
+    auto *counterRemoval = counterChoice->mutable_counter_removal();
+    counterRemoval->mutable_source()->set_object_id(101);
+    counterRemoval->mutable_source()->set_zone_change_generation(4);
+    counterRemoval->set_count(1);
+    counterRemoval->add_options()->set_option_id(3);
     auto *p1Reduction = (*p1Legal.mutable_valid_targets_by_hand_slot())[0].add_targeted_cost_reduction_applications();
     p1Reduction->set_application_id(701);
     p1Reduction->set_generic_mana(3);
@@ -646,6 +653,11 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     ASSERT_EQ(privateAction.eligible_restricted_mana_group_ids_size(), 1);
     EXPECT_EQ(privateAction.eligible_restricted_mana_group_ids(0), 7u);
     EXPECT_EQ(forP1.legal_by_player().at(1).hand_actions(0).cost_choices().choices(0).candidate_ids(0), 7u);
+    const auto &privateCounters =
+        forP1.legal_by_player().at(1).cost_choices_by_ability().at(101).choices(0).counter_removal();
+    EXPECT_EQ(privateCounters.source().zone_change_generation(), 4u);
+    ASSERT_EQ(privateCounters.options_size(), 1);
+    EXPECT_EQ(privateCounters.options(0).option_id(), 3u);
     EXPECT_EQ(forP1.legal_by_player()
                   .at(1)
                   .valid_targets_by_hand_slot()
@@ -662,6 +674,7 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     const auto forP2 = redactFor(batch, p2);
     ASSERT_EQ(forP2.legal_by_player_size(), 1);
     EXPECT_TRUE(forP2.legal_by_player().contains(2));
+    EXPECT_TRUE(forP2.legal_by_player().at(2).cost_choices_by_ability().empty());
     EXPECT_EQ(forP2.legal_by_player().at(2).permanent_actions_size(), 0);
     EXPECT_EQ(forP2.legal_by_player().at(2).hand_actions(0).cost_choices().choices(0).candidate_ids(0), 9u);
     EXPECT_EQ(forP2.legal_by_player()

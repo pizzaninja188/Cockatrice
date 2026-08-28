@@ -154,6 +154,7 @@ mod casting;
 mod characteristics;
 mod combat;
 mod continuous;
+mod counters;
 mod custom_resolution;
 pub(crate) mod damage;
 mod dev;
@@ -375,6 +376,7 @@ pub enum EngineError {
 /// (CR 603.2). Each variant carries the minimum data needed to identify which triggers match.
 #[derive(Clone, Debug)]
 struct TriggerSourceSnapshot {
+    counters: BTreeMap<CounterKind, u32>,
     /// Derived event-time types, captured before any member of a simultaneous departure moves.
     types: Vec<String>,
     owner: PlayerId,
@@ -769,7 +771,16 @@ pub(super) enum UntapOutcome {
 /// `PermanentsUntapped` edge is published. The application list currently contains only the
 /// intrinsic stun-counter rule; when another untap replacement is modeled, this is the shared
 /// collection boundary that will feed the existing CR 616 ordering prompt.
-pub(super) fn attempt_untap(state: &mut GameState, oid: ObjectId) -> UntapOutcome {
+pub(super) fn attempt_untap(engine: &mut GameEngine, oid: ObjectId) -> UntapOutcome {
+    if engine.characteristics(oid).is_some_and(|c| {
+        engine.state.continuous_effects.iter().any(|effect| {
+            effect.kind == ContinuousEffectKind::ProhibitUntap
+                && characteristics::effect_affects(&engine.state, engine.registry, effect, oid, &c)
+        })
+    }) {
+        return UntapOutcome::NoChange;
+    }
+    let state = &mut engine.state;
     let Some(object) = state.objects.get(&oid) else {
         return UntapOutcome::NoChange;
     };
@@ -953,6 +964,7 @@ impl GameEngine {
             last_known_colors_by_generation: HashMap::new(),
             last_known_types_by_generation: HashMap::new(),
             last_known_controller_by_generation: HashMap::new(),
+            last_known_counters_by_generation: HashMap::new(),
             last_known_pt_by_generation: HashMap::new(),
             last_known_attached_object_by_generation: HashMap::new(),
             zone_change_generation: HashMap::new(),

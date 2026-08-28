@@ -11,6 +11,47 @@
 
 RuledPendingCast::RuledPendingCast() = default;
 
+bool RuledPendingCast::chooseCounterCosts(QWidget *parent, PendingActivatedAbility &pending)
+{
+    while (pending.valid && pending.nextCostChoice < pending.costChoices.size()) {
+        const auto choice = pending.costChoices.at(pending.nextCostChoice);
+        if (choice.kind != RuledCostChoiceKind::RemoveCounters)
+            break;
+        if (choice.counterOptions.isEmpty() || choice.counterCount == 0 ||
+            choice.counterSourceId != pending.permanentOid ||
+            choice.counterSourceGeneration != pending.expectedZoneChangeGeneration)
+            return false;
+        quint32 optionId = choice.counterOptions.front().optionId;
+        const int position = pending.nextCostChoice;
+        const int abilityIndex = pending.abilityIndex;
+        if (choice.counterOptions.size() > 1) {
+            QMenu menu(parent);
+            menu.addSection(QObject::tr("Remove %1 counter(s) from %2").arg(choice.counterCount).arg(pending.cardName));
+            for (const auto &option : choice.counterOptions) {
+                auto *action =
+                    menu.addAction(QObject::tr("%1 (%2 available)").arg(option.label).arg(option.availableCount));
+                action->setData(option.optionId);
+            }
+            QAction *chosen = menu.exec(QCursor::pos());
+            if (!chosen)
+                return false;
+            optionId = chosen->data().toUInt();
+        }
+        // The nested menu loop may receive a new engine batch or cancel the transaction.
+        RuledPendingCostSelection selection{
+            choice.costIndex, choice.zone, {choice.counterSourceId}, {choice.counterSourceGeneration}, optionId};
+        if (!pending.valid || pending.abilityIndex != abilityIndex || pending.nextCostChoice != position ||
+            pending.permanentOid != choice.counterSourceId ||
+            pending.expectedZoneChangeGeneration != choice.counterSourceGeneration ||
+            position >= pending.costChoices.size() ||
+            !ruledCounterSelectionStillLegal(selection, pending.costChoices.at(position)))
+            return false;
+        pending.costSelections.append(selection);
+        ++pending.nextCostChoice;
+    }
+    return pending.valid;
+}
+
 PendingRuledSpellCast &RuledPendingCast::beginSpell()
 {
     ability = {};

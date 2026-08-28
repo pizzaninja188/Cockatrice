@@ -645,3 +645,63 @@ pub(super) fn can_put_counters(
     resolve_effect_subject(engine, top, targets, subject)
         .is_some_and(|object_id| engine.can_receive_counters(object_id))
 }
+
+pub(super) fn change_counters(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    use tricerules_cards::primitives::CounterSnapshotSource;
+    let (subject, counters, removing) = match effect {
+        SpellEffectKind::RemoveCounters {
+            counter,
+            count,
+            subject,
+        } => (subject, BTreeMap::from([(counter, count)]), true),
+        SpellEffectKind::PutCounterSnapshot { from, subject } => {
+            let reference = match from {
+                CounterSnapshotSource::Source => cx
+                    .top
+                    .source_permanent_id
+                    .map(|id| (id, cx.top.source_zone_change)),
+                CounterSnapshotSource::TriggerObject => cx
+                    .top
+                    .trigger_context
+                    .observed_object
+                    .map(|r| (r.object_id, r.zone_change_generation)),
+            };
+            let counters = reference
+                .and_then(|r| cx.engine.state.last_known_counters_by_generation.get(&r))
+                .cloned()
+                .unwrap_or_default();
+            (subject, counters, false)
+        }
+        _ => return Err(EngineError::Illegal("counter dispatch mismatch")),
+    };
+    let subjects = if matches!(subject, EffectSubject::Chosen(_)) {
+        cx.targets.to_vec()
+    } else {
+        resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
+            .into_iter()
+            .collect()
+    };
+    for oid in subjects {
+        for (&kind, &count) in &counters {
+            let changed = if removing {
+                cx.engine.remove_counters(oid, kind, count)
+            } else {
+                cx.engine.place_counters(oid, kind, count)
+            };
+            if changed > 0 {
+                cx.events.push(ev_log(format!(
+                    "{} {} {changed} {} counter(s) {} {}",
+                    cx.spell_label,
+                    if removing { "removes" } else { "puts" },
+                    kind.label(),
+                    if removing { "from" } else { "on" },
+                    object_display_name(&cx.engine.state, cx.engine.registry, oid)
+                )));
+            }
+        }
+    }
+    Ok(EffectOutcome::Continue)
+}

@@ -182,6 +182,18 @@ impl GameEngine {
         for event in events {
             match event {
                 GameEvent::ZoneChanges(batch) => {
+                    for source in &batch.sources {
+                        if batch.moves.iter().any(|m| {
+                            m.before.object_id == source.object_id
+                                && m.origin == Zone::Battlefield
+                                && m.destination != Zone::Battlefield
+                        }) {
+                            self.state.last_known_counters_by_generation.insert(
+                                (source.object_id, source.zone_change_generation),
+                                source.counters.clone(),
+                            );
+                        }
+                    }
                     for movement in &batch.moves {
                         if movement.origin == Zone::Battlefield
                             && movement.destination != Zone::Battlefield
@@ -1508,6 +1520,7 @@ impl GameEngine {
             AttachmentRecipient::Player(player_id) => AttachmentSnapshot::Player(player_id),
         });
         Some(TriggerSourceSnapshot {
+            counters: object.counters.clone(),
             owner: object.owner,
             is_token: object.is_token(),
             all_creature_types: characteristics
@@ -2499,6 +2512,7 @@ mod tests {
             .triggered_abilities[0]
             .clone();
         let source = TriggerSourceSnapshot {
+            counters: BTreeMap::new(),
             owner: 0,
             is_token: false,
             all_creature_types: false,
@@ -2747,6 +2761,7 @@ mod tests {
     fn attached_player_attack_trigger_fires_once_for_the_declaration_group() {
         let engine = GameEngine::new(6303, &[0, 1], 20, None, true).expect("engine");
         let source = TriggerSourceSnapshot {
+            counters: BTreeMap::new(),
             owner: 0,
             is_token: false,
             all_creature_types: false,

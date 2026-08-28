@@ -442,7 +442,7 @@ impl GameEngine {
     /// Whether the resolving spell or ability's damage source has `keyword` now, or had it as
     /// last known information before leaving the battlefield. Kept generic so all future
     /// source-characteristic damage results (lifelink, infect, wither) share this identity path.
-    fn resolving_source_has_keyword(&self, top: &StackItem, keyword: Keyword) -> bool {
+    pub(super) fn resolving_source_has_keyword(&self, top: &StackItem, keyword: Keyword) -> bool {
         let Some(source_id) = top.source_permanent_id else {
             // A spell (and a copy of one) uses the characteristics of the selected face on the
             // stack. Copies have no backing GameObject, so the card definition is authoritative.
@@ -1257,6 +1257,10 @@ impl GameEngine {
                         restrictions::apply_combat_restriction(&mut cx, effect)?
                     }
                     SpellEffectKind::Blight { count } => blight::blight(&mut cx, count)?,
+                    effect @ (SpellEffectKind::RemoveCounters { .. }
+                    | SpellEffectKind::PutCounterSnapshot { .. }) => {
+                        pump_counters::change_counters(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::PutCounters { .. } => {
                         pump_counters::put_counters(&mut cx, effect)?
                     }
@@ -2225,6 +2229,9 @@ fn move_object_to_zone_with_entry_receipt(
             // this permanent's tap status gets its last known information, not the reset value.
             let was_tapped = o.tapped;
             o.tapped = false;
+            state
+                .last_known_counters_by_generation
+                .insert((oid, prior_generation), o.counters.clone());
             o.counters.clear();
             o.counter_timestamps.clear();
             o.attached_to = None;
@@ -2823,6 +2830,101 @@ mod attached_subject_tests {
         ability.effect = effects;
         item.triggered_ability = Some(ability);
         item
+    }
+
+    #[test]
+    fn issue_157_blossombind_prohibition_precedes_stun_and_expires_on_departure() {
+        let mut engine = GameEngine::new_with_default_decks(15705, &[0, 1], 20).unwrap();
+        let target = add_battlefield_object(&mut engine, 0, "hill_giant");
+        let aura = add_battlefield_object(&mut engine, 1, "blossombind");
+        engine.state.objects.get_mut(&aura).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(target));
+        engine.emit_static_abilities_on_enter(aura);
+        let object = engine.state.objects.get_mut(&target).unwrap();
+        object.tapped = true;
+        object.add_counters(CounterKind::Stun, 1, 0);
+        assert_eq!(attempt_untap(&mut engine, target), UntapOutcome::NoChange);
+        assert_eq!(
+            engine.state.objects[&target].counter_count(CounterKind::Stun),
+            1
+        );
+        assert_eq!(
+            engine.place_counters(target, CounterKind::PlusOnePlusOne, 1),
+            0
+        );
+        assert_eq!(engine.remove_counters(target, CounterKind::Stun, 1), 1);
+        assert_eq!(attempt_untap(&mut engine, target), UntapOutcome::NoChange);
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            aura,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        assert_eq!(engine.place_counters(target, CounterKind::Stun, 1), 1);
+        assert_eq!(
+            attempt_untap(&mut engine, target),
+            UntapOutcome::ReplacedByStun
+        );
+        assert_eq!(attempt_untap(&mut engine, target), UntapOutcome::Untapped);
+    }
+
+    #[test]
+    fn issue_157_multiple_observers_recreate_the_same_departure_counter_bag() {
+        use tricerules_cards::primitives::CounterSnapshotSource;
+        let mut engine = GameEngine::new_with_default_decks(15709, &[0, 1], 20).unwrap();
+        let departed = add_battlefield_object(&mut engine, 0, "dockworker_drone");
+        let first = add_battlefield_object(&mut engine, 0, "hill_giant");
+        let second = add_battlefield_object(&mut engine, 1, "hill_giant");
+        let bag = BTreeMap::from([
+            (CounterKind::PlusOnePlusOne, 2),
+            (CounterKind::Stun, 3),
+            (CounterKind::Keyword(Keyword::Flying), 1),
+        ]);
+        for (&kind, &count) in &bag {
+            engine.place_counters(departed, kind, count);
+        }
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            departed,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            departed,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        for observer in [first, second] {
+            let mut item = quantity_item(
+                observer,
+                vec![SpellEffectKind::PutCounterSnapshot {
+                    from: CounterSnapshotSource::TriggerObject,
+                    subject: EffectSubject::Source,
+                }],
+            );
+            item.trigger_context.observed_object = Some(TriggerObjectRef {
+                object_id: departed,
+                zone_change_generation: 0,
+                controller_at_event: 0,
+            });
+            let (effects, label) = engine.build_resolution_effects(&item);
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+                .unwrap();
+            assert_eq!(engine.state.objects[&observer].counters, bag);
+        }
+        assert_eq!(
+            engine.state.last_known_counters_by_generation[&(departed, 0)],
+            bag
+        );
+        assert!(engine.state.objects[&departed].counters.is_empty());
     }
 
     #[test]
@@ -4169,6 +4271,93 @@ mod attached_subject_tests {
 #[cfg(test)]
 mod source_keyword_tests {
     use super::*;
+
+    #[test]
+    fn issue_157_wither_preserves_prevention_lifelink_deathtouch_and_source_lki() {
+        use crate::engine::damage::{DamageEvent, DamageRecipient, DamageSpec};
+        for left_and_returned in [false, true] {
+            for prohibited in [false, true] {
+                for prevented in [0, 1, 3] {
+                    let mut engine =
+                        GameEngine::new_with_default_decks(15704, &[0, 1], 20).unwrap();
+                    let source = add_three_toughness_creature(&mut engine, 0);
+                    let target = add_three_toughness_creature(&mut engine, 1);
+                    engine.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
+                        source_id: None,
+                        affected: AffectedScope::Single(source),
+                        kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Wither),
+                        condition: None,
+                        duration: EffectDuration::UntilEndOfTurn,
+                        timestamp: 0,
+                    });
+                    let item = ability_item(source, 0);
+                    if left_and_returned {
+                        move_object_to_zone(
+                            &mut engine.state,
+                            engine.registry,
+                            source,
+                            Zone::Graveyard,
+                            None,
+                        )
+                        .unwrap();
+                        move_object_to_zone(
+                            &mut engine.state,
+                            engine.registry,
+                            source,
+                            Zone::Battlefield,
+                            None,
+                        )
+                        .unwrap();
+                        assert!(!engine.effective_has_keyword(source, Keyword::Wither));
+                    }
+                    if prohibited {
+                        let aura = add_three_toughness_creature(&mut engine, 0);
+                        let object = engine.state.objects.get_mut(&aura).unwrap();
+                        object.card_id = "blossombind".into();
+                        object.attached_to = Some(AttachmentRecipient::Object(target));
+                    }
+                    if prevented > 0 {
+                        engine.add_damage_prevention(
+                            None,
+                            "shield",
+                            DamagePreventionScope::Recipient(target),
+                            DamagePreventionAmount::Remaining(prevented),
+                        );
+                    }
+                    let mut events = Vec::new();
+                    let completed = engine
+                        .process_or_park_damage_batch(
+                            &item,
+                            vec![DamageSpec {
+                                event: DamageEvent::noncombat(
+                                    source,
+                                    0,
+                                    "Wither source",
+                                    DamageRecipient::Permanent(target),
+                                    3,
+                                ),
+                                source_has_deathtouch: true,
+                                source_has_lifelink: true,
+                            }],
+                            &mut events,
+                        )
+                        .unwrap();
+                    engine.commit_completed_damage_batch(&completed, &mut events);
+                    let dealt = 3 - prevented;
+                    let object = &engine.state.objects[&target];
+                    assert_eq!(object.damage, 0);
+                    assert_eq!(
+                        object.counter_count(CounterKind::MinusOneMinusOne),
+                        if prohibited { 0 } else { dealt }
+                    );
+                    assert_eq!(object.deathtouch_damage, dealt > 0);
+                    assert_eq!(engine.state.players[0].life, 20 + dealt as i32);
+                    assert_eq!(completed[0].result.prevented, prevented);
+                }
+            }
+        }
+    }
 
     fn ability_item(source: ObjectId, generation: u64) -> StackItem {
         StackItem {

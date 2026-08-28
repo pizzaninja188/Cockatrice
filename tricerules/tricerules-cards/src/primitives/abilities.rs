@@ -1465,6 +1465,9 @@ pub enum StaticAbilityDef {
         /// untap effects remain legal.
         #[serde(default)]
         doesnt_untap_during_untap_step: bool,
+        /// Blossombind / Frozen in Ice: prohibits every untap event, not just the turn action.
+        #[serde(default)]
+        cant_untap: bool,
     },
     /// CR 508.1c / 509.1b: cumulative combat restrictions, optionally conditioned on live state.
     /// Vampire Soulcaller prohibits blocking; Argothian Sprite filters blockers; Rampaging

@@ -204,6 +204,7 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
             }
             AbilityCost::Tap
             | AbilityCost::Blight { .. }
+            | AbilityCost::RemoveCounters { .. }
             | AbilityCost::TapPermanents { .. }
             | AbilityCost::Mana(_)
             | AbilityCost::Loyalty(_) => None,
@@ -477,6 +478,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             cant_attack,
             cant_block,
             doesnt_untap_during_untap_step,
+            cant_untap,
         } = ability
         {
             if !attachment_source {
@@ -500,6 +502,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 && !cant_attack
                 && !cant_block
                 && !doesnt_untap_during_untap_step
+                && !cant_untap
             {
                 return Err(RegistryError::InvalidCard {
                     id: card.id.clone(),
@@ -561,6 +564,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     || *cant_attack
                     || *cant_block
                     || *doesnt_untap_during_untap_step
+                    || *cant_untap
                 {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),

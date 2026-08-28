@@ -1,7 +1,7 @@
 use crate::helpers::*;
 
 #[test]
-fn keyword_counter_grants_layer_6_keyword_and_tracks_first_timestamp() {
+fn keyword_counter_grants_layer_6_keyword_and_refreshes_timestamp() {
     use tricerules_cards::{CounterKind, Keyword};
 
     let decks = Some(vec![
@@ -45,8 +45,8 @@ fn keyword_counter_grants_layer_6_keyword_and_tracks_first_timestamp() {
             .get(&bear)
             .expect("bear")
             .counter_timestamp(CounterKind::Keyword(Keyword::Flying)),
-        Some(first_timestamp),
-        "later counters of the same kind share the first counter's timestamp"
+        Some(later_timestamp),
+        "adding a counter refreshes the timestamp of every counter of that kind"
     );
     assert_eq!(
         e.state

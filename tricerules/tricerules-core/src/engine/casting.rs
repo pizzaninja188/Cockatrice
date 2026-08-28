@@ -1308,6 +1308,9 @@ impl GameEngine {
         if !self.activation_conditions_hold(permanent_id, ability) {
             return false;
         }
+        if !self.counter_costs_payable(permanent_id, &ability.costs) {
+            return false;
+        }
         if !self.activation_limit_allows(permanent_id, ability_index, ability) {
             return false;
         }

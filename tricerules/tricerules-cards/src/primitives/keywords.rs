@@ -113,6 +113,8 @@ impl ProtectionQuality {
 /// such as [`Evasion`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Keyword {
+    /// Sickle Ripper / Barbed Bloodletter: creature damage produces -1/-1 counters.
+    Wither,
     /// CR 702.51: Unexpected Assistance and Merrow Skyswimmer.
     Convoke,
     /// CR 702.9: this creature can only be blocked by creatures with flying or reach.
@@ -185,6 +187,7 @@ impl Keyword {
     pub fn as_str(self) -> &'static str {
         match self {
             Keyword::Flying => "Flying",
+            Keyword::Wither => "Wither",
             Keyword::Reach => "Reach",
             Keyword::Intimidate => "Intimidate",
             Keyword::Vigilance => "Vigilance",

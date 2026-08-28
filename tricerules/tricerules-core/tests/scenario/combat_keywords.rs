@@ -3,6 +3,67 @@ use tricerules_cards::{ContinuousEffectKind, EffectDuration, Keyword};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
 
 #[test]
+fn issue_157_wither_first_strike_changes_later_damage_without_marking_damage() {
+    use tricerules_cards::CounterKind;
+    for first_strike in [false, true] {
+        let mut e = GameEngine::new(15708, &[0, 1], 20, None, true).unwrap();
+        advance_to_declare_attackers(&mut e);
+        let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+        let blocker = inject_creature_on_battlefield(&mut e, 1, "hill_giant");
+        e.state.objects.get_mut(&blocker).unwrap().power = None;
+        e.state.objects.get_mut(&blocker).unwrap().toughness = None;
+        for keyword in [
+            Some(Keyword::Wither),
+            first_strike.then_some(Keyword::FirstStrike),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            e.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(attacker),
+                kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 0,
+            });
+        }
+        e.apply_command(0, &declare_attackers(vec![attacker]))
+            .unwrap();
+        pass_both_players(&mut e);
+        e.apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: attacker,
+                blocker_id: blocker,
+            }]),
+        )
+        .unwrap();
+        pass_both_players(&mut e);
+        if first_strike {
+            pass_both_players(&mut e);
+        }
+        assert_eq!(
+            e.state.objects[&blocker].counter_count(CounterKind::MinusOneMinusOne),
+            2,
+            "first_strike={first_strike}, step={:?}, blocker={:?}, attacker={:?}",
+            e.state.turn_step,
+            e.state.objects[&blocker],
+            e.state.objects[&attacker]
+        );
+        assert_eq!(e.state.objects[&blocker].damage, 0);
+        assert_eq!(
+            e.state.objects[&attacker].zone == tricerules_core::Zone::Battlefield,
+            first_strike
+        );
+        if first_strike {
+            assert_eq!(e.state.objects[&attacker].damage, 1);
+        }
+    }
+}
+
+#[test]
 fn summoning_sick_creature_can_block() {
     // CR 302.6: summoning sickness does NOT prevent blocking.
     // Defender has a summoning-sick but untapped creature → engine must enter DeclareBlockers

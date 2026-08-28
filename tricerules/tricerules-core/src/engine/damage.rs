@@ -10,6 +10,7 @@ use super::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DamageSourceSnapshot {
+    pub wither: bool,
     pub object_id: ObjectId,
     pub controller: PlayerId,
     pub label: String,
@@ -91,6 +92,7 @@ impl DamageEvent {
     ) -> Self {
         Self {
             source: DamageSourceSnapshot {
+                wither: false,
                 object_id: source_id,
                 controller,
                 label: label.into(),
@@ -281,6 +283,11 @@ impl GameEngine {
     ) -> Option<Vec<CompletedDamage>> {
         for spec in &mut damage {
             let item_source = item.source_permanent_id.unwrap_or(item.id);
+            spec.event.source.wither = if spec.event.source.object_id == item_source {
+                self.resolving_source_has_keyword(item, Keyword::Wither)
+            } else {
+                self.effective_has_keyword(spec.event.source.object_id, Keyword::Wither)
+            };
             let source = if spec.event.source.object_id == item_source {
                 TargetSourceIdentity::for_stack_item(self, item)
             } else {
@@ -719,8 +726,8 @@ impl GameEngine {
     }
 
     /// Preflight a simultaneous combat-damage batch. The legacy commit loop remains the fast path
-    /// when no ordering decision exists; when CR 616 or finite-shield allocation creates a real
-    /// choice, the whole batch is parked before any damage is committed.
+    /// when neither Wither nor an ordering decision is present. Wither uses the shared result
+    /// pipeline; CR 616 ordering parks the whole batch before any damage is committed.
     pub(super) fn try_park_ordered_combat_damage(
         &mut self,
         combat: &CombatState,
@@ -832,7 +839,11 @@ impl GameEngine {
             }
         }
 
-        if !self.damage_batch_needs_ordering(&damage) {
+        if !self.damage_batch_needs_ordering(&damage)
+            && !damage
+                .iter()
+                .any(|d| self.effective_has_keyword(d.event.source.object_id, Keyword::Wither))
+        {
             return Ok(false);
         }
         let first = damage
@@ -850,7 +861,12 @@ impl GameEngine {
             targets: Vec::new(),
             ability_text: Some("combat damage".to_string()),
             source_permanent_id: Some(first.event.source.object_id),
-            source_zone_change: 0,
+            source_zone_change: self
+                .state
+                .zone_change_generation
+                .get(&first.event.source.object_id)
+                .copied()
+                .unwrap_or(0),
             source_face_change: 0,
             ability_index: None,
             activated_ability: None,
@@ -870,11 +886,8 @@ impl GameEngine {
             trigger_context: TriggerContext::default(),
         };
         let completed = self.process_or_park_damage_batch(&item, damage, events);
-        debug_assert!(completed.is_none());
-        if completed.is_some() {
-            return Err(EngineError::Illegal(
-                "ordered combat damage unexpectedly completed without a choice",
-            ));
+        if let Some(completed) = completed {
+            self.commit_completed_damage_batch(&completed, events);
         }
         Ok(true)
     }
@@ -1001,7 +1014,9 @@ impl GameEngine {
                     return 0;
                 }
                 if is_creature {
-                    object.damage = object.damage.saturating_add(result.dealt);
+                    if !event.source.wither {
+                        object.damage = object.damage.saturating_add(result.dealt);
+                    }
                     if source_has_deathtouch && result.dealt > 0 {
                         object.deathtouch_damage = true;
                     }
@@ -1025,6 +1040,9 @@ impl GameEngine {
                     && object.counter_count(CounterKind::Defense) == 0
                     && characteristics.has_type("Siege");
                 let _ = object;
+                if is_creature && event.source.wither {
+                    self.place_counters(permanent, CounterKind::MinusOneMinusOne, result.dealt);
+                }
                 if defeated_siege {
                     self.stage_siege_defeat_trigger(permanent);
                 }

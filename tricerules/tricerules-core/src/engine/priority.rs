@@ -640,7 +640,7 @@ impl GameEngine {
                 let skip_untap = self.state.skip_next_untap.remove(&(oid, generation));
                 let doesnt_untap = self.doesnt_untap_during_untap_step(oid);
                 if !skip_untap && !doesnt_untap {
-                    super::attempt_untap(&mut self.state, oid);
+                    super::attempt_untap(self, oid);
                 }
                 if let Some(c) = self.state.objects.get_mut(&oid) {
                     c.summoning_sick = false;
@@ -656,7 +656,7 @@ impl GameEngine {
             .filter(|oid| self.untaps_during_other_players_untap_steps(*oid))
             .collect::<Vec<_>>();
         for oid in additional_untaps {
-            super::attempt_untap(&mut self.state, oid);
+            super::attempt_untap(self, oid);
         }
         // Servatrice only applies engine untaps during batches that include phase_changed("untap").
         // Emit zone_view in this same batch so battlefield_tapped reaches Cockatrice while

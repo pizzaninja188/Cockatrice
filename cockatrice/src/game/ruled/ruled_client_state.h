@@ -169,6 +169,14 @@ enum class RuledCostChoiceKind : int
     Exile,
     Tap,
     Blight,
+    RemoveCounters,
+};
+
+struct RuledCounterRemovalOption
+{
+    quint32 optionId = 0;
+    QString label;
+    quint32 availableCount = 0;
 };
 
 struct RuledCostChoice
@@ -181,6 +189,10 @@ struct RuledCostChoice
     RuledCostChoiceKind kind = RuledCostChoiceKind::Unspecified;
     QHash<quint32, quint64> candidateGenerations;
     quint32 blightCount = 0;
+    quint32 counterSourceId = 0;
+    quint64 counterSourceGeneration = 0;
+    quint32 counterCount = 0;
+    QVector<RuledCounterRemovalOption> counterOptions;
 };
 
 enum class RuledCastCostOptionKind : int

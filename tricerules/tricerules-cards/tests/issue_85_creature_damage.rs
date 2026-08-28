@@ -4,6 +4,51 @@ use tricerules_cards::primitives::{
 use tricerules_cards::CardRegistry;
 
 #[test]
+fn issue_157_counter_effects_are_typed_and_validate_their_subjects() {
+    for text in [
+        "RemoveCounters(counter: MinusOneMinusOne, count: 1, subject: Source)",
+        "PutCounterSnapshot(from: Source, subject: Chosen((kind: Creature, controller: You)))",
+        "PutCounterSnapshot(from: TriggerObject, subject: Source)",
+    ] {
+        let effect: SpellEffectKind = ron::from_str(text).expect("typed counter effect");
+        effect
+            .validate(tricerules_cards::primitives::EffectContext::Ability)
+            .unwrap();
+    }
+}
+
+#[test]
+fn issue_157_wither_and_absolute_untap_are_distinct_capabilities() {
+    let _: tricerules_cards::Keyword = ron::from_str("Wither").unwrap();
+    let _: tricerules_cards::primitives::StaticAbilityDef =
+        ron::from_str("AttachedModifier(cant_untap: true)").unwrap();
+}
+
+#[test]
+fn issue_157_counter_costs_distinguish_fixed_kind_from_any_one() {
+    for text in [
+        "RemoveCounters(counter: None, count: 1)",
+        "RemoveCounters(counter: Some(PlusOnePlusOne), count: 2)",
+    ] {
+        let _: tricerules_cards::AbilityCost = ron::from_str(text).unwrap();
+    }
+}
+
+#[test]
+fn issue_157_departure_snapshot_requires_an_observed_object() {
+    let result = CardRegistry::from_chunks_and_tokens(
+        &[r#"(
+        id: "invalid_snapshot", name: "Invalid snapshot", mana_cost: "{1}", types: ["Artifact"],
+        triggered_abilities: [(trigger: WhenSelfEntersBattlefield,
+            effect: [PutCounterSnapshot(from: TriggerObject, subject: Source)], text: "Invalid snapshot")]
+    )"#],
+        &[],
+    );
+    let error = result.expect_err("an ETB trigger cannot supply another object's departure bag");
+    assert!(error.to_string().contains("observed object"), "{error}");
+}
+
+#[test]
 fn issue_85_cards_share_the_grouped_creature_damage_primitive() {
     let registry = CardRegistry::global();
 

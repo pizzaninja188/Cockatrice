@@ -83,6 +83,7 @@ impl GameEngine {
             max: 1,
             kind: rv1::CostChoiceKind::Blight as i32,
             blight_count: count,
+            counter_removal: None,
             candidate_objects: candidate_ids
                 .iter()
                 .map(|&oid| rv1::CostObjectRef {

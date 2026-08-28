@@ -168,6 +168,21 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
             case ruled::v1::COST_CHOICE_KIND_BLIGHT:
                 parsed.kind = RuledCostChoiceKind::Blight;
                 break;
+            case ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS:
+                parsed.kind = RuledCostChoiceKind::RemoveCounters;
+                if (choice.has_counter_removal() && choice.counter_removal().has_source()) {
+                    const auto &removal = choice.counter_removal();
+                    parsed.counterSourceId = removal.source().object_id();
+                    parsed.counterSourceGeneration = removal.source().zone_change_generation();
+                    parsed.counterCount = removal.count();
+                    for (const auto &option : removal.options()) {
+                        if (option.option_id() != 0 && option.available_count() >= removal.count()) {
+                            parsed.counterOptions.append(
+                                {option.option_id(), QString::fromStdString(option.label()), option.available_count()});
+                        }
+                    }
+                }
+                break;
             default:
                 parsed.kind = RuledCostChoiceKind::Unspecified;
                 break;

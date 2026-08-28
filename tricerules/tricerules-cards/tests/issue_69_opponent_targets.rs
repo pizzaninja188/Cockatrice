@@ -57,6 +57,7 @@ fn glaring_aegis_has_complete_oracle_behavior() {
             cant_attack: false,
             cant_block: false,
             doesnt_untap_during_untap_step: false,
+            cant_untap: false,
         }]
     );
 }

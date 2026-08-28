@@ -1,0 +1,17 @@
+// Oracle/rulings verified 2026-08-28. CR 101.2, 120.3, 122: prohibitions do not prevent damage.
+(
+  id: "blossombind",
+  name: "Blossombind",
+  mana_cost: "{1}{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Tap(subject: AttachedObject)],
+    text: "When this Aura enters, tap enchanted creature.",
+  )],
+  static_abilities: [
+    AttachedModifier(cant_untap: true),
+    ProhibitCounters(affected: AttachedPermanent),
+  ],
+)

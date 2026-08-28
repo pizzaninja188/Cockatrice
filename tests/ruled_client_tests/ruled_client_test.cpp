@@ -3371,6 +3371,54 @@ TEST_F(RuledClientTest, AppliesExileLandActionsAndStablePermissionGroupSnapshots
     EXPECT_EQ(changed.count(), 2);
 }
 
+TEST_F(RuledClientTest, CounterRemovalCostsAreRecognized)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *hand = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
+    hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_hand_index(3);
+    auto *choice = hand->mutable_cost_choices()->add_choices();
+    choice->set_kind(ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS);
+    choice->set_cost_index(1);
+    choice->set_min(1);
+    choice->set_max(1);
+    auto *removal = choice->mutable_counter_removal();
+    removal->mutable_source()->set_object_id(900);
+    removal->mutable_source()->set_zone_change_generation(12);
+    removal->set_count(1);
+    auto *option = removal->add_options();
+    option->set_option_id(3);
+    option->set_label("stun");
+    option->set_available_count(2);
+    apply(batch);
+    const auto costs = state->spellCostData(3, 0, RuledCastSource::Hand);
+    ASSERT_EQ(costs.choices.size(), 1);
+    EXPECT_NE(costs.choices[0].kind, RuledCostChoiceKind::Unspecified);
+    const auto &parsed = costs.choices.front();
+    ASSERT_EQ(parsed.counterOptions.size(), 1);
+    EXPECT_EQ(parsed.counterOptions.front().label, QStringLiteral("stun"));
+    PendingActivatedAbility pending;
+    pending.valid = true;
+    pending.permanentOid = 900;
+    pending.expectedZoneChangeGeneration = 12;
+    pending.costChoices = costs.choices;
+    EXPECT_TRUE(RuledPendingCast::chooseCounterCosts(nullptr, pending));
+    ASSERT_EQ(pending.costSelections.size(), 1);
+    EXPECT_EQ(pending.nextCostChoice, 1);
+    EXPECT_TRUE(ruledCounterSelectionStillLegal(pending.costSelections.front(), parsed));
+    ruled::v1::CostSelection command;
+    ruledWriteCounterRemoval(pending.costSelections.front(), command);
+    EXPECT_EQ(command.counter_removal().option_id(), 3u);
+    EXPECT_EQ(command.counter_removal().source().object_id(), 900u);
+    EXPECT_EQ(command.counter_removal().source().zone_change_generation(), 12u);
+    auto stale = parsed;
+    ++stale.counterSourceGeneration;
+    EXPECT_FALSE(ruledCounterSelectionStillLegal(pending.costSelections.front(), stale));
+    stale = parsed;
+    stale.counterOptions.clear();
+    EXPECT_FALSE(ruledCounterSelectionStillLegal(pending.costSelections.front(), stale));
+}
+
 TEST_F(RuledClientTest, BlightCostsUseAnAuthoritativeCreaturePicker)
 {
     ruled::v1::RuledEventBatch batch;

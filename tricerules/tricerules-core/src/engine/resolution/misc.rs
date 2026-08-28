@@ -267,7 +267,7 @@ pub(super) fn untap(
             .objects
             .get(&tid)
             .is_some_and(|object| object.zone == Zone::Battlefield);
-        if on_battlefield && attempt_untap(&mut cx.engine.state, tid) == UntapOutcome::Untapped {
+        if on_battlefield && attempt_untap(cx.engine, tid) == UntapOutcome::Untapped {
             let subject_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
             cx.events
                 .push(ev_log(format!("{} untaps {subject_name}", cx.spell_label)));

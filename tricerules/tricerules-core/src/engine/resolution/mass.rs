@@ -220,7 +220,7 @@ pub(super) fn untap_all(
         .collect();
     let mut untapped = 0;
     for oid in affected {
-        if attempt_untap(&mut engine.state, oid) == UntapOutcome::Untapped {
+        if attempt_untap(engine, oid) == UntapOutcome::Untapped {
             untapped += 1;
         }
     }

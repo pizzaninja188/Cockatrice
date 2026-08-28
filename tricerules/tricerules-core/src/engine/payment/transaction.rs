@@ -15,6 +15,11 @@ pub(in crate::engine) struct SacrificeSnapshot {
 }
 
 enum CostDebit {
+    RemoveCounters {
+        object: rv1::CostObjectRef,
+        kind: CounterKind,
+        count: u32,
+    },
     Blight {
         object: rv1::CostObjectRef,
         count: u32,
@@ -712,6 +717,35 @@ impl GameEngine {
         let eligible_restricted_mana = self.eligible_restricted_mana_for_ability(idx, permanent_id);
         for (cost_index, cost) in costs.iter().enumerate() {
             match cost {
+                AbilityCost::RemoveCounters { counter, count } => {
+                    expected_selections += 1;
+                    let Some(Selection::CounterRemoval(selected)) =
+                        by_index.get(&cost_index).and_then(|s| s.selection.as_ref())
+                    else {
+                        return Err(EngineError::Illegal("missing counter removal selection"));
+                    };
+                    let reference = selected
+                        .source
+                        .as_ref()
+                        .ok_or(EngineError::Illegal("missing counter source"))?;
+                    if reference.object_id != permanent_id {
+                        return Err(EngineError::Illegal("counter cost must use its source"));
+                    }
+                    let kind = self.state.objects[&permanent_id]
+                        .counters
+                        .keys()
+                        .copied()
+                        .find(|kind| {
+                            crate::engine::counters::counter_option_id(*kind) == selected.option_id
+                        })
+                        .filter(|kind| counter.is_none_or(|expected| expected == *kind))
+                        .ok_or(EngineError::Illegal("invalid counter kind"))?;
+                    debits.push(CostDebit::RemoveCounters {
+                        object: *reference,
+                        kind,
+                        count: *count,
+                    });
+                }
                 AbilityCost::Blight { count } => {
                     expected_selections += 1;
                     let selection = by_index
@@ -1030,11 +1064,12 @@ impl GameEngine {
 
         // Counter placement is nonconsuming. Complete it before any selected zone departure,
         // including when the same creature also pays a sacrifice cost (CR 601.2h).
-        if plan
-            .debits
-            .iter()
-            .any(|debit| matches!(debit, CostDebit::Blight { .. }))
-        {
+        if plan.debits.iter().any(|debit| {
+            matches!(
+                debit,
+                CostDebit::Blight { .. } | CostDebit::RemoveCounters { .. }
+            )
+        }) {
             plan.debits.sort_by_key(|debit| {
                 matches!(
                     debit,
@@ -1065,6 +1100,13 @@ impl GameEngine {
             )
             .then(|| self.snapshot_zone_event());
             match debit {
+                CostDebit::RemoveCounters {
+                    object,
+                    kind,
+                    count,
+                } => {
+                    self.remove_counters(object.object_id, kind, count);
+                }
                 CostDebit::Blight { object, count } => {
                     let receipt = self.complete_blight(plan.player, count, Some(object.object_id));
                     payment.trigger_events.push(GameEvent::Blighted(receipt));
@@ -1250,8 +1292,28 @@ impl GameEngine {
         if self.state.player_idx(plan.player) != Some(plan.player_idx) {
             return Err(EngineError::Illegal("cost transaction player changed"));
         }
+        let mut counter_debits: BTreeMap<(ObjectId, CounterKind), u64> = BTreeMap::new();
         for debit in &plan.debits {
             let valid = match debit {
+                CostDebit::RemoveCounters {
+                    object,
+                    kind,
+                    count,
+                } => {
+                    *counter_debits.entry((object.object_id, *kind)).or_default() +=
+                        u64::from(*count);
+                    self.state
+                        .objects
+                        .get(&object.object_id)
+                        .is_some_and(|o| o.zone == Zone::Battlefield && o.controller == plan.player)
+                        && self
+                            .state
+                            .zone_change_generation
+                            .get(&object.object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == object.zone_change_generation
+                }
                 CostDebit::Blight { object, count } => {
                     self.validate_blight(plan.player, *count, object).is_ok()
                 }
@@ -1260,6 +1322,11 @@ impl GameEngine {
                     generation,
                     delta,
                 } => {
+                    if *delta < 0 {
+                        *counter_debits
+                            .entry((*object_id, CounterKind::Loyalty))
+                            .or_default() += u64::from(delta.unsigned_abs());
+                    }
                     (*delta <= 0 || self.can_receive_counters(*object_id))
                         && self.state.objects.get(object_id).is_some_and(|object| {
                             object.zone == Zone::Battlefield
@@ -1391,6 +1458,16 @@ impl GameEngine {
                 return Err(EngineError::Illegal("cost transaction became stale"));
             }
         }
+        for ((oid, kind), count) in counter_debits {
+            if self
+                .state
+                .objects
+                .get(&oid)
+                .is_none_or(|o| u64::from(o.counter_count(kind)) < count)
+            {
+                return Err(EngineError::Illegal("not enough counters to pay all costs"));
+            }
+        }
         Ok(())
     }
 
@@ -1452,6 +1529,73 @@ impl GameEngine {
 #[cfg(test)]
 mod convoke_transaction_tests {
     use super::*;
+
+    #[test]
+    fn issue_157_counter_debits_aggregate_before_any_payment_and_precede_sacrifice() {
+        let mut engine = GameEngine::new(15707, &[0, 1], 20, None, true).unwrap();
+        let oid = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&oid).unwrap().card_id = "dockworker_drone".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            oid,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&oid)
+            .unwrap()
+            .add_counters(CounterKind::PlusOnePlusOne, 1, 0);
+        let generation = engine.state.zone_change_generation[&oid];
+        let debit = || CostDebit::RemoveCounters {
+            object: rv1::CostObjectRef {
+                object_id: oid,
+                zone_change_generation: generation,
+            },
+            kind: CounterKind::PlusOnePlusOne,
+            count: 1,
+        };
+        let plan = |debits| CostTransactionPlan {
+            purpose: CostPurpose::Ability,
+            player: 0,
+            player_idx: 0,
+            cast_cost_receipts: vec![],
+            debits,
+        };
+        assert!(engine
+            .commit_cost_transaction(plan(vec![debit(), debit()]))
+            .is_err());
+        assert_eq!(
+            engine.state.objects[&oid].counter_count(CounterKind::PlusOnePlusOne),
+            1
+        );
+        assert!(!engine.counter_costs_payable(
+            oid,
+            &[
+                AbilityCost::RemoveCounters {
+                    counter: Some(CounterKind::PlusOnePlusOne),
+                    count: 1
+                },
+                AbilityCost::RemoveCounters {
+                    counter: None,
+                    count: 1
+                },
+            ]
+        ));
+        let snapshot = engine.sacrifice_snapshot(oid).unwrap();
+        let receipt = engine
+            .commit_cost_transaction(plan(vec![
+                CostDebit::Sacrifice { snapshot, owner: 0 },
+                debit(),
+            ]))
+            .unwrap();
+        assert!(receipt.sacrificed[0].source.counters.is_empty());
+        assert!(engine.state.last_known_counters_by_generation[&(oid, generation)].is_empty());
+        assert_eq!(engine.state.objects[&oid].zone, Zone::Graveyard);
+    }
 
     #[test]
     fn issue_153_blight_then_sacrifice_preserves_post_counter_lki_and_one_event() {

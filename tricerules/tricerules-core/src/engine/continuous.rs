@@ -7,6 +7,35 @@ use super::resolution::resolve_creature_scope;
 use super::*;
 
 impl GameEngine {
+    /// Heirloom Auntie / Brambleback Brute: effects saturate; costs preflight the full debit.
+    pub(super) fn remove_counters(
+        &mut self,
+        target: ObjectId,
+        kind: CounterKind,
+        count: u32,
+    ) -> u32 {
+        let Some(object) = self
+            .state
+            .objects
+            .get_mut(&target)
+            .filter(|o| o.zone == Zone::Battlefield)
+        else {
+            return 0;
+        };
+        let before = object.counter_count(kind);
+        let removed = before.min(count);
+        object.set_counter(kind, before - removed);
+        if kind == CounterKind::Defense
+            && before > 0
+            && before == removed
+            && self
+                .characteristics(target)
+                .is_some_and(|c| c.has_type("Battle") && c.has_type("Siege"))
+        {
+            self.stage_siege_defeat_trigger(target);
+        }
+        removed
+    }
     /// Tatterkite / Blossombind: consult live copied abilities and attachment membership.
     /// This also runs after an entrant's face is established, before its entry counters.
     pub(super) fn can_receive_counters(&self, target: ObjectId) -> bool {
@@ -325,6 +354,7 @@ impl GameEngine {
                     cant_attack,
                     cant_block,
                     doesnt_untap_during_untap_step,
+                    cant_untap,
                 } => {
                     let affected = AffectedScope::AttachedTo(object_id);
                     if let Some(name) = set_name {
@@ -456,6 +486,17 @@ impl GameEngine {
                                 ..Default::default()
                             }),
                             condition: None,
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    if cant_untap {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::ProhibitUntap,
+                            condition: condition.clone(),
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
                         });

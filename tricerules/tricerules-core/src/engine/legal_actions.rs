@@ -326,6 +326,12 @@ fn activated_ability_info(
         .costs
         .iter()
         .map(|cost| match cost {
+            AbilityCost::RemoveCounters { counter, count } => format!(
+                "Remove {count} {}counter(s)",
+                counter
+                    .map(|k| format!("{} ", k.label()))
+                    .unwrap_or_default()
+            ),
             AbilityCost::Tap => "{T}".to_string(),
             AbilityCost::TapPermanents { count, .. } => format!("Tap {count} permanents"),
             AbilityCost::Blight { count } => format!("Blight {count}"),
@@ -532,6 +538,9 @@ fn legal_ability_cost_choices(
 
     for (cost_index, cost) in ability.costs.iter().enumerate() {
         match cost {
+            AbilityCost::RemoveCounters { counter, count } => {
+                choices.push(eng.counter_removal_choice(source, cost_index, *counter, *count));
+            }
             AbilityCost::Blight { count } => {
                 let choice = eng.blight_cost_choice(player, cost_index, *count);
                 structurally_payable &= !choice.candidate_ids.is_empty();
@@ -549,6 +558,7 @@ fn legal_ability_cost_choices(
                     min: 1,
                     max: 1,
                     blight_count: 0,
+                    counter_removal: None,
                     kind: rv1::CostChoiceKind::Discard as i32,
                     candidate_objects: vec![],
                 });
@@ -574,6 +584,7 @@ fn legal_ability_cost_choices(
                     min: 1,
                     max: 1,
                     blight_count: 0,
+                    counter_removal: None,
                     kind: rv1::CostChoiceKind::Sacrifice as i32,
                     candidate_objects: candidate_ids
                         .iter()
@@ -615,6 +626,7 @@ fn legal_ability_cost_choices(
                     min: *count,
                     max: *count,
                     blight_count: 0,
+                    counter_removal: None,
                     kind: rv1::CostChoiceKind::Tap as i32,
                     candidate_objects: candidate_ids
                         .iter()
@@ -659,6 +671,7 @@ fn legal_ability_cost_choices(
                     min: *count,
                     max: *count,
                     blight_count: 0,
+                    counter_removal: None,
                     kind: rv1::CostChoiceKind::Exile as i32,
                     candidate_objects: vec![],
                 });
@@ -708,6 +721,7 @@ fn legal_spell_cost_choices(
                     min: 1,
                     max: 1,
                     blight_count: 0,
+                    counter_removal: None,
                     kind: rv1::CostChoiceKind::Discard as i32,
                     candidate_objects: vec![],
                 });
@@ -728,6 +742,7 @@ fn legal_spell_cost_choices(
                     min: 1,
                     max: 1,
                     blight_count: 0,
+                    counter_removal: None,
                     kind: rv1::CostChoiceKind::Sacrifice as i32,
                     candidate_objects: candidate_ids
                         .iter()
@@ -769,6 +784,7 @@ fn legal_spell_cost_choices(
                     min: *count,
                     max: *count,
                     blight_count: 0,
+                    counter_removal: None,
                     kind: rv1::CostChoiceKind::Tap as i32,
                     candidate_objects: candidate_ids
                         .iter()

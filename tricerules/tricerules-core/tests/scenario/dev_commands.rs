@@ -61,6 +61,269 @@ fn basics_engine(seed: u64) -> GameEngine {
     e
 }
 
+#[test]
+fn issue_157_dounguard_removes_counters_only_for_other_friendly_entries() {
+    use tricerules_cards::CounterKind::MinusOneMinusOne;
+    let mut e = basics_engine(15701);
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Reluctant Dounguard"))
+        .unwrap();
+    let source = *e.state.players[0].battlefield.last().unwrap();
+    assert_eq!(e.state.objects[&source].counter_count(MinusOneMinusOne), 2);
+    e.apply_command(0, &put(1, DevZone::Battlefield, "Grizzly Bears"))
+        .unwrap();
+    assert!(e.state.stack.is_empty());
+    for expected in [1, 0, 0] {
+        e.apply_command(0, &put(0, DevZone::Battlefield, "Grizzly Bears"))
+            .unwrap();
+        resolve_entire_stack_two_player(&mut e);
+        assert_eq!(
+            e.state.objects[&source].counter_count(MinusOneMinusOne),
+            expected
+        );
+    }
+}
+
+#[test]
+fn issue_157_drone_copies_all_pre_sba_counters_even_after_returning() {
+    use tricerules_cards::CounterKind;
+    let mut e = basics_engine(15702);
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Dockworker Drone"))
+        .unwrap();
+    let source = *e.state.players[0].battlefield.last().unwrap();
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Hill Giant"))
+        .unwrap();
+    let recipient = *e.state.players[0].battlefield.last().unwrap();
+    e.state
+        .objects
+        .get_mut(&source)
+        .unwrap()
+        .add_counters(CounterKind::Stun, 2, 0);
+    e.state
+        .objects
+        .get_mut(&source)
+        .unwrap()
+        .add_counters(CounterKind::MinusOneMinusOne, 2, 0);
+    e.apply_command(e.state.priority_player_id(), &pass())
+        .unwrap();
+    assert_eq!(e.state.objects[&source].zone, Zone::Graveyard);
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                targets: vec![TargetRef {
+                    kind: TargetRefKind::Permanent as i32,
+                    object_id: recipient,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })),
+        },
+    )
+    .unwrap();
+    e.apply_command(0, &mv(0, DevZone::Hand, "Dockworker Drone"))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.objects[&recipient].counter_count(CounterKind::Stun),
+        2
+    );
+    assert_eq!(
+        e.state.objects[&recipient].counter_count(CounterKind::MinusOneMinusOne),
+        1
+    );
+    assert_eq!(e.state.objects[&source].zone, Zone::Hand);
+}
+
+#[test]
+fn issue_157_brute_counter_payment_is_typed_atomic_and_generation_bound() {
+    use tricerules_cards::CounterKind;
+    use tricerules_proto::ruled::v1::{
+        cost_selection, CostObjectRef, CostSelection, CounterRemovalSelection,
+    };
+    let mut e = basics_engine(15703);
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Brambleback Brute"))
+        .unwrap();
+    let source = *e.state.players[0].battlefield.last().unwrap();
+    e.apply_command(0, &put(1, DevZone::Battlefield, "Hill Giant"))
+        .unwrap();
+    let target = *e.state.players[1].battlefield.last().unwrap();
+    e.apply_command(0, &add_mana(0, 0, 0, 0, 2, 0, 0)).unwrap();
+    e.state
+        .objects
+        .get_mut(&source)
+        .unwrap()
+        .add_counters(CounterKind::Stun, 1, 0);
+    let generation = e.state.zone_change_generation[&source];
+    let command = |generation, option_id| {
+        let mut command = activate_ability_with_costs(
+            source,
+            0,
+            target_object(target),
+            vec![CostSelection {
+                cost_index: 1,
+                selection: Some(cost_selection::Selection::CounterRemoval(
+                    CounterRemovalSelection {
+                        source: Some(CostObjectRef {
+                            object_id: source,
+                            zone_change_generation: generation,
+                        }),
+                        option_id,
+                    },
+                )),
+            }],
+        );
+        if let Some(Cmd::ActivateAbility(a)) = command.cmd.as_mut() {
+            a.expected_zone_change_generation = generation;
+        }
+        command
+    };
+    for invalid in [command(generation + 1, 3), command(generation, 999)] {
+        assert!(e.apply_command(0, &invalid).is_err());
+        assert_eq!(e.state.players[0].mana_pool.red, 2);
+        assert_eq!(e.state.objects[&source].counter_count(CounterKind::Stun), 1);
+        assert!(e.state.stack.is_empty());
+    }
+    e.apply_command(0, &command(generation, 3)).unwrap();
+    assert_eq!(e.state.players[0].mana_pool.red, 0);
+    assert_eq!(e.state.objects[&source].counter_count(CounterKind::Stun), 0);
+    assert_eq!(
+        e.state.objects[&source].counter_count(CounterKind::MinusOneMinusOne),
+        2
+    );
+    resolve_entire_stack_two_player(&mut e);
+}
+
+#[test]
+fn issue_157_auntie_surveils_before_removal_and_retains_departure_identity() {
+    use tricerules_cards::CounterKind;
+    for simultaneous_death in [false, true] {
+        let mut e = basics_engine(15706);
+        e.apply_command(0, &put(0, DevZone::Battlefield, "Heirloom Auntie"))
+            .unwrap();
+        let source = *e.state.players[0].battlefield.last().unwrap();
+        e.apply_command(0, &put(0, DevZone::Battlefield, "Hill Giant"))
+            .unwrap();
+        let other = *e.state.players[0].battlefield.last().unwrap();
+        e.state.objects.get_mut(&other).unwrap().damage = 3;
+        if simultaneous_death {
+            e.state.objects.get_mut(&source).unwrap().damage = 2;
+        }
+        e.apply_command(0, &pass()).unwrap();
+        assert_eq!(e.state.stack.len(), 1);
+        if simultaneous_death {
+            e.apply_command(0, &mv(0, DevZone::Battlefield, "Heirloom Auntie"))
+                .unwrap();
+        }
+        e.apply_command(e.state.priority_player_id(), &pass())
+            .unwrap();
+        let resolution = e
+            .apply_command(e.state.priority_player_id(), &pass())
+            .unwrap();
+        let choice = find_resolution_choice(&resolution).expect("surveil before counter removal");
+        assert_eq!(
+            e.state.objects[&source].counter_count(CounterKind::MinusOneMinusOne),
+            2
+        );
+        let top = choice.candidate_object_ids[0];
+        e.apply_command(0, &submit_resolution_choice(vec![top]))
+            .unwrap();
+        assert!(e.state.players[0].graveyard.contains(&top));
+        assert_eq!(
+            e.state.objects[&source].counter_count(CounterKind::MinusOneMinusOne),
+            if simultaneous_death { 2 } else { 1 }
+        );
+    }
+}
+
+#[test]
+fn issue_157_brute_can_pay_a_lethal_counter_cost() {
+    use tricerules_cards::CounterKind;
+    use tricerules_proto::ruled::v1::{
+        cost_selection, CostObjectRef, CostSelection, CounterRemovalSelection,
+    };
+    let mut e = basics_engine(15710);
+    e.apply_command(0, &put(0, DevZone::Battlefield, "Brambleback Brute"))
+        .unwrap();
+    let source = *e.state.players[0].battlefield.last().unwrap();
+    e.apply_command(0, &put(1, DevZone::Battlefield, "Hill Giant"))
+        .unwrap();
+    let target = *e.state.players[1].battlefield.last().unwrap();
+    e.apply_command(0, &add_mana(0, 0, 0, 0, 2, 0, 0)).unwrap();
+    let object = e.state.objects.get_mut(&source).unwrap();
+    object.set_counter(CounterKind::MinusOneMinusOne, 0);
+    object.add_counters(CounterKind::PlusOnePlusOne, 1, 0);
+    object.damage = 5;
+    let mut command = activate_ability_for(&e, source, 0, target_object(target));
+    if let Some(Cmd::ActivateAbility(a)) = command.cmd.as_mut() {
+        a.cost_selections.push(CostSelection {
+            cost_index: 1,
+            selection: Some(cost_selection::Selection::CounterRemoval(
+                CounterRemovalSelection {
+                    source: Some(CostObjectRef {
+                        object_id: source,
+                        zone_change_generation: a.expected_zone_change_generation,
+                    }),
+                    option_id: 1,
+                },
+            )),
+        });
+    }
+    e.apply_command(0, &command).unwrap();
+    assert_eq!(e.state.objects[&source].zone, Zone::Graveyard);
+    assert_eq!(e.state.stack.len(), 1);
+    assert_eq!(e.state.players[0].mana_pool.red, 0);
+    resolve_entire_stack_two_player(&mut e);
+}
+
+#[test]
+fn issue_157_counter_payment_replays_with_engine_published_options() {
+    use tricerules_proto::ruled::v1::{cost_selection, CostSelection, CounterRemovalSelection};
+    let mut e = basics_engine(15711);
+    let mut commands = vec![
+        (0, put(0, DevZone::Battlefield, "Brambleback Brute")),
+        (0, put(1, DevZone::Battlefield, "Hill Giant")),
+        (0, add_mana(0, 0, 0, 0, 2, 0, 0)),
+    ];
+    let mut batches = Vec::new();
+    for (actor, command) in &commands {
+        batches.push(e.apply_command(*actor, command).unwrap());
+    }
+    let source = *e.state.players[0].battlefield.last().unwrap();
+    let target = *e.state.players[1].battlefield.last().unwrap();
+    let choice = batches.last().unwrap().legal_by_player[&0]
+        .cost_choices_by_ability
+        .values()
+        .flat_map(|costs| &costs.choices)
+        .find_map(|choice| choice.counter_removal.as_ref())
+        .unwrap();
+    assert_eq!(choice.options.len(), 1);
+    assert_eq!(choice.options[0].available_count, 2);
+    let mut command = activate_ability_for(&e, source, 0, target_object(target));
+    if let Some(Cmd::ActivateAbility(a)) = command.cmd.as_mut() {
+        a.cost_selections.push(CostSelection {
+            cost_index: 1,
+            selection: Some(cost_selection::Selection::CounterRemoval(
+                CounterRemovalSelection {
+                    source: choice.source,
+                    option_id: choice.options[0].option_id,
+                },
+            )),
+        });
+    }
+    batches.push(e.apply_command(0, &command).unwrap());
+    commands.push((0, command));
+    while !e.state.stack.is_empty() {
+        let actor = e.state.priority_player_id();
+        let command = pass();
+        batches.push(e.apply_command(actor, &command).unwrap());
+        commands.push((actor, command));
+    }
+    let mut replay = basics_engine(15711);
+    for ((actor, command), expected) in commands.iter().zip(batches) {
+        assert_eq!(replay.apply_command(*actor, command).unwrap(), expected);
+    }
+}
+
 fn power_of(e: &GameEngine, oid: u32) -> u32 {
     e.characteristics(oid)
         .expect("object exists")

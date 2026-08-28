@@ -1,0 +1,16 @@
+// Oracle/rulings verified 2026-08-28. Counter choice is an engine-authored ability cost.
+(
+  id: "brambleback_brute",
+  name: "Brambleback Brute",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Giant", "Warrior"],
+  power: 4,
+  toughness: 5,
+  static_abilities: [EntersWithCounters(counter: MinusOneMinusOne, amount: 2)],
+  activated_abilities: [(
+    costs: [Mana("{1}{R}"), RemoveCounters(counter: None, count: 1)],
+    effect: [ApplyCombatRestriction(scope: Chosen((kind: Creature)), restriction: (cant_block: true))],
+    timing: SorcerySpeed,
+    text: "{1}{R}, Remove a counter from this creature: Target creature can't block this turn. Activate only as a sorcery.",
+  )],
+)

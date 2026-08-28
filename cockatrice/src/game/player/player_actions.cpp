@@ -105,6 +105,9 @@ void PlayerActions::reconcilePendingRuledTargetSelections()
         if (choice == choices.cend()) {
             return false;
         }
+        if (choice->kind == RuledCostChoiceKind::RemoveCounters) {
+            return ruledCounterSelectionStillLegal(selection, *choice);
+        }
         if (selection.selectedIds.isEmpty() || selection.selectedIds.size() < choice->min ||
             selection.selectedIds.size() > choice->max) {
             return false;
@@ -852,7 +855,9 @@ bool PlayerActions::completeActivateAbility()
         }
         auto *costSelection = aa->add_cost_selections();
         costSelection->set_cost_index(static_cast<quint32>(selection.costIndex));
-        if (selection.zone == RuledCostChoiceZone::Hand) {
+        if (selection.counterOptionId != 0) {
+            ruledWriteCounterRemoval(selection, *costSelection);
+        } else if (selection.zone == RuledCostChoiceZone::Hand) {
             RuledClientState *const handler = player->getGame()->getGameEventHandler()->ruled();
             const int handSlot = handler ? handler->engineHandSlotForServerCard(player->getPlayerInfo()->getId(),
                                                                                 static_cast<int>(selection.selectedIds.value(0)))
@@ -1071,6 +1076,10 @@ void PlayerActions::continuePendingSpellAfterChoice()
 void PlayerActions::continuePendingActivatedAbilityAfterChoice()
 {
     if (!pendingActivatedAbility.valid || pendingActivatedAbility.waitingForTarget) {
+        return;
+    }
+    if (!RuledPendingCast::chooseCounterCosts(nullptr, pendingActivatedAbility)) {
+        cancelPendingActivatedAbility();
         return;
     }
     if (!pendingActivatedAbility.targetingCostApplied && pendingActivatedAbility.selectedTargetOid != 0) {

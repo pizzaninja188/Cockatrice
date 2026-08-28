@@ -10,6 +10,12 @@ use serde::{Deserialize, Serialize};
 /// `{1}, {T}` filter land, and a sacrifice-for-mana rock all use these same cost kinds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AbilityCost {
+    /// Brambleback Brute removes any one kind; Walking Ballista removes fixed +1/+1 counters.
+    /// None permits exactly one counter of any present kind. Always paid by the source.
+    RemoveCounters {
+        counter: Option<super::CounterKind>,
+        count: u32,
+    },
     /// CR 701.68: Gristle Glutton and Spiral into Solitude put all counters on one creature.
     Blight { count: u32 },
     /// CR 606.4: add (positive), remove (negative), or leave unchanged (zero) loyalty counters
@@ -54,6 +60,17 @@ pub enum AbilityCost {
 impl AbilityCost {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::RemoveCounters { counter, count } => {
+                if *count == 0 || (counter.is_none() && *count != 1) {
+                    return Err(
+                        "counter cost requires a positive fixed count or any one counter".into(),
+                    );
+                }
+                if let Some(counter) = counter {
+                    counter.validate()?;
+                }
+                Ok(())
+            }
             Self::Blight { count: 0 } => Err("blight cost requires a positive count".into()),
             Self::TapPermanents { count: 0, .. } => {
                 Err("permanent tap cost requires a positive count".into())

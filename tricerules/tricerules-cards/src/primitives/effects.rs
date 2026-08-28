@@ -1110,6 +1110,13 @@ pub struct CounterPlacement {
     pub count: u32,
 }
 
+/// Departure LKI used by Dockworker Drone (Source) and The Ozolith (TriggerObject).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CounterSnapshotSource {
+    Source,
+    TriggerObject,
+}
+
 /// Where an effect is being resolved from. Controls validation that depends on context —
 /// e.g. [`EffectSubject::Source`] is only meaningful for an ability bound to a source permanent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2169,6 +2176,18 @@ pub enum SpellEffectKind {
         #[serde(default)]
         subject: EffectSubject,
     },
+    /// Heirloom Auntie and Reluctant Dounguard remove counters without paying a cost.
+    RemoveCounters {
+        counter: CounterKind,
+        count: u32,
+        #[serde(default)]
+        subject: EffectSubject,
+    },
+    /// CR 122.8: recreate a departed object's counter bag, never move live counters.
+    PutCounterSnapshot {
+        from: CounterSnapshotSource,
+        subject: EffectSubject,
+    },
     /// CR 119 + 119.4: drain `amount` life from a target player and give that much life to the
     /// controller ("target player loses N life and you gain N life"). Covered by Blood Artist,
     /// Falkenrath Noble, and drain-life spells like Vampire's Kiss. The target must be a player.
@@ -2600,6 +2619,12 @@ impl SpellEffectKind {
             } | SpellEffectKind::PutCounters {
                 subject: EffectSubject::AttachedObject,
                 ..
+            } | SpellEffectKind::RemoveCounters {
+                subject: EffectSubject::AttachedObject,
+                ..
+            } | SpellEffectKind::PutCounterSnapshot {
+                subject: EffectSubject::AttachedObject,
+                ..
             } | SpellEffectKind::GrantKeywords {
                 subject: EffectSubject::AttachedObject,
                 ..
@@ -2638,10 +2663,19 @@ impl SpellEffectKind {
     pub(crate) fn uses_trigger_object_reference(&self) -> bool {
         matches!(
             self,
-            SpellEffectKind::PumpTarget {
+            SpellEffectKind::PutCounterSnapshot {
+                from: CounterSnapshotSource::TriggerObject,
+                ..
+            } | SpellEffectKind::PumpTarget {
                 subject: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::PutCounters {
+                subject: EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::RemoveCounters {
+                subject: EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::PutCounterSnapshot {
                 subject: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::GrantKeywords {
@@ -2765,7 +2799,9 @@ impl SpellEffectKind {
             | SpellEffectKind::AddTypes { subject, .. }
             | SpellEffectKind::ReturnToOwnersHand { subject }
             | SpellEffectKind::Regenerate { subject }
-            | SpellEffectKind::PutCounters { subject, .. } => match subject {
+            | SpellEffectKind::PutCounters { subject, .. }
+            | SpellEffectKind::RemoveCounters { subject, .. }
+            | SpellEffectKind::PutCounterSnapshot { subject, .. } => match subject {
                 EffectSubject::Chosen(target) => vec![TargetRole::Filtered(target)],
                 EffectSubject::Source
                 | EffectSubject::AttachedObject
@@ -3058,8 +3094,18 @@ impl SpellEffectKind {
         if let SpellEffectKind::MoveGraveyardCards { filter, .. } = self {
             filter.validate()?;
         }
-        if let SpellEffectKind::PutCounters { counter, .. } = self {
+        if let SpellEffectKind::PutCounters { counter, .. }
+        | SpellEffectKind::RemoveCounters { counter, .. } = self
+        {
             counter.validate()?;
+        }
+        if matches!(self, SpellEffectKind::PutCounterSnapshot { .. })
+            && context == EffectContext::Spell
+        {
+            return Err("counter snapshots require a departure ability".into());
+        }
+        if matches!(self, SpellEffectKind::RemoveCounters { count: 0, .. }) {
+            return Err("counter removal requires a positive count".into());
         }
         if matches!(self, SpellEffectKind::Blight { count: 0 }) {
             return Err("Blight requires a positive counter count".into());
@@ -3402,6 +3448,16 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
                 ..
+            } | SpellEffectKind::RemoveCounters {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::PutCounterSnapshot {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
+                ..
             } | SpellEffectKind::GrantKeywords {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
@@ -3538,6 +3594,14 @@ impl SpellEffectKind {
             }
             // CR 122: counters go on permanents, never players.
             SpellEffectKind::PutCounters {
+                subject: EffectSubject::Chosen(target),
+                ..
+            }
+            | SpellEffectKind::RemoveCounters {
+                subject: EffectSubject::Chosen(target),
+                ..
+            }
+            | SpellEffectKind::PutCounterSnapshot {
                 subject: EffectSubject::Chosen(target),
                 ..
             } => {
@@ -4098,6 +4162,8 @@ pub enum ContinuousEffectKind {
     /// CR 502.3: the affected permanent is excluded from its controller's normal untap-step
     /// turn-based action. This does not prohibit other spells or abilities from untapping it.
     DoesntUntapDuringUntapStep,
+    /// Absolute prohibition shared by Blossombind and Frozen in Ice.
+    ProhibitUntap,
     /// CR 613.11 / 702.3: ignore only Defender while checking whether this creature may attack.
     /// The creature retains Defender for every other rules and display query.
     AttackAsThoughWithoutDefender,

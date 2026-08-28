@@ -64,7 +64,27 @@ struct RuledPendingCostSelection
     QVector<quint32> selectedIds;
     /// Parallel generation snapshot for typed public-zone choices; zero/empty for concealed slots.
     QVector<quint64> selectedGenerations;
+    /// Opaque engine option; zero denotes an ordinary object-selection cost.
+    quint32 counterOptionId = 0;
 };
+
+inline bool ruledCounterSelectionStillLegal(const RuledPendingCostSelection &selection, const RuledCostChoice &choice)
+{
+    return choice.kind == RuledCostChoiceKind::RemoveCounters && choice.counterCount > 0 &&
+           selection.selectedIds == QVector<quint32>{choice.counterSourceId} &&
+           selection.selectedGenerations == QVector<quint64>{choice.counterSourceGeneration} &&
+           std::any_of(choice.counterOptions.cbegin(), choice.counterOptions.cend(), [&](const auto &option) {
+               return option.optionId == selection.counterOptionId && option.availableCount >= choice.counterCount;
+           });
+}
+
+inline void ruledWriteCounterRemoval(const RuledPendingCostSelection &selection, ruled::v1::CostSelection &command)
+{
+    auto *removal = command.mutable_counter_removal();
+    removal->set_option_id(selection.counterOptionId);
+    removal->mutable_source()->set_object_id(selection.selectedIds.value(0));
+    removal->mutable_source()->set_zone_change_generation(selection.selectedGenerations.value(0));
+}
 
 inline void ruledWriteCostObjectRefs(const RuledPendingCostSelection &selection, ruled::v1::CostSelection &command)
 {
@@ -798,6 +818,9 @@ public:
     };
 
     RuledPendingCast();
+
+    /// Collect only engine-authored counter choices. Cancellation never submits payment.
+    static bool chooseCounterCosts(QWidget *parent, PendingActivatedAbility &pending);
 
     /// Shared left/right-click modal picker. Choose-one spells use ordinary menu actions;
     /// choose-N spells use persistent checkboxes plus explicit confirm/cancel controls.

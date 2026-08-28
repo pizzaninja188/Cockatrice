@@ -1,0 +1,16 @@
+// Oracle/rulings verified 2026-08-28. CR 603.4: recheck the intervening condition on resolution.
+(
+  id: "reluctant_dounguard",
+  name: "Reluctant Dounguard",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Kithkin", "Soldier"],
+  power: 4,
+  toughness: 4,
+  static_abilities: [EntersWithCounters(counter: MinusOneMinusOne, amount: 2)],
+  triggered_abilities: [(
+    trigger: WheneverPermanentEntersBattlefield(controller: Controller, filter: (permanent_type: Some(Creature), exclude_source: true)),
+    intervening_if: Some(GameCondition(SourceCounterCount(counter: MinusOneMinusOne, min: Some(1)))),
+    effect: [RemoveCounters(counter: MinusOneMinusOne, count: 1, subject: Source)],
+    text: "Whenever another creature you control enters while this creature has a -1/-1 counter on it, remove a -1/-1 counter from this creature.",
+  )],
+)

@@ -440,6 +440,12 @@ impl GameEngine {
                                     .costs
                                     .iter()
                                     .map(|cost| match cost {
+                                        AbilityCost::RemoveCounters { counter, count } => format!(
+                                            "Remove {count} {}counter(s)",
+                                            counter
+                                                .map(|k| format!("{} ", k.label()))
+                                                .unwrap_or_default()
+                                        ),
                                         AbilityCost::Tap => "{T}".to_string(),
                                         AbilityCost::Blight { count } => format!("Blight {count}"),
                                         AbilityCost::TapPermanents { count, .. } => {
