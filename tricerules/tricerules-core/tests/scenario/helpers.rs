@@ -557,20 +557,23 @@ pub(crate) fn resolve_entire_stack_two_player(e: &mut GameEngine) {
 
 pub(crate) fn hand_cast_source(hand_card_index: usize) -> CastSource {
     CastSource {
+        expected_zone_change_generation: None,
         location: Some(rv1::cast_source::Location::HandIndex(
             hand_card_index as u32,
         )),
     }
 }
 
-pub(crate) fn graveyard_cast_source(object_id: u32) -> CastSource {
+pub(crate) fn graveyard_cast_source(object_id: u32, generation: u64) -> CastSource {
     CastSource {
+        expected_zone_change_generation: Some(generation),
         location: Some(rv1::cast_source::Location::GraveyardObjectId(object_id)),
     }
 }
 
-pub(crate) fn exile_cast_source(object_id: u32) -> CastSource {
+pub(crate) fn exile_cast_source(object_id: u32, generation: u64) -> CastSource {
     CastSource {
+        expected_zone_change_generation: Some(generation),
         location: Some(rv1::cast_source::Location::ExileObjectId(object_id)),
     }
 }

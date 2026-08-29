@@ -1,0 +1,8 @@
+// Oracle and rulings checked 2026-08-28. Void is evaluated during resolution.
+(
+  id: "plasma_bolt",
+  name: "Plasma Bolt",
+  mana_cost: "{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageTarget(amount: Conditional(condition: Void, when_true: 3, otherwise: 2), target: (kind: AnyTarget))],
+)

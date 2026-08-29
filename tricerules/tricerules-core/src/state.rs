@@ -142,6 +142,14 @@ pub enum ExilePlayPermissionScope {
     CastFace(usize),
     /// Play any otherwise-available spell or land face of the card.
     PlayCard,
+    /// Cast any otherwise available spell face, but never play a land (Warp).
+    CastCard,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExilePlayPermissionOrigin {
+    Effect,
+    Warp,
 }
 
 /// One deterministic, generation-aware permission entry. Entries created by one resolving
@@ -154,8 +162,18 @@ pub struct ActiveExilePlayPermission {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
     pub scope: ExilePlayPermissionScope,
+    pub origin: ExilePlayPermissionOrigin,
+    /// Warp is unavailable during the turn in which its delayed trigger exiled the card.
+    pub available_after_turn_instance: Option<u64>,
     /// Monotonic turn instance whose cleanup ends the permission. `None` means while exiled.
     pub expires_at_cleanup_turn_instance: Option<u64>,
+}
+
+impl ActiveExilePlayPermission {
+    pub fn available_on_turn(&self, turn_instance: u64) -> bool {
+        self.available_after_turn_instance
+            .is_none_or(|turn| turn_instance > turn)
+    }
 }
 
 /// Turn structure for vanilla (no first-strike or trample substeps).
@@ -1164,6 +1182,7 @@ pub enum SpellCastMethod {
     Flashback,
     Harmonize,
     SiegeDefeat,
+    Warp,
 }
 
 impl SpellCastMethod {
@@ -1179,6 +1198,7 @@ impl SpellCastMethod {
             Self::Flashback => Some("Flashback"),
             Self::Harmonize => Some("Harmonize"),
             Self::SiegeDefeat => Some("Siege defeat"),
+            Self::Warp => Some("Warp"),
         }
     }
 }
@@ -1531,6 +1551,7 @@ impl TurnObjectFact {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TurnRecord {
+    pub nonland_permanent_left_battlefield: bool,
     pub spells_cast: u32,
     pub spell_casts: Vec<SpellCastFact>,
     pub creatures_died: u32,
@@ -1557,6 +1578,7 @@ pub struct PermanentHistoryFact {
 /// belong to the cast face at the event, not the card's later zone or face.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpellCastFact {
+    pub cast_method: SpellCastMethod,
     pub occurrence: StackObjectRef,
     pub caster: PlayerId,
     pub origin: Zone,
@@ -1569,6 +1591,14 @@ pub struct SpellCastFact {
 }
 
 impl TurnRecord {
+    pub fn void_holds(&self) -> bool {
+        self.nonland_permanent_left_battlefield
+            || self
+                .spell_casts
+                .iter()
+                .any(|cast| cast.cast_method == SpellCastMethod::Warp)
+    }
+
     pub fn player(&self, player: PlayerId) -> PlayerTurnRecord {
         self.by_player.get(&player).copied().unwrap_or_default()
     }
@@ -1701,6 +1731,9 @@ pub struct GameState {
     /// Generation-bound one-shot event observers. Both delayed triggers and paired one-shot
     /// effects use this closed dispatcher so object identity and event matching cannot drift.
     pub active_event_observers: Vec<ActiveEventObserver>,
+    /// Battlefield incarnations that entered after being cast for their Warp cost. The public
+    /// annotation is generation-bound so blink, bounce, and recast create an ordinary permanent.
+    pub(crate) warped_permanent_incarnations: HashSet<(ObjectId, u64)>,
     /// Exact multi-object contexts keyed by the delayed trigger's primary observed object.
     /// Mobilize keeps its whole token cohort here without making ubiquitous TriggerContext
     /// values heap-owning or reconstructing identity from card names.

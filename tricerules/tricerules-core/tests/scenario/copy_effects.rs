@@ -195,7 +195,15 @@ fn cackling_counterpart_flashback_creates_a_token_and_exiles_the_spell() {
             &RuledCommand {
                 cmd: Some(Cmd::CastSpell(CastSpell {
                     cast_method: tricerules_proto::ruled::v1::CastMethod::Flashback as i32,
-                    source: Some(graveyard_cast_source(spell)),
+                    source: Some(graveyard_cast_source(
+                        spell,
+                        engine
+                            .state
+                            .zone_change_generation
+                            .get(&spell)
+                            .copied()
+                            .unwrap_or(0),
+                    )),
                     targets: target_object(first),
                     ..Default::default()
                 })),

@@ -49,6 +49,13 @@ impl GameEngine {
             .get(&oid)
             .copied()
             .unwrap_or(0);
+        if self
+            .state
+            .warped_permanent_incarnations
+            .contains(&(oid, generation))
+        {
+            labels.push("Warped".to_string());
+        }
         if self.state.skip_next_untap.contains(&(oid, generation)) {
             labels.push("Doesn't untap during its controller's next untap step".to_string());
         }

@@ -18,6 +18,7 @@
 #include "game/ruled/ruled_mana_pool_tracker.h"
 #include "game/ruled/ruled_pending_cast.h"
 #include "game/ruled/ruled_restricted_mana_model.h"
+#include "game/ruled/ruled_zone_snapshot_policy.h"
 
 #include <QSignalSpy>
 #include <QString>
@@ -212,6 +213,7 @@ protected:
     {
         auto *action = actions.add_hand_actions();
         action->set_kind(kind);
+        action->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
         action->set_hand_index(static_cast<quint32>(handIndex));
         action->set_card_name(cardName);
         action->set_face_index(static_cast<quint32>(faceIndex));
@@ -291,6 +293,14 @@ TEST_F(RuledClientTest, ConvokePreviewPreservesLegalActionsAndRejectsObsoleteRep
     EXPECT_TRUE(dispatcher->processPayload(batch.SerializeAsString()));
     EXPECT_FALSE(payment.active);
     EXPECT_EQ(spy.count(), 1);
+}
+
+TEST(RuledZoneSnapshotPolicyTest, OpenPermissionMirrorDoesNotDuplicatePublicExileOnFullSnapshots)
+{
+    EXPECT_TRUE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::STACK)));
+    EXPECT_TRUE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::GRAVE)));
+    EXPECT_TRUE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::EXILE)));
+    EXPECT_FALSE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::HAND)));
 }
 
 TEST_F(RuledClientTest, ConvokeSelectionUsesPublishedColorAndGeneration)
@@ -2606,6 +2616,7 @@ TEST_F(RuledClientTest, ParsesSpellCostChoicesForHandAndPublicZoneCasts)
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     auto *hand = actions.add_hand_actions();
     hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     hand->set_hand_index(3);
     hand->set_face_index(0);
     auto *discard = hand->mutable_cost_choices()->add_choices();
@@ -3445,6 +3456,53 @@ TEST_F(RuledClientTest, ParsesMethodAwareHarmonizeActionAndAuthoritativeCreature
     EXPECT_EQ(costs.castCostGroups[0].options[0].validPermanentGenericReductions.value(900), 4);
 }
 
+TEST_F(RuledClientTest, WarpAndNormalHandOffersKeepDistinctMethodsAndCostChoices)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    for (const auto method : {ruled::v1::CAST_METHOD_NORMAL, ruled::v1::CAST_METHOD_WARP}) {
+        auto *action = actions.add_hand_actions();
+        action->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+        action->set_hand_index(3);
+        action->set_card_name("Knight Luminary");
+        action->set_cast_method(method);
+        action->set_cost(method == ruled::v1::CAST_METHOD_WARP ? "{1}{W}" : "{3}{W}");
+        action->add_eligible_restricted_mana_group_ids(static_cast<quint32>(method));
+    }
+    apply(batch);
+    const auto options = state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 3);
+    ASSERT_EQ(options.size(), 2);
+    EXPECT_EQ(options[0].castMethod, ruled::v1::CAST_METHOD_NORMAL);
+    EXPECT_EQ(options[1].castMethod, ruled::v1::CAST_METHOD_WARP);
+    EXPECT_EQ(options[1].manaCost, QStringLiteral("{1}{W}"));
+    const auto menu = RuledPendingCast::cardActionMenuOptions(options, {}, {}, {});
+    EXPECT_EQ(menu[1].label, QStringLiteral("Warp Knight Luminary ({1}{W})"));
+    EXPECT_EQ(menu[1].castMethod, ruled::v1::CAST_METHOD_WARP);
+    EXPECT_EQ(state->eligibleRestrictedManaForCast(3, 0, RuledCastSource::Hand, ruled::v1::CAST_METHOD_NORMAL),
+              QSet<quint32>{static_cast<quint32>(ruled::v1::CAST_METHOD_NORMAL)});
+    EXPECT_EQ(state->eligibleRestrictedManaForCast(3, 0, RuledCastSource::Hand, ruled::v1::CAST_METHOD_WARP),
+              QSet<quint32>{static_cast<quint32>(ruled::v1::CAST_METHOD_WARP)});
+    EXPECT_NE(RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_NORMAL),
+              RuledClientState::handCastActionKey(4, 0, ruled::v1::CAST_METHOD_NORMAL));
+}
+
+TEST_F(RuledClientTest, PublicCastGenerationRejectsAnOldSelectionAfterReexile)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *action = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+    action->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    action->set_object_id(77);
+    action->set_card_name("Knight Luminary");
+    action->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    action->set_zone_change_generation(4);
+    apply(batch);
+    EXPECT_TRUE(state->isZoneCastActionLegal(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_NORMAL, 4));
+    action->set_zone_change_generation(6);
+    apply(batch);
+    EXPECT_FALSE(state->isZoneCastActionLegal(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_NORMAL, 4));
+    EXPECT_TRUE(state->isZoneCastActionLegal(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_NORMAL, 6));
+}
+
 TEST_F(RuledClientTest, PublicZoneCastActionsRequireTheClickedSourceZone)
 {
     ruled::v1::RuledEventBatch batch;
@@ -3516,6 +3574,7 @@ TEST_F(RuledClientTest, CounterRemovalCostsAreRecognized)
     ruled::v1::RuledEventBatch batch;
     auto *hand = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
     hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     hand->set_hand_index(3);
     auto *choice = hand->mutable_cost_choices()->add_choices();
     choice->set_kind(ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS);
@@ -3564,6 +3623,7 @@ TEST_F(RuledClientTest, BlightCostsUseAnAuthoritativeCreaturePicker)
     ruled::v1::RuledEventBatch batch;
     auto *hand = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
     hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     hand->set_hand_index(3);
     auto *choice = hand->mutable_cost_choices()->add_choices();
     choice->set_cost_index(1);
@@ -3635,6 +3695,7 @@ TEST_F(RuledClientTest, ParsesEngineAuthoredOptionalCastCostGroups)
     ruled::v1::RuledEventBatch batch;
     auto *hand = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
     hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     hand->set_hand_index(3);
     auto *group = hand->mutable_cost_choices()->add_cast_cost_groups();
     group->set_group_index(0);

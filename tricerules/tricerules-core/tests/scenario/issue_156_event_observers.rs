@@ -817,7 +817,15 @@ fn issue_168_graveyard_cast_is_observed_only_after_successful_commit() {
     let cast = RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
             cast_method: tricerules_proto::ruled::v1::CastMethod::Flashback as i32,
-            source: Some(graveyard_cast_source(spell)),
+            source: Some(graveyard_cast_source(
+                spell,
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&spell)
+                    .copied()
+                    .unwrap_or(0),
+            )),
             targets: target_player(1),
             ..Default::default()
         })),

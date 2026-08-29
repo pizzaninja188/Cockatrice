@@ -546,6 +546,16 @@ impl GameEngine {
     /// matching: transactional cast/activation checks may collect prospective triggers, but turn
     /// history must only observe changes that actually reached game state.
     pub(super) fn record_committed_events(&mut self, events: &[GameEvent]) {
+        // Record the whole committed cohort before inspecting any characteristics or triggers.
+        // Pre-move derived types distinguish animated lands from actual nonland permanents.
+        self.state
+            .turn_history
+            .current
+            .nonland_permanent_left_battlefield |= events.iter().any(|event| {
+            matches!(event, GameEvent::ZoneChanges(batch) if batch.moves.iter().any(|movement|
+                movement.origin == Zone::Battlefield && movement.destination != Zone::Battlefield
+                    && !movement.before.has_type("Land")))
+        });
         let deaths = events
             .iter()
             .filter(|event| {
@@ -727,6 +737,7 @@ impl GameEngine {
             types.push("Adventure".into());
         }
         let mut fact = crate::state::SpellCastFact {
+            cast_method: item.cast_method,
             occurrence,
             caster,
             origin,
@@ -789,6 +800,7 @@ impl GameEngine {
         context: ConditionContext,
     ) -> bool {
         match condition {
+            GameCondition::Void => self.state.turn_history.current.void_holds(),
             GameCondition::CastSnapshot { index } => context
                 .stack_item
                 .filter(|item| item.ability_text.is_none() && !item.is_copy)

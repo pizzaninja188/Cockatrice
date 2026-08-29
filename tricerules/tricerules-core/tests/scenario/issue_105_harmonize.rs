@@ -28,10 +28,18 @@ fn setup_harmonize(seed: u64) -> (GameEngine, u32, u32, u64) {
     (engine, whisper, bear, generation)
 }
 
-fn harmonize_cast(whisper: u32, bear: Option<(u32, u64)>) -> RuledCommand {
+fn harmonize_cast(engine: &GameEngine, whisper: u32, bear: Option<(u32, u64)>) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
-            source: Some(graveyard_cast_source(whisper)),
+            source: Some(graveyard_cast_source(
+                whisper,
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&whisper)
+                    .copied()
+                    .unwrap_or(0),
+            )),
             cast_method: CastMethod::Harmonize as i32,
             cast_cost_group_selections: bear
                 .map(|(object_id, generation)| {
@@ -105,7 +113,10 @@ fn harmonize_publishes_owner_only_candidates_and_commits_tap_with_reduced_paymen
 
     let before_hand = engine.state.players[0].hand.len();
     engine
-        .apply_command(0, &harmonize_cast(whisper, Some((bear, generation))))
+        .apply_command(
+            0,
+            &harmonize_cast(&engine, whisper, Some((bear, generation))),
+        )
         .expect("pay {3}{U} and tap the summoning-sick Bear");
     assert!(engine.state.objects[&bear].tapped);
     assert_eq!(engine.state.objects[&whisper].zone, Zone::Stack);
@@ -131,7 +142,7 @@ fn full_cost_harmonize_does_not_tap_a_candidate() {
         },
     );
     engine
-        .apply_command(0, &harmonize_cast(whisper, None))
+        .apply_command(0, &harmonize_cast(&engine, whisper, None))
         .expect("pay the full {5}{U}");
     assert!(!engine.state.objects[&bear].tapped);
     assert_eq!(engine.state.objects[&whisper].zone, Zone::Stack);
@@ -170,13 +181,13 @@ fn missing_or_wrong_cast_method_is_rejected_for_the_source_zone() {
             ..Default::default()
         },
     );
-    let mut missing = harmonize_cast(whisper, None);
+    let mut missing = harmonize_cast(&engine, whisper, None);
     let Some(Cmd::CastSpell(cast)) = missing.cmd.as_mut() else {
         panic!("cast command")
     };
     cast.cast_method = CastMethod::Unspecified as i32;
     assert!(engine.apply_command(0, &missing).is_err());
-    let mut normal = harmonize_cast(whisper, None);
+    let mut normal = harmonize_cast(&engine, whisper, None);
     let Some(Cmd::CastSpell(cast)) = normal.cmd.as_mut() else {
         panic!("cast command")
     };
@@ -200,21 +211,27 @@ fn forged_or_unaffordable_harmonize_is_atomic() {
         },
     );
     assert!(engine
-        .apply_command(0, &harmonize_cast(whisper, Some((land, 0))))
+        .apply_command(0, &harmonize_cast(&engine, whisper, Some((land, 0))))
         .is_err());
     assert!(!engine.state.objects[&bear].tapped);
     assert!(!engine.state.objects[&land].tapped);
     assert_eq!(engine.state.objects[&whisper].zone, Zone::Graveyard);
 
     assert!(engine
-        .apply_command(0, &harmonize_cast(whisper, Some((opponent_bear, 0))))
+        .apply_command(
+            0,
+            &harmonize_cast(&engine, whisper, Some((opponent_bear, 0)))
+        )
         .is_err());
     assert!(!engine.state.objects[&opponent_bear].tapped);
     assert_eq!(engine.state.objects[&whisper].zone, Zone::Graveyard);
 
     engine.state.objects.get_mut(&bear).unwrap().tapped = true;
     assert!(engine
-        .apply_command(0, &harmonize_cast(whisper, Some((bear, generation))))
+        .apply_command(
+            0,
+            &harmonize_cast(&engine, whisper, Some((bear, generation)))
+        )
         .is_err());
     assert!(engine.state.objects[&bear].tapped);
     assert_eq!(engine.state.objects[&whisper].zone, Zone::Graveyard);
@@ -223,7 +240,10 @@ fn forged_or_unaffordable_harmonize_is_atomic() {
     engine.state.players[0].mana_pool.colorless = 2;
     let before_pool = engine.state.players[0].mana_pool;
     assert!(engine
-        .apply_command(0, &harmonize_cast(whisper, Some((bear, generation))))
+        .apply_command(
+            0,
+            &harmonize_cast(&engine, whisper, Some((bear, generation)))
+        )
         .is_err());
     assert!(!engine.state.objects[&bear].tapped);
     assert_eq!(engine.state.objects[&whisper].zone, Zone::Graveyard);
@@ -266,7 +286,10 @@ fn stale_harmonize_selection_rejects_without_tapping_spending_or_moving() {
         .insert(bear, generation + 1);
     let before_pool = engine.state.players[0].mana_pool;
     let err = engine
-        .apply_command(0, &harmonize_cast(whisper, Some((bear, generation))))
+        .apply_command(
+            0,
+            &harmonize_cast(&engine, whisper, Some((bear, generation))),
+        )
         .expect_err("stale creature generation");
     assert!(format!("{err:?}").contains("stale harmonize"));
     assert!(!engine.state.objects[&bear].tapped);
@@ -358,7 +381,10 @@ fn countered_harmonize_spell_is_exiled() {
         },
     );
     engine
-        .apply_command(0, &harmonize_cast(whisper, Some((bear, generation))))
+        .apply_command(
+            0,
+            &harmonize_cast(&engine, whisper, Some((bear, generation))),
+        )
         .expect("cast with Harmonize");
     engine.apply_command(0, &pass()).expect("pass to counterer");
     let counter_slot = hand_index_for_card(&engine, 1, "counterspell");
@@ -399,7 +425,10 @@ fn mammoth_bellow_reduces_only_generic_and_creates_one_five_five_elephant() {
         },
     );
     engine
-        .apply_command(0, &harmonize_cast(bellow, Some((angel, generation))))
+        .apply_command(
+            0,
+            &harmonize_cast(&engine, bellow, Some((angel, generation))),
+        )
         .expect("power four leaves {1}{G}{U}{R}, including every colored pip");
     resolve_entire_stack_two_player(&mut engine);
     let elephants = engine.state.players[0]
@@ -427,7 +456,7 @@ fn harmonize_command_replays_with_method_and_selected_permanent() {
                 ..Default::default()
             },
         );
-        let command = harmonize_cast(whisper, Some((bear, generation)));
+        let command = harmonize_cast(&engine, whisper, Some((bear, generation)));
         let Some(Cmd::CastSpell(cast)) = command.cmd.as_ref() else {
             panic!("cast command")
         };

@@ -279,6 +279,8 @@ message CastSource {
     uint32 graveyard_object_id = 2;
     uint32 exile_object_id = 3;
   }
+  // Required for ordinary public-zone casts; hand casts use their current private slot.
+  optional uint64 expected_zone_change_generation = 4;
 }
 
 // CR 601.2b: the announced method whose alternative cost and stack-exit rules apply to this cast.
@@ -289,6 +291,7 @@ enum CastMethod {
   CAST_METHOD_FLASHBACK = 2;
   CAST_METHOD_HARMONIZE = 3;
   CAST_METHOD_SIEGE_DEFEAT = 4;
+  CAST_METHOD_WARP = 5;
 }
 
 message CastSpell {
@@ -647,6 +650,7 @@ message LegalHandAction {
   // cost increases have been added. `cost` remains the raw base or alternative mana cost.
   uint32 generic_cost_reduction = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool has_convoke = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  CastMethod cast_method = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // CR 702.34: a spell the player may cast from their own graveyard using flashback.
@@ -672,6 +676,7 @@ message LegalZoneCastAction {
   uint32 generic_cost_reduction = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   CastMethod cast_method = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool has_convoke = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 zone_change_generation = 15 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message ManaPaymentEligibility {

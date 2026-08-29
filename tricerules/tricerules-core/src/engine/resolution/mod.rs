@@ -56,7 +56,67 @@ struct EffectCx<'a> {
 }
 
 impl GameEngine {
-    fn grant_exile_play_permission(
+    /// CR 707.10f / 608.3f: a resolving permanent spell copy becomes a token. This is
+    /// not a token-creation instruction: use normal entry replacements, never creation multipliers.
+    fn materialize_permanent_spell_copy(&mut self, item: &StackItem) -> bool {
+        if !item.is_copy || item.ability_text.is_some() {
+            return false;
+        }
+        let Some(definition) = self.registry.get(&item.card_id) else {
+            return false;
+        };
+        let Some(face) = definition
+            .face(item.face_index)
+            .filter(|face| face.is_permanent())
+        else {
+            return false;
+        };
+        let values = CopiableValues {
+            source_card_id: item.card_id.clone(),
+            source_face_index: item.face_index,
+            face: face.clone(),
+            room_faces: (definition.layout == Layout::Room).then(|| definition.faces.clone()),
+            display_name: face.name.clone(),
+        };
+        let mut object =
+            new_object_from_card(item.id, item.controller, &item.card_id, Zone::Stack, face);
+        object.face_up_index = item.face_index;
+        object.token_origin = Some(values);
+        self.state.objects.insert(item.id, object);
+        true
+    }
+
+    pub(in crate::engine) fn finish_permanent_spell_entry(
+        &mut self,
+        item: &StackItem,
+        events: &mut Vec<RuledEvent>,
+    ) {
+        self.register_warp_entry(item, item.id);
+        if !item.is_copy {
+            return;
+        }
+        let Some(object) = self
+            .state
+            .objects
+            .get(&item.id)
+            .filter(|o| o.zone == Zone::Battlefield && o.is_token())
+        else {
+            return;
+        };
+        if let Some(values) = self.copiable_values_for(item.id) {
+            events.push(RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::TokenCreated(rv1::TokenCreated {
+                    object_id: item.id,
+                    controller_player_id: object.controller,
+                    card_id: item.card_id.clone(),
+                    identity: Some(token_identity(&values)),
+                    enters_tapped: object.tapped,
+                })),
+            });
+        }
+    }
+
+    pub(in crate::engine) fn grant_exile_play_permission(
         &mut self,
         player_id: PlayerId,
         object_id: ObjectId,
@@ -103,6 +163,8 @@ impl GameEngine {
                     .copied()
                     .unwrap_or(0),
                 scope,
+                origin: crate::state::ExilePlayPermissionOrigin::Effect,
+                available_after_turn_instance: None,
                 expires_at_cleanup_turn_instance,
             });
         Ok(group_id)
@@ -583,7 +645,8 @@ impl GameEngine {
         // only a genuinely cast spell has a backing card that moves to a zone. A copy has no
         // `GameObject` in `objects`, so it must take the same no-zone-move path as an ability.
         let is_ability = top.ability_text.is_some();
-        let leaves_no_object = is_ability || top.is_copy;
+        let permanent_copy = self.materialize_permanent_spell_copy(&top);
+        let leaves_no_object = is_ability || (top.is_copy && !permanent_copy);
         let is_omen_spell = self
             .registry
             .get(&card_id)
@@ -729,6 +792,7 @@ impl GameEngine {
                             })),
                         });
                         self.commit_battlefield_entry(entry, attached_to)?;
+                        self.finish_permanent_spell_entry(&top, events);
                     }
                 }
             } else if !defer_soft_counter_exit && !defer_authored_nonpermanent_exit {
@@ -1356,6 +1420,10 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::SacrificeObservedObjects => {
                         tokens::sacrifice_observed_objects(&mut cx, effect)?
+                    }
+                    SpellEffectKind::ExileWarpedObject => {
+                        cx.engine.resolve_warp_exile(cx.top, cx.events)?;
+                        EffectOutcome::Continue
                     }
                     effect @ SpellEffectKind::Equip { .. } => misc::equip(&mut cx, effect)?,
                     effect @ SpellEffectKind::PreventNextDamage { .. } => {
@@ -2181,6 +2249,9 @@ fn move_object_to_zone_with_entry_receipt(
     // This matters for exile permissions: exiling an already-exiled card cannot preserve an old
     // Adventure or "play it" permission merely because the destination enum is unchanged.
     if old_zone.is_some() {
+        state
+            .warped_permanent_incarnations
+            .retain(|&(object_id, generation)| object_id != oid || generation != prior_generation);
         *state.zone_change_generation.entry(oid).or_insert(0) += 1;
         state
             .active_exile_play_permissions
@@ -2548,6 +2619,8 @@ mod exile_permission_generation_tests {
                 group_id: 1,
                 player_id: 0,
                 source_label: "generation test".to_string(),
+                origin: crate::state::ExilePlayPermissionOrigin::Effect,
+                available_after_turn_instance: None,
                 object_id,
                 zone_change_generation: generation,
                 scope: ExilePlayPermissionScope::PlayCard,

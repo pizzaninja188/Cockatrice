@@ -553,7 +553,7 @@ fn bonecrusher_giant_casts_once_from_adventure_exile() {
     let cast = RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
             cast_method: tricerules_proto::ruled::v1::CastMethod::Normal as i32,
-            source: Some(exile_cast_source(oid)),
+            source: Some(exile_cast_source(oid, e.state.zone_change_generation[&oid])),
             face_index: 0,
             ..Default::default()
         })),
@@ -620,10 +620,11 @@ fn adventure_exile_permission_rejects_wrong_source_player_face_and_unpaid_cost()
         .iter()
         .any(|permission| permission.object_id == oid));
 
+    let generation = e.state.zone_change_generation[&oid];
     let exile_cast = |object_id, face_index| RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
             cast_method: tricerules_proto::ruled::v1::CastMethod::Normal as i32,
-            source: Some(exile_cast_source(object_id)),
+            source: Some(exile_cast_source(object_id, generation)),
             face_index,
             ..Default::default()
         })),

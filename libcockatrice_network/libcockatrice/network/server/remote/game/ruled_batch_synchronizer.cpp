@@ -408,9 +408,9 @@ void RuledBatchSynchronizer::applyStackResolvedEvent(const ruled::v1::StackResol
                                                      const QHash<quint32, int> &battlefieldDisplayPlayers)
 {
     const quint32 resolvedOid = static_cast<quint32>(stackResolved.object_id());
-    // CR 707.10d: a spell copy ceases to exist on resolution and has no physical card to move.
-    // Returning here also stops the name-matching fallback from resolving the original spell's
-    // still-on-stack card (the copy shares its card_id/name).
+    // A copy has no stack-zone Server_Card to move. Permanent spell copies materialize through an
+    // earlier TokenCreated event; returning here preserves that newly minted physical token and
+    // also prevents the name fallback from moving the original spell with the same card_id/name.
     if (ruledStackCopyObjectIds.remove(resolvedOid)) {
         ruledEngineStackPushDescriptionsByObjectId.remove(resolvedOid);
         return;

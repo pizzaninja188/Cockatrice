@@ -582,6 +582,7 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     faceUp->add_eligible_restricted_mana_group_ids(7u);
     auto *p1Cast = p1Legal.add_hand_actions();
     p1Cast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    p1Cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     p1Cast->mutable_cost_choices()->add_choices()->add_candidate_ids(7);
     auto *counterChoice = (*p1Legal.mutable_cost_choices_by_ability())[101].add_choices();
     counterChoice->set_kind(ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS);
@@ -610,6 +611,7 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     p2Legal.add_labels("P2 legal");
     auto *p2Cast = p2Legal.add_hand_actions();
     p2Cast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    p2Cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     p2Cast->mutable_cost_choices()->add_choices()->add_candidate_ids(9);
     auto *p2Reduction = (*p2Legal.mutable_valid_targets_by_hand_slot())[0].add_targeted_cost_reduction_applications();
     p2Reduction->set_application_id(702);
@@ -1948,6 +1950,7 @@ TEST_F(RuledBatchTest, CastCostCandidatesStayPrivateWhileActiveBeholdRevealIsPub
     ruled::v1::RuledEventBatch batch;
     auto *action = (*batch.mutable_legal_by_player())[p1->getPlayerId()].add_hand_actions();
     action->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    action->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     action->set_hand_index(3);
     auto *option = action->mutable_cost_choices()->add_cast_cost_groups()->add_options();
     option->set_option_index(0);
@@ -3510,6 +3513,53 @@ TEST_F(RuledBatchTest, TokenCopyKeepsIndependentPhysicalIdentityAcrossResyncAndR
     EXPECT_EQ(original->getId(), originalId);
     EXPECT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards().size(), 1);
     EXPECT_TRUE(p1->getZones().value(ZoneNames::HAND)->getCards().isEmpty());
+}
+
+TEST_F(RuledBatchTest, PermanentSpellCopyResolutionMintsTokenWithoutMovingOriginalStackCard)
+{
+    seedCardCatalog({"Serra Angel"});
+    Server_Card *original = addCardToHand(p1, QStringLiteral("Serra Angel"));
+    Server_CardZone *hand = p1->getZones().value(ZoneNames::HAND);
+    Server_CardZone *stack = p1->getZones().value(ZoneNames::STACK);
+    hand->removeCard(original);
+    stack->insertCard(original, -1, 0);
+    bindStackObject(900u, original, p1->getPlayerId(), QStringLiteral("Serra Angel"));
+    seedSyntheticStackBookkeeping(901u, 900u, true);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *token = response.mutable_batch()->add_events()->mutable_token_created();
+    token->set_object_id(901u);
+    token->set_controller_player_id(p1->getPlayerId());
+    token->set_card_id("serra_angel");
+    token->mutable_identity()->set_name("Serra Angel");
+    token->mutable_identity()->set_pt("4/4");
+    token->mutable_identity()->set_color("w");
+    token->mutable_identity()->set_is_creature(true);
+    token->mutable_identity()->add_types("Creature");
+    auto *resolved = response.mutable_batch()->add_events()->mutable_stack_resolved();
+    resolved->set_object_id(901u);
+    resolved->set_destination(ruled::v1::STACK_RESOLVE_DESTINATION_BATTLEFIELD);
+    auto *zone = response.mutable_batch()->add_events()->mutable_zone_view();
+    ruled::v1::RuledPerPlayerView view;
+    view.set_player_id(p1->getPlayerId());
+    auto *object = view.add_battlefield_objects();
+    object->set_object_id(901u);
+    object->set_card_id("serra_angel");
+    object->set_controller_player_id(p1->getPlayerId());
+    object->set_owner_player_id(p1->getPlayerId());
+    object->set_is_creature(true);
+    *zone->add_per_player() = view;
+    *zone->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(response);
+
+    Server_Card *copy = findCardByEngineOid(p1, 901u);
+    ASSERT_NE(copy, nullptr);
+    EXPECT_NE(copy, original);
+    EXPECT_EQ(copy->getName(), QStringLiteral("Serra Angel"));
+    EXPECT_TRUE(copy->getDestroyOnZoneChange());
+    EXPECT_EQ(original->getZone(), stack);
+    EXPECT_FALSE(hasSyntheticStackBookkeeping(901u));
 }
 
 TEST_F(RuledBatchTest, CopiedPermanentLeavesAsItsPhysicalCardWithoutMovingTheSource)

@@ -43,6 +43,7 @@ struct RuledCardActionMenuOption
     QString label;
     bool enabled = true;
     int manaOptionIndex = 0;
+    ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL;
 };
 
 struct RuledFlexPip
@@ -275,6 +276,7 @@ struct PendingRuledSpellCast
     int handIndex = -1;
     RuledCastSource source = RuledCastSource::Hand;
     ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL;
+    quint64 sourceZoneChangeGeneration = 0;
     /// Fireball's "divided evenly, rounded down": the engine splits on resolution, so there is no
     /// allocation to collect, no one-damage-per-target cap, and zero targets is a legal cast.
     bool damageDividedEvenly = false;

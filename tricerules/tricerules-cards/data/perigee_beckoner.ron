@@ -1,0 +1,25 @@
+// Oracle and rulings checked 2026-08-28. The granted ability follows its source's death generation.
+(
+  id: "perigee_beckoner",
+  name: "Perigee Beckoner",
+  mana_cost: "{4}{B}",
+  warp_cost: Some("{1}{B}"),
+  types: ["Creature", "Horror"],
+  power: 4,
+  toughness: 5,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      PumpTarget(power: 2, toughness: 0, subject: Chosen((kind: Creature, controller: You, excluded_objects: [Source]))),
+      GrantTriggeredAbility(
+        subject: Chosen((kind: Creature, controller: You, excluded_objects: [Source])),
+        ability: (
+          trigger: WhenSelfDies,
+          effect: [ReturnTriggeredCard(from: [Graveyard], reference: AbilitySource, tapped: true, controller: Owner)],
+          text: "When this creature dies, return it to the battlefield tapped under its owner's control.",
+        ),
+      ),
+    ],
+    text: "When this creature enters, until end of turn, another target creature you control gets +2/+0 and gains \"When this creature dies, return it to the battlefield tapped under its owner's control.\"",
+  )],
+)

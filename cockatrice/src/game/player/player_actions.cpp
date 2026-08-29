@@ -131,12 +131,13 @@ void PlayerActions::reconcilePendingRuledTargetSelections()
 
     if (pendingRuledSpellCast.valid) {
         const bool sourceStillLegal = pendingRuledSpellCast.source == RuledCastSource::Hand
-                                          ? state->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL,
-                                                                     pendingRuledSpellCast.handIndex)
+                                          ? state->isHandCastActionLegal(pendingRuledSpellCast.handIndex,
+                                                pendingRuledSpellCast.faceIndex, pendingRuledSpellCast.castMethod)
                                           : state->isZoneCastActionLegal(
                                                 static_cast<quint32>(pendingRuledSpellCast.handIndex),
                                                 pendingRuledSpellCast.faceIndex, pendingRuledSpellCast.source,
-                                                pendingRuledSpellCast.castMethod);
+                                                pendingRuledSpellCast.castMethod,
+                                                pendingRuledSpellCast.sourceZoneChangeGeneration);
         const auto latest = state->spellCostData(pendingRuledSpellCast.handIndex, pendingRuledSpellCast.faceIndex,
                                                  pendingRuledSpellCast.source, pendingRuledSpellCast.castMethod);
         const bool castCostSelectionsStillLegal =
@@ -2074,7 +2075,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
 {
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
     if (source == RuledCastSource::Hand
-            ? !geh->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex)
+            ? !geh->isHandCastActionLegal(ruledHandIndex, faceIndex, castMethod)
             : !geh->isZoneCastActionLegal(static_cast<quint32>(ruledHandIndex), faceIndex, source, castMethod)) {
         return false;
     }
@@ -2094,7 +2095,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
 
     const auto actionIt = geh->handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
     const quint64 castKey = source == RuledCastSource::Hand
-                                ? RuledClientState::spellTargetKey(ruledHandIndex, faceIndex)
+                                ? RuledClientState::handCastActionKey(ruledHandIndex, faceIndex, castMethod)
                                 : RuledClientState::zoneCastActionKey(ruledHandIndex, faceIndex, source, castMethod);
     QVector<PendingRuledSpellCast::SelectedMode> selectedModes;
     const RuledHandActionSet *actionSet = source == RuledCastSource::Hand ? nullptr : &geh->zoneCastActions;
@@ -2141,8 +2142,10 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
         ? geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex)
         : geh->zoneActionFaceOptions(ruledHandIndex, source);
     for (const auto &face : paymentFaces)
-        if (face.faceIndex == faceIndex && face.castMethod == castMethod)
+        if (face.faceIndex == faceIndex && face.castMethod == castMethod) {
             pendingRuledSpellCast.hasConvoke = face.hasConvoke;
+            pendingRuledSpellCast.sourceZoneChangeGeneration = face.zoneChangeGeneration;
+        }
 
     pendingRuledSpellCast.selectedTargetOids.clear();
     pendingRuledSpellCast.selectedTargetOidsByGroup.clear();
@@ -2271,7 +2274,7 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
         const auto actionIt = geh->handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
         const int faceIndex = faces.first().faceIndex;
         const quint64 castKey = fromHand
-                                    ? RuledClientState::spellTargetKey(sourceIndex, faceIndex)
+                                    ? RuledClientState::handCastActionKey(sourceIndex, faceIndex, faces.first().castMethod)
                                     : RuledClientState::zoneCastActionKey(sourceIndex, faceIndex, publicSource,
                                                                          faces.first().castMethod);
         const RuledHandActionSet *actionSet = fromHand && actionIt != geh->handActions.constEnd()
@@ -5183,9 +5186,9 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     const auto &selectedOption = cardOptions.at(menuIndex);
     if (selectedOption.kind == RuledCardActionMenuOption::Kind::CastFace) {
         for (const auto &face : castFaces) {
-            if (face.faceIndex == selectedOption.index) {
+            if (face.faceIndex == selectedOption.index && face.castMethod == selectedOption.castMethod) {
                 beginRuledSpellCast(card, castHandIndex, face.faceIndex, face.faceName, face.manaCost,
-                                    face.genericCostReduction);
+                                    face.genericCostReduction, RuledCastSource::Hand, face.castMethod);
                 return true;
             }
         }

@@ -51,7 +51,7 @@ pub(in crate::engine) struct PreparedSpellCast {
     face_name: String,
     has_x: bool,
     chosen_x: u32,
-    has_multiple_cast_options: bool,
+    has_multiple_cast_faces: bool,
     cast_method: SpellCastMethod,
     public_targets: Vec<rv1::TargetRef>,
     chosen_modes: Vec<ChosenMode>,
@@ -280,6 +280,7 @@ impl GameEngine {
             Ok(rv1::CastMethod::Normal) => SpellCastMethod::Normal,
             Ok(rv1::CastMethod::Flashback) => SpellCastMethod::Flashback,
             Ok(rv1::CastMethod::Harmonize) => SpellCastMethod::Harmonize,
+            Ok(rv1::CastMethod::Warp) => SpellCastMethod::Warp,
             Ok(rv1::CastMethod::SiegeDefeat) => {
                 return Err(EngineError::Illegal(
                     "Siege defeat casts require an active engine offer",
@@ -304,10 +305,8 @@ impl GameEngine {
         let from_hand = matches!(source, rv1::cast_source::Location::HandIndex(_));
         let (oid, exile_permission_scope) = match source {
             rv1::cast_source::Location::HandIndex(hand_index) => {
-                if cast_method != SpellCastMethod::Normal {
-                    return Err(EngineError::Illegal(
-                        "hand casts require the normal cast method",
-                    ));
+                if !matches!(cast_method, SpellCastMethod::Normal | SpellCastMethod::Warp) {
+                    return Err(EngineError::Illegal("invalid hand cast method"));
                 }
                 (
                     *self.state.players[idx]
@@ -321,7 +320,10 @@ impl GameEngine {
                 if !self.state.players[idx].graveyard.contains(source_oid) {
                     return Err(EngineError::Illegal("card is not in your graveyard"));
                 }
-                if cast_method == SpellCastMethod::Normal {
+                if !matches!(
+                    cast_method,
+                    SpellCastMethod::Flashback | SpellCastMethod::Harmonize
+                ) {
                     return Err(EngineError::Illegal(
                         "graveyard casts require an alternative cast method",
                     ));
@@ -353,11 +355,13 @@ impl GameEngine {
                         permission.object_id == *source_oid
                             && permission.player_id == player
                             && permission.zone_change_generation == generation
+                            && permission.available_on_turn(self.state.turn_instance)
                             && match permission.scope {
                                 ExilePlayPermissionScope::CastFace(expected) => {
                                     expected == face_index
                                 }
-                                ExilePlayPermissionScope::PlayCard => true,
+                                ExilePlayPermissionScope::PlayCard
+                                | ExilePlayPermissionScope::CastCard => true,
                             }
                     })
                     .ok_or(EngineError::Illegal(
@@ -369,8 +373,25 @@ impl GameEngine {
                 (*source_oid, Some(permission.scope))
             }
         };
-        let has_multiple_cast_options =
-            super::legal_actions::cast_option_count_for_source(self, player, source) > 1;
+        let has_multiple_cast_faces =
+            super::legal_actions::cast_face_count_for_source(self, player, source) > 1;
+        if !from_hand
+            && command
+                .source
+                .as_ref()
+                .and_then(|source| source.expected_zone_change_generation)
+                != Some(
+                    self.state
+                        .zone_change_generation
+                        .get(&oid)
+                        .copied()
+                        .unwrap_or(0),
+                )
+        {
+            return Err(EngineError::Illegal(
+                "missing or stale public cast generation",
+            ));
+        }
         let target_source = TargetSourceIdentity::spell_face(self, oid, face_index);
         let card_id = self.state.objects.get(&oid).unwrap().card_id.clone();
         let def = self
@@ -382,6 +403,13 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("bad face index"))?;
         if from_hand && !def.face_available_from_hand(face_index) {
             return Err(EngineError::Illegal("face cannot be cast from hand"));
+        }
+        if exile_permission_scope == Some(ExilePlayPermissionScope::CastCard)
+            && !def.face_available_from_hand(face_index)
+        {
+            return Err(EngineError::Illegal(
+                "face cannot be cast with this permission",
+            ));
         }
         if matches!(
             exile_permission_scope,
@@ -399,6 +427,10 @@ impl GameEngine {
         let face_instant_speed = castable_at_instant_speed(&face);
         let face_mana = match cast_method {
             SpellCastMethod::Normal => face.mana_cost.clone(),
+            SpellCastMethod::Warp => face
+                .warp_cost
+                .clone()
+                .ok_or(EngineError::Illegal("card has no Warp cost"))?,
             SpellCastMethod::Flashback => face
                 .flashback_cost
                 .clone()
@@ -636,7 +668,7 @@ impl GameEngine {
             face_name,
             has_x,
             chosen_x,
-            has_multiple_cast_options,
+            has_multiple_cast_faces,
             cast_method,
             public_targets,
             chosen_modes,
@@ -668,7 +700,7 @@ impl GameEngine {
             face_name,
             has_x,
             chosen_x,
-            has_multiple_cast_options,
+            has_multiple_cast_faces,
             cast_method,
             public_targets,
             chosen_modes,
@@ -795,7 +827,7 @@ impl GameEngine {
             "P{} casts {}{}{}{}{}",
             player, face_name, modes_line, x_line, paid_costs_line, tgt_line
         )));
-        let mut stack_annotation = match (has_multiple_cast_options, has_x) {
+        let mut stack_annotation = match (has_multiple_cast_faces, has_x) {
             (true, true) => format!("{face_name} (X = {chosen_x})"),
             (true, false) => face_name.clone(),
             (false, true) => format!("X = {chosen_x}"),
@@ -1953,6 +1985,47 @@ mod cast_snapshot_tests {
         engine_with_extra(spell_fields, &[])
     }
 
+    #[test]
+    fn issue_148_warp_publishes_and_pays_a_distinct_hand_method() {
+        let mut e = engine_with_extra(
+            "",
+            &[r#"(id: "warp_test", name: "Warp Test",
+            mana_cost: "{3}{W}", warp_cost: Some("{1}{W}"), types: ["Creature"], power: 3, toughness: 2)"#],
+        );
+        let oid = add(&mut e, 0, "warp_test", Zone::Hand);
+        let slot = e.state.players[0]
+            .hand
+            .iter()
+            .position(|id| *id == oid)
+            .unwrap() as u32;
+        let offers = e.initial_response_batch().legal_by_player[&0]
+            .hand_actions
+            .iter()
+            .filter(|a| a.hand_index == slot)
+            .map(|a| a.cost.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(offers, ["{3}{W}", "{1}{W}"]);
+        let mut cast = command(&e, oid);
+        let Some(rv1::ruled_command::Cmd::CastSpell(ref mut spell)) = cast.cmd else {
+            unreachable!()
+        };
+        spell.cast_method = 5; // CAST_METHOD_WARP, introduced with the coordinated protocol change.
+        let before = e.state.command_index;
+        assert!(matches!(
+            e.apply_command(0, &cast),
+            Err(EngineError::Illegal(_))
+        ));
+        assert_eq!(e.state.command_index, before);
+        assert_eq!(e.state.objects[&oid].zone, Zone::Hand);
+        e.state.players[0].mana_pool.white = 1;
+        e.state.players[0].mana_pool.colorless = 1;
+        e.apply_command(0, &cast)
+            .expect("pay the Warp cost rather than the printed cost");
+        assert_eq!(e.state.objects[&oid].zone, Zone::Stack);
+        assert_eq!(e.state.players[0].mana_pool.white, 0);
+        assert_eq!(e.state.players[0].mana_pool.colorless, 0);
+    }
+
     fn engine_with_extra(spell_fields: &str, extra: &[&str]) -> GameEngine {
         let spell = format!(
             r#"(id: "snapshot_spell", name: "Snapshot Spell", mana_cost: "{{B}}", types: ["Instant"], {spell_fields})"#
@@ -2099,6 +2172,13 @@ mod cast_snapshot_tests {
             cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
                 cast_method: rv1::CastMethod::Flashback as i32,
                 source: Some(rv1::CastSource {
+                    expected_zone_change_generation: Some(
+                        e.state
+                            .zone_change_generation
+                            .get(&spell)
+                            .copied()
+                            .unwrap_or(0),
+                    ),
                     location: Some(rv1::cast_source::Location::GraveyardObjectId(spell)),
                 }),
                 ..Default::default()
@@ -2133,6 +2213,13 @@ mod cast_snapshot_tests {
             cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
                 cast_method: rv1::CastMethod::Normal as i32,
                 source: Some(rv1::CastSource {
+                    expected_zone_change_generation: Some(
+                        e.state
+                            .zone_change_generation
+                            .get(&adventure)
+                            .copied()
+                            .unwrap_or(0),
+                    ),
                     location: Some(rv1::cast_source::Location::ExileObjectId(adventure)),
                 }),
                 ..Default::default()
@@ -2279,6 +2366,7 @@ mod cast_snapshot_tests {
             cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
                 cast_method: rv1::CastMethod::Normal as i32,
                 source: Some(rv1::CastSource {
+                    expected_zone_change_generation: None,
                     location: Some(rv1::cast_source::Location::HandIndex(
                         e.state.players[0]
                             .hand
@@ -2506,6 +2594,7 @@ mod cast_snapshot_tests {
         let command = rv1::CastSpell {
             cast_method: rv1::CastMethod::SiegeDefeat as i32,
             source: Some(rv1::CastSource {
+                expected_zone_change_generation: None,
                 location: Some(rv1::cast_source::Location::ExileObjectId(siege)),
             }),
             face_index: 1,

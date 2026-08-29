@@ -117,6 +117,8 @@ mod issue_142_endure;
 mod issue_144_selectable_tap_payments;
 #[path = "scenario/issue_145_convoke.rs"]
 mod issue_145_convoke;
+#[path = "scenario/issue_148_warp_void.rs"]
+mod issue_148_warp_void;
 #[path = "scenario/issue_151_firebending.rs"]
 mod issue_151_firebending;
 #[path = "scenario/issue_152_exhaust.rs"]

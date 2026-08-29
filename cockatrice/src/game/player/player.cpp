@@ -1,6 +1,7 @@
 #include "player.h"
 
 #include "../ruled/ruled_actions.h"
+#include "../ruled/ruled_zone_snapshot_policy.h"
 #include "../../interface/theme_manager.h"
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../board/arrow_item.h"
@@ -155,16 +156,14 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
         }
     }
 
-    // In ruled mode the stack and graveyard zones are authoritative from Event_MoveCard events
+    // In ruled mode the stack, graveyard, and exile zones are authoritative from Event_MoveCard events
     // and the engine's synthetic ability system. Clearing and repopulating them from the
     // game-state snapshot (sent on hand/battlefield-order changes) causes visual duplicates:
     // open zone views are not cleared by clearContents(), so each repopulation adds another
     // copy of every card on top of the ones the view already holds.
     const bool ruledMode = RuledActions::isRuledGame(game);
     auto skipInRuledMode = [&](const QString &zoneName) {
-        return ruledMode &&
-               (zoneName == QLatin1String(ZoneNames::STACK) ||
-                zoneName == QLatin1String(ZoneNames::GRAVE));
+        return ruledMode && ruledSnapshotPreservesEventAuthoritativeZone(zoneName);
     };
 
     QMutableMapIterator<QString, CardZoneLogic *> zoneIt(zones);

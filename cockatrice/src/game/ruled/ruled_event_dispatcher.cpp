@@ -257,14 +257,18 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
     for (const auto &action : actions.hand_actions()) {
         const int handIndex = static_cast<int>(action.hand_index());
         const int faceIndex = static_cast<int>(action.face_index());
-        const int castKey = RuledClientState::spellTargetKey(handIndex, faceIndex);
+        const auto method = action.kind() == ruled::v1::HAND_ACTION_CAST_SPELL
+                                ? action.cast_method() : ruled::v1::CAST_METHOD_NORMAL;
+        if (method != ruled::v1::CAST_METHOD_NORMAL && method != ruled::v1::CAST_METHOD_WARP)
+            continue;
+        const quint64 castKey = RuledClientState::handCastActionKey(handIndex, faceIndex, method);
         RuledHandActionSet &set = parsed[action.kind()];
         set.handIndices.insert(handIndex);
         const QString cardName = QString::fromStdString(action.card_name());
         set.indicesByCardName.insert(cardName, handIndex);
         set.faceOptionsByIndex[handIndex].append({faceIndex, cardName, QString::fromStdString(action.cost()),
                                                static_cast<int>(action.generic_cost_reduction()),
-                                               ruled::v1::CAST_METHOD_NORMAL, action.has_convoke()});
+                                               method, action.has_convoke()});
         if (action.has_cost_choices()) {
             set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices()));
         }
@@ -274,7 +278,7 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         }
         set.eligibleRestrictedManaByCastKey.insert(castKey, eligibleGroups);
         if (action.needs_target()) {
-            set.needsTargetCastKeys.insert(castKey);
+            set.needsTargetCastKeys.insert(RuledClientState::spellTargetKey(handIndex, faceIndex));
         }
         if (action.modes_size() > 0) {
             set.modalMinModesByCastKey.insert(castKey, static_cast<int>(action.min_modes()));
@@ -1525,7 +1529,8 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         state->zoneCastActions.faceOptionsByIndex[objectId].append({faceIndex, displayName,
                                                                     QString::fromStdString(action.cost()),
                                                                     static_cast<int>(action.generic_cost_reduction()),
-                                                                    castMethod, action.has_convoke()});
+                                                                    castMethod, action.has_convoke(),
+                                                                    action.zone_change_generation()});
         state->zoneCastSourceByOid.insert(objectId, source);
         if (action.needs_target()) {
             state->zoneCastActions.needsTargetIndices.insert(objectId);

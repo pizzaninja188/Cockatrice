@@ -25,6 +25,9 @@ use std::fmt;
 /// the identities of the cards that moved through a graveyard.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameCondition {
+    /// Plasma Bolt and Temporal Intervention: a nonland permanent left the battlefield or
+    /// a spell was cast for its Warp cost this turn, by any player.
+    Void,
     /// A face-authored condition captured after successful casting. Spell copies were not cast
     /// and have no result; ordinary live conditions elsewhere are unaffected.
     CastSnapshot { index: u32 },
@@ -208,7 +211,7 @@ impl GameCondition {
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            GameCondition::CastSnapshot { .. } => Ok(()),
+            GameCondition::Void | GameCondition::CastSnapshot { .. } => Ok(()),
             GameCondition::ActivePlayer { .. } => Ok(()),
             GameCondition::LifeChangedThisTurn { .. } => Ok(()),
             GameCondition::PlayerLifeAggregate { min, max, .. } => {
@@ -334,7 +337,8 @@ impl GameCondition {
 
     pub fn matches_value(&self, value: u32) -> bool {
         match self {
-            GameCondition::CastSnapshot { .. }
+            GameCondition::Void
+            | GameCondition::CastSnapshot { .. }
             | GameCondition::ActivePlayer { .. }
             | GameCondition::LifeChangedThisTurn { .. }
             | GameCondition::PlayerLifeAggregate { .. }
@@ -1944,6 +1948,9 @@ pub enum SpellEffectKind {
     /// trigger. Mobilize uses this runtime context effect so one delayed ability handles all
     /// tokens made by one resolution without re-querying the battlefield by name.
     SacrificeObservedObjects,
+    /// CR 702.185: exile the observed permanent incarnation and grant its owner Warp's
+    /// later-turn permission. Runtime delayed effect shared by all Warp cards.
+    ExileWarpedObject,
     /// CR 610.3 paired one-shot effects: exile the chosen permanent, then return that exact card
     /// under its owner's control immediately after the exact source generation leaves the
     /// battlefield. Banishing Light and Stormplain Detainment share the nonland form; Trapped in
@@ -2866,6 +2873,7 @@ impl SpellEffectKind {
             | SpellEffectKind::GrantKeywordsAll { .. }
             | SpellEffectKind::ReturnTriggeredCard { .. }
             | SpellEffectKind::SacrificeObservedObjects
+            | SpellEffectKind::ExileWarpedObject
             | SpellEffectKind::ChooseGraveyardCard { .. }
             | SpellEffectKind::GrantKeywordsAllPermanents { .. }
             | SpellEffectKind::GainLife { .. }

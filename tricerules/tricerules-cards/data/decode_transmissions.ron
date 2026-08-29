@@ -1,0 +1,13 @@
+// Oracle and rulings checked 2026-08-28. Choose the replacement sequence before drawing.
+(
+  id: "decode_transmissions",
+  name: "Decode Transmissions",
+  mana_cost: "{2}{B}",
+  types: ["Sorcery"],
+  spell_effect: [ChooseResolutionBranch(selection: FirstApplicable, branches: [
+    (label: "Draw two cards; each opponent loses 2 life", cost: None,
+      requirement: GameCondition(Void), effects: [Draw(count: 2), LoseLife(amount: Fixed(2), who: EachOpponent)]),
+    (label: "Draw two cards and lose 2 life", cost: None,
+      requirement: Always, effects: [Draw(count: 2), LoseLife(amount: Fixed(2))]),
+  ])],
+)

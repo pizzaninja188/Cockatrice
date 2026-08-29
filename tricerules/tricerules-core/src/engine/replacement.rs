@@ -1052,6 +1052,7 @@ impl GameEngine {
                     })),
                 });
                 self.commit_battlefield_entry(event, attached_to)?;
+                self.finish_permanent_spell_entry(&stack.item, &mut events);
                 self.complete_parked_resolution(stack.item, Some(0), events)
             }
             BattlefieldEntryCompletion::ResolutionEffect {

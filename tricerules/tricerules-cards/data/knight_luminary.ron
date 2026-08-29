@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-08-28. Warp: CR 702.185.
+(
+  id: "knight_luminary",
+  name: "Knight Luminary",
+  mana_cost: "{3}{W}",
+  warp_cost: Some("{1}{W}"),
+  types: ["Creature", "Human", "Knight"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "human_soldier_w_1_1", count: 1)],
+    text: "When this creature enters, create a 1/1 white Human Soldier creature token.",
+  )],
+)

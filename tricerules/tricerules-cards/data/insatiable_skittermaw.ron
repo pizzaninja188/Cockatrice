@@ -1,0 +1,16 @@
+// Oracle and rulings checked 2026-08-28. CR 603.4: intervening-if, checked at both boundaries.
+(
+  id: "insatiable_skittermaw",
+  name: "Insatiable Skittermaw",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Insect", "Horror"],
+  power: 2,
+  toughness: 2,
+  keywords: [Menace],
+  triggered_abilities: [(
+    trigger: AtBeginningOfEndStep(player: Controller),
+    intervening_if: Some(GameCondition(Void)),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    text: "Void — At the beginning of your end step, if a nonland permanent left the battlefield this turn or a spell was warped this turn, put a +1/+1 counter on this creature.",
+  )],
+)

@@ -1055,6 +1055,7 @@ fn hand_action(
         eligible_restricted_mana_group_ids: vec![],
         generic_cost_reduction: 0,
         has_convoke: false,
+        cast_method: rv1::CastMethod::Normal as i32,
     }
 }
 
@@ -1069,10 +1070,10 @@ fn spell_targets_have_candidate(targets: &rv1::SpellTargets) -> bool {
     })
 }
 
-/// Number of face-level cast actions the engine is currently publishing for this exact physical
-/// source. Stack display uses this to annotate a chosen face only when the player actually had a
-/// choice; modal spell choices remain separate annotations.
-pub(super) fn cast_option_count_for_source(
+/// Number of distinct faces the engine is currently publishing for this exact physical source.
+/// Alternative methods such as Warp may publish several actions for one face, but stack display
+/// names the chosen face only when the card actually offered more than one face.
+pub(super) fn cast_face_count_for_source(
     eng: &GameEngine,
     pid: PlayerId,
     source: &rv1::cast_source::Location,
@@ -1084,12 +1085,16 @@ pub(super) fn cast_option_count_for_source(
                 action.hand_index == *hand_index
                     && action.kind == rv1::HandActionKind::HandActionCastSpell as i32
             })
-            .count(),
+            .map(|action| action.face_index)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
         rv1::cast_source::Location::GraveyardObjectId(object_id)
         | rv1::cast_source::Location::ExileObjectId(object_id) => legal_zone_cast_actions(eng, pid)
             .iter()
             .filter(|action| action.object_id == *object_id)
-            .count(),
+            .map(|action| action.face_index)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
     }
 }
 
@@ -1252,7 +1257,14 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                         continue;
                     }
                 }
+                let warp = face.warp_cost.as_ref().map(|cost| {
+                    let mut warp = action.clone();
+                    warp.cast_method = rv1::CastMethod::Warp as i32;
+                    warp.cost = cost.to_string();
+                    warp
+                });
                 actions.push(action);
+                actions.extend(warp);
             }
         }
     }
@@ -1322,6 +1334,12 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 let mut action = rv1::LegalZoneCastAction {
                     source_zone: rv1::CastSourceZone::Graveyard as i32,
                     object_id: oid,
+                    zone_change_generation: eng
+                        .state
+                        .zone_change_generation
+                        .get(&oid)
+                        .copied()
+                        .unwrap_or(0),
                     card_name: face.name.clone(),
                     face_index: face_index as u32,
                     needs_target: target_schema(&face.spell_effect, face.targeting.as_ref())
@@ -1391,7 +1409,9 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
         .state
         .active_exile_play_permissions
         .iter()
-        .filter(|permission| permission.player_id == pid)
+        .filter(|permission| {
+            permission.player_id == pid && permission.available_on_turn(eng.state.turn_instance)
+        })
     {
         let Some(object) = eng.state.objects.get(&permission.object_id) else {
             continue;
@@ -1411,6 +1431,9 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
         let face_indices: Vec<_> = match permission.scope {
             ExilePlayPermissionScope::CastFace(face_index) => vec![face_index],
             ExilePlayPermissionScope::PlayCard => (0..definition.faces_iter().count()).collect(),
+            ExilePlayPermissionScope::CastCard => (0..definition.faces_iter().count())
+                .filter(|&face| definition.face_available_from_hand(face))
+                .collect(),
         };
         for face_index in face_indices {
             if !emitted.insert((object.id, face_index)) {
@@ -1436,6 +1459,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             let mut action = rv1::LegalZoneCastAction {
                 source_zone: rv1::CastSourceZone::Exile as i32,
                 object_id: object.id,
+                zone_change_generation: generation,
                 card_name: face.name.clone(),
                 face_index: face_index as u32,
                 needs_target: target_schema(&face.spell_effect, face.targeting.as_ref())

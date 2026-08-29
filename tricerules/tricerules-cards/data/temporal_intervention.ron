@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-08-28. CR 601.2f: reduction after increases, before payment.
+(
+  id: "temporal_intervention",
+  name: "Temporal Intervention",
+  mana_cost: "{2}{B}",
+  types: ["Sorcery"],
+  cost_modifiers: [ConditionalGenericReduction(amount: 2, condition: Void)],
+  spell_effect: [DiscardCards(count: 1, target: (kind: OpponentPlayer), chooser: Controller,
+    card_filter: Some(Nonland), visibility: PublicReveal)],
+)

@@ -89,6 +89,14 @@ RuledPendingCast::InteractionKind RuledPendingCast::activeInteraction() const
     return InteractionKind::None;
 }
 
+static QString ruledCastOptionLabel(const RuledFaceOption &face)
+{
+    const QString label = face.castMethod == ruled::v1::CAST_METHOD_WARP
+                              ? QObject::tr("Warp %1").arg(face.faceName)
+                              : QObject::tr("Cast %1").arg(face.faceName);
+    return face.manaCost.isEmpty() ? label : QStringLiteral("%1 (%2)").arg(label, face.manaCost);
+}
+
 QVector<RuledCardActionMenuOption> RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
                                                                            const QList<int> &abilityIndices,
                                                                            const QStringList &abilityLabels,
@@ -102,7 +110,7 @@ QVector<RuledCardActionMenuOption> RuledPendingCast::cardActionMenuOptions(const
         if (manaAbilitiesOnly)
             break;
         options.append({RuledCardActionMenuOption::Kind::CastFace, face.faceIndex,
-                        QObject::tr("Cast %1").arg(face.faceName), true});
+                        ruledCastOptionLabel(face), true, 0, face.castMethod});
     }
     for (const int abilityIndex : abilityIndices) {
         if (manaAbilitiesOnly && manaProduced.value(abilityIndex).isEmpty())
@@ -133,7 +141,7 @@ std::optional<RuledFaceOption> RuledPendingCast::chooseFace(QWidget *parent,
     QVector<QAction *> actions;
     actions.reserve(faces.size());
     for (const auto &face : faces) {
-        actions.append(menu.addAction(QObject::tr("Cast %1").arg(face.faceName)));
+        actions.append(menu.addAction(ruledCastOptionLabel(face)));
     }
     QAction *chosen = menu.exec(QCursor::pos());
     const int position = actions.indexOf(chosen);

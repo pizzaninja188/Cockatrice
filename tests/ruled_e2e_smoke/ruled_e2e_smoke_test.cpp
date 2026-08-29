@@ -2123,6 +2123,7 @@ public:
                 auto *cast = cmd.mutable_cast_spell();
                 cast->set_cast_method(ruled::v1::CAST_METHOD_FLASHBACK);
                 cast->mutable_source()->set_graveyard_object_id(ga.object_id());
+                cast->mutable_source()->set_expected_zone_change_generation(ga.zone_change_generation());
                 cast->add_targets()->set_object_id(static_cast<quint32>(oppId));
                 flashbackCast = true;
                 sendRuled(
@@ -2178,6 +2179,7 @@ public:
                 ruled::v1::RuledCommand cmd;
                 auto *cast = cmd.mutable_cast_spell();
                 cast->mutable_source()->set_exile_object_id(action.object_id());
+                cast->mutable_source()->set_expected_zone_change_generation(action.zone_change_generation());
                 cast->set_face_index(action.face_index());
                 giantCastFromExile = true;
                 sendRuled(cmd, QStringLiteral("cast Bonecrusher Giant from exile oid %1").arg(action.object_id()));
@@ -5083,6 +5085,7 @@ TEST_F(RuledE2ESmokeTest, HarmonizeUsesOwnerOnlyReductionAndPreservesPhysicalIde
     auto *cast = castHarmonize.mutable_cast_spell();
     cast->set_cast_method(ruled::v1::CAST_METHOD_HARMONIZE);
     cast->mutable_source()->set_graveyard_object_id(whisperOid);
+    cast->mutable_source()->set_expected_zone_change_generation(harmonize->zone_change_generation());
     cast->set_face_index(harmonize->face_index());
     auto *selection = cast->add_cast_cost_group_selections();
     selection->set_group_index(group.group_index());
@@ -6054,6 +6057,118 @@ TEST_F(RuledE2ESmokeTest, EarthbendBadgeRowsAndGenerationBoundReturnReachBothCli
             EXPECT_TRUE(client->physicalRowAndPt.at(key).second.isEmpty());
         }
     }
+}
+
+TEST_F(RuledE2ESmokeTest, WarpCastExilesAtEndStepAndPublishesOwnerOnlyPermission)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("warpp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("warpp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Plains")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "Warp game start"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "Warp game start"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000 && p1.phase != ruled::v1::PHASE_ID_MAIN1) {
+        p1.pump(25);
+        p2.pump(25);
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &label) {
+        const quint64 v1 = p1.stateVersion;
+        const quint64 v2 = p2.stateVersion;
+        sender.sendRuled(command, label);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= v1 || p2.stateVersion <= v2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > v1 && p2.stateVersion > v2;
+    };
+    ruled::v1::RuledCommand put;
+    put.mutable_dev_command()->set_target_player_id(p1.myId);
+    auto *placement = put.mutable_dev_command()->mutable_put_card_in_zone();
+    placement->set_card_name("Knight Luminary");
+    placement->set_zone(ruled::v1::DEV_ZONE_HAND);
+    placement->set_ready(true);
+    ASSERT_TRUE(send(p1, put, QStringLiteral("Warp put Knight")));
+    ruled::v1::RuledCommand mana;
+    mana.mutable_dev_command()->set_target_player_id(p1.myId);
+    mana.mutable_dev_command()->mutable_add_mana()->set_w(1);
+    mana.mutable_dev_command()->mutable_add_mana()->set_c(1);
+    ASSERT_TRUE(send(p1, mana, QStringLiteral("Warp mana")));
+    const auto actions = p1.handActions(ruled::v1::HAND_ACTION_CAST_SPELL);
+    const auto warp = std::find_if(actions.begin(), actions.end(), [](const auto *action) {
+        return action->card_name() == "Knight Luminary" && action->cast_method() == ruled::v1::CAST_METHOD_WARP;
+    });
+    ASSERT_NE(warp, actions.end());
+    ruled::v1::RuledCommand cast;
+    cast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_WARP);
+    cast.mutable_cast_spell()->mutable_source()->set_hand_index((*warp)->hand_index());
+    ASSERT_TRUE(send(p1, cast, QStringLiteral("Warp cast Knight")));
+    auto pass = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(client, command, QStringLiteral("Warp pass"));
+    };
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    ASSERT_TRUE(p1.pumpUntil([&] {
+        const auto current = p1.battlefieldByPlayer.find(p1.myId);
+        return current != p1.battlefieldByPlayer.end() &&
+               std::any_of(current->second.begin(), current->second.end(), [](const auto &object) {
+                   return object.cardId == QLatin1String("knight_luminary");
+               });
+    }, 10000, "Warp Knight battlefield projection"));
+    p2.pumpUntil([&] { return p2.stateVersion >= p1.stateVersion; }, 10000, "Warp observer projection");
+    const auto battlefield = p1.battlefieldByPlayer.find(p1.myId);
+    ASSERT_NE(battlefield, p1.battlefieldByPlayer.end());
+    const auto knight = std::find_if(battlefield->second.begin(), battlefield->second.end(), [](const auto &object) {
+        return object.cardId == QLatin1String("knight_luminary");
+    });
+    ASSERT_NE(knight, battlefield->second.end());
+    const quint32 oid = knight->oid;
+    const int physicalId = p1.serverCardByEngineOid.at(oid);
+    QElapsedTimer toEnd;
+    toEnd.start();
+    while (!(p1.phase == ruled::v1::PHASE_ID_END_STEP && p1.stackDepth > 0) && toEnd.elapsed() < 30000) {
+        if (p1.priorityPlayer == p1.myId) ASSERT_TRUE(pass(p1));
+        else if (p1.priorityPlayer == p2.myId) ASSERT_TRUE(pass(p2));
+        else { p1.pump(25); p2.pump(25); }
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_END_STEP);
+    ASSERT_TRUE(pass(p1.priorityPlayer == p1.myId ? p1 : p2));
+    ASSERT_TRUE(pass(p1.priorityPlayer == p1.myId ? p1 : p2));
+    EXPECT_EQ(p1.serverCardByEngineOid.at(oid), physicalId);
+    EXPECT_EQ(p2.serverCardByEngineOid.at(oid), physicalId);
+    const auto ownerGroup = std::find_if(p1.latestLegal.exile_play_permission_groups().begin(),
+                                         p1.latestLegal.exile_play_permission_groups().end(), [](const auto &group) {
+        return group.source_label().find("Warp") != std::string::npos;
+    });
+    EXPECT_NE(ownerGroup, p1.latestLegal.exile_play_permission_groups().end());
+    EXPECT_TRUE(std::none_of(p2.latestLegal.exile_play_permission_groups().begin(),
+                             p2.latestLegal.exile_play_permission_groups().end(), [](const auto &group) {
+        return group.source_label().find("Warp") != std::string::npos;
+    }));
 }
 TEST_F(RuledE2ESmokeTest, TappedOrdinaryTokenReachesBothClientsWithoutCombatState)
 {

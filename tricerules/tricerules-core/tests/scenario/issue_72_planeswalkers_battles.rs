@@ -404,7 +404,7 @@ fn defeated_siege_casts_back_face_with_exact_physical_identity() {
     let (mut engine, battle, exile_generation) = siege_ready_to_choose(72_006);
     let announcement = CastSpell {
         cast_method: CastMethod::SiegeDefeat as i32,
-        source: Some(exile_cast_source(battle)),
+        source: Some(exile_cast_source(battle, exile_generation)),
         face_index: 1,
         ..Default::default()
     };

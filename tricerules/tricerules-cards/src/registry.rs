@@ -894,6 +894,12 @@ impl CardRegistry {
             // subjects are rejected here (EffectContext::Spell); activated/triggered
             // effects bind to a source (Ability).
             for face in card.faces_iter() {
+                if face.warp_cost.is_some() && (!face.is_permanent() || face.is_land) {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "Warp requires a permanent spell face".into(),
+                    });
+                }
                 for condition in &face.cast_conditions {
                     condition
                         .validate_live()
@@ -1755,6 +1761,27 @@ mod tests {
                 },
             }]
         ));
+    }
+
+    #[test]
+    fn issue_148_warp_cost_survives_flat_face_normalization() {
+        let fixture = r#"(id: "warp_test", name: "Warp Test", mana_cost: "{3}{W}",
+            warp_cost: Some("{1}{W}"), types: ["Creature"], power: 3, toughness: 2)"#;
+        let registry = CardRegistry::from_chunks(&[fixture]).expect("Warp face");
+        let face = registry.get("warp_test").unwrap().primary_face();
+        let serialized = ron::to_string(face).unwrap();
+        assert!(
+            serialized.contains("warp_cost:Some(\"{1}{W}\")"),
+            "Warp must be retained on the normalized face: {serialized}"
+        );
+    }
+
+    #[test]
+    fn issue_148_warp_rejects_nonpermanent_faces() {
+        let fixture = r#"(id: "bad_warp", name: "Bad Warp", mana_cost: "{3}{W}",
+            warp_cost: Some("{1}{W}"), types: ["Sorcery"], spell_effect: [Draw(count: 1)])"#;
+        assert!(matches!(CardRegistry::from_chunks(&[fixture]),
+            Err(RegistryError::InvalidCard { reason, .. }) if reason.contains("Warp")));
     }
 
     #[test]

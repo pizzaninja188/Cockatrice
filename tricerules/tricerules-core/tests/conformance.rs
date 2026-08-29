@@ -53,6 +53,7 @@ fn cast_spell_face(hand_card_index: u32, targets: Vec<TargetRef>, face_index: u3
         cmd: Some(Cmd::CastSpell(CastSpell {
             cast_method: tricerules_proto::ruled::v1::CastMethod::Normal as i32,
             source: Some(CastSource {
+                expected_zone_change_generation: None,
                 location: Some(
                     tricerules_proto::ruled::v1::cast_source::Location::HandIndex(hand_card_index),
                 ),

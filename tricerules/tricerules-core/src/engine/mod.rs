@@ -171,6 +171,7 @@ mod resolution;
 mod state_based;
 mod targeting;
 mod triggers;
+mod warp;
 mod zone_events;
 
 #[cfg(test)]
@@ -1011,6 +1012,7 @@ impl GameEngine {
             pending_triggers: VecDeque::new(),
             staged_trigger_groups: VecDeque::new(),
             active_event_observers: Vec::new(),
+            warped_permanent_incarnations: HashSet::new(),
             observed_object_cohorts: HashMap::new(),
             pending_immediate_observer_actions: Vec::new(),
             pending_trigger_order: None,

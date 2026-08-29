@@ -492,7 +492,13 @@ pub(super) fn copy_target_spell(
                     // CR 707.2: the copy has the original's characteristics and choices. `None`
                     // for every spell today, but copying inherits it rather than dropping it.
                     trigger_context: src.trigger_context,
-                    cast_method: SpellCastMethod::Normal,
+                    // CR 707.10 copies the Warp choice; Flashback/Harmonize stack-exit
+                    // replacements still belong only to the spell actually cast that way.
+                    cast_method: if src.cast_method == SpellCastMethod::Warp {
+                        SpellCastMethod::Warp
+                    } else {
+                        SpellCastMethod::Normal
+                    },
                 };
                 // CR 707.10c: prompt for new targets on the first copy; push any
                 // additional copies immediately with the original targets.

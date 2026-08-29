@@ -1,0 +1,8 @@
+(
+  id: "human_soldier_w_1_1",
+  name: "Human Soldier",
+  types: ["Creature", "Human", "Soldier"],
+  colors: [White],
+  power: 1,
+  toughness: 1,
+)

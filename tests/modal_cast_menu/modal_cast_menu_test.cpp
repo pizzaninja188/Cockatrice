@@ -47,8 +47,8 @@ TEST(ModalCastMenuTest, AdventureFacePickerUsesEngineOptionsWhenPhysicalNameIsOn
         QMenu *menu = activeMenu();
         ASSERT_NE(menu, nullptr);
         ASSERT_EQ(menu->actions().size(), 2);
-        EXPECT_EQ(menu->actions().at(0)->text(), QStringLiteral("Cast Bonecrusher Giant"));
-        EXPECT_EQ(menu->actions().at(1)->text(), QStringLiteral("Cast Stomp"));
+    EXPECT_EQ(menu->actions().at(0)->text(), QStringLiteral("Cast Bonecrusher Giant ({2}{R})"));
+    EXPECT_EQ(menu->actions().at(1)->text(), QStringLiteral("Cast Stomp ({1}{R})"));
         const QRect actionRect = menu->actionGeometry(menu->actions().at(1));
         QTest::mouseClick(menu, Qt::LeftButton, Qt::NoModifier, actionRect.center());
     });
