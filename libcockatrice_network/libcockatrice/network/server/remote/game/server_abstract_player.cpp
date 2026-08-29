@@ -1,7 +1,7 @@
 #include "server_abstract_player.h"
 
-#include "ruled_utils.h"
 #include "ruled_game_driver.h"
+#include "ruled_utils.h"
 #include "server_arrow.h"
 #include "server_card.h"
 #include "server_cardzone.h"
@@ -158,8 +158,8 @@ makeCreateTokenEvent(Server_CardZone *zone, Server_Card *card, int xCoord, int y
         for (const QString &kw : card->getTokenAbilityKeywords()) {
             event.add_ability_keywords(kw.toStdString());
         }
-        for (const QString &text : card->getTokenTriggeredAbilityTexts()) {
-            event.add_triggered_ability_texts(text.toStdString());
+        for (const QString &text : card->getTokenAbilityTexts()) {
+            event.add_ability_texts(text.toStdString());
         }
     }
 
@@ -497,11 +497,10 @@ void Server_AbstractPlayer::processMoveCard(GameEventStorage &ges,
         // Other clients need a list index to remove from a private hand when card_ids are not mirrored locally
         // (opponent hands use contentsKnown=false and CardItems keep id -1). Hidden zones (e.g. library) already
         // sent position here; add Private -> Public (hand to stack/table) so takeCard(position, ...) succeeds.
-        const bool sendHandIndexToOthers =
-            ((startzone->getType() != ServerInfo_Zone::PublicZone) &&
-             (startzone->getType() != ServerInfo_Zone::PrivateZone)) ||
-            (startzone->getType() == ServerInfo_Zone::PrivateZone &&
-             targetzone->getType() == ServerInfo_Zone::PublicZone);
+        const bool sendHandIndexToOthers = ((startzone->getType() != ServerInfo_Zone::PublicZone) &&
+                                            (startzone->getType() != ServerInfo_Zone::PrivateZone)) ||
+                                           (startzone->getType() == ServerInfo_Zone::PrivateZone &&
+                                            targetzone->getType() == ServerInfo_Zone::PublicZone);
         if (sendHandIndexToOthers) {
             eventOthers.set_position(position);
         }

@@ -117,10 +117,9 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
     if (ruledHandler) {
         const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
         ruledOid = ruledHandler->engineOidForCardId(ownerPlayerId, id);
-        ruledTargetSelectionOid =
-            zone && zone->getName() == ZoneNames::GRAVE
-                ? ruledHandler->graveyardEngineOidForOwnedCard(ownerPlayerId, id)
-                : ruledOid;
+        ruledTargetSelectionOid = zone && zone->getName() == ZoneNames::GRAVE
+                                      ? ruledHandler->graveyardEngineOidForOwnedCard(ownerPlayerId, id)
+                                      : ruledOid;
     }
 
     if (!pt.isEmpty()) {
@@ -163,8 +162,8 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
     // battlefield cards (TABLE zone); a lingering spell/ability card in the stack zone
     // may share an OID with a summoning-sick permanent but must never show the label there.
     const bool inTableZone = zone && zone->getName() == QLatin1String(ZoneNames::TABLE);
-    if (ruledHandler && ruledOid != 0 && inTableZone && ruledHandler->isEngineOidSummoningSick(ruledOid)
-        && !ruledHandler->isEngineOidHaste(ruledOid)) {
+    if (ruledHandler && ruledOid != 0 && inTableZone && ruledHandler->isEngineOidSummoningSick(ruledOid) &&
+        !ruledHandler->isEngineOidHaste(ruledOid)) {
         if (!renderedAnnotation.contains(QStringLiteral("summoning sick"), Qt::CaseInsensitive)) {
             if (!renderedAnnotation.isEmpty()) {
                 renderedAnnotation += QLatin1Char('\n');
@@ -200,11 +199,9 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             abilityFont.setItalic(true);
             abilityFont.setPointSizeF(abilityFont.pointSizeF() * 0.75);
             painter->setFont(abilityFont);
-            painter->drawText(
-                QRectF(4 * scaleFactor, translatedSize.height() * 0.65,
-                       translatedSize.width() - 8 * scaleFactor, translatedSize.height() * 0.33),
-                Qt::AlignCenter | Qt::TextWrapAnywhere,
-                abilityAnnotation);
+            painter->drawText(QRectF(4 * scaleFactor, translatedSize.height() * 0.65,
+                                     translatedSize.width() - 8 * scaleFactor, translatedSize.height() * 0.33),
+                              Qt::AlignCenter | Qt::TextWrapAnywhere, abilityAnnotation);
             painter->restore();
         }
     }
@@ -289,8 +286,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
                 }
             }
         }
-        if (ruledTargetSelectionOid != 0 &&
-            RuledActions::isSelectedSpellTarget(ruledGame, ruledTargetSelectionOid)) {
+        if (ruledTargetSelectionOid != 0 && RuledActions::isSelectedSpellTarget(ruledGame, ruledTargetSelectionOid)) {
             painter->save();
             painter->setRenderHint(QPainter::Antialiasing, true);
             QPen pen(QColor(220, 40, 40));
@@ -310,9 +306,8 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             painter->drawPath(shape());
             painter->restore();
         }
-        if (zone && (zone->getName() == ZoneNames::GRAVE || zone->getName() == ZoneNames::TABLE) &&
-            owner && owner->getPlayerInfo()->getLocal() &&
-            ruledTargetSelectionOid != 0 &&
+        if (zone && (zone->getName() == ZoneNames::GRAVE || zone->getName() == ZoneNames::TABLE) && owner &&
+            owner->getPlayerInfo()->getLocal() && ruledTargetSelectionOid != 0 &&
             RuledActions::isSelectedGraveyardCostObject(ruledGame, ruledTargetSelectionOid)) {
             painter->save();
             painter->setRenderHint(QPainter::Antialiasing, true);
@@ -327,8 +322,7 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             if (zone->getCards().indexOf(const_cast<CardItem *>(this)) >= 0) {
                 const int ri =
                     RuledActions::resolveHandActionIndex(ruledHandler, ruled::v1::HAND_ACTION_CLEANUP_DISCARD, this);
-                if (ri >= 0 &&
-                    ruledHandler->isHandActionLegal(ruled::v1::HAND_ACTION_CLEANUP_DISCARD, ri) &&
+                if (ri >= 0 && ruledHandler->isHandActionLegal(ruled::v1::HAND_ACTION_CLEANUP_DISCARD, ri) &&
                     ruledHandler->isCleanupDiscardHandIndexSelected(ri)) {
                     painter->save();
                     painter->setRenderHint(QPainter::Antialiasing, true);
@@ -495,13 +489,13 @@ void retargetRuledTokenCardRef(const CardItem *card,
                                const QString &pt,
                                const QString &color,
                                const QStringList &keywords,
-                               const QStringList &triggeredAbilityTexts)
+                               const QStringList &abilityTexts)
 {
     if (ref.name.isEmpty() || !RuledActions::isRuledGameForCard(card)) {
         return;
     }
     CardRef resolved =
-        RuledTokenDisplay::resolve(CardDatabaseManager::query(), ref.name, pt, color, keywords, triggeredAbilityTexts);
+        RuledTokenDisplay::resolve(CardDatabaseManager::query(), ref.name, pt, color, keywords, abilityTexts);
     if (!resolved.name.isEmpty()) {
         ref = resolved;
     }
@@ -522,16 +516,16 @@ void CardItem::processCardInfo(const ServerInfo_Card &_info)
     // subtype as the name; remap it to the matching Oracle "<Subtype> Token" art so it doesn't revert
     // the resolution done at token creation.
     CardRef ref{QString::fromStdString(_info.name()), QString::fromStdString(_info.provider_id())};
-    if (!_info.face_down() && _info.has_token_base_pt() && !_info.token_base_pt().empty()) {
+    if (!_info.face_down() && _info.destroy_on_zone_change() && !ref.name.isEmpty()) {
         QStringList keywords;
         keywords.reserve(_info.ability_keywords_size());
         for (const auto &kw : _info.ability_keywords()) {
             keywords.append(QString::fromStdString(kw));
         }
-        QStringList triggeredAbilityTexts;
-        triggeredAbilityTexts.reserve(_info.triggered_ability_texts_size());
-        for (const auto &text : _info.triggered_ability_texts()) {
-            triggeredAbilityTexts.append(QString::fromStdString(text));
+        QStringList abilityTexts;
+        abilityTexts.reserve(_info.ability_texts_size());
+        for (const auto &text : _info.ability_texts()) {
+            abilityTexts.append(QString::fromStdString(text));
         }
         // `_info.pt()` is the EFFECTIVE P/T (anthem-boosted) from the zone-view sync.
         // Using it for Oracle art lookup would match a higher-P/T token variant
@@ -540,8 +534,7 @@ void CardItem::processCardInfo(const ServerInfo_Card &_info)
         const QString lookupPt = _info.has_token_base_pt() && !_info.token_base_pt().empty()
                                      ? QString::fromStdString(_info.token_base_pt())
                                      : QString::fromStdString(_info.pt());
-        retargetRuledTokenCardRef(this, ref, lookupPt, QString::fromStdString(_info.color()), keywords,
-                                  triggeredAbilityTexts);
+        retargetRuledTokenCardRef(this, ref, lookupPt, QString::fromStdString(_info.color()), keywords, abilityTexts);
     }
     setCardRef(ref);
     setAttacking(_info.attacking());
@@ -651,8 +644,7 @@ void CardItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         } else if (!owner->getPlayerInfo()->getLocalOrJudge())
             return;
 
-        if (auto *game = owner->getGame();
-            RuledActions::isRuledGame(game)) {
+        if (auto *game = owner->getGame(); RuledActions::isRuledGame(game)) {
             setCursor(Qt::OpenHandCursor);
             return;
         }
@@ -720,8 +712,7 @@ void CardItem::playCard(bool faceDown)
 
     TableZoneLogic *tz = qobject_cast<TableZoneLogic *>(zone);
     if (tz) {
-        if (auto *game = owner->getGame();
-            RuledActions::isRuledGame(game)) {
+        if (auto *game = owner->getGame(); RuledActions::isRuledGame(game)) {
             if (RuledActions::gameplayInputLocked(game)) {
                 return;
             }
@@ -811,7 +802,8 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         if (owner != nullptr) {
             auto *game = owner->getGame();
             auto *playerManager = game ? game->getPlayerManager() : nullptr;
-            auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
+            auto *localPlayer =
+                playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
             auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
             // Spell damage allocation: right-click decrements this target's allocation.
             if (actions && zone && zone->getName() == ZoneNames::TABLE &&
@@ -853,7 +845,8 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
                 return;
             }
             auto *playerManager = game ? game->getPlayerManager() : nullptr;
-            auto *localPlayer = playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
+            auto *localPlayer =
+                playerManager ? playerManager->getPlayers().value(playerManager->getLocalPlayerId()) : nullptr;
             auto *actions = localPlayer ? localPlayer->getPlayerActions() : nullptr;
             if (stationaryLeft && actions) {
                 const auto eligibility = actions->ruledCardTargetEligibility(this);
@@ -936,9 +929,8 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
             AbstractCardItem::mouseReleaseEvent(event);
             return;
         }
-        if (stationaryLeft &&
-            (!SettingsCache::instance().getDoubleClickToPlay() || RuledActions::isSingleClickPlayLegal(this) ||
-             isTableLandSingleClickLegal(this))) {
+        if (stationaryLeft && (!SettingsCache::instance().getDoubleClickToPlay() ||
+                               RuledActions::isSingleClickPlayLegal(this) || isTableLandSingleClickLegal(this))) {
             handleClickedToPlay(event->modifiers().testFlag(Qt::ShiftModifier));
         }
     }

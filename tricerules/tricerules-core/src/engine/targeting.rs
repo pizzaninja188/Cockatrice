@@ -965,6 +965,16 @@ fn validate_effect_targets(
     trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
     match effect {
+        SpellEffectKind::Conditional { effect, .. } => {
+            return validate_effect_targets(
+                engine,
+                caster,
+                source,
+                effect,
+                targets,
+                trigger_context,
+            );
+        }
         SpellEffectKind::CreatureDealsDamageEqualToPower { .. } | SpellEffectKind::Fight { .. } => {
             return Err(EngineError::Illegal(
                 "creature damage targets require grouped target-role validation",

@@ -29,3 +29,26 @@ TEST(RuledTokenDisplayTest, ResolvesSparseProwessTokenDespitePrintedCardNameColl
             "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)")});
     EXPECT_TRUE(wrongPt.name.isEmpty()) << "never substitute a token with the wrong printed P/T";
 }
+
+TEST(RuledTokenDisplayTest, ResolvesNoncreatureTokensByPrintedAbilityText)
+{
+    auto db = std::make_unique<CardDatabase>(nullptr, new NoopCardPreferenceProvider(),
+                                             new TestCardDatabasePathProvider(), new NoopCardSetPriorityController());
+    db->loadCardDatabases();
+    ASSERT_EQ(db->getLoadStatus(), Ok);
+
+    const CardRef clue = RuledTokenDisplay::resolve(db->query(), QStringLiteral("Clue"), {}, {}, {},
+                                                    {QStringLiteral("{2}, Sacrifice this token: Draw a card.")});
+    EXPECT_EQ(clue.name, QStringLiteral("Clue Token"));
+
+    const CardRef lander = RuledTokenDisplay::resolve(
+        db->query(), QStringLiteral("Lander"), {}, {}, {},
+        {QStringLiteral("{2}, {T}, Sacrifice this token: Search your library for a basic land card, put it onto the "
+                        "battlefield tapped, then shuffle.")});
+    EXPECT_EQ(lander.name, QStringLiteral("Lander Token"));
+
+    const CardRef wrongAbility =
+        RuledTokenDisplay::resolve(db->query(), QStringLiteral("Clue"), {}, {}, {},
+                                   {QStringLiteral("{2}, Sacrifice this token: You gain 3 life.")});
+    EXPECT_TRUE(wrongAbility.name.isEmpty()) << "never substitute a token with different printed text";
+}

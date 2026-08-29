@@ -58,6 +58,7 @@ pub(super) fn populate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineErr
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
                 waterbend: false,
+                selection_slots: Vec::new(),
                 deciding_player_id: cx.controller,
                 source_object_id: cx.top.id,
                 prompt_text: prompt.clone(),
@@ -322,6 +323,7 @@ pub(super) fn create_attacking_tokens(
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
                 waterbend: false,
+                selection_slots: Vec::new(),
                 deciding_player_id: controller,
                 source_object_id: item.id,
                 prompt_text: prompt.clone(),

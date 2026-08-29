@@ -1,0 +1,24 @@
+// Oracle verified 2026-08-29. CR 608.2c/h: apply the instructions in order and
+// inspect the same target's current power after the -3/-0 effect.
+(
+  id: "depressurize",
+  name: "Depressurize",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: -3, toughness: 0, subject: Chosen((kind: Creature))),
+    Conditional(
+      condition: ObjectMatches(
+        object: ChosenTarget(group_index: 0, target_index: 0),
+        filter: (kind: Creature, power: Some(AtMost(0))),
+      ),
+      effect: Destroy(subject: Chosen((kind: Creature))),
+    ),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0, 1],
+  )])),
+)

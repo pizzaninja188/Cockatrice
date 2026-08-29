@@ -117,7 +117,17 @@ fn validate_effect_cast_cost_conditions(
         | SpellEffectKind::SearchLibrary {
             count_by_cast_cost: Some(conditional),
             ..
+        }
+        | SpellEffectKind::ExileTopWithPlayPermission {
+            count_by_cast_cost: Some(conditional),
+            ..
         } => validate_cast_cost_condition(groups, conditional.condition),
+        SpellEffectKind::SearchLibrary { slots, .. } => {
+            for condition in slots.iter().filter_map(|slot| slot.enabled_by_cast_cost) {
+                validate_cast_cost_condition(groups, condition)?;
+            }
+            Ok(())
+        }
         SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
             for branch in branches {
                 if let ResolutionBranchRequirement::CastCostReceipt(condition) = branch.requirement

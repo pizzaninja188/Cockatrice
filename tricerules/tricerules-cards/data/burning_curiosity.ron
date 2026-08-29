@@ -1,0 +1,23 @@
+// Oracle and rulings verified 2026-08-29. CR 601.2f-h/701.68: the optional
+// Blight payment is captured at cast time and controls one grouped exile permission.
+(
+  id: "burning_curiosity",
+  name: "Burning Curiosity",
+  mana_cost: "{2}{R}",
+  types: ["Sorcery"],
+  cast_cost_groups: [(
+    prompt: "Blight 1?",
+    min: 0,
+    max: 1,
+    options: [Blight(label: "Blight 1", count: 1)],
+  )],
+  spell_effect: [ExileTopWithPlayPermission(
+    player: Controller,
+    count: 2,
+    count_by_cast_cost: Some((
+      condition: (group_index: 0, option_index: 0, expected_selected: true),
+      if_selected: 3,
+      otherwise: 2,
+    )),
+  )],
+)

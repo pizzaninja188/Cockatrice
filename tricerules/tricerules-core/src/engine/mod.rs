@@ -8,7 +8,7 @@ use crate::state::{
     CardResultCohort, CardResultEntry, CastCostObjectReceipt, CastCostReceipt, ChosenMode,
     CombatAttackAssignment, CombatDefenderTarget, CombatState, ContinuousEffect, CopiableValues,
     DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
-    DelayedTriggerPayload, EntryReplacementApplication, EntryReplacementEffectId,
+    DelayedTriggerPayload, EffectResult, EntryReplacementApplication, EntryReplacementEffectId,
     EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState,
     HandCardAction, ImmediateObserverAction, ObjectId, ObservedGameEvent, OpeningSequence,
     ParkedStackResolution, PendingBattlefieldEntry, PendingHandChoice, PendingLibraryLookStage,
@@ -17,10 +17,10 @@ use crate::state::{
     PendingResolutionBranch, PendingResolutionBranchStage, PendingResolutionPresentation,
     PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
     PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
-    ReplacementPriority, ResolutionContinuation, RoomState, SpellCastMethod, StackItem,
-    StackObjectRef, StackTarget, StagedTrigger, StagedTriggerGroup, TokenBattlefieldEntry,
-    TriggerAbilityOrigin, TriggerContext, TriggerObjectRef, TriggerUseKey, TurnHistory,
-    TurnObjectFact, TurnStep, UndoableManaAbility, Zone,
+    ReplacementPriority, ResolutionContinuation, ResolutionReceipt, RoomState, SpellCastMethod,
+    StackItem, StackObjectRef, StackTarget, StagedTrigger, StagedTriggerGroup,
+    TokenBattlefieldEntry, TriggerAbilityOrigin, TriggerContext, TriggerObjectRef, TriggerUseKey,
+    TurnHistory, TurnObjectFact, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -46,7 +46,7 @@ use tricerules_cards::primitives::{
     LifeChangeKind, ManaAmount, ManaSpendFilter, PermanentEventFilter, PermanentTypeFilter,
     PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison, PreventionAmountBasis,
     ProtectionCardType, ProtectionGrant, ProtectionQuality, RelativePlayerSet, ResolutionBranchDef,
-    ResolutionCost, ReturnController, SearchDestination, SearchZoneSelection,
+    ResolutionCost, ReturnController, SearchDestination, SearchSelectionSlot, SearchZoneSelection,
     SpecialActionAffected, SpecialActionKind, SpecialActionManaPurpose, SpellCastFilter,
     SpellCastOrigin, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
     StaticDamagePreventionAmount, TapTriggerCardinality, TargetController, TargetFilter,
@@ -81,8 +81,6 @@ fn attachment_recipient_proto(recipient: AttachmentRecipient) -> rv1::Attachment
         recipient: Some(recipient),
     }
 }
-
-type EffectResult = CardResultCohort;
 
 #[derive(Clone, Copy)]
 struct AmountContext<'a> {

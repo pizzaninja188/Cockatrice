@@ -165,10 +165,9 @@ int RuledClientState::handActionIndexForCard(RuledHandActionKind kind,
 QVector<RuledFaceOption> RuledClientState::handActionFaceOptions(RuledHandActionKind kind, int handIndex) const
 {
     QVector<RuledFaceOption> options = handActionSet(kind).faceOptionsByIndex.value(handIndex);
-    std::sort(options.begin(), options.end(),
-              [](const RuledFaceOption &a, const RuledFaceOption &b) {
-                  return std::tie(a.faceIndex, a.castMethod) < std::tie(b.faceIndex, b.castMethod);
-              });
+    std::sort(options.begin(), options.end(), [](const RuledFaceOption &a, const RuledFaceOption &b) {
+        return std::tie(a.faceIndex, a.castMethod) < std::tie(b.faceIndex, b.castMethod);
+    });
     return options;
 }
 
@@ -671,8 +670,8 @@ bool RuledClientState::isPendingTriggerTargetCandidate(ruled::v1::TargetRefKind 
         return false;
     }
 
-    const auto &selected = pendingChoice->selectedTriggerTargetsByGroup.at(
-        pendingChoice->activeTriggerTargetGroupPosition);
+    const auto &selected =
+        pendingChoice->selectedTriggerTargetsByGroup.at(pendingChoice->activeTriggerTargetGroupPosition);
     const auto existing = std::find_if(selected.cbegin(), selected.cend(),
                                        [oid](const ruled::v1::TargetRef &target) { return target.object_id() == oid; });
     if (existing != selected.cend()) {
@@ -739,8 +738,8 @@ void RuledClientState::confirmPendingTriggerTargets()
     if (!group.has_value()) {
         return;
     }
-    const auto &selected = pendingChoice->selectedTriggerTargetsByGroup.at(
-        pendingChoice->activeTriggerTargetGroupPosition);
+    const auto &selected =
+        pendingChoice->selectedTriggerTargetsByGroup.at(pendingChoice->activeTriggerTargetGroupPosition);
     if (selected.size() < group->minTargets || selected.size() > group->maxTargets) {
         return;
     }
@@ -792,9 +791,7 @@ int RuledClientState::pendingTriggerSelectedCount() const
     if (!hasPendingTriggerTarget() || pendingChoice->selectedTriggerTargetsByGroup.isEmpty()) {
         return 0;
     }
-    return pendingChoice->selectedTriggerTargetsByGroup
-        .at(pendingChoice->activeTriggerTargetGroupPosition)
-        .size();
+    return pendingChoice->selectedTriggerTargetsByGroup.at(pendingChoice->activeTriggerTargetGroupPosition).size();
 }
 
 int RuledClientState::pendingTriggerMinTargets() const
@@ -844,7 +841,42 @@ bool RuledClientState::isResolutionHandPickCardSelectable(int serverCardId) cons
             }
         }
     }
+    QList<int> proposed = pendingChoice->selectedServerCardIds;
+    proposed.append(serverCardId);
+    if (!resolutionPickSelectionAdmitsSlots(proposed)) {
+        return false;
+    }
     return true;
+}
+
+bool RuledClientState::resolutionPickSelectionAdmitsSlots(const QList<int> &selectedServerCardIds) const
+{
+    if (!isResolutionHandPickActive() || pendingChoice->selectionSlotServerCardIds.isEmpty()) {
+        return true;
+    }
+    if (selectedServerCardIds.size() > pendingChoice->selectionSlotServerCardIds.size()) {
+        return false;
+    }
+
+    QVector<bool> occupied(pendingChoice->selectionSlotServerCardIds.size(), false);
+    const auto assign = [&](const auto &self, int selectedIndex) -> bool {
+        if (selectedIndex == selectedServerCardIds.size()) {
+            return true;
+        }
+        const int serverCardId = selectedServerCardIds.at(selectedIndex);
+        for (int slotIndex = 0; slotIndex < pendingChoice->selectionSlotServerCardIds.size(); ++slotIndex) {
+            if (!occupied.at(slotIndex) &&
+                pendingChoice->selectionSlotServerCardIds.at(slotIndex).contains(serverCardId)) {
+                occupied[slotIndex] = true;
+                if (self(self, selectedIndex + 1)) {
+                    return true;
+                }
+                occupied[slotIndex] = false;
+            }
+        }
+        return false;
+    };
+    return assign(assign, 0);
 }
 
 int RuledClientState::resolutionHandPickClickOrderFor(int serverCardId) const
@@ -903,6 +935,9 @@ void RuledClientState::submitResolutionHandPick()
     }
     const int n = pendingChoice->selectedServerCardIds.size();
     if (n < pendingChoice->min || n > pendingChoice->max) {
+        return;
+    }
+    if (!resolutionPickSelectionAdmitsSlots(pendingChoice->selectedServerCardIds)) {
         return;
     }
     QVector<quint32> chosen;
@@ -1093,12 +1128,12 @@ bool RuledClientState::chooseAttackPlayerDefender(int playerId)
         return false;
     }
     if (hasPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender)) {
-        const auto found = std::find_if(
-            pendingChoice->combatDefenderOptions.cbegin(), pendingChoice->combatDefenderOptions.cend(),
-            [playerId](const auto &option) {
-                return option.has_defender() && option.defender().kind() == ruled::v1::TARGET_REF_KIND_PLAYER &&
-                       static_cast<int>(option.defender().object_id()) == playerId;
-            });
+        const auto found = std::find_if(pendingChoice->combatDefenderOptions.cbegin(),
+                                        pendingChoice->combatDefenderOptions.cend(), [playerId](const auto &option) {
+                                            return option.has_defender() &&
+                                                   option.defender().kind() == ruled::v1::TARGET_REF_KIND_PLAYER &&
+                                                   static_cast<int>(option.defender().object_id()) == playerId;
+                                        });
         submitAttackingTokenDefender(*found);
         return true;
     }
@@ -1120,12 +1155,12 @@ bool RuledClientState::chooseAttackPermanentDefender(quint32 engineOid)
         return false;
     }
     if (hasPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender)) {
-        const auto found = std::find_if(
-            pendingChoice->combatDefenderOptions.cbegin(), pendingChoice->combatDefenderOptions.cend(),
-            [engineOid](const auto &option) {
-                return option.has_defender() && option.defender().kind() == ruled::v1::TARGET_REF_KIND_PERMANENT &&
-                       option.defender().object_id() == engineOid;
-            });
+        const auto found = std::find_if(pendingChoice->combatDefenderOptions.cbegin(),
+                                        pendingChoice->combatDefenderOptions.cend(), [engineOid](const auto &option) {
+                                            return option.has_defender() &&
+                                                   option.defender().kind() == ruled::v1::TARGET_REF_KIND_PERMANENT &&
+                                                   option.defender().object_id() == engineOid;
+                                        });
         submitAttackingTokenDefender(*found);
         return true;
     }

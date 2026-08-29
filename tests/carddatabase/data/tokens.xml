@@ -14,6 +14,26 @@
             </prop>
         </card>
         <card>
+            <name>Clue Token</name>
+            <text>{2}, Sacrifice this token: Draw a card.</text>
+            <token>1</token>
+            <tablerow>2</tablerow>
+            <prop>
+                <type>Token Artifact — Clue</type>
+                <maintype>Artifact</maintype>
+            </prop>
+        </card>
+        <card>
+            <name>Lander Token</name>
+            <text>{2}, {T}, Sacrifice this token: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.</text>
+            <token>1</token>
+            <tablerow>2</tablerow>
+            <prop>
+                <type>Token Artifact — Lander</type>
+                <maintype>Artifact</maintype>
+            </prop>
+        </card>
+        <card>
             <name>Kitten</name>
             <set>CAT</set>
             <tablerow>0</tablerow>

@@ -282,8 +282,8 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         QVector<QPair<quint32, QString>> libWants;
         libWants.reserve(v.library_cards_size());
         for (const auto &entry : v.library_cards()) {
-            libWants.append(qMakePair(static_cast<quint32>(entry.object_id()),
-                                      QString::fromStdString(entry.card_id())));
+            libWants.append(
+                qMakePair(static_cast<quint32>(entry.object_id()), QString::fromStdString(entry.card_id())));
         }
         if (v.hand_cards_size() + libWants.size() != pool.size()) {
             qWarning() << "applyRuledEngineZoneView: count mismatch hand" << v.hand_cards_size() << "lib"
@@ -431,280 +431,280 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         // The map is rebuilt whenever the engine reports a battlefield, even if the caller
         // doesn't ask for tap propagation, so combat translation in the driver can rely on it.
         if (v.battlefield_objects_size() == tableZone->getCards().size()) {
-        QList<Server_Card *> tablePool;
-        tablePool.reserve(tableZone->getCards().size());
-        for (Server_Card *c : tableZone->getCards()) {
-            tablePool.append(c);
-        }
-        QList<Server_Card *> ordered;
-        ordered.reserve(v.battlefield_objects_size());
-        // Match engine slots to physical cards by stable engine ObjectId when possible.
-        // Name-only matching mis-orders duplicates (e.g. two Forests), assigning the wrong
-        // battlefield_tapped[] entry to each Server_Card and causing spurious tap/untap events.
-        const QHash<int, quint32> prevServerCardIdToEngineOid = serverCardIdToEngineOid;
+            QList<Server_Card *> tablePool;
+            tablePool.reserve(tableZone->getCards().size());
+            for (Server_Card *c : tableZone->getCards()) {
+                tablePool.append(c);
+            }
+            QList<Server_Card *> ordered;
+            ordered.reserve(v.battlefield_objects_size());
+            // Match engine slots to physical cards by stable engine ObjectId when possible.
+            // Name-only matching mis-orders duplicates (e.g. two Forests), assigning the wrong
+            // battlefield_tapped[] entry to each Server_Card and causing spurious tap/untap events.
+            const QHash<int, quint32> prevServerCardIdToEngineOid = serverCardIdToEngineOid;
 
-        for (int i = 0; i < v.battlefield_objects_size(); ++i) {
-            const auto &battlefieldObject = v.battlefield_objects(i);
-            const QString want = QString::fromStdString(battlefieldObject.card_id());
-            const quint32 wantOid = static_cast<quint32>(battlefieldObject.object_id());
-            int found = -1;
-            if (wantOid != 0) {
-                for (int j = 0; j < tablePool.size(); ++j) {
-                    if (prevServerCardIdToEngineOid.value(tablePool[j]->getId()) == wantOid) {
-                        found = j;
-                        break;
-                    }
-                }
-            }
-            if (found < 0) {
-                for (int j = 0; j < tablePool.size(); ++j) {
-                    if (trId(tablePool[j]) == want) {
-                        found = j;
-                        break;
-                    }
-                }
-            }
-            if (found < 0) {
-                ordered.clear();
-                break;
-            }
-            ordered.append(tablePool.takeAt(found));
-        }
-
-        if (ordered.size() == v.battlefield_objects_size()) {
-            // The engine's effective types are authoritative. This also reflows a permanent after
-            // a type-changing effect and repairs stale coordinates during join/reconnect.
-            QList<int> expectedY;
-            expectedY.reserve(ordered.size());
-            for (int i = 0; i < ordered.size(); ++i) {
-                const auto &object = v.battlefield_objects(i);
-                expectedY.append(ruledBattlefieldGridY(object.is_creature(), object.is_land()));
-            }
-
-            const QList<Server_Card *> &zoneOrderBefore = tableZone->getCards();
-            bool orderMismatch = false;
-            if (zoneOrderBefore.size() == ordered.size()) {
-                for (int i = 0; i < ordered.size(); ++i) {
-                    if (zoneOrderBefore.at(i) != ordered[i] || (ordered[i] && ordered[i]->getY() != expectedY[i])) {
-                        orderMismatch = true;
-                        break;
-                    }
-                }
-            } else {
-                orderMismatch = true;
-            }
-            if (orderMismatch && tableZone->hasCoords()) {
-                for (Server_Card *c : ordered) {
-                    if (c) {
-                        tableZone->removeCard(c);
-                    }
-                }
-                for (int i = 0; i < ordered.size(); ++i) {
-                    Server_Card *c = ordered[i];
-                    if (!c) {
-                        continue;
-                    }
-                    const int y = expectedY[i];
-                    // An attached card (aura, equipment) carries x = -1 by upstream convention —
-                    // see Server_AbstractPlayer::cmdAttachCard, which sets exactly that on attach.
-                    // It is drawn against its parent rather than occupying a grid column, so handing
-                    // it a real column here both steals a slot from unattached permanents and gives
-                    // the client a stale grid position to render the card at.
-                    const int x = c->getParentCard() ? -1 : tableZone->getFreeGridColumn(-1, y, c->getName(), y != 2);
-                    tableZone->insertCard(c, x, y);
-                }
-                result.battlefieldOrderChanged = true;
-            }
-
-            // Battlefield, stack, and hand share these server-only maps. Preserve the interactive
-            // nonbattlefield bindings before rebuilding the battlefield half. In particular, a
-            // state-based action can change the battlefield while another spell is still waiting
-            // underneath on the stack; losing that binding would strand its physical card when it
-            // later resolves or fizzles.
-            QHash<quint32, int> preservedNonbattlefieldOidToServerCardId;
-            QHash<int, quint32> preservedNonbattlefieldServerCardIdToOid;
-            for (Server_Card *nonbattlefieldCard : handZone->getCards() + stackZone->getCards()) {
-                if (!nonbattlefieldCard) {
-                    continue;
-                }
-                const int serverCardId = nonbattlefieldCard->getId();
-                const auto oidIt = serverCardIdToEngineOid.constFind(serverCardId);
-                if (oidIt == serverCardIdToEngineOid.constEnd()) {
-                    continue;
-                }
-                preservedNonbattlefieldOidToServerCardId.insert(*oidIt, serverCardId);
-                preservedNonbattlefieldServerCardIdToOid.insert(serverCardId, *oidIt);
-            }
-
-            engineOidToServerCardId = preservedNonbattlefieldOidToServerCardId;
-            serverCardIdToEngineOid = preservedNonbattlefieldServerCardIdToOid;
-            engineOidToSummoningSick.clear();
-            engineOidToHaste.clear();
-            engineOidToTrample.clear();
-            engineOidToCreature.clear();
-            engineOidToFaceDown.clear();
-            engineOidToZoneChangeGeneration.clear();
-            engineOidToUnderlyingCardId.clear();
-            for (int i = 0; i < ordered.size(); ++i) {
-                Server_Card *card = ordered[i];
-                if (!card) {
-                    continue;
-                }
+            for (int i = 0; i < v.battlefield_objects_size(); ++i) {
                 const auto &battlefieldObject = v.battlefield_objects(i);
-                const quint32 oid = static_cast<quint32>(battlefieldObject.object_id());
-                engineOidToServerCardId.insert(oid, card->getId());
-                serverCardIdToEngineOid.insert(card->getId(), oid);
-                const bool summoningSick = battlefieldObject.summoning_sick();
-                engineOidToSummoningSick.insert(oid, summoningSick);
-                const auto hasKeyword = [&battlefieldObject](const char *keyword) {
-                    for (const std::string &candidate : battlefieldObject.keywords()) {
-                        if (candidate == keyword) {
-                            return true;
+                const QString want = QString::fromStdString(battlefieldObject.card_id());
+                const quint32 wantOid = static_cast<quint32>(battlefieldObject.object_id());
+                int found = -1;
+                if (wantOid != 0) {
+                    for (int j = 0; j < tablePool.size(); ++j) {
+                        if (prevServerCardIdToEngineOid.value(tablePool[j]->getId()) == wantOid) {
+                            found = j;
+                            break;
                         }
                     }
-                    return false;
-                };
-                const bool hasHaste = hasKeyword("Haste");
-                engineOidToHaste.insert(oid, hasHaste);
-                const bool hasTrample = hasKeyword("Trample");
-                engineOidToTrample.insert(oid, hasTrample);
-                const bool isCreatureFlag = battlefieldObject.is_creature();
-                engineOidToCreature.insert(oid, isCreatureFlag);
-                engineOidToFaceDown.insert(oid, battlefieldObject.face_down());
-                engineOidToZoneChangeGeneration.insert(
-                    oid, static_cast<quint64>(battlefieldObject.zone_change_generation()));
-                engineOidToUnderlyingCardId.insert(oid, QString::fromStdString(battlefieldObject.card_id()));
+                }
+                if (found < 0) {
+                    for (int j = 0; j < tablePool.size(); ++j) {
+                        if (trId(tablePool[j]) == want) {
+                            found = j;
+                            break;
+                        }
+                    }
+                }
+                if (found < 0) {
+                    ordered.clear();
+                    break;
+                }
+                ordered.append(tablePool.takeAt(found));
+            }
 
-                if (tapGes) {
-                    const bool desiredTapped = battlefieldObject.tapped();
-                    if (card->getTapped() != desiredTapped) {
-                        // Do not force untap from engine during non-untap batches: Cockatrice may have
-                        // tapped permanents for mana (or other UI) that the engine has not yet
-                        // reflected in battlefield_tapped. Real untap-step sync is delivered in the
-                        // same ruled batch as PhaseChanged(PHASE_ID_UNTAP) (see tricerules
-                        // finish_cleanup_roll_new_turn).
-                        //
-                        // A permanent named by the batch's PermanentsUntapped event is exempt: the
-                        // engine reported an actual CR 701.20 untap edge for it (untap effect,
-                        // untap step, CR 605 mana undo), so there is no local tap to protect and
-                        // suppressing it would leave the client drawing an untapped permanent
-                        // sideways.
-                        const bool engineUntappedIt = engineUntappedOids && engineUntappedOids->contains(oid);
-                        if (!allowUntapReset && !engineUntappedIt && card->getTapped() && !desiredTapped) {
+            if (ordered.size() == v.battlefield_objects_size()) {
+                // The engine's effective types are authoritative. This also reflows a permanent after
+                // a type-changing effect and repairs stale coordinates during join/reconnect.
+                QList<int> expectedY;
+                expectedY.reserve(ordered.size());
+                for (int i = 0; i < ordered.size(); ++i) {
+                    const auto &object = v.battlefield_objects(i);
+                    expectedY.append(ruledBattlefieldGridY(object.is_creature(), object.is_land()));
+                }
+
+                const QList<Server_Card *> &zoneOrderBefore = tableZone->getCards();
+                bool orderMismatch = false;
+                if (zoneOrderBefore.size() == ordered.size()) {
+                    for (int i = 0; i < ordered.size(); ++i) {
+                        if (zoneOrderBefore.at(i) != ordered[i] || (ordered[i] && ordered[i]->getY() != expectedY[i])) {
+                            orderMismatch = true;
+                            break;
+                        }
+                    }
+                } else {
+                    orderMismatch = true;
+                }
+                if (orderMismatch && tableZone->hasCoords()) {
+                    for (Server_Card *c : ordered) {
+                        if (c) {
+                            tableZone->removeCard(c);
+                        }
+                    }
+                    for (int i = 0; i < ordered.size(); ++i) {
+                        Server_Card *c = ordered[i];
+                        if (!c) {
                             continue;
                         }
-                        // Engine tap state is authoritative for ruled games (taps, and untaps
-                        // during the untap step when allowUntapReset is true for the active player).
-                        card->setTapped(desiredTapped);
-                        result.tapStateChanged = true;
-                        Event_SetCardAttr tapEv;
-                        tapEv.set_zone_name(std::string(ZoneNames::TABLE));
-                        tapEv.set_card_id(card->getId());
-                        tapEv.set_attribute(AttrTapped);
-                        tapEv.set_attr_value(desiredTapped ? "1" : "0");
-                        tapGes->enqueueGameEvent(tapEv, playerId);
+                        const int y = expectedY[i];
+                        // An attached card (aura, equipment) carries x = -1 by upstream convention —
+                        // see Server_AbstractPlayer::cmdAttachCard, which sets exactly that on attach.
+                        // It is drawn against its parent rather than occupying a grid column, so handing
+                        // it a real column here both steals a slot from unattached permanents and gives
+                        // the client a stale grid position to render the card at.
+                        const int x =
+                            c->getParentCard() ? -1 : tableZone->getFreeGridColumn(-1, y, c->getName(), y != 2);
+                        tableZone->insertCard(c, x, y);
                     }
+                    result.battlefieldOrderChanged = true;
                 }
 
-                if (tapGes) {
-                    const bool isCreature = battlefieldObject.is_creature();
-                    const auto pwr = static_cast<uint32_t>(battlefieldObject.power());
-                    const auto tgh = static_cast<uint32_t>(battlefieldObject.toughness());
-                    const auto dmg = static_cast<uint32_t>(battlefieldObject.damage());
-
-                    // Earthbend and other type-changing effects must also remove a former
-                    // creature's badge. Printed Oracle P/T is not authoritative in ruled mode.
-                    const QString newPt = isCreature ? QStringLiteral("%1/%2").arg(pwr).arg(tgh) : QString();
-                    if (card->getPT() != newPt) {
-                        card->setPT(newPt);
-                        result.tapStateChanged = true;
-                        Event_SetCardAttr ptEv;
-                        ptEv.set_zone_name(std::string(ZoneNames::TABLE));
-                        ptEv.set_card_id(card->getId());
-                        ptEv.set_attribute(AttrPT);
-                        ptEv.set_attr_value(newPt.toStdString());
-                        tapGes->enqueueGameEvent(ptEv, playerId);
+                // Battlefield, stack, and hand share these server-only maps. Preserve the interactive
+                // nonbattlefield bindings before rebuilding the battlefield half. In particular, a
+                // state-based action can change the battlefield while another spell is still waiting
+                // underneath on the stack; losing that binding would strand its physical card when it
+                // later resolves or fizzles.
+                QHash<quint32, int> preservedNonbattlefieldOidToServerCardId;
+                QHash<int, quint32> preservedNonbattlefieldServerCardIdToOid;
+                for (Server_Card *nonbattlefieldCard : handZone->getCards() + stackZone->getCards()) {
+                    if (!nonbattlefieldCard) {
+                        continue;
                     }
+                    const int serverCardId = nonbattlefieldCard->getId();
+                    const auto oidIt = serverCardIdToEngineOid.constFind(serverCardId);
+                    if (oidIt == serverCardIdToEngineOid.constEnd()) {
+                        continue;
+                    }
+                    preservedNonbattlefieldOidToServerCardId.insert(*oidIt, serverCardId);
+                    preservedNonbattlefieldServerCardIdToOid.insert(serverCardId, *oidIt);
+                }
 
-                    const QString counterAnn = QString::fromStdString(battlefieldObject.counters_annotation());
-                    const int controllerPlayerId = battlefieldObject.has_controller_player_id()
-                                                       ? battlefieldObject.controller_player_id()
-                                                       : playerId;
-                    QString ownerName;
-                    if (battlefieldObject.owner_player_id() != controllerPlayerId) {
-                        if (Server_Game *g = player->getGame()) {
-                            if (Server_AbstractPlayer *ownerPlayer =
-                                    g->getPlayer(battlefieldObject.owner_player_id())) {
-                                ownerName = QString::fromStdString(ownerPlayer->getUserInfo()->name());
+                engineOidToServerCardId = preservedNonbattlefieldOidToServerCardId;
+                serverCardIdToEngineOid = preservedNonbattlefieldServerCardIdToOid;
+                engineOidToSummoningSick.clear();
+                engineOidToHaste.clear();
+                engineOidToTrample.clear();
+                engineOidToCreature.clear();
+                engineOidToFaceDown.clear();
+                engineOidToZoneChangeGeneration.clear();
+                engineOidToUnderlyingCardId.clear();
+                for (int i = 0; i < ordered.size(); ++i) {
+                    Server_Card *card = ordered[i];
+                    if (!card) {
+                        continue;
+                    }
+                    const auto &battlefieldObject = v.battlefield_objects(i);
+                    const quint32 oid = static_cast<quint32>(battlefieldObject.object_id());
+                    engineOidToServerCardId.insert(oid, card->getId());
+                    serverCardIdToEngineOid.insert(card->getId(), oid);
+                    const bool summoningSick = battlefieldObject.summoning_sick();
+                    engineOidToSummoningSick.insert(oid, summoningSick);
+                    const auto hasKeyword = [&battlefieldObject](const char *keyword) {
+                        for (const std::string &candidate : battlefieldObject.keywords()) {
+                            if (candidate == keyword) {
+                                return true;
                             }
                         }
+                        return false;
+                    };
+                    const bool hasHaste = hasKeyword("Haste");
+                    engineOidToHaste.insert(oid, hasHaste);
+                    const bool hasTrample = hasKeyword("Trample");
+                    engineOidToTrample.insert(oid, hasTrample);
+                    const bool isCreatureFlag = battlefieldObject.is_creature();
+                    engineOidToCreature.insert(oid, isCreatureFlag);
+                    engineOidToFaceDown.insert(oid, battlefieldObject.face_down());
+                    engineOidToZoneChangeGeneration.insert(
+                        oid, static_cast<quint64>(battlefieldObject.zone_change_generation()));
+                    engineOidToUnderlyingCardId.insert(oid, QString::fromStdString(battlefieldObject.card_id()));
+
+                    if (tapGes) {
+                        const bool desiredTapped = battlefieldObject.tapped();
+                        if (card->getTapped() != desiredTapped) {
+                            // Do not force untap from engine during non-untap batches: Cockatrice may have
+                            // tapped permanents for mana (or other UI) that the engine has not yet
+                            // reflected in battlefield_tapped. Real untap-step sync is delivered in the
+                            // same ruled batch as PhaseChanged(PHASE_ID_UNTAP) (see tricerules
+                            // finish_cleanup_roll_new_turn).
+                            //
+                            // A permanent named by the batch's PermanentsUntapped event is exempt: the
+                            // engine reported an actual CR 701.20 untap edge for it (untap effect,
+                            // untap step, CR 605 mana undo), so there is no local tap to protect and
+                            // suppressing it would leave the client drawing an untapped permanent
+                            // sideways.
+                            const bool engineUntappedIt = engineUntappedOids && engineUntappedOids->contains(oid);
+                            if (!allowUntapReset && !engineUntappedIt && card->getTapped() && !desiredTapped) {
+                                continue;
+                            }
+                            // Engine tap state is authoritative for ruled games (taps, and untaps
+                            // during the untap step when allowUntapReset is true for the active player).
+                            card->setTapped(desiredTapped);
+                            result.tapStateChanged = true;
+                            Event_SetCardAttr tapEv;
+                            tapEv.set_zone_name(std::string(ZoneNames::TABLE));
+                            tapEv.set_card_id(card->getId());
+                            tapEv.set_attribute(AttrTapped);
+                            tapEv.set_attr_value(desiredTapped ? "1" : "0");
+                            tapGes->enqueueGameEvent(tapEv, playerId);
+                        }
                     }
-                    QString mergedAnn = mergeRuledDamageIntoAnnotation(card->getAnnotation(), isCreature ? dmg : 0);
-                    mergedAnn = mergeRuledCountersIntoAnnotation(mergedAnn, counterAnn);
-                    mergedAnn = mergeRuledOwnerIntoAnnotation(mergedAnn, ownerName);
-                    QString battleControllerName;
-                    if (battlefieldObject.has_battle_protector_player_id() && controllerPlayerId != playerId) {
-                        battleControllerName = QStringLiteral("P%1").arg(controllerPlayerId);
-                        if (Server_Game *g = player->getGame()) {
-                            if (Server_AbstractPlayer *controllerPlayer = g->getPlayer(controllerPlayerId)) {
-                                const QString resolvedName =
-                                    QString::fromStdString(controllerPlayer->getUserInfo()->name());
-                                if (!resolvedName.isEmpty()) {
-                                    battleControllerName = resolvedName;
+
+                    if (tapGes) {
+                        const bool isCreature = battlefieldObject.is_creature();
+                        const auto pwr = static_cast<uint32_t>(battlefieldObject.power());
+                        const auto tgh = static_cast<uint32_t>(battlefieldObject.toughness());
+                        const auto dmg = static_cast<uint32_t>(battlefieldObject.damage());
+
+                        // Earthbend and other type-changing effects must also remove a former
+                        // creature's badge. Printed Oracle P/T is not authoritative in ruled mode.
+                        const QString newPt = isCreature ? QStringLiteral("%1/%2").arg(pwr).arg(tgh) : QString();
+                        if (card->getPT() != newPt) {
+                            card->setPT(newPt);
+                            result.tapStateChanged = true;
+                            Event_SetCardAttr ptEv;
+                            ptEv.set_zone_name(std::string(ZoneNames::TABLE));
+                            ptEv.set_card_id(card->getId());
+                            ptEv.set_attribute(AttrPT);
+                            ptEv.set_attr_value(newPt.toStdString());
+                            tapGes->enqueueGameEvent(ptEv, playerId);
+                        }
+
+                        const QString counterAnn = QString::fromStdString(battlefieldObject.counters_annotation());
+                        const int controllerPlayerId = battlefieldObject.has_controller_player_id()
+                                                           ? battlefieldObject.controller_player_id()
+                                                           : playerId;
+                        QString ownerName;
+                        if (battlefieldObject.owner_player_id() != controllerPlayerId) {
+                            if (Server_Game *g = player->getGame()) {
+                                if (Server_AbstractPlayer *ownerPlayer =
+                                        g->getPlayer(battlefieldObject.owner_player_id())) {
+                                    ownerName = QString::fromStdString(ownerPlayer->getUserInfo()->name());
                                 }
                             }
                         }
-                    }
-                    mergedAnn = mergeRuledBattleControllerIntoAnnotation(mergedAnn, battleControllerName);
-                    mergedAnn = mergeRuledCopyIntoAnnotation(
-                        mergedAnn, QString::fromStdString(battlefieldObject.copy_annotation()));
-                    QString enchantedPlayerName;
-                    if (battlefieldObject.has_attachment_recipient() &&
-                        battlefieldObject.attachment_recipient().recipient_case() ==
-                            ruled::v1::AttachmentRecipient::kPlayerId) {
-                        const int enchantedPlayerId = battlefieldObject.attachment_recipient().player_id();
-                        enchantedPlayerName = QStringLiteral("P%1").arg(enchantedPlayerId);
-                        if (Server_Game *g = player->getGame()) {
-                            if (Server_AbstractPlayer *enchantedPlayer = g->getPlayer(enchantedPlayerId)) {
-                                const QString resolvedName =
-                                    QString::fromStdString(enchantedPlayer->getUserInfo()->name());
-                                if (!resolvedName.isEmpty()) {
-                                    enchantedPlayerName = resolvedName;
+                        QString mergedAnn = mergeRuledDamageIntoAnnotation(card->getAnnotation(), isCreature ? dmg : 0);
+                        mergedAnn = mergeRuledCountersIntoAnnotation(mergedAnn, counterAnn);
+                        mergedAnn = mergeRuledOwnerIntoAnnotation(mergedAnn, ownerName);
+                        QString battleControllerName;
+                        if (battlefieldObject.has_battle_protector_player_id() && controllerPlayerId != playerId) {
+                            battleControllerName = QStringLiteral("P%1").arg(controllerPlayerId);
+                            if (Server_Game *g = player->getGame()) {
+                                if (Server_AbstractPlayer *controllerPlayer = g->getPlayer(controllerPlayerId)) {
+                                    const QString resolvedName =
+                                        QString::fromStdString(controllerPlayer->getUserInfo()->name());
+                                    if (!resolvedName.isEmpty()) {
+                                        battleControllerName = resolvedName;
+                                    }
                                 }
                             }
                         }
-                    }
-                    mergedAnn = mergeRuledEnchantingIntoAnnotation(mergedAnn, enchantedPlayerName);
-                    QStringList doorLabels;
-                    doorLabels.reserve(battlefieldObject.room_doors_size());
-                    for (const auto &door : battlefieldObject.room_doors()) {
-                        doorLabels.append(QStringLiteral("%1 (%2)")
-                                              .arg(QString::fromStdString(door.name()),
-                                                   door.unlocked() ? QStringLiteral("unlocked")
-                                                                   : QStringLiteral("locked")));
-                    }
-                    mergedAnn = mergeRuledDoorsIntoAnnotation(mergedAnn, doorLabels);
-                    QStringList rulesAnnotationLabels;
-                    rulesAnnotationLabels.reserve(battlefieldObject.rules_annotation_labels_size());
-                    for (const std::string &label : battlefieldObject.rules_annotation_labels()) {
-                        rulesAnnotationLabels.append(QString::fromStdString(label));
-                    }
-                    mergedAnn = mergeRuledEffectsIntoAnnotation(mergedAnn, rulesAnnotationLabels);
-                    if (mergedAnn != card->getAnnotation()) {
-                        card->setAnnotation(mergedAnn);
-                        result.tapStateChanged = true;
-                        Event_SetCardAttr annEv;
-                        annEv.set_zone_name(std::string(ZoneNames::TABLE));
-                        annEv.set_card_id(card->getId());
-                        annEv.set_attribute(AttrAnnotation);
-                        annEv.set_attr_value(mergedAnn.toStdString());
-                        tapGes->enqueueGameEvent(annEv, playerId);
+                        mergedAnn = mergeRuledBattleControllerIntoAnnotation(mergedAnn, battleControllerName);
+                        mergedAnn = mergeRuledCopyIntoAnnotation(
+                            mergedAnn, QString::fromStdString(battlefieldObject.copy_annotation()));
+                        QString enchantedPlayerName;
+                        if (battlefieldObject.has_attachment_recipient() &&
+                            battlefieldObject.attachment_recipient().recipient_case() ==
+                                ruled::v1::AttachmentRecipient::kPlayerId) {
+                            const int enchantedPlayerId = battlefieldObject.attachment_recipient().player_id();
+                            enchantedPlayerName = QStringLiteral("P%1").arg(enchantedPlayerId);
+                            if (Server_Game *g = player->getGame()) {
+                                if (Server_AbstractPlayer *enchantedPlayer = g->getPlayer(enchantedPlayerId)) {
+                                    const QString resolvedName =
+                                        QString::fromStdString(enchantedPlayer->getUserInfo()->name());
+                                    if (!resolvedName.isEmpty()) {
+                                        enchantedPlayerName = resolvedName;
+                                    }
+                                }
+                            }
+                        }
+                        mergedAnn = mergeRuledEnchantingIntoAnnotation(mergedAnn, enchantedPlayerName);
+                        QStringList doorLabels;
+                        doorLabels.reserve(battlefieldObject.room_doors_size());
+                        for (const auto &door : battlefieldObject.room_doors()) {
+                            doorLabels.append(QStringLiteral("%1 (%2)").arg(
+                                QString::fromStdString(door.name()),
+                                door.unlocked() ? QStringLiteral("unlocked") : QStringLiteral("locked")));
+                        }
+                        mergedAnn = mergeRuledDoorsIntoAnnotation(mergedAnn, doorLabels);
+                        QStringList rulesAnnotationLabels;
+                        rulesAnnotationLabels.reserve(battlefieldObject.rules_annotation_labels_size());
+                        for (const std::string &label : battlefieldObject.rules_annotation_labels()) {
+                            rulesAnnotationLabels.append(QString::fromStdString(label));
+                        }
+                        mergedAnn = mergeRuledEffectsIntoAnnotation(mergedAnn, rulesAnnotationLabels);
+                        if (mergedAnn != card->getAnnotation()) {
+                            card->setAnnotation(mergedAnn);
+                            result.tapStateChanged = true;
+                            Event_SetCardAttr annEv;
+                            annEv.set_zone_name(std::string(ZoneNames::TABLE));
+                            annEv.set_card_id(card->getId());
+                            annEv.set_attribute(AttrAnnotation);
+                            annEv.set_attr_value(mergedAnn.toStdString());
+                            tapGes->enqueueGameEvent(annEv, playerId);
+                        }
                     }
                 }
+                battlefieldSynced = true;
             }
-            battlefieldSynced = true;
         }
-    }
     }
 
     // Hand OIDs (discard, bounce-to-hand, etc.): register after battlefield rebuild so
@@ -894,12 +894,12 @@ void RuledPlayerBinding::createRuledToken(Server_Player *player,
         keywords.append(QString::fromStdString(kw));
     }
     card->setTokenAbilityKeywords(keywords);
-    QStringList triggeredAbilityTexts;
-    triggeredAbilityTexts.reserve(identity.triggered_ability_texts_size());
-    for (const auto &text : identity.triggered_ability_texts()) {
-        triggeredAbilityTexts.append(QString::fromStdString(text));
+    QStringList abilityTexts;
+    abilityTexts.reserve(identity.ability_texts_size());
+    for (const auto &text : identity.ability_texts()) {
+        abilityTexts.append(QString::fromStdString(text));
     }
-    card->setTokenTriggeredAbilityTexts(triggeredAbilityTexts);
+    card->setTokenAbilityTexts(abilityTexts);
     card->setAnnotation(QStringLiteral("Token"));
     card->setTapped(entersTapped);
     // CR 111.7: when the engine later moves the token off the battlefield it ceases to exist;

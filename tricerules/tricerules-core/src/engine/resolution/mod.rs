@@ -124,13 +124,38 @@ impl GameEngine {
         scope: ExilePlayPermissionScope,
         until_end_of_next_turn: bool,
     ) -> Result<u64, EngineError> {
-        let object = self
-            .state
-            .objects
-            .get(&object_id)
-            .ok_or(EngineError::Illegal("unknown exile permission object"))?;
-        if object.zone != Zone::Exile {
-            return Err(EngineError::Illegal("permission object is not in exile"));
+        self.grant_exile_play_permission_group(
+            player_id,
+            &[object_id],
+            source_label,
+            scope,
+            until_end_of_next_turn,
+        )
+    }
+
+    pub(in crate::engine) fn grant_exile_play_permission_group(
+        &mut self,
+        player_id: PlayerId,
+        object_ids: &[ObjectId],
+        source_label: &str,
+        scope: ExilePlayPermissionScope,
+        until_end_of_next_turn: bool,
+    ) -> Result<u64, EngineError> {
+        if object_ids.is_empty() {
+            return Err(EngineError::Illegal("exile permission cohort is empty"));
+        }
+        let mut seen = HashSet::new();
+        for object_id in object_ids {
+            let object = self
+                .state
+                .objects
+                .get(object_id)
+                .ok_or(EngineError::Illegal("unknown exile permission object"))?;
+            if object.zone != Zone::Exile || !seen.insert(*object_id) {
+                return Err(EngineError::Illegal(
+                    "permission cohort requires distinct objects in exile",
+                ));
+            }
         }
         let player_index = self
             .state
@@ -149,17 +174,17 @@ impl GameEngine {
         });
         let group_id = self.state.next_exile_play_permission_group_id;
         self.state.next_exile_play_permission_group_id = group_id.saturating_add(1);
-        self.state
-            .active_exile_play_permissions
-            .push(ActiveExilePlayPermission {
+        let permissions = object_ids
+            .iter()
+            .map(|object_id| ActiveExilePlayPermission {
                 group_id,
                 player_id,
                 source_label: source_label.to_string(),
-                object_id,
+                object_id: *object_id,
                 zone_change_generation: self
                     .state
                     .zone_change_generation
-                    .get(&object_id)
+                    .get(object_id)
                     .copied()
                     .unwrap_or(0),
                 scope,
@@ -167,6 +192,7 @@ impl GameEngine {
                 available_after_turn_instance: None,
                 expires_at_cleanup_turn_instance,
             });
+        self.state.active_exile_play_permissions.extend(permissions);
         Ok(group_id)
     }
 }
@@ -218,10 +244,15 @@ pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
             .iter()
             .map(|keyword| keyword.as_str().to_string())
             .collect(),
-        triggered_ability_texts: face
-            .triggered_abilities
+        ability_texts: face
+            .activated_abilities
             .iter()
             .map(|ability| ability.text.clone())
+            .chain(
+                face.triggered_abilities
+                    .iter()
+                    .map(|ability| ability.text.clone()),
+            )
             .collect(),
     }
 }
@@ -1255,6 +1286,28 @@ impl GameEngine {
                     effect_index: index as u32,
                 };
                 match effect {
+                    SpellEffectKind::Conditional { condition, effect } => {
+                        if !cx
+                            .engine
+                            .condition_holds(&condition, ConditionContext::for_stack_item(cx.top))
+                        {
+                            EffectOutcome::Continue
+                        } else {
+                            match *effect {
+                                effect @ SpellEffectKind::Destroy { .. } => {
+                                    misc::destroy(&mut cx, effect)?
+                                }
+                                effect @ SpellEffectKind::GrantKeywords { .. } => {
+                                    pump_counters::grant_keywords(&mut cx, effect)?
+                                }
+                                _ => {
+                                    return Err(EngineError::Illegal(
+                                        "unsupported conditional inner effect",
+                                    ));
+                                }
+                            }
+                        }
+                    }
                     effect @ SpellEffectKind::DamageTarget { .. } => {
                         damage::damage_target(&mut cx, effect)?
                     }
@@ -1678,6 +1731,7 @@ impl GameEngine {
                             candidate_source_zones: Vec::new(),
                             combat_defender_options: Vec::new(),
                             waterbend: false,
+                            selection_slots: Vec::new(),
                         },
                     )),
                 });

@@ -48,6 +48,7 @@ public:
         QString name;
         int controllerPlayerId;
         QString setName;
+        std::optional<TokenStackIdentity> sourceTokenIdentity;
     };
     QVector<SyntheticCard> createdSyntheticCards;
     QVector<quint32> removedSyntheticCards;
@@ -84,9 +85,10 @@ public:
     void createSyntheticStackCard(quint32 virtualOid,
                                   const QString &displayName,
                                   int controllerPlayerId,
-                                  const QString &setName) override
+                                  const QString &setName,
+                                  const std::optional<TokenStackIdentity> &sourceTokenIdentity) override
     {
-        createdSyntheticCards.append({virtualOid, displayName, controllerPlayerId, setName});
+        createdSyntheticCards.append({virtualOid, displayName, controllerPlayerId, setName, sourceTokenIdentity});
     }
     void removeSyntheticStackCard(quint32 virtualOid) override
     {
@@ -244,9 +246,8 @@ protected:
         *actions.add_legal_attack_assignments() = playerAttackAssignment(attackerOid);
     }
 
-    static ruled::v1::AttackAssignment permanentAttackAssignment(quint32 attackerOid,
-                                                                  quint32 defenderOid,
-                                                                  quint64 defenderGeneration)
+    static ruled::v1::AttackAssignment
+    permanentAttackAssignment(quint32 attackerOid, quint32 defenderOid, quint64 defenderGeneration)
     {
         ruled::v1::AttackAssignment assignment;
         assignment.set_attacker_object_id(attackerOid);
@@ -858,9 +859,7 @@ TEST(RuledPendingTargetTest, HarmonizeCostIsNotFinalizedWhileItsOptionChoiceIsPe
     spell.castCostGenericReduction = 2;
     spell.nextCastCostGroup = 1;
     EXPECT_TRUE(ruledCastCostGroupsComplete(spell));
-    EXPECT_EQ(ruledFinalGenericCost(spell.remainingCost.value(QLatin1Char('X')), 0,
-                                    spell.castCostGenericReduction),
-              3);
+    EXPECT_EQ(ruledFinalGenericCost(spell.remainingCost.value(QLatin1Char('X')), 0, spell.castCostGenericReduction), 3);
 }
 
 TEST(RuledPendingTargetTest, ReconcileDropsTargetsMissingFromLatestLegalSnapshot)
@@ -1083,8 +1082,7 @@ TEST_F(RuledClientTest, OmenFacesOptionalTargetAndStackAnnotationStayEngineAutho
     group->add_valid_permanent_ids(101u);
     apply(legalBatch);
 
-    const QVector<RuledFaceOption> faces =
-        state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 6);
+    const QVector<RuledFaceOption> faces = state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 6);
     ASSERT_EQ(faces.size(), 2);
     EXPECT_EQ(faces[0].faceName, QStringLiteral("Dirgur Island Dragon"));
     EXPECT_EQ(faces[0].manaCost, QStringLiteral("{5}{U}"));
@@ -1289,9 +1287,12 @@ TEST_F(RuledClientTest, MultiZoneSearchCarriesSourceAnnotationsAndMalformedMetad
     choice->set_prompt_text("Search the selected zones for Altanak");
     choice->set_min(0);
     choice->set_max(1);
-    for (const quint32 oid : {71u, 72u, 73u}) choice->add_candidate_object_ids(oid);
-    for (const int scid : {0, 1, 2}) choice->add_candidate_server_card_ids(scid);
-    for (int i = 0; i < 3; ++i) choice->add_candidate_names("Altanak, the Thrice-Called");
+    for (const quint32 oid : {71u, 72u, 73u})
+        choice->add_candidate_object_ids(oid);
+    for (const int scid : {0, 1, 2})
+        choice->add_candidate_server_card_ids(scid);
+    for (int i = 0; i < 3; ++i)
+        choice->add_candidate_names("Altanak, the Thrice-Called");
     choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
     choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD);
     choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
@@ -1363,8 +1364,7 @@ TEST(RuledPendingCostSelectionTest, GraveyardSelectionMembershipTracksPhysicalOb
     PendingActivatedAbility pending;
     pending.valid = true;
     pending.waitingForCost = true;
-    pending.costChoices.append(
-        {3, RuledCostChoiceZone::Graveyard, QSet<quint32>({501u, 502u}), 2, 2});
+    pending.costChoices.append({3, RuledCostChoiceZone::Graveyard, QSet<quint32>({501u, 502u}), 2, 2});
     pending.costSelections.append({3, RuledCostChoiceZone::Graveyard, QVector<quint32>({501u, 502u})});
 
     EXPECT_TRUE(ruledPendingGraveyardCostSelectionContains(pending, 501u));
@@ -1895,6 +1895,31 @@ TEST_F(RuledClientTest, ActivatedAbilityOnStackKeepsThePendingTriggerPrompt)
     EXPECT_TRUE(state->hasPendingTriggerTarget())
         << "an activated ability must not retire the trigger prompt it caused";
     EXPECT_EQ(state->pendingTriggerSource(), 100u);
+}
+
+TEST_F(RuledClientTest, TokenActivatedAbilityForwardsItsDisplayIdentityToTheSyntheticStackCard)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *sp = batch.add_events()->mutable_stack_pushed();
+    sp->set_object_id(901);
+    sp->set_description("Clue");
+    sp->set_ability_annotation("{2}, Sacrifice this token: Draw a card.");
+    sp->set_is_triggered(false);
+    auto *identity = sp->mutable_source_token_identity();
+    identity->set_name("Clue");
+    identity->add_types("Artifact");
+    identity->add_ability_texts("{2}, Sacrifice this token: Draw a card.");
+
+    apply(batch);
+
+    ASSERT_EQ(host.createdSyntheticCards.size(), 1);
+    ASSERT_TRUE(host.createdSyntheticCards[0].sourceTokenIdentity.has_value());
+    const auto &forwarded = *host.createdSyntheticCards[0].sourceTokenIdentity;
+    EXPECT_EQ(forwarded.name, QStringLiteral("Clue"));
+    EXPECT_TRUE(forwarded.basePt.isEmpty());
+    EXPECT_TRUE(forwarded.color.isEmpty());
+    EXPECT_TRUE(forwarded.keywords.isEmpty());
+    EXPECT_EQ(forwarded.abilityTexts, QStringList({QStringLiteral("{2}, Sacrifice this token: Draw a card.")}));
 }
 
 // Gravedigger ETB: a pending trigger whose only legal targets sit in a graveyard makes the tab
@@ -3504,13 +3529,11 @@ TEST_F(RuledClientTest, ParsesMethodAwareHarmonizeActionAndAuthoritativeCreature
               QStringLiteral("{6}{U}"));
     EXPECT_EQ(state->zoneActionCost(77, 0, RuledCastSource::Graveyard, ruled::v1::CAST_METHOD_HARMONIZE),
               QStringLiteral("{5}{U}"));
-    const auto costs = state->spellCostData(77, 0, RuledCastSource::Graveyard,
-                                            ruled::v1::CAST_METHOD_HARMONIZE);
+    const auto costs = state->spellCostData(77, 0, RuledCastSource::Graveyard, ruled::v1::CAST_METHOD_HARMONIZE);
     ASSERT_EQ(costs.castCostGroups.size(), 1);
     EXPECT_EQ(costs.castCostGroups[0].skipLabel, QStringLiteral("Pay full Harmonize cost"));
     ASSERT_EQ(costs.castCostGroups[0].options.size(), 1);
-    EXPECT_EQ(costs.castCostGroups[0].options[0].kind,
-              RuledCastCostOptionKind::TapPermanentForGenericReduction);
+    EXPECT_EQ(costs.castCostGroups[0].options[0].kind, RuledCastCostOptionKind::TapPermanentForGenericReduction);
     EXPECT_EQ(costs.castCostGroups[0].options[0].validPermanentGenerations.value(900), 12u);
     EXPECT_EQ(costs.castCostGroups[0].options[0].validPermanentGenericReductions.value(900), 4);
 }
@@ -3581,9 +3604,7 @@ TEST_F(RuledClientTest, PublicZoneCastActionsRequireTheClickedSourceZone)
     EXPECT_TRUE(state->zoneActionFaceOptions(77, RuledCastSource::Exile).isEmpty());
     EXPECT_EQ(state->zoneActionCost(77, 0, RuledCastSource::Graveyard, ruled::v1::CAST_METHOD_HARMONIZE),
               QStringLiteral("{5}{U}"));
-    EXPECT_TRUE(state->zoneActionCost(77, 0, RuledCastSource::Exile,
-                                      ruled::v1::CAST_METHOD_HARMONIZE)
-                    .isEmpty());
+    EXPECT_TRUE(state->zoneActionCost(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_HARMONIZE).isEmpty());
 }
 
 TEST_F(RuledClientTest, AppliesExileLandActionsAndStablePermissionGroupSnapshots)
@@ -3611,8 +3632,7 @@ TEST_F(RuledClientTest, AppliesExileLandActionsAndStablePermissionGroupSnapshots
     ASSERT_EQ(state->zoneLandFaceOptions(objectId).size(), 1);
     EXPECT_EQ(state->zoneLandFaceOptions(objectId).first().faceName, QStringLiteral("Timbercrown Pathway"));
     ASSERT_EQ(state->exilePlayPermissionGroups.size(), 2);
-    EXPECT_EQ(state->exilePlayPermissionGroups.value(42).sourceLabel,
-              QStringLiteral("Clockwork Percussionist"));
+    EXPECT_EQ(state->exilePlayPermissionGroups.value(42).sourceLabel, QStringLiteral("Clockwork Percussionist"));
     EXPECT_EQ(state->exilePlayPermissionGroups.value(42).objectIds, QVector<quint32>{objectId});
     EXPECT_EQ(state->exilePlayPermissionGroups.value(43).objectIds, QVector<quint32>{objectId});
     EXPECT_EQ(changed.count(), 1);
@@ -3884,9 +3904,9 @@ TEST_F(RuledClientTest, SearchZoneBranchesRemainStructuredAndSubmitTheirOpaqueCo
 
     ASSERT_TRUE(state->hasPendingZoneScopeChoice());
     ASSERT_EQ(state->pendingChoiceOptions().size(), 7);
-    EXPECT_EQ(state->pendingChoiceOptions().at(4).searchZones,
-              QSet<int>({ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND,
-                         ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY}));
+    EXPECT_EQ(
+        state->pendingChoiceOptions().at(4).searchZones,
+        QSet<int>({ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND, ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY}));
     state->submitPendingChoiceOption(4);
     ASSERT_EQ(host.sentCommands.size(), 1);
     EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().selected_branch_index(), 4u);
@@ -4099,6 +4119,72 @@ TEST_F(RuledClientTest, LibrarySearchChoiceEnforcesUniqueNamesAndOpensTheDeckVie
     EXPECT_TRUE(state->isResolutionHandPickCardSelectable(3));
     state->toggleResolutionHandPickCard(3);
     EXPECT_EQ(state->resolutionHandPickSelected(), 2);
+}
+
+TEST_F(RuledClientTest, HeterogeneousLibrarySearchUsesTheEngineAuthoredDistinctSlotGraph)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
+    rcr->set_prompt_text("Search for up to two cards.");
+    rcr->set_min(0);
+    rcr->set_max(2);
+    for (const quint32 oid : {101u, 102u, 103u, 104u}) {
+        rcr->add_candidate_object_ids(oid);
+    }
+    for (const int scid : {0, 1, 2, 3}) {
+        rcr->add_candidate_server_card_ids(scid);
+    }
+    for (const char *name : {"Dryad Shrine", "Forest", "Sanctum", "Island"}) {
+        rcr->add_candidate_names(name);
+    }
+    auto *basic = rcr->add_selection_slots();
+    basic->set_label("a basic land card");
+    for (const uint32_t index : {0u, 1u, 3u}) {
+        basic->add_candidate_indices(index);
+    }
+    auto *shrine = rcr->add_selection_slots();
+    shrine->set_label("a Shrine card");
+    for (const uint32_t index : {0u, 2u}) {
+        shrine->add_candidate_indices(index);
+    }
+    apply(batch);
+
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_TRUE(state->resolutionHandPickPromptText().contains(QStringLiteral("a basic land card")));
+    EXPECT_TRUE(state->resolutionHandPickPromptText().contains(QStringLiteral("a Shrine card")));
+    state->toggleResolutionHandPickCard(1);                     // Basic-only candidate occupies the first slot.
+    EXPECT_FALSE(state->isResolutionHandPickCardSelectable(3)); // Another basic-only card has no slot.
+    EXPECT_TRUE(state->isResolutionHandPickCardSelectable(0));  // Overlap can occupy the Shrine slot.
+    EXPECT_TRUE(state->isResolutionHandPickCardSelectable(2));  // Shrine-only candidate is also valid.
+    state->toggleResolutionHandPickCard(2);
+
+    host.sentCommands.clear();
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &submitted = host.sentCommands.first().submit_resolution_choice();
+    ASSERT_EQ(submitted.chosen_object_ids_size(), 2);
+    EXPECT_EQ(submitted.chosen_object_ids(0), 102u);
+    EXPECT_EQ(submitted.chosen_object_ids(1), 103u);
+}
+
+TEST_F(RuledClientTest, MalformedHeterogeneousLibrarySearchIsRejected)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
+    rcr->set_max(1);
+    rcr->add_candidate_object_ids(101u);
+    rcr->add_candidate_server_card_ids(0);
+    rcr->add_candidate_names("Forest");
+    auto *slot = rcr->add_selection_slots();
+    slot->set_label("a basic land card");
+    slot->add_candidate_indices(1);
+    apply(batch);
+
+    EXPECT_FALSE(state->isResolutionHandPickActive());
 }
 
 // CR 701.18 scry reuses the library-search deck popup, retitled. The ordering step submits in

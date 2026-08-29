@@ -36,6 +36,7 @@ impl GameEngine {
                     candidate_source_zones: Vec::new(),
                     combat_defender_options: Vec::new(),
                     waterbend: payment.waterbend,
+                    selection_slots: Vec::new(),
                 },
             )),
         })
@@ -56,6 +57,11 @@ impl GameEngine {
             ));
         }
         let mut events = Vec::new();
+        let soft_counter_paid = matches!(
+            pending.continuation,
+            ResolutionContinuation::ManaPayment { .. }
+        )
+        .then_some(decision == rv1::ResolutionChoiceDecision::PayMana);
         match decision {
             rv1::ResolutionChoiceDecision::PayMana => {
                 if payment.waterbend {
@@ -230,12 +236,11 @@ impl GameEngine {
         } else {
             stack.resume_effect_index
         };
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            resume,
-            stack.previous_result,
-            events,
-        )
+        let mut previous_result = stack.previous_result;
+        if let Some(paid) = soft_counter_paid {
+            previous_result.receipt = Some(ResolutionReceipt::CounterUnlessPaid { paid });
+        }
+        self.complete_parked_resolution_with_previous(stack.item, resume, previous_result, events)
     }
 
     pub(in crate::engine) fn resolution_cost_candidates(
@@ -545,6 +550,7 @@ impl GameEngine {
                             candidate_source_zones: Vec::new(),
                             combat_defender_options: Vec::new(),
                             waterbend: false,
+                            selection_slots: Vec::new(),
                         },
                     )),
                 });

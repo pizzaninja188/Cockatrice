@@ -632,6 +632,7 @@ impl GameEngine {
                     candidate_source_zones: Vec::new(),
                     combat_defender_options: Vec::new(),
                     waterbend: false,
+                    selection_slots: Vec::new(),
                 },
             )),
         });
@@ -655,7 +656,7 @@ impl GameEngine {
                 stack: ParkedStackResolution {
                     item,
                     resume_effect_index,
-                    previous_result: CardResultCohort::default(),
+                    previous_result: EffectResult::default(),
                 },
                 effect_ids: candidate_effect_ids,
             },

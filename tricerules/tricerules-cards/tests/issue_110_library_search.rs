@@ -87,6 +87,7 @@ fn issue_110_say_its_name_and_altanak_are_complete() {
         },
         destination: GraveyardDestination::Hand,
         optional: true,
+        ..
     }] = say.primary_face().spell_effect.as_slice()
     else {
         panic!("Say Its Name mills then chooses from the current graveyard");

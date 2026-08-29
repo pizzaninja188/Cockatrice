@@ -17,7 +17,7 @@ CardRef resolve(const CardDatabaseQuerier *db,
                 const QString &basePt,
                 const QString &color,
                 const QStringList &keywords,
-                const QStringList &triggeredAbilityTexts);
+                const QStringList &abilityTexts);
 } // namespace RuledTokenDisplay
 
 #endif

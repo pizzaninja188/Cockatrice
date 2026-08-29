@@ -361,6 +361,7 @@ impl GameEngine {
                     candidate_source_zones: Vec::new(),
                     combat_defender_options: Vec::new(),
                     waterbend: false,
+                    selection_slots: Vec::new(),
                 },
             )),
         });
@@ -578,6 +579,7 @@ impl GameEngine {
                                         candidate_source_zones: Vec::new(),
                                         combat_defender_options: Vec::new(),
                                         waterbend: false,
+                                        selection_slots: Vec::new(),
                                     },
                                 )),
                             });
@@ -681,6 +683,7 @@ impl GameEngine {
                                 candidate_source_zones: Vec::new(),
                                 combat_defender_options: Vec::new(),
                                 waterbend: false,
+                                selection_slots: Vec::new(),
                             },
                         )),
                     });

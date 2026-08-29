@@ -1220,6 +1220,13 @@ message ResolutionBranchOption {
   repeated ChoiceCandidateSourceZone search_zones = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
+// One engine-authored capacity in a heterogeneous concealed-zone search. Candidate indices refer
+// to ResolutionChoiceRequired.candidate_object_ids; card identities are never duplicated here.
+message ResolutionSelectionSlot {
+  string label = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated uint32 candidate_indices = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
 // A parked custom resolution (CR 608) requesting input from one player. Reused by every tier-3
 // card (and later X-spells / modal spells) — the engine is the sole source of the candidate set,
 // so clients never replicate selection logic from Oracle text. The deciding player may be the
@@ -1281,6 +1288,10 @@ message ResolutionChoiceRequired {
   repeated CombatDefenderOption combat_defender_options = 21
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool waterbend = 22 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Empty for homogeneous picks. Nonempty is a bipartite eligibility graph that the existing
+  // picker uses to reject selections which cannot occupy distinct authored slots.
+  repeated ResolutionSelectionSlot selection_slots = 23
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no
@@ -1308,9 +1319,9 @@ message TokenIdentity {
   // Static keyword abilities, MTG spelling (e.g. ["Flying"], ["Lifelink"]). Lets the client pick
   // the matching Oracle token art among same-name variants (e.g. vanilla vs. vigilance Knight).
   repeated string keywords = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
-  // Oracle-style text for printed triggered abilities. This is display identity, not a client
-  // rules source; the engine remains authoritative for when and how each ability triggers.
-  repeated string triggered_ability_texts = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Oracle-style text for printed non-keyword abilities. This is display identity, not a client
+  // rules source; the engine remains authoritative for every ability's behavior.
+  repeated string ability_texts = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // The single source of card identity for a ruled session: Servatrice sends Oracle names
@@ -1416,6 +1427,10 @@ message StackPushed {
   repeated uint32 chosen_mode_indices = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   repeated string chosen_mode_labels = 9 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   repeated string chosen_cast_cost_labels = 11 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Public display identity captured before an activated ability's token source pays its costs.
+  // The source may be sacrificed (Clue/Lander), so the synthetic stack card cannot recover this
+  // metadata from the battlefield after the ability has been pushed.
+  TokenIdentity source_token_identity = 12 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ActivePublicReveal {

@@ -355,6 +355,25 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                 continue;
             }
             auto *rcr = filtered.mutable_events(ei)->mutable_resolution_choice_required();
+            bool malformedSelectionSlots = false;
+            for (const auto &slot : rcr->selection_slots()) {
+                if (slot.label().empty()) {
+                    malformedSelectionSlots = true;
+                    break;
+                }
+                for (const auto candidateIndex : slot.candidate_indices()) {
+                    if (candidateIndex >= static_cast<uint32_t>(rcr->candidate_object_ids_size())) {
+                        malformedSelectionSlots = true;
+                        break;
+                    }
+                }
+                if (malformedSelectionSlots) {
+                    break;
+                }
+            }
+            if (malformedSelectionSlots) {
+                rcr->clear_selection_slots();
+            }
             const bool requiresSourceZones = rcr->choice_kind() == ruled::v1::CHOICE_KIND_ZONE_SEARCH ||
                                              rcr->choice_kind() == ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS;
             if (requiresSourceZones && (rcr->candidate_source_zones_size() != rcr->candidate_object_ids_size() ||
@@ -366,6 +385,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                 rcr->clear_candidate_server_card_ids();
                 rcr->clear_candidate_selectable();
                 rcr->clear_candidate_source_zones();
+                rcr->clear_selection_slots();
                 rcr->set_prompt_text("Resolution choice metadata is unavailable.");
             }
             const bool isDecider = rcr->deciding_player_id() == participant->getPlayerId();
@@ -378,8 +398,12 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                 rcr->clear_candidate_server_card_ids();
                 rcr->clear_candidate_selectable();
                 rcr->clear_candidate_source_zones();
+                rcr->clear_selection_slots();
                 rcr->set_prompt_text("Opponent is making a resolution choice.");
             } else {
+                if (!isDecider) {
+                    rcr->clear_selection_slots();
+                }
                 if (isPublicReveal && !isDecider) {
                     rcr->clear_candidate_selectable();
                     rcr->set_prompt_text("Opponent is making a resolution choice.");
@@ -507,6 +531,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
             choice->set_waterbend(choiceIt.value().waterbend());
             choice->mutable_resolution_branches()->CopyFrom(choiceIt.value().resolution_branches());
             choice->mutable_combat_defender_options()->CopyFrom(choiceIt.value().combat_defender_options());
+            choice->mutable_selection_slots()->CopyFrom(choiceIt.value().selection_slots());
         }
     }
     for (auto triggerIt = routedTriggerChoices.constBegin(); triggerIt != routedTriggerChoices.constEnd();

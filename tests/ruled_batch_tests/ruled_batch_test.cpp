@@ -14,9 +14,9 @@
 // privileged operations as protected helpers (callBatchApply / insertParticipant /
 // peekBatchResult) which the test bodies invoke.
 
-#include "game/ruled_game_driver.h"
 #include "game/ruled_batch_synchronizer.h"
 #include "game/ruled_broadcast_router.h"
+#include "game/ruled_game_driver.h"
 #include "game/ruled_game_session.h"
 #include "game/ruled_utils.h"
 #include "game/server_abstract_player.h"
@@ -796,6 +796,79 @@ TEST_F(RuledBatchTest, LibraryTopChoiceIsPrivateToTheScryingPlayerWithSequential
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+TEST_F(RuledBatchTest, HeterogeneousLibrarySearchSlotsArePrivateAndMalformedSlotsFailClosed)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
+    choice->set_prompt_text("Search for a basic land and, if kicked, a Shrine.");
+    for (const quint32 oid : {701u, 702u, 703u}) {
+        choice->add_candidate_object_ids(oid);
+    }
+    for (const char *cardId : {"forest", "sanctum", "dryad_shrine"}) {
+        choice->add_candidate_card_ids(cardId);
+    }
+    for (const char *name : {"Forest", "Sanctum", "Dryad Shrine"}) {
+        choice->add_candidate_names(name);
+    }
+    auto *basic = choice->add_selection_slots();
+    basic->set_label("a basic land card");
+    basic->add_candidate_indices(0);
+    basic->add_candidate_indices(2);
+    auto *shrine = choice->add_selection_slots();
+    shrine->set_label("a Shrine card");
+    shrine->add_candidate_indices(1);
+    shrine->add_candidate_indices(2);
+
+    const auto forP1 = redactFor(batch, p1);
+    const auto forP2 = redactFor(batch, p2);
+    const auto &p1Choice = std::find_if(forP1.events().begin(), forP1.events().end(), [](const auto &event) {
+                               return event.has_resolution_choice_required();
+                           })->resolution_choice_required();
+    const auto &p2Choice = std::find_if(forP2.events().begin(), forP2.events().end(), [](const auto &event) {
+                               return event.has_resolution_choice_required();
+                           })->resolution_choice_required();
+    ASSERT_EQ(p1Choice.selection_slots_size(), 2);
+    EXPECT_EQ(p1Choice.selection_slots(1).label(), "a Shrine card");
+    EXPECT_EQ(p2Choice.selection_slots_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_object_ids_size(), 0);
+
+    ruled::v1::RuledEventBatch malformed = batch;
+    malformed.mutable_events(0)
+        ->mutable_resolution_choice_required()
+        ->mutable_selection_slots(0)
+        ->add_candidate_indices(99);
+    const auto malformedForP1 = redactFor(malformed, p1);
+    const auto &malformedChoice = malformedForP1.events(0).resolution_choice_required();
+    EXPECT_EQ(malformedChoice.selection_slots_size(), 0);
+    EXPECT_EQ(malformedChoice.candidate_object_ids_size(), 3);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    response.mutable_batch()->CopyFrom(batch);
+    updatePendingResolutionChoiceCache(response);
+    ResponseContainer deciderReconnect(-1);
+    game->createGameJoinedEvent(p1, deciderReconnect, true);
+    const auto *deciderContainer =
+        dynamic_cast<const GameEventContainer *>(deciderReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(deciderContainer, nullptr);
+    ruled::v1::RuledEventBatch restoredForDecider;
+    ASSERT_TRUE(restoredForDecider.ParseFromString(
+        deciderContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    EXPECT_EQ(restoredForDecider.events(0).resolution_choice_required().selection_slots_size(), 2);
+
+    ResponseContainer observerReconnect(-1);
+    game->createGameJoinedEvent(p2, observerReconnect, true);
+    const auto *observerContainer =
+        dynamic_cast<const GameEventContainer *>(observerReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(observerContainer, nullptr);
+    ruled::v1::RuledEventBatch restoredForObserver;
+    ASSERT_TRUE(restoredForObserver.ParseFromString(
+        observerContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    EXPECT_EQ(restoredForObserver.events(0).resolution_choice_required().selection_slots_size(), 0);
+}
+
 // CR 101.4: a player-set hidden choice advances from one decider to the next. Every replacement
 // prompt must bind only that player's physical hand ids and reduce to an identity-free wait prompt
 // for the other participant.
@@ -956,7 +1029,8 @@ TEST_F(RuledBatchTest, MultiZoneSearchMetadataAndTransientIdsAreDeciderPrivate)
     choice->set_deciding_player_id(1);
     choice->set_choice_kind(ruled::v1::CHOICE_KIND_ZONE_SEARCH);
     choice->set_prompt_text("Search hand, graveyard, and library");
-    for (const quint32 oid : {501u, 501u, 777u}) choice->add_candidate_object_ids(oid);
+    for (const quint32 oid : {501u, 501u, 777u})
+        choice->add_candidate_object_ids(oid);
     for (int i = 0; i < 3; ++i) {
         choice->add_candidate_card_ids("altanak");
         choice->add_candidate_names("Altanak, the Thrice-Called");
@@ -1293,8 +1367,7 @@ TEST_F(RuledBatchTest, ZoneViewPlacesPermanentsByAuthoritativeEffectiveType)
     Server_Card *land = addCardToTable(p1, "Forest");
     Server_Card *other = addCardToTable(p1, "Sol Ring");
 
-    ruled::v1::RuledPerPlayerView view =
-        buildPerPlayerView(p1, {101u, 102u, 103u, 104u}, {false, false, false, false});
+    ruled::v1::RuledPerPlayerView view = buildPerPlayerView(p1, {101u, 102u, 103u, 104u}, {false, false, false, false});
     view.mutable_battlefield_objects(0)->set_is_creature(true);
     view.mutable_battlefield_objects(1)->set_is_creature(true);
     view.mutable_battlefield_objects(1)->set_is_land(true);
@@ -1373,8 +1446,8 @@ TEST_F(RuledBatchTest, BattlefieldLandClassificationIsServerOnly)
     object->set_object_id(301u);
     object->set_is_land(true);
 
-    for (Server_AbstractParticipant *participant : {static_cast<Server_AbstractParticipant *>(p1),
-                                                    static_cast<Server_AbstractParticipant *>(p2)}) {
+    for (Server_AbstractParticipant *participant :
+         {static_cast<Server_AbstractParticipant *>(p1), static_cast<Server_AbstractParticipant *>(p2)}) {
         const auto redacted = redactFor(batch, participant);
         ASSERT_EQ(redacted.events_size(), 1);
         ASSERT_TRUE(redacted.events(0).has_zone_view());
@@ -1442,10 +1515,10 @@ TEST_F(RuledBatchTest, PublicPileReorderingPreservesBoundDuplicateIdentities)
         auto *zone = p1->getZones().value(exile ? ZoneNames::EXILE : ZoneNames::GRAVE);
         EXPECT_EQ(zone->getCards().first(), first);
         const auto &binding = bindingFor(p1);
-        EXPECT_EQ(exile ? binding.findExileCardByEngineOid(p1, 701u)
-                        : binding.findGraveyardCardByEngineOid(p1, 701u), first);
-        EXPECT_EQ(exile ? binding.findExileCardByEngineOid(p1, 702u)
-                        : binding.findGraveyardCardByEngineOid(p1, 702u), second);
+        EXPECT_EQ(exile ? binding.findExileCardByEngineOid(p1, 701u) : binding.findGraveyardCardByEngineOid(p1, 701u),
+                  first);
+        EXPECT_EQ(exile ? binding.findExileCardByEngineOid(p1, 702u) : binding.findGraveyardCardByEngineOid(p1, 702u),
+                  second);
     }
 }
 
@@ -1970,8 +2043,12 @@ TEST_F(RuledBatchTest, CastCostCandidatesStayPrivateWhileActiveBeholdRevealIsPub
 
     const auto forController = redactFor(batch, p1);
     ASSERT_TRUE(forController.legal_by_player().contains(p1->getPlayerId()));
-    const auto &controllerOption =
-        forController.legal_by_player().at(p1->getPlayerId()).hand_actions(0).cost_choices().cast_cost_groups(0).options(0);
+    const auto &controllerOption = forController.legal_by_player()
+                                       .at(p1->getPlayerId())
+                                       .hand_actions(0)
+                                       .cost_choices()
+                                       .cast_cost_groups(0)
+                                       .options(0);
     EXPECT_EQ(controllerOption.valid_hand_indices_size(), 1);
     EXPECT_EQ(controllerOption.valid_permanent_generations(0), 12u);
     ASSERT_EQ(forController.events_size(), 1);
@@ -2013,15 +2090,14 @@ TEST_F(RuledBatchTest, PendingPrivateWardDiscardIsRestoredForPayerAndRedactedFor
         dynamic_cast<const GameEventContainer *>(payerReconnect.getPostResponseQueue().last().second);
     ASSERT_NE(payerContainer, nullptr);
     ruled::v1::RuledEventBatch payerBatch;
-    ASSERT_TRUE(payerBatch.ParseFromString(
-        payerContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    ASSERT_TRUE(
+        payerBatch.ParseFromString(payerContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
     const auto &payerChoice = payerBatch.events(0).resolution_choice_required();
     ASSERT_EQ(payerChoice.candidate_object_ids_size(), 1);
     EXPECT_EQ(payerChoice.candidate_object_ids(0), 501u);
     ASSERT_EQ(payerChoice.candidate_server_card_ids_size(), 1);
     EXPECT_EQ(payerChoice.candidate_server_card_ids(0), bear->getId());
-    EXPECT_EQ(payerChoice.prompt_text(),
-              "Discard a matching card to pay for Ward—Discard a card, or decline.");
+    EXPECT_EQ(payerChoice.prompt_text(), "Discard a matching card to pay for Ward—Discard a card, or decline.");
 
     ResponseContainer opponentReconnect(-1);
     game->createGameJoinedEvent(p2, opponentReconnect, true);
@@ -2070,8 +2146,8 @@ TEST_F(RuledBatchTest, PendingTapPaymentCohortIsRestoredForPayerAndRedactedForOp
         dynamic_cast<const GameEventContainer *>(payerReconnect.getPostResponseQueue().last().second);
     ASSERT_NE(payerContainer, nullptr);
     ruled::v1::RuledEventBatch payerBatch;
-    ASSERT_TRUE(payerBatch.ParseFromString(
-        payerContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    ASSERT_TRUE(
+        payerBatch.ParseFromString(payerContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
     const auto &payerChoice = payerBatch.events(0).resolution_choice_required();
     ASSERT_EQ(payerChoice.candidate_object_ids_size(), 2);
     EXPECT_EQ(payerChoice.candidate_object_ids(0), 601u);
@@ -2788,7 +2864,7 @@ TEST_F(RuledBatchTest, ApplyRuledBatchCreatesTokenOnControllerTable)
     id->set_pt("1/1");
     id->set_color("w");
     id->set_is_creature(true);
-    id->add_triggered_ability_texts(
+    id->add_ability_texts(
         "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)");
 
     callBatchApply(resp);
@@ -2798,15 +2874,15 @@ TEST_F(RuledBatchTest, ApplyRuledBatchCreatesTokenOnControllerTable)
     EXPECT_EQ(token->getName(), QStringLiteral("Soldier"));
     EXPECT_EQ(token->getPT(), QStringLiteral("1/1"));
     EXPECT_EQ(token->getColor(), QStringLiteral("w"));
-    EXPECT_EQ(token->getTokenTriggeredAbilityTexts(),
+    EXPECT_EQ(token->getTokenAbilityTexts(),
               QStringList({QStringLiteral(
                   "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)")}));
     EXPECT_TRUE(token->getDestroyOnZoneChange());
 
     ServerInfo_Card info;
     token->getInfo(&info);
-    ASSERT_EQ(info.triggered_ability_texts_size(), 1);
-    EXPECT_EQ(info.triggered_ability_texts(0),
+    ASSERT_EQ(info.ability_texts_size(), 1);
+    EXPECT_EQ(info.ability_texts(0),
               "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)");
     EXPECT_EQ(info.token_base_pt(), "1/1");
     // The engine ObjectId is bound to the minted card for subsequent zone-view / combat sync.

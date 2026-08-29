@@ -1,0 +1,20 @@
+// Oracle verified 2026-08-29. CR 701.17c/608.2i: the optional return is limited
+// to the exact cards milled by the preceding instruction that remain in the graveyard.
+(
+  id: "midnight_tilling",
+  name: "Midnight Tilling",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    Mill(count: 4),
+    ChooseGraveyardCard(
+      filter: (any_of: Some([
+        (card_type: Some(Land)),
+        (card_type: Some(NonlandPermanent)),
+      ])),
+      destination: Hand,
+      optional: true,
+      from_result: Some((source: PreviousEffect, action: Mill, players: Controller)),
+    ),
+  ],
+)

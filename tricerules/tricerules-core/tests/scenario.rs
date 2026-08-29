@@ -131,6 +131,8 @@ mod issue_154_changeling;
 mod issue_156_event_observers;
 #[path = "scenario/issue_158_predicates.rs"]
 mod issue_158_predicates;
+#[path = "scenario/issue_159_resolution_results.rs"]
+mod issue_159_resolution_results;
 #[path = "scenario/issue_160_blocker_constraints.rs"]
 mod issue_160_blocker_constraints;
 #[path = "scenario/issue_161_turn_boundaries.rs"]

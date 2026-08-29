@@ -19,7 +19,7 @@ message Event_CreateToken {
     // Ruled engine tokens only: static keyword abilities (MTG spelling, e.g. "Flying", "Lifelink").
     // Lets the client pick the matching Oracle token art among same-name variants. Empty otherwise.
     repeated string ability_keywords = 12;
-    // Ruled engine tokens only: Oracle-style text for printed triggered abilities. Display
+    // Ruled engine tokens only: Oracle-style text for printed non-keyword abilities. Display
     // identity only; clients must not infer rules behavior from it.
-    repeated string triggered_ability_texts = 13;
+    repeated string ability_texts = 13;
 }

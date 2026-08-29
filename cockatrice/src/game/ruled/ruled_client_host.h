@@ -18,6 +18,7 @@
 #include <QVector>
 #include <QtGlobal>
 #include <functional>
+#include <optional>
 
 namespace ruled::v1
 {
@@ -27,6 +28,15 @@ class RuledCommand;
 class RuledClientHost
 {
 public:
+    struct TokenStackIdentity
+    {
+        QString name;
+        QString basePt;
+        QString color;
+        QStringList keywords;
+        QStringList abilityTexts;
+    };
+
     virtual ~RuledClientHost() = default;
 
     /// Cockatrice seat id of the player sitting at this client, or -1 when unknown.
@@ -40,10 +50,12 @@ public:
 
     /// Abilities and spell copies have no physical card on the stack; the host materialises a
     /// synthetic `CardItem` for them (and tears it down again) so the stack window shows them.
-    virtual void createSyntheticStackCard(quint32 virtualOid,
-                                          const QString &displayName,
-                                          int controllerPlayerId,
-                                          const QString &setName) = 0;
+    virtual void
+    createSyntheticStackCard(quint32 virtualOid,
+                             const QString &displayName,
+                             int controllerPlayerId,
+                             const QString &setName,
+                             const std::optional<TokenStackIdentity> &sourceTokenIdentity = std::nullopt) = 0;
     virtual void removeSyntheticStackCard(quint32 virtualOid) = 0;
     /// Printing (Scryfall provider id) of the spell currently on the stack under `oid`, so a
     /// copy (CR 707.10) inherits the original's art. Empty when it cannot be resolved.

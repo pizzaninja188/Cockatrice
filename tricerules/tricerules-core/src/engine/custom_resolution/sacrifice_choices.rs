@@ -61,7 +61,7 @@ impl GameEngine {
         self.complete_parked_resolution_with_previous(
             stack.item,
             stack.resume_effect_index,
-            result,
+            result.into(),
             ev,
         )
     }

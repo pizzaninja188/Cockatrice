@@ -458,6 +458,10 @@ public:
         int min = 0;
         int max = 0;
         bool uniqueNames = false;
+        /// Optional engine-authored bipartite graph for heterogeneous hidden-zone searches.
+        /// Each set is one capacity and contains only transient ids from this pick's popup.
+        QVector<QSet<int>> selectionSlotServerCardIds;
+        QStringList selectionSlotLabels;
         // Title for the Deck / Revealed popup. The popup is built on the local player's deck zone
         // purely as a scaffold, so without this it would inherit that zone's name and claim to be
         // a library even when it is showing a hand or a revealed set.
@@ -813,17 +817,14 @@ public:
     }
     [[nodiscard]] static quint64 handCastActionKey(int slot, int faceIndex, ruled::v1::CastMethod method)
     {
-        return spellTargetKey(slot, faceIndex) |
-               (static_cast<quint64>(static_cast<quint32>(method) - 1) << 8);
+        return spellTargetKey(slot, faceIndex) | (static_cast<quint64>(static_cast<quint32>(method) - 1) << 8);
     }
-    [[nodiscard]] static quint64 zoneCastActionKey(int objectId,
-                                                   int faceIndex,
-                                                   RuledCastSource source,
-                                                   ruled::v1::CastMethod method)
+    [[nodiscard]] static quint64
+    zoneCastActionKey(int objectId, int faceIndex, RuledCastSource source, ruled::v1::CastMethod method)
     {
         return (static_cast<quint64>(static_cast<quint32>(objectId)) << 18) |
-               (static_cast<quint64>(faceIndex & 0xff) << 10) |
-               ((static_cast<quint64>(source) & 0x3) << 8) | (static_cast<quint64>(method) & 0xff);
+               (static_cast<quint64>(faceIndex & 0xff) << 10) | ((static_cast<quint64>(source) & 0x3) << 8) |
+               (static_cast<quint64>(method) & 0xff);
     }
     [[nodiscard]] static quint64 abilityTargetKey(quint32 permanentOid, int abilityIndex)
     {
@@ -951,10 +952,9 @@ public:
             return {};
         }
         QVector<RuledFaceOption> options = zoneCastActions.faceOptionsByIndex.value(static_cast<int>(objectId));
-        std::sort(options.begin(), options.end(),
-                  [](const RuledFaceOption &a, const RuledFaceOption &b) {
-                      return std::tie(a.faceIndex, a.castMethod) < std::tie(b.faceIndex, b.castMethod);
-                  });
+        std::sort(options.begin(), options.end(), [](const RuledFaceOption &a, const RuledFaceOption &b) {
+            return std::tie(a.faceIndex, a.castMethod) < std::tie(b.faceIndex, b.castMethod);
+        });
         return options;
     }
     [[nodiscard]] bool isZoneActionLegal(quint32 objectId, RuledCastSource source) const
@@ -971,8 +971,7 @@ public:
                                          RuledCastSource source,
                                          ruled::v1::CastMethod method = ruled::v1::CAST_METHOD_NORMAL) const
     {
-        return zoneCastCostsByCastKey.value(
-            zoneCastActionKey(static_cast<int>(objectId), faceIndex, source, method));
+        return zoneCastCostsByCastKey.value(zoneCastActionKey(static_cast<int>(objectId), faceIndex, source, method));
     }
     [[nodiscard]] RuledCastSource zoneActionSource(quint32 objectId) const
     {
@@ -998,11 +997,10 @@ public:
                    ? validTargetsByHandSlot.value(spellTargetKey(slot, faceIndex))
                    : validTargetsByZoneObject.value(zoneSpellTargetKey(static_cast<quint32>(slot), faceIndex));
     }
-    [[nodiscard]] RuledCostData
-    spellCostData(int sourceId,
-                  int faceIndex,
-                  RuledCastSource source = RuledCastSource::Hand,
-                  ruled::v1::CastMethod method = ruled::v1::CAST_METHOD_NORMAL) const
+    [[nodiscard]] RuledCostData spellCostData(int sourceId,
+                                              int faceIndex,
+                                              RuledCastSource source = RuledCastSource::Hand,
+                                              ruled::v1::CastMethod method = ruled::v1::CAST_METHOD_NORMAL) const
     {
         const auto &set =
             source == RuledCastSource::Hand ? handActionSet(ruled::v1::HAND_ACTION_CAST_SPELL) : zoneCastActions;
@@ -1010,12 +1008,11 @@ public:
                                                             : zoneCastActionKey(sourceId, faceIndex, source, method);
         return set.costDataByCastKey.value(key);
     }
-    [[nodiscard]] bool
-    isZoneCastActionLegal(quint32 objectId,
-                          int faceIndex,
-                          RuledCastSource source,
-                          ruled::v1::CastMethod method,
-                          std::optional<quint64> expectedGeneration = std::nullopt) const
+    [[nodiscard]] bool isZoneCastActionLegal(quint32 objectId,
+                                             int faceIndex,
+                                             RuledCastSource source,
+                                             ruled::v1::CastMethod method,
+                                             std::optional<quint64> expectedGeneration = std::nullopt) const
     {
         if (!isZoneActionLegal(objectId, source)) {
             return false;
@@ -1026,10 +1023,11 @@ public:
                    (!expectedGeneration || option.zoneChangeGeneration == *expectedGeneration);
         });
     }
-    [[nodiscard]] QSet<quint32> eligibleRestrictedManaForCast(int sourceId,
-                                                              int faceIndex,
-                                                              RuledCastSource source,
-                                                              ruled::v1::CastMethod method = ruled::v1::CAST_METHOD_NORMAL) const
+    [[nodiscard]] QSet<quint32>
+    eligibleRestrictedManaForCast(int sourceId,
+                                  int faceIndex,
+                                  RuledCastSource source,
+                                  ruled::v1::CastMethod method = ruled::v1::CAST_METHOD_NORMAL) const
     {
         const auto &set =
             source == RuledCastSource::Hand ? handActionSet(ruled::v1::HAND_ACTION_CAST_SPELL) : zoneCastActions;
@@ -1459,8 +1457,7 @@ public:
     [[nodiscard]] bool hasPendingChoiceOptions() const
     {
         return hasPendingChoiceOfKind(ChoiceKind::TriggerMode) ||
-               hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch) ||
-               hasPendingChoiceOfKind(ChoiceKind::SiegeCast);
+               hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch) || hasPendingChoiceOfKind(ChoiceKind::SiegeCast);
     }
     [[nodiscard]] QVector<RuledPermanentAction> permanentActionsForOid(quint32 oid) const
     {
@@ -1492,9 +1489,8 @@ public:
     }
     void submitPendingChoiceOption(int optionIndex);
     void appendPendingTriggerMode(ruled::v1::ChooseTriggerTarget *command) const;
-    [[nodiscard]] bool isPendingTriggerTargetCandidate(ruled::v1::TargetRefKind kind,
-                                                       quint32 oid,
-                                                       int targetPlayerId) const;
+    [[nodiscard]] bool
+    isPendingTriggerTargetCandidate(ruled::v1::TargetRefKind kind, quint32 oid, int targetPlayerId) const;
     [[nodiscard]] std::optional<RuledTargetGroupData> pendingTriggerTargetGroupData() const;
     bool stagePendingTriggerTarget(ruled::v1::TargetRefKind kind, quint32 oid, int targetPlayerId);
     void confirmPendingTriggerTargets();
@@ -1841,6 +1837,7 @@ signals:
     void activePublicRevealsChanged(QStringList cardNames, QVector<int> revealingPlayerIds);
 
 private:
+    [[nodiscard]] bool resolutionPickSelectionAdmitsSlots(const QList<int> &selectedServerCardIds) const;
     void sendOpeningBottomCommandSequence(const QList<int> &adjustedIndices, int position);
 
     /// Push the local player's in-progress attacker / block staging to the server so the opponent

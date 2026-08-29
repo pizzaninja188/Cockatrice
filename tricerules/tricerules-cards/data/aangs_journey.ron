@@ -1,0 +1,36 @@
+// Oracle and rulings checked 2026-08-29. Issue #159 owns heterogeneous search slots.
+(
+  id: "aangs_journey",
+  name: "Aang's Journey",
+  mana_cost: "{2}",
+  types: ["Sorcery", "Lesson"],
+  cast_cost_groups: [(
+    prompt: "Pay kicker?",
+    min: 0,
+    max: 1,
+    options: [Mana(label: "Kicker {2}", cost: "{2}")],
+  )],
+  spell_effect: [
+    SearchLibrary(
+      slots: [
+        (
+          label: "a basic land card",
+          filter: (card_type: Some(BasicLand)),
+        ),
+        (
+          label: "a Shrine card",
+          filter: (subtype: Some("Shrine")),
+          enabled_by_cast_cost: Some((
+            group_index: 0,
+            option_index: 0,
+            expected_selected: true,
+          )),
+        ),
+      ],
+      destination: Hand,
+      shuffle: true,
+      reveal: true,
+    ),
+    GainLife(amount: 2),
+  ],
+)

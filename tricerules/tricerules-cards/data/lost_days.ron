@@ -1,0 +1,15 @@
+// Oracle and rulings verified 2026-08-29. CR 400.3/401.4/608.2b: the target's
+// owner chooses the exact placement. General meld support is intentionally deferred.
+(
+  id: "lost_days",
+  name: "Lost Days",
+  mana_cost: "{4}{U}",
+  types: ["Instant", "Lesson"],
+  spell_effect: [
+    PutTargetPermanentInOwnersLibrary(
+      target: (kind: AnyPermanent, permanent_types: [Creature, Enchantment]),
+      placement: OwnerChoiceSecondFromTopOrBottom,
+    ),
+    CreateTokens(token: "clue", count: 1),
+  ],
+)

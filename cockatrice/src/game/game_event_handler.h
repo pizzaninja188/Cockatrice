@@ -169,7 +169,8 @@ private:
     void createSyntheticStackCard(quint32 virtualOid,
                                   const QString &displayName,
                                   int controllerPlayerId,
-                                  const QString &setName) override;
+                                  const QString &setName,
+                                  const std::optional<TokenStackIdentity> &sourceTokenIdentity) override;
     void removeSyntheticStackCard(quint32 virtualOid) override;
     [[nodiscard]] QString stackCardProviderId(quint32 oid) const override;
     [[nodiscard]] bool fallbackCreaturePt(quint32 engineOid, int *power, int *toughness) const override;

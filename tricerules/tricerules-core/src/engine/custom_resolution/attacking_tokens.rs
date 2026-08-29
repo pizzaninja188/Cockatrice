@@ -13,6 +13,7 @@ fn defender_choice_event(
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
                 waterbend: false,
+                selection_slots: Vec::new(),
                 deciding_player_id: deciding_player,
                 source_object_id,
                 prompt_text: format!(

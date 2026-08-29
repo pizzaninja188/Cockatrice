@@ -231,11 +231,11 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
             for (const quint32 candidate : option.valid_permanent_ids()) {
                 parsedOption.validPermanentIds.insert(candidate);
             }
-            const int generationCount = std::min(option.valid_permanent_ids_size(),
-                                                 option.valid_permanent_generations_size());
+            const int generationCount =
+                std::min(option.valid_permanent_ids_size(), option.valid_permanent_generations_size());
             for (int i = 0; i < generationCount; ++i) {
                 parsedOption.validPermanentGenerations.insert(option.valid_permanent_ids(i),
-                                                               option.valid_permanent_generations(i));
+                                                              option.valid_permanent_generations(i));
             }
             const int reductionCount =
                 std::min(option.valid_permanent_ids_size(), option.valid_permanent_generic_reductions_size());
@@ -257,8 +257,8 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
     for (const auto &action : actions.hand_actions()) {
         const int handIndex = static_cast<int>(action.hand_index());
         const int faceIndex = static_cast<int>(action.face_index());
-        const auto method = action.kind() == ruled::v1::HAND_ACTION_CAST_SPELL
-                                ? action.cast_method() : ruled::v1::CAST_METHOD_NORMAL;
+        const auto method =
+            action.kind() == ruled::v1::HAND_ACTION_CAST_SPELL ? action.cast_method() : ruled::v1::CAST_METHOD_NORMAL;
         if (method != ruled::v1::CAST_METHOD_NORMAL && method != ruled::v1::CAST_METHOD_WARP)
             continue;
         const quint64 castKey = RuledClientState::handCastActionKey(handIndex, faceIndex, method);
@@ -267,8 +267,8 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         const QString cardName = QString::fromStdString(action.card_name());
         set.indicesByCardName.insert(cardName, handIndex);
         set.faceOptionsByIndex[handIndex].append({faceIndex, cardName, QString::fromStdString(action.cost()),
-                                               static_cast<int>(action.generic_cost_reduction()),
-                                               method, action.has_convoke()});
+                                                  static_cast<int>(action.generic_cost_reduction()), method,
+                                                  action.has_convoke()});
         if (action.has_cost_choices()) {
             set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices()));
         }
@@ -614,8 +614,23 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
             if (state->lastTriggerSourceOid != 0) {
                 state->stackSourceOidByStackOid.insert(sp.object_id(), state->lastTriggerSourceOid);
             }
+            std::optional<RuledClientHost::TokenStackIdentity> sourceTokenIdentity;
+            if (sp.has_source_token_identity() && !sp.source_token_identity().name().empty()) {
+                const auto &published = sp.source_token_identity();
+                RuledClientHost::TokenStackIdentity identity;
+                identity.name = QString::fromStdString(published.name());
+                identity.basePt = QString::fromStdString(published.pt());
+                identity.color = QString::fromStdString(published.color());
+                for (const auto &keyword : published.keywords()) {
+                    identity.keywords.append(QString::fromStdString(keyword));
+                }
+                for (const auto &abilityText : published.ability_texts()) {
+                    identity.abilityTexts.append(QString::fromStdString(abilityText));
+                }
+                sourceTokenIdentity = std::move(identity);
+            }
             host->createSyntheticStackCard(sp.object_id(), QString::fromStdString(sp.description()),
-                                           state->lastTriggerControllerPlayerId, {});
+                                           state->lastTriggerControllerPlayerId, {}, sourceTokenIdentity);
         } else if (sp.is_copy()) {
             // The copy is being placed on the stack — any pending copy-target choice has been
             // accepted by the engine.
@@ -649,8 +664,7 @@ void RuledEventDispatcher::applyStackResolved(const ruled::v1::StackResolved &sr
                              " confirms the client saw the resolve";
 }
 
-void RuledEventDispatcher::applyActivePublicRevealSnapshot(
-    const ruled::v1::ActivePublicRevealSnapshot &snapshot)
+void RuledEventDispatcher::applyActivePublicRevealSnapshot(const ruled::v1::ActivePublicRevealSnapshot &snapshot)
 {
     QVector<RuledClientState::RuledActivePublicReveal> reveals;
     reveals.reserve(snapshot.reveals_size());
@@ -663,7 +677,7 @@ void RuledEventDispatcher::applyActivePublicRevealSnapshot(
 }
 
 void RuledEventDispatcher::applyStackObjectCountered(const ruled::v1::StackObjectCountered &countered,
-                                                      BatchContext &ctx)
+                                                     BatchContext &ctx)
 {
     const quint32 objectId = countered.object_id();
     retireStackObject(objectId, ctx);
@@ -850,10 +864,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             choice.choiceOptions.append(option);
         }
         if (malformedSearchZones ||
-            (anySearchZones && std::any_of(choice.choiceOptions.cbegin(), choice.choiceOptions.cend(),
-                                           [](const RuledChoiceOption &option) {
-                                               return option.searchZones.isEmpty();
-                                           }))) {
+            (anySearchZones &&
+             std::any_of(choice.choiceOptions.cbegin(), choice.choiceOptions.cend(),
+                         [](const RuledChoiceOption &option) { return option.searchZones.isEmpty(); }))) {
             qWarning() << "Rejecting malformed ruled search-zone branches";
             return;
         }
@@ -886,9 +899,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         choice.kind = ChoiceKind::AttackingTokenDefender;
         choice.promptText = QString::fromStdString(rcr.prompt_text());
         for (const auto &option : rcr.combat_defender_options()) {
-            if (!option.has_defender() ||
-                (option.defender().kind() != ruled::v1::TARGET_REF_KIND_PLAYER &&
-                 option.defender().kind() != ruled::v1::TARGET_REF_KIND_PERMANENT)) {
+            if (!option.has_defender() || (option.defender().kind() != ruled::v1::TARGET_REF_KIND_PLAYER &&
+                                           option.defender().kind() != ruled::v1::TARGET_REF_KIND_PERMANENT)) {
                 qWarning() << "Rejecting malformed attacking-token defender option";
                 return;
             }
@@ -1000,9 +1012,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         emit state->combatStateChanged();
         return;
     }
-    if ((isZoneSearch || isGraveyardCards) &&
-        (rcr.candidate_source_zones_size() != rcr.candidate_names_size() ||
-         rcr.candidate_object_ids_size() != rcr.candidate_names_size())) {
+    if ((isZoneSearch || isGraveyardCards) && (rcr.candidate_source_zones_size() != rcr.candidate_names_size() ||
+                                               rcr.candidate_object_ids_size() != rcr.candidate_names_size())) {
         qWarning() << "Rejecting malformed ruled multi-zone choice";
         return;
     }
@@ -1075,6 +1086,29 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
                 pick.candidateAnnotations.append(QString{});
             }
             libScids.append(scid);
+        }
+        if (rcr.selection_slots_size() > 0) {
+            if (!isLibrarySearch) {
+                qWarning() << "Rejecting heterogeneous slot metadata on a non-library-search choice";
+                return;
+            }
+            for (const auto &slot : rcr.selection_slots()) {
+                if (slot.label().empty()) {
+                    qWarning() << "Rejecting ruled library search with an empty slot label";
+                    return;
+                }
+                QSet<int> slotServerCardIds;
+                for (const auto candidateIndex : slot.candidate_indices()) {
+                    if (candidateIndex >= static_cast<uint32_t>(rcr.candidate_server_card_ids_size())) {
+                        qWarning() << "Rejecting ruled library search with an invalid slot candidate index";
+                        return;
+                    }
+                    slotServerCardIds.insert(rcr.candidate_server_card_ids(static_cast<int>(candidateIndex)));
+                }
+                pick.selectionSlotLabels.append(QString::fromStdString(slot.label()));
+                pick.selectionSlotServerCardIds.append(std::move(slotServerCardIds));
+            }
+            pick.promptText += tr("\nSearch slots: %1").arg(pick.selectionSlotLabels.join(tr("; ")));
         }
         const int required = pick.min;
         const QStringList pickNames = pick.candidateNames;
@@ -1526,11 +1560,10 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
             displayName += tr(" — Harmonize");
         }
         state->zoneCastActions.indicesByCardName.insert(cardName, objectId);
-        state->zoneCastActions.faceOptionsByIndex[objectId].append({faceIndex, displayName,
-                                                                    QString::fromStdString(action.cost()),
-                                                                    static_cast<int>(action.generic_cost_reduction()),
-                                                                    castMethod, action.has_convoke(),
-                                                                    action.zone_change_generation()});
+        state->zoneCastActions.faceOptionsByIndex[objectId].append(
+            {faceIndex, displayName, QString::fromStdString(action.cost()),
+             static_cast<int>(action.generic_cost_reduction()), castMethod, action.has_convoke(),
+             action.zone_change_generation()});
         state->zoneCastSourceByOid.insert(objectId, source);
         if (action.needs_target()) {
             state->zoneCastActions.needsTargetIndices.insert(objectId);

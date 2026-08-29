@@ -77,6 +77,7 @@ pub(super) fn counter_target_spell(
                         candidate_source_zones: Vec::new(),
                         combat_defender_options: Vec::new(),
                         waterbend: false,
+                        selection_slots: Vec::new(),
                     },
                 )),
             });
@@ -200,6 +201,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
+                selection_slots: Vec::new(),
             };
             (presentation, PendingWardPaymentStage::Mana(payment), event)
         }
@@ -274,6 +276,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
+                selection_slots: Vec::new(),
             };
             (
                 presentation,
@@ -608,6 +611,7 @@ pub(super) fn copy_target_spell(
                                 candidate_source_zones: Vec::new(),
                                 combat_defender_options: Vec::new(),
                                 waterbend: false,
+                                selection_slots: Vec::new(),
                             },
                         )),
                     });
@@ -658,6 +662,7 @@ pub(super) fn copy_target_spell(
                                 .iter()
                                 .map(|receipt| receipt.label.clone())
                                 .collect(),
+                            source_token_identity: None,
                         })),
                     });
                     events.push(ev_log(format!(

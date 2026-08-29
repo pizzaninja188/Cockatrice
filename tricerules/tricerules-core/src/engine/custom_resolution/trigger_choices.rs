@@ -192,6 +192,7 @@ impl GameEngine {
                 chosen_mode_indices,
                 chosen_mode_labels,
                 chosen_cast_cost_labels: vec![],
+                source_token_identity: None,
             })),
         });
 

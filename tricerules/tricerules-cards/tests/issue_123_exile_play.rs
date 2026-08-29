@@ -18,6 +18,7 @@ fn issue_123_cards_use_the_generic_exile_play_effect() {
         trigger.effect.as_slice(),
         [SpellEffectKind::ExileTopWithPlayPermission {
             player: PlayerRecipient::Controller,
+            ..
         }]
     ));
 
@@ -56,6 +57,7 @@ fn issue_123_cards_use_the_generic_exile_play_effect() {
         branches[0].effects.as_slice(),
         [SpellEffectKind::ExileTopWithPlayPermission {
             player: PlayerRecipient::Controller,
+            ..
         }]
     ));
 }

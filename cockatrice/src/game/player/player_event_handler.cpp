@@ -56,7 +56,8 @@ static void pehDbgLog(const QString &msg)
     }
 }
 
-namespace {
+namespace
+{
 /// Matches `isRuledModeManaPoolCounterName` in servatrice (ruled floating mana).
 bool isRuledManaPoolCounterName(const QString &name)
 {
@@ -166,14 +167,14 @@ void PlayerEventHandler::eventCreateToken(const Event_CreateToken &event)
         for (const auto &kw : event.ability_keywords()) {
             engineKeywords.append(QString::fromStdString(kw));
         }
-        QStringList triggeredAbilityTexts;
-        triggeredAbilityTexts.reserve(event.triggered_ability_texts_size());
-        for (const auto &text : event.triggered_ability_texts()) {
-            triggeredAbilityTexts.append(QString::fromStdString(text));
+        QStringList abilityTexts;
+        abilityTexts.reserve(event.ability_texts_size());
+        for (const auto &text : event.ability_texts()) {
+            abilityTexts.append(QString::fromStdString(text));
         }
         CardRef tokenRef =
             RuledTokenDisplay::resolve(CardDatabaseManager::query(), cardRef.name, QString::fromStdString(event.pt()),
-                                       QString::fromStdString(event.color()), engineKeywords, triggeredAbilityTexts);
+                                       QString::fromStdString(event.color()), engineKeywords, abilityTexts);
         if (!tokenRef.name.isEmpty()) {
             cardRef = tokenRef;
         }
@@ -256,8 +257,7 @@ void PlayerEventHandler::eventSetCounter(const Event_SetCounter &event)
         return;
     }
     int oldValue = ctr->getValue();
-    if (RuledActions::isRuledGame(player->getGame()) &&
-        isRuledManaPoolCounterName(ctr->getName())) {
+    if (RuledActions::isRuledGame(player->getGame()) && isRuledManaPoolCounterName(ctr->getName())) {
         // CR 605: when the local player produces mana (this pool counter just went up) while a spell or
         // ability is mid-payment, route the new mana straight into that pending cost rather than leaving
         // it floating — the "tap a land after clicking the spell pays the spell" behavior. The engine's
@@ -313,12 +313,11 @@ void PlayerEventHandler::eventMoveCard(const Event_MoveCard &event, const GameEv
     } else {
         targetZone = startZone;
     }
-    RULED_TRACE("client") << "moveCard: '" << QString::fromStdString(event.card_name()) << "' "
-                          << startZoneString << " -> " << QString::fromStdString(event.target_zone())
-                          << " cardId=" << event.card_id() << " newCardId=" << event.new_card_id()
-                          << " startZoneResolved=" << (startZone != nullptr)
-                          << " targetZoneResolved=" << (targetZone != nullptr)
-                          << " x=" << event.x() << " (a zone that fails to resolve drops the move"
+    RULED_TRACE("client") << "moveCard: '" << QString::fromStdString(event.card_name()) << "' " << startZoneString
+                          << " -> " << QString::fromStdString(event.target_zone()) << " cardId=" << event.card_id()
+                          << " newCardId=" << event.new_card_id() << " startZoneResolved=" << (startZone != nullptr)
+                          << " targetZoneResolved=" << (targetZone != nullptr) << " x=" << event.x()
+                          << " (a zone that fails to resolve drops the move"
                              " silently — that is what an empty-looking stack means)";
     if (!startZone || !targetZone) {
         return;
@@ -340,7 +339,8 @@ void PlayerEventHandler::eventMoveCard(const Event_MoveCard &event, const GameEv
         }
         // Objects entering the stack from another zone must append (LIFO). Some move events carry x=0 while the stack
         // is non-empty; inserting at 0 prepends, desyncs the stack window, and makes resolution (server pops last)
-        // remove the wrong Cockatrice card. Do not gate on ruled_game — ServerInfo_Game may omit the flag on some paths.
+        // remove the wrong Cockatrice card. Do not gate on ruled_game — ServerInfo_Game may omit the flag on some
+        // paths.
         if (startZone != targetZone) {
             x = stackSz;
         }
@@ -350,8 +350,8 @@ void PlayerEventHandler::eventMoveCard(const Event_MoveCard &event, const GameEv
     // Ruled: opponent hands use contentsKnown=false (card ids are not mirrored). Server Event_MoveCard position
     // is the server's hand index and can disagree with this client's ordering. Prefer engine HandSlotMap when it
     // maps (start_player_id, card_id) to a valid local index so takeCard removes the correct CardItem.
-    if (RuledActions::isRuledGame(player->getGame()) &&
-        startZoneString == QLatin1String(ZoneNames::HAND) && !startZone->getCards().getContentsKnown()) {
+    if (RuledActions::isRuledGame(player->getGame()) && startZoneString == QLatin1String(ZoneNames::HAND) &&
+        !startZone->getCards().getContentsKnown()) {
         if (RuledClientState *geh = player->getGame()->getGameEventHandler()->ruled()) {
             if (event.has_card_id()) {
                 const int sid = static_cast<int>(event.card_id());
@@ -368,20 +368,20 @@ void PlayerEventHandler::eventMoveCard(const Event_MoveCard &event, const GameEv
     const bool movingToStack = (targetZone->getName() == QLatin1String(ZoneNames::STACK));
     if (movingToStack) {
         const bool knownHand = startZone->getCards().getContentsKnown();
-        pehDbgLog(QStringLiteral("MoveCard→Stack startPlayer=%1 targetPlayer=%2 startZone='%3' "
-                                 "handKnown=%4 eventPos=%5 resolvedPos=%6 eventCardId=%7 newCardId=%8 "
-                                 "startZoneSize=%9 cardName='%10'")
-                      .arg(event.start_player_id())
-                      .arg(event.target_player_id())
-                      .arg(startZone->getName())
-                      .arg(knownHand)
-                      .arg(event.position())
-                      .arg(position)
-                      .arg(event.card_id())
-                      .arg(event.new_card_id())
-                      .arg(startZone->getCards().size())
-                      .arg(event.has_card_name() ? QString::fromStdString(event.card_name())
-                                                 : QStringLiteral("<none>")));
+        pehDbgLog(
+            QStringLiteral("MoveCard→Stack startPlayer=%1 targetPlayer=%2 startZone='%3' "
+                           "handKnown=%4 eventPos=%5 resolvedPos=%6 eventCardId=%7 newCardId=%8 "
+                           "startZoneSize=%9 cardName='%10'")
+                .arg(event.start_player_id())
+                .arg(event.target_player_id())
+                .arg(startZone->getName())
+                .arg(knownHand)
+                .arg(event.position())
+                .arg(position)
+                .arg(event.card_id())
+                .arg(event.new_card_id())
+                .arg(startZone->getCards().size())
+                .arg(event.has_card_name() ? QString::fromStdString(event.card_name()) : QStringLiteral("<none>")));
     }
 
     CardItem *card = startZone->takeCard(position, event.card_id(), startZone != targetZone);
@@ -451,8 +451,7 @@ void PlayerEventHandler::eventMoveCard(const Event_MoveCard &event, const GameEv
     // and Event_MoveCard arrive as separate messages. The QTimer scheduled by the batch may
     // fire before this MoveCard is processed, leaving the card absent from the stack zone and
     // the targeting arrow un-drawn. Re-sync arrows now so the arrow appears regardless of order.
-    if (startZone != targetZone &&
-        targetZone->getName() == QLatin1String(ZoneNames::STACK) &&
+    if (startZone != targetZone && targetZone->getName() == QLatin1String(ZoneNames::STACK) &&
         RuledActions::isRuledGame(player->getGame())) {
         if (GameEventHandler *geh = player->getGame()->getGameEventHandler()) {
             geh->refreshRuledSpellTargetArrows();

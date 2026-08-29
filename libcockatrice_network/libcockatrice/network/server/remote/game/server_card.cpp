@@ -22,8 +22,8 @@
 #include "server_cardzone.h"
 #include "server_player.h"
 
-#include <libcockatrice/card/database/card_database_manager.h>
 #include <QVariant>
+#include <libcockatrice/card/database/card_database_manager.h>
 #include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/event_set_card_counter.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
@@ -165,8 +165,8 @@ void Server_Card::getInfo(ServerInfo_Card *info)
         for (const QString &kw : tokenAbilityKeywords) {
             info->add_ability_keywords(kw.toStdString());
         }
-        for (const QString &text : tokenTriggeredAbilityTexts) {
-            info->add_triggered_ability_texts(text.toStdString());
+        for (const QString &text : tokenAbilityTexts) {
+            info->add_ability_texts(text.toStdString());
         }
         if (!tokenBasePt.isEmpty()) {
             info->set_token_base_pt(tokenBasePt.toStdString());

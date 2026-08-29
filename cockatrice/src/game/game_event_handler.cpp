@@ -12,6 +12,7 @@
 #include "ruled/ruled_actions.h"
 #include "ruled/ruled_client_state.h"
 #include "ruled/ruled_event_dispatcher.h"
+#include "ruled/ruled_token_display.h"
 #include "zones/logic/card_zone_logic.h"
 #include "zones/logic/stack_zone_logic.h"
 
@@ -25,6 +26,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <algorithm>
+#include <libcockatrice/card/database/card_database_manager.h>
 #include <libcockatrice/network/client/abstract/abstract_client.h>
 #include <libcockatrice/protocol/get_pb_extension.h>
 #include <libcockatrice/protocol/pb/command_concede.pb.h>
@@ -187,7 +189,8 @@ void GameEventHandler::setToolbarPhase(int toolbarPhase)
 void GameEventHandler::createSyntheticStackCard(quint32 virtualOid,
                                                 const QString &displayName,
                                                 int controllerPlayerId,
-                                                const QString &setName)
+                                                const QString &setName,
+                                                const std::optional<TokenStackIdentity> &sourceTokenIdentity)
 {
     Q_UNUSED(controllerPlayerId);
     // Idempotent: StackPushed may be rebroadcast; a second card for the same OID would corrupt the zone.
@@ -214,6 +217,15 @@ void GameEventHandler::createSyntheticStackCard(quint32 virtualOid,
     // Assign a fake card ID well outside the range Servatrice assigns (small positive ints).
     const int fakeId = static_cast<int>(0x70000000u | (virtualOid & 0x0FFFFFFFu));
     CardRef ref{displayName, setName};
+    if (sourceTokenIdentity.has_value()) {
+        const auto &identity = *sourceTokenIdentity;
+        const CardRef tokenRef =
+            RuledTokenDisplay::resolve(CardDatabaseManager::query(), identity.name, identity.basePt, identity.color,
+                                       identity.keywords, identity.abilityTexts);
+        if (!tokenRef.name.isEmpty()) {
+            ref = tokenRef;
+        }
+    }
     auto *card = new CardItem(zonePlayer, nullptr, ref, fakeId);
     // Register the OID mapping so card_item.cpp paint() can show the italic ability annotation.
     // BattlefieldObjectMap clears ownerCardIdToEngineOid on every priority change, so the state
@@ -375,18 +387,17 @@ void GameEventHandler::sendRuledCommandExpectingAck(const ruled::v1::RuledComman
     }
     const quint64 token = engineBound ? ++ruledPendingCommandToken : 0;
     PendingCommand *pend = prepareGameCommand(cmd);
-    QObject::connect(
-        pend, &PendingCommand::finished, this,
-        [this, engineBound, token, handler = std::move(onFinished)](const Response &response, const CommandContainer &,
-                                                                   const QVariant &) {
-            if (engineBound && token != ruledPendingCommandToken) {
-                return;
-            }
-            if (engineBound) {
-                finishRuledGameplayCommand(token);
-            }
-            handler(response.response_code() == Response::RespOk);
-        });
+    QObject::connect(pend, &PendingCommand::finished, this,
+                     [this, engineBound, token, handler = std::move(onFinished)](
+                         const Response &response, const CommandContainer &, const QVariant &) {
+                         if (engineBound && token != ruledPendingCommandToken) {
+                             return;
+                         }
+                         if (engineBound) {
+                             finishRuledGameplayCommand(token);
+                         }
+                         handler(response.response_code() == Response::RespOk);
+                     });
     client->sendCommand(pend);
 }
 

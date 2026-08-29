@@ -197,6 +197,7 @@ impl GameEngine {
                     chosen_mode_indices: vec![],
                     chosen_mode_labels: vec![],
                     chosen_cast_cost_labels,
+                    source_token_identity: None,
                 })),
             },
             ev_log(format!(

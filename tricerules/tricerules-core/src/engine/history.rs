@@ -1013,6 +1013,22 @@ impl GameEngine {
                         .damaged_objects
                         .contains(&identity)
                 }),
+            GameCondition::ObjectMatches { object, filter } => self
+                .condition_object_identity(*object, context)
+                .is_some_and(|(object_id, expected_generation)| {
+                    self.state
+                        .zone_change_generation
+                        .get(&object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == expected_generation
+                        && super::targeting::object_matches_scoped_mass_filter(
+                            self,
+                            object_id,
+                            filter.as_ref(),
+                            context.controller,
+                        )
+                }),
             GameCondition::BattlefieldCreatureCount { filter, .. } => {
                 condition.matches_value(self.battlefield_creature_count(
                     filter,

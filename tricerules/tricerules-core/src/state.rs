@@ -4,8 +4,8 @@ use tricerules_cards::primitives::{
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, Keyword, LibraryBottomOrder,
-    ManaAmount, ManaSpendingRestriction, SearchDestination, TargetFilter, TriggeredAbilityDef,
-    ZoneCardFilter,
+    LibraryPlacement, ManaAmount, ManaSpendingRestriction, SearchDestination, TargetFilter,
+    TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{is_creature_type, CardFace, ManaCost, ManaSymbol};
@@ -38,6 +38,29 @@ pub(crate) struct CardResultEntry {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct CardResultCohort {
     pub cards: Vec<CardResultEntry>,
+}
+
+/// Private typed output of one primitive resolution instruction. Card cohorts and semantic
+/// receipts intentionally share this immediate-result boundary: both are consumed only by the
+/// following instruction and never serialized to clients.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct EffectResult {
+    pub cards: Vec<CardResultEntry>,
+    pub receipt: Option<ResolutionReceipt>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ResolutionReceipt {
+    CounterUnlessPaid { paid: bool },
+}
+
+impl From<CardResultCohort> for EffectResult {
+    fn from(cohort: CardResultCohort) -> Self {
+        Self {
+            cards: cohort.cards,
+            receipt: None,
+        }
+    }
 }
 
 /// The exact activated ability on the exact incarnation of a permanent.
@@ -688,7 +711,7 @@ pub struct ParkedStackResolution {
     /// Exact card cohort produced by the primitive that parked this resolution. It remains
     /// engine-private while a player answers the choice, then becomes the next primitive's
     /// `PreviousEffect` input.
-    pub(crate) previous_result: CardResultCohort,
+    pub(crate) previous_result: EffectResult,
 }
 
 impl ParkedStackResolution {
@@ -696,11 +719,11 @@ impl ParkedStackResolution {
         Self {
             item,
             resume_effect_index: None,
-            previous_result: CardResultCohort::default(),
+            previous_result: EffectResult::default(),
         }
     }
 
-    pub(crate) fn with_previous_result(mut self, result: CardResultCohort) -> Self {
+    pub(crate) fn with_previous_result(mut self, result: EffectResult) -> Self {
         self.previous_result = result;
         self
     }
@@ -787,6 +810,8 @@ pub enum ResolutionContinuation {
     SearchLibrary {
         stack: ParkedStackResolution,
         zones: Vec<CardSearchZone>,
+        candidate_generations: Vec<(ObjectId, u64)>,
+        selection_slot_candidates: Vec<Vec<ObjectId>>,
         destination: SearchDestination,
         conditional_destination: Option<ConditionalSearchDestination>,
         shuffle: bool,
@@ -807,6 +832,7 @@ pub enum ResolutionContinuation {
         object_id: ObjectId,
         owner: PlayerId,
         zone_change_generation: u64,
+        nonbottom_placement: LibraryPlacement,
         spell_label: String,
     },
     LibraryPartition {

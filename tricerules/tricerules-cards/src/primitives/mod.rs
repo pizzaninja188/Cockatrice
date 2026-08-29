@@ -66,6 +66,84 @@ mod tests {
         let zero = r#"(id: "test", name: "Test", types: ["Creature"], power: 1, toughness: 1, activated_abilities: [(text: "Blight", costs: [Blight(count: 0)], effect: [Draw(count: 1)])])"#;
         assert!(crate::CardRegistry::from_chunks_and_tokens(&[zero], &[]).is_err());
     }
+
+    #[test]
+    fn issue_159_typed_receipts_and_current_target_conditions_deserialize() {
+        let requirement: super::ResolutionBranchRequirement =
+            ron::from_str("PreviousResultReceipt(CounterUnlessPaid(paid: true))")
+                .expect("soft-counter payment state is a typed previous-result receipt");
+        assert!(matches!(
+            requirement,
+            super::ResolutionBranchRequirement::PreviousResultReceipt(
+                super::ResolutionReceiptCondition::CounterUnlessPaid { paid: true }
+            )
+        ));
+
+        let effect: super::SpellEffectKind = ron::from_str(
+            r#"Conditional(
+                condition: ObjectMatches(
+                    object: ChosenTarget(group_index: 0, target_index: 0),
+                    filter: (kind: Creature, required_subtypes: ["Ally"]),
+                ),
+                effect: GrantKeywords(
+                    subject: Chosen((kind: Creature, controller: You)),
+                    keywords: [Flying],
+                ),
+            )"#,
+        )
+        .expect("a later effect can inspect and reuse an earlier chosen target");
+        assert!(matches!(effect, super::SpellEffectKind::Conditional { .. }));
+    }
+
+    #[test]
+    fn issue_159_exact_cohorts_grouped_permissions_and_second_from_top_deserialize() {
+        let graveyard: super::SpellEffectKind = ron::from_str(
+            "ChooseGraveyardCard(filter: (card_type: Some(NonlandPermanent)), destination: Hand, optional: true, from_result: Some((source: PreviousEffect, action: Mill, players: Controller)))",
+        )
+        .expect("a graveyard choice can be constrained to the exact preceding mill cohort");
+        assert!(matches!(
+            graveyard,
+            super::SpellEffectKind::ChooseGraveyardCard {
+                from_result: Some(_),
+                ..
+            }
+        ));
+
+        let exile: super::SpellEffectKind = ron::from_str(
+            "ExileTopWithPlayPermission(player: Controller, count: 2, count_by_cast_cost: Some((condition: (group_index: 0, option_index: 0, expected_selected: true), if_selected: 3, otherwise: 2)))",
+        )
+        .expect("one permission instruction can carry a receipt-conditioned result cohort");
+        assert!(matches!(
+            exile,
+            super::SpellEffectKind::ExileTopWithPlayPermission { count: 2, .. }
+        ));
+
+        let placement: super::LibraryPlacement = ron::from_str("OwnerChoiceSecondFromTopOrBottom")
+            .expect("Lost Days uses the owner's second-from-top or bottom choice");
+        assert_eq!(
+            placement,
+            super::LibraryPlacement::OwnerChoiceSecondFromTopOrBottom
+        );
+    }
+
+    #[test]
+    fn issue_159_heterogeneous_library_search_slots_deserialize() {
+        let effect: super::SpellEffectKind = ron::from_str(
+            r#"SearchLibrary(
+                slots: [
+                    (label: "a basic land card", filter: (card_type: Some(BasicLand))),
+                    (label: "a Shrine card", filter: (subtype: Some("Shrine")), enabled_by_cast_cost: Some((group_index: 0, option_index: 0, expected_selected: true))),
+                ],
+                destination: Hand,
+                reveal: true,
+            )"#,
+        )
+        .expect("Aang's Journey authors distinct engine-owned search slots");
+        assert!(matches!(
+            effect,
+            super::SpellEffectKind::SearchLibrary { slots, .. } if slots.len() == 2
+        ));
+    }
     #[test]
     fn issue_166_cast_quantity_and_filter_validate() {
         let amount: super::Amount = ron::from_str(

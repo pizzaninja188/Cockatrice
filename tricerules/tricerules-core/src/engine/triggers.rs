@@ -2012,6 +2012,7 @@ impl GameEngine {
                     chosen_mode_indices: vec![],
                     chosen_mode_labels: vec![],
                     chosen_cast_cost_labels: vec![],
+                    source_token_identity: None,
                 })),
             });
             events.push(ev_log(format!("Triggered: {card_name} — {ability_text}")));

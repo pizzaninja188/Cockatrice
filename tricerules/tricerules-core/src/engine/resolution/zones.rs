@@ -97,6 +97,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
+                selection_slots: Vec::new(),
             },
         )),
     });
@@ -356,6 +357,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
+                selection_slots: Vec::new(),
             },
         )),
     });
@@ -380,9 +382,25 @@ pub(super) fn exile_top_with_play_permission(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::ExileTopWithPlayPermission { player } = effect else {
+    let SpellEffectKind::ExileTopWithPlayPermission {
+        player,
+        count,
+        count_by_cast_cost,
+    } = effect
+    else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let count = count_by_cast_cost.map_or(count, |conditional| {
+        if cx.top.cast_cost_receipts.iter().any(|receipt| {
+            receipt.group_index == conditional.condition.group_index
+                && receipt.option_index == conditional.condition.option_index
+        }) == conditional.condition.expected_selected
+        {
+            conditional.if_selected
+        } else {
+            conditional.otherwise
+        }
+    });
     let recipients = player_recipients(cx, player);
     let spell_label = cx.spell_label.to_string();
     for recipient in recipients {
@@ -391,37 +409,54 @@ pub(super) fn exile_top_with_play_permission(
             .state
             .player_idx(recipient)
             .ok_or(EngineError::UnknownPlayer(recipient))?;
-        let Some(object_id) = cx.engine.state.players[player_index]
+        let object_ids = cx.engine.state.players[player_index]
             .library
-            .front()
+            .iter()
             .copied()
-        else {
+            .take(count as usize)
+            .collect::<Vec<_>>();
+        if object_ids.is_empty() {
             continue;
-        };
-        let card_name = object_display_name(&cx.engine.state, cx.engine.registry, object_id);
-        move_object_to_zone(
-            &mut cx.engine.state,
-            cx.engine.registry,
-            object_id,
-            Zone::Exile,
-            None,
-        )?;
-        cx.events.push(permanent_moved_event_with_library_position(
-            &cx.engine.state,
-            object_id,
+        }
+        let mut card_names = Vec::new();
+        for object_id in &object_ids {
+            card_names.push(object_display_name(
+                &cx.engine.state,
+                cx.engine.registry,
+                *object_id,
+            ));
+            move_object_to_zone(
+                &mut cx.engine.state,
+                cx.engine.registry,
+                *object_id,
+                Zone::Exile,
+                None,
+            )?;
+            cx.events.push(permanent_moved_event_with_library_position(
+                &cx.engine.state,
+                *object_id,
+                recipient,
+                rv1::permanent_moved::Destination::Exile,
+                0,
+            ));
+            cx.effect_result.cards.push(payment::card_result_entry(
+                &cx.engine.state,
+                cx.engine.registry,
+                CardResultAction::Exile,
+                recipient,
+                *object_id,
+            ));
+        }
+        cx.engine.grant_exile_play_permission_group(
             recipient,
-            rv1::permanent_moved::Destination::Exile,
-            0,
-        ));
-        cx.engine.grant_exile_play_permission(
-            recipient,
-            object_id,
+            &object_ids,
             &spell_label,
             ExilePlayPermissionScope::PlayCard,
             true,
         )?;
         cx.events.push(ev_log(format!(
-            "P{recipient} exiles {card_name} and may play it until the end of their next turn ({spell_label})."
+            "P{recipient} exiles {} and may play those cards until the end of their next turn ({spell_label}).",
+            card_names.join(", ")
         )));
     }
     Ok(EffectOutcome::Continue)
@@ -645,6 +680,16 @@ pub(in crate::engine) fn move_permanent_to_owners_library(
                 "{spell_label} puts {target_name} on top of its owner's library."
             )));
         }
+        LibraryPlacement::SecondFromTop => {
+            engine.state.players[owner_idx]
+                .library
+                .retain(|&oid| oid != tid);
+            let index = usize::min(1, engine.state.players[owner_idx].library.len());
+            engine.state.players[owner_idx].library.insert(index, tid);
+            events.push(ev_log(format!(
+                "{spell_label} puts {target_name} second from the top of its owner's library."
+            )));
+        }
         LibraryPlacement::Bottom => {
             events.push(ev_log(format!(
                 "{spell_label} puts {target_name} on the bottom of its owner's library."
@@ -654,7 +699,8 @@ pub(in crate::engine) fn move_permanent_to_owners_library(
             crate::engine::shuffle_player_library_for_current_command(&mut engine.state, owner);
             events.push(ev_log(format!("P{owner} shuffles their library.")));
         }
-        LibraryPlacement::OwnerChoiceTopOrBottom => {
+        LibraryPlacement::OwnerChoiceTopOrBottom
+        | LibraryPlacement::OwnerChoiceSecondFromTopOrBottom => {
             return Err(EngineError::Illegal(
                 "owner library placement choice must be resolved before movement",
             ));
@@ -681,7 +727,11 @@ pub(super) fn put_target_permanent_in_owners_library(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     if let Some(&tid) = cx.targets.first() {
-        if placement == LibraryPlacement::OwnerChoiceTopOrBottom {
+        if matches!(
+            placement,
+            LibraryPlacement::OwnerChoiceTopOrBottom
+                | LibraryPlacement::OwnerChoiceSecondFromTopOrBottom
+        ) {
             let Some(object) = cx.engine.state.objects.get(&tid) else {
                 return Ok(EffectOutcome::Continue);
             };
@@ -693,8 +743,19 @@ pub(super) fn put_target_permanent_in_owners_library(
                 .get(&tid)
                 .copied()
                 .unwrap_or(0);
+            let nonbottom_placement =
+                if placement == LibraryPlacement::OwnerChoiceSecondFromTopOrBottom {
+                    LibraryPlacement::SecondFromTop
+                } else {
+                    LibraryPlacement::Top
+                };
+            let nonbottom_label = if nonbottom_placement == LibraryPlacement::SecondFromTop {
+                "second from the top"
+            } else {
+                "the top"
+            };
             let prompt = format!(
-                "P{owner}: put {} on the top or bottom of its owner's library.",
+                "P{owner}: put {} on {nonbottom_label} or the bottom of its owner's library.",
                 object_display_name(&cx.engine.state, cx.engine.registry, tid)
             );
             cx.events.push(rv1::RuledEvent {
@@ -720,7 +781,11 @@ pub(super) fn put_target_permanent_in_owners_library(
                         resolution_branches: vec![
                             rv1::ResolutionBranchOption {
                                 branch_index: 0,
-                                label: "Top".into(),
+                                label: if nonbottom_placement == LibraryPlacement::SecondFromTop {
+                                    "Second from top".into()
+                                } else {
+                                    "Top".into()
+                                },
                                 cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
                                 cost_text: String::new(),
                                 selectable: true,
@@ -742,6 +807,7 @@ pub(super) fn put_target_permanent_in_owners_library(
                         candidate_source_zones: Vec::new(),
                         combat_defender_options: Vec::new(),
                         waterbend: false,
+                        selection_slots: Vec::new(),
                     },
                 )),
             });
@@ -763,6 +829,7 @@ pub(super) fn put_target_permanent_in_owners_library(
                     object_id: tid,
                     owner,
                     zone_change_generation: generation,
+                    nonbottom_placement,
                     spell_label: cx.spell_label.to_string(),
                 },
             });
@@ -1029,6 +1096,7 @@ fn choose_hand_cards_for_player(
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
+                selection_slots: Vec::new(),
             },
         )),
     });
@@ -1165,7 +1233,7 @@ pub(super) fn mill_target_player(
     };
     let recipients = cx.targets.first().map(|target| *target as PlayerId);
     if let Some(recipient) = recipients {
-        *cx.effect_result = mill_players(cx, &[recipient], count)?;
+        *cx.effect_result = mill_players(cx, &[recipient], count)?.into();
     }
 
     Ok(EffectOutcome::Continue)
@@ -1182,7 +1250,7 @@ pub(super) fn mill(
         .with_previous_effect_result(cx.previous_effect_result);
     let count = cx.engine.resolve_amount(&count, amount_context);
     let recipients = player_recipients(cx, who);
-    *cx.effect_result = mill_players(cx, &recipients, count)?;
+    *cx.effect_result = mill_players(cx, &recipients, count)?.into();
 
     Ok(EffectOutcome::Continue)
 }
@@ -1313,6 +1381,7 @@ pub(super) fn target_player_sacrifices(
                             candidate_source_zones: Vec::new(),
                             combat_defender_options: Vec::new(),
                             waterbend: false,
+                            selection_slots: Vec::new(),
                         },
                     )),
                 });
@@ -1349,6 +1418,7 @@ pub(super) fn choose_graveyard_card(
         filter,
         destination,
         optional,
+        from_result,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -1357,12 +1427,48 @@ pub(super) fn choose_graveyard_card(
     let Some(index) = cx.engine.state.player_idx(controller) else {
         return Ok(EffectOutcome::Continue);
     };
+    let exact_result_generations = from_result.map(|result_filter| {
+        cx.previous_effect_result
+            .cards
+            .iter()
+            .filter(|entry| entry.action == result_filter.action)
+            .filter(|entry| {
+                super::super::history::relative_player_set_contains(
+                    &cx.engine.state,
+                    result_filter.players,
+                    controller,
+                    entry.affected_player,
+                )
+            })
+            .filter(|entry| {
+                result_filter
+                    .card_type
+                    .is_none_or(|card_type| entry.matched_card_types.contains(&card_type))
+            })
+            .map(|entry| (entry.object_id, entry.zone_change_generation))
+            .collect::<HashSet<_>>()
+    });
     let candidates: Vec<ObjectId> = cx.engine.state.players[index]
         .graveyard
         .iter()
         .copied()
         .filter(|oid| {
-            library_card_matches_filter(&cx.engine.state, cx.engine.registry, *oid, Some(&filter))
+            let generation = cx
+                .engine
+                .state
+                .zone_change_generation
+                .get(oid)
+                .copied()
+                .unwrap_or(0);
+            exact_result_generations
+                .as_ref()
+                .is_none_or(|entries| entries.contains(&(*oid, generation)))
+                && library_card_matches_filter(
+                    &cx.engine.state,
+                    cx.engine.registry,
+                    *oid,
+                    Some(&filter),
+                )
         })
         .collect();
     if candidates.is_empty() {
@@ -1407,6 +1513,7 @@ pub(super) fn choose_graveyard_card(
                 ],
                 combat_defender_options: Vec::new(),
                 waterbend: false,
+                selection_slots: Vec::new(),
             },
         )),
     });
@@ -1798,6 +1905,7 @@ fn begin_library_partition(
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
+                selection_slots: Vec::new(),
             },
         )),
     });
@@ -1935,6 +2043,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
+                selection_slots: Vec::new(),
             },
         )),
     });
@@ -2040,6 +2149,7 @@ pub(super) fn look_choose_to_hand(
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
+                selection_slots: Vec::new(),
             },
         )),
     });
@@ -2113,6 +2223,7 @@ fn search_zone_proto(zone: CardSearchZone) -> i32 {
 pub(in crate::engine) struct ZoneSearchRequest {
     pub count: u32,
     pub filter: Option<ZoneCardFilter>,
+    pub slots: Vec<SearchSelectionSlot>,
     pub zones: Vec<CardSearchZone>,
     pub destination: SearchDestination,
     pub conditional_destination: Option<ConditionalSearchDestination>,
@@ -2129,6 +2240,7 @@ pub(in crate::engine) fn park_zone_search_choice(
     let ZoneSearchRequest {
         count,
         filter,
+        slots,
         zones,
         destination,
         conditional_destination,
@@ -2140,6 +2252,7 @@ pub(in crate::engine) fn park_zone_search_choice(
         .state
         .player_idx(controller)
         .ok_or(EngineError::UnknownPlayer(controller))?;
+    let heterogeneous = !slots.is_empty();
     let mut candidates = Vec::new();
     let mut candidate_zones = Vec::new();
     for zone in &zones {
@@ -2149,7 +2262,18 @@ pub(in crate::engine) fn park_zone_search_choice(
             CardSearchZone::Library => engine.state.players[idx].library.iter().copied().collect(),
         };
         for oid in cohort.into_iter().filter(|oid| {
-            library_card_matches_filter(&engine.state, engine.registry, *oid, filter.as_ref())
+            if heterogeneous {
+                slots.iter().any(|slot| {
+                    library_card_matches_filter(
+                        &engine.state,
+                        engine.registry,
+                        *oid,
+                        Some(&slot.filter),
+                    )
+                })
+            } else {
+                library_card_matches_filter(&engine.state, engine.registry, *oid, filter.as_ref())
+            }
         }) {
             candidates.push(oid);
             candidate_zones.push(search_zone_proto(*zone));
@@ -2159,7 +2283,9 @@ pub(in crate::engine) fn park_zone_search_choice(
         .iter()
         .zip(&candidate_zones)
         .any(|(_, zone)| *zone == rv1::ChoiceCandidateSourceZone::Graveyard as i32);
-    let min = if public_graveyard_match || (filter.is_none() && !candidates.is_empty()) {
+    let min = if heterogeneous {
+        0
+    } else if public_graveyard_match || (filter.is_none() && !candidates.is_empty()) {
         count.min(candidates.len() as u32)
     } else {
         0
@@ -2169,7 +2295,12 @@ pub(in crate::engine) fn park_zone_search_choice(
         .map(|zone| search_zone_label(*zone))
         .collect::<Vec<_>>()
         .join(" / ");
-    let prompt = format!("P{controller}: search {zone_names} for up to {count} matching card(s).");
+    let max = if heterogeneous {
+        slots.len() as u32
+    } else {
+        count
+    };
+    let prompt = format!("P{controller}: search {zone_names} for up to {max} matching card(s).");
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
     let multi_zone = zones.len() > 1 || zones.first() != Some(&CardSearchZone::Library);
     let choice_kind = if multi_zone {
@@ -2177,6 +2308,48 @@ pub(in crate::engine) fn park_zone_search_choice(
     } else {
         custom::ChoiceKind::LibrarySearch
     };
+    let selection_slots: Vec<rv1::ResolutionSelectionSlot> = slots
+        .iter()
+        .map(|slot| rv1::ResolutionSelectionSlot {
+            label: slot.label.clone(),
+            candidate_indices: candidates
+                .iter()
+                .enumerate()
+                .filter_map(|(index, oid)| {
+                    library_card_matches_filter(
+                        &engine.state,
+                        engine.registry,
+                        *oid,
+                        Some(&slot.filter),
+                    )
+                    .then_some(index as u32)
+                })
+                .collect(),
+        })
+        .collect();
+    let selection_slot_candidates = selection_slots
+        .iter()
+        .map(|slot| {
+            slot.candidate_indices
+                .iter()
+                .filter_map(|index| candidates.get(*index as usize).copied())
+                .collect()
+        })
+        .collect();
+    let candidate_generations = candidates
+        .iter()
+        .map(|oid| {
+            (
+                *oid,
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(oid)
+                    .copied()
+                    .unwrap_or(0),
+            )
+        })
+        .collect();
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -2188,7 +2361,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                 candidate_card_ids,
                 candidate_names,
                 min,
-                max: count,
+                max,
                 ordered: false,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
@@ -2206,6 +2379,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                 },
                 combat_defender_options: Vec::new(),
                 waterbend: false,
+                selection_slots,
             },
         )),
     });
@@ -2216,7 +2390,7 @@ pub(in crate::engine) fn park_zone_search_choice(
             source_object_id: top.id,
             candidates,
             min,
-            max: count,
+            max,
             ordered: false,
             unique_names: false,
             prompt,
@@ -2225,6 +2399,8 @@ pub(in crate::engine) fn park_zone_search_choice(
         continuation: ResolutionContinuation::SearchLibrary {
             stack: ParkedStackResolution::new(top.clone()),
             zones,
+            candidate_generations,
+            selection_slot_candidates,
             destination,
             conditional_destination,
             shuffle,
@@ -2242,6 +2418,7 @@ pub(super) fn search_library(
         filter,
         count,
         count_by_cast_cost,
+        slots,
         zones,
         destination,
         conditional_destination,
@@ -2258,6 +2435,13 @@ pub(super) fn search_library(
             conditional.otherwise
         }
     });
+    let slots = slots
+        .into_iter()
+        .filter(|slot| {
+            slot.enabled_by_cast_cost
+                .is_none_or(|condition| cx.top.cast_cost_condition_matches(condition))
+        })
+        .collect();
     match zones {
         SearchZoneSelection::Fixed(zones) => park_zone_search_choice(
             cx.engine,
@@ -2266,6 +2450,7 @@ pub(super) fn search_library(
             ZoneSearchRequest {
                 count,
                 filter,
+                slots,
                 zones,
                 destination,
                 conditional_destination,
@@ -2320,6 +2505,7 @@ pub(super) fn search_library(
                         candidate_source_zones: Vec::new(),
                         combat_defender_options: Vec::new(),
                         waterbend: false,
+                        selection_slots: Vec::new(),
                     },
                 )),
             });
@@ -2396,6 +2582,50 @@ mod tests {
             engine.state.objects.get(&target).expect("target").zone,
             Zone::Library
         );
+    }
+
+    #[test]
+    fn second_from_top_clamps_to_empty_and_one_card_libraries() {
+        for retained_cards in [0, 1, 5] {
+            let decks = Some(vec![
+                vec!["forest".to_string(); 12],
+                vec!["forest".to_string(); 12],
+            ]);
+            let mut engine = GameEngine::new(159_012 + retained_cards, &[0, 1], 20, decks, true)
+                .expect("new game");
+            let target = engine.state.players[1]
+                .library
+                .pop_front()
+                .expect("card in library");
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                target,
+                Zone::Battlefield,
+                Some(1),
+            )
+            .expect("put target on battlefield");
+            engine.state.players[1]
+                .library
+                .truncate(retained_cards as usize);
+
+            move_permanent_to_owners_library(
+                &mut engine,
+                &mut Vec::new(),
+                target,
+                LibraryPlacement::SecondFromTop,
+                "test effect",
+            )
+            .expect("put target second from top");
+
+            assert_eq!(
+                engine.state.players[1]
+                    .library
+                    .iter()
+                    .position(|oid| *oid == target),
+                Some(if retained_cards == 0 { 0 } else { 1 })
+            );
+        }
     }
 
     #[test]

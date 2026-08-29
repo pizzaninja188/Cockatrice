@@ -612,7 +612,7 @@ impl GameEngine {
         self.complete_parked_resolution_with_previous(
             item,
             resume_effect_index,
-            CardResultCohort::default(),
+            EffectResult::default(),
             ev,
         )
     }
@@ -621,7 +621,7 @@ impl GameEngine {
         &mut self,
         item: StackItem,
         resume_effect_index: Option<u32>,
-        previous_result: CardResultCohort,
+        previous_result: EffectResult,
         mut ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         if let Some(start) = resume_effect_index {
@@ -716,6 +716,7 @@ impl GameEngine {
                     candidate_source_zones: Vec::new(),
                     combat_defender_options: Vec::new(),
                     waterbend: false,
+                    selection_slots: Vec::new(),
                 },
             )),
         });

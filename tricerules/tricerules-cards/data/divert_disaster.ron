@@ -1,0 +1,23 @@
+// Oracle verified 2026-08-29. CR 118.12a/608.2g: remember whether the resolving
+// soft-counter payment was actually made; do not infer it from mana state.
+(
+  id: "divert_disaster",
+  name: "Divert Disaster",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(spell_filter: None, unless_controller_pays: Some(2)),
+    ChooseResolutionBranch(
+      selection: FirstApplicable,
+      branches: [
+        (
+          label: "Create a Lander",
+          cost: None,
+          requirement: PreviousResultReceipt(CounterUnlessPaid(paid: true)),
+          effects: [CreateTokens(token: "lander", count: 1)],
+        ),
+        (label: "No additional effect", cost: None, requirement: Always, effects: []),
+      ],
+    ),
+  ],
+)

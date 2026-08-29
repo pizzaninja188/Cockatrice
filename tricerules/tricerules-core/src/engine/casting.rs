@@ -251,6 +251,7 @@ impl GameEngine {
                 chosen_mode_indices: vec![],
                 chosen_mode_labels: vec![],
                 chosen_cast_cost_labels: vec!["Siege defeat".into()],
+                source_token_identity: None,
             })),
         });
         let fact =
@@ -881,6 +882,7 @@ impl GameEngine {
                 chosen_mode_indices,
                 chosen_mode_labels,
                 chosen_cast_cost_labels,
+                source_token_identity: None,
             })),
         });
         let fact = self.record_spell_cast(player, oid, origin, mana_value);
@@ -1028,6 +1030,7 @@ impl GameEngine {
                 "ability source is not in its authored zone",
             ));
         }
+        let source_is_token = object.is_token();
         let source_zone_change = self
             .state
             .zone_change_generation
@@ -1063,6 +1066,16 @@ impl GameEngine {
                 (card_id, face_index, ability)
             }
         };
+        // The source can leave the battlefield while its activation costs are committed (Clue and
+        // Lander both sacrifice themselves). Capture the existing public token identity now so a
+        // synthetic stack card can still render the exact token face after payment.
+        let source_token_identity =
+            if source_zone == AbilitySourceZone::Battlefield && source_is_token {
+                self.copiable_values_for(permanent_id)
+                    .map(|values| super::resolution::token_identity(&values))
+            } else {
+                None
+            };
         let resolving_mana_payment =
             self.state
                 .pending_resolution
@@ -1185,10 +1198,11 @@ impl GameEngine {
         self.record_limited_activations(activation_uses);
 
         let ability_text = ability.text.clone();
-        let card_name = self
-            .registry
-            .get(&card_id)
-            .map(|d| d.name.clone())
+        let card_name = source_token_identity
+            .as_ref()
+            .map(|identity| identity.name.clone())
+            .filter(|name| !name.is_empty())
+            .or_else(|| self.registry.get(&card_id).map(|d| d.name.clone()))
             .unwrap_or_else(|| card_id.clone());
 
         self.state.next_object_id += 1;
@@ -1267,6 +1281,7 @@ impl GameEngine {
                 chosen_mode_indices: vec![],
                 chosen_mode_labels: vec![],
                 chosen_cast_cost_labels: vec![],
+                source_token_identity,
             })),
         });
         // CR 603.3b: a trigger that fired while the cost was being paid goes on the stack *above*

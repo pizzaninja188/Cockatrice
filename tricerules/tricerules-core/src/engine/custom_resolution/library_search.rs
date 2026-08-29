@@ -1,5 +1,30 @@
 use super::*;
 
+fn selection_admits_distinct_slots(chosen: &[ObjectId], slots: &[Vec<ObjectId>]) -> bool {
+    fn assign(
+        chosen_index: usize,
+        chosen: &[ObjectId],
+        slots: &[Vec<ObjectId>],
+        occupied: &mut [bool],
+    ) -> bool {
+        if chosen_index == chosen.len() {
+            return true;
+        }
+        for (slot_index, candidates) in slots.iter().enumerate() {
+            if !occupied[slot_index] && candidates.contains(&chosen[chosen_index]) {
+                occupied[slot_index] = true;
+                if assign(chosen_index + 1, chosen, slots, occupied) {
+                    return true;
+                }
+                occupied[slot_index] = false;
+            }
+        }
+        false
+    }
+
+    chosen.len() <= slots.len() && assign(0, chosen, slots, &mut vec![false; slots.len()])
+}
+
 impl GameEngine {
     pub(in crate::engine) fn continue_library_search_battlefield_entries(
         &mut self,
@@ -129,6 +154,7 @@ impl GameEngine {
             resolution::zones::ZoneSearchRequest {
                 count,
                 filter,
+                slots: Vec::new(),
                 zones: selected.expect("validated selected zones"),
                 destination,
                 conditional_destination,
@@ -145,22 +171,25 @@ impl GameEngine {
         answer: &rv1::SubmitResolutionChoice,
         decision: rv1::ResolutionChoiceDecision,
     ) -> Result<RuledEventBatch, EngineError> {
-        let (stack, object_id, owner, generation, spell_label) = match &pending.continuation {
-            ResolutionContinuation::OwnerLibraryPlacement {
-                stack,
-                object_id,
-                owner,
-                zone_change_generation,
-                spell_label,
-            } => (
-                stack.clone(),
-                *object_id,
-                *owner,
-                *zone_change_generation,
-                spell_label.clone(),
-            ),
-            _ => return Err(EngineError::Illegal("owner-placement continuation missing")),
-        };
+        let (stack, object_id, owner, generation, nonbottom_placement, spell_label) =
+            match &pending.continuation {
+                ResolutionContinuation::OwnerLibraryPlacement {
+                    stack,
+                    object_id,
+                    owner,
+                    zone_change_generation,
+                    nonbottom_placement,
+                    spell_label,
+                } => (
+                    stack.clone(),
+                    *object_id,
+                    *owner,
+                    *zone_change_generation,
+                    *nonbottom_placement,
+                    spell_label.clone(),
+                ),
+                _ => return Err(EngineError::Illegal("owner-placement continuation missing")),
+            };
         let invalid_shape = decision != rv1::ResolutionChoiceDecision::SelectBranch
             || !answer.chosen_object_ids.is_empty()
             || answer.selected_branch_index > 1;
@@ -181,12 +210,12 @@ impl GameEngine {
             return Err(EngineError::Illegal(if stale {
                 "owner-placement target became stale"
             } else {
-                "owner placement requires Top or Bottom"
+                "owner placement requires the authored non-bottom placement or Bottom"
             }));
         }
 
         let placement = if answer.selected_branch_index == 0 {
-            LibraryPlacement::Top
+            nonbottom_placement
         } else {
             LibraryPlacement::Bottom
         };
@@ -351,27 +380,69 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[u32],
     ) -> Result<RuledEventBatch, EngineError> {
-        let (stack, zones, mut destination, conditional_destination, shuffle, reveal) =
-            match &pending.continuation {
-                ResolutionContinuation::SearchLibrary {
-                    stack,
-                    zones,
-                    destination,
-                    conditional_destination,
-                    shuffle,
-                    reveal,
-                } => (
-                    stack.clone(),
-                    zones.clone(),
-                    *destination,
-                    conditional_destination.clone(),
-                    *shuffle,
-                    *reveal,
-                ),
-                _ => return Err(EngineError::Illegal("library-search continuation missing")),
-            };
+        let (
+            stack,
+            zones,
+            candidate_generations,
+            selection_slot_candidates,
+            mut destination,
+            conditional_destination,
+            shuffle,
+            reveal,
+        ) = match &pending.continuation {
+            ResolutionContinuation::SearchLibrary {
+                stack,
+                zones,
+                candidate_generations,
+                selection_slot_candidates,
+                destination,
+                conditional_destination,
+                shuffle,
+                reveal,
+            } => (
+                stack.clone(),
+                zones.clone(),
+                candidate_generations.clone(),
+                selection_slot_candidates.clone(),
+                *destination,
+                conditional_destination.clone(),
+                *shuffle,
+                *reveal,
+            ),
+            _ => return Err(EngineError::Illegal("library-search continuation missing")),
+        };
         let controller = stack.item.controller;
         let shuffle = shuffle && zones.contains(&CardSearchZone::Library);
+        let choices_are_current = chosen.iter().all(|oid| {
+            let expected_generation = candidate_generations
+                .iter()
+                .find_map(|(candidate, generation)| (*candidate == *oid).then_some(*generation));
+            let current_generation = self
+                .state
+                .zone_change_generation
+                .get(oid)
+                .copied()
+                .unwrap_or(0);
+            expected_generation == Some(current_generation)
+                && self.state.objects.get(oid).is_some_and(|object| {
+                    object.owner == controller
+                        && match object.zone {
+                            Zone::Hand => zones.contains(&CardSearchZone::Hand),
+                            Zone::Graveyard => zones.contains(&CardSearchZone::Graveyard),
+                            Zone::Library => zones.contains(&CardSearchZone::Library),
+                            _ => false,
+                        }
+                })
+        });
+        if !choices_are_current
+            || (!selection_slot_candidates.is_empty()
+                && !selection_admits_distinct_slots(chosen, &selection_slot_candidates))
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "library-search choice became stale or violates its slot assignment",
+            ));
+        }
         if let Some(conditional) = conditional_destination.filter(|conditional| {
             self.condition_holds(
                 &conditional.condition,
@@ -393,44 +464,38 @@ impl GameEngine {
                 ev.push(ev_log(format!("P{controller} shuffles their library.")));
             }
         } else {
-            let oid = chosen[0];
-            let card_name = self
-                .state
-                .objects
-                .get(&oid)
-                .and_then(|o| self.registry.get(&o.card_id))
-                .map(|d| d.name.clone())
-                .unwrap_or_else(|| "card".to_string());
-
             match destination {
                 SearchDestination::Hand => {
-                    let owner = self.state.objects.get(&oid).map(|object| object.owner);
-                    let origin = self.state.objects.get(&oid).map(|object| object.zone);
-                    if origin != Some(Zone::Hand) {
-                        self.commit_observed_zone_move(oid, Zone::Hand, None)?;
-                        if let Some(owner) = owner {
-                            ev.push(permanent_moved_event(
-                                &self.state,
-                                oid,
-                                owner,
-                                rv1::permanent_moved::Destination::Hand,
+                    for &oid in chosen {
+                        let card_name = object_display_name(&self.state, self.registry, oid);
+                        let owner = self.state.objects.get(&oid).map(|object| object.owner);
+                        let origin = self.state.objects.get(&oid).map(|object| object.zone);
+                        if origin != Some(Zone::Hand) {
+                            self.commit_observed_zone_move(oid, Zone::Hand, None)?;
+                            if let Some(owner) = owner {
+                                ev.push(permanent_moved_event(
+                                    &self.state,
+                                    oid,
+                                    owner,
+                                    rv1::permanent_moved::Destination::Hand,
+                                ));
+                            }
+                        }
+                        if reveal {
+                            ev.push(ev_log(format!("P{controller} reveals {card_name}.")));
+                            ev.push(ev_log(format!(
+                                "P{controller} puts {card_name} into their hand."
+                            )));
+                        } else {
+                            ev.push(ev_log_private(
+                                format!("P{controller} puts {card_name} into their hand."),
+                                controller,
+                            ));
+                            ev.push(ev_log_hidden_from(
+                                format!("P{controller} puts a card into their hand."),
+                                controller,
                             ));
                         }
-                    }
-                    if reveal {
-                        ev.push(ev_log(format!("P{controller} reveals {card_name}.")));
-                        ev.push(ev_log(format!(
-                            "P{controller} puts {card_name} into their hand."
-                        )));
-                    } else {
-                        ev.push(ev_log_private(
-                            format!("P{controller} puts {card_name} into their hand."),
-                            controller,
-                        ));
-                        ev.push(ev_log_hidden_from(
-                            format!("P{controller} puts a card into their hand."),
-                            controller,
-                        ));
                     }
                     if shuffle {
                         crate::engine::shuffle_player_library_for_current_command(
@@ -441,6 +506,8 @@ impl GameEngine {
                     }
                 }
                 SearchDestination::TopOfLibrary => {
+                    let oid = chosen[0];
+                    let card_name = object_display_name(&self.state, self.registry, oid);
                     // Oracle: "then shuffle and put that card on top" — shuffle first, then put on top.
                     let owner = self.state.objects.get(&oid).map(|object| object.owner);
                     if self.state.objects.get(&oid).map(|object| object.zone) != Some(Zone::Library)
@@ -500,5 +567,18 @@ impl GameEngine {
         }
 
         self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
+    }
+}
+
+#[cfg(test)]
+mod selection_slot_tests {
+    use super::selection_admits_distinct_slots;
+
+    #[test]
+    fn overlapping_candidates_use_a_distinct_assignment() {
+        let slots = vec![vec![1, 2], vec![1]];
+        assert!(selection_admits_distinct_slots(&[1, 2], &slots));
+        assert!(selection_admits_distinct_slots(&[1], &slots));
+        assert!(!selection_admits_distinct_slots(&[2, 3], &slots));
     }
 }

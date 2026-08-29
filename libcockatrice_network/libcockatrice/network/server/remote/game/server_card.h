@@ -51,8 +51,8 @@ private:
     // Ruled engine tokens only: static keyword abilities (MTG spelling). Forwarded into
     // Event_CreateToken so the client can pick matching Oracle art among same-name token variants.
     QStringList tokenAbilityKeywords;
-    // Ruled engine tokens only: printed triggered-ability text used solely for display identity.
-    QStringList tokenTriggeredAbilityTexts;
+    // Ruled engine tokens only: printed non-keyword ability text used solely for display identity.
+    QStringList tokenAbilityTexts;
     // Ruled engine tokens only: immutable printed P/T (e.g. "1/1"). ptString is updated by
     // zone-view syncs to the effective P/T; this stays at the base value for Oracle art lookup.
     QString tokenBasePt;
@@ -136,9 +136,9 @@ public:
     {
         return tokenAbilityKeywords;
     }
-    const QStringList &getTokenTriggeredAbilityTexts() const
+    const QStringList &getTokenAbilityTexts() const
     {
-        return tokenTriggeredAbilityTexts;
+        return tokenAbilityTexts;
     }
     bool getDoesntUntap() const
     {
@@ -203,9 +203,9 @@ public:
     {
         tokenAbilityKeywords = _keywords;
     }
-    void setTokenTriggeredAbilityTexts(const QStringList &_texts)
+    void setTokenAbilityTexts(const QStringList &_texts)
     {
-        tokenTriggeredAbilityTexts = _texts;
+        tokenAbilityTexts = _texts;
     }
     void setAnnotation(const QString &_annotation)
     {

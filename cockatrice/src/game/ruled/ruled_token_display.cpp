@@ -48,22 +48,22 @@ CardRef RuledTokenDisplay::resolve(const CardDatabaseQuerier *db,
                                    const QString &basePt,
                                    const QString &color,
                                    const QStringList &keywords,
-                                   const QStringList &triggeredAbilityTexts)
+                                   const QStringList &abilityTexts)
 {
-    if (!db || tokenName.isEmpty() || basePt.isEmpty()) {
+    if (!db || tokenName.isEmpty()) {
         return {};
     }
 
     QStringList expectedAbilities;
-    expectedAbilities.reserve(keywords.size() + triggeredAbilityTexts.size());
+    expectedAbilities.reserve(keywords.size() + abilityTexts.size());
     for (const QString &keyword : keywords) {
         expectedAbilities.append(abilityMarker(keyword));
     }
-    for (const QString &ability : triggeredAbilityTexts) {
+    for (const QString &ability : abilityTexts) {
         expectedAbilities.append(abilityMarker(ability));
     }
     expectedAbilities.removeAll(QString());
-    const QString expectedText = normalizeAbilityText(keywords.join(QString()) + triggeredAbilityTexts.join(QString()));
+    const QString expectedText = normalizeAbilityText(keywords.join(QString()) + abilityTexts.join(QString()));
     const QString expectedColors = normalizeColors(color);
     const QString baseName = tokenName + QStringLiteral(" Token");
 

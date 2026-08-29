@@ -208,7 +208,7 @@ fn goblin_wizardry_tokens_carry_and_trigger_prowess() {
         assert_eq!(identity.pt, "1/1");
         assert_eq!(identity.color, "r");
         assert_eq!(
-            identity.triggered_ability_texts,
+            identity.ability_texts,
             vec!["Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)"]
         );
     }

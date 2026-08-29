@@ -143,6 +143,13 @@ pub enum GameCondition {
     },
     /// Whether the referenced object generation was actually dealt positive damage this turn.
     ObjectWasDealtDamageThisTurn { object: ConditionObjectRef },
+    /// Inspect the current derived characteristics of an exact object already bound by this
+    /// stack item. Depressurize and Yip Yip! use this after an earlier instruction without
+    /// adding the secondary predicate to cast-time target legality.
+    ObjectMatches {
+        object: ConditionObjectRef,
+        filter: Box<TargetFilter>,
+    },
     /// Compare the number of battlefield creatures matching derived characteristics against
     /// inclusive bounds. Winged Words uses `min: 1` plus Flying; subtype-based cost reductions
     /// and public activation/trigger conditions reuse the same filter.
@@ -274,6 +281,9 @@ impl GameCondition {
             }
             GameCondition::AttackedThisTurn { .. } => Ok(()),
             GameCondition::ObjectWasDealtDamageThisTurn { .. } => Ok(()),
+            GameCondition::ObjectMatches { filter, .. } => {
+                filter.validate_characteristic_constraints()
+            }
             GameCondition::BattlefieldCreatureCount { filter, min, max } => {
                 filter.validate()?;
                 if min.is_none() && max.is_none() {
@@ -343,7 +353,8 @@ impl GameCondition {
             | GameCondition::LifeChangedThisTurn { .. }
             | GameCondition::PlayerLifeAggregate { .. }
             | GameCondition::AttackedThisTurn { .. }
-            | GameCondition::ObjectWasDealtDamageThisTurn { .. } => false,
+            | GameCondition::ObjectWasDealtDamageThisTurn { .. }
+            | GameCondition::ObjectMatches { .. } => false,
             GameCondition::CreatureDeathsThisTurn { min, max }
             | GameCondition::PermanentCardsEnteredGraveyardThisTurn { min, max, .. }
             | GameCondition::PermanentsSacrificedThisTurn { min, max, .. }
@@ -1412,11 +1423,14 @@ pub enum CombatRestrictionScope {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LibraryPlacement {
     Top,
+    SecondFromTop,
     Bottom,
     Shuffle,
     /// The targeted object's owner makes a logged resolution-time choice. Uncharted Voyage and
     /// Riverwalk Technique share this owner-relative placement primitive.
     OwnerChoiceTopOrBottom,
+    /// Lost Days: the targeted object's owner chooses second from the top or bottom.
+    OwnerChoiceSecondFromTopOrBottom,
 }
 
 /// How cards left over from a bounded library look are placed on the bottom.
@@ -1561,6 +1575,10 @@ pub enum ResolutionBranchRequirement {
     /// A linked cast-time choice recorded on this spell's stack item (CR 607.2i). Kicker and
     /// behold effects remain true even if the object used for the choice later changes zones.
     CastCostReceipt(CastCostReceiptCondition),
+    /// A typed result emitted by the immediately preceding primitive instruction. Divert
+    /// Disaster distinguishes an actual soft-counter payment from a decline without inspecting
+    /// mana pools or logs.
+    PreviousResultReceipt(ResolutionReceiptCondition),
     /// Compare the size of an exact paid-or-moved card cohort. Grab the Prize reads its discard
     /// payment; Soul-Shackled Zombie and Fanatic of the Harrowing read a preceding instruction.
     CardResultCount {
@@ -1570,6 +1588,11 @@ pub enum ResolutionBranchRequirement {
         #[serde(default)]
         max: Option<u32>,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResolutionReceiptCondition {
+    CounterUnlessPaid { paid: bool },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -1588,6 +1611,17 @@ pub struct CastCostConditionalAmount {
     pub otherwise: u32,
 }
 
+/// One independently filtered capacity in a heterogeneous hidden-zone search. Aang's Journey
+/// uses a basic-land slot plus a kicked Shrine slot; the same graph represents searches such as
+/// Gem of Becoming without exposing card-type inference to clients.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchSelectionSlot {
+    pub label: String,
+    pub filter: ZoneCardFilter,
+    #[serde(default)]
+    pub enabled_by_cast_cost: Option<CastCostReceiptCondition>,
+}
+
 /// Timing for a delayed trigger that sacrifices the full post-replacement token cohort.
 /// Mobilize uses the next end step; Kav Landseeker uses the end step of its controller's next
 /// actual turn.
@@ -1599,6 +1633,12 @@ pub enum DelayedTokenSacrificeTiming {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
+    /// Apply one ordinary non-suspending instruction only when a current engine-side condition
+    /// holds. Target roles come solely from `effect`; `condition` never narrows initial legality.
+    Conditional {
+        condition: GameCondition,
+        effect: Box<SpellEffectKind>,
+    },
     /// CR 701.66: persistent land animation followed by a generation-bound delayed return.
     /// Rebellious Captives, Dai Li Indoctrination, and Badgermole share this action.
     Earthbend {
@@ -2018,6 +2058,10 @@ pub enum SpellEffectKind {
     /// Inferno share this primitive; the engine owns physical identity, duration, and legality.
     ExileTopWithPlayPermission {
         player: PlayerRecipient,
+        #[serde(default = "default_one")]
+        count: u32,
+        #[serde(default)]
+        count_by_cast_cost: Option<CastCostConditionalAmount>,
     },
     /// Return a battlefield permanent to its owner's hand. A chosen subject uses the normal
     /// targeting contract (Unsummon, Boomerang); a source-bound subject is untargeted and keeps
@@ -2047,6 +2091,10 @@ pub enum SpellEffectKind {
         destination: GraveyardDestination,
         #[serde(default)]
         optional: bool,
+        /// When present, candidates must be exact surviving entries from the immediately
+        /// preceding card-moving instruction rather than the whole current graveyard.
+        #[serde(default)]
+        from_result: Option<CardResultFilter>,
     },
     MillTargetPlayer {
         count: u32,
@@ -2247,6 +2295,10 @@ pub enum SpellEffectKind {
         /// `None` = any card is valid; `Some(f)` = every authored predicate must match.
         #[serde(default)]
         filter: Option<ZoneCardFilter>,
+        /// Independently filtered capacities. Empty selects homogeneous `count`/`filter` mode;
+        /// nonempty selects heterogeneous slot mode and publishes only engine-authored edges.
+        #[serde(default)]
+        slots: Vec<SearchSelectionSlot>,
         /// Which of the controller's zones are searched. Existing tutors default to library;
         /// Say Its Name lets its controller choose any nonempty hand/graveyard/library subset.
         #[serde(default)]
@@ -2780,6 +2832,7 @@ impl SpellEffectKind {
     /// them). Group cardinality and role binding are compiled by [`super::TargetSchema`].
     pub fn target_roles(&self) -> Vec<TargetRole<'_>> {
         match self {
+            SpellEffectKind::Conditional { effect, .. } => effect.target_roles(),
             SpellEffectKind::Earthbend { .. } => {
                 vec![TargetRole::Filtered(earthbend_target_filter())]
             }
@@ -2957,6 +3010,10 @@ impl SpellEffectKind {
                     }
                 }
             }
+            Self::Conditional { condition, effect } => {
+                condition.validate_cast_snapshot_reference(count)?;
+                effect.validate_cast_snapshot_references(count)?;
+            }
             Self::SearchLibrary {
                 conditional_destination: Some(conditional),
                 ..
@@ -2991,6 +3048,7 @@ impl SpellEffectKind {
                 CardResultAction::Exile => matches!(
                     effect,
                     SpellEffectKind::ExileCardsFromHand { .. }
+                        | SpellEffectKind::ExileTopWithPlayPermission { .. }
                         | SpellEffectKind::MoveGraveyardCards {
                             destination: GraveyardDestination::Exile,
                             ..
@@ -3086,6 +3144,20 @@ impl SpellEffectKind {
                     }
                 }
             }
+            if let SpellEffectKind::ChooseGraveyardCard {
+                from_result: Some(filter),
+                ..
+            } = effect
+            {
+                if filter.source != CardResultSource::PreviousEffect
+                    || !previous.is_some_and(|effect| produces_card_result(effect, filter.action))
+                {
+                    return Err(
+                        "ChooseGraveyardCard result source requires an immediately preceding compatible card-moving effect"
+                            .into(),
+                    );
+                }
+            }
         }
         Ok(())
     }
@@ -3132,6 +3204,21 @@ impl SpellEffectKind {
         }
 
         match self {
+            SpellEffectKind::Conditional { condition, effect } => {
+                condition.validate()?;
+                if matches!(effect.as_ref(), SpellEffectKind::Conditional { .. }) {
+                    return Err("Conditional effects cannot be nested".into());
+                }
+                if !matches!(
+                    effect.as_ref(),
+                    SpellEffectKind::Destroy { .. } | SpellEffectKind::GrantKeywords { .. }
+                ) {
+                    return Err(
+                        "Conditional currently supports Destroy and GrantKeywords effects".into(),
+                    );
+                }
+                effect.validate(context)?;
+            }
             SpellEffectKind::DamageTarget { amount, .. }
             | SpellEffectKind::DamagePlayer { amount, .. }
             | SpellEffectKind::DamageAll { amount, .. }
@@ -3941,13 +4028,21 @@ impl SpellEffectKind {
             SpellEffectKind::SearchLibrary {
                 count,
                 filter,
+                slots,
                 zones,
+                destination,
                 conditional_destination,
                 count_by_cast_cost,
                 ..
             } => {
-                if *count == 0 {
+                if slots.is_empty() && *count == 0 {
                     return Err("SearchLibrary requires a positive count".into());
+                }
+                if !slots.is_empty() && (filter.is_some() || count_by_cast_cost.is_some()) {
+                    return Err(
+                        "SearchLibrary heterogeneous slots cannot combine with filter or count_by_cast_cost"
+                            .into(),
+                    );
                 }
                 if count_by_cast_cost.is_some_and(|conditional| {
                     conditional.if_selected == 0 || conditional.otherwise == 0
@@ -3957,9 +4052,49 @@ impl SpellEffectKind {
                 if let Some(filter) = filter {
                     filter.validate()?;
                 }
+                for slot in slots {
+                    if slot.label.trim().is_empty() {
+                        return Err("SearchLibrary slot labels cannot be empty".into());
+                    }
+                    slot.filter.validate()?;
+                }
                 zones.validate()?;
+                if !slots.is_empty()
+                    && !matches!(zones, SearchZoneSelection::Fixed(zones) if zones == &[CardSearchZone::Library])
+                {
+                    return Err(
+                        "SearchLibrary heterogeneous slots currently require the controller's library"
+                            .into(),
+                    );
+                }
+                if !slots.is_empty()
+                    && (*destination != SearchDestination::Hand
+                        || conditional_destination.is_some())
+                {
+                    return Err(
+                        "SearchLibrary heterogeneous slots currently require an unconditional Hand destination"
+                            .into(),
+                    );
+                }
                 if let Some(conditional) = conditional_destination {
                     conditional.condition.validate()?;
+                }
+                Ok(())
+            }
+            SpellEffectKind::ExileTopWithPlayPermission {
+                count,
+                count_by_cast_cost,
+                ..
+            } => {
+                if *count == 0 {
+                    return Err("ExileTopWithPlayPermission requires a positive count".into());
+                }
+                if count_by_cast_cost.is_some_and(|conditional| {
+                    conditional.if_selected == 0 || conditional.otherwise == 0
+                }) {
+                    return Err(
+                        "ExileTopWithPlayPermission cast-cost counts must be positive".into(),
+                    );
                 }
                 Ok(())
             }
@@ -3969,7 +4104,22 @@ impl SpellEffectKind {
                 }
                 filter.validate()
             }
-            SpellEffectKind::ChooseGraveyardCard { filter, .. } => filter.validate(),
+            SpellEffectKind::ChooseGraveyardCard {
+                filter,
+                from_result,
+                ..
+            } => {
+                filter.validate()?;
+                if from_result.as_ref().is_some_and(|result| {
+                    result.source != CardResultSource::PreviousEffect
+                        || result.action != CardResultAction::Mill
+                }) {
+                    return Err(
+                        "ChooseGraveyardCard supports only a previous Mill result cohort".into(),
+                    );
+                }
+                Ok(())
+            }
             // CR 701.18: scry is legal on spells and on abilities alike (scry lands, Sensei's
             // Divining Top-style activations). Reject a useless literal zero; a dynamic amount
             // may evaluate to zero and then does nothing.
