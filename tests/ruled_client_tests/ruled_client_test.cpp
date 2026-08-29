@@ -351,6 +351,43 @@ TEST_F(RuledClientTest, WaterbendUsesSharedPaymentSelectionWithoutConvokeColorCh
     EXPECT_EQ(payment.selection.convoke_size(), 0);
 }
 
+TEST_F(RuledClientTest, SharedPaymentTracksOptimisticPoolDebitsAndRetiresSanitizedMana)
+{
+    auto &payment = state->payment;
+    payment.begin();
+    auto request = payment.request({});
+    ruled::v1::PaymentPreview response;
+    response.set_transaction_id(request.transaction_id());
+    response.set_revision(request.revision());
+    response.set_valid(true);
+    ASSERT_TRUE(payment.apply(response));
+
+    ASSERT_TRUE(payment.payMana('G', 0, 17));
+    EXPECT_EQ(payment.optimisticManaCounterSpendCount(17), 1);
+    RuledManaPoolTracker tracker;
+    EXPECT_EQ(tracker.observe(17, 0, 3, 0).displayedBeforeNewStaging, 3);
+    EXPECT_EQ(tracker.observe(17, 2, 3, payment.optimisticManaCounterSpendCount(17)).displayedBeforeNewStaging, 2);
+    request = payment.request({});
+    response.set_revision(request.revision());
+    *response.mutable_selection() = request.cast_spell().payment();
+    ASSERT_TRUE(payment.apply(response));
+    EXPECT_TRUE(payment.takeRetiredOptimisticManaCounterIds().isEmpty());
+
+    // The engine can sanitize a stale or excessive staged pip. The UI must restore precisely
+    // that optimistic display debit instead of leaving the pool counter visually reduced.
+    request = payment.request({});
+    response.set_revision(request.revision());
+    response.mutable_selection()->Clear();
+    response.set_selection_changed(true);
+    ASSERT_TRUE(payment.apply(response));
+    EXPECT_EQ(payment.optimisticManaCounterSpendCount(17), 0);
+    EXPECT_EQ(payment.takeRetiredOptimisticManaCounterIds(), QVector<int>({17}));
+
+    ASSERT_TRUE(payment.payMana('G', 0, 17));
+    payment.clear();
+    EXPECT_EQ(payment.takeRetiredOptimisticManaCounterIds(), QVector<int>({17}));
+}
+
 TEST_F(RuledClientTest, ConvokeCompletionSubmitsExactlyOnceAndStateRefreshInvalidatesReplies)
 {
     auto &payment = state->payment;
@@ -3155,6 +3192,28 @@ TEST(RuledPendingCastTest, NestedPaymentMenuOffersOnlyEnginePublishedManaAbiliti
     EXPECT_EQ(options.at(2).index, 2);
     EXPECT_EQ(options.at(2).manaOptionIndex, 1);
     EXPECT_FALSE(options.at(2).enabled);
+}
+
+TEST(RuledPendingCastTest, PaymentCandidateAndManaAbilityShareOneCardMenu)
+{
+    const QVector<QPair<int, QString>> waterbend = {
+        {ruled::v1::OBJECT_PAYMENT_KIND_WATERBEND, QStringLiteral("Waterbend — pay {1}")}};
+    const auto waterbendOptions = RuledPendingCast::cardActionMenuOptions(
+        {}, {0}, {QStringLiteral("{T}: Add {G}.")}, {{0, true}}, {QStringLiteral("G")}, true, waterbend);
+    ASSERT_EQ(waterbendOptions.size(), 2);
+    EXPECT_EQ(waterbendOptions.at(0).kind, RuledCardActionMenuOption::Kind::PaymentContribution);
+    EXPECT_EQ(waterbendOptions.at(0).index, ruled::v1::OBJECT_PAYMENT_KIND_WATERBEND);
+    EXPECT_EQ(waterbendOptions.at(1).kind, RuledCardActionMenuOption::Kind::ActivateAbility);
+
+    const QVector<QPair<int, QString>> convoke = {
+        {ruled::v1::OBJECT_PAYMENT_KIND_GREEN, QStringLiteral("Convoke — pay {G}")},
+        {ruled::v1::OBJECT_PAYMENT_KIND_GENERIC, QStringLiteral("Convoke — pay {1}")}};
+    const auto convokeOptions = RuledPendingCast::cardActionMenuOptions(
+        {}, {0}, {QStringLiteral("{T}: Add {G}.")}, {{0, true}}, {QStringLiteral("G")}, true, convoke);
+    ASSERT_EQ(convokeOptions.size(), 3);
+    EXPECT_EQ(convokeOptions.at(0).kind, RuledCardActionMenuOption::Kind::PaymentContribution);
+    EXPECT_EQ(convokeOptions.at(1).kind, RuledCardActionMenuOption::Kind::PaymentContribution);
+    EXPECT_EQ(convokeOptions.at(2).kind, RuledCardActionMenuOption::Kind::ActivateAbility);
 }
 
 TEST(RuledPendingCastTest, ActivationHeaderPreservesSelectedManaOptionAndSourceIdentity)

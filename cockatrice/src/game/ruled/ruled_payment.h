@@ -2,6 +2,7 @@
 #define RULED_PAYMENT_H
 
 #include <QString>
+#include <QVector>
 #include <QtGlobal>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
@@ -23,7 +24,10 @@ public:
     void writePayment(ruled::v1::RuledCommand &command) const;
     bool apply(const ruled::v1::PaymentPreview &preview);
     bool select(quint32 oid, int kind);
-    bool payMana(QChar symbol, quint32 groupId = 0);
+    bool payMana(QChar symbol, quint32 groupId = 0, int optimisticCounterId = -1);
+    [[nodiscard]] int optimisticManaCounterSpendCount(int counterId) const;
+    QVector<int> takeRetiredOptimisticManaCounterIds();
+    QVector<int> takeAllOptimisticManaCounterIds();
     bool remove(quint32 oid);
     bool selected(quint32 oid) const;
     const ruled::v1::ObjectPaymentCandidate *candidate(quint32 oid) const;
@@ -37,10 +41,20 @@ public:
     ruled::v1::PaymentPreview view;
 
 private:
+    struct OptimisticManaCounter
+    {
+        int counterId = -1;
+        QChar symbol;
+        quint32 groupId = 0;
+    };
+
+    void reconcileOptimisticManaCounters();
     quint64 transactionId = 0;
     quint64 revision = 0;
     bool guardSanitizedPayment = false;
     bool submissionArmed = false;
+    QVector<OptimisticManaCounter> optimisticManaCounters;
+    QVector<int> retiredOptimisticManaCounterIds;
 };
 
 #endif

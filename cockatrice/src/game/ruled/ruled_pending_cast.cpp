@@ -91,26 +91,29 @@ RuledPendingCast::InteractionKind RuledPendingCast::activeInteraction() const
 
 static QString ruledCastOptionLabel(const RuledFaceOption &face)
 {
-    const QString label = face.castMethod == ruled::v1::CAST_METHOD_WARP
-                              ? QObject::tr("Warp %1").arg(face.faceName)
-                              : QObject::tr("Cast %1").arg(face.faceName);
+    const QString label = face.castMethod == ruled::v1::CAST_METHOD_WARP ? QObject::tr("Warp %1").arg(face.faceName)
+                                                                         : QObject::tr("Cast %1").arg(face.faceName);
     return face.manaCost.isEmpty() ? label : QStringLiteral("%1 (%2)").arg(label, face.manaCost);
 }
 
-QVector<RuledCardActionMenuOption> RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
-                                                                           const QList<int> &abilityIndices,
-                                                                           const QStringList &abilityLabels,
-                                                                           const QHash<int, bool> &abilityEnabled,
-                                                                           const QStringList &manaProduced,
-                                                                           bool manaAbilitiesOnly)
+QVector<RuledCardActionMenuOption>
+RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
+                                        const QList<int> &abilityIndices,
+                                        const QStringList &abilityLabels,
+                                        const QHash<int, bool> &abilityEnabled,
+                                        const QStringList &manaProduced,
+                                        bool manaAbilitiesOnly,
+                                        const QVector<QPair<int, QString>> &paymentContributions)
 {
     QVector<RuledCardActionMenuOption> options;
-    options.reserve(castFaces.size() + abilityIndices.size());
+    options.reserve(paymentContributions.size() + castFaces.size() + abilityIndices.size());
+    for (const auto &[kind, label] : paymentContributions)
+        options.append({RuledCardActionMenuOption::Kind::PaymentContribution, kind, label, true});
     for (const auto &face : castFaces) {
         if (manaAbilitiesOnly)
             break;
-        options.append({RuledCardActionMenuOption::Kind::CastFace, face.faceIndex,
-                        ruledCastOptionLabel(face), true, 0, face.castMethod});
+        options.append({RuledCardActionMenuOption::Kind::CastFace, face.faceIndex, ruledCastOptionLabel(face), true, 0,
+                        face.castMethod});
     }
     for (const int abilityIndex : abilityIndices) {
         if (manaAbilitiesOnly && manaProduced.value(abilityIndex).isEmpty())

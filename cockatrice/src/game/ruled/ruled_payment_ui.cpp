@@ -1,6 +1,7 @@
 #include "ruled_payment_ui.h"
 
 #include "../abstract_game.h"
+#include "../board/abstract_counter.h"
 #include "../board/card_item.h"
 #include "../game_event_handler.h"
 #include "../player/player.h"
@@ -14,6 +15,7 @@
 #include <QPainter>
 #include <QScopedValueRollback>
 #include <QTimer>
+#include <algorithm>
 #include <libcockatrice/utility/zone_names.h>
 
 RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
@@ -103,7 +105,7 @@ bool RuledPaymentUi::startOrRefresh()
     if (activeContext != nextContext) {
         // A rejected resolution command restores its parked model before emitting the prompt.
         if (!(activeContext == Context::None && nextContext == Context::Resolution && model.active))
-            model.clear();
+            clear();
         queuedMana.clear();
         activeContext = nextContext;
     }
@@ -195,6 +197,7 @@ void RuledPaymentUi::received()
         return;
     auto *game = actions->player->getGame();
     auto &model = game->getGameEventHandler()->ruled()->payment;
+    restoreOptimisticManaCounters(model.takeRetiredOptimisticManaCounterIds());
     changed();
     if (model.pending || model.submitting || !model.view.valid())
         return;
@@ -241,7 +244,8 @@ void RuledPaymentUi::received()
     }
     if (!queuedMana.isEmpty()) {
         const auto contribution = queuedMana.takeFirst();
-        model.payMana(contribution.first, contribution.second);
+        if (!model.payMana(contribution.symbol, contribution.groupId, contribution.counterId))
+            restoreOptimisticManaCounters({contribution.counterId});
         schedule();
     }
 }
@@ -261,51 +265,117 @@ bool RuledPaymentUi::payMana(const QString &name, quint32 groupId)
         return false;
     if (model.submitting)
         return true;
-    if (model.pending || !queuedMana.isEmpty())
-        queuedMana.append({symbol.at(0), groupId});
-    else
-        model.payMana(symbol.at(0), groupId);
+    int counterId = -1;
+    if (groupId == 0) {
+        for (auto it = actions->player->getCounters().constBegin(); it != actions->player->getCounters().constEnd();
+             ++it) {
+            if (it.value() && it.value()->getName().trimmed().compare(name.trimmed(), Qt::CaseInsensitive) == 0) {
+                counterId = it.key();
+                break;
+            }
+        }
+        auto *counter = actions->player->getCounters().value(counterId, nullptr);
+        if (!counter || counter->getValue() <= 0)
+            return false;
+        counter->setValue(counter->getValue() - 1);
+    }
+    if (model.pending || !queuedMana.isEmpty()) {
+        queuedMana.append({symbol.at(0), groupId, counterId});
+    } else if (!model.payMana(symbol.at(0), groupId, counterId)) {
+        restoreOptimisticManaCounters({counterId});
+        return false;
+    }
     schedule();
     return true;
 }
 
 bool RuledPaymentUi::click(CardItem *card, bool leftClick)
 {
-    if (!leftClick || !card || !applicable() || !card->getZone() || card->getZone()->getName() != ZoneNames::TABLE)
+    if (!card || !applicable() || !card->getZone() || card->getZone()->getName() != ZoneNames::TABLE)
         return false;
-    auto *game = actions->player->getGame();
-    auto *state = game->getGameEventHandler()->ruled();
+    const auto options = contributionOptions(card);
+    if (options.isEmpty())
+        return false;
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     const auto oid = state->engineOidForCardId(card->getOwner()->getPlayerInfo()->getId(), card->getId());
-    auto &model = state->payment;
-    if (RuledActions::gameplayInputLocked(game) || model.pending || model.submitting)
-        return true;
-    if (model.remove(oid)) {
-        schedule();
-        changed();
-        return true;
+    const QStringList manaProduced = state->activatedAbilityManaProducedForOid(oid);
+    const bool hasManaAbility =
+        std::any_of(manaProduced.cbegin(), manaProduced.cend(), [](const QString &mana) { return !mana.isEmpty(); });
+    // A candidate with a mana ability needs one combined menu on either mouse button. Candidates
+    // without that ambiguity retain the fast left-click contribution toggle.
+    if (!leftClick || hasManaAbility)
+        return false;
+    if (options.size() == 1)
+        return contribute(card, options.constFirst().first);
+
+    QMenu menu;
+    for (const auto &[kind, label] : options) {
+        auto *action = menu.addAction(label);
+        action->setData(kind);
+    }
+    if (const auto *choice = menu.exec(QCursor::pos()))
+        contribute(card, choice->data().toInt());
+    return true;
+}
+
+QVector<QPair<int, QString>> RuledPaymentUi::contributionOptions(CardItem *card) const
+{
+    if (!card || !applicable() || !card->getOwner() || !card->getZone() ||
+        card->getZone()->getName() != ZoneNames::TABLE)
+        return {};
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    const auto oid = state->engineOidForCardId(card->getOwner()->getPlayerInfo()->getId(), card->getId());
+    const auto &model = state->payment;
+    if (model.selected(oid)) {
+        for (const auto &object : model.selection.waterbend())
+            if (object.object_id() == oid)
+                return {{ruled::v1::OBJECT_PAYMENT_KIND_UNSPECIFIED, QObject::tr("Remove Waterbend contribution")}};
+        return {{ruled::v1::OBJECT_PAYMENT_KIND_UNSPECIFIED, QObject::tr("Remove Convoke contribution")}};
     }
     const auto *candidate = model.candidate(oid);
     if (!candidate)
-        return false;
-    int selected = 0;
-    if (candidate->options_size() == 1)
-        selected = candidate->options(0);
-    else {
-        QMenu menu;
-        for (int option : candidate->options()) {
-            auto *action = menu.addAction(QObject::tr("Convoke — pay %1").arg(RuledPayment::contributionLabel(option)));
-            action->setData(option);
-        }
-        const auto *choice = menu.exec(QCursor::pos());
-        if (choice)
-            selected = choice->data().toInt();
+        return {};
+    QVector<QPair<int, QString>> result;
+    for (const int kind : candidate->options()) {
+        const QString label = kind == ruled::v1::OBJECT_PAYMENT_KIND_WATERBEND
+                                  ? QObject::tr("Waterbend — pay {1}")
+                                  : QObject::tr("Convoke — pay %1").arg(RuledPayment::contributionLabel(kind));
+        result.append({kind, label});
     }
-    // Recheck the current model after the nested menu event loop; a new batch may have arrived.
-    if (selected && model.select(oid, selected)) {
+    return result;
+}
+
+bool RuledPaymentUi::contribute(CardItem *card, int kind)
+{
+    if (!card || !card->getOwner() || !applicable())
+        return false;
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    auto &model = state->payment;
+    if (model.pending || model.submitting)
+        return true;
+    const auto oid = state->engineOidForCardId(card->getOwner()->getPlayerInfo()->getId(), card->getId());
+    const bool changedSelection =
+        kind == ruled::v1::OBJECT_PAYMENT_KIND_UNSPECIFIED ? model.remove(oid) : model.select(oid, kind);
+    if (changedSelection) {
         schedule();
         changed();
     }
     return true;
+}
+
+int RuledPaymentUi::optimisticManaCounterSpendCount(int counterId) const
+{
+    const auto &model = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
+    return model.optimisticManaCounterSpendCount(counterId) +
+           std::count_if(queuedMana.cbegin(), queuedMana.cend(),
+                         [counterId](const auto &entry) { return entry.counterId == counterId; });
+}
+
+void RuledPaymentUi::restoreOptimisticManaCounters(const QVector<int> &counterIds)
+{
+    for (const int counterId : counterIds)
+        if (auto *counter = actions->player->getCounters().value(counterId, nullptr))
+            counter->setValue(counter->getValue() + 1);
 }
 
 QString RuledPaymentUi::prompt() const
@@ -332,14 +402,21 @@ QString RuledPaymentUi::prompt() const
 
 void RuledPaymentUi::clear()
 {
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    auto &model = state->payment;
+    QVector<int> optimisticCounterIds = model.takeAllOptimisticManaCounterIds();
+    for (const auto &entry : queuedMana)
+        if (entry.counterId >= 0)
+            optimisticCounterIds.append(entry.counterId);
+    if (!model.submitting)
+        restoreOptimisticManaCounters(optimisticCounterIds);
     queuedMana.clear();
     suspended.reset();
     suspendedAbility.reset();
     activeContext = Context::None;
     if (!actions->player->getPlayerInfo()->getLocal())
         return;
-    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
-    state->payment.clear();
+    model.clear();
     state->emitSpellTargetSelectionChanged();
 }
 

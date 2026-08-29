@@ -1432,7 +1432,7 @@ int PlayerActions::ruledManaCounterOptimisticSpendCount(int counterId) const
 {
     // Once submitted, the incoming pool snapshot already includes the resolution payment.
     // Retain the staged IDs for rejection recovery, but do not deduct them from that snapshot.
-    return manaPaymentCounterIds.count(counterId) +
+    return manaPaymentCounterIds.count(counterId) + ruledPayment->optimisticManaCounterSpendCount(counterId) +
            (resolutionPaymentSubmissionPending ? 0 : resolutionPaymentCounterIds.count(counterId));
 }
 
@@ -5034,9 +5034,10 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 
     const QStringList abilityTexts = handler->activatedAbilitiesForOid(oid);
     const bool manaAbilitiesOnly = handler->isResolutionPaymentActive() || ruledPayment->applicable();
+    const auto paymentContributions = ruledPayment->contributionOptions(card);
     const auto permanentActions = battlefieldSource && !manaAbilitiesOnly ? handler->permanentActionsForOid(oid)
                                                                           : QVector<RuledPermanentAction>{};
-    if (abilityTexts.isEmpty() && permanentActions.isEmpty()) {
+    if (abilityTexts.isEmpty() && permanentActions.isEmpty() && paymentContributions.isEmpty()) {
         return false;
     }
 
@@ -5050,8 +5051,8 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     const QStringList costLabels = handler->activatedAbilityCostLabelsForOid(oid);
     // A tapped (or summoning-sick) mana source has nothing to offer: skip the fast path rather
     // than firing an activation the engine will reject.
-    if (battlefieldSource && abilityTexts.size() == 1 && !manaProduced.value(0).isEmpty() &&
-        handler->abilityActivatable(oid, 0) &&
+    if (battlefieldSource && paymentContributions.isEmpty() && abilityTexts.size() == 1 &&
+        !manaProduced.value(0).isEmpty() && handler->abilityActivatable(oid, 0) &&
         handler->abilityCostChoices(oid, 0).isEmpty()) {
         const QStringList colorOptions = manaProduced.value(0).split(QChar('/'));
         if (colorOptions.size() > 1) {
@@ -5129,8 +5130,9 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         }
     }
 
-    const auto cardOptions = RuledPendingCast::cardActionMenuOptions(
-        castFaces, menuAbilityIndices, menuAbilityLabels, menuAbilityEnabled, manaProduced, manaAbilitiesOnly);
+    const auto cardOptions =
+        RuledPendingCast::cardActionMenuOptions(castFaces, menuAbilityIndices, menuAbilityLabels, menuAbilityEnabled,
+                                                manaProduced, manaAbilitiesOnly, paymentContributions);
     QVector<QAction *> cardMenuActions;
     cardMenuActions.reserve(cardOptions.size());
     for (const auto &option : cardOptions) {
@@ -5184,6 +5186,10 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return true;
     }
     const auto &selectedOption = cardOptions.at(menuIndex);
+    if (selectedOption.kind == RuledCardActionMenuOption::Kind::PaymentContribution) {
+        ruledPayment->contribute(card, selectedOption.index);
+        return true;
+    }
     if (selectedOption.kind == RuledCardActionMenuOption::Kind::CastFace) {
         for (const auto &face : castFaces) {
             if (face.faceIndex == selectedOption.index && face.castMethod == selectedOption.castMethod) {

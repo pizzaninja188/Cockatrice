@@ -21,6 +21,9 @@ public:
     bool startOrRefresh();
     bool payMana(const QString &name, quint32 groupId = 0);
     bool click(CardItem *card, bool leftClick);
+    [[nodiscard]] QVector<QPair<int, QString>> contributionOptions(CardItem *card) const;
+    bool contribute(CardItem *card, int kind);
+    [[nodiscard]] int optimisticManaCounterSpendCount(int counterId) const;
     bool applicable() const;
     QString prompt() const;
     void clear();
@@ -29,6 +32,13 @@ public:
     static void paint(CardItem *card, QPainter *painter);
 
 private:
+    struct QueuedMana
+    {
+        QChar symbol;
+        quint32 groupId = 0;
+        int counterId = -1;
+    };
+
     enum class Context
     {
         None,
@@ -43,10 +53,11 @@ private:
     void query();
     void received();
     void changed();
+    void restoreOptimisticManaCounters(const QVector<int> &counterIds);
     PlayerActions *actions;
     bool queued = false;
     bool choosingLifePayment = false;
-    QVector<QPair<QChar, quint32>> queuedMana;
+    QVector<QueuedMana> queuedMana;
     std::optional<PendingRuledSpellCast> suspended;
     std::optional<PendingActivatedAbility> suspendedAbility;
 };

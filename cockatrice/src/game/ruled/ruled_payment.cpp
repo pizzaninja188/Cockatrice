@@ -1,6 +1,9 @@
 #include "ruled_payment.h"
 
+#include <QHash>
+#include <algorithm>
 #include <limits>
+#include <utility>
 
 void RuledPayment::begin(bool guardSanitized)
 {
@@ -14,6 +17,9 @@ void RuledPayment::begin(bool guardSanitized)
 
 void RuledPayment::clear()
 {
+    if (!submitting)
+        for (const auto &entry : optimisticManaCounters)
+            retiredOptimisticManaCounterIds.append(entry.counterId);
     ++transactionId;
     revision = 0;
     active = pending = submitting = false;
@@ -21,6 +27,7 @@ void RuledPayment::clear()
     selection.Clear();
     restrictedMana.Clear();
     view.Clear();
+    optimisticManaCounters.clear();
 }
 
 void RuledPayment::invalidate()
@@ -94,6 +101,7 @@ bool RuledPayment::apply(const ruled::v1::PaymentPreview &preview)
     if (preview.valid()) {
         selection = preview.selection();
         restrictedMana = preview.restricted_mana();
+        reconcileOptimisticManaCounters();
     }
     return true;
 }
@@ -164,7 +172,7 @@ bool RuledPayment::select(quint32 oid, int kind)
     return true;
 }
 
-bool RuledPayment::payMana(QChar symbol, quint32 groupId)
+bool RuledPayment::payMana(QChar symbol, quint32 groupId, int optimisticCounterId)
 {
     if (!active || submitting)
         return false;
@@ -189,9 +197,66 @@ bool RuledPayment::payMana(QChar symbol, quint32 groupId)
     if (amount == std::numeric_limits<quint32>::max())
         return false;
     reflection->SetUInt32(message, field, amount + 1);
+    if (optimisticCounterId >= 0)
+        optimisticManaCounters.append({optimisticCounterId, symbol.toUpper(), groupId});
     submissionArmed = true;
     invalidate();
     return true;
+}
+
+int RuledPayment::optimisticManaCounterSpendCount(int counterId) const
+{
+    return std::count_if(optimisticManaCounters.cbegin(), optimisticManaCounters.cend(),
+                         [counterId](const auto &entry) { return entry.counterId == counterId; });
+}
+
+QVector<int> RuledPayment::takeRetiredOptimisticManaCounterIds()
+{
+    QVector<int> result;
+    result.swap(retiredOptimisticManaCounterIds);
+    return result;
+}
+
+QVector<int> RuledPayment::takeAllOptimisticManaCounterIds()
+{
+    QVector<int> result;
+    result.reserve(optimisticManaCounters.size() + retiredOptimisticManaCounterIds.size());
+    for (const auto &entry : optimisticManaCounters)
+        result.append(entry.counterId);
+    result.append(retiredOptimisticManaCounterIds);
+    optimisticManaCounters.clear();
+    retiredOptimisticManaCounterIds.clear();
+    return result;
+}
+
+void RuledPayment::reconcileOptimisticManaCounters()
+{
+    QHash<QString, int> retainedCounts;
+    const auto addMana = [&retainedCounts](const auto &mana, quint32 groupId) {
+        for (const auto &[symbol, amount] :
+             {std::pair{'W', mana.w()}, std::pair{'U', mana.u()}, std::pair{'B', mana.b()}, std::pair{'R', mana.r()},
+              std::pair{'G', mana.g()}, std::pair{'C', mana.c()}}) {
+            retainedCounts.insert(QStringLiteral("%1:%2").arg(groupId).arg(QLatin1Char(symbol)),
+                                  static_cast<int>(amount));
+        }
+    };
+    addMana(selection.mana(), 0);
+    for (const auto &restricted : restrictedMana)
+        addMana(restricted, restricted.restriction_group_id());
+
+    QVector<OptimisticManaCounter> retained;
+    retained.reserve(optimisticManaCounters.size());
+    for (const auto &entry : optimisticManaCounters) {
+        const QString key = QStringLiteral("%1:%2").arg(entry.groupId).arg(entry.symbol);
+        int &remaining = retainedCounts[key];
+        if (remaining > 0) {
+            --remaining;
+            retained.append(entry);
+        } else {
+            retiredOptimisticManaCounterIds.append(entry.counterId);
+        }
+    }
+    optimisticManaCounters.swap(retained);
 }
 
 QString RuledPayment::contributionLabel(int kind)

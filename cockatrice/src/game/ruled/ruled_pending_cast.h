@@ -35,6 +35,7 @@ struct RuledCardActionMenuOption
     enum class Kind
     {
         CastFace,
+        PaymentContribution,
         ActivateAbility,
     };
 
@@ -839,12 +840,14 @@ public:
 
     /// Build one engine-authoritative menu model for alternate actions on a physical card.
     /// Castable faces precede zone abilities so a cycler in hand exposes both Cast and Cycle.
-    static QVector<RuledCardActionMenuOption> cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
-                                                                    const QList<int> &abilityIndices,
-                                                                    const QStringList &abilityLabels,
-                                                                    const QHash<int, bool> &abilityEnabled,
-                                                                    const QStringList &manaProduced = {},
-                                                                    bool manaAbilitiesOnly = false);
+    static QVector<RuledCardActionMenuOption>
+    cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
+                          const QList<int> &abilityIndices,
+                          const QStringList &abilityLabels,
+                          const QHash<int, bool> &abilityEnabled,
+                          const QStringList &manaProduced = {},
+                          bool manaAbilitiesOnly = false,
+                          const QVector<QPair<int, QString>> &paymentContributions = {});
 
     /// Spell casts and activated abilities are mutually exclusive local UI transactions.
     PendingRuledSpellCast &beginSpell();
