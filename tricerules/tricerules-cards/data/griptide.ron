@@ -3,8 +3,8 @@
   name: "Griptide",
   mana_cost: "{3}{U}",
   types: ["Instant"],
-  spell_effect: [PutTargetPermanentInOwnersLibrary(
-    target: (kind: Creature),
+  spell_effect: [PutInOwnersLibrary(
+    subject: Chosen((kind: Creature)),
     placement: Top,
   )],
 )

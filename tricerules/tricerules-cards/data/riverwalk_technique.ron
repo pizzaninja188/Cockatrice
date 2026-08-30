@@ -10,8 +10,8 @@
     modes: [
       (
         label: "Owner puts target nonland permanent on top or bottom",
-        effects: [PutTargetPermanentInOwnersLibrary(
-          target: (kind: AnyPermanent, not_land: true),
+        effects: [PutInOwnersLibrary(
+          subject: Chosen((kind: AnyPermanent, not_land: true)),
           placement: OwnerChoiceTopOrBottom,
         )],
       ),

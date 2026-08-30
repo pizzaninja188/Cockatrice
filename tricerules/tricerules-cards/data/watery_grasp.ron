@@ -1,0 +1,15 @@
+// Oracle and Waterbend rulings verified 2026-08-29. The move is untargeted and uses the
+// enchanted creature's owner for both library placement and shuffle.
+(
+  id: "watery_grasp",
+  name: "Watery Grasp",
+  mana_cost: "{U}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  static_abilities: [AttachedModifier(doesnt_untap_during_untap_step: true)],
+  activated_abilities: [(
+    costs: [Waterbend("{5}")],
+    effect: [PutInOwnersLibrary(subject: AttachedObject, placement: Shuffle)],
+    text: "Waterbend {5}: Enchanted creature's owner shuffles it into their library.",
+  )],
+)

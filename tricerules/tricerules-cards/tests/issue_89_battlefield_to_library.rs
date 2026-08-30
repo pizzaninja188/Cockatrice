@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    LibraryPlacement, PermanentTypeFilter, SpellEffectKind, TargetKind,
+    EffectSubject, LibraryPlacement, PermanentTypeFilter, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::CardRegistry;
 
@@ -11,7 +11,7 @@ fn issue_89_cards_share_the_owner_library_placement_primitive() {
     assert_eq!(totally_lost.primary_face().mana_cost.to_string(), "{4}{U}");
     assert!(matches!(
         &totally_lost.primary_face().spell_effect[..],
-        [SpellEffectKind::PutTargetPermanentInOwnersLibrary { target, placement }]
+        [SpellEffectKind::PutInOwnersLibrary { subject: EffectSubject::Chosen(target), placement }]
             if target.kind == TargetKind::AnyPermanent
                 && target.not_land
                 && *placement == LibraryPlacement::Top
@@ -21,7 +21,7 @@ fn issue_89_cards_share_the_owner_library_placement_primitive() {
     assert_eq!(griptide.primary_face().mana_cost.to_string(), "{3}{U}");
     assert!(matches!(
         &griptide.primary_face().spell_effect[..],
-        [SpellEffectKind::PutTargetPermanentInOwnersLibrary { target, placement }]
+        [SpellEffectKind::PutInOwnersLibrary { subject: EffectSubject::Chosen(target), placement }]
             if target.kind == TargetKind::Creature
                 && *placement == LibraryPlacement::Top
     ));
@@ -34,7 +34,7 @@ fn issue_89_cards_share_the_owner_library_placement_primitive() {
         assert_eq!(definition.primary_face().mana_cost.to_string(), "{1}{G}");
         assert!(matches!(
             &definition.primary_face().spell_effect[..],
-            [SpellEffectKind::PutTargetPermanentInOwnersLibrary { target, placement }]
+            [SpellEffectKind::PutInOwnersLibrary { subject: EffectSubject::Chosen(target), placement }]
                 if target.kind == TargetKind::AnyPermanent
                     && target.permanent_types
                         == [PermanentTypeFilter::Artifact, PermanentTypeFilter::Enchantment]

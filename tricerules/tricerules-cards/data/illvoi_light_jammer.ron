@@ -1,0 +1,22 @@
+// Oracle verified 2026-08-29. CR 301.5/701.3: the ETB instruction is distinct from Equip.
+(
+  id: "illvoi_light_jammer",
+  name: "Illvoi Light Jammer",
+  mana_cost: "{1}{U}",
+  types: ["Artifact", "Equipment"],
+  keywords: [Flash],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      AttachSource(target: (kind: Creature, controller: You)),
+      GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Hexproof]),
+    ],
+    text: "When this Equipment enters, attach it to target creature you control. That creature gains hexproof until end of turn.",
+  )],
+  static_abilities: [AttachedModifier(delta_power: 1, delta_toughness: 2)],
+  activated_abilities: [(
+    costs: [Mana("{3}")],
+    effect: [Equip(target: (kind: Creature, controller: You))],
+    text: "Equip {3}",
+  )],
+)

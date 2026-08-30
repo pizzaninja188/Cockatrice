@@ -13,7 +13,7 @@
   )],
   activated_abilities: [(
     costs: [Mana("{G}"), SacrificeSelf],
-    effect: [ExileTarget(target: (kind: AnyPermanent, permanent_types: [Artifact, Enchantment], excluded_permanent_types: [Creature]))],
+    effect: [Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Enchantment], excluded_permanent_types: [Creature])))],
     text: "{G}, Sacrifice this creature: Exile target noncreature artifact or noncreature enchantment.",
   )],
 )

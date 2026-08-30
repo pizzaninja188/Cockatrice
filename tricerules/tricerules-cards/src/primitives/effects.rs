@@ -1925,6 +1925,14 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_creature")]
         target: TargetFilter,
     },
+    /// CR 701.3 / 301.5: attach the exact Equipment source to a chosen permanent. Unlike Equip,
+    /// this is an ordinary one-shot instruction and does not impose sorcery timing. Illvoi Light
+    /// Jammer, Squire's Lightblade, Meltstrider's Gear, and Barbed Bloodletter share this ETB
+    /// primitive.
+    AttachSource {
+        #[serde(default = "TargetFilter::default_creature")]
+        target: TargetFilter,
+    },
     /// CR 613 layer 6: grant one or more keyword abilities to every creature matching `filter`
     /// until end of turn. Untargeted — the one-shot keyword-grant sibling of
     /// [`StaticAbilityDef::AnthemKeyword`]. Covers Overrun (Trample) and Make a Stand
@@ -2047,10 +2055,12 @@ pub enum SpellEffectKind {
     EachOpponentLosesLifeYouGainEqual {
         amount: u32,
     },
-    /// Haywire Mite and Oblivion Strike: exile one chosen permanent using the shared filter.
-    ExileTarget {
-        #[serde(default = "TargetFilter::default_creature")]
-        target: TargetFilter,
+    /// Exile a permanent-valued subject. Haywire Mite and Oblivion Strike choose an ordinary
+    /// target; Spiral into Solitude and Path to Redemption use the exact attached object without
+    /// turning that instruction into a target.
+    Exile {
+        #[serde(default)]
+        subject: EffectSubject,
     },
     ExileTargetGainLifeEqualToPower,
     /// Exile the top card of the named player's library and let that player play the exact
@@ -2069,10 +2079,10 @@ pub enum SpellEffectKind {
     ReturnToOwnersHand {
         subject: EffectSubject,
     },
-    /// Move a chosen battlefield permanent to its owner's library (CR 400.3). The target filter
-    /// carries card-specific restrictions; placement controls library ordering or shuffling.
-    PutTargetPermanentInOwnersLibrary {
-        target: TargetFilter,
+    /// Move a permanent-valued subject to its owner's library (CR 400.3). Chosen subjects retain
+    /// ordinary target legality; Watery Grasp uses the exact attached object untargeted.
+    PutInOwnersLibrary {
+        subject: EffectSubject,
         placement: LibraryPlacement,
     },
     /// Move a card from a graveyard to hand or battlefield (CR 400.1: graveyard is public).
@@ -2715,6 +2725,11 @@ impl SpellEffectKind {
                 ..
             } | SpellEffectKind::ReturnToOwnersHand {
                 subject: EffectSubject::AttachedObject,
+            } | SpellEffectKind::Exile {
+                subject: EffectSubject::AttachedObject,
+            } | SpellEffectKind::PutInOwnersLibrary {
+                subject: EffectSubject::AttachedObject,
+                ..
             } | SpellEffectKind::Destroy {
                 subject: EffectSubject::AttachedObject,
             }
@@ -2768,6 +2783,11 @@ impl SpellEffectKind {
                 ..
             } | SpellEffectKind::ReturnToOwnersHand {
                 subject: EffectSubject::TriggerObject,
+            } | SpellEffectKind::Exile {
+                subject: EffectSubject::TriggerObject,
+            } | SpellEffectKind::PutInOwnersLibrary {
+                subject: EffectSubject::TriggerObject,
+                ..
             } | SpellEffectKind::Destroy {
                 subject: EffectSubject::TriggerObject,
             } | SpellEffectKind::LoseLife {
@@ -2860,6 +2880,8 @@ impl SpellEffectKind {
             | SpellEffectKind::CreateDelayedTrigger { subject, .. }
             | SpellEffectKind::AddTypes { subject, .. }
             | SpellEffectKind::ReturnToOwnersHand { subject }
+            | SpellEffectKind::Exile { subject }
+            | SpellEffectKind::PutInOwnersLibrary { subject, .. }
             | SpellEffectKind::Regenerate { subject }
             | SpellEffectKind::PutCounters { subject, .. }
             | SpellEffectKind::RemoveCounters { subject, .. }
@@ -2874,12 +2896,10 @@ impl SpellEffectKind {
                 CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_) => Vec::new(),
             },
             SpellEffectKind::DamageTarget { target, .. }
-            | SpellEffectKind::ExileTarget { target }
             | SpellEffectKind::CreateTokenCopies { target, .. }
             | SpellEffectKind::ExileIfWouldDieThisTurn { target }
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyAttached { target, .. }
-            | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target, .. }
             | SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
@@ -2891,6 +2911,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ExileCardsFromHand { target, .. }
             | SpellEffectKind::ExileUntilSourceLeaves { target }
             | SpellEffectKind::AuraAttach { target }
+            | SpellEffectKind::AttachSource { target }
             | SpellEffectKind::Equip { target }
             | SpellEffectKind::TargetPlayerSacrifices { target, .. }
             | SpellEffectKind::PreventNextDamage { target, .. }
@@ -3197,9 +3218,18 @@ impl SpellEffectKind {
                 return Err("CreateTokenCopies requires a permanent source".into());
             }
         }
-        if let SpellEffectKind::ExileTarget { target } = self {
+        if let SpellEffectKind::Exile { subject }
+        | SpellEffectKind::PutInOwnersLibrary { subject, .. } = self
+        {
+            if let EffectSubject::Chosen(target) = subject {
+                if !target.is_permanent_only() {
+                    return Err("zone-move subjects require a permanent target".into());
+                }
+            }
+        }
+        if let SpellEffectKind::AttachSource { target } = self {
             if !target.is_permanent_only() {
-                return Err("ExileTarget requires a permanent target".into());
+                return Err("AttachSource requires a permanent target".into());
             }
         }
 
@@ -3606,11 +3636,21 @@ impl SpellEffectKind {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
+            } | SpellEffectKind::Exile {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
+            } | SpellEffectKind::PutInOwnersLibrary {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
+                ..
             } | SpellEffectKind::Destroy {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
-            } | SpellEffectKind::ChangeSourceFace { .. }
+            } | SpellEffectKind::AttachSource { .. }
+                | SpellEffectKind::ChangeSourceFace { .. }
                 | SpellEffectKind::ReturnTriggeredCard { .. }
                 | SpellEffectKind::ApplyCombatRestriction {
                     scope: CombatRestrictionScope::Source,
@@ -3676,6 +3716,13 @@ impl SpellEffectKind {
             }
             | SpellEffectKind::ReturnToOwnersHand {
                 subject: EffectSubject::Chosen(target),
+            }
+            | SpellEffectKind::Exile {
+                subject: EffectSubject::Chosen(target),
+            }
+            | SpellEffectKind::PutInOwnersLibrary {
+                subject: EffectSubject::Chosen(target),
+                ..
             }
             | SpellEffectKind::Destroy {
                 subject: EffectSubject::Chosen(target),
@@ -4167,6 +4214,18 @@ impl SpellEffectKind {
                 });
                 if !object_only && !player_only {
                     Err("AuraAttach does not support mixed AnyTarget recipients".into())
+                } else {
+                    Ok(())
+                }
+            }
+            SpellEffectKind::AttachSource { target } => {
+                if context == EffectContext::Spell {
+                    Err("AttachSource is only valid on an activated or triggered ability".into())
+                } else if !target.is_permanent_only() {
+                    Err(format!(
+                        "AttachSource cannot target players, got {:?}",
+                        target.kind
+                    ))
                 } else {
                     Ok(())
                 }

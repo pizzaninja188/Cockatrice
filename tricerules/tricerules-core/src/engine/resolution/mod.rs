@@ -516,6 +516,44 @@ fn resolve_effect_subject(
     }
 }
 
+/// Resolve a subject for a zone move. Source-bound zone actions may originate from a declared
+/// public nonbattlefield zone, but must still match the exact generation captured on the stack.
+/// Other effect families keep their existing battlefield-only Source contract.
+fn resolve_zone_effect_subject(
+    engine: &GameEngine,
+    top: &StackItem,
+    targets: &[ObjectId],
+    subject: &EffectSubject,
+) -> Option<ObjectId> {
+    if !matches!(subject, EffectSubject::Source) {
+        return resolve_effect_subject(engine, top, targets, subject);
+    }
+    let source_id = top.source_permanent_id?;
+    let expected_zone = match top
+        .activated_ability
+        .as_ref()
+        .map(|ability| ability.source_zone)
+        .unwrap_or_default()
+    {
+        AbilitySourceZone::Battlefield => Zone::Battlefield,
+        AbilitySourceZone::Hand => Zone::Hand,
+        AbilitySourceZone::Graveyard => Zone::Graveyard,
+    };
+    (engine
+        .state
+        .zone_change_generation
+        .get(&source_id)
+        .copied()
+        .unwrap_or(0)
+        == top.source_zone_change
+        && engine
+            .state
+            .objects
+            .get(&source_id)
+            .is_some_and(|object| object.zone == expected_zone))
+    .then_some(source_id)
+}
+
 /// One entry of a resolving stack item's flattened effect list. Target group identities stay
 /// attached so one primitive can consume multiple independently filtered roles.
 pub(super) struct ResolutionEffect {
@@ -1409,9 +1447,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::DrainTarget { .. } => {
                         life::drain_target(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::ExileTarget { .. } => {
-                        zones::exile_target(&mut cx, effect)?
-                    }
+                    effect @ SpellEffectKind::Exile { .. } => zones::exile(&mut cx, effect)?,
                     effect @ SpellEffectKind::ExileTargetGainLifeEqualToPower => {
                         zones::exile_target_gain_life_equal_to_power(&mut cx, effect)?
                     }
@@ -1421,8 +1457,8 @@ impl GameEngine {
                     effect @ SpellEffectKind::ReturnToOwnersHand { .. } => {
                         zones::return_to_owners_hand(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::PutTargetPermanentInOwnersLibrary { .. } => {
-                        zones::put_target_permanent_in_owners_library(&mut cx, effect)?
+                    effect @ SpellEffectKind::PutInOwnersLibrary { .. } => {
+                        zones::put_in_owners_library(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::DiscardCards { .. } => {
                         zones::discard_cards(&mut cx, effect)?
@@ -1477,6 +1513,9 @@ impl GameEngine {
                     SpellEffectKind::ExileWarpedObject => {
                         cx.engine.resolve_warp_exile(cx.top, cx.events)?;
                         EffectOutcome::Continue
+                    }
+                    effect @ SpellEffectKind::AttachSource { .. } => {
+                        misc::attach_source(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Equip { .. } => misc::equip(&mut cx, effect)?,
                     effect @ SpellEffectKind::PreventNextDamage { .. } => {

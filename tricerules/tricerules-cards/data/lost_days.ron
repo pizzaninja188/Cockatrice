@@ -6,8 +6,8 @@
   mana_cost: "{4}{U}",
   types: ["Instant", "Lesson"],
   spell_effect: [
-    PutTargetPermanentInOwnersLibrary(
-      target: (kind: AnyPermanent, permanent_types: [Creature, Enchantment]),
+    PutInOwnersLibrary(
+      subject: Chosen((kind: AnyPermanent, permanent_types: [Creature, Enchantment])),
       placement: OwnerChoiceSecondFromTopOrBottom,
     ),
     CreateTokens(token: "clue", count: 1),

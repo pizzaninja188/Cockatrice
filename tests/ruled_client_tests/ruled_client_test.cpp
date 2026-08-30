@@ -3167,6 +3167,44 @@ TEST_F(RuledClientTest, ZoneAbilityActionsBindHandSlotsAndGraveyardObjectsWithou
     EXPECT_TRUE(state->activatedAbilityIndicesForOid(7201u).isEmpty());
 }
 
+TEST_F(RuledClientTest, MerchantGraveyardActionSubmitsItsExactPublicZoneIdentity)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &localActions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *merchant = localActions.add_zone_ability_actions();
+    merchant->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+    merchant->set_object_id(7301u);
+    merchant->set_zone_change_generation(12u);
+    merchant->set_ability_index(0u);
+    merchant->set_card_name("Merchant of Many Hats");
+    merchant->mutable_ability()->set_text("{2}{B}: Return this card from your graveyard to your hand.");
+    merchant->mutable_ability()->set_mana_cost("{2}{B}");
+    merchant->mutable_ability()->set_activatable(true);
+    auto *opponentOnly = (*batch.mutable_legal_by_player())[kLocalPlayer + 1].add_zone_ability_actions();
+    opponentOnly->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+    opponentOnly->set_object_id(9999u);
+    opponentOnly->set_zone_change_generation(1u);
+    opponentOnly->set_ability_index(0u);
+    opponentOnly->mutable_ability()->set_activatable(true);
+    apply(batch);
+
+    EXPECT_EQ(state->abilitySourceZone(7301u), ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+    EXPECT_EQ(state->abilitySourceGeneration(7301u), 12u);
+    EXPECT_TRUE(state->abilityActivatable(7301u, 0));
+    EXPECT_TRUE(state->activatedAbilityIndicesForOid(9999u).isEmpty());
+
+    PendingActivatedAbility pending;
+    pending.permanentOid = 7301u;
+    pending.abilityIndex = 0;
+    pending.sourceZone = state->abilitySourceZone(7301u);
+    pending.expectedZoneChangeGeneration = state->abilitySourceGeneration(7301u);
+    ruled::v1::ActivateAbility command;
+    pending.writeActivationHeader(command);
+    EXPECT_EQ(command.source_object_id(), 7301u);
+    EXPECT_EQ(command.source_zone(), ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+    EXPECT_EQ(command.expected_zone_change_generation(), 12u);
+}
+
 TEST_F(RuledClientTest, CastAndCycleAreCombinedIntoOneCardActionMenuModel)
 {
     RuledFaceOption face;

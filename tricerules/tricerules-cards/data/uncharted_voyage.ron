@@ -5,8 +5,8 @@
   mana_cost: "{3}{U}",
   types: ["Instant"],
   spell_effect: [
-    PutTargetPermanentInOwnersLibrary(
-      target: (kind: Creature),
+    PutInOwnersLibrary(
+      subject: Chosen((kind: Creature)),
       placement: OwnerChoiceTopOrBottom,
     ),
     LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil),

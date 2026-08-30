@@ -502,16 +502,19 @@ pub(in crate::engine) fn draw_cards_for_player(
     Ok(())
 }
 
-pub(super) fn exile_target(
+pub(super) fn exile(
     cx: &mut EffectCx<'_>,
-    _effect: SpellEffectKind,
+    effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::Exile { subject } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let tid = resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
     let spell_label = cx.spell_label;
 
-    if let Some(&tid) = targets.first() {
+    if let Some(tid) = tid {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         let zone_snapshot = engine.snapshot_zone_event();
@@ -616,7 +619,7 @@ pub(super) fn return_to_owners_hand(
     let SpellEffectKind::ReturnToOwnersHand { subject } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let tid = resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject);
+    let tid = resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let spell_label = cx.spell_label;
@@ -715,18 +718,15 @@ pub(in crate::engine) fn move_permanent_to_owners_library(
     Ok(())
 }
 
-pub(super) fn put_target_permanent_in_owners_library(
+pub(super) fn put_in_owners_library(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::PutTargetPermanentInOwnersLibrary {
-        target: _,
-        placement,
-    } = effect
-    else {
+    let SpellEffectKind::PutInOwnersLibrary { subject, placement } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    if let Some(&tid) = cx.targets.first() {
+    let tid = resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject);
+    if let Some(tid) = tid {
         if matches!(
             placement,
             LibraryPlacement::OwnerChoiceTopOrBottom

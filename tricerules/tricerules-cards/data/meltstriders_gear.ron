@@ -1,0 +1,18 @@
+// Oracle verified 2026-08-29. CR 301.5/701.3: this Equipment attaches through its ETB trigger.
+(
+  id: "meltstriders_gear",
+  name: "Meltstrider's Gear",
+  mana_cost: "{G}",
+  types: ["Artifact", "Equipment"],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [AttachSource(target: (kind: Creature, controller: You))],
+    text: "When this Equipment enters, attach it to target creature you control.",
+  )],
+  static_abilities: [AttachedModifier(delta_power: 2, delta_toughness: 1, keywords: [Reach])],
+  activated_abilities: [(
+    costs: [Mana("{5}")],
+    effect: [Equip(target: (kind: Creature, controller: You))],
+    text: "Equip {5}",
+  )],
+)

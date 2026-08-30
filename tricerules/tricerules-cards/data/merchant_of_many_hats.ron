@@ -1,0 +1,16 @@
+// Oracle verified 2026-08-29. The public-zone action binds this card's exact ObjectId and
+// zone-change generation rather than searching the graveyard by name.
+(
+  id: "merchant_of_many_hats",
+  name: "Merchant of Many Hats",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Peasant", "Ally"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [(
+    source_zone: Graveyard,
+    costs: [Mana("{2}{B}")],
+    effect: [ReturnToOwnersHand(subject: Source)],
+    text: "{2}{B}: Return this card from your graveyard to your hand.",
+  )],
+)

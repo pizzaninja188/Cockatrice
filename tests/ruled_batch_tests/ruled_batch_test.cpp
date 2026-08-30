@@ -2492,6 +2492,76 @@ TEST_F(RuledBatchTest, ControlTransferRestoresAttachmentAcrossPlayerTables)
     EXPECT_EQ(aura->getParentCard(), bear);
 }
 
+TEST_F(RuledBatchTest, EquipmentAttachmentThenOwnerLibraryMoveKeepsExactPhysicalIdentity)
+{
+    seedCardCatalog({"Illvoi Light Jammer"});
+    Server_Card *creature = addCardToTable(p1, "Grizzly Bears");
+    Server_Card *equipment = addCardToTable(p1, "Illvoi Light Jammer");
+
+    ruled::v1::IpcResponse attached;
+    attached.set_ok(true);
+    auto *attachedView = attached.mutable_batch()->add_events()->mutable_zone_view();
+    auto ownerView = buildPerPlayerView(p1, {907u, 908u}, {false, false});
+    ownerView.mutable_battlefield_objects(1)->mutable_attachment_recipient()->set_object_id(907u);
+    *attachedView->add_per_player() = ownerView;
+    *attachedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(attached);
+    ASSERT_EQ(equipment->getParentCard(), creature);
+
+    ruled::v1::IpcResponse stolen;
+    stolen.set_ok(true);
+    auto *stolenView = stolen.mutable_batch()->add_events()->mutable_zone_view();
+    auto *equipmentOwnerView = stolenView->add_per_player();
+    equipmentOwnerView->set_player_id(p1->getPlayerId());
+    auto *equipmentObject = equipmentOwnerView->add_battlefield_objects();
+    equipmentObject->set_object_id(908u);
+    equipmentObject->set_card_id("illvoi_light_jammer");
+    equipmentObject->set_owner_player_id(p1->getPlayerId());
+    equipmentObject->mutable_attachment_recipient()->set_object_id(907u);
+    auto *stolenCreatureView = stolenView->add_per_player();
+    stolenCreatureView->set_player_id(p2->getPlayerId());
+    auto *creatureObject = stolenCreatureView->add_battlefield_objects();
+    creatureObject->set_object_id(907u);
+    creatureObject->set_card_id("grizzly_bears");
+    creatureObject->set_owner_player_id(p1->getPlayerId());
+    callBatchApply(stolen);
+    ASSERT_EQ(findCardByEngineOid(p2, 907u), creature);
+    ASSERT_EQ(equipment->getParentCard(), creature);
+
+    ruled::v1::IpcResponse moved;
+    moved.set_ok(true);
+    auto *batch = moved.mutable_batch();
+    auto *permanentMoved = batch->add_events()->mutable_permanent_moved();
+    permanentMoved->set_object_id(907u);
+    permanentMoved->set_owner_player_id(p1->getPlayerId());
+    permanentMoved->set_controller_player_id(p2->getPlayerId());
+    permanentMoved->set_destination(ruled::v1::PermanentMoved::DESTINATION_LIBRARY);
+    permanentMoved->set_card_id("grizzly_bears");
+    auto *finalView = batch->add_events()->mutable_zone_view();
+    auto *finalOwnerView = finalView->add_per_player();
+    finalOwnerView->set_player_id(p1->getPlayerId());
+    auto *remainingEquipment = finalOwnerView->add_battlefield_objects();
+    remainingEquipment->set_object_id(908u);
+    remainingEquipment->set_card_id("illvoi_light_jammer");
+    remainingEquipment->set_owner_player_id(p1->getPlayerId());
+    auto *libraryCard = finalOwnerView->add_library_cards();
+    libraryCard->set_object_id(907u);
+    libraryCard->set_card_id("grizzly_bears");
+    *finalView->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    const auto opponentBatch = redactFor(*batch, p2);
+    const auto opponentZoneView = std::find_if(opponentBatch.events().begin(), opponentBatch.events().end(),
+                                               [](const auto &event) { return event.has_zone_view(); });
+    ASSERT_NE(opponentZoneView, opponentBatch.events().end());
+    EXPECT_EQ(opponentZoneView->zone_view().per_player(0).library_cards_size(), 0);
+
+    callBatchApply(moved);
+    ASSERT_EQ(findCardByEngineOid(p1, 907u), creature);
+    EXPECT_EQ(creature->getZone()->getName(), QString(ZoneNames::DECK));
+    EXPECT_EQ(creature->getZone()->getPlayer(), p1);
+    EXPECT_EQ(equipment->getParentCard(), nullptr);
+}
+
 TEST_F(RuledBatchTest, PlayerAttachmentStaysInNormalRowAndTransitionsWithoutLosingAnnotations)
 {
     seedCardCatalog({"Curse of Disturbance"});

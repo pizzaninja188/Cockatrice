@@ -127,6 +127,8 @@ mod issue_152_exhaust;
 mod issue_153_blight;
 #[path = "scenario/issue_154_changeling.rs"]
 mod issue_154_changeling;
+#[path = "scenario/issue_155_attachment_actions.rs"]
+mod issue_155_attachment_actions;
 #[path = "scenario/issue_156_event_observers.rs"]
 mod issue_156_event_observers;
 #[path = "scenario/issue_158_predicates.rs"]

@@ -1079,6 +1079,24 @@ impl CardRegistry {
                         reason: "AuraAttach is only valid on an Aura face".into(),
                     });
                 }
+                let uses_attach_source = face
+                    .activated_abilities
+                    .iter()
+                    .flat_map(|ability| &ability.effect)
+                    .chain(
+                        face.triggered_abilities
+                            .iter()
+                            .flat_map(|ability| &ability.effect),
+                    )
+                    .any(|effect| matches!(effect, SpellEffectKind::AttachSource { .. }));
+                if uses_attach_source
+                    && !face.types.iter().any(|card_type| card_type == "Equipment")
+                {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "AttachSource requires an Equipment source".into(),
+                    });
+                }
                 let can_reference_attached_object = face_can_reference_attached_object(face);
                 let can_reference_attached_player = face_can_reference_attached_player(face);
                 let uses_attached_object = face

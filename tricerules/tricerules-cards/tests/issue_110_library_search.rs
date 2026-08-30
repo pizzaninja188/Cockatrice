@@ -146,7 +146,7 @@ fn issue_110_conditional_and_owner_choice_cards_are_complete() {
     assert!(matches!(
         voyage.spell_effect.as_slice(),
         [
-            SpellEffectKind::PutTargetPermanentInOwnersLibrary {
+            SpellEffectKind::PutInOwnersLibrary {
                 placement: LibraryPlacement::OwnerChoiceTopOrBottom,
                 ..
             },
@@ -169,7 +169,7 @@ fn issue_110_conditional_and_owner_choice_cards_are_complete() {
     );
     assert!(matches!(
         modal.modes[0].effects.as_slice(),
-        [SpellEffectKind::PutTargetPermanentInOwnersLibrary {
+        [SpellEffectKind::PutInOwnersLibrary {
             placement: LibraryPlacement::OwnerChoiceTopOrBottom,
             ..
         }]

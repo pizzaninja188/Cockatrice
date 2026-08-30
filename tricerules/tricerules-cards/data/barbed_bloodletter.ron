@@ -1,0 +1,22 @@
+// Oracle and ruling verified 2026-08-29. Wither applies to all creature damage from the recipient.
+(
+  id: "barbed_bloodletter",
+  name: "Barbed Bloodletter",
+  mana_cost: "{1}{B}",
+  types: ["Artifact", "Equipment"],
+  keywords: [Flash],
+  triggered_abilities: [(
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      AttachSource(target: (kind: Creature, controller: You)),
+      GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Wither]),
+    ],
+    text: "When this Equipment enters, attach it to target creature you control. That creature gains wither until end of turn.",
+  )],
+  static_abilities: [AttachedModifier(delta_power: 1, delta_toughness: 2)],
+  activated_abilities: [(
+    costs: [Mana("{2}")],
+    effect: [Equip(target: (kind: Creature, controller: You))],
+    text: "Equip {2}",
+  )],
+)

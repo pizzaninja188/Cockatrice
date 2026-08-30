@@ -989,7 +989,14 @@ fn validate_effect_targets(
         | SpellEffectKind::Earthbend { .. }
         | SpellEffectKind::ExileUntilSourceLeaves { target: _ }
         | SpellEffectKind::DestroyAttached { target: _, .. }
-        | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: _, .. } => {
+        | SpellEffectKind::AttachSource { target: _ }
+        | SpellEffectKind::Exile {
+            subject: EffectSubject::Chosen(_),
+        }
+        | SpellEffectKind::PutInOwnersLibrary {
+            subject: EffectSubject::Chosen(_),
+            ..
+        } => {
             let roles = effect.target_roles();
             let [TargetRole::Filtered(filter)] = roles.as_slice() else {
                 return Err(EngineError::Illegal("effect requires one filtered target role"));
@@ -1160,11 +1167,6 @@ fn validate_effect_targets(
                 }
             }
         },
-        SpellEffectKind::ExileTarget { target } => {
-            if targets.len() != 1 || !target_filter_legal_with_context(engine, target, targets[0].object_id, caster, source, trigger_context) {
-                return Err(EngineError::Illegal("illegal exile target"));
-            }
-        }
         SpellEffectKind::ExileTargetGainLifeEqualToPower => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one creature target"));
@@ -1319,6 +1321,17 @@ fn validate_effect_targets(
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject,
+        }
+        | SpellEffectKind::Exile {
+            subject: EffectSubject::Source
+                | EffectSubject::AttachedObject
+                | EffectSubject::TriggerObject,
+        }
+        | SpellEffectKind::PutInOwnersLibrary {
+            subject: EffectSubject::Source
+                | EffectSubject::AttachedObject
+                | EffectSubject::TriggerObject,
+            ..
         }
         | SpellEffectKind::PumpAll { .. }
         | SpellEffectKind::GrantKeywordsAll { .. }
@@ -1623,7 +1636,14 @@ fn spell_target_legality_error_with_context(
             subject: EffectSubject::Chosen(_),
         }
         | SpellEffectKind::DestroyAttached { target: _, .. }
-        | SpellEffectKind::PutTargetPermanentInOwnersLibrary { target: _, .. }
+        | SpellEffectKind::AttachSource { target: _ }
+        | SpellEffectKind::Exile {
+            subject: EffectSubject::Chosen(_),
+        }
+        | SpellEffectKind::PutInOwnersLibrary {
+            subject: EffectSubject::Chosen(_),
+            ..
+        }
         | SpellEffectKind::DamageTarget { target: _, .. }
         | SpellEffectKind::ExileIfWouldDieThisTurn { target: _ }
         | SpellEffectKind::DamageTargets { target: _, .. }
@@ -1733,6 +1753,13 @@ fn spell_target_legality_error_with_context(
         | SpellEffectKind::Untap {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
         }
+        | SpellEffectKind::Exile {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+        }
+        | SpellEffectKind::PutInOwnersLibrary {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            ..
+        }
         | SpellEffectKind::ApplyCombatRestriction {
             scope: CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_),
             ..
@@ -1740,18 +1767,6 @@ fn spell_target_legality_error_with_context(
             return Err(EngineError::Illegal(
                 "source-bound effects are only valid on activated or triggered abilities",
             ));
-        }
-        SpellEffectKind::ExileTarget { target } => {
-            if !target_filter_legal_with_context(
-                engine,
-                target,
-                tid,
-                caster,
-                source,
-                trigger_context,
-            ) {
-                return Err(EngineError::Illegal("illegal exile target"));
-            }
         }
         SpellEffectKind::ExileTargetGainLifeEqualToPower => {
             if !destroy_spell_target_legal(engine, tid) {
@@ -2040,7 +2055,7 @@ fn compute_targets_with_context(
 mod tests {
     #[test]
     fn issue_176_exile_role_accepts_noncreature_artifacts() {
-        let card = r#"(id: "test", name: "Test", types: ["Instant"], spell_effect: [ExileTarget(target: (kind: AnyPermanent, permanent_types: [Artifact], excluded_permanent_types: [Creature]))])"#;
+        let card = r#"(id: "test", name: "Test", types: ["Instant"], spell_effect: [Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact], excluded_permanent_types: [Creature])))])"#;
         let registry = CardRegistry::from_chunks_and_tokens(&[card], &[]).unwrap();
         let effect = &registry.get("test").unwrap().primary_face().spell_effect[0];
         let decks = Some(vec![

@@ -222,6 +222,7 @@ public:
         int defense = -1;
         int battleProtector = -1;
         bool firstAbilityActivatable = false;
+        quint32 attachmentObjectId = 0;
         int attachmentPlayerId = -1;
         std::array<bool, 2> roomDoors{false, false};
         int roomDoorCount = 0;
@@ -1559,6 +1560,11 @@ public:
                                         roomPhysicalIdentityContinuous = false;
                                     }
                                 }
+                            }
+                            if (battlefieldObject.has_attachment_recipient() &&
+                                battlefieldObject.attachment_recipient().recipient_case() ==
+                                    ruled::v1::AttachmentRecipient::kObjectId) {
+                                perm.attachmentObjectId = battlefieldObject.attachment_recipient().object_id();
                             }
                             if (battlefieldObject.has_attachment_recipient() &&
                                 battlefieldObject.attachment_recipient().recipient_case() ==
@@ -5369,6 +5375,172 @@ TEST_F(RuledE2ESmokeTest, GraveyardTargetCohortIsPrivateAndMovesExactPhysicalCar
     EXPECT_TRUE(p2.sawGraveyardToLibraryPhysicalMove);
     EXPECT_TRUE(p1.graveyardCohortPhysicalIdentityContinuous);
     EXPECT_TRUE(p2.graveyardCohortPhysicalIdentityContinuous);
+}
+
+TEST_F(RuledE2ESmokeTest, EquipmentAttachmentAndMerchantGraveyardReturnReachBothClients)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("attachmentp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("attachmentp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "attachment game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "attachment game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 && (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto devPut = [&](const char *cardName, ruled::v1::DevZone zone, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(cardName);
+        put->set_zone(zone);
+        put->set_ready(ready);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1 for attachment flow").arg(cardName));
+    };
+    auto devMove = [&](const char *cardName, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        auto *move = dev->mutable_move_card();
+        move->set_card_name(cardName);
+        move->set_zone(zone);
+        return sendAndPump(p1, command, QStringLiteral("dev: move %1 for attachment flow").arg(cardName));
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority in attachment flow"));
+    };
+
+    ASSERT_TRUE(devPut("Grizzly Bears", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    const auto bear = std::find_if(p1.battlefieldByPlayer[p1.myId].begin(), p1.battlefieldByPlayer[p1.myId].end(),
+                                   [](const SmokeClient::Permanent &permanent) {
+                                       return permanent.cardId == QStringLiteral("grizzly_bears");
+                                   });
+    ASSERT_NE(bear, p1.battlefieldByPlayer[p1.myId].end());
+    const quint32 bearOid = bear->oid;
+
+    ASSERT_TRUE(devPut("Illvoi Light Jammer", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(p1.pendingTriggerTarget.has_value());
+    ASSERT_EQ(p1.pendingTriggerTarget->targets().groups_size(), 1);
+    const auto &attachGroup = p1.pendingTriggerTarget->targets().groups(0);
+    ASSERT_TRUE(std::find(attachGroup.valid_permanent_ids().begin(), attachGroup.valid_permanent_ids().end(), bearOid) !=
+                attachGroup.valid_permanent_ids().end());
+    ruled::v1::RuledCommand chooseAttachment;
+    auto *attachmentTarget = chooseAttachment.mutable_choose_trigger_target()->add_targets();
+    attachmentTarget->set_object_id(bearOid);
+    attachmentTarget->set_group_index(attachGroup.group_index());
+    attachmentTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    ASSERT_TRUE(sendAndPump(p1, chooseAttachment, QStringLiteral("attach Illvoi Light Jammer")));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+
+    for (SmokeClient *client : {&p1, &p2}) {
+        const auto &battlefield = client->battlefieldByPlayer[p1.myId];
+        const auto attachedEquipment = std::find_if(battlefield.begin(), battlefield.end(),
+                                                    [](const SmokeClient::Permanent &permanent) {
+                                                        return permanent.cardId == QStringLiteral("illvoi_light_jammer");
+                                                    });
+        ASSERT_NE(attachedEquipment, battlefield.end());
+        EXPECT_EQ(attachedEquipment->attachmentObjectId, bearOid);
+        const auto enhancedBear = std::find_if(battlefield.begin(), battlefield.end(), [bearOid](const auto &permanent) {
+            return permanent.oid == bearOid;
+        });
+        ASSERT_NE(enhancedBear, battlefield.end());
+        EXPECT_EQ(enhancedBear->power, 3);
+        EXPECT_EQ(enhancedBear->toughness, 4);
+        ASSERT_TRUE(client->serverCardByEngineOid.count(attachedEquipment->oid));
+    }
+    const auto p1Equipment = std::find_if(p1.battlefieldByPlayer[p1.myId].begin(),
+                                          p1.battlefieldByPlayer[p1.myId].end(), [](const auto &permanent) {
+                                              return permanent.cardId == QStringLiteral("illvoi_light_jammer");
+                                          });
+    ASSERT_NE(p1Equipment, p1.battlefieldByPlayer[p1.myId].end());
+    EXPECT_EQ(p1.serverCardByEngineOid[p1Equipment->oid], p2.serverCardByEngineOid[p1Equipment->oid]);
+
+    ASSERT_TRUE(devPut("Merchant of Many Hats", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(devMove("Merchant of Many Hats", ruled::v1::DEV_ZONE_GRAVEYARD));
+    ruled::v1::RuledCommand addMana;
+    addMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_b(1);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_c(2);
+    ASSERT_TRUE(sendAndPump(p1, addMana, QStringLiteral("dev: add {2}{B} for Merchant")));
+
+    const ruled::v1::LegalZoneAbilityAction *merchantAction = nullptr;
+    for (const auto &action : p1.latestLegal.zone_ability_actions()) {
+        if (action.card_name() == "Merchant of Many Hats" &&
+            action.source_zone() == ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD) {
+            merchantAction = &action;
+            break;
+        }
+    }
+    ASSERT_NE(merchantAction, nullptr);
+    EXPECT_TRUE(std::none_of(p2.latestLegal.zone_ability_actions().begin(), p2.latestLegal.zone_ability_actions().end(),
+                             [](const auto &action) { return action.card_name() == "Merchant of Many Hats"; }));
+    const quint32 merchantOid = merchantAction->object_id();
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(merchantOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(merchantOid));
+    EXPECT_EQ(p1.serverCardByEngineOid[merchantOid], p2.serverCardByEngineOid[merchantOid]);
+    const int handBefore = p1.handSizeByPlayer[p1.myId];
+    const auto opponentPrivateHandBefore = p2.handServerCardBySlot;
+
+    ruled::v1::RuledCommand activateMerchant;
+    auto *ability = activateMerchant.mutable_activate_ability();
+    ability->set_source_object_id(merchantOid);
+    ability->set_source_zone(merchantAction->source_zone());
+    ability->set_expected_zone_change_generation(merchantAction->zone_change_generation());
+    ability->set_ability_index(merchantAction->ability_index());
+    ASSERT_TRUE(sendAndPump(p1, activateMerchant, QStringLiteral("activate Merchant from graveyard")));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], handBefore + 1);
+    EXPECT_EQ(p2.handServerCardBySlot, opponentPrivateHandBefore);
+    EXPECT_TRUE(std::none_of(p1.latestLegal.zone_ability_actions().begin(), p1.latestLegal.zone_ability_actions().end(),
+                             [](const auto &action) { return action.card_name() == "Merchant of Many Hats"; }));
 }
 
 TEST_F(RuledE2ESmokeTest, PlaneswalkerBattleTargetsSplitCombatAndSiegeCastReachBothClients)

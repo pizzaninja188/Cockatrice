@@ -994,7 +994,7 @@ pub(crate) fn setup_two_blockers_assign_phase(
 }
 
 // ----------------------------------------------------------------------------
-// New M2 primitives: GainLife, LoseLife, ExileTarget, ReturnToHand, Mill.
+// New M2 primitives: GainLife, LoseLife, Exile, ReturnToHand, Mill.
 // ----------------------------------------------------------------------------
 
 pub(crate) fn forest_only_deck() -> Vec<String> {

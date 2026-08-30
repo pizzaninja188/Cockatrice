@@ -456,13 +456,10 @@ pub(super) fn tap_all_creatures(
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn equip(
+fn attach_equipment_source(
     cx: &mut EffectCx<'_>,
-    effect: SpellEffectKind,
+    effect_name: &str,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::Equip { .. } = effect else {
-        return Err(EngineError::Illegal("resolution dispatch mismatch"));
-    };
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;
@@ -473,14 +470,14 @@ pub(super) fn equip(
         Some(id) => id,
         None => {
             events.push(ev_log(format!(
-                "{spell_label}: equip ability has no source permanent."
+                "{spell_label}: {effect_name} has no source permanent."
             )));
             return Ok(EffectOutcome::Continue);
         }
     };
     if !engine.source_is_current_object(top) {
         events.push(ev_log(format!(
-            "{spell_label}: equip source is no longer the same object."
+            "{spell_label}: attachment source is no longer the same object."
         )));
         return Ok(EffectOutcome::Continue);
     }
@@ -493,17 +490,29 @@ pub(super) fn equip(
             && engine
                 .characteristics(target_id)
                 .is_some_and(|value| value.is_creature());
-        let equip_on_battlefield = engine
-            .state
-            .objects
-            .get(&equip_oid)
-            .map(|e| e.zone == Zone::Battlefield)
-            .unwrap_or(false);
-        if valid && equip_on_battlefield {
+        let source_is_equipment = engine
+            .characteristics(equip_oid)
+            .is_some_and(|value| value.has_type("Equipment"));
+        if valid && source_is_equipment {
             let tgt = object_display_name(&engine.state, engine.registry, target_id);
             let eq_name = object_display_name(&engine.state, engine.registry, equip_oid);
-            if let Some(eq) = engine.state.objects.get_mut(&equip_oid) {
-                eq.attached_to = Some(AttachmentRecipient::Object(target_id));
+            let recipient = AttachmentRecipient::Object(target_id);
+            let changed = engine.state.objects[&equip_oid].attached_to != Some(recipient);
+            if changed {
+                engine
+                    .state
+                    .objects
+                    .get_mut(&equip_oid)
+                    .expect("source exists")
+                    .attached_to = Some(recipient);
+                let timestamp = engine.state.command_index;
+                for effect in &mut engine.state.continuous_effects {
+                    if effect.source_id == Some(equip_oid)
+                        && effect.duration == EffectDuration::WhileSourceOnBattlefield
+                    {
+                        effect.timestamp = timestamp;
+                    }
+                }
             }
             events.push(ev_log(format!(
                 "{spell_label} attaches {eq_name} to {tgt}."
@@ -512,6 +521,26 @@ pub(super) fn equip(
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn attach_source(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::AttachSource { .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    attach_equipment_source(cx, "AttachSource")
+}
+
+pub(super) fn equip(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::Equip { .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    attach_equipment_source(cx, "equip ability")
 }
 
 pub(super) fn prevent_next_damage(

@@ -1,0 +1,18 @@
+// Oracle verified 2026-08-29. CR 400.7/608.2h binds the pre-sacrifice attachment generation.
+(
+  id: "path_to_redemption",
+  name: "Path to Redemption",
+  mana_cost: "{1}{W}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  static_abilities: [AttachedModifier(cant_attack: true, cant_block: true)],
+  activated_abilities: [(
+    costs: [Mana("{5}"), SacrificeSelf],
+    conditions: [GameCondition(ActivePlayer(players: Controller))],
+    effect: [
+      Exile(subject: AttachedObject),
+      CreateTokens(token: "ally_w_1_1", count: 1),
+    ],
+    text: "{5}, Sacrifice this Aura: Exile enchanted creature. Create a 1/1 white Ally creature token. Activate only during your turn.",
+  )],
+)

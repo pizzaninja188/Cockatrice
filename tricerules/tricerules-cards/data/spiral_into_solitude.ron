@@ -1,0 +1,15 @@
+// Oracle and Blight rulings verified 2026-08-29. The sacrificed Aura supplies generation-bound
+// last-known attachment information to its untargeted resolution instruction.
+(
+  id: "spiral_into_solitude",
+  name: "Spiral into Solitude",
+  mana_cost: "{1}{W}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  static_abilities: [AttachedModifier(cant_attack: true, cant_block: true)],
+  activated_abilities: [(
+    costs: [Mana("{1}{W}"), Blight(count: 1), SacrificeSelf],
+    effect: [Exile(subject: AttachedObject)],
+    text: "{1}{W}, Blight 1, Sacrifice this Aura: Exile enchanted creature.",
+  )],
+)
