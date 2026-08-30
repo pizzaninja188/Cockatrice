@@ -3419,6 +3419,8 @@ TEST_F(RuledClientTest, NonModalTriggerPublishesItsClickTargets)
     ASSERT_TRUE(state->hasPendingTriggerTarget());
     EXPECT_EQ(state->pendingTriggerTargetPrompt(),
               QString::fromUtf8("Choose a target for “Deal 3 damage to any target.”"));
+    EXPECT_EQ(state->pendingTriggerTargetDisplayText(),
+              QString::fromUtf8("Choose a target for “Deal 3 damage to any target.”"));
     const auto targets = state->abilityTargetData(100, 2);
     EXPECT_TRUE(targets.validPermanentIds.contains(101));
     EXPECT_TRUE(targets.canTargetOpponent);
@@ -3442,6 +3444,10 @@ TEST_F(RuledClientTest, TriggerTargetPromptPreservesSpecificGuidance)
     EXPECT_EQ(state->pendingTriggerTargetPrompt(),
               QString::fromUtf8("Choose targets for “Exile up to two target cards from a single graveyard.”\n"
                                 "Choose up to two target cards from a single graveyard."));
+    EXPECT_EQ(state->pendingTriggerTargetDisplayText(),
+              QString::fromUtf8("Choose targets for “Exile up to two target cards from a single graveyard.”\n"
+                                "Choose up to two target cards from a single graveyard.\n"
+                                "Selected: 0 (0–2)."));
 }
 
 TEST_F(RuledClientTest, TriggerTargetPromptAdvancesSequentialGroupGuidance)

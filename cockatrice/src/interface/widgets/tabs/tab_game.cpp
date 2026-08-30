@@ -844,11 +844,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.selected = h->pendingTriggerSelectedCount();
         const int maximum = h->pendingTriggerMaxTargets();
         state.max = state.required == 1 && maximum == 1 ? -1 : maximum;
-        state.text = tr("%1\nSelected: %2 (%3–%4).")
-                         .arg(h->pendingTriggerTargetPrompt())
-                         .arg(state.selected)
-                         .arg(state.required)
-                         .arg(maximum);
+        state.text = h->pendingTriggerTargetDisplayText();
     } else if (localActions && localActions->isAwaitingRuledCastCostObject()) {
         state.mode = PromptMode::CastCostObject;
         state.text = localActions->pendingRuledSpellPromptText();

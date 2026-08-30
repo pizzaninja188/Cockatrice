@@ -864,6 +864,21 @@ QString RuledClientState::pendingTriggerTargetPrompt() const
                                    pendingChoice->activeTriggerTargetGroupPosition, groupCount);
 }
 
+QString RuledClientState::pendingTriggerTargetDisplayText() const
+{
+    const QString prompt = pendingTriggerTargetPrompt();
+    const int minimum = pendingTriggerMinTargets();
+    const int maximum = pendingTriggerMaxTargets();
+    if (minimum == 1 && maximum == 1) {
+        return prompt;
+    }
+    return QCoreApplication::translate("RuledTargetPrompt", "%1\nSelected: %2 (%3–%4).")
+        .arg(prompt)
+        .arg(pendingTriggerSelectedCount())
+        .arg(minimum)
+        .arg(maximum);
+}
+
 // ---------------------------------------------------------------------------------------
 // Tier-3 resolution pick
 // ---------------------------------------------------------------------------------------

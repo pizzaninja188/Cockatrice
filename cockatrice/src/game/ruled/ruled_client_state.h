@@ -1507,6 +1507,7 @@ public:
     [[nodiscard]] int pendingTriggerMinTargets() const;
     [[nodiscard]] int pendingTriggerMaxTargets() const;
     [[nodiscard]] QString pendingTriggerTargetPrompt() const;
+    [[nodiscard]] QString pendingTriggerTargetDisplayText() const;
 
     [[nodiscard]] bool hasPendingTriggerTarget() const
     {
