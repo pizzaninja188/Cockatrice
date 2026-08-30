@@ -585,6 +585,35 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
     return data->groups.at(spell.activeTargetGroupPosition);
 }
 
+[[nodiscard]] inline QString ruledPendingSpellTargetPrompt(const PendingRuledSpellCast &spell,
+                                                           const RuledClientState &state)
+{
+    const auto data = currentRuledSpellTargetData(spell, state);
+    const auto group = currentRuledSpellTargetGroup(spell, state);
+    QString sourceContext = spell.cardName;
+    if (spell.activeModePosition >= 0 && spell.activeModePosition < spell.selectedModes.size()) {
+        sourceContext = QStringLiteral("%1 — %2")
+                            .arg(spell.cardName, spell.selectedModes.at(spell.activeModePosition).label);
+    }
+    const RuledTargetGroupData fallbackGroup;
+    return formatRuledTargetPrompt(sourceContext, group.value_or(fallbackGroup), spell.activeTargetGroupPosition,
+                                   data.has_value() ? data->groups.size() : 0);
+}
+
+[[nodiscard]] inline QString ruledPendingAbilityTargetPrompt(const PendingActivatedAbility &ability,
+                                                             const RuledClientState &state)
+{
+    const RuledSpellTargetData data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
+    const RuledTargetGroupData group =
+        data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data) : data.groups.first();
+    return formatRuledTargetPrompt(ability.abilityText, group, 0, data.groups.size());
+}
+
+[[nodiscard]] inline int ruledTargetSelectionDisplayMaximum(const RuledTargetGroupData &group)
+{
+    return ruledTargetGroupUsesExplicitConfirmation(group) ? group.maxTargets : -1;
+}
+
 /// One authoritative click predicate for every true target-selection flow. Untargeted resolution
 /// and cost choices deliberately stay out of this function.
 [[nodiscard]] inline RuledTargetClickEligibility

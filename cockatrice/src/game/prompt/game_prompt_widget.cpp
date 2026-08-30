@@ -468,6 +468,7 @@ void GamePromptWidget::setMultiTargetSelectionCount(int selected, int minTargets
     multiTargetMinCount = minTargets;
     multiTargetMaxCount = maxTargets;
     updateCombatButtonsVisibility();
+    refreshTargetingPromptText();
 }
 
 void GamePromptWidget::setSpellDamageAllocationStatus(bool active, int assigned, int total)
@@ -570,10 +571,11 @@ void GamePromptWidget::setTargetingMode(bool enabled, const QString &effectText)
     // Unlike the other two sources this one always re-announces itself: re-entering targeting for
     // a different mode of the same spell must replace the effect text on the label.
     if (enabled) {
-        setPromptText(effectText);
+        targetingPromptText = effectText.trimmed();
     }
     setTargetingSource(TargetingSource::SpellTargetSelection, enabled);
     updateCombatButtonsVisibility();
+    refreshTargetingPromptText();
 }
 
 void GamePromptWidget::setRuledStackHasItems(bool hasItems)
@@ -619,15 +621,35 @@ void GamePromptWidget::setSpellCastPending(bool pending)
     setTargetingSource(TargetingSource::SpellCastPending, pending);
 }
 
-void GamePromptWidget::setActivatedAbilityTargetPending(bool pending, const QString &abilityText)
+void GamePromptWidget::setActivatedAbilityTargetPending(bool pending, const QString &promptText)
 {
+    if (pending) {
+        targetingPromptText = promptText.trimmed();
+        multiTargetSelectedCount = 0;
+        multiTargetMinCount = 0;
+        multiTargetMaxCount = -1;
+    }
     if (targetingSources.testFlag(TargetingSource::AbilityTargetPending) == pending) {
+        refreshTargetingPromptText();
         return;
     }
-    if (pending) {
-        setPromptText(tr("Choose a target for “%1”, or press Cancel.").arg(abilityText));
-    }
     setTargetingSource(TargetingSource::AbilityTargetPending, pending);
+    refreshTargetingPromptText();
+}
+
+void GamePromptWidget::refreshTargetingPromptText()
+{
+    if (effectiveMode() != PromptMode::Targeting || targetingPromptText.isEmpty()) {
+        return;
+    }
+    QString text = targetingPromptText;
+    if (multiTargetMaxCount >= 0) {
+        text += tr("\nSelected: %1 (%2–%3).")
+                    .arg(multiTargetSelectedCount)
+                    .arg(multiTargetMinCount)
+                    .arg(multiTargetMaxCount);
+    }
+    setPromptText(text);
 }
 
 void GamePromptWidget::setCombatDamageStatus(const QString &attackerName, int assigned, int power,

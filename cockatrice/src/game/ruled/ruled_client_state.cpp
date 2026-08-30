@@ -2,9 +2,49 @@
 
 #include "ruled_client_host.h"
 
+#include <QCoreApplication>
 #include <QTimer>
 #include <algorithm>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
+
+QString formatRuledTargetPrompt(const QString &sourceContext,
+                                const RuledTargetGroupData &group,
+                                int groupPosition,
+                                int groupCount)
+{
+    const QString source = sourceContext.trimmed();
+    const QString guidance = group.promptText.trimmed();
+    if (source.isEmpty()) {
+        return guidance;
+    }
+
+    const int totalGroups = std::max(groupCount, 1);
+    const bool plural = totalGroups > 1 || group.maxTargets != 1;
+    const char *sourceTemplate = plural ? "Choose targets for “%1”" : "Choose a target for “%1”";
+    QString sourceLine = QCoreApplication::translate("RuledTargetPrompt", sourceTemplate).arg(source);
+    if (!source.endsWith(QLatin1Char('.')) && !source.endsWith(QLatin1Char('?')) &&
+        !source.endsWith(QLatin1Char('!'))) {
+        sourceLine += QLatin1Char('.');
+    }
+    const bool genericSingleTarget =
+        guidance.compare(QStringLiteral("Choose a target"), Qt::CaseInsensitive) == 0;
+
+    if (totalGroups > 1) {
+        const QString groupGuidance =
+            guidance.isEmpty()
+                ? QCoreApplication::translate("RuledTargetPrompt", "Choose a target.")
+                : guidance;
+        return QCoreApplication::translate("RuledTargetPrompt", "%1\nTarget %2 of %3: %4")
+            .arg(sourceLine)
+            .arg(std::clamp(groupPosition, 0, totalGroups - 1) + 1)
+            .arg(totalGroups)
+            .arg(groupGuidance);
+    }
+    if (guidance.isEmpty() || genericSingleTarget) {
+        return sourceLine;
+    }
+    return sourceLine + QLatin1Char('\n') + guidance;
+}
 
 RuledClientState::RuledClientState(RuledClientHost *_host, QObject *parent) : QObject(parent), host(_host)
 {
@@ -809,7 +849,19 @@ int RuledClientState::pendingTriggerMaxTargets() const
 QString RuledClientState::pendingTriggerTargetPrompt() const
 {
     const auto group = pendingTriggerTargetGroupData();
-    return group.has_value() && !group->promptText.isEmpty() ? group->promptText : pendingTriggerText();
+    if (!group.has_value()) {
+        return pendingTriggerText();
+    }
+    int groupCount = pendingChoice->triggerTargets.groups.size();
+    if (groupCount == 0) {
+        const quint64 key = abilityTargetKey(lastTriggerSourceOid, static_cast<int>(lastTriggerAbilityIndex));
+        const auto published = validTargetsByAbility.constFind(key);
+        if (published != validTargetsByAbility.constEnd()) {
+            groupCount = published->groups.size();
+        }
+    }
+    return formatRuledTargetPrompt(pendingTriggerText(), *group,
+                                   pendingChoice->activeTriggerTargetGroupPosition, groupCount);
 }
 
 // ---------------------------------------------------------------------------------------

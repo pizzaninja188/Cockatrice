@@ -146,7 +146,7 @@ public slots:
     void setLandTapUndoAvailable(bool available);
     // Targeting sources — wired straight to the PlayerActions signals that raise/drop them.
     void setSpellCastPending(bool pending);
-    void setActivatedAbilityTargetPending(bool pending, const QString &abilityText);
+    void setActivatedAbilityTargetPending(bool pending, const QString &promptText);
     /// Active player only: drives assign-combat-damage title, assigned/power line, and OK enable.
     /// `playerDamage` is the implied trample damage to the defending player (0 for non-trample).
     void setCombatDamageStatus(const QString &attackerName, int assigned, int power, int playerDamage, bool legal);
@@ -201,6 +201,7 @@ private:
     void hideActionAndCombatButtons();
     void updateZoneSelectionControls();
     [[nodiscard]] int matchingZoneSelectionOption() const;
+    void refreshTargetingPromptText();
 
     QLabel *promptLabel;
     QPushButton *passPriorityButton;
@@ -221,6 +222,7 @@ private:
     int multiTargetMinCount = 0;
     int multiTargetMaxCount = -1;
     QString fallbackPromptText;
+    QString targetingPromptText;
     bool landTapUndoAvailable = false;
     int currentActivePhase = -1;
     bool localPlayerHasPriority = false;

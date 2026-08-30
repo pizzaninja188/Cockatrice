@@ -740,6 +740,59 @@ TEST(RuledPendingTargetTest, ClickEligibilityUsesLatestAuthoritativeModalTargets
               RuledTargetClickEligibility::Illegal);
 }
 
+TEST(RuledPendingTargetTest, SpellPromptUsesFaceAndActiveModeContext)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.waitingForTarget = true;
+    spell.handIndex = 3;
+    spell.faceIndex = 0;
+    spell.cardName = QStringLiteral("Mystic Confluence");
+    spell.activeModePosition = 0;
+    spell.activeTargetGroupPosition = 0;
+
+    RuledSpellTargetData targets;
+    RuledTargetGroupData group;
+    group.promptText = QStringLiteral("Choose target spell.");
+    group.minTargets = 1;
+    group.maxTargets = 1;
+    targets.groups.append(group);
+    spell.selectedModes.append({7, QStringLiteral("Counter target spell unless its controller pays {3}"), true,
+                                targets, {}, {}});
+    state.handActions[ruled::v1::HAND_ACTION_CAST_SPELL]
+        .modalOptionsByCastKey[RuledClientState::spellTargetKey(3, 0)] = {
+        {7, QStringLiteral("Counter target spell unless its controller pays {3}"), true, true, targets}};
+
+    EXPECT_EQ(ruledPendingSpellTargetPrompt(spell, state),
+              QString::fromUtf8("Choose a target for “Mystic Confluence — Counter target spell unless its "
+                                "controller pays {3}”.\nChoose target spell."));
+}
+
+TEST(RuledPendingTargetTest, ActivatedAbilityPromptUsesAbilityTextAndTargetGuidance)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.permanentOid = 44;
+    ability.abilityIndex = 2;
+    ability.abilityText = QStringLiteral("{W}, {T}: Tap target creature.");
+
+    RuledSpellTargetData targets;
+    RuledTargetGroupData group;
+    group.promptText = QStringLiteral("Choose target creature an opponent controls.");
+    group.minTargets = 1;
+    group.maxTargets = 1;
+    targets.groups.append(group);
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(44, 2), targets);
+
+    EXPECT_EQ(ruledPendingAbilityTargetPrompt(ability, state),
+              QString::fromUtf8("Choose a target for “{W}, {T}: Tap target creature.”\n"
+                                "Choose target creature an opponent controls."));
+}
+
 TEST(RuledPendingTargetTest, ClickEligibilityCoversAbilitiesTriggersAndCopyRetargeting)
 {
     FakeHost host;
@@ -3358,14 +3411,68 @@ TEST_F(RuledClientTest, NonModalTriggerPublishesItsClickTargets)
     group->set_group_index(0);
     group->set_min(1);
     group->set_max(1);
+    group->set_prompt_text("Choose a target");
     group->add_valid_permanent_ids(101);
     group->set_can_target_opponent(true);
     apply(batch);
 
     ASSERT_TRUE(state->hasPendingTriggerTarget());
+    EXPECT_EQ(state->pendingTriggerTargetPrompt(),
+              QString::fromUtf8("Choose a target for “Deal 3 damage to any target.”"));
     const auto targets = state->abilityTargetData(100, 2);
     EXPECT_TRUE(targets.validPermanentIds.contains(101));
     EXPECT_TRUE(targets.canTargetOpponent);
+}
+
+TEST_F(RuledClientTest, TriggerTargetPromptPreservesSpecificGuidance)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *tnt = batch.add_events()->mutable_trigger_needs_target();
+    tnt->set_source_permanent_id(100);
+    tnt->set_ability_index(0);
+    tnt->set_ability_text("Exile up to two target cards from a single graveyard.");
+    tnt->set_controller_player_id(kLocalPlayer);
+    auto *group = tnt->mutable_targets()->add_groups();
+    group->set_group_index(0);
+    group->set_prompt_text("Choose up to two target cards from a single graveyard.");
+    group->set_min(0);
+    group->set_max(2);
+    apply(batch);
+
+    EXPECT_EQ(state->pendingTriggerTargetPrompt(),
+              QString::fromUtf8("Choose targets for “Exile up to two target cards from a single graveyard.”\n"
+                                "Choose up to two target cards from a single graveyard."));
+}
+
+TEST_F(RuledClientTest, TriggerTargetPromptAdvancesSequentialGroupGuidance)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *tnt = batch.add_events()->mutable_trigger_needs_target();
+    tnt->set_source_permanent_id(100);
+    tnt->set_ability_index(0);
+    tnt->set_ability_text("Choose one artifact and one creature.");
+    tnt->set_controller_player_id(kLocalPlayer);
+    auto *artifact = tnt->mutable_targets()->add_groups();
+    artifact->set_group_index(3);
+    artifact->set_prompt_text("Choose target artifact.");
+    artifact->set_min(1);
+    artifact->set_max(1);
+    artifact->add_valid_permanent_ids(701);
+    auto *creature = tnt->mutable_targets()->add_groups();
+    creature->set_group_index(7);
+    creature->set_prompt_text("Choose target creature.");
+    creature->set_min(1);
+    creature->set_max(1);
+    creature->add_valid_permanent_ids(702);
+    apply(batch);
+
+    EXPECT_EQ(state->pendingTriggerTargetPrompt(),
+              QString::fromUtf8("Choose targets for “Choose one artifact and one creature.”\n"
+                                "Target 1 of 2: Choose target artifact."));
+    ASSERT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kLocalPlayer));
+    EXPECT_EQ(state->pendingTriggerTargetPrompt(),
+              QString::fromUtf8("Choose targets for “Choose one artifact and one creature.”\n"
+                                "Target 2 of 2: Choose target creature."));
 }
 
 TEST_F(RuledClientTest, ResolutionBranchesSubmitOpaqueIndexWithoutOpeningADialog)

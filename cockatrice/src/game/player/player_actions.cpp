@@ -955,16 +955,11 @@ void PlayerActions::continuePendingSpellAfterCastCostGroups()
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
     if (pendingRuledSpellCast.waitingForTarget) {
         const auto activeGroup = currentRuledSpellTargetGroup(pendingRuledSpellCast, *geh);
-        const QString effectText =
-            activeGroup.has_value() && !activeGroup->promptText.isEmpty() ? activeGroup->promptText
-            : pendingRuledSpellCast.activeModePosition >= 0
-                ? pendingRuledSpellCast.selectedModes.at(pendingRuledSpellCast.activeModePosition).label
-                : pendingRuledSpellCast.cardName;
+        const QString effectText = ruledPendingSpellTargetPrompt(pendingRuledSpellCast, *geh);
         emit ruledSpellTargetingChanged(true, effectText);
-        if (ruledTargetRangeUsesExplicitConfirmation(pendingRuledSpellCast.minTargets,
-                                                      pendingRuledSpellCast.maxTargets)) {
+        if (activeGroup.has_value()) {
             emit ruledMultiTargetSelectionUpdated(0, pendingRuledSpellCast.minTargets,
-                                                  pendingRuledSpellCast.maxTargets);
+                                                  ruledTargetSelectionDisplayMaximum(*activeGroup));
         }
         RuledActions::updateGraveyardTargetHint(player, pendingRuledSpellCast.handIndex,
                                                 pendingRuledSpellCast.faceIndex);
@@ -2626,13 +2621,12 @@ bool PlayerActions::storeCurrentTargetGroupAndAdvance()
     loadCurrentTargetGroup();
     pendingRuledSpellCast.waitingForTarget = true;
     const auto &next = data->groups.at(current + 1);
-    emit ruledSpellTargetingChanged(true, next.promptText);
-    if (ruledTargetGroupUsesExplicitConfirmation(next)) {
-        emit ruledMultiTargetSelectionUpdated(pendingRuledSpellCast.selectedTargetOids.size(), next.minTargets,
-                                              next.maxTargets);
-    }
+    const QString prompt = ruledPendingSpellTargetPrompt(pendingRuledSpellCast, *state);
+    emit ruledSpellTargetingChanged(true, prompt);
+    emit ruledMultiTargetSelectionUpdated(pendingRuledSpellCast.selectedTargetOids.size(), next.minTargets,
+                                          ruledTargetSelectionDisplayMaximum(next));
     RuledActions::updateGraveyardTargetHint(player, pendingRuledSpellCast.handIndex, pendingRuledSpellCast.faceIndex);
-    state->emitLocalLog(next.promptText);
+    state->emitLocalLog(prompt);
     state->emitSpellTargetSelectionChanged();
     player->getGameScene()->update();
     return true;
@@ -2670,14 +2664,13 @@ bool PlayerActions::storeCurrentModalTargetsAndAdvance()
         pendingRuledSpellCast.extraManaPerTarget = nextMode.targets.extraManaPerTarget;
         loadCurrentTargetGroup();
         pendingRuledSpellCast.waitingForTarget = true;
-        const QString prompt =
-            nextMode.targets.groups.isEmpty() ? nextMode.label : nextMode.targets.groups.first().promptText;
+        const QString prompt = ruledPendingSpellTargetPrompt(
+            pendingRuledSpellCast, *player->getGame()->getGameEventHandler()->ruled());
         emit ruledSpellTargetingChanged(true, prompt);
-        if (!nextMode.targets.groups.isEmpty() &&
-            ruledTargetGroupUsesExplicitConfirmation(nextMode.targets.groups.first())) {
+        if (!nextMode.targets.groups.isEmpty()) {
             const auto &group = nextMode.targets.groups.first();
             emit ruledMultiTargetSelectionUpdated(pendingRuledSpellCast.selectedTargetOids.size(), group.minTargets,
-                                                  group.maxTargets);
+                                                  ruledTargetSelectionDisplayMaximum(group));
         }
         RuledActions::updateGraveyardTargetHint(player, pendingRuledSpellCast.handIndex,
                                                 pendingRuledSpellCast.faceIndex);
@@ -5243,8 +5236,9 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 
     if (needsTarget) {
         // Target first, then mana payment after target is chosen.
-        emit ruledActivatedAbilityTargetPendingChanged(true, chosen->text());
-        handler->emitLocalLog(tr("Choose a target for: %1").arg(chosen->text()));
+        const QString prompt = ruledPendingAbilityTargetPrompt(pendingActivatedAbility, *handler);
+        emit ruledActivatedAbilityTargetPendingChanged(true, prompt);
+        handler->emitLocalLog(prompt);
     } else {
         continuePendingActivatedAbilityAfterChoice();
     }

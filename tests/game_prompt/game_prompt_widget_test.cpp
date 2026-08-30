@@ -158,11 +158,32 @@ TEST_F(GamePromptWidgetTest, TargetingModeUpdatesForTheNextSelectedMode)
     EXPECT_EQ(label("promptLabel")->text(), QStringLiteral("Return target permanent to its owner's hand"));
 }
 
-TEST_F(GamePromptWidgetTest, ActivatedAbilityTargetingUsesAbilityText)
+TEST_F(GamePromptWidgetTest, ActivatedAbilityTargetingDisplaysPreformattedPrompt)
 {
-    widget->setActivatedAbilityTargetPending(true, "{T}: Tap target permanent");
+    widget->setActivatedAbilityTargetPending(
+        true, QString::fromUtf8("Choose a target for “{T}: Tap target permanent.”\nChoose target creature."));
     EXPECT_EQ(label("promptLabel")->text(),
-              QString::fromUtf8("Choose a target for “{T}: Tap target permanent”, or press Cancel."));
+              QString::fromUtf8("Choose a target for “{T}: Tap target permanent.”\nChoose target creature."));
+}
+
+TEST_F(GamePromptWidgetTest, VariableTargetingShowsSelectionRangeWithoutLosingContext)
+{
+    const QString prompt = QString::fromUtf8(
+        "Choose targets for “Example Spell”.\nChoose up to two target creatures.");
+    widget->setTargetingMode(true, prompt);
+    widget->setMultiTargetSelectionCount(1, 0, 2);
+    EXPECT_EQ(label("promptLabel")->text(),
+              prompt + QString::fromUtf8("\nSelected: 1 (0–2)."));
+}
+
+TEST_F(GamePromptWidgetTest, ExactOneTargetGroupClearsStaleSelectionRange)
+{
+    widget->setTargetingMode(true, "Choose targets for Example Spell.");
+    widget->setMultiTargetSelectionCount(1, 0, 2);
+    widget->setTargetingMode(true, "Choose a target for Example Spell.");
+    widget->setMultiTargetSelectionCount(0, 1, -1);
+    EXPECT_EQ(label("promptLabel")->text(), QStringLiteral("Choose a target for Example Spell."));
+    EXPECT_TRUE(btn("confirmTargetsButton")->isHidden());
 }
 
 TEST_F(GamePromptWidgetTest, TargetingModeCancelSignalEmitted)

@@ -45,11 +45,11 @@ void RuledTargetUi::reconcile(PlayerActions *actions)
     if (spell.valid && spell.waitingForTarget) {
         spell.inDamageAllocationMode = false;
         const auto group = currentRuledSpellTargetGroup(spell, *state);
-        const QString prompt = group.has_value() ? group->promptText : spell.cardName;
+        const QString prompt = ruledPendingSpellTargetPrompt(spell, *state);
         emit actions->ruledSpellTargetingChanged(true, prompt);
-        if (group.has_value() && ruledTargetGroupUsesExplicitConfirmation(*group)) {
+        if (group.has_value()) {
             emit actions->ruledMultiTargetSelectionUpdated(spell.selectedTargetOids.size(), group->minTargets,
-                                                           group->maxTargets);
+                                                           ruledTargetSelectionDisplayMaximum(*group));
         }
         if (spellHadTargets) {
             state->emitLocalLog(actions->tr("A selected target is no longer legal. %1").arg(prompt));
@@ -59,9 +59,9 @@ void RuledTargetUi::reconcile(PlayerActions *actions)
     if (abilityHadTarget && ability.valid && ability.selectedTargetOid == 0) {
         ability.waitingForTarget = true;
         ability.waitingForMana = false;
-        emit actions->ruledActivatedAbilityTargetPendingChanged(true, ability.abilityText);
-        state->emitLocalLog(actions->tr("The selected target is no longer legal. Choose a new target for: %1")
-                                .arg(ability.abilityText));
+        const QString prompt = ruledPendingAbilityTargetPrompt(ability, *state);
+        emit actions->ruledActivatedAbilityTargetPendingChanged(true, prompt);
+        state->emitLocalLog(actions->tr("The selected target is no longer legal. %1").arg(prompt));
     }
     state->emitSpellTargetSelectionChanged();
     state->emitSpellDamageAllocationUiChanged();

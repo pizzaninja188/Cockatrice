@@ -96,6 +96,14 @@ struct RuledTargetGroupData
     bool sameGraveyard = false;
 };
 
+/// Builds the common ruled target prompt from engine-authored source and group presentation data.
+/// `groupPosition` is zero-based; `groupCount` is the number of sequential groups in the active
+/// spell mode or ability.
+[[nodiscard]] QString formatRuledTargetPrompt(const QString &sourceContext,
+                                              const RuledTargetGroupData &group,
+                                              int groupPosition,
+                                              int groupCount);
+
 struct RuledTargetingCostCandidate
 {
     ruled::v1::TargetRefKind kind = ruled::v1::TARGET_REF_KIND_UNSPECIFIED;
