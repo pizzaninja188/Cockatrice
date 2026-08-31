@@ -539,7 +539,12 @@ QString PlayerActions::pendingRuledSpellPromptText() const
                    : tr("%1\n%2").arg(pendingRuledSpellCast.castCostObjectError, instruction);
     }
     if (pendingRuledSpellCast.nextCastCostGroup < pendingRuledSpellCast.castCostGroups.size()) {
-        return pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup).prompt;
+        const auto &group = pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup);
+        return tr("%1\nSelected: %2 (%3-%4)")
+            .arg(group.prompt)
+            .arg(ruledCastCostGroupSelectionCount(pendingRuledSpellCast, group.groupIndex))
+            .arg(group.min)
+            .arg(group.max);
     }
     if (pendingRuledSpellCast.waitingForTarget) {
         return {};
@@ -779,6 +784,9 @@ bool PlayerActions::completePendingRuledSpellCast()
         clearPendingRuledSpellCast();
         return false;
     }
+    if (pendingRuledSpellCast.submissionPending) {
+        return true;
+    }
     if (pendingRuledSpellCast.waitingForTarget || pendingRuledSpellCast.waitingForCost ||
         pendingRuledSpellCast.waitingForCastCostObject ||
         pendingRuledSpellCast.nextCastCostGroup < pendingRuledSpellCast.castCostGroups.size()) {
@@ -790,21 +798,23 @@ bool PlayerActions::completePendingRuledSpellCast()
         cancelPendingRuledSpellCast();
         return false;
     }
-    const auto &ruledCommand = *built;
-    std::string payload;
-    if (!ruledCommand.SerializeToString(&payload)) {
-        clearPendingRuledSpellCast();
-        return false;
-    }
-
-    Command_RuledPayload cmd;
-    cmd.set_payload(payload);
-    sendGameCommand(cmd);
-
-    manaPaymentCounterIds.clear();
-    midCastLandTapStack.clear();
-    clearLandTapUndoStack();
-    clearPendingRuledSpellCast();
+    pendingRuledSpellCast.submissionPending = true;
+    emit ruledSpellCastPendingChanged(true);
+    RuledActions::sendRuledCommandExpectingAck(player->getGame(), *built, [this](bool accepted) {
+        if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.submissionPending) {
+            return;
+        }
+        pendingRuledSpellCast.submissionPending = false;
+        if (accepted) {
+            manaPaymentCounterIds.clear();
+            midCastLandTapStack.clear();
+            clearLandTapUndoStack();
+            clearPendingRuledSpellCast();
+        } else {
+            emit ruledSpellCastPendingChanged(true);
+            emit ruledSpellManaPromptChanged();
+        }
+    });
     return true;
 }
 
@@ -850,9 +860,41 @@ bool PlayerActions::promptForNextRuledCastCostGroup()
     while (pendingRuledSpellCast.valid &&
            pendingRuledSpellCast.nextCastCostGroup < pendingRuledSpellCast.castCostGroups.size()) {
         const auto &group = pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup);
+        for (const auto &coordinate : pendingRuledSpellCast.selectedModeLinkedCastCosts) {
+            if (coordinate.first != group.groupIndex ||
+                ruledCastCostOptionAlreadySelected(pendingRuledSpellCast, coordinate.first, coordinate.second)) {
+                continue;
+            }
+            const auto linked = std::find_if(group.options.cbegin(), group.options.cend(), [&coordinate](const auto &o) {
+                return o.optionIndex == coordinate.second;
+            });
+            if (linked == group.options.cend() || !linked->selectable) {
+                cancelPendingRuledSpellCast();
+                return false;
+            }
+            if (linked->kind != RuledCastCostOptionKind::Mana) {
+                pendingRuledSpellCast.activeCastCostOption = linked->optionIndex;
+                pendingRuledSpellCast.waitingForCastCostObject = true;
+                pendingRuledSpellCast.castCostObjectError.clear();
+                emit ruledSpellCastPendingChanged(true);
+                return true;
+            }
+            const auto additional = parseSimpleManaCost(linked->additionalManaCost);
+            for (auto it = additional.constBegin(); it != additional.constEnd(); ++it) {
+                pendingRuledSpellCast.remainingCost[it.key()] += it.value();
+            }
+            pendingRuledSpellCast.castCostSelections.append(
+                {group.groupIndex, linked->optionIndex, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
+        }
+        const int selected = ruledCastCostGroupSelectionCount(pendingRuledSpellCast, group.groupIndex);
         const bool hasSelectableOption =
-            std::any_of(group.options.cbegin(), group.options.cend(), [](const auto &option) { return option.selectable; });
-        if (!hasSelectableOption && group.min == 0) {
+            selected < group.max && std::any_of(group.options.cbegin(), group.options.cend(), [&](const auto &option) {
+                const QPair<int, int> coordinate{group.groupIndex, option.optionIndex};
+                return option.selectable && !pendingRuledSpellCast.modeLinkedCastCosts.contains(coordinate) &&
+                       !ruledCastCostOptionAlreadySelected(pendingRuledSpellCast, group.groupIndex,
+                                                           option.optionIndex);
+            });
+        if (!hasSelectableOption && ruledCastCostGroupCanConfirm(pendingRuledSpellCast, group)) {
             ++pendingRuledSpellCast.nextCastCostGroup;
             continue;
         }
@@ -896,7 +938,41 @@ QVector<RuledCastCostOption> PlayerActions::pendingRuledCastCostOptions() const
     if (!isAwaitingRuledCastCostOption()) {
         return {};
     }
-    return pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup).options;
+    auto options = pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup).options;
+    const auto &group = pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup);
+    const bool full = ruledCastCostGroupSelectionCount(pendingRuledSpellCast, group.groupIndex) >= group.max;
+    for (auto &option : options) {
+        const QPair<int, int> coordinate{group.groupIndex, option.optionIndex};
+        const bool selected = ruledCastCostOptionAlreadySelected(pendingRuledSpellCast, group.groupIndex,
+                                                                  option.optionIndex);
+        option.selectable = option.selectable && (!full || selected) &&
+                            !pendingRuledSpellCast.modeLinkedCastCosts.contains(coordinate);
+        if (selected)
+            option.label = tr("Selected: %1").arg(option.label);
+    }
+    return options;
+}
+
+int PlayerActions::pendingRuledCastCostSelectedCount() const
+{
+    if (!isAwaitingRuledCastCostOption())
+        return 0;
+    const auto &group = pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup);
+    return ruledCastCostGroupSelectionCount(pendingRuledSpellCast, group.groupIndex);
+}
+
+int PlayerActions::pendingRuledCastCostMinimum() const
+{
+    return isAwaitingRuledCastCostOption()
+               ? pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup).min
+               : 0;
+}
+
+int PlayerActions::pendingRuledCastCostMaximum() const
+{
+    return isAwaitingRuledCastCostOption()
+               ? pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup).max
+               : 0;
 }
 
 void PlayerActions::selectPendingRuledCastCostOption(int optionIndex)
@@ -905,13 +981,36 @@ void PlayerActions::selectPendingRuledCastCostOption(int optionIndex)
         return;
     }
     const auto &group = pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup);
-    if (optionIndex < 0 && group.min == 0) {
-        ++pendingRuledSpellCast.nextCastCostGroup;
+    if (optionIndex < 0) {
+        confirmPendingRuledCastCostGroup();
+        return;
     } else {
         const auto option = std::find_if(group.options.cbegin(), group.options.cend(), [optionIndex](const auto &entry) {
             return entry.optionIndex == optionIndex;
         });
-        if (option == group.options.cend() || !option->selectable) {
+        const QPair<int, int> coordinate{group.groupIndex, optionIndex};
+        const auto selected = std::find_if(
+            pendingRuledSpellCast.castCostSelections.cbegin(), pendingRuledSpellCast.castCostSelections.cend(),
+            [&coordinate](const auto &selection) {
+                return selection.groupIndex == coordinate.first && selection.optionIndex == coordinate.second;
+            });
+        if (selected != pendingRuledSpellCast.castCostSelections.cend() &&
+            !pendingRuledSpellCast.modeLinkedCastCosts.contains(coordinate)) {
+            if (option == group.options.cend())
+                return;
+            if (option->kind == RuledCastCostOptionKind::Mana) {
+                const auto additional = parseSimpleManaCost(option->additionalManaCost);
+                for (auto it = additional.constBegin(); it != additional.constEnd(); ++it)
+                    pendingRuledSpellCast.remainingCost[it.key()] -= it.value();
+            }
+            pendingRuledSpellCast.castCostGenericReduction -= selected->genericCostReduction;
+            pendingRuledSpellCast.castCostSelections.erase(selected);
+            emit ruledSpellCastPendingChanged(true);
+            return;
+        }
+        if (option == group.options.cend() || !option->selectable ||
+            pendingRuledSpellCast.modeLinkedCastCosts.contains(coordinate) ||
+            ruledCastCostGroupSelectionCount(pendingRuledSpellCast, group.groupIndex) >= group.max) {
             return;
         }
         if (option->kind == RuledCastCostOptionKind::Mana) {
@@ -920,8 +1019,7 @@ void PlayerActions::selectPendingRuledCastCostOption(int optionIndex)
                 pendingRuledSpellCast.remainingCost[it.key()] += it.value();
             }
             pendingRuledSpellCast.castCostSelections.append(
-            {group.groupIndex, option->optionIndex, RuledPendingCastCostSelection::ObjectKind::None, 0, 0});
-            ++pendingRuledSpellCast.nextCastCostGroup;
+                {group.groupIndex, option->optionIndex, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
         } else {
             pendingRuledSpellCast.activeCastCostOption = option->optionIndex;
             pendingRuledSpellCast.waitingForCastCostObject = true;
@@ -930,17 +1028,32 @@ void PlayerActions::selectPendingRuledCastCostOption(int optionIndex)
             return;
         }
     }
-    if (!promptForNextRuledCastCostGroup()) {
+    emit ruledSpellCastPendingChanged(true);
+}
+
+void PlayerActions::confirmPendingRuledCastCostGroup()
+{
+    if (!isAwaitingRuledCastCostOption())
         return;
-    }
-    if (!pendingRuledSpellCast.waitingForCastCostObject && !isAwaitingRuledCastCostOption()) {
+    const auto &group = pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup);
+    if (!ruledCastCostGroupCanConfirm(pendingRuledSpellCast, group))
+        return;
+    ++pendingRuledSpellCast.nextCastCostGroup;
+    if (!promptForNextRuledCastCostGroup())
+        return;
+    if (!pendingRuledSpellCast.waitingForCastCostObject && !isAwaitingRuledCastCostOption())
         continuePendingSpellAfterCastCostGroups();
-    }
 }
 
 void PlayerActions::backPendingRuledCastCostObject()
 {
     if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForCastCostObject) {
+        return;
+    }
+    const auto &group = pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup);
+    if (pendingRuledSpellCast.selectedModeLinkedCastCosts.contains(
+            {group.groupIndex, pendingRuledSpellCast.activeCastCostOption})) {
+        cancelPendingRuledSpellCast();
         return;
     }
     pendingRuledSpellCast.waitingForCastCostObject = false;
@@ -2120,7 +2233,14 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
             const auto option = std::find_if(modeOptions.cbegin(), modeOptions.cend(),
                                              [modeIndex](const auto &mode) { return mode.modeIndex == modeIndex; });
             if (option != modeOptions.cend()) {
-                selectedModes.append({option->modeIndex, option->label, option->needsTarget, option->targets, {}, {}});
+                PendingRuledSpellCast::SelectedMode selectedMode;
+                selectedMode.modeIndex = option->modeIndex;
+                selectedMode.label = option->label;
+                selectedMode.needsTarget = option->needsTarget;
+                selectedMode.targets = option->targets;
+                selectedMode.linkedCastCostGroupIndex = option->linkedCastCostGroupIndex;
+                selectedMode.linkedCastCostOptionIndex = option->linkedCastCostOptionIndex;
+                selectedModes.append(std::move(selectedMode));
             }
         }
     }
@@ -2167,6 +2287,18 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     pendingRuledSpellCast.costChoices = costData.choices;
     pendingRuledSpellCast.castCostGroups = costData.castCostGroups;
     pendingRuledSpellCast.selectedModes = selectedModes;
+    if (actionSet && actionSet->modalOptionsByCastKey.contains(castKey)) {
+        for (const auto &mode : actionSet->modalOptionsByCastKey.value(castKey)) {
+            if (mode.linkedCastCostGroupIndex >= 0 && mode.linkedCastCostOptionIndex >= 0)
+                pendingRuledSpellCast.modeLinkedCastCosts.insert(
+                    {mode.linkedCastCostGroupIndex, mode.linkedCastCostOptionIndex});
+        }
+    }
+    for (const auto &mode : selectedModes) {
+        if (mode.linkedCastCostGroupIndex >= 0 && mode.linkedCastCostOptionIndex >= 0)
+            pendingRuledSpellCast.selectedModeLinkedCastCosts.append(
+                {mode.linkedCastCostGroupIndex, mode.linkedCastCostOptionIndex});
+    }
 
     // CR 107.3: record how many X pips the cost has; X is chosen before target selection
     // (see promptForRuledSpellXIfNeeded). parseSimpleManaCost folds each X pip
@@ -5337,20 +5469,41 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         pendingRuledSpellCast.castCostSelections.append(
             {group.groupIndex, option->optionIndex, objectKind, stableId, expectedGeneration, genericReduction});
         pendingRuledSpellCast.castCostGenericReduction += genericReduction;
-        ++pendingRuledSpellCast.nextCastCostGroup;
         pendingRuledSpellCast.waitingForCastCostObject = false;
         pendingRuledSpellCast.activeCastCostOption = -1;
-        if (!promptForNextRuledCastCostGroup()) {
+        const QPair<int, int> coordinate{group.groupIndex, option->optionIndex};
+        if (!pendingRuledSpellCast.selectedModeLinkedCastCosts.contains(coordinate)) {
+            emit ruledSpellCastPendingChanged(true);
             return true;
         }
-        if (ruledCastCostGroupsComplete(pendingRuledSpellCast)) {
+        if (!promptForNextRuledCastCostGroup())
+            return true;
+        if (ruledCastCostGroupsComplete(pendingRuledSpellCast))
             continuePendingSpellAfterCastCostGroups();
-        }
         return true;
     }
 
     // CR 614.12 / 707.5: Clone's entering-as-copy choice is untargeted but uses the existing
     // engine-authoritative board click path.
+    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::PermanentChoice)) {
+        if (!card || !card->getZone()) {
+            return false;
+        }
+        if (card->getZone()->getName() != ZoneNames::TABLE) {
+            handler->emitLocalLog(tr("Choose a permanent on the battlefield."));
+            return true;
+        }
+        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+        const quint32 chosenOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        if (chosenOid == 0 ||
+            !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::PermanentChoice, chosenOid)) {
+            handler->emitLocalLog(tr("That permanent is not a legal choice."));
+            return true;
+        }
+        handler->submitPendingChoiceObject(chosenOid);
+        return true;
+    }
+
     if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource)) {
         if (!card || !card->getZone()) {
             return false;

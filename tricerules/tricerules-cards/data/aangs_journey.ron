@@ -25,8 +25,8 @@
           presentation: Fallback,
           filter: (subtype: Some("Shrine")),
           enabled_by_cast_cost: Some((
-            group_index: 0,
-            option_index: 0,
+            group_id: "cast_cost_01",
+            option_id: "option_01",
             expected_selected: true,
           )),
         ),

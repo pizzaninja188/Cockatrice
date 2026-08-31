@@ -663,6 +663,16 @@ message LegalSpellMode {
   bool needs_target = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   SpellTargets targets = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   PresentationRef presentation = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Exact engine-resolved additional cost inseparably linked to choosing this Spree mode
+  // (CR 702.172a).
+  // Stable authored ids remain engine-side; these indices are coordinates in this legal-action
+  // batch and are copied verbatim into CastSpell.cast_cost_group_selections.
+  LinkedCastCostOption linked_cast_cost = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message LinkedCastCostOption {
+  uint32 group_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 option_index = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 enum HandActionKind {
@@ -1230,6 +1240,9 @@ enum ChoiceKind {
   // Untargeted battlefield objects selected to pay a resolving authored cost. The candidate
   // snapshot is private to the deciding player even though accepted taps become public state.
   CHOICE_KIND_COST_OBJECTS = 20;
+  // Public battlefield permanents chosen during resolution without targeting (CR 608.2d).
+  // Final Showdown and source-selection effects such as Sakashima's Will use this click surface.
+  CHOICE_KIND_PERMANENT_OBJECTS = 21;
 }
 
 enum ChoiceCandidateSourceZone {

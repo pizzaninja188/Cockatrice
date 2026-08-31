@@ -147,6 +147,8 @@ mod issue_162_tapped_tokens;
 mod issue_163_calibration_cards;
 #[path = "scenario/issue_169_actor_aware_taps.rs"]
 mod issue_169_actor_aware_taps;
+#[path = "scenario/issue_177_multi_option_cast_costs.rs"]
+mod issue_177_multi_option_cast_costs;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

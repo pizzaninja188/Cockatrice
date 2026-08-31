@@ -1,0 +1,11 @@
+// 2/2 white Spirit creature token with flying (Phantom Interference).
+(
+  id: "spirit_w_2_2_flying",
+  name: "Spirit",
+  face_id: "spirit",
+  types: ["Creature", "Spirit"],
+  colors: [White],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+)

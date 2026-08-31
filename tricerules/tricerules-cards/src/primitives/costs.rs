@@ -185,8 +185,14 @@ impl CastCostGroupDef {
     pub(crate) fn validate(&self) -> Result<(), String> {
         self.group_id.validate()?;
         self.presentation.validate()?;
-        if self.options.is_empty() || self.min > self.max || self.max != 1 {
-            return Err("cast cost group requires min <= max = 1".into());
+        if self.options.is_empty()
+            || self.min > self.max
+            || self.max == 0
+            || self.max as usize > self.options.len()
+        {
+            return Err(
+                "cast cost group requires min <= max <= distinct option count and max > 0".into(),
+            );
         }
         let mut option_ids = std::collections::HashSet::new();
         for option in &self.options {
@@ -254,12 +260,29 @@ impl CastCostOptionDef {
     }
 }
 
+/// Stable authored identity of one option in one cast-cost group. Wire commands continue to use
+/// positional indices as batch coordinates, while card definitions and durable receipts use this
+/// identity so reordering unrelated options cannot change rules behavior.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CastCostOptionRef {
+    pub group_id: ChoiceId,
+    pub option_id: ChoiceId,
+}
+
+impl CastCostOptionRef {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        self.group_id.validate()?;
+        self.option_id.validate()
+    }
+}
+
 /// A typed linked condition over an announced cast-cost option. `expected_selected = false`
 /// supports the inverse branch without requiring clients or effects to infer a default.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CastCostReceiptCondition {
-    pub group_index: u32,
-    pub option_index: u32,
+    pub group_id: ChoiceId,
+    pub option_id: ChoiceId,
     #[serde(default = "default_true")]
     pub expected_selected: bool,
 }

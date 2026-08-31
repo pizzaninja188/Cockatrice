@@ -171,8 +171,8 @@ impl GameEngine {
                             ..
                         } if cast_cost_condition.as_ref().is_none_or(|condition| {
                             event.cast_cost_receipts.iter().any(|receipt| {
-                                receipt.group_index == condition.group_index
-                                    && receipt.option_index == condition.option_index
+                                receipt.group_id.as_ref() == Some(&condition.group_id)
+                                    && receipt.option_id.as_ref() == Some(&condition.option_id)
                             }) == condition.expected_selected
                         }) =>
                         {

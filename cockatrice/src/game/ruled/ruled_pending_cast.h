@@ -272,6 +272,8 @@ struct PendingRuledSpellCast
         QVector<quint32> selectedTargetDamages;
         QVector<QVector<quint32>> selectedTargetOidsByGroup;
         QVector<QVector<quint32>> selectedTargetDamagesByGroup;
+        int linkedCastCostGroupIndex = -1;
+        int linkedCastCostOptionIndex = -1;
     };
 
     int handIndex = -1;
@@ -318,9 +320,38 @@ struct PendingRuledSpellCast
     int activeCastCostOption = -1;
     QString castCostObjectError;
     QVector<RuledPendingCastCostSelection> castCostSelections;
+    /// Every option owned by a mode is chosen only through that mode. This prevents the generic
+    /// additional-cost picker from independently toggling a Spree cost.
+    QSet<QPair<int, int>> modeLinkedCastCosts;
+    QVector<QPair<int, int>> selectedModeLinkedCastCosts;
+    bool submissionPending = false;
     QVector<SelectedMode> selectedModes;
     int activeModePosition = -1;
 };
+
+[[nodiscard]] inline int ruledCastCostGroupSelectionCount(const PendingRuledSpellCast &spell, int groupIndex)
+{
+    return static_cast<int>(std::count_if(spell.castCostSelections.cbegin(), spell.castCostSelections.cend(),
+                                          [groupIndex](const auto &selection) {
+                                              return selection.groupIndex == groupIndex;
+                                          }));
+}
+
+[[nodiscard]] inline bool
+ruledCastCostOptionAlreadySelected(const PendingRuledSpellCast &spell, int groupIndex, int optionIndex)
+{
+    return std::any_of(spell.castCostSelections.cbegin(), spell.castCostSelections.cend(),
+                       [groupIndex, optionIndex](const auto &selection) {
+                           return selection.groupIndex == groupIndex && selection.optionIndex == optionIndex;
+                       });
+}
+
+[[nodiscard]] inline bool
+ruledCastCostGroupCanConfirm(const PendingRuledSpellCast &spell, const RuledCastCostGroup &group)
+{
+    const int selected = ruledCastCostGroupSelectionCount(spell, group.groupIndex);
+    return selected >= group.min && selected <= group.max;
+}
 
 /// A required exactly-one target group completes on the target click. Every other legal range
 /// needs an explicit confirmation surface, including optional 0-1 groups where confirming zero
@@ -630,6 +661,12 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
                                       kind == RuledTargetCandidateKind::Stack ||
                                       kind == RuledTargetCandidateKind::Player;
         return supportedSurface && state.isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, oid)
+                   ? RuledTargetClickEligibility::Legal
+                   : RuledTargetClickEligibility::Illegal;
+    }
+    if (state.hasPendingChoiceOfKind(RuledClientState::ChoiceKind::PermanentChoice)) {
+        return kind == RuledTargetCandidateKind::Battlefield &&
+                       state.isPendingChoiceCandidate(RuledClientState::ChoiceKind::PermanentChoice, oid)
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
     }

@@ -1154,6 +1154,9 @@ pub enum EffectSubject {
     /// The distinct permanent named by the trigger event. This is an untargeted rules reference
     /// (for example, the blocking creature affected by flanking), not a CR 115 target.
     TriggerObject,
+    /// The exact generation-bound permanent selected by the immediately preceding
+    /// `ChoosePermanents(min: 1, max: 1)` instruction. This is an untargeted CR 608 choice.
+    PreviousEffectObject,
     Chosen(Box<TargetFilter>),
 }
 
@@ -1628,7 +1631,7 @@ pub enum ResolutionBranchSelection {
     FirstApplicable,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CastCostConditionalAmount {
     pub condition: CastCostReceiptCondition,
     pub if_selected: u32,
@@ -1787,6 +1790,16 @@ pub enum SpellEffectKind {
         #[serde(default)]
         selection: ResolutionBranchSelection,
         branches: Vec<ResolutionBranchDef>,
+    },
+    /// Choose a bounded set of battlefield permanents during resolution without targeting.
+    /// The result is engine-private and may be consumed by the immediately following effect.
+    /// Final Showdown, Sakashima's Will, and Polymorphous Rush share this selection boundary.
+    ChoosePermanents {
+        #[serde(default)]
+        chooser: PlayerRecipient,
+        filter: TargetFilter,
+        min: u32,
+        max: u32,
     },
     /// Stage a reflexive triggered ability created by the immediately preceding paid branch.
     /// Sparktongue Dragon and Heart-Piercer Manticore share this CR 603.12 primitive.
@@ -1973,6 +1986,12 @@ pub enum SpellEffectKind {
         #[serde(default)]
         filter: CreatureScopeFilter,
         keywords: Vec<Keyword>,
+    },
+    /// CR 613 layer 6: remove all abilities from the current snapshot of matching creatures
+    /// until end of turn. Final Showdown and Vedalken Humiliator share this instruction.
+    RemoveAbilitiesAll {
+        #[serde(default)]
+        filter: CreatureScopeFilter,
     },
     /// CR 613 layer 6: grant one or more keyword abilities until end of turn. `Chosen` is an
     /// ordinary permanent target (Boros Charm); `Source` auto-binds an activated or triggered
@@ -2976,7 +2995,8 @@ impl SpellEffectKind {
                     EffectSubject::Chosen(filter) => Some(TargetRole::Filtered(filter)),
                     EffectSubject::Source
                     | EffectSubject::AttachedObject
-                    | EffectSubject::TriggerObject => None,
+                    | EffectSubject::TriggerObject
+                    | EffectSubject::PreviousEffectObject => None,
                 })
                 .collect(),
             SpellEffectKind::Destroy { subject }
@@ -3001,7 +3021,8 @@ impl SpellEffectKind {
                 EffectSubject::Chosen(target) => vec![TargetRole::Filtered(target)],
                 EffectSubject::Source
                 | EffectSubject::AttachedObject
-                | EffectSubject::TriggerObject => Vec::new(),
+                | EffectSubject::TriggerObject
+                | EffectSubject::PreviousEffectObject => Vec::new(),
             },
             SpellEffectKind::ApplyCombatRestriction { scope, .. } => match scope {
                 CombatRestrictionScope::Chosen(target) => vec![TargetRole::Filtered(target)],
@@ -3048,6 +3069,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Blight { .. }
             | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
             | SpellEffectKind::ChooseResolutionBranch { .. }
+            | SpellEffectKind::ChoosePermanents { .. }
             | SpellEffectKind::CreateReflexiveTrigger { .. }
             | SpellEffectKind::Scry { .. }
             | SpellEffectKind::LibraryPartition { .. }
@@ -3057,6 +3079,7 @@ impl SpellEffectKind {
             | SpellEffectKind::UntapAll { .. }
             | SpellEffectKind::PumpAll { .. }
             | SpellEffectKind::GrantKeywordsAll { .. }
+            | SpellEffectKind::RemoveAbilitiesAll { .. }
             | SpellEffectKind::ReturnTriggeredCard { .. }
             | SpellEffectKind::SacrificeObservedObjects
             | SpellEffectKind::ExileWarpedObject
@@ -3251,6 +3274,21 @@ impl SpellEffectKind {
             let previous = index
                 .checked_sub(1)
                 .and_then(|previous| effects.get(previous));
+            if matches!(
+                effect,
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::PreviousEffectObject,
+                    ..
+                }
+            ) && !matches!(
+                previous,
+                Some(SpellEffectKind::ChoosePermanents { min: 1, max: 1, .. })
+            ) {
+                return Err(
+                    "PreviousEffectObject requires an immediately preceding exactly-one ChoosePermanents"
+                        .into(),
+                );
+            }
             if let Some(filter) = amount.and_then(Amount::card_result_filter) {
                 if filter.source == CardResultSource::PreviousEffect
                     && !previous.is_some_and(|effect| produces_card_result(effect, filter.action))
@@ -3433,7 +3471,8 @@ impl SpellEffectKind {
                 attachments.validate()?;
             }
             SpellEffectKind::PumpAll { filter, .. }
-            | SpellEffectKind::GrantKeywordsAll { filter, .. } => filter.validate()?,
+            | SpellEffectKind::GrantKeywordsAll { filter, .. }
+            | SpellEffectKind::RemoveAbilitiesAll { filter } => filter.validate()?,
             SpellEffectKind::ReturnTriggeredCard {
                 from,
                 entry_counters,
@@ -3457,6 +3496,28 @@ impl SpellEffectKind {
                     if !kinds.insert(placement.counter) {
                         return Err("entry counter placements cannot repeat a counter kind".into());
                     }
+                }
+            }
+            SpellEffectKind::ChoosePermanents {
+                chooser,
+                filter,
+                min,
+                max,
+            } => {
+                if matches!(
+                    chooser,
+                    PlayerRecipient::EachOpponent | PlayerRecipient::EachPlayer
+                ) {
+                    return Err("permanent choice requires exactly one deciding player".into());
+                }
+                if *max == 0 || min > max {
+                    return Err("permanent choice requires 0 <= min <= max and max > 0".into());
+                }
+                filter.validate_target_constraints()?;
+                if !filter.all_terminal_filters_match(|leaf| {
+                    matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                }) {
+                    return Err("permanent choice requires permanent-only filters".into());
                 }
             }
             SpellEffectKind::ChooseResolutionBranch {
@@ -4211,7 +4272,7 @@ impl SpellEffectKind {
                             .into(),
                     );
                 }
-                if count_by_cast_cost.is_some_and(|conditional| {
+                if count_by_cast_cost.as_ref().is_some_and(|conditional| {
                     conditional.if_selected == 0 || conditional.otherwise == 0
                 }) {
                     return Err("SearchLibrary cast-cost counts must be positive".into());
@@ -4262,7 +4323,7 @@ impl SpellEffectKind {
                 if *count == 0 {
                     return Err("ExileTopWithPlayPermission requires a positive count".into());
                 }
-                if count_by_cast_cost.is_some_and(|conditional| {
+                if count_by_cast_cost.as_ref().is_some_and(|conditional| {
                     conditional.if_selected == 0 || conditional.otherwise == 0
                 }) {
                     return Err(

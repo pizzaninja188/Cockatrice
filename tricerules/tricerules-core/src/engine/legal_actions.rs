@@ -988,7 +988,7 @@ fn legal_spell_cost_choices(
                     }
                 })
                 .collect::<Vec<_>>();
-            if group.min > 0 && !options.iter().any(|option| option.selectable) {
+            if options.iter().filter(|option| option.selectable).count() < group.min as usize {
                 non_mana_costs_payable = false;
             }
             rv1::LegalCastCostGroup {
@@ -1074,21 +1074,67 @@ fn harmonize_cast_cost_group(
     }
 }
 
-fn cast_cost_timing_condition_available(
+fn legal_mode_cast_cost_link(
+    face: &CardFace,
     costs: &rv1::LegalCostChoices,
-    condition: CastCostReceiptCondition,
+    mode: &tricerules_cards::ModeDef,
+) -> Option<(rv1::LinkedCastCostOption, bool)> {
+    let link = mode.linked_cast_cost.as_ref()?;
+    let group_index = face
+        .cast_cost_groups
+        .iter()
+        .position(|group| group.group_id == link.group_id)?;
+    let option_index = face.cast_cost_groups[group_index]
+        .options
+        .iter()
+        .position(|option| option.option_id() == &link.option_id)?;
+    let selectable = costs
+        .cast_cost_groups
+        .iter()
+        .find(|group| group.group_index == group_index as u32)?
+        .options
+        .iter()
+        .find(|option| option.option_index == option_index as u32)?
+        .selectable;
+    Some((
+        rv1::LinkedCastCostOption {
+            group_index: group_index as u32,
+            option_index: option_index as u32,
+        },
+        selectable,
+    ))
+}
+
+fn cast_cost_timing_condition_available(
+    face: &CardFace,
+    costs: &rv1::LegalCostChoices,
+    condition: &CastCostReceiptCondition,
 ) -> bool {
+    let Some((group_index, option_index)) = face
+        .cast_cost_groups
+        .iter()
+        .position(|group| group.group_id == condition.group_id)
+        .and_then(|group_index| {
+            face.cast_cost_groups[group_index]
+                .options
+                .iter()
+                .position(|option| option.option_id() == &condition.option_id)
+                .map(|option_index| (group_index as u32, option_index as u32))
+        })
+    else {
+        return false;
+    };
     let Some(group) = costs
         .cast_cost_groups
         .iter()
-        .find(|group| group.group_index == condition.group_index)
+        .find(|group| group.group_index == group_index)
     else {
         return false;
     };
     let selected_available = group
         .options
         .iter()
-        .any(|option| option.option_index == condition.option_index && option.selectable);
+        .any(|option| option.option_index == option_index && option.selectable);
     if condition.expected_selected {
         selected_available
     } else {
@@ -1096,7 +1142,7 @@ fn cast_cost_timing_condition_available(
             || group
                 .options
                 .iter()
-                .any(|option| option.option_index != condition.option_index && option.selectable)
+                .any(|option| option.option_index != option_index && option.selectable)
     }
 }
 
@@ -1113,7 +1159,10 @@ fn face_cast_timing_available(
         || (instant_ok
             && face
                 .instant_speed_cast_cost
-                .is_some_and(|condition| cast_cost_timing_condition_available(costs, condition)))
+                .as_ref()
+                .is_some_and(|condition| {
+                    cast_cost_timing_condition_available(face, costs, condition)
+                }))
 }
 
 fn hand_action(
@@ -1316,6 +1365,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 if !cost_choices.non_mana_costs_payable {
                     continue;
                 }
+                let mode_cost_choices = cost_choices.clone();
                 action.cost_choices = Some(cost_choices);
                 if let Some(modal) = &face.modal_spell {
                     action.min_modes = modal.min_modes;
@@ -1335,8 +1385,13 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                                 mode.targeting.as_ref(),
                                 &face.cost_modifiers,
                             );
-                            let selectable =
-                                !needs_target || spell_targets_have_candidate(&targets);
+                            let linked_cost =
+                                legal_mode_cast_cost_link(face, &mode_cost_choices, mode);
+                            let selectable = (!needs_target
+                                || spell_targets_have_candidate(&targets))
+                                && linked_cost
+                                    .as_ref()
+                                    .is_none_or(|(_, selectable)| *selectable);
                             rv1::LegalSpellMode {
                                 mode_index: mode_index as u32,
                                 label: mode_fallback(&face.name, &mode.mode_id),
@@ -1354,6 +1409,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                                     &mode.presentation,
                                     mode_fallback(&face.name, &mode.mode_id),
                                 )),
+                                linked_cast_cost: linked_cost.map(|(link, _)| link),
                             }
                         })
                         .collect();
@@ -1482,6 +1538,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 if !cost_choices.non_mana_costs_payable {
                     continue;
                 }
+                let mode_cost_choices = cost_choices.clone();
                 action.cost_choices = Some(cost_choices);
                 if let Some(modal) = &face.modal_spell {
                     action.min_modes = modal.min_modes;
@@ -1501,8 +1558,13 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                                 mode.targeting.as_ref(),
                                 &face.cost_modifiers,
                             );
-                            let selectable =
-                                !needs_target || spell_targets_have_candidate(&targets);
+                            let linked_cost =
+                                legal_mode_cast_cost_link(face, &mode_cost_choices, mode);
+                            let selectable = (!needs_target
+                                || spell_targets_have_candidate(&targets))
+                                && linked_cost
+                                    .as_ref()
+                                    .is_none_or(|(_, selectable)| *selectable);
                             rv1::LegalSpellMode {
                                 mode_index: mode_index as u32,
                                 label: mode_fallback(&face.name, &mode.mode_id),
@@ -1520,6 +1582,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                                     &mode.presentation,
                                     mode_fallback(&face.name, &mode.mode_id),
                                 )),
+                                linked_cast_cost: linked_cost.map(|(link, _)| link),
                             }
                         })
                         .collect();
@@ -1634,6 +1697,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             if !cost_choices.non_mana_costs_payable {
                 continue;
             }
+            let mode_cost_choices = cost_choices.clone();
             action.cost_choices = Some(cost_choices);
             if let Some(modal) = &face.modal_spell {
                 action.min_modes = modal.min_modes;
@@ -1653,10 +1717,14 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                             mode.targeting.as_ref(),
                             &face.cost_modifiers,
                         );
+                        let linked_cost = legal_mode_cast_cost_link(face, &mode_cost_choices, mode);
                         rv1::LegalSpellMode {
                             mode_index: mode_index as u32,
                             label: mode_fallback(&face.name, &mode.mode_id),
-                            selectable: !needs_target || spell_targets_have_candidate(&targets),
+                            selectable: (!needs_target || spell_targets_have_candidate(&targets))
+                                && linked_cost
+                                    .as_ref()
+                                    .is_none_or(|(_, selectable)| *selectable),
                             needs_target,
                             targets: Some(targets),
                             presentation: Some(presentation_ref(
@@ -1670,6 +1738,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                                 &mode.presentation,
                                 mode_fallback(&face.name, &mode.mode_id),
                             )),
+                            linked_cast_cost: linked_cost.map(|(link, _)| link),
                         }
                     })
                     .collect();
@@ -1954,16 +2023,29 @@ mod cast_cost_timing_tests {
 
     #[test]
     fn conditional_instant_timing_is_published_only_with_a_live_cost_option() {
-        let condition = CastCostReceiptCondition {
-            group_index: 0,
-            option_index: 0,
-            expected_selected: true,
-        };
-        let mut face = CardFace {
-            instant_speed_cast_cost: Some(condition),
+        let group_id = tricerules_cards::ChoiceId::new("cast_cost_01").unwrap();
+        let option_id = tricerules_cards::ChoiceId::new("option_01").unwrap();
+        let face = CardFace {
+            is_sorcery: true,
+            cast_cost_groups: vec![CastCostGroupDef {
+                group_id: group_id.clone(),
+                presentation: tricerules_cards::AbilityPresentation::Fallback,
+                min: 0,
+                max: 1,
+                options: vec![CastCostOptionDef::Mana {
+                    option_id: option_id.clone(),
+                    presentation: tricerules_cards::AbilityPresentation::Fallback,
+                    kind: tricerules_cards::primitives::ManaCostChoiceKind::AdditionalPayment,
+                    cost: ManaCost::parse("{1}").unwrap(),
+                }],
+            }],
+            instant_speed_cast_cost: Some(CastCostReceiptCondition {
+                group_id,
+                option_id,
+                expected_selected: true,
+            }),
             ..Default::default()
         };
-        face.is_sorcery = true;
         let mut costs = rv1::LegalCostChoices {
             non_mana_costs_payable: true,
             cast_cost_groups: vec![rv1::LegalCastCostGroup {

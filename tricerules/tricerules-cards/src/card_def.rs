@@ -16,9 +16,10 @@
 use crate::mana::ManaCost;
 use crate::primitives::{
     ActivatedAbilityDef, AdditionalCost, Amount, CardTypeFilter, CastCostGroupDef,
-    CastCostReceiptCondition, Color, CounterKind, EffectContext, EntersWithCountersAffected,
-    Evasion, GameCondition, Keyword, PermanentTypeFilter, ProtectionQuality, SpellCostModifier,
-    SpellEffectKind, StaticAbilityDef, TargetingDef, TriggeredAbilityDef,
+    CastCostOptionRef, CastCostReceiptCondition, Color, CounterKind, EffectContext,
+    EntersWithCountersAffected, Evasion, GameCondition, Keyword, PermanentTypeFilter,
+    ProtectionQuality, SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetingDef,
+    TriggeredAbilityDef,
 };
 use crate::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility, ModeId};
 use serde::{Deserialize, Serialize};
@@ -32,6 +33,11 @@ pub struct ModeDef {
     pub mode_id: ModeId,
     /// External Oracle-line mapping, or an explicit decision to use the deterministic fallback.
     pub presentation: AbilityPresentation,
+    /// Additional cost inseparably linked to choosing this mode (CR 700.2h / Spree). Stable
+    /// authored identities are resolved to per-command coordinates only when legal actions are
+    /// published.
+    #[serde(default)]
+    pub linked_cast_cost: Option<CastCostOptionRef>,
     /// Data-driven effects for this mode, resolved from this mode's own target group.
     #[serde(default)]
     pub effects: Vec<SpellEffectKind>,
@@ -998,7 +1004,7 @@ impl CardDefinition {
                 .extend(door.cast_cost_groups.clone());
             result.instant_speed_cast_cost = result
                 .instant_speed_cast_cost
-                .or(door.instant_speed_cast_cost);
+                .or_else(|| door.instant_speed_cast_cost.clone());
             result.cost_modifiers.extend(door.cost_modifiers.clone());
             result.spell_effect.extend(door.spell_effect.clone());
             result.keywords.extend(door.keywords.clone());

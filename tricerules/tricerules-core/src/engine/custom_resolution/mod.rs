@@ -256,6 +256,9 @@ impl GameEngine {
             ResolutionContinuation::AuthoredBranch { .. } => {
                 return self.finish_resolution_branch_object(pending, chosen);
             }
+            ResolutionContinuation::PermanentChoice { .. } => {
+                return self.finish_permanent_choice(pending, chosen);
+            }
             ResolutionContinuation::WardPayment { .. } => {
                 return self.finish_ward_discard(pending, chosen);
             }
@@ -614,6 +617,72 @@ impl GameEngine {
             resume_effect_index,
             EffectResult::default(),
             ev,
+        )
+    }
+
+    fn finish_permanent_choice(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, candidate_generations) = match &pending.continuation {
+            ResolutionContinuation::PermanentChoice {
+                stack,
+                candidate_generations,
+            } => (stack.clone(), candidate_generations.clone()),
+            _ => unreachable!("permanent-choice continuation"),
+        };
+        let mut selected_objects = Vec::with_capacity(chosen.len());
+        for oid in chosen {
+            let Some(expected_generation) = candidate_generations
+                .iter()
+                .find_map(|(candidate, generation)| (candidate == oid).then_some(*generation))
+            else {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("invalid permanent choice"));
+            };
+            let current_generation = self
+                .state
+                .zone_change_generation
+                .get(oid)
+                .copied()
+                .unwrap_or(0);
+            if current_generation != expected_generation
+                || !self
+                    .state
+                    .objects
+                    .get(oid)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+            {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("stale permanent choice"));
+            }
+            selected_objects.push(TriggerObjectRef {
+                object_id: *oid,
+                zone_change_generation: expected_generation,
+                controller_at_event: self
+                    .characteristics(*oid)
+                    .map(|characteristics| characteristics.controller)
+                    .unwrap_or(pending.deciding_player),
+            });
+        }
+        let names = chosen
+            .iter()
+            .map(|oid| object_display_name(&self.state, self.registry, *oid))
+            .collect::<Vec<_>>();
+        let events = vec![ev_log(format!(
+            "P{} chooses {}.",
+            pending.deciding_player,
+            names.join(", ")
+        ))];
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            EffectResult {
+                selected_objects,
+                ..Default::default()
+            },
+            events,
         )
     }
 

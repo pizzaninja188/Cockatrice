@@ -1995,6 +1995,7 @@ impl GameEngine {
                                 mode_fallback(&ability_text, &mode.mode_id),
                             )
                         }),
+                        linked_cast_cost: None,
                     }
                 })
                 .collect::<Vec<_>>()

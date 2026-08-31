@@ -37,7 +37,10 @@ pub(super) fn destroy(
     };
     let subjects: Vec<ObjectId> = match &subject {
         EffectSubject::Chosen(_) => cx.targets.to_vec(),
-        EffectSubject::Source | EffectSubject::AttachedObject | EffectSubject::TriggerObject => {
+        EffectSubject::Source
+        | EffectSubject::AttachedObject
+        | EffectSubject::TriggerObject
+        | EffectSubject::PreviousEffectObject => {
             resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
                 .into_iter()
                 .collect()
@@ -97,7 +100,10 @@ pub(super) fn sacrifice(
     };
     let subjects: Vec<ObjectId> = match &subject {
         EffectSubject::Chosen(_) => cx.targets.to_vec(),
-        EffectSubject::Source | EffectSubject::AttachedObject | EffectSubject::TriggerObject => {
+        EffectSubject::Source
+        | EffectSubject::AttachedObject
+        | EffectSubject::TriggerObject
+        | EffectSubject::PreviousEffectObject => {
             resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
                 .into_iter()
                 .collect()
@@ -323,7 +329,10 @@ pub(super) fn create_delayed_trigger(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let watched_id = match &subject {
-        EffectSubject::Source | EffectSubject::AttachedObject | EffectSubject::TriggerObject => {
+        EffectSubject::Source
+        | EffectSubject::AttachedObject
+        | EffectSubject::TriggerObject
+        | EffectSubject::PreviousEffectObject => {
             resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
         }
         EffectSubject::Chosen(target) => cx.targets.first().copied().filter(|object_id| {

@@ -17,7 +17,7 @@
     player: Controller,
     count: 2,
     count_by_cast_cost: Some((
-      condition: (group_index: 0, option_index: 0, expected_selected: true),
+      condition: (group_id: "cast_cost_01", option_id: "option_01", expected_selected: true),
       if_selected: 3,
       otherwise: 2,
     )),

@@ -1,5 +1,24 @@
 use super::*;
 
+fn previous_effect_object(cx: &EffectCx<'_>) -> Option<ObjectId> {
+    let selected = cx.previous_effect_result.selected_objects.first()?;
+    let generation = cx
+        .engine
+        .state
+        .zone_change_generation
+        .get(&selected.object_id)
+        .copied()
+        .unwrap_or(0);
+    (generation == selected.zone_change_generation
+        && cx
+            .engine
+            .state
+            .objects
+            .get(&selected.object_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield))
+    .then_some(selected.object_id)
+}
+
 pub(super) fn pump_target(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -154,6 +173,34 @@ pub(super) fn grant_keywords_all(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn remove_abilities_all(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::RemoveAbilitiesAll { filter } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let source = cx.top.source_permanent_id.unwrap_or(cx.top.id);
+    let affected = snapshot_creature_scope(cx.engine, &filter, cx.controller, source);
+    for oid in &affected {
+        cx.engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: Some(cx.top.id),
+            affected: AffectedScope::Single(*oid),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: cx.engine.state.command_index,
+        });
+    }
+    cx.events.push(ev_log(format!(
+        "{} removes all abilities from {} creature(s) until end of turn",
+        cx.spell_label,
+        affected.len()
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn grant_keywords(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -189,6 +236,7 @@ pub(super) fn grant_keywords(
             });
             (tid, Some(cx.top.id))
         }
+        EffectSubject::PreviousEffectObject => (previous_effect_object(cx), Some(cx.top.id)),
     };
     let Some(tid) = tid else {
         return Ok(EffectOutcome::Continue);
@@ -335,6 +383,7 @@ pub(super) fn grant_protection(
             });
             (tid, Some(cx.top.id))
         }
+        EffectSubject::PreviousEffectObject => (previous_effect_object(cx), Some(cx.top.id)),
     };
     let Some(tid) = tid else {
         return Ok(EffectOutcome::Continue);
@@ -392,6 +441,7 @@ pub(super) fn grant_triggered_ability(
             });
             (tid, Some(cx.top.id))
         }
+        EffectSubject::PreviousEffectObject => (previous_effect_object(cx), Some(cx.top.id)),
     };
     let Some(tid) = tid else {
         return Ok(EffectOutcome::Continue);
@@ -541,6 +591,7 @@ pub(super) fn add_types(
             });
             (tid, Some(cx.top.id))
         }
+        EffectSubject::PreviousEffectObject => (previous_effect_object(cx), Some(cx.top.id)),
     };
     let Some(tid) = tid else {
         return Ok(EffectOutcome::Continue);

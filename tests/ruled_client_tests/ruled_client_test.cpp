@@ -1115,6 +1115,39 @@ TEST(RuledPendingTargetTest, HarmonizeCostIsNotFinalizedWhileItsOptionChoiceIsPe
     EXPECT_EQ(ruledFinalGenericCost(spell.remainingCost.value(QLatin1Char('X')), 0, spell.castCostGenericReduction), 3);
 }
 
+TEST(RuledPendingTargetTest, BoundedCastCostGroupStaysOpenUntilItsSelectionCountIsConfirmed)
+{
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.nextCastCostGroup = 0;
+
+    RuledCastCostGroup group;
+    group.groupIndex = 4;
+    group.min = 1;
+    group.max = 2;
+    group.options = {{10, QStringLiteral("First"), RuledCastCostOptionKind::Mana},
+                     {11, QStringLiteral("Second"), RuledCastCostOptionKind::Mana}};
+    spell.castCostGroups = {group};
+
+    EXPECT_EQ(ruledCastCostGroupSelectionCount(spell, 4), 0);
+    EXPECT_FALSE(ruledCastCostGroupCanConfirm(spell, group));
+
+    spell.castCostSelections.append(
+        {4, 10, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
+    EXPECT_EQ(ruledCastCostGroupSelectionCount(spell, 4), 1);
+    EXPECT_TRUE(ruledCastCostOptionAlreadySelected(spell, 4, 10));
+    EXPECT_TRUE(ruledCastCostGroupCanConfirm(spell, group));
+    EXPECT_FALSE(ruledCastCostGroupsComplete(spell));
+
+    spell.castCostSelections.append(
+        {4, 11, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
+    EXPECT_EQ(ruledCastCostGroupSelectionCount(spell, 4), 2);
+    EXPECT_TRUE(ruledCastCostGroupCanConfirm(spell, group));
+
+    spell.nextCastCostGroup = 1;
+    EXPECT_TRUE(ruledCastCostGroupsComplete(spell));
+}
+
 TEST(RuledPendingTargetTest, ReconcileDropsTargetsMissingFromLatestLegalSnapshot)
 {
     FakeHost host;
@@ -4192,6 +4225,48 @@ TEST_F(RuledClientTest, ParsesEngineAuthoredOptionalCastCostGroups)
     EXPECT_EQ(costs.castCostGroups.first().options.at(1).validHandIndices, QSet<quint32>({7}));
     EXPECT_EQ(costs.castCostGroups.first().options.at(1).validPermanentIds, QSet<quint32>({900}));
     EXPECT_EQ(costs.castCostGroups.first().options.at(1).validPermanentGenerations.value(900), 12u);
+}
+
+TEST_F(RuledClientTest, ParsesModeLinkedCastCostCoordinates)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *hand = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
+    hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    hand->set_hand_index(3);
+    auto *mode = hand->add_modes();
+    mode->set_mode_index(7);
+    mode->set_label("Create a Spirit token.");
+    mode->set_selectable(true);
+    mode->mutable_linked_cast_cost()->set_group_index(2);
+    mode->mutable_linked_cast_cost()->set_option_index(5);
+    apply(batch);
+
+    const RuledCastActionKey key{3, 0, RuledCastSource::Hand, ruled::v1::CAST_METHOD_NORMAL, 0};
+    const auto modes = state->handActions.value(ruled::v1::HAND_ACTION_CAST_SPELL).modalOptionsByCastKey.value(key);
+    ASSERT_EQ(modes.size(), 1);
+    EXPECT_EQ(modes.first().linkedCastCostGroupIndex, 2);
+    EXPECT_EQ(modes.first().linkedCastCostOptionIndex, 5);
+}
+
+TEST_F(RuledClientTest, ParsesPublicPermanentResolutionChoiceAsUntargetedBoardClick)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->set_prompt_text("Choose a creature you control.");
+    choice->add_candidate_object_ids(901);
+    apply(batch);
+
+    EXPECT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::PermanentChoice));
+    EXPECT_TRUE(state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::PermanentChoice, 901));
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, *state, RuledTargetCandidateKind::Battlefield, 901, kLocalPlayer),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledTargetClickEligibility({}, {}, *state, RuledTargetCandidateKind::Stack, 901, kLocalPlayer),
+              RuledTargetClickEligibility::Illegal);
 }
 
 TEST_F(RuledClientTest, ActiveCastRevealsReplaceAsExactSnapshotsAndClear)

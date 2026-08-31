@@ -10,7 +10,7 @@
     options: [Blight(option_id: "option_01", presentation: OracleLines([1]), count: 1)],
   )],
   spell_effect: [DamageTarget(
-    amount: CastCost(cast_cost: (group_index: 0, option_index: 0), when_true: 4, otherwise: 2),
+    amount: CastCost(cast_cost: (group_id: "cast_cost_01", option_id: "option_01"), when_true: 4, otherwise: 2),
     target: (kind: Creature),
   )],
 )

@@ -64,6 +64,21 @@ mod tests {
         duplicate_options.options.push(group.options[0].clone());
         assert!(duplicate_options.validate().is_err());
 
+        let bounded_group: super::CastCostGroupDef = ron::from_str(
+            r#"(
+                group_id: "spree",
+                presentation: Fallback,
+                min: 1,
+                max: 2,
+                options: [
+                    Mana(option_id: "first", presentation: Fallback, kind: AdditionalPayment, cost: "{1}"),
+                    Mana(option_id: "second", presentation: Fallback, kind: AdditionalPayment, cost: "{2}"),
+                ],
+            )"#,
+        )
+        .expect("bounded cast-cost group parses");
+        assert!(bounded_group.validate().is_ok());
+
         let branch: super::ResolutionBranchDef = ron::from_str(
             r#"(branch_id: "draw", presentation: Fallback, cost: None, effects: [Draw(count: 1)])"#,
         )
@@ -129,7 +144,7 @@ mod tests {
     #[test]
     fn issue_153_cast_cost_amount_roundtrips_and_checks_references() {
         let source =
-            "CastCost(cast_cost: (group_index: 0, option_index: 0), when_true: 4, otherwise: 2)";
+            "CastCost(cast_cost: (group_id: \"cast_cost_01\", option_id: \"option_01\"), when_true: 4, otherwise: 2)";
         let amount: super::Amount = ron::from_str(source).unwrap();
         let encoded = ron::to_string(&amount).unwrap();
         assert_eq!(ron::from_str::<super::Amount>(&encoded).unwrap(), amount);
@@ -191,7 +206,7 @@ mod tests {
         ));
 
         let exile: super::SpellEffectKind = ron::from_str(
-            "ExileTopWithPlayPermission(player: Controller, count: 2, count_by_cast_cost: Some((condition: (group_index: 0, option_index: 0, expected_selected: true), if_selected: 3, otherwise: 2)))",
+            "ExileTopWithPlayPermission(player: Controller, count: 2, count_by_cast_cost: Some((condition: (group_id: \"cast_cost_01\", option_id: \"option_01\", expected_selected: true), if_selected: 3, otherwise: 2)))",
         )
         .expect("one permission instruction can carry a receipt-conditioned result cohort");
         assert!(matches!(
@@ -213,7 +228,7 @@ mod tests {
             r#"SearchLibrary(
                 slots: [
                     (slot_id: "slot_01", presentation: Fallback, filter: (card_type: Some(BasicLand))),
-                    (slot_id: "slot_02", presentation: Fallback, filter: (subtype: Some("Shrine")), enabled_by_cast_cost: Some((group_index: 0, option_index: 0, expected_selected: true))),
+                    (slot_id: "slot_02", presentation: Fallback, filter: (subtype: Some("Shrine")), enabled_by_cast_cost: Some((group_id: "cast_cost_01", option_id: "option_01", expected_selected: true))),
                 ],
                 destination: Hand,
                 reveal: true,

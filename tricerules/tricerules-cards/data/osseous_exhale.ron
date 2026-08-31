@@ -33,8 +33,8 @@
           branch_id: "gain_2_life", presentation: Fallback,
           cost: None,
           requirement: CastCostReceipt((
-            group_index: 0,
-            option_index: 0,
+            group_id: "cast_cost_01",
+            option_id: "option_01",
             expected_selected: true,
           )),
           effects: [GainLife(amount: 2)],

@@ -469,6 +469,7 @@ fn resolve_effect_subject(
             .source_permanent_id
             .filter(|_| engine.source_is_current_object(top)),
         EffectSubject::Chosen(_) => targets.first().copied(),
+        EffectSubject::PreviousEffectObject => None,
         EffectSubject::TriggerObject => {
             let trigger_object = top.trigger_context.observed_object?;
             let current_generation = engine
@@ -1385,6 +1386,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::GrantKeywordsAll { .. } => {
                         pump_counters::grant_keywords_all(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::RemoveAbilitiesAll { .. } => {
+                        pump_counters::remove_abilities_all(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::GrantKeywords { .. } => {
                         pump_counters::grant_keywords(&mut cx, effect)?
                     }
@@ -1560,6 +1564,9 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::ChooseResolutionBranch { .. } => {
                         choices::choose_resolution_branch(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::ChoosePermanents { .. } => {
+                        choices::choose_permanents(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::CreateReflexiveTrigger { .. } => {
                         choices::create_reflexive_trigger(&mut cx, effect)?

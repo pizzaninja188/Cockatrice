@@ -70,12 +70,17 @@ fn face_can_reference_attached_player(face: &CardFace) -> bool {
 
 fn validate_cast_cost_condition(
     groups: &[CastCostGroupDef],
-    condition: CastCostReceiptCondition,
+    condition: &CastCostReceiptCondition,
 ) -> Result<(), String> {
     let group = groups
-        .get(condition.group_index as usize)
+        .iter()
+        .find(|group| group.group_id == condition.group_id)
         .ok_or_else(|| "cast-cost condition references an unknown group".to_string())?;
-    if group.options.get(condition.option_index as usize).is_none() {
+    if !group
+        .options
+        .iter()
+        .any(|option| option.option_id() == &condition.option_id)
+    {
         return Err("cast-cost condition references an unknown option".into());
     }
     Ok(())
@@ -109,7 +114,7 @@ fn validate_effect_cast_cost_conditions(
         _ => None,
     };
     if let Some(Amount::CastCost(value)) = amount {
-        validate_cast_cost_condition(groups, value.condition)?;
+        validate_cast_cost_condition(groups, &value.condition)?;
     }
     match effect {
         SpellEffectKind::CounterTargetSpell {
@@ -123,16 +128,19 @@ fn validate_effect_cast_cost_conditions(
         | SpellEffectKind::ExileTopWithPlayPermission {
             count_by_cast_cost: Some(conditional),
             ..
-        } => validate_cast_cost_condition(groups, conditional.condition),
+        } => validate_cast_cost_condition(groups, &conditional.condition),
         SpellEffectKind::SearchLibrary { slots, .. } => {
-            for condition in slots.iter().filter_map(|slot| slot.enabled_by_cast_cost) {
+            for condition in slots
+                .iter()
+                .filter_map(|slot| slot.enabled_by_cast_cost.as_ref())
+            {
                 validate_cast_cost_condition(groups, condition)?;
             }
             Ok(())
         }
         SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
             for branch in branches {
-                if let ResolutionBranchRequirement::CastCostReceipt(condition) = branch.requirement
+                if let ResolutionBranchRequirement::CastCostReceipt(condition) = &branch.requirement
                 {
                     validate_cast_cost_condition(groups, condition)?;
                 }
@@ -431,7 +439,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
         } = ability
         {
             if let Some(condition) = cast_cost_condition {
-                validate_cast_cost_condition(&face.cast_cost_groups, *condition).map_err(
+                validate_cast_cost_condition(&face.cast_cost_groups, condition).map_err(
                     |reason| RegistryError::InvalidCard {
                         id: card.id.clone(),
                         reason,
@@ -798,6 +806,27 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
             return Err(format!("duplicate cast cost group id '{}'", group.group_id));
         }
     }
+    let mut linked_costs = HashSet::new();
+    if let Some(modal) = &face.modal_spell {
+        for mode in &modal.modes {
+            let Some(link) = &mode.linked_cast_cost else {
+                continue;
+            };
+            link.validate()?;
+            let condition = CastCostReceiptCondition {
+                group_id: link.group_id.clone(),
+                option_id: link.option_id.clone(),
+                expected_selected: true,
+            };
+            validate_cast_cost_condition(&face.cast_cost_groups, &condition)?;
+            if !linked_costs.insert((link.group_id.as_str(), link.option_id.as_str())) {
+                return Err(format!(
+                    "cast-cost option '{}.{}' is linked to more than one mode",
+                    link.group_id, link.option_id
+                ));
+            }
+        }
+    }
     validate_effect_list_metadata(&face.spell_effect)?;
     Ok(())
 }
@@ -1078,7 +1107,7 @@ impl CardRegistry {
                             reason,
                         })?;
                 }
-                if let Some(condition) = face.instant_speed_cast_cost {
+                if let Some(condition) = &face.instant_speed_cast_cost {
                     if !condition.expected_selected {
                         return Err(RegistryError::InvalidCard {
                             id: card.id.clone(),

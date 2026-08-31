@@ -375,22 +375,23 @@ impl GameEngine {
         let mut debits = Vec::with_capacity(costs.len() + cast_cost_groups.len() + 1);
         let mut combined_mana = mana_cost.clone();
         let mut cast_cost_receipts = Vec::new();
-        let mut group_selections = HashMap::new();
+        let mut group_selections: HashMap<usize, Vec<&rv1::CastCostGroupSelection>> =
+            HashMap::new();
         let harmonize_group_index = cast_cost_groups.len();
         for selection in cast_cost_group_selections {
             let group_index = selection.group_index as usize;
             let is_harmonize_group =
                 cast_method == SpellCastMethod::Harmonize && group_index == harmonize_group_index;
-            if (group_index >= cast_cost_groups.len() && !is_harmonize_group)
-                || group_selections.insert(group_index, selection).is_some()
-            {
-                return Err(EngineError::Illegal(
-                    "invalid or duplicate cast cost group selection",
-                ));
+            if group_index >= cast_cost_groups.len() && !is_harmonize_group {
+                return Err(EngineError::Illegal("invalid cast cost group selection"));
             }
+            group_selections
+                .entry(group_index)
+                .or_default()
+                .push(selection);
         }
         for (group_index, group) in cast_cost_groups.iter().enumerate() {
-            let Some(selection) = group_selections.get(&group_index) else {
+            let Some(selections) = group_selections.get(&group_index) else {
                 if group.min == 0 {
                     continue;
                 }
@@ -398,147 +399,174 @@ impl GameEngine {
                     "missing required cast cost group selection",
                 ));
             };
-            let option = group
-                .options
-                .get(selection.option_index as usize)
-                .ok_or(EngineError::Illegal("invalid cast cost option"))?;
-            let object = match option {
-                CastCostOptionDef::Blight { count, .. } => {
-                    let Some(rv1::cast_cost_group_selection::SelectedObject::PermanentId(
-                        object_id,
-                    )) = selection.selected_object
-                    else {
-                        return Err(EngineError::Illegal(
-                            "Blight requires one battlefield creature",
-                        ));
-                    };
-                    let reference = rv1::CostObjectRef {
-                        object_id,
-                        zone_change_generation: selection.expected_zone_change_generation,
-                    };
-                    self.validate_blight(player, *count, &reference)?;
-                    debits.push(CostDebit::Blight {
-                        object: reference,
-                        count: *count,
-                    });
-                    Some(CastCostObjectReceipt::ChosenPermanent {
-                        object_id,
-                        zone_change_generation: selection.expected_zone_change_generation,
-                        card_id: self.state.objects[&object_id].card_id.clone(),
-                        card_name: object_display_name(&self.state, self.registry, object_id),
-                    })
-                }
-                CastCostOptionDef::Mana { cost, .. } => {
-                    if selection.selected_object.is_some() {
-                        return Err(EngineError::Illegal(
-                            "mana cast cost option cannot select an object",
-                        ));
+            if selections.len() < group.min as usize || selections.len() > group.max as usize {
+                return Err(EngineError::Illegal(
+                    "cast cost group selection count is outside its bounds",
+                ));
+            }
+            let mut selections = selections.clone();
+            selections.sort_by_key(|selection| selection.option_index);
+            if selections
+                .windows(2)
+                .any(|pair| pair[0].option_index == pair[1].option_index)
+            {
+                return Err(EngineError::Illegal("duplicate cast cost option selection"));
+            }
+            for selection in selections {
+                let option = group
+                    .options
+                    .get(selection.option_index as usize)
+                    .ok_or(EngineError::Illegal("invalid cast cost option"))?;
+                let object = match option {
+                    CastCostOptionDef::Blight { count, .. } => {
+                        let Some(rv1::cast_cost_group_selection::SelectedObject::PermanentId(
+                            object_id,
+                        )) = selection.selected_object
+                        else {
+                            return Err(EngineError::Illegal(
+                                "Blight requires one battlefield creature",
+                            ));
+                        };
+                        let reference = rv1::CostObjectRef {
+                            object_id,
+                            zone_change_generation: selection.expected_zone_change_generation,
+                        };
+                        self.validate_blight(player, *count, &reference)?;
+                        debits.push(CostDebit::Blight {
+                            object: reference,
+                            count: *count,
+                        });
+                        Some(CastCostObjectReceipt::ChosenPermanent {
+                            object_id,
+                            zone_change_generation: selection.expected_zone_change_generation,
+                            card_id: self.state.objects[&object_id].card_id.clone(),
+                            card_name: object_display_name(&self.state, self.registry, object_id),
+                        })
                     }
-                    combined_mana.pips.extend(cost.pips.iter().cloned());
-                    None
-                }
-                CastCostOptionDef::Behold {
-                    hand_filter,
-                    permanent_filter,
-                    ..
-                } => {
-                    use rv1::cast_cost_group_selection::SelectedObject;
-                    match selection.selected_object {
-                        Some(SelectedObject::HandIndex(hand_index)) => {
-                            let object_id = self.state.players[player_idx]
-                                .hand
-                                .get(hand_index as usize)
-                                .copied()
-                                .ok_or(EngineError::Illegal("invalid behold hand slot"))?;
-                            if object_id == source_oid
-                                || !super::super::resolution::library_card_matches_filter(
-                                    &self.state,
-                                    self.registry,
-                                    object_id,
-                                    Some(hand_filter),
-                                )
-                            {
-                                return Err(EngineError::Illegal("illegal behold hand selection"));
-                            }
-                            let object = &self.state.objects[&object_id];
-                            let generation = self
-                                .state
-                                .zone_change_generation
-                                .get(&object_id)
-                                .copied()
-                                .unwrap_or(0);
-                            debits.push(CostDebit::ObserveHand {
-                                object_id,
-                                generation,
-                                owner: object.owner,
-                            });
-                            Some(CastCostObjectReceipt::RevealedHand {
-                                object_id,
-                                zone_change_generation: generation,
-                                card_id: object.card_id.clone(),
-                                card_name: object_display_name(
-                                    &self.state,
-                                    self.registry,
-                                    object_id,
-                                ),
-                            })
+                    CastCostOptionDef::Mana { cost, .. } => {
+                        if selection.selected_object.is_some() {
+                            return Err(EngineError::Illegal(
+                                "mana cast cost option cannot select an object",
+                            ));
                         }
-                        Some(SelectedObject::PermanentId(object_id)) => {
-                            if !self.ability_cost_permanent_matches(
-                                player,
-                                None,
-                                object_id,
-                                permanent_filter,
-                            ) {
-                                return Err(EngineError::Illegal(
-                                    "illegal behold permanent selection",
-                                ));
-                            }
-                            let object = &self.state.objects[&object_id];
-                            let generation = self
-                                .state
-                                .zone_change_generation
-                                .get(&object_id)
-                                .copied()
-                                .unwrap_or(0);
-                            if selection.expected_zone_change_generation != generation {
-                                return Err(EngineError::Illegal(
-                                    "stale behold permanent selection",
-                                ));
-                            }
-                            debits.push(CostDebit::ObservePermanent {
-                                object_id,
-                                generation,
-                                controller: player,
-                            });
-                            Some(CastCostObjectReceipt::ChosenPermanent {
-                                object_id,
-                                zone_change_generation: generation,
-                                card_id: object.card_id.clone(),
-                                card_name: object_display_name(
-                                    &self.state,
-                                    self.registry,
+                        combined_mana.pips.extend(cost.pips.iter().cloned());
+                        None
+                    }
+                    CastCostOptionDef::Behold {
+                        hand_filter,
+                        permanent_filter,
+                        ..
+                    } => {
+                        use rv1::cast_cost_group_selection::SelectedObject;
+                        match selection.selected_object {
+                            Some(SelectedObject::HandIndex(hand_index)) => {
+                                let object_id = self.state.players[player_idx]
+                                    .hand
+                                    .get(hand_index as usize)
+                                    .copied()
+                                    .ok_or(EngineError::Illegal("invalid behold hand slot"))?;
+                                if object_id == source_oid
+                                    || !super::super::resolution::library_card_matches_filter(
+                                        &self.state,
+                                        self.registry,
+                                        object_id,
+                                        Some(hand_filter),
+                                    )
+                                {
+                                    return Err(EngineError::Illegal(
+                                        "illegal behold hand selection",
+                                    ));
+                                }
+                                let object = &self.state.objects[&object_id];
+                                let generation = self
+                                    .state
+                                    .zone_change_generation
+                                    .get(&object_id)
+                                    .copied()
+                                    .unwrap_or(0);
+                                debits.push(CostDebit::ObserveHand {
                                     object_id,
-                                ),
-                            })
-                        }
-                        None => {
-                            return Err(EngineError::Illegal("behold requires a selected object"))
+                                    generation,
+                                    owner: object.owner,
+                                });
+                                Some(CastCostObjectReceipt::RevealedHand {
+                                    object_id,
+                                    zone_change_generation: generation,
+                                    card_id: object.card_id.clone(),
+                                    card_name: object_display_name(
+                                        &self.state,
+                                        self.registry,
+                                        object_id,
+                                    ),
+                                })
+                            }
+                            Some(SelectedObject::PermanentId(object_id)) => {
+                                if !self.ability_cost_permanent_matches(
+                                    player,
+                                    None,
+                                    object_id,
+                                    permanent_filter,
+                                ) {
+                                    return Err(EngineError::Illegal(
+                                        "illegal behold permanent selection",
+                                    ));
+                                }
+                                let object = &self.state.objects[&object_id];
+                                let generation = self
+                                    .state
+                                    .zone_change_generation
+                                    .get(&object_id)
+                                    .copied()
+                                    .unwrap_or(0);
+                                if selection.expected_zone_change_generation != generation {
+                                    return Err(EngineError::Illegal(
+                                        "stale behold permanent selection",
+                                    ));
+                                }
+                                debits.push(CostDebit::ObservePermanent {
+                                    object_id,
+                                    generation,
+                                    controller: player,
+                                });
+                                Some(CastCostObjectReceipt::ChosenPermanent {
+                                    object_id,
+                                    zone_change_generation: generation,
+                                    card_id: object.card_id.clone(),
+                                    card_name: object_display_name(
+                                        &self.state,
+                                        self.registry,
+                                        object_id,
+                                    ),
+                                })
+                            }
+                            None => {
+                                return Err(EngineError::Illegal(
+                                    "behold requires a selected object",
+                                ))
+                            }
                         }
                     }
-                }
-            };
-            let label = option.fallback_label();
-            cast_cost_receipts.push(CastCostReceipt {
-                group_index: group_index as u32,
-                option_index: selection.option_index,
-                label,
-                object,
-            });
+                };
+                let label = option.fallback_label();
+                cast_cost_receipts.push(CastCostReceipt {
+                    group_index: group_index as u32,
+                    option_index: selection.option_index,
+                    group_id: Some(group.group_id.clone()),
+                    option_id: Some(option.option_id().clone()),
+                    label,
+                    object,
+                });
+            }
         }
         let mut harmonize_reduction = 0;
         if cast_method == SpellCastMethod::Harmonize {
-            if let Some(selection) = group_selections.get(&harmonize_group_index) {
+            if let Some(selections) = group_selections.get(&harmonize_group_index) {
+                if selections.len() != 1 {
+                    return Err(EngineError::Illegal(
+                        "Harmonize accepts at most one cast cost selection",
+                    ));
+                }
+                let selection = selections[0];
                 use rv1::cast_cost_group_selection::SelectedObject;
                 if selection.option_index != 0 {
                     return Err(EngineError::Illegal("invalid harmonize cost option"));
@@ -582,6 +610,8 @@ impl GameEngine {
                 cast_cost_receipts.push(CastCostReceipt {
                     group_index: harmonize_group_index as u32,
                     option_index: 0,
+                    group_id: None,
+                    option_id: None,
                     label: format!(
                         "Harmonize — tap {} (reduce {{{harmonize_reduction}}})",
                         object_display_name(&self.state, self.registry, object_id)
@@ -595,7 +625,9 @@ impl GameEngine {
                 });
             }
         }
-        if group_selections.len() != cast_cost_group_selections.len() {
+        if group_selections.values().map(Vec::len).sum::<usize>()
+            != cast_cost_group_selections.len()
+        {
             return Err(EngineError::Illegal("unexpected cast cost group selection"));
         }
         let mut consumed = HashSet::new();

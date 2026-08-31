@@ -263,7 +263,13 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
 
     confirmTargetsButton = new QPushButton(this);
     confirmTargetsButton->setObjectName("confirmTargetsButton");
-    connect(confirmTargetsButton, &QPushButton::clicked, this, &GamePromptWidget::confirmTargetsRequested);
+    connect(confirmTargetsButton, &QPushButton::clicked, this, [this]() {
+        if (effectiveMode() == PromptMode::CastCostOptions) {
+            emit ruledCastCostConfirmRequested();
+        } else {
+            emit confirmTargetsRequested();
+        }
+    });
 
     undoLandTapButton = new QPushButton(this);
     undoLandTapButton->setObjectName("undoLandTapButton");
@@ -773,7 +779,10 @@ void GamePromptWidget::updateCombatButtonsVisibility()
             ((mode == PromptMode::ClickChoice || mode == PromptMode::ChoiceOptions) && promptState.canDecline));
         resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment);
         undoLandTapButton->setVisible(mode == PromptMode::ResolutionPayment && landTapUndoAvailable);
-        confirmTargetsButton->setVisible(mode == PromptMode::ClickChoice && promptState.max >= 0);
+        confirmTargetsButton->setText(mode == PromptMode::CastCostOptions ? tr("Confirm Costs")
+                                                                          : tr("Confirm Targets"));
+        confirmTargetsButton->setVisible((mode == PromptMode::ClickChoice && promptState.max >= 0) ||
+                                         mode == PromptMode::CastCostOptions);
         confirmTargetsButton->setEnabled(promptState.selected >= promptState.required &&
                                          promptState.selected <= promptState.max);
         return;

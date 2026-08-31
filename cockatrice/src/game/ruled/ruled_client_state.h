@@ -301,6 +301,8 @@ struct RuledModalSpellOption
     bool selectable = false;
     bool needsTarget = false;
     RuledSpellTargetData targets;
+    int linkedCastCostGroupIndex = -1;
+    int linkedCastCostOptionIndex = -1;
 };
 
 enum class RuledCastSource : int
@@ -434,6 +436,8 @@ public:
             TriggerMode,
             /// CR 707.10c: the controller of a spell copy may redirect its targets.
             CopyTarget,
+            /// CR 608.2d: a resolving effect chooses a permanent without targeting it.
+            PermanentChoice,
             /// CR 614.12 / 707.5: an entering permanent chooses an untargeted copy source.
             CopySource,
             /// CR 704.5j: which of two-or-more same-name legends the controller keeps.

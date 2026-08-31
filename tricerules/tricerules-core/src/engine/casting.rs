@@ -39,12 +39,25 @@ pub(super) fn castable_at_instant_speed(face: &tricerules_cards::FaceRef<'_>) ->
 
 fn command_satisfies_cast_cost_condition(
     selections: &[rv1::CastCostGroupSelection],
-    condition: tricerules_cards::CastCostReceiptCondition,
+    groups: &[CastCostGroupDef],
+    condition: &tricerules_cards::CastCostReceiptCondition,
 ) -> bool {
-    selections.iter().any(|selection| {
-        selection.group_index == condition.group_index
-            && selection.option_index == condition.option_index
-    }) == condition.expected_selected
+    let selected = groups
+        .iter()
+        .position(|group| group.group_id == condition.group_id)
+        .and_then(|group_index| {
+            groups[group_index]
+                .options
+                .iter()
+                .position(|option| option.option_id() == &condition.option_id)
+                .map(|option_index| (group_index as u32, option_index as u32))
+        })
+        .is_some_and(|(group_index, option_index)| {
+            selections.iter().any(|selection| {
+                selection.group_index == group_index && selection.option_index == option_index
+            })
+        });
+    selected == condition.expected_selected
 }
 
 pub(in crate::engine) struct PreparedSpellCast {
@@ -508,9 +521,16 @@ impl GameEngine {
         let eligible_restricted_mana = self.eligible_restricted_mana_for_spell(idx, face);
         let sorcery_ok = super::priority::sorcery_speed_available(&self.state, player);
         let instant_ok = super::priority::instant_timing_step_allowed(&self.state);
-        let conditional_instant = face.instant_speed_cast_cost.is_some_and(|condition| {
-            command_satisfies_cast_cost_condition(cast_cost_group_selections, condition)
-        });
+        let conditional_instant = face
+            .instant_speed_cast_cost
+            .as_ref()
+            .is_some_and(|condition| {
+                command_satisfies_cast_cost_condition(
+                    cast_cost_group_selections,
+                    &face.cast_cost_groups,
+                    condition,
+                )
+            });
         if face_is_sorcery {
             if !(sorcery_ok || instant_ok && conditional_instant) {
                 return Err(EngineError::Illegal("sorcery speed only"));
@@ -568,6 +588,37 @@ impl GameEngine {
                 || selected_modes.len() > modal.max_modes as usize
             {
                 return Err(EngineError::Illegal("illegal number of selected modes"));
+            }
+            let selected_mode_indices = selected_modes
+                .iter()
+                .map(|selection| selection.mode_index as usize)
+                .collect::<HashSet<_>>();
+            for (mode_index, mode) in modal.modes.iter().enumerate() {
+                let Some(link) = &mode.linked_cast_cost else {
+                    continue;
+                };
+                let group_index = cast_cost_groups
+                    .iter()
+                    .position(|group| group.group_id == link.group_id)
+                    .ok_or(EngineError::Illegal(
+                        "mode links an unknown cast cost group",
+                    ))?;
+                let option_index = cast_cost_groups[group_index]
+                    .options
+                    .iter()
+                    .position(|option| option.option_id() == &link.option_id)
+                    .ok_or(EngineError::Illegal(
+                        "mode links an unknown cast cost option",
+                    ))?;
+                let submitted = cast_cost_group_selections.iter().any(|selection| {
+                    selection.group_index == group_index as u32
+                        && selection.option_index == option_index as u32
+                });
+                if submitted != selected_mode_indices.contains(&mode_index) {
+                    return Err(EngineError::Illegal(
+                        "selected modes and linked cast costs must match exactly",
+                    ));
+                }
             }
             let mut seen = HashSet::new();
             let mut ordered: Vec<&rv1::SelectedSpellMode> = selected_modes.iter().collect();
@@ -2839,29 +2890,49 @@ mod mana_payment_tests {
 
     #[test]
     fn conditional_instant_timing_requires_the_linked_cast_cost_selection() {
+        let group_id = tricerules_cards::ChoiceId::new("cast_cost_01").unwrap();
+        let option_id = tricerules_cards::ChoiceId::new("option_01").unwrap();
+        let groups = vec![CastCostGroupDef {
+            group_id: group_id.clone(),
+            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            min: 0,
+            max: 1,
+            options: vec![CastCostOptionDef::Mana {
+                option_id: option_id.clone(),
+                presentation: tricerules_cards::AbilityPresentation::Fallback,
+                kind: tricerules_cards::primitives::ManaCostChoiceKind::AdditionalPayment,
+                cost: ManaCost::parse("{1}").unwrap(),
+            }],
+        }];
         let condition = CastCostReceiptCondition {
-            group_index: 0,
-            option_index: 1,
+            group_id,
+            option_id,
             expected_selected: true,
         };
-        assert!(!command_satisfies_cast_cost_condition(&[], condition));
         assert!(!command_satisfies_cast_cost_condition(
-            &[rv1::CastCostGroupSelection {
-                group_index: 0,
-                option_index: 0,
-                selected_object: None,
-                expected_zone_change_generation: 0,
-            }],
-            condition,
+            &[],
+            &groups,
+            &condition,
         ));
-        assert!(command_satisfies_cast_cost_condition(
+        assert!(!command_satisfies_cast_cost_condition(
             &[rv1::CastCostGroupSelection {
                 group_index: 0,
                 option_index: 1,
                 selected_object: None,
                 expected_zone_change_generation: 0,
             }],
-            condition,
+            &groups,
+            &condition,
+        ));
+        assert!(command_satisfies_cast_cost_condition(
+            &[rv1::CastCostGroupSelection {
+                group_index: 0,
+                option_index: 0,
+                selected_object: None,
+                expected_zone_change_generation: 0,
+            }],
+            &groups,
+            &condition,
         ));
     }
 

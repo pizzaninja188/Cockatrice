@@ -820,6 +820,10 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.mode = PromptMode::ClickChoice;
         state.text = h->pendingChoicePromptText(ChoiceKind::CopyTarget) +
                      tr("\nClick a target, or click the original target to keep it.");
+    } else if (h->hasPendingChoiceOfKind(ChoiceKind::PermanentChoice)) {
+        state.mode = PromptMode::ClickChoice;
+        state.text = h->pendingChoicePromptText(ChoiceKind::PermanentChoice) +
+                     tr("\nClick a legal permanent on the battlefield.");
     } else if (h->hasPendingChoiceOfKind(ChoiceKind::CopySource)) {
         state.mode = PromptMode::ClickChoice;
         state.canDecline = h->pendingClickChoiceMayDecline();
@@ -851,10 +855,9 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
     } else if (localActions && localActions->isAwaitingRuledCastCostOption()) {
         state.mode = PromptMode::CastCostOptions;
         state.text = localActions->pendingRuledSpellPromptText();
-        if (localActions->pendingRuledCastCostGroupIsOptional()) {
-            const QString skipLabel = localActions->pendingRuledCastCostSkipLabel();
-            state.choiceOptions.append({-1, skipLabel.isEmpty() ? tr("Cast normally") : skipLabel, true});
-        }
+        state.required = localActions->pendingRuledCastCostMinimum();
+        state.selected = localActions->pendingRuledCastCostSelectedCount();
+        state.max = localActions->pendingRuledCastCostMaximum();
         for (const auto &option : localActions->pendingRuledCastCostOptions()) {
             state.choiceOptions.append({option.optionIndex, option.label, option.selectable});
         }
@@ -1699,6 +1702,8 @@ void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
                 [this](bool /*pending*/) { refreshRuledPromptState(); });
         connect(gamePromptWidget, &GamePromptWidget::ruledCastCostOptionRequested, newPlayer->getPlayerActions(),
                 &PlayerActions::selectPendingRuledCastCostOption);
+        connect(gamePromptWidget, &GamePromptWidget::ruledCastCostConfirmRequested, newPlayer->getPlayerActions(),
+                &PlayerActions::confirmPendingRuledCastCostGroup);
         connect(gamePromptWidget, &GamePromptWidget::ruledCastCostBackRequested, newPlayer->getPlayerActions(),
                 &PlayerActions::backPendingRuledCastCostObject);
         connect(newPlayer->getPlayerActions(), &PlayerActions::ruledSpellManaPromptChanged, this, [this, newPlayer]() {

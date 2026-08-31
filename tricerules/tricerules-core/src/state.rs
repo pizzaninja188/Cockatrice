@@ -8,7 +8,7 @@ use tricerules_cards::primitives::{
     TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
-use tricerules_cards::{is_creature_type, CardFace, ManaCost, ManaSymbol, ModeId};
+use tricerules_cards::{is_creature_type, CardFace, ChoiceId, ManaCost, ManaSymbol, ModeId};
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
 pub type PlayerId = i32;
@@ -46,6 +46,7 @@ pub(crate) struct CardResultCohort {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct EffectResult {
     pub cards: Vec<CardResultEntry>,
+    pub selected_objects: Vec<TriggerObjectRef>,
     pub receipt: Option<ResolutionReceipt>,
 }
 
@@ -58,6 +59,7 @@ impl From<CardResultCohort> for EffectResult {
     fn from(cohort: CardResultCohort) -> Self {
         Self {
             cards: cohort.cards,
+            selected_objects: Vec::new(),
             receipt: None,
         }
     }
@@ -813,6 +815,10 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         branch: PendingResolutionBranch,
     },
+    PermanentChoice {
+        stack: ParkedStackResolution,
+        candidate_generations: Vec<(ObjectId, u64)>,
+    },
     WardPayment {
         stack: ParkedStackResolution,
         ward: PendingWardPayment,
@@ -928,6 +934,7 @@ impl ResolutionContinuation {
             Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
+            | Self::PermanentChoice { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
             | Self::PlayerSetDiscard { stack, .. }
@@ -958,6 +965,7 @@ impl ResolutionContinuation {
             Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
+            | Self::PermanentChoice { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
             | Self::PlayerSetDiscard { stack, .. }
@@ -1227,6 +1235,8 @@ pub enum CastCostObjectReceipt {
 pub struct CastCostReceipt {
     pub group_index: u32,
     pub option_index: u32,
+    pub group_id: Option<ChoiceId>,
+    pub option_id: Option<ChoiceId>,
     pub label: String,
     pub object: Option<CastCostObjectReceipt>,
 }
@@ -1340,10 +1350,10 @@ pub struct StackPresentation {
 }
 
 impl StackItem {
-    pub fn cast_cost_condition_matches(&self, condition: CastCostReceiptCondition) -> bool {
+    pub fn cast_cost_condition_matches(&self, condition: &CastCostReceiptCondition) -> bool {
         self.cast_cost_receipts.iter().any(|receipt| {
-            receipt.group_index == condition.group_index
-                && receipt.option_index == condition.option_index
+            receipt.group_id.as_ref() == Some(&condition.group_id)
+                && receipt.option_id.as_ref() == Some(&condition.option_id)
         }) == condition.expected_selected
     }
 }

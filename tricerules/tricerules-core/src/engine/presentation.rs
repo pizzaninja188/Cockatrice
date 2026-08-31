@@ -215,6 +215,8 @@ mod tests {
             &[CastCostReceipt {
                 group_index: 0,
                 option_index: 0,
+                group_id: Some(tricerules_cards::ChoiceId::new("cast_cost_01").unwrap()),
+                option_id: Some(tricerules_cards::ChoiceId::new("option_01").unwrap()),
                 label: "Kicker {2}".into(),
                 object: None,
             }],

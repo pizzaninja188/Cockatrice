@@ -19,8 +19,8 @@
       counter: PlusOnePlusOne,
       amount: 2,
       cast_cost_condition: Some((
-        group_index: 0,
-        option_index: 0,
+        group_id: "cast_cost_01",
+        option_id: "option_01",
         expected_selected: true,
       )),
     )),

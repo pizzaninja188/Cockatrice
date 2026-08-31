@@ -1,0 +1,36 @@
+// Oracle and rulings checked against Scryfall on 2026-08-31.
+(
+  id: "phantom_interference",
+  name: "Phantom Interference",
+  face_id: "phantom_interference",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "spree",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 2,
+    options: [
+      Mana(option_id: "create_spirit_cost", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{3}"),
+      Mana(option_id: "counter_unless_pays_cost", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{1}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 2,
+    modes: [
+      (
+        mode_id: "create_spirit",
+        presentation: OracleLines([2]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "create_spirit_cost")),
+        effects: [CreateTokens(token: "spirit_w_2_2_flying", count: 1)],
+      ),
+      (
+        mode_id: "counter_unless_pays",
+        presentation: OracleLines([3]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "counter_unless_pays_cost")),
+        effects: [CounterTargetSpell(unless_controller_pays: Some(2))],
+      ),
+    ],
+  ),
+)

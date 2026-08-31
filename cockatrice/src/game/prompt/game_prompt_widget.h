@@ -188,6 +188,7 @@ signals:
     void ruledResolutionPaymentDeclineRequested();
     void ruledChoiceOptionRequested(int optionIndex);
     void ruledCastCostOptionRequested(int optionIndex);
+    void ruledCastCostConfirmRequested();
     void ruledCastCostBackRequested();
 
 private:

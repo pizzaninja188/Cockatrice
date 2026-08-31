@@ -1237,7 +1237,7 @@ impl GameEngine {
             Amount::CastCost(value) => {
                 if context
                     .stack_item
-                    .is_some_and(|item| item.cast_cost_condition_matches(value.condition))
+                    .is_some_and(|item| item.cast_cost_condition_matches(&value.condition))
                 {
                     value.if_selected
                 } else {

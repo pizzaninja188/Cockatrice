@@ -327,7 +327,9 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
                                              : QString::fromStdString(mode.label()),
                      mode.selectable(),
                      mode.needs_target(),
-                     mode.has_targets() ? parseSpellTargets(mode.targets()) : RuledClientState::SpellTargetData{}});
+                     mode.has_targets() ? parseSpellTargets(mode.targets()) : RuledClientState::SpellTargetData{},
+                     mode.has_linked_cast_cost() ? static_cast<int>(mode.linked_cast_cost().group_index()) : -1,
+                     mode.has_linked_cast_cost() ? static_cast<int>(mode.linked_cast_cost().option_index()) : -1});
             }
             set.modalOptionsByCastKey.insert(castKey, modes);
         }
@@ -964,6 +966,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     }
 
     if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_TARGET_OBJECTS ||
+        rcr.choice_kind() == ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS ||
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_COST_OBJECTS ||
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_COPY_SOURCE ||
         rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP ||
@@ -979,6 +982,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             choice.kind = ChoiceKind::CostObjects;
             choice.min = static_cast<int>(rcr.min());
             choice.max = static_cast<int>(rcr.max());
+        } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS) {
+            choice.kind = ChoiceKind::PermanentChoice;
         } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP) {
             choice.kind = ChoiceKind::LegendKeep;
         } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_COPY_SOURCE) {
@@ -1660,7 +1665,9 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
                                              : QString::fromStdString(mode.label()),
                      mode.selectable(),
                      mode.needs_target(),
-                     mode.has_targets() ? parseSpellTargets(mode.targets()) : RuledClientState::SpellTargetData{}});
+                     mode.has_targets() ? parseSpellTargets(mode.targets()) : RuledClientState::SpellTargetData{},
+                     mode.has_linked_cast_cost() ? static_cast<int>(mode.linked_cast_cost().group_index()) : -1,
+                     mode.has_linked_cast_cost() ? static_cast<int>(mode.linked_cast_cost().option_index()) : -1});
             }
             state->zoneCastActions.modalOptionsByCastKey.insert(castKey, modes);
         }

@@ -105,6 +105,7 @@ bool isPrivateChoiceKind(ruled::v1::ChoiceKind kind)
             return true;
         case ruled::v1::CHOICE_KIND_REVEALED:
         case ruled::v1::CHOICE_KIND_TARGET_OBJECTS:
+        case ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS:
         case ruled::v1::CHOICE_KIND_LEGEND_KEEP:
         case ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT:
         case ruled::v1::CHOICE_KIND_COPY_SOURCE:

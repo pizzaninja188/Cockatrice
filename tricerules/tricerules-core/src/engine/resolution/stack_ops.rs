@@ -19,11 +19,7 @@ pub(super) fn counter_target_spell(
 
     if let Some(&tid) = targets.first() {
         let receipt_payment = unless_controller_pays_by_cast_cost.map(|conditional| {
-            if cx.top.cast_cost_receipts.iter().any(|receipt| {
-                receipt.group_index == conditional.condition.group_index
-                    && receipt.option_index == conditional.condition.option_index
-            }) == conditional.condition.expected_selected
-            {
+            if cx.top.cast_cost_condition_matches(&conditional.condition) {
                 conditional.if_selected
             } else {
                 conditional.otherwise

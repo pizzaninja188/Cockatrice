@@ -47,6 +47,7 @@ TEST(RuledUtilsTest, PrivateChoiceKindsAreTheConcealedZoneOnes)
     // Public: already revealed to the table, or on the battlefield.
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_REVEALED));
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_TARGET_OBJECTS));
+    EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS));
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_LEGEND_KEEP));
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT));
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_COPY_SOURCE));

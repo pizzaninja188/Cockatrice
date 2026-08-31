@@ -213,6 +213,8 @@ public:
         bool sick = false;
         bool haste = false;
         bool reach = false;
+        bool flying = false;
+        bool indestructible = false;
         int power = 0;
         int toughness = 0;
         int faceIndex = 0;
@@ -1615,6 +1617,12 @@ public:
                             perm.reach =
                                 std::find(battlefieldObject.keywords().begin(), battlefieldObject.keywords().end(),
                                           "Reach") != battlefieldObject.keywords().end();
+                            perm.flying =
+                                std::find(battlefieldObject.keywords().begin(), battlefieldObject.keywords().end(),
+                                          "Flying") != battlefieldObject.keywords().end();
+                            perm.indestructible =
+                                std::find(battlefieldObject.keywords().begin(), battlefieldObject.keywords().end(),
+                                          "Indestructible") != battlefieldObject.keywords().end();
                             bf.push_back(perm);
                             const int omenOwnerId = role == Role::Aggressor ? myId : oppId;
                             if (devOmenFizzleTargetSent && pp.player_id() == omenOwnerId &&
@@ -4576,6 +4584,143 @@ TEST_F(RuledE2ESmokeTest, KickedAangSearchSlotsArePrivateAndResolveForBothSeats)
     EXPECT_EQ(p2.lifeByPlayer[p1.myId], 22);
     EXPECT_EQ(p1.stackDepth, 0);
     EXPECT_EQ(p2.stackDepth, 0);
+}
+
+TEST_F(RuledE2ESmokeTest, FinalShowdownLinksEveryModeToItsCostAndPublishesItsPermanentChoice)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("showdownp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("showdownp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Plains")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "Final Showdown game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "Final Showdown game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto conjure = [&](const char *name, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        dev->mutable_put_card_in_zone()->set_card_name(name);
+        dev->mutable_put_card_in_zone()->set_zone(zone);
+        return send(p1, command, QStringLiteral("conjure %1").arg(QString::fromUtf8(name)));
+    };
+    auto pass = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(client, command, QStringLiteral("Final Showdown resolution pass"));
+    };
+
+    ASSERT_TRUE(conjure("Wind Drake", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(conjure("Grizzly Bears", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(conjure("Final Showdown", ruled::v1::DEV_ZONE_HAND));
+
+    ruled::v1::RuledCommand mana;
+    mana.mutable_dev_command()->set_target_player_id(p1.myId);
+    mana.mutable_dev_command()->mutable_add_mana()->set_w(3);
+    mana.mutable_dev_command()->mutable_add_mana()->set_c(5);
+    ASSERT_TRUE(send(p1, mana, QStringLiteral("add mana for all Final Showdown modes")));
+
+    const auto *showdown = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Final Showdown"));
+    ASSERT_NE(showdown, nullptr);
+    ASSERT_EQ(showdown->modes_size(), 3);
+    ASSERT_EQ(showdown->cost_choices().cast_cost_groups_size(), 1);
+    EXPECT_EQ(showdown->cost_choices().cast_cost_groups(0).min(), 1u);
+    EXPECT_EQ(showdown->cost_choices().cast_cost_groups(0).max(), 3u);
+
+    ruled::v1::RuledCommand cast;
+    auto *spell = cast.mutable_cast_spell();
+    spell->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    spell->mutable_source()->set_hand_index(showdown->hand_index());
+    std::set<std::pair<quint32, quint32>> linkedCosts;
+    for (const auto &mode : showdown->modes()) {
+        ASSERT_TRUE(mode.has_linked_cast_cost());
+        spell->add_selected_modes()->set_mode_index(mode.mode_index());
+        linkedCosts.insert({mode.linked_cast_cost().group_index(), mode.linked_cast_cost().option_index()});
+    }
+    ASSERT_EQ(linkedCosts.size(), 3);
+    for (const auto &[groupIndex, optionIndex] : linkedCosts) {
+        auto *selection = spell->add_cast_cost_group_selections();
+        selection->set_group_index(groupIndex);
+        selection->set_option_index(optionIndex);
+    }
+    ASSERT_TRUE(send(p1, cast, QStringLiteral("cast Final Showdown with all modes")));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+
+    ASSERT_TRUE(p1.pendingChoice.has_value());
+    EXPECT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+    EXPECT_EQ(p1.pendingChoice->candidate_object_ids_size(), 2);
+    ASSERT_TRUE(p2.lastResolutionChoice.has_value());
+    EXPECT_EQ(p2.lastResolutionChoice->choice_kind(), ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+    EXPECT_EQ(p2.lastResolutionChoice->candidate_object_ids_size(), 2)
+        << "the battlefield choice is public and must not be relay-redacted";
+
+    const auto own = p1.battlefieldByPlayer.find(p1.myId);
+    ASSERT_NE(own, p1.battlefieldByPlayer.end());
+    const auto drake = std::find_if(own->second.cbegin(), own->second.cend(),
+                                    [](const auto &permanent) { return permanent.cardId == QStringLiteral("wind_drake"); });
+    ASSERT_NE(drake, own->second.cend());
+    ruled::v1::RuledCommand choose;
+    choose.mutable_submit_resolution_choice()->add_chosen_object_ids(drake->oid);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, choose, QStringLiteral("choose Wind Drake for indestructible")));
+
+    const auto finalOwn = p1.battlefieldByPlayer.find(p1.myId);
+    ASSERT_NE(finalOwn, p1.battlefieldByPlayer.end());
+    const auto survivingDrake = std::find_if(finalOwn->second.cbegin(), finalOwn->second.cend(),
+                                             [](const auto &permanent) {
+                                                 return permanent.cardId == QStringLiteral("wind_drake");
+                                             });
+    ASSERT_NE(survivingDrake, finalOwn->second.cend());
+    EXPECT_FALSE(survivingDrake->flying) << "the first mode removes Flying through end of turn";
+    EXPECT_TRUE(survivingDrake->indestructible)
+        << "the later mode grants Indestructible after the ability-removal layer was established";
+    EXPECT_EQ(p1.countOwn(QStringLiteral("grizzly_bears"), false), 0)
+        << "the unprotected creature should be destroyed by the final mode";
 }
 
 TEST_F(RuledE2ESmokeTest, TemporaryExileReturnsTheExactPhysicalCardToBothClients)

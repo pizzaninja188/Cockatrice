@@ -122,7 +122,11 @@ public:
     [[nodiscard]] bool pendingRuledCastCostGroupIsOptional() const;
     [[nodiscard]] QString pendingRuledCastCostSkipLabel() const;
     [[nodiscard]] QVector<RuledCastCostOption> pendingRuledCastCostOptions() const;
+    [[nodiscard]] int pendingRuledCastCostSelectedCount() const;
+    [[nodiscard]] int pendingRuledCastCostMinimum() const;
+    [[nodiscard]] int pendingRuledCastCostMaximum() const;
     void selectPendingRuledCastCostOption(int optionIndex);
+    void confirmPendingRuledCastCostGroup();
     void backPendingRuledCastCostObject();
     /// Activated abilities on a battlefield permanent. With `leftClick` true, a permanent whose sole
     /// ability is a mana ability (CR 605) is activated directly (the mana floats, no menu); every

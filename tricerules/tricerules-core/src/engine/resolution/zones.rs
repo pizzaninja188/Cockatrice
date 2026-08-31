@@ -392,11 +392,7 @@ pub(super) fn exile_top_with_play_permission(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let count = count_by_cast_cost.map_or(count, |conditional| {
-        if cx.top.cast_cost_receipts.iter().any(|receipt| {
-            receipt.group_index == conditional.condition.group_index
-                && receipt.option_index == conditional.condition.option_index
-        }) == conditional.condition.expected_selected
-        {
+        if cx.top.cast_cost_condition_matches(&conditional.condition) {
             conditional.if_selected
         } else {
             conditional.otherwise
@@ -2519,7 +2515,7 @@ pub(super) fn search_library(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let count = count_by_cast_cost.map_or(count, |conditional| {
-        if cx.top.cast_cost_condition_matches(conditional.condition) {
+        if cx.top.cast_cost_condition_matches(&conditional.condition) {
             conditional.if_selected
         } else {
             conditional.otherwise
@@ -2529,6 +2525,7 @@ pub(super) fn search_library(
         .into_iter()
         .filter(|slot| {
             slot.enabled_by_cast_cost
+                .as_ref()
                 .is_none_or(|condition| cx.top.cast_cost_condition_matches(condition))
         })
         .collect();

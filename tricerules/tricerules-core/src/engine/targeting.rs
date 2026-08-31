@@ -832,6 +832,48 @@ pub(super) fn target_filter_legal_at_resolution(
     target_filter_legal_with_context(engine, filter, tid, caster, source, trigger_context)
 }
 
+/// Legality for an untargeted battlefield-permanent choice made during resolution. This shares
+/// characteristic, controller, and source-exclusion predicates with targeting, but deliberately
+/// ignores hexproof, shroud, and protection because the instruction does not target (CR 115.1).
+pub(super) fn permanent_choice_filter_legal(
+    engine: &GameEngine,
+    filter: &TargetFilter,
+    oid: ObjectId,
+    chooser: PlayerId,
+    source: TargetSourceIdentity,
+    trigger_context: TriggerContext,
+) -> bool {
+    if let Some(branches) = &filter.any_of {
+        return branches.iter().any(|branch| {
+            permanent_choice_filter_legal(engine, branch, oid, chooser, source, trigger_context)
+        });
+    }
+    if filter.is_player()
+        || !matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+        || !any_battlefield_permanent_target_legal(&engine.state, oid)
+        || object_is_excluded(
+            &engine.state,
+            &filter.excluded_objects,
+            oid,
+            source,
+            trigger_context,
+        )
+        || !filter_characteristics_match(engine, filter, oid)
+    {
+        return false;
+    }
+    let Some(characteristics) = engine.characteristics(oid) else {
+        return false;
+    };
+    target_controller_matches(
+        &engine.state,
+        filter.controller,
+        chooser,
+        characteristics.controller,
+        trigger_context.defending_player,
+    )
+}
+
 fn target_filter_legal_with_context(
     engine: &GameEngine,
     filter: &TargetFilter,
@@ -1124,7 +1166,8 @@ fn validate_effect_targets(
         | SpellEffectKind::Sacrifice { subject } => match subject {
             EffectSubject::Source
             | EffectSubject::AttachedObject
-            | EffectSubject::TriggerObject => {
+            | EffectSubject::TriggerObject
+            | EffectSubject::PreviousEffectObject => {
                 if !targets.is_empty() {
                     return Err(EngineError::Illegal("this effect takes no targets"));
                 }
@@ -1314,37 +1357,44 @@ fn validate_effect_targets(
         | SpellEffectKind::Untap {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
-                | EffectSubject::TriggerObject,
+                | EffectSubject::TriggerObject
+                | EffectSubject::PreviousEffectObject,
         }
         | SpellEffectKind::Tap {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
-                | EffectSubject::TriggerObject,
+                | EffectSubject::TriggerObject
+                | EffectSubject::PreviousEffectObject,
         }
         | SpellEffectKind::ReturnToOwnersHand {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
-                | EffectSubject::TriggerObject,
+                | EffectSubject::TriggerObject
+                | EffectSubject::PreviousEffectObject,
         }
         | SpellEffectKind::Exile {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
-                | EffectSubject::TriggerObject,
+                | EffectSubject::TriggerObject
+                | EffectSubject::PreviousEffectObject,
         }
         | SpellEffectKind::ExileWithOwnerCastPermission {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
-                | EffectSubject::TriggerObject,
+                | EffectSubject::TriggerObject
+                | EffectSubject::PreviousEffectObject,
             ..
         }
         | SpellEffectKind::PutInOwnersLibrary {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
-                | EffectSubject::TriggerObject,
+                | EffectSubject::TriggerObject
+                | EffectSubject::PreviousEffectObject,
             ..
         }
         | SpellEffectKind::PumpAll { .. }
         | SpellEffectKind::GrantKeywordsAll { .. }
+        | SpellEffectKind::RemoveAbilitiesAll { .. }
         | SpellEffectKind::GrantKeywordsAllPermanents { .. }
         | SpellEffectKind::CreateTokens { .. }
         | SpellEffectKind::Populate
@@ -1370,6 +1420,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ManifestDread
         | SpellEffectKind::ExileTopWithPlayPermission { .. }
         | SpellEffectKind::ChooseResolutionBranch { .. }
+        | SpellEffectKind::ChoosePermanents { .. }
         | SpellEffectKind::CreateReflexiveTrigger { .. }
         | SpellEffectKind::ChangeSourceFace { .. }
         | SpellEffectKind::ReturnTriggeredCard { .. }

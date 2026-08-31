@@ -1,0 +1,47 @@
+// Oracle and rulings checked against Scryfall on 2026-08-31. The second mode chooses during
+// resolution and does not target; selected modes resolve in their printed order (CR 700.2e).
+(
+  id: "final_showdown",
+  name: "Final Showdown",
+  face_id: "final_showdown",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "spree",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 3,
+    options: [
+      Mana(option_id: "remove_abilities_cost", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{1}"),
+      Mana(option_id: "grant_indestructible_cost", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{1}"),
+      Mana(option_id: "destroy_creatures_cost", presentation: OracleLines([4]), kind: AdditionalPayment, cost: "{3}{W}{W}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 3,
+    modes: [
+      (
+        mode_id: "remove_abilities",
+        presentation: OracleLines([2]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "remove_abilities_cost")),
+        effects: [RemoveAbilitiesAll(filter: ())],
+      ),
+      (
+        mode_id: "grant_indestructible",
+        presentation: OracleLines([3]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "grant_indestructible_cost")),
+        effects: [
+          ChoosePermanents(chooser: Controller, filter: (kind: Creature, controller: You), min: 1, max: 1),
+          GrantKeywords(subject: PreviousEffectObject, keywords: [Indestructible]),
+        ],
+      ),
+      (
+        mode_id: "destroy_creatures",
+        presentation: OracleLines([4]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "destroy_creatures_cost")),
+        effects: [DestroyAll(kind: (kind: Creature))],
+      ),
+    ],
+  ),
+)

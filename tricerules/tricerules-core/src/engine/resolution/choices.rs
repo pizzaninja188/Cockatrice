@@ -5,7 +5,7 @@ use crate::engine::{rv1, EngineError};
 use crate::state::{
     ParkedStackResolution, PendingResolution, PendingResolutionBranch,
     PendingResolutionBranchStage, PendingResolutionPresentation, ResolutionContinuation, StackItem,
-    StagedTrigger, StagedTriggerGroup, TriggerContext,
+    StagedTrigger, StagedTriggerGroup, TriggerContext, TriggerObjectRef,
 };
 use tricerules_cards::primitives::{
     PlayerRecipient, ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection,
@@ -84,6 +84,152 @@ pub(super) fn choose_resolution_branch(
     }
 }
 
+pub(super) fn choose_permanents(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ChoosePermanents {
+        chooser,
+        filter,
+        min,
+        max,
+    } = effect
+    else {
+        unreachable!();
+    };
+    let recipients = super::player_recipients(cx, chooser);
+    let [deciding_player] = recipients.as_slice() else {
+        return Err(EngineError::Illegal(
+            "permanent choice requires exactly one deciding player",
+        ));
+    };
+    let deciding_player = *deciding_player;
+    let source = crate::engine::targeting::TargetSourceIdentity::for_stack_item(cx.engine, cx.top);
+    let candidates = cx
+        .engine
+        .state
+        .players
+        .iter()
+        .flat_map(|player| player.battlefield.iter().copied())
+        .filter(|oid| {
+            crate::engine::targeting::permanent_choice_filter_legal(
+                cx.engine,
+                &filter,
+                *oid,
+                deciding_player,
+                source,
+                cx.top.trigger_context,
+            )
+        })
+        .collect::<Vec<_>>();
+    if candidates.len() < min as usize {
+        cx.events.push(ev_log(format!(
+            "P{deciding_player} has no legal permanent to choose."
+        )));
+        return Ok(EffectOutcome::Continue);
+    }
+    if min == max && candidates.len() == min as usize {
+        cx.effect_result.selected_objects = candidates
+            .iter()
+            .map(|oid| TriggerObjectRef {
+                object_id: *oid,
+                zone_change_generation: cx
+                    .engine
+                    .state
+                    .zone_change_generation
+                    .get(oid)
+                    .copied()
+                    .unwrap_or(0),
+                controller_at_event: cx
+                    .engine
+                    .characteristics(*oid)
+                    .map(|characteristics| characteristics.controller)
+                    .unwrap_or(deciding_player),
+            })
+            .collect();
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let candidate_card_ids = candidates
+        .iter()
+        .map(|oid| {
+            cx.engine
+                .state
+                .objects
+                .get(oid)
+                .map(|object| object.card_id.clone())
+                .unwrap_or_default()
+        })
+        .collect::<Vec<_>>();
+    let candidate_names = candidates
+        .iter()
+        .map(|oid| {
+            cx.engine
+                .state
+                .objects
+                .get(oid)
+                .and_then(|object| cx.engine.registry.get(&object.card_id))
+                .map(|definition| definition.name.clone())
+                .unwrap_or_else(|| format!("[object {oid}]"))
+        })
+        .collect::<Vec<_>>();
+    let prompt = if min == 1 && max == 1 {
+        "Choose a permanent.".to_string()
+    } else {
+        format!("Choose {min}–{max} permanents.")
+    };
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: deciding_player,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: rv1::ChoiceKind::PermanentObjects as i32,
+                candidate_object_ids: candidates.clone(),
+                candidate_card_ids,
+                candidate_names,
+                min,
+                max,
+                ..Default::default()
+            },
+        )),
+    });
+    cx.events.push(ev_log(prompt.clone()));
+    let candidate_generations = candidates
+        .iter()
+        .map(|oid| {
+            (
+                *oid,
+                cx.engine
+                    .state
+                    .zone_change_generation
+                    .get(oid)
+                    .copied()
+                    .unwrap_or(0),
+            )
+        })
+        .collect();
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates,
+            min,
+            max,
+            ordered: false,
+            prompt,
+            choice_kind: rv1::ChoiceKind::PermanentObjects,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::PermanentChoice {
+            stack: ParkedStackResolution::new(cx.top.clone())
+                .with_previous_result(cx.previous_effect_result.clone()),
+            candidate_generations,
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
 pub(in crate::engine) fn resolution_branch_is_live(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
@@ -106,10 +252,7 @@ pub(in crate::engine) fn resolution_branch_is_live(
             crate::engine::ConditionContext::for_stack_item(top),
         ),
         ResolutionBranchRequirement::CastCostReceipt(condition) => {
-            top.cast_cost_receipts.iter().any(|receipt| {
-                receipt.group_index == condition.group_index
-                    && receipt.option_index == condition.option_index
-            }) == condition.expected_selected
+            top.cast_cost_condition_matches(condition)
         }
         ResolutionBranchRequirement::PreviousResultReceipt(condition) => {
             match (condition, previous_result.receipt) {
