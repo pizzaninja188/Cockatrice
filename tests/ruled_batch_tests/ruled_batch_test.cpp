@@ -2091,6 +2091,36 @@ TEST_F(RuledBatchTest, CastCostCandidatesStayPrivateWhileActiveBeholdRevealIsPub
     EXPECT_EQ(forOpponent.events(0).active_public_reveal_snapshot().reveals(0).card_id(), "adult_gold_dragon");
 }
 
+TEST_F(RuledBatchTest, ExileCastingPermissionIdentityAndOfferStayOwnerOnly)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[p1->getPlayerId()];
+    auto *group = actions.add_exile_play_permission_groups();
+    group->set_group_id(149);
+    group->set_source_label("Airbending Lesson");
+    group->add_object_ids(700);
+    auto *action = actions.add_zone_cast_actions();
+    action->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    action->set_object_id(700);
+    action->set_card_name("Grizzly Bears");
+    action->set_cost("{2}");
+    action->set_cast_method(ruled::v1::CAST_METHOD_PERMISSION);
+    action->set_zone_change_generation(9);
+    action->set_casting_permission_id(149);
+
+    const auto forOwner = redactFor(batch, p1);
+    ASSERT_TRUE(forOwner.legal_by_player().contains(p1->getPlayerId()));
+    const auto &ownerActions = forOwner.legal_by_player().at(p1->getPlayerId());
+    ASSERT_EQ(ownerActions.zone_cast_actions_size(), 1);
+    EXPECT_TRUE(ownerActions.zone_cast_actions(0).has_casting_permission_id());
+    EXPECT_EQ(ownerActions.zone_cast_actions(0).casting_permission_id(), 149u);
+    ASSERT_EQ(ownerActions.exile_play_permission_groups_size(), 1);
+    EXPECT_EQ(ownerActions.exile_play_permission_groups(0).source_label(), "Airbending Lesson");
+
+    const auto forOpponent = redactFor(batch, p2);
+    EXPECT_FALSE(forOpponent.legal_by_player().contains(p1->getPlayerId()));
+}
+
 TEST_F(RuledBatchTest, PendingPrivateWardDiscardIsRestoredForPayerAndRedactedForOpponent)
 {
     Server_Card *bear = addCardToHand(p1, QStringLiteral("Grizzly Bears"));

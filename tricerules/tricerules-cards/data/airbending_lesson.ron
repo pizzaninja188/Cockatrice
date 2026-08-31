@@ -1,0 +1,16 @@
+// Oracle and rulings verified 2026-08-31. CR 701.65, 601, 118.9, and 400.7.
+(
+  id: "airbending_lesson",
+  name: "Airbending Lesson",
+  face_id: "airbending_lesson",
+  mana_cost: "{2}{W}",
+  types: ["Instant", "Lesson"],
+  spell_presentation: OracleLines([1, 2]),
+  spell_effect: [
+    ExileWithOwnerCastPermission(
+      subject: Chosen((kind: AnyPermanent, not_land: true)),
+      alternative_cost: "{2}",
+    ),
+    Draw(count: 1),
+  ],
+)

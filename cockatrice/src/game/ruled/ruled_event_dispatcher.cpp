@@ -294,7 +294,7 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
             action.kind() == ruled::v1::HAND_ACTION_CAST_SPELL ? action.cast_method() : ruled::v1::CAST_METHOD_NORMAL;
         if (method != ruled::v1::CAST_METHOD_NORMAL && method != ruled::v1::CAST_METHOD_WARP)
             continue;
-        const quint64 castKey = RuledClientState::handCastActionKey(handIndex, faceIndex, method);
+        const auto castKey = RuledClientState::handCastActionKey(handIndex, faceIndex, method);
         RuledHandActionSet &set = parsed[action.kind()];
         set.handIndices.insert(handIndex);
         const QString cardName = QString::fromStdString(action.card_name());
@@ -302,6 +302,7 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         set.faceOptionsByIndex[handIndex].append(
             {faceIndex, cardName, QString::fromStdString(action.cost()),
              static_cast<int>(action.generic_cost_reduction()), method, action.has_convoke(), 0,
+             0, QString{},
              action.has_spell_presentation() ? resolver.resolve(action.spell_presentation()) : QString{}});
         if (action.has_cost_choices()) {
             set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices(), resolver));
@@ -1593,6 +1594,21 @@ void RuledEventDispatcher::applyManaPoolUpdated(const ruled::v1::ManaPoolUpdated
 void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &actions, BatchContext &ctx)
 {
     state->handActions = copyHandActions(actions, presentationResolver);
+    QHash<quint64, RuledExilePlayPermissionGroup> permissionGroups;
+    for (const auto &group : actions.exile_play_permission_groups()) {
+        RuledExilePlayPermissionGroup parsed;
+        parsed.groupId = static_cast<quint64>(group.group_id());
+        parsed.sourceLabel = QString::fromStdString(group.source_label());
+        parsed.objectIds.reserve(group.object_ids_size());
+        for (const quint32 objectId : group.object_ids()) {
+            parsed.objectIds.append(objectId);
+        }
+        permissionGroups.insert(parsed.groupId, parsed);
+    }
+    if (permissionGroups != state->exilePlayPermissionGroups) {
+        state->exilePlayPermissionGroups = permissionGroups;
+        emit state->exilePlayPermissionGroupsChanged();
+    }
     for (const auto &action : actions.zone_cast_actions()) {
         const int objectId = static_cast<int>(action.object_id());
         const int faceIndex = static_cast<int>(action.face_index());
@@ -1600,7 +1616,9 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         const RuledCastSource source = action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_EXILE
                                            ? RuledCastSource::Exile
                                            : RuledCastSource::Graveyard;
-        const quint64 castKey = RuledClientState::zoneCastActionKey(objectId, faceIndex, source, castMethod);
+        const quint64 castingPermissionId = action.has_casting_permission_id() ? action.casting_permission_id() : 0;
+        const auto castKey =
+            RuledClientState::zoneCastActionKey(objectId, faceIndex, source, castMethod, castingPermissionId);
         state->zoneCastActions.handIndices.insert(objectId);
         const QString cardName = QString::fromStdString(action.card_name());
         QString displayName = cardName;
@@ -1613,7 +1631,8 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         state->zoneCastActions.faceOptionsByIndex[objectId].append(
             {faceIndex, displayName, QString::fromStdString(action.cost()),
              static_cast<int>(action.generic_cost_reduction()), castMethod, action.has_convoke(),
-             action.zone_change_generation(),
+             action.zone_change_generation(), castingPermissionId,
+             permissionGroups.value(castingPermissionId).sourceLabel,
              action.has_spell_presentation() ? presentationResolver.resolve(action.spell_presentation())
                                              : QString{}});
         state->zoneCastSourceByOid.insert(objectId, source);
@@ -1651,22 +1670,6 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         const quint32 objectId = static_cast<quint32>(action.object_id());
         state->zoneLandFacesByOid[objectId].append(
             {static_cast<int>(action.face_index()), QString::fromStdString(action.card_name()), QString(), 0});
-    }
-
-    QHash<quint64, RuledExilePlayPermissionGroup> permissionGroups;
-    for (const auto &group : actions.exile_play_permission_groups()) {
-        RuledExilePlayPermissionGroup parsed;
-        parsed.groupId = static_cast<quint64>(group.group_id());
-        parsed.sourceLabel = QString::fromStdString(group.source_label());
-        parsed.objectIds.reserve(group.object_ids_size());
-        for (const quint32 objectId : group.object_ids()) {
-            parsed.objectIds.append(objectId);
-        }
-        permissionGroups.insert(parsed.groupId, parsed);
-    }
-    if (permissionGroups != state->exilePlayPermissionGroups) {
-        state->exilePlayPermissionGroups = permissionGroups;
-        emit state->exilePlayPermissionGroupsChanged();
     }
 
     state->validTargetsByHandSlot.clear();

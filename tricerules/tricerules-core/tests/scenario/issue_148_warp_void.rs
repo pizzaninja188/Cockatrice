@@ -59,12 +59,20 @@ fn issue_148_knight_warp_creates_human_soldier_and_normal_recast_stays() {
     e.state.priority_idx = 0;
     grant_pool(&mut e, 0);
     let generation = e.state.zone_change_generation[&knight];
+    let permission_id = e
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .find(|permission| permission.object_id == knight)
+        .expect("Warp recast permission")
+        .group_id;
     e.apply_command(
         0,
         &RuledCommand {
             cmd: Some(Cmd::CastSpell(CastSpell {
                 source: Some(exile_cast_source(knight, generation)),
                 cast_method: CastMethod::Normal as i32,
+                casting_permission_id: Some(permission_id),
                 ..Default::default()
             })),
         },

@@ -173,6 +173,36 @@ pub enum ExilePlayPermissionOrigin {
     Warp,
 }
 
+/// The base mana cost authorized by an exile permission. Ordinary permissions retain the
+/// printed face cost; effect-created alternatives replace only that base cost before the shared
+/// CR 601 additional-cost and cost-modification pipeline runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExilePermissionCastCost {
+    PrintedManaCost,
+    AlternativeManaCost(ManaCost),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExilePlayPermissionGrant {
+    pub scope: ExilePlayPermissionScope,
+    pub cast_cost: ExilePermissionCastCost,
+    pub origin: ExilePlayPermissionOrigin,
+    pub available_after_turn_instance: Option<u64>,
+    pub until_end_of_next_turn: bool,
+}
+
+impl ExilePlayPermissionGrant {
+    pub fn printed(scope: ExilePlayPermissionScope, until_end_of_next_turn: bool) -> Self {
+        Self {
+            scope,
+            cast_cost: ExilePermissionCastCost::PrintedManaCost,
+            origin: ExilePlayPermissionOrigin::Effect,
+            available_after_turn_instance: None,
+            until_end_of_next_turn,
+        }
+    }
+}
+
 /// One deterministic, generation-aware permission entry. Entries created by one resolving
 /// spell or ability share a group id and source label for the client presentation snapshot.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -183,6 +213,7 @@ pub struct ActiveExilePlayPermission {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
     pub scope: ExilePlayPermissionScope,
+    pub cast_cost: ExilePermissionCastCost,
     pub origin: ExilePlayPermissionOrigin,
     /// Warp is unavailable during the turn in which its delayed trigger exiled the card.
     pub available_after_turn_instance: Option<u64>,
@@ -1210,6 +1241,7 @@ pub enum SpellCastMethod {
     Harmonize,
     SiegeDefeat,
     Warp,
+    Permission,
 }
 
 impl SpellCastMethod {
@@ -1226,6 +1258,7 @@ impl SpellCastMethod {
             Self::Harmonize => Some("Harmonize"),
             Self::SiegeDefeat => Some("Siege defeat"),
             Self::Warp => Some("Warp"),
+            Self::Permission => Some("Alternative cost"),
         }
     }
 }

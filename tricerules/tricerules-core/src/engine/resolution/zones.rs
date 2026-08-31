@@ -452,8 +452,10 @@ pub(super) fn exile_top_with_play_permission(
             recipient,
             &object_ids,
             &spell_label,
-            ExilePlayPermissionScope::PlayCard,
-            true,
+            crate::state::ExilePlayPermissionGrant::printed(
+                ExilePlayPermissionScope::PlayCard,
+                true,
+            ),
         )?;
         cx.events.push(ev_log(format!(
             "P{recipient} exiles {} and may play those cards until the end of their next turn ({spell_label}).",
@@ -531,6 +533,78 @@ pub(super) fn exile(
                 rv1::permanent_moved::Destination::Exile,
             ));
         }
+    }
+
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn exile_with_owner_cast_permission(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ExileWithOwnerCastPermission {
+        subject,
+        alternative_cost,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(object_id) = resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject)
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some((owner, is_token)) = cx
+        .engine
+        .state
+        .objects
+        .get(&object_id)
+        .map(|object| (object.owner, object.is_token()))
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let label = object_display_name(&cx.engine.state, cx.engine.registry, object_id);
+    let zone_snapshot = cx.engine.snapshot_zone_event();
+    let leave_event = cx.engine.battlefield_leave_event(object_id);
+    move_object_to_zone(
+        &mut cx.engine.state,
+        cx.engine.registry,
+        object_id,
+        Zone::Exile,
+        None,
+    )?;
+    cx.engine
+        .fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
+    cx.events
+        .push(ev_log(format!("{} exiles {label}", cx.spell_label)));
+    cx.events.push(permanent_moved_event(
+        &cx.engine.state,
+        object_id,
+        owner,
+        rv1::permanent_moved::Destination::Exile,
+    ));
+
+    if !is_token
+        && cx
+            .engine
+            .state
+            .objects
+            .get(&object_id)
+            .is_some_and(|object| object.zone == Zone::Exile)
+    {
+        cx.engine.grant_exile_play_permission(
+            owner,
+            object_id,
+            cx.spell_label,
+            crate::state::ExilePlayPermissionGrant {
+                scope: ExilePlayPermissionScope::CastCard,
+                cast_cost: crate::state::ExilePermissionCastCost::AlternativeManaCost(
+                    alternative_cost,
+                ),
+                origin: crate::state::ExilePlayPermissionOrigin::Effect,
+                available_after_turn_instance: None,
+                until_end_of_next_turn: false,
+            },
+        )?;
     }
 
     Ok(EffectOutcome::Continue)

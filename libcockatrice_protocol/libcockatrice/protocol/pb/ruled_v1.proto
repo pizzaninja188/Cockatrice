@@ -292,6 +292,8 @@ enum CastMethod {
   CAST_METHOD_HARMONIZE = 3;
   CAST_METHOD_SIEGE_DEFEAT = 4;
   CAST_METHOD_WARP = 5;
+  // An effect-created permission supplies the alternative mana cost and exact permission id.
+  CAST_METHOD_PERMISSION = 6;
 }
 
 message CastSpell {
@@ -327,6 +329,9 @@ message CastSpell {
   CastMethod cast_method = 12;
   // Present for engine-previewed payments (Convoke). Ordinary casts retain their existing path.
   PaymentSelection payment = 13;
+  // Required for casts authorized by an exile permission. The engine validates this opaque id
+  // together with the exact object and zone-change generation before committing any costs.
+  optional uint64 casting_permission_id = 14;
 }
 
 // One unit paid by a creature; GENERIC is a demand, never colorless mana.
@@ -717,6 +722,7 @@ message LegalZoneCastAction {
   bool has_convoke = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint64 zone_change_generation = 15 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   PresentationRef spell_presentation = 16 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  optional uint64 casting_permission_id = 17 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message ManaPaymentEligibility {

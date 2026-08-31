@@ -993,6 +993,10 @@ fn validate_effect_targets(
         | SpellEffectKind::Exile {
             subject: EffectSubject::Chosen(_),
         }
+        | SpellEffectKind::ExileWithOwnerCastPermission {
+            subject: EffectSubject::Chosen(_),
+            ..
+        }
         | SpellEffectKind::PutInOwnersLibrary {
             subject: EffectSubject::Chosen(_),
             ..
@@ -1327,6 +1331,12 @@ fn validate_effect_targets(
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject,
         }
+        | SpellEffectKind::ExileWithOwnerCastPermission {
+            subject: EffectSubject::Source
+                | EffectSubject::AttachedObject
+                | EffectSubject::TriggerObject,
+            ..
+        }
         | SpellEffectKind::PutInOwnersLibrary {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
@@ -1640,6 +1650,10 @@ fn spell_target_legality_error_with_context(
         | SpellEffectKind::Exile {
             subject: EffectSubject::Chosen(_),
         }
+        | SpellEffectKind::ExileWithOwnerCastPermission {
+            subject: EffectSubject::Chosen(_),
+            ..
+        }
         | SpellEffectKind::PutInOwnersLibrary {
             subject: EffectSubject::Chosen(_),
             ..
@@ -1755,6 +1769,10 @@ fn spell_target_legality_error_with_context(
         }
         | SpellEffectKind::Exile {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
+        }
+        | SpellEffectKind::ExileWithOwnerCastPermission {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            ..
         }
         | SpellEffectKind::PutInOwnersLibrary {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,

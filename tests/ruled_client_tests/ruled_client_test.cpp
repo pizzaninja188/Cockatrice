@@ -734,7 +734,7 @@ TEST(RuledPendingTargetTest, ClickEligibilityUsesLatestAuthoritativeModalTargets
     current.groups.append(static_cast<const RuledTargetGroupData &>(current));
     RuledModalSpellOption mode{7, QStringLiteral("mode"), true, true, current};
     state.handActions[ruled::v1::HAND_ACTION_CAST_SPELL]
-        .modalOptionsByCastKey[RuledClientState::spellTargetKey(3, 0)] = {mode};
+        .modalOptionsByCastKey[RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_NORMAL)] = {mode};
 
     EXPECT_EQ(ruledTargetClickEligibility(spell, {}, state, RuledTargetCandidateKind::Battlefield, 100, 0),
               RuledTargetClickEligibility::Illegal);
@@ -766,7 +766,7 @@ TEST(RuledPendingTargetTest, SpellPromptUsesFaceAndActiveModeContext)
     spell.selectedModes.append({7, QStringLiteral("Counter target spell unless its controller pays {3}"), true,
                                 targets, {}, {}});
     state.handActions[ruled::v1::HAND_ACTION_CAST_SPELL]
-        .modalOptionsByCastKey[RuledClientState::spellTargetKey(3, 0)] = {
+        .modalOptionsByCastKey[RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_NORMAL)] = {
         {7, QStringLiteral("Counter target spell unless its controller pays {3}"), true, true, targets}};
 
     EXPECT_EQ(ruledPendingSpellTargetPrompt(spell, state),
@@ -1389,7 +1389,7 @@ TEST_F(RuledClientTest, AppliesAuthoritativeModalModeDataPerFace)
     apply(batch);
 
     const auto &set = state->handActions[ruled::v1::HAND_ACTION_CAST_SPELL];
-    const int key = RuledClientState::spellTargetKey(5, 0);
+    const auto key = RuledClientState::handCastActionKey(5, 0, ruled::v1::CAST_METHOD_NORMAL);
     ASSERT_TRUE(set.modalOptionsByCastKey.contains(key));
     EXPECT_EQ(set.modalMinModesByCastKey.value(key), 1);
     EXPECT_EQ(set.modalMaxModesByCastKey.value(key), 1);
@@ -3919,6 +3919,42 @@ TEST_F(RuledClientTest, WarpAndNormalHandOffersKeepDistinctMethodsAndCostChoices
               RuledClientState::handCastActionKey(4, 0, ruled::v1::CAST_METHOD_NORMAL));
 }
 
+TEST_F(RuledClientTest, ExilePermissionOffersKeepOpaqueIdentityCostAndSourceLabel)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    for (const auto [id, cost, source] :
+         {std::tuple<quint64, const char *, const char *>{41, "{2}", "Airbending Lesson"},
+          std::tuple<quint64, const char *, const char *>{42, "", "Release to the Wind"}}) {
+        auto *group = actions.add_exile_play_permission_groups();
+        group->set_group_id(id);
+        group->set_source_label(source);
+        group->add_object_ids(77);
+        auto *action = actions.add_zone_cast_actions();
+        action->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+        action->set_object_id(77);
+        action->set_card_name("Grizzly Bears");
+        action->set_cost(cost);
+        action->set_cast_method(ruled::v1::CAST_METHOD_PERMISSION);
+        action->set_zone_change_generation(9);
+        action->set_casting_permission_id(id);
+    }
+    apply(batch);
+
+    const auto faces = state->zoneActionFaceOptions(77, RuledCastSource::Exile);
+    ASSERT_EQ(faces.size(), 2);
+    EXPECT_EQ(faces[0].castingPermissionId, 41u);
+    EXPECT_EQ(faces[0].permissionSourceLabel, QStringLiteral("Airbending Lesson"));
+    EXPECT_EQ(faces[1].castingPermissionId, 42u);
+    EXPECT_EQ(state->zoneActionCost(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_PERMISSION, 41),
+              QStringLiteral("{2}"));
+    EXPECT_TRUE(state->zoneActionCost(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_PERMISSION, 42).isEmpty());
+    const auto menu = RuledPendingCast::cardActionMenuOptions(faces, {}, {}, {});
+    ASSERT_EQ(menu.size(), 2);
+    EXPECT_EQ(menu[0].label, QStringLiteral("Cast Grizzly Bears — Airbending Lesson ({2})"));
+    EXPECT_EQ(menu[1].label, QStringLiteral("Cast Grizzly Bears — Release to the Wind"));
+}
+
 TEST_F(RuledClientTest, PublicCastGenerationRejectsAnOldSelectionAfterReexile)
 {
     ruled::v1::RuledEventBatch batch;
@@ -3929,11 +3965,11 @@ TEST_F(RuledClientTest, PublicCastGenerationRejectsAnOldSelectionAfterReexile)
     action->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     action->set_zone_change_generation(4);
     apply(batch);
-    EXPECT_TRUE(state->isZoneCastActionLegal(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_NORMAL, 4));
+    EXPECT_TRUE(state->isZoneCastActionLegal(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_NORMAL, 0, 4));
     action->set_zone_change_generation(6);
     apply(batch);
-    EXPECT_FALSE(state->isZoneCastActionLegal(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_NORMAL, 4));
-    EXPECT_TRUE(state->isZoneCastActionLegal(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_NORMAL, 6));
+    EXPECT_FALSE(state->isZoneCastActionLegal(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_NORMAL, 0, 4));
+    EXPECT_TRUE(state->isZoneCastActionLegal(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_NORMAL, 0, 6));
 }
 
 TEST_F(RuledClientTest, PublicZoneCastActionsRequireTheClickedSourceZone)

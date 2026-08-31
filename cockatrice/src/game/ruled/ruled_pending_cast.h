@@ -278,6 +278,7 @@ struct PendingRuledSpellCast
     RuledCastSource source = RuledCastSource::Hand;
     ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL;
     quint64 sourceZoneChangeGeneration = 0;
+    quint64 castingPermissionId = 0;
     /// Fireball's "divided evenly, rounded down": the engine splits on resolution, so there is no
     /// allocation to collect, no one-damage-per-target cap, and zero targets is a legal cast.
     bool damageDividedEvenly = false;
@@ -570,7 +571,7 @@ currentRuledSpellTargetData(const PendingRuledSpellCast &spell, const RuledClien
     if (spell.activeModePosition >= 0 && spell.activeModePosition < spell.selectedModes.size()) {
         return state.modalSpellTargetData(spell.handIndex, spell.faceIndex,
                                           spell.selectedModes.at(spell.activeModePosition).modeIndex, spell.source,
-                                          spell.castMethod);
+                                          spell.castMethod, spell.castingPermissionId);
     }
     return state.spellTargetData(spell.handIndex, spell.faceIndex, spell.source);
 }
@@ -763,7 +764,8 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
             for (int modePosition = 0; modePosition < spell.selectedModes.size(); ++modePosition) {
                 auto &mode = spell.selectedModes[modePosition];
                 const auto data = state.modalSpellTargetData(spell.handIndex, spell.faceIndex, mode.modeIndex,
-                                                             spell.source, spell.castMethod);
+                                                             spell.source, spell.castMethod,
+                                                             spell.castingPermissionId);
                 if (!data.has_value()) {
                     continue;
                 }

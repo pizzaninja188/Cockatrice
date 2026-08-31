@@ -2094,6 +2094,14 @@ pub enum SpellEffectKind {
         #[serde(default)]
         subject: EffectSubject,
     },
+    /// Exile a permanent-valued subject and let the resulting card's owner cast it from exile
+    /// for the stated alternative mana cost while that exact generation remains there. Airbend
+    /// uses `{2}`; Release to the Wind demonstrates the same permission with a zero cost.
+    ExileWithOwnerCastPermission {
+        #[serde(default)]
+        subject: EffectSubject,
+        alternative_cost: ManaCost,
+    },
     ExileTargetGainLifeEqualToPower,
     /// Exile the top card of the named player's library and let that player play the exact
     /// resulting object until the end of their next turn. Clockwork Percussionist and Impossible
@@ -2824,6 +2832,9 @@ impl SpellEffectKind {
                 subject: EffectSubject::AttachedObject,
             } | SpellEffectKind::Exile {
                 subject: EffectSubject::AttachedObject,
+            } | SpellEffectKind::ExileWithOwnerCastPermission {
+                subject: EffectSubject::AttachedObject,
+                ..
             } | SpellEffectKind::PutInOwnersLibrary {
                 subject: EffectSubject::AttachedObject,
                 ..
@@ -2882,6 +2893,9 @@ impl SpellEffectKind {
                 subject: EffectSubject::TriggerObject,
             } | SpellEffectKind::Exile {
                 subject: EffectSubject::TriggerObject,
+            } | SpellEffectKind::ExileWithOwnerCastPermission {
+                subject: EffectSubject::TriggerObject,
+                ..
             } | SpellEffectKind::PutInOwnersLibrary {
                 subject: EffectSubject::TriggerObject,
                 ..
@@ -2978,6 +2992,7 @@ impl SpellEffectKind {
             | SpellEffectKind::AddTypes { subject, .. }
             | SpellEffectKind::ReturnToOwnersHand { subject }
             | SpellEffectKind::Exile { subject }
+            | SpellEffectKind::ExileWithOwnerCastPermission { subject, .. }
             | SpellEffectKind::PutInOwnersLibrary { subject, .. }
             | SpellEffectKind::Regenerate { subject }
             | SpellEffectKind::PutCounters { subject, .. }
@@ -3167,6 +3182,7 @@ impl SpellEffectKind {
                     effect,
                     SpellEffectKind::ExileCardsFromHand { .. }
                         | SpellEffectKind::ExileTopWithPlayPermission { .. }
+                        | SpellEffectKind::ExileWithOwnerCastPermission { .. }
                         | SpellEffectKind::MoveGraveyardCards {
                             destination: GraveyardDestination::Exile,
                             ..

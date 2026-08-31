@@ -427,6 +427,12 @@ public:
     bool sawAdventureStackToBattlefield = false;
     bool adventurePhysicalIdentityContinuous = true;
     int adventurePhysicalCardId = -1;
+    int airbendOwnerId = -1;
+    bool sawAirbendBattlefieldToExile = false;
+    bool sawAirbendExileToStack = false;
+    bool sawAirbendStackToBattlefield = false;
+    bool airbendPhysicalIdentityContinuous = true;
+    int airbendPhysicalCardId = -1;
     bool devOmenConjureSent = false;
     bool devOmenManaSent = false;
     bool sawOmenFaceActions = false;
@@ -909,6 +915,23 @@ public:
                     } else if (from == stack && to == table && mc.target_player_id() == myId) {
                         followPhysicalCard();
                         sawAdventureStackToBattlefield = true;
+                    }
+                } else if (name == QLatin1String("Grizzly Bears") && airbendPhysicalCardId >= 0) {
+                    auto followPhysicalCard = [&] {
+                        if (mc.card_id() != airbendPhysicalCardId) {
+                            airbendPhysicalIdentityContinuous = false;
+                        }
+                        airbendPhysicalCardId = mc.new_card_id();
+                    };
+                    if (from == table && to == exile && mc.target_player_id() == airbendOwnerId) {
+                        followPhysicalCard();
+                        sawAirbendBattlefieldToExile = true;
+                    } else if (from == exile && to == stack && mc.start_player_id() == airbendOwnerId) {
+                        followPhysicalCard();
+                        sawAirbendExileToStack = true;
+                    } else if (from == stack && to == table && mc.target_player_id() == airbendOwnerId) {
+                        followPhysicalCard();
+                        sawAirbendStackToBattlefield = true;
                     }
                 } else if (name == QLatin1String("Say Its Name")) {
                     if (from == grave && to == exile) {
@@ -2191,6 +2214,10 @@ public:
                 cast->mutable_source()->set_exile_object_id(action.object_id());
                 cast->mutable_source()->set_expected_zone_change_generation(action.zone_change_generation());
                 cast->set_face_index(action.face_index());
+                cast->set_cast_method(action.cast_method());
+                if (action.has_casting_permission_id()) {
+                    cast->set_casting_permission_id(action.casting_permission_id());
+                }
                 giantCastFromExile = true;
                 sendRuled(cmd, QStringLiteral("cast Bonecrusher Giant from exile oid %1").arg(action.object_id()));
                 return true;
@@ -6441,6 +6468,224 @@ TEST_F(RuledE2ESmokeTest, WarpCastExilesAtEndStepAndPublishesOwnerOnlyPermission
     EXPECT_TRUE(std::none_of(p2.latestLegal.exile_play_permission_groups().begin(),
                              p2.latestLegal.exile_play_permission_groups().end(),
                              [](const auto &group) { return group.source_label().find("Warp") != std::string::npos; }));
+}
+
+TEST_F(RuledE2ESmokeTest, AirbendPublishesOwnerOnlyAlternativeCastAndPreservesPhysicalIdentity)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("airbendp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("airbendp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Plains")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "Airbend game start"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "Airbend game start"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000 && p1.phase != ruled::v1::PHASE_ID_MAIN1) {
+        p1.pump(25);
+        p2.pump(25);
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &label) {
+        const quint64 v1 = p1.stateVersion;
+        const quint64 v2 = p2.stateVersion;
+        sender.sendRuled(command, label);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= v1 || p2.stateVersion <= v2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > v1 && p2.stateVersion > v2;
+    };
+    auto put = [&](int playerId, const char *name, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        command.mutable_dev_command()->set_target_player_id(playerId);
+        auto *placement = command.mutable_dev_command()->mutable_put_card_in_zone();
+        placement->set_card_name(name);
+        placement->set_zone(zone);
+        placement->set_ready(true);
+        return send(p1, command, QStringLiteral("Airbend put %1").arg(QString::fromLatin1(name)));
+    };
+    ASSERT_TRUE(put(p2.myId, "Grizzly Bears", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(put(p1.myId, "Airbending Lesson", ruled::v1::DEV_ZONE_HAND));
+    const auto battlefield = p1.battlefieldByPlayer.find(p2.myId);
+    ASSERT_NE(battlefield, p1.battlefieldByPlayer.end());
+    const auto bear = std::find_if(battlefield->second.begin(), battlefield->second.end(), [](const auto &object) {
+        return object.cardId == QLatin1String("grizzly_bears");
+    });
+    ASSERT_NE(bear, battlefield->second.end());
+    const quint32 bearOid = bear->oid;
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(bearOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(bearOid));
+    const int physicalId = p1.serverCardByEngineOid[bearOid];
+    ASSERT_EQ(p2.serverCardByEngineOid[bearOid], physicalId);
+    for (SmokeClient *client : {&p1, &p2}) {
+        client->airbendOwnerId = p2.myId;
+        client->airbendPhysicalCardId = physicalId;
+    }
+
+    ruled::v1::RuledCommand mana;
+    mana.mutable_dev_command()->set_target_player_id(p1.myId);
+    mana.mutable_dev_command()->mutable_add_mana()->set_w(1);
+    mana.mutable_dev_command()->mutable_add_mana()->set_c(2);
+    ASSERT_TRUE(send(p1, mana, QStringLiteral("Airbend caster mana")));
+    const auto *lesson = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Airbending Lesson"));
+    ASSERT_NE(lesson, nullptr);
+    ruled::v1::RuledCommand castLesson;
+    auto *lessonCast = castLesson.mutable_cast_spell();
+    lessonCast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    lessonCast->mutable_source()->set_hand_index(lesson->hand_index());
+    auto *target = lessonCast->add_targets();
+    target->set_object_id(bearOid);
+    target->set_group_index(0);
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    ASSERT_TRUE(send(p1, castLesson, QStringLiteral("cast Airbending Lesson")));
+    QElapsedTimer lessonStack;
+    lessonStack.start();
+    while ((p1.stackDepth == 0 || p2.stackDepth == 0) && lessonStack.elapsed() < 10000) {
+        p1.pump(25);
+        p2.pump(25);
+    }
+    ASSERT_GT(p1.stackDepth, 0);
+    ASSERT_GT(p2.stackDepth, 0);
+    QElapsedTimer resolveLesson;
+    resolveLesson.start();
+    while ((p1.stackDepth > 0 || p2.stackDepth > 0) && resolveLesson.elapsed() < 10000) {
+        ruled::v1::RuledCommand pass;
+        pass.mutable_pass_priority();
+        SmokeClient &priority = p1.priorityPlayer == p1.myId ? p1 : p2;
+        ASSERT_TRUE(send(priority, pass, QStringLiteral("resolve Airbending Lesson")));
+    }
+    ASSERT_EQ(p1.stackDepth, 0);
+    ASSERT_TRUE(p2.pumpUntil(
+        [&] {
+            return std::any_of(p2.latestLegal.exile_play_permission_groups().begin(),
+                               p2.latestLegal.exile_play_permission_groups().end(), [&](const auto &group) {
+                                   return group.source_label() == "Airbending Lesson" &&
+                                          std::find(group.object_ids().begin(), group.object_ids().end(), bearOid) !=
+                                              group.object_ids().end();
+                               });
+        },
+        10000, "Airbend owner permission"));
+    EXPECT_TRUE(std::none_of(p1.latestLegal.exile_play_permission_groups().begin(),
+                             p1.latestLegal.exile_play_permission_groups().end(),
+                             [](const auto &group) { return group.source_label() == "Airbending Lesson"; }));
+    EXPECT_TRUE(p1.airbendPhysicalIdentityContinuous);
+    EXPECT_TRUE(p2.airbendPhysicalIdentityContinuous);
+    EXPECT_TRUE(p1.sawAirbendBattlefieldToExile && p2.sawAirbendBattlefieldToExile);
+    EXPECT_EQ(p1.serverCardByEngineOid[bearOid], p1.airbendPhysicalCardId);
+    EXPECT_EQ(p2.serverCardByEngineOid[bearOid], p2.airbendPhysicalCardId);
+
+    QElapsedTimer nextTurn;
+    nextTurn.start();
+    while (!(p1.activePlayer == p2.myId && p1.phase == ruled::v1::PHASE_ID_MAIN1) && nextTurn.elapsed() < 45000) {
+        p1.pump(25);
+        p2.pump(25);
+        ruled::v1::RuledCommand advance;
+        SmokeClient *sender = nullptr;
+        QString label;
+        SmokeClient &active = p1.activePlayer == p1.myId ? p1 : p2;
+        const auto cleanupDiscards = active.handActions(ruled::v1::HAND_ACTION_CLEANUP_DISCARD);
+        if (!cleanupDiscards.isEmpty()) {
+            const int excess = cleanupDiscards.size() - 7;
+            auto *discard = advance.mutable_discard_to_hand_size();
+            for (int i = 0; i < excess; ++i) {
+                discard->add_hand_card_indices(cleanupDiscards.at(i)->hand_index());
+            }
+            sender = &active;
+            label = QStringLiteral("Airbend cleanup discard");
+        } else if (p1.phase == ruled::v1::PHASE_ID_DECLARE_ATTACKERS) {
+            advance.mutable_declare_attackers();
+            sender = p1.activePlayer == p1.myId ? &p1 : &p2;
+            label = QStringLiteral("Airbend declare no attackers");
+        } else if (p1.phase == ruled::v1::PHASE_ID_DECLARE_BLOCKERS) {
+            advance.mutable_declare_blockers();
+            sender = p1.activePlayer == p1.myId ? &p2 : &p1;
+            label = QStringLiteral("Airbend declare no blockers");
+        } else if (p1.priorityPlayer == p1.myId) {
+            advance.mutable_pass_priority();
+            sender = &p1;
+            label = QStringLiteral("Airbend advance turn");
+        } else if (p1.priorityPlayer == p2.myId) {
+            advance.mutable_pass_priority();
+            sender = &p2;
+            label = QStringLiteral("Airbend advance turn");
+        }
+        if (sender != nullptr) {
+            ASSERT_TRUE(send(*sender, advance, label));
+        }
+    }
+    ASSERT_EQ(p1.activePlayer, p2.myId);
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ruled::v1::RuledCommand ownerMana;
+    ownerMana.mutable_dev_command()->set_target_player_id(p2.myId);
+    ownerMana.mutable_dev_command()->mutable_add_mana()->set_c(2);
+    ASSERT_TRUE(send(p2, ownerMana, QStringLiteral("Airbend owner mana")));
+    const auto action = std::find_if(p2.latestLegal.zone_cast_actions().begin(),
+                                     p2.latestLegal.zone_cast_actions().end(), [&](const auto &candidate) {
+                                         return candidate.object_id() == bearOid &&
+                                                candidate.cast_method() == ruled::v1::CAST_METHOD_PERMISSION;
+                                     });
+    ASSERT_NE(action, p2.latestLegal.zone_cast_actions().end());
+    ASSERT_TRUE(action->has_casting_permission_id());
+    EXPECT_EQ(action->cost(), "{2}");
+    ruled::v1::RuledCommand castBear;
+    auto *permissionCast = castBear.mutable_cast_spell();
+    permissionCast->set_cast_method(action->cast_method());
+    permissionCast->set_casting_permission_id(action->casting_permission_id());
+    permissionCast->mutable_source()->set_exile_object_id(bearOid);
+    permissionCast->mutable_source()->set_expected_zone_change_generation(action->zone_change_generation());
+    ASSERT_TRUE(send(p2, castBear, QStringLiteral("cast Airbent Bears for two")));
+    QElapsedTimer bearStack;
+    bearStack.start();
+    while ((p1.stackDepth == 0 || p2.stackDepth == 0) && bearStack.elapsed() < 10000) {
+        p1.pump(25);
+        p2.pump(25);
+    }
+    ASSERT_GT(p1.stackDepth, 0);
+    ASSERT_GT(p2.stackDepth, 0);
+    QElapsedTimer resolveBear;
+    resolveBear.start();
+    while ((p1.stackDepth > 0 || p2.stackDepth > 0) && resolveBear.elapsed() < 10000) {
+        ruled::v1::RuledCommand pass;
+        pass.mutable_pass_priority();
+        SmokeClient &priority = p1.priorityPlayer == p1.myId ? p1 : p2;
+        ASSERT_TRUE(send(priority, pass, QStringLiteral("resolve Airbent Bears")));
+    }
+    ASSERT_EQ(p1.stackDepth, 0);
+    ASSERT_TRUE(p2.pumpUntil(
+        [&] {
+            const auto permanents = p2.battlefieldByPlayer.find(p2.myId);
+            return permanents != p2.battlefieldByPlayer.end() &&
+                   std::any_of(permanents->second.begin(), permanents->second.end(),
+                               [&](const auto &object) { return object.oid == bearOid; });
+        },
+        10000, "Airbent Bears battlefield"));
+    EXPECT_TRUE(p1.sawAirbendExileToStack && p2.sawAirbendExileToStack);
+    EXPECT_TRUE(p1.sawAirbendStackToBattlefield && p2.sawAirbendStackToBattlefield);
+    EXPECT_TRUE(p1.airbendPhysicalIdentityContinuous);
+    EXPECT_TRUE(p2.airbendPhysicalIdentityContinuous);
+    EXPECT_EQ(p1.serverCardByEngineOid[bearOid], p1.airbendPhysicalCardId);
+    EXPECT_EQ(p2.serverCardByEngineOid[bearOid], p2.airbendPhysicalCardId);
 }
 TEST_F(RuledE2ESmokeTest, TappedOrdinaryTokenReachesBothClientsWithoutCombatState)
 {

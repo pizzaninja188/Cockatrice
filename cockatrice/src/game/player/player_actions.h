@@ -345,7 +345,8 @@ private:
                              const QString &castCost,
                              int genericCostReduction,
                              RuledCastSource source = RuledCastSource::Hand,
-                             ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL);
+                             ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL,
+                             quint64 castingPermissionId = 0);
     void finalizePendingSpellManaCost();
     bool storeCurrentModalTargetsAndAdvance();
     bool storeCurrentTargetGroupAndAdvance();

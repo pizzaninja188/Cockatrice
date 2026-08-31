@@ -134,18 +134,19 @@ impl GameEngine {
                 owner,
                 watched.object_id,
                 &label,
-                ExilePlayPermissionScope::CastCard,
-                false,
+                crate::state::ExilePlayPermissionGrant {
+                    scope: ExilePlayPermissionScope::CastCard,
+                    cast_cost: crate::state::ExilePermissionCastCost::PrintedManaCost,
+                    origin: crate::state::ExilePlayPermissionOrigin::Warp,
+                    available_after_turn_instance: Some(self.state.turn_instance),
+                    until_end_of_next_turn: false,
+                },
             )?;
-            if let Some(permission) = self
+            debug_assert!(self
                 .state
                 .active_exile_play_permissions
-                .iter_mut()
-                .find(|p| p.group_id == group)
-            {
-                permission.origin = crate::state::ExilePlayPermissionOrigin::Warp;
-                permission.available_after_turn_instance = Some(self.state.turn_instance);
-            }
+                .iter()
+                .any(|permission| permission.group_id == group));
         }
         Ok(())
     }
@@ -302,6 +303,7 @@ mod tests {
             .unwrap();
         assert_eq!(action.cast_method, rv1::CastMethod::Normal as i32);
         assert_eq!(action.cost, "{3}{W}");
+        assert!(action.casting_permission_id.is_some());
         assert!(batch.legal_by_player[&1].zone_cast_actions.is_empty());
     }
 
@@ -318,6 +320,13 @@ mod tests {
         engine.state.turn_step = TurnStep::Main1;
         engine.state.priority_idx = 0;
         let generation = engine.state.zone_change_generation[&oid];
+        let permission_id = engine
+            .state
+            .active_exile_play_permissions
+            .iter()
+            .find(|permission| permission.object_id == oid)
+            .expect("old Warp permission")
+            .group_id;
         let command = RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
                 source: Some(rv1::CastSource {
@@ -325,6 +334,7 @@ mod tests {
                     expected_zone_change_generation: Some(generation),
                 }),
                 cast_method: rv1::CastMethod::Normal as i32,
+                casting_permission_id: Some(permission_id),
                 ..Default::default()
             })),
         };
@@ -335,8 +345,10 @@ mod tests {
                 0,
                 oid,
                 "new permission",
-                ExilePlayPermissionScope::CastCard,
-                false,
+                crate::state::ExilePlayPermissionGrant::printed(
+                    ExilePlayPermissionScope::CastCard,
+                    false,
+                ),
             )
             .unwrap();
         engine.state.players[0].mana_pool.white = 1;

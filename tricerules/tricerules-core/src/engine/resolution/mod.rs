@@ -121,16 +121,9 @@ impl GameEngine {
         player_id: PlayerId,
         object_id: ObjectId,
         source_label: &str,
-        scope: ExilePlayPermissionScope,
-        until_end_of_next_turn: bool,
+        grant: crate::state::ExilePlayPermissionGrant,
     ) -> Result<u64, EngineError> {
-        self.grant_exile_play_permission_group(
-            player_id,
-            &[object_id],
-            source_label,
-            scope,
-            until_end_of_next_turn,
-        )
+        self.grant_exile_play_permission_group(player_id, &[object_id], source_label, grant)
     }
 
     pub(in crate::engine) fn grant_exile_play_permission_group(
@@ -138,8 +131,7 @@ impl GameEngine {
         player_id: PlayerId,
         object_ids: &[ObjectId],
         source_label: &str,
-        scope: ExilePlayPermissionScope,
-        until_end_of_next_turn: bool,
+        grant: crate::state::ExilePlayPermissionGrant,
     ) -> Result<u64, EngineError> {
         if object_ids.is_empty() {
             return Err(EngineError::Illegal("exile permission cohort is empty"));
@@ -161,7 +153,7 @@ impl GameEngine {
             .state
             .player_idx(player_id)
             .ok_or(EngineError::UnknownPlayer(player_id))?;
-        let expires_at_cleanup_turn_instance = until_end_of_next_turn.then(|| {
+        let expires_at_cleanup_turn_instance = grant.until_end_of_next_turn.then(|| {
             let player_count = self.state.players.len() as u64;
             let active = self.state.active_player_idx;
             let offset = if player_index == active {
@@ -187,9 +179,10 @@ impl GameEngine {
                     .get(object_id)
                     .copied()
                     .unwrap_or(0),
-                scope,
-                origin: crate::state::ExilePlayPermissionOrigin::Effect,
-                available_after_turn_instance: None,
+                scope: grant.scope,
+                cast_cost: grant.cast_cost.clone(),
+                origin: grant.origin,
+                available_after_turn_instance: grant.available_after_turn_instance,
                 expires_at_cleanup_turn_instance,
             });
         self.state.active_exile_play_permissions.extend(permissions);
@@ -911,8 +904,10 @@ impl GameEngine {
                     top.controller,
                     top.id,
                     &source_label,
-                    ExilePlayPermissionScope::CastFace(0),
-                    false,
+                    crate::state::ExilePlayPermissionGrant::printed(
+                        ExilePlayPermissionScope::CastFace(0),
+                        false,
+                    ),
                 )?;
             }
             if !resolves_to_battlefield && is_aura {
@@ -1448,6 +1443,9 @@ impl GameEngine {
                         life::drain_target(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Exile { .. } => zones::exile(&mut cx, effect)?,
+                    effect @ SpellEffectKind::ExileWithOwnerCastPermission { .. } => {
+                        zones::exile_with_owner_cast_permission(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::ExileTargetGainLifeEqualToPower => {
                         zones::exile_target_gain_life_equal_to_power(&mut cx, effect)?
                     }
@@ -2717,6 +2715,7 @@ mod exile_permission_generation_tests {
                 object_id,
                 zone_change_generation: generation,
                 scope: ExilePlayPermissionScope::PlayCard,
+                cast_cost: crate::state::ExilePermissionCastCost::PrintedManaCost,
                 expires_at_cleanup_turn_instance: None,
             });
 

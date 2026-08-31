@@ -501,6 +501,9 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerAction
     ruled::v1::RuledCommand ruledCommand;
     auto *cast = ruledCommand.mutable_cast_spell();
     cast->set_cast_method(pendingRuledSpellCast.castMethod);
+    if (pendingRuledSpellCast.castingPermissionId != 0) {
+        cast->set_casting_permission_id(pendingRuledSpellCast.castingPermissionId);
+    }
     auto *source = cast->mutable_source();
     if (pendingRuledSpellCast.source != RuledCastSource::Hand)
         source->set_expected_zone_change_generation(pendingRuledSpellCast.sourceZoneChangeGeneration);

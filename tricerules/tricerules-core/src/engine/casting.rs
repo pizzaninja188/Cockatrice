@@ -293,6 +293,7 @@ impl GameEngine {
             Ok(rv1::CastMethod::Flashback) => SpellCastMethod::Flashback,
             Ok(rv1::CastMethod::Harmonize) => SpellCastMethod::Harmonize,
             Ok(rv1::CastMethod::Warp) => SpellCastMethod::Warp,
+            Ok(rv1::CastMethod::Permission) => SpellCastMethod::Permission,
             Ok(rv1::CastMethod::SiegeDefeat) => {
                 return Err(EngineError::Illegal(
                     "Siege defeat casts require an active engine offer",
@@ -317,6 +318,11 @@ impl GameEngine {
         let from_hand = matches!(source, rv1::cast_source::Location::HandIndex(_));
         let (oid, exile_permission_scope) = match source {
             rv1::cast_source::Location::HandIndex(hand_index) => {
+                if command.casting_permission_id.is_some() {
+                    return Err(EngineError::Illegal(
+                        "hand casts cannot name an exile permission",
+                    ));
+                }
                 if !matches!(cast_method, SpellCastMethod::Normal | SpellCastMethod::Warp) {
                     return Err(EngineError::Illegal("invalid hand cast method"));
                 }
@@ -329,6 +335,11 @@ impl GameEngine {
                 )
             }
             rv1::cast_source::Location::GraveyardObjectId(source_oid) => {
+                if command.casting_permission_id.is_some() {
+                    return Err(EngineError::Illegal(
+                        "graveyard casts cannot name an exile permission",
+                    ));
+                }
                 if !self.state.players[idx].graveyard.contains(source_oid) {
                     return Err(EngineError::Illegal("card is not in your graveyard"));
                 }
@@ -343,11 +354,9 @@ impl GameEngine {
                 (*source_oid, None)
             }
             rv1::cast_source::Location::ExileObjectId(source_oid) => {
-                if cast_method != SpellCastMethod::Normal {
-                    return Err(EngineError::Illegal(
-                        "exile casts require the normal cast method",
-                    ));
-                }
+                let permission_id = command
+                    .casting_permission_id
+                    .ok_or(EngineError::Illegal("missing exile casting permission id"))?;
                 let object = self
                     .state
                     .objects
@@ -364,7 +373,8 @@ impl GameEngine {
                     .active_exile_play_permissions
                     .iter()
                     .find(|permission| {
-                        permission.object_id == *source_oid
+                        permission.group_id == permission_id
+                            && permission.object_id == *source_oid
                             && permission.player_id == player
                             && permission.zone_change_generation == generation
                             && permission.available_on_turn(self.state.turn_instance)
@@ -379,10 +389,28 @@ impl GameEngine {
                     .ok_or(EngineError::Illegal(
                         "card has no cast-from-exile permission",
                     ))?;
+                let method_matches = matches!(
+                    (&permission.cast_cost, cast_method),
+                    (
+                        crate::state::ExilePermissionCastCost::PrintedManaCost,
+                        SpellCastMethod::Normal
+                    ) | (
+                        crate::state::ExilePermissionCastCost::AlternativeManaCost(_),
+                        SpellCastMethod::Permission
+                    )
+                );
+                if !method_matches {
+                    return Err(EngineError::Illegal(
+                        "cast method does not match exile permission cost",
+                    ));
+                }
                 if object.zone != Zone::Exile {
                     return Err(EngineError::Illegal("illegal cast from exile"));
                 }
-                (*source_oid, Some(permission.scope))
+                (
+                    *source_oid,
+                    Some((permission.scope, permission.cast_cost.clone())),
+                )
             }
         };
         let has_multiple_cast_faces =
@@ -416,7 +444,10 @@ impl GameEngine {
         if from_hand && !def.face_available_from_hand(face_index) {
             return Err(EngineError::Illegal("face cannot be cast from hand"));
         }
-        if exile_permission_scope == Some(ExilePlayPermissionScope::CastCard)
+        if exile_permission_scope
+            .as_ref()
+            .map(|permission| permission.0)
+            == Some(ExilePlayPermissionScope::CastCard)
             && !def.face_available_from_hand(face_index)
         {
             return Err(EngineError::Illegal(
@@ -425,7 +456,7 @@ impl GameEngine {
         }
         if matches!(
             exile_permission_scope,
-            Some(ExilePlayPermissionScope::CastFace(_))
+            Some((ExilePlayPermissionScope::CastFace(_), _))
         ) && !face.is_permanent()
         {
             return Err(EngineError::Illegal(
@@ -451,6 +482,16 @@ impl GameEngine {
                 .harmonize_cost
                 .clone()
                 .ok_or(EngineError::Illegal("card has no harmonize cost"))?,
+            SpellCastMethod::Permission => match exile_permission_scope.as_ref() {
+                Some((_, crate::state::ExilePermissionCastCost::AlternativeManaCost(cost))) => {
+                    cost.clone()
+                }
+                _ => {
+                    return Err(EngineError::Illegal(
+                        "permission cast has no alternative mana cost",
+                    ));
+                }
+            },
             SpellCastMethod::SiegeDefeat => {
                 return Err(EngineError::Illegal(
                     "Siege defeat casts require the offered resolution choice",
@@ -2311,6 +2352,13 @@ mod cast_snapshot_tests {
         e.state.players[0].mana_pool.red = 5;
         e.apply_command(0, &cast).unwrap();
         resolve(&mut e);
+        let permission_id = e
+            .state
+            .active_exile_play_permissions
+            .iter()
+            .find(|permission| permission.object_id == adventure)
+            .expect("Adventure permission")
+            .group_id;
         let creature_cast = RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
                 cast_method: rv1::CastMethod::Normal as i32,
@@ -2324,6 +2372,7 @@ mod cast_snapshot_tests {
                     ),
                     location: Some(rv1::cast_source::Location::ExileObjectId(adventure)),
                 }),
+                casting_permission_id: Some(permission_id),
                 ..Default::default()
             })),
         };

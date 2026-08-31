@@ -549,12 +549,14 @@ fn bonecrusher_giant_casts_once_from_adventure_exile() {
     assert_eq!(actions[0].face_index, 0);
     assert_eq!(actions[0].card_name, "Bonecrusher Giant");
     assert_eq!(actions[0].cost, "{2}{R}");
+    let permission_id = actions[0].casting_permission_id;
 
     let cast = RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
             cast_method: tricerules_proto::ruled::v1::CastMethod::Normal as i32,
             source: Some(exile_cast_source(oid, e.state.zone_change_generation[&oid])),
             face_index: 0,
+            casting_permission_id: permission_id,
             ..Default::default()
         })),
     };
@@ -621,11 +623,19 @@ fn adventure_exile_permission_rejects_wrong_source_player_face_and_unpaid_cost()
         .any(|permission| permission.object_id == oid));
 
     let generation = e.state.zone_change_generation[&oid];
+    let permission_id = e
+        .state
+        .active_exile_play_permissions
+        .iter()
+        .find(|permission| permission.object_id == oid)
+        .expect("Adventure permission")
+        .group_id;
     let exile_cast = |object_id, face_index| RuledCommand {
         cmd: Some(Cmd::CastSpell(CastSpell {
             cast_method: tricerules_proto::ruled::v1::CastMethod::Normal as i32,
             source: Some(exile_cast_source(object_id, generation)),
             face_index,
+            casting_permission_id: Some(permission_id),
             ..Default::default()
         })),
     };

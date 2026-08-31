@@ -137,9 +137,11 @@ void PlayerActions::reconcilePendingRuledTargetSelections()
                                                 static_cast<quint32>(pendingRuledSpellCast.handIndex),
                                                 pendingRuledSpellCast.faceIndex, pendingRuledSpellCast.source,
                                                 pendingRuledSpellCast.castMethod,
+                                                pendingRuledSpellCast.castingPermissionId,
                                                 pendingRuledSpellCast.sourceZoneChangeGeneration);
         const auto latest = state->spellCostData(pendingRuledSpellCast.handIndex, pendingRuledSpellCast.faceIndex,
-                                                 pendingRuledSpellCast.source, pendingRuledSpellCast.castMethod);
+                                                 pendingRuledSpellCast.source, pendingRuledSpellCast.castMethod,
+                                                 pendingRuledSpellCast.castingPermissionId);
         const bool castCostSelectionsStillLegal =
             std::all_of(pendingRuledSpellCast.castCostSelections.cbegin(),
                         pendingRuledSpellCast.castCostSelections.cend(), [&](const auto &selection) {
@@ -1182,7 +1184,8 @@ bool PlayerActions::tryPayRuledRestrictedMana(quint32 groupId, QChar symbol)
         !pendingRuledSpellCast.waitingForCost &&
         state
             ->eligibleRestrictedManaForCast(pendingRuledSpellCast.handIndex, pendingRuledSpellCast.faceIndex,
-                                            pendingRuledSpellCast.source, pendingRuledSpellCast.castMethod)
+                                            pendingRuledSpellCast.source, pendingRuledSpellCast.castMethod,
+                                            pendingRuledSpellCast.castingPermissionId)
             .contains(groupId)) {
         reduced = tryReducePendingSpellRemainingCostOnePip(normalized == QLatin1Char('C'), normalized);
         if (reduced) {
@@ -1459,7 +1462,8 @@ bool PlayerActions::ruledRestrictedManaGroupEligible(quint32 groupId) const
         !pendingRuledSpellCast.waitingForCost) {
         return state
             ->eligibleRestrictedManaForCast(pendingRuledSpellCast.handIndex, pendingRuledSpellCast.faceIndex,
-                                            pendingRuledSpellCast.source, pendingRuledSpellCast.castMethod)
+                                            pendingRuledSpellCast.source, pendingRuledSpellCast.castMethod,
+                                            pendingRuledSpellCast.castingPermissionId)
             .contains(groupId);
     }
     return true;
@@ -1789,7 +1793,8 @@ bool PlayerActions::tryPlayRuledLand(CardItem *card)
             }
             return beginRuledSpellCast(card, sourceIndex, choice.face.faceIndex, choice.face.faceName,
                                        choice.face.manaCost, choice.face.genericCostReduction,
-                                       RuledCastSource::Exile, choice.face.castMethod);
+                                       RuledCastSource::Exile, choice.face.castMethod,
+                                       choice.face.castingPermissionId);
         }
     }
     if (faces.size() > 1) {
@@ -2034,12 +2039,14 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
             }
             option = *chosen;
         }
-        const QString cost = geh->zoneActionCost(objectId, option.faceIndex, source, option.castMethod);
+        const QString cost = geh->zoneActionCost(objectId, option.faceIndex, source, option.castMethod,
+                                                 option.castingPermissionId);
         if (cost.isEmpty()) {
             return false;
         }
         return beginRuledSpellCast(card, static_cast<int>(objectId), option.faceIndex, option.faceName, cost,
-                                   option.genericCostReduction, source, option.castMethod);
+                                   option.genericCostReduction, source, option.castMethod,
+                                   option.castingPermissionId);
     }
 
     const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
@@ -2066,17 +2073,20 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
                                         const QString &castCost,
                                         int genericCostReduction,
                                         RuledCastSource source,
-                                        ruled::v1::CastMethod castMethod)
+                                        ruled::v1::CastMethod castMethod,
+                                        quint64 castingPermissionId)
 {
     RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
     if (source == RuledCastSource::Hand
             ? !geh->isHandCastActionLegal(ruledHandIndex, faceIndex, castMethod)
-            : !geh->isZoneCastActionLegal(static_cast<quint32>(ruledHandIndex), faceIndex, source, castMethod)) {
+            : !geh->isZoneCastActionLegal(static_cast<quint32>(ruledHandIndex), faceIndex, source, castMethod,
+                                          castingPermissionId)) {
         return false;
     }
     if (pendingRuledSpellCast.valid && pendingRuledSpellCast.waitingForTarget &&
         pendingRuledSpellCast.handIndex == ruledHandIndex && pendingRuledSpellCast.faceIndex == faceIndex &&
-        pendingRuledSpellCast.source == source && pendingRuledSpellCast.castMethod == castMethod) {
+        pendingRuledSpellCast.source == source && pendingRuledSpellCast.castMethod == castMethod &&
+        pendingRuledSpellCast.castingPermissionId == castingPermissionId) {
         // Target ranges with an explicit confirmation surface may also be confirmed by clicking
         // the spell again. In particular, 0-1 means "skip this target", not "cancel the cast".
         if (ruledTargetRangeUsesExplicitConfirmation(pendingRuledSpellCast.minTargets,
@@ -2089,9 +2099,10 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     }
 
     const auto actionIt = geh->handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
-    const quint64 castKey = source == RuledCastSource::Hand
-                                ? RuledClientState::handCastActionKey(ruledHandIndex, faceIndex, castMethod)
-                                : RuledClientState::zoneCastActionKey(ruledHandIndex, faceIndex, source, castMethod);
+    const auto castKey = source == RuledCastSource::Hand
+                             ? RuledClientState::handCastActionKey(ruledHandIndex, faceIndex, castMethod)
+                             : RuledClientState::zoneCastActionKey(ruledHandIndex, faceIndex, source, castMethod,
+                                                                   castingPermissionId);
     QVector<PendingRuledSpellCast::SelectedMode> selectedModes;
     const RuledHandActionSet *actionSet = source == RuledCastSource::Hand ? nullptr : &geh->zoneCastActions;
     if (source == RuledCastSource::Hand && actionIt != geh->handActions.constEnd()) {
@@ -2132,12 +2143,14 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     pendingRuledSpellCast.handIndex = ruledHandIndex;
     pendingRuledSpellCast.source = source;
     pendingRuledSpellCast.castMethod = castMethod;
+    pendingRuledSpellCast.castingPermissionId = castingPermissionId;
     pendingRuledSpellCast.faceIndex = faceIndex;
     const auto paymentFaces = source == RuledCastSource::Hand
         ? geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex)
         : geh->zoneActionFaceOptions(ruledHandIndex, source);
     for (const auto &face : paymentFaces)
-        if (face.faceIndex == faceIndex && face.castMethod == castMethod) {
+        if (face.faceIndex == faceIndex && face.castMethod == castMethod &&
+            face.castingPermissionId == castingPermissionId) {
             pendingRuledSpellCast.hasConvoke = face.hasConvoke;
             pendingRuledSpellCast.sourceZoneChangeGeneration = face.zoneChangeGeneration;
             pendingRuledSpellCast.presentationText = face.presentationText;
@@ -2150,7 +2163,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
     pendingRuledSpellCast.cardName = castName;
     pendingRuledSpellCast.remainingCost = parseSimpleManaCost(castCost);
     pendingRuledSpellCast.genericCostReduction = genericCostReduction;
-    const auto costData = geh->spellCostData(ruledHandIndex, faceIndex, source, castMethod);
+    const auto costData = geh->spellCostData(ruledHandIndex, faceIndex, source, castMethod, castingPermissionId);
     pendingRuledSpellCast.costChoices = costData.choices;
     pendingRuledSpellCast.castCostGroups = costData.castCostGroups;
     pendingRuledSpellCast.selectedModes = selectedModes;
@@ -2269,10 +2282,11 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
     if (faces.size() == 1) {
         const auto actionIt = geh->handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
         const int faceIndex = faces.first().faceIndex;
-        const quint64 castKey = fromHand
-                                    ? RuledClientState::handCastActionKey(sourceIndex, faceIndex, faces.first().castMethod)
-                                    : RuledClientState::zoneCastActionKey(sourceIndex, faceIndex, publicSource,
-                                                                         faces.first().castMethod);
+        const auto castKey = fromHand
+                                 ? RuledClientState::handCastActionKey(sourceIndex, faceIndex, faces.first().castMethod)
+                                 : RuledClientState::zoneCastActionKey(sourceIndex, faceIndex, publicSource,
+                                                                      faces.first().castMethod,
+                                                                      faces.first().castingPermissionId);
         const RuledHandActionSet *actionSet = fromHand && actionIt != geh->handActions.constEnd()
                                                   ? &actionIt.value()
                                                   : fromPublicZone ? &geh->zoneCastActions : nullptr;
@@ -2283,7 +2297,7 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
         return beginRuledSpellCast(card, sourceIndex, face.faceIndex, face.faceName, face.manaCost,
                                    face.genericCostReduction,
                                    fromHand ? RuledCastSource::Hand : publicSource,
-                                   face.castMethod);
+                                   face.castMethod, face.castingPermissionId);
     }
     const auto chosen = RuledPendingCast::chooseFace(player->getGame()->getTab(), card->getName(), faces);
     if (!chosen.has_value()) {
@@ -2291,7 +2305,8 @@ bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
     }
     beginRuledSpellCast(card, sourceIndex, chosen->faceIndex, chosen->faceName, chosen->manaCost,
                         chosen->genericCostReduction,
-                        fromHand ? RuledCastSource::Hand : publicSource, chosen->castMethod);
+                        fromHand ? RuledCastSource::Hand : publicSource, chosen->castMethod,
+                        chosen->castingPermissionId);
     return true;
 }
 
@@ -2780,7 +2795,8 @@ void PlayerActions::autoApplyRestrictedManaToPendingCost(quint32 groupId, QChar 
             !pendingRuledSpellCast.waitingForCost &&
             state
                 ->eligibleRestrictedManaForCast(pendingRuledSpellCast.handIndex, pendingRuledSpellCast.faceIndex,
-                                                pendingRuledSpellCast.source, pendingRuledSpellCast.castMethod)
+                                                pendingRuledSpellCast.source, pendingRuledSpellCast.castMethod,
+                                                pendingRuledSpellCast.castingPermissionId)
                 .contains(groupId)) {
             reduced = tryReducePendingSpellRemainingCostOnePip(normalized == QLatin1Char('C'), normalized);
             appliedToSpell = appliedToSpell || reduced;

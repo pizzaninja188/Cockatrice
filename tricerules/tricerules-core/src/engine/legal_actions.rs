@@ -1477,6 +1477,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                             face.name.clone(),
                         )
                     }),
+                    casting_permission_id: None,
                 };
                 if !cost_choices.non_mana_costs_payable {
                     continue;
@@ -1565,7 +1566,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 .collect(),
         };
         for face_index in face_indices {
-            if !emitted.insert((object.id, face_index)) {
+            if !emitted.insert((object.id, face_index, permission.group_id)) {
                 continue;
             }
             let Some(face) = definition.face(face_index) else {
@@ -1587,6 +1588,14 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             if !cast_ok {
                 continue;
             }
+            let (cost, cast_method) = match &permission.cast_cost {
+                crate::state::ExilePermissionCastCost::PrintedManaCost => {
+                    (face.mana_cost.to_string(), rv1::CastMethod::Normal)
+                }
+                crate::state::ExilePermissionCastCost::AlternativeManaCost(cost) => {
+                    (cost.to_string(), rv1::CastMethod::Permission)
+                }
+            };
             let mut action = rv1::LegalZoneCastAction {
                 source_zone: rv1::CastSourceZone::Exile as i32,
                 object_id: object.id,
@@ -1598,7 +1607,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 min_modes: 0,
                 max_modes: 0,
                 modes: vec![],
-                cost: face.mana_cost.to_string(),
+                cost,
                 cost_choices: None,
                 eligible_restricted_mana_group_ids: eng
                     .eligible_restricted_mana_for_spell(player_index, face),
@@ -1608,7 +1617,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     face,
                     &face.cost_modifiers,
                 ),
-                cast_method: rv1::CastMethod::Normal as i32,
+                cast_method: cast_method as i32,
                 has_convoke: face.keywords.contains(&Keyword::Convoke),
                 spell_presentation: face.spell_presentation.as_ref().map(|mapping| {
                     presentation_ref(
@@ -1620,6 +1629,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                         face.name.clone(),
                     )
                 }),
+                casting_permission_id: Some(permission.group_id),
             };
             if !cost_choices.non_mana_costs_payable {
                 continue;
