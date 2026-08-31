@@ -313,6 +313,7 @@ struct RuledFaceOption
     ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL;
     bool hasConvoke = false;
     quint64 zoneChangeGeneration = 0;
+    QString presentationText;
 };
 
 struct RuledExilePlayPermissionGroup

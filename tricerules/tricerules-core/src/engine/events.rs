@@ -1,4 +1,5 @@
 use super::legal_actions::fill_legal;
+use super::presentation::{presentation_ref, PresentationPath};
 use super::*;
 
 impl GameEngine {
@@ -240,6 +241,12 @@ impl GameEngine {
                     g: amount.g,
                     c: amount.c,
                     display_label: restriction.fallback_label(),
+                    presentation: self
+                        .state
+                        .mana_restriction_presentations
+                        .get(restriction_group_id.checked_sub(1)? as usize)
+                        .cloned()
+                        .flatten(),
                 })
             })
             .collect();
@@ -482,13 +489,19 @@ impl GameEngine {
                                     })
                                     .collect::<Vec<_>>()
                                     .join(", ");
+                                let fallback = ability.fallback_text_with_path(
+                                    face.as_deref()
+                                        .map(|face| face.name.as_str())
+                                        .unwrap_or(&object.card_id),
+                                    &path,
+                                );
+                                let definition = self.ability_definition(
+                                    oid,
+                                    object.face_up_index,
+                                    path.clone(),
+                                );
                                 rv1::AbilityInfo {
-                                    text: ability.fallback_text_with_path(
-                                        face.as_deref()
-                                            .map(|face| face.name.as_str())
-                                            .unwrap_or(&object.card_id),
-                                        &path,
-                                    ),
+                                    text: fallback.clone(),
                                     mana_cost,
                                     mana_produced,
                                     cost_label,
@@ -497,6 +510,17 @@ impl GameEngine {
                                         ability_index,
                                         &ability,
                                     ),
+                                    presentation: Some(presentation_ref(
+                                        self.registry,
+                                        &definition.card_id,
+                                        &definition.face_id,
+                                        definition
+                                            .ability_path
+                                            .iter()
+                                            .map(PresentationPath::Ability),
+                                        &ability.presentation,
+                                        fallback,
+                                    )),
                                 }
                             })
                             .collect();
@@ -903,6 +927,7 @@ pub(super) fn ev_trigger_order_required(
                         ability_index: staged.ability_index as u32,
                         source_card_name: staged.card_name.clone(),
                         ability_text: staged.ability_text.clone(),
+                        ability_presentation: staged.presentation.clone(),
                     })
                     .collect(),
             },

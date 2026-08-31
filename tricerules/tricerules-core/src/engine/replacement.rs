@@ -3,6 +3,7 @@
 use super::characteristics::{apply_face_down_values, creature_matches_scope};
 use super::events::{ev_log, ev_priority_changed, finish_with_events};
 use super::history::player_life_aggregate_value;
+use super::presentation::{child_presentation_ref, PresentationPath};
 use super::resolution::{
     move_object_to_zone, permanent_moved_event, permanent_moved_event_with_library_position,
 };
@@ -986,6 +987,33 @@ impl GameEngine {
                         "At the beginning of the end step on your next turn, sacrifice those tokens.",
                     ),
                 };
+                let ability = TriggeredAbilityDef {
+                    ability_id: tricerules_cards::AbilityId::new("delayed_sacrifice")
+                        .expect("intrinsic ability id"),
+                    presentation: tricerules_cards::AbilityPresentation::Fallback,
+                    trigger,
+                    effect: vec![SpellEffectKind::SacrificeObservedObjects],
+                    modal: None,
+                    targeting: None,
+                    may: false,
+                    intervening_if: None,
+                    max_triggers_per_turn: None,
+                    triggers_only_once: false,
+                };
+                let ability_text = ability.fallback_text(&card_name);
+                let presentation = self
+                    .state
+                    .stack_presentations
+                    .get(&item.id)
+                    .and_then(|stack| stack.primary.as_ref())
+                    .map(|parent| {
+                        child_presentation_ref(
+                            parent,
+                            PresentationPath::Ability(&ability.ability_id),
+                            &ability.presentation,
+                            ability_text,
+                        )
+                    });
                 self.state.active_event_observers.push(ActiveEventObserver {
                     watched,
                     matcher,
@@ -1003,19 +1031,8 @@ impl GameEngine {
                             card_id: item.card_id.clone(),
                             card_name,
                             source_face_index: item.face_index,
-                            ability: TriggeredAbilityDef {
-                                ability_id: tricerules_cards::AbilityId::new("delayed_sacrifice")
-                                    .expect("intrinsic ability id"),
-                                presentation: tricerules_cards::AbilityPresentation::Fallback,
-                                trigger,
-                                effect: vec![SpellEffectKind::SacrificeObservedObjects],
-                                modal: None,
-                                targeting: None,
-                                may: false,
-                                intervening_if: None,
-                                max_triggers_per_turn: None,
-                                triggers_only_once: false,
-                            },
+                            presentation,
+                            ability,
                         },
                     )),
                 });

@@ -17,10 +17,14 @@
 #include "game/ruled/ruled_event_dispatcher.h"
 #include "game/ruled/ruled_mana_pool_tracker.h"
 #include "game/ruled/ruled_pending_cast.h"
+#include "game/ruled/ruled_presentation_resolver.h"
 #include "game/ruled/ruled_restricted_mana_model.h"
 #include "game/ruled/ruled_zone_snapshot_policy.h"
 
 #include <QSignalSpy>
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QString>
 #include <QTest>
 #include <gtest/gtest.h>
@@ -766,8 +770,204 @@ TEST(RuledPendingTargetTest, SpellPromptUsesFaceAndActiveModeContext)
         {7, QStringLiteral("Counter target spell unless its controller pays {3}"), true, true, targets}};
 
     EXPECT_EQ(ruledPendingSpellTargetPrompt(spell, state),
-              QString::fromUtf8("Choose a target for “Mystic Confluence — Counter target spell unless its "
-                                "controller pays {3}”.\nChoose target spell."));
+              QString::fromUtf8("Choose a target for “Counter target spell unless its controller pays {3}”.\n"
+                                "Choose target spell."));
+}
+
+TEST(RuledPresentationResolverTest, ResolvesExactFaceLinesAndFallsBackAsOneUnit)
+{
+    QTemporaryDir directory;
+    ASSERT_TRUE(directory.isValid());
+    const QString cardDatabasePath = directory.filePath(QStringLiteral("cards.xml"));
+    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(cardDatabasePath);
+    const QString oracleText = QStringLiteral("Choose one —\n• First mode\n• Second mode");
+    QString writeError;
+    ASSERT_TRUE(RuledOracleCache::writeAtomic(
+        cachePath, QStringLiteral("https://example.test/AllPrintings.json"), QStringLiteral("2026-08-31"),
+        {{QStringLiteral("Fire // Ice"), QStringLiteral("Fire"), oracleText}}, &writeError))
+        << writeError.toStdString();
+
+    RuledPresentationResolver resolver;
+    QString loadError;
+    ASSERT_TRUE(resolver.loadForCardDatabase(cardDatabasePath, &loadError)) << loadError.toStdString();
+
+    ruled::v1::PresentationRef presentation;
+    presentation.set_card_id("fire_ice");
+    presentation.set_face_id("fire");
+    presentation.set_external_card_name("Fire // Ice");
+    presentation.set_external_face_name("Fire");
+    presentation.set_oracle_text_sha256(RuledOracleCache::textSha256(oracleText).toStdString());
+    presentation.add_oracle_line_indices(1);
+    presentation.add_oracle_line_indices(3);
+    presentation.set_fallback_text("fallback");
+    EXPECT_EQ(resolver.resolve(presentation), QString::fromUtf8("Choose one —\n• Second mode"));
+
+    presentation.set_oracle_text_sha256(std::string(64, '0'));
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
+    presentation.set_oracle_text_sha256(RuledOracleCache::textSha256(oracleText).toStdString());
+    presentation.add_oracle_line_indices(99);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
+}
+
+TEST(RuledPresentationResolverTest, EmptyMappingAlwaysUsesEngineFallback)
+{
+    ruled::v1::PresentationRef presentation;
+    presentation.set_fallback_text("engine-authored fallback");
+    RuledPresentationResolver resolver;
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("engine-authored fallback"));
+}
+
+TEST(RuledPresentationResolverTest, NormalizesLineEndingsWhitespaceHeadingsAndBullets)
+{
+    EXPECT_EQ(RuledOracleCache::normalizedText(
+                  QString::fromUtf8("  Choose two —\r\n\r\n • First mode  \r  • Second mode\n\t\nTail  ")),
+              QString::fromUtf8("Choose two —\n• First mode\n• Second mode\nTail"));
+}
+
+TEST(RuledPresentationResolverTest, SelectsExactSplitRoomAndTransformFaces)
+{
+    QTemporaryDir directory;
+    ASSERT_TRUE(directory.isValid());
+    const QString cardDatabasePath = directory.filePath(QStringLiteral("cards.xml"));
+    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(cardDatabasePath);
+    const QList<RuledOracleFace> faces{
+        {QStringLiteral("Fire // Ice"), QStringLiteral("Fire"), QStringLiteral("Fire deals 2 damage.")},
+        {QStringLiteral("Fire // Ice"), QStringLiteral("Ice"), QStringLiteral("Tap target permanent.\nDraw a card.")},
+        {QStringLiteral("Derelict Attic // Widow's Walk"), QStringLiteral("Derelict Attic"),
+         QStringLiteral("When you unlock this door, draw two cards, then lose 2 life.")},
+        {QStringLiteral("Brutal Cathar // Moonrage Brute"), QStringLiteral("Moonrage Brute"),
+         QStringLiteral("First strike\nWard—Pay 3 life.")},
+    };
+    QString error;
+    ASSERT_TRUE(RuledOracleCache::writeAtomic(cachePath, QStringLiteral("https://example.test/source"),
+                                              QStringLiteral("snapshot-1"), faces, &error))
+        << error.toStdString();
+    RuledPresentationResolver resolver;
+    ASSERT_TRUE(resolver.loadForCardDatabase(cardDatabasePath, &error)) << error.toStdString();
+
+    const auto resolveFace = [&](const QString &card, const QString &face, std::initializer_list<quint32> lines) {
+        const auto found = std::find_if(faces.begin(), faces.end(), [&](const RuledOracleFace &candidate) {
+            return candidate.cardName == card && candidate.faceName == face;
+        });
+        EXPECT_NE(found, faces.end());
+        ruled::v1::PresentationRef presentation;
+        presentation.set_external_card_name(card.toStdString());
+        presentation.set_external_face_name(face.toStdString());
+        presentation.set_oracle_text_sha256(RuledOracleCache::textSha256(found->oracleText).toStdString());
+        presentation.set_fallback_text("fallback");
+        for (const quint32 line : lines) {
+            presentation.add_oracle_line_indices(line);
+        }
+        return resolver.resolve(presentation);
+    };
+
+    EXPECT_EQ(resolveFace(QStringLiteral("Fire // Ice"), QStringLiteral("Ice"), {1, 2}),
+              QStringLiteral("Tap target permanent.\nDraw a card."));
+    EXPECT_EQ(resolveFace(QStringLiteral("Derelict Attic // Widow's Walk"), QStringLiteral("Derelict Attic"), {1}),
+              QStringLiteral("When you unlock this door, draw two cards, then lose 2 life."));
+    EXPECT_EQ(resolveFace(QStringLiteral("Brutal Cathar // Moonrage Brute"), QStringLiteral("Moonrage Brute"), {2}),
+              QString::fromUtf8("Ward—Pay 3 life."));
+}
+
+TEST(RuledPresentationResolverTest, RejectsMissingCorruptIncompatibleAndIncompleteCachesAsOneUnit)
+{
+    QTemporaryDir directory;
+    ASSERT_TRUE(directory.isValid());
+    const QString cardDatabasePath = directory.filePath(QStringLiteral("cards.xml"));
+    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(cardDatabasePath);
+    const QString text = QStringLiteral("One\nTwo");
+    QString error;
+    ASSERT_TRUE(RuledOracleCache::writeAtomic(
+        cachePath, QStringLiteral("https://example.test/source"), QStringLiteral("snapshot-1"),
+        {{QStringLiteral("Card"), QStringLiteral("Face"), text}}, &error));
+    RuledPresentationResolver resolver;
+    ASSERT_TRUE(resolver.loadForCardDatabase(cardDatabasePath, &error));
+
+    ruled::v1::PresentationRef presentation;
+    presentation.set_external_card_name("Missing");
+    presentation.set_external_face_name("Face");
+    presentation.set_oracle_text_sha256(RuledOracleCache::textSha256(text).toStdString());
+    presentation.set_fallback_text("whole fallback");
+    presentation.add_oracle_line_indices(1);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
+
+    presentation.set_external_card_name("Card");
+    presentation.set_external_face_name("Missing");
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
+    presentation.set_external_face_name("Face");
+    presentation.set_oracle_text_sha256(std::string(64, 'f'));
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
+    presentation.set_oracle_text_sha256(RuledOracleCache::textSha256(text).toStdString());
+    presentation.set_oracle_line_indices(0, 0);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
+    presentation.set_oracle_line_indices(0, 1);
+    presentation.add_oracle_line_indices(3);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
+
+    QFile corrupt(cachePath);
+    ASSERT_TRUE(corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    ASSERT_EQ(corrupt.write("{not-json"), 9);
+    corrupt.close();
+    RuledPresentationResolver corruptResolver;
+    EXPECT_FALSE(corruptResolver.loadForCardDatabase(cardDatabasePath, &error));
+    EXPECT_EQ(corruptResolver.resolve(presentation), QStringLiteral("whole fallback"));
+    RuledPresentationResolver missingResolver;
+    EXPECT_FALSE(missingResolver.loadForCardDatabase(directory.filePath(QStringLiteral("missing.xml")), &error));
+    EXPECT_EQ(missingResolver.resolve(presentation), QStringLiteral("whole fallback"));
+}
+
+TEST(RuledPresentationResolverTest, AtomicCacheRefreshRetainsProvenanceAndWorksOffline)
+{
+    QTemporaryDir directory;
+    ASSERT_TRUE(directory.isValid());
+    const QString cardDatabasePath = directory.filePath(QStringLiteral("cards.xml"));
+    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(cardDatabasePath);
+    QString error;
+    ASSERT_TRUE(RuledOracleCache::writeAtomic(
+        cachePath, QStringLiteral("https://example.test/source"), QStringLiteral("snapshot-1"),
+        {{QStringLiteral("Card"), QStringLiteral("Face"), QStringLiteral("Offline text")}}, &error));
+    RuledOracleCache offline;
+    ASSERT_TRUE(offline.load(cachePath, &error));
+    EXPECT_EQ(offline.sourceUrl(), QStringLiteral("https://example.test/source"));
+    EXPECT_EQ(offline.sourceVersion(), QStringLiteral("snapshot-1"));
+    EXPECT_EQ(offline.compatibleFaceText(QStringLiteral("Card"), QStringLiteral("Face"),
+                                         RuledOracleCache::textSha256(QStringLiteral("Offline text"))),
+              QStringLiteral("Offline text"));
+
+    ASSERT_TRUE(RuledOracleCache::writeAtomic(
+        cachePath, QStringLiteral("https://example.test/source"), QStringLiteral("snapshot-2"),
+        {{QStringLiteral("Card"), QStringLiteral("Face"), QStringLiteral("Longer refreshed offline text")}},
+        &error));
+    ASSERT_TRUE(offline.load(cachePath, &error));
+    EXPECT_EQ(offline.sourceVersion(), QStringLiteral("snapshot-2"));
+    EXPECT_EQ(QDir(directory.path()).entryList({QStringLiteral("cards.ruled-oracle.json*")}, QDir::Files).size(), 1);
+}
+
+TEST(RuledPendingTargetTest, SpellPromptComposesResolvedOrFallbackWordingWithEngineGuidance)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.waitingForTarget = true;
+    spell.handIndex = 4;
+    spell.faceIndex = 0;
+    spell.cardName = QStringLiteral("Deterministic spell fallback");
+    spell.presentationText = QStringLiteral("Resolved exact Oracle wording");
+    spell.activeTargetGroupPosition = 0;
+    RuledSpellTargetData targets;
+    RuledTargetGroupData group;
+    group.promptText = QStringLiteral("Choose a target controlled by an opponent.");
+    targets.groups.append(group);
+    state.validTargetsByHandSlot.insert(RuledClientState::spellTargetKey(4, 0), targets);
+
+    EXPECT_EQ(ruledPendingSpellTargetPrompt(spell, state),
+              QString::fromUtf8("Choose a target for “Resolved exact Oracle wording”.\n"
+                                "Choose a target controlled by an opponent."));
+    spell.presentationText.clear();
+    EXPECT_EQ(ruledPendingSpellTargetPrompt(spell, state),
+              QString::fromUtf8("Choose a target for “Deterministic spell fallback”.\n"
+                                "Choose a target controlled by an opponent."));
 }
 
 TEST(RuledPendingTargetTest, ActivatedAbilityPromptUsesAbilityTextAndTargetGuidance)

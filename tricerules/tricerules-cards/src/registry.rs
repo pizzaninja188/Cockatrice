@@ -6,6 +6,7 @@ use crate::primitives::{
     StaticAbilityDef, TargetController, TargetKind, TargetingDef, TriggerCondition,
 };
 use crate::token_def::TokenDefinition;
+use crate::PresentationFaceMetadata;
 use once_cell::sync::Lazy;
 use ron::extensions::Extensions;
 use ron::Options;
@@ -39,6 +40,7 @@ pub struct CardRegistry {
     /// or counted as implemented Oracle cards, but [`Self::get`] falls back here so the engine's
     /// characteristic queries work uniformly for token objects.
     tokens: HashMap<String, CardDefinition>,
+    presentation_faces: HashMap<(String, String), PresentationFaceMetadata>,
 }
 
 /// Name-index key normalization, applied to both stored names and lookup queries.
@@ -802,7 +804,21 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
 
 impl CardRegistry {
     pub fn from_embedded() -> Result<Self, RegistryError> {
-        Self::from_chunks_and_tokens(EMBEDDED_RON_CHUNKS, EMBEDDED_TOKEN_CHUNKS)
+        let mut registry =
+            Self::from_chunks_and_tokens(EMBEDDED_RON_CHUNKS, EMBEDDED_TOKEN_CHUNKS)?;
+        for &(card_id, card_name, face_id, face_name, oracle_text_sha256) in
+            EMBEDDED_PRESENTATION_FACES
+        {
+            registry.presentation_faces.insert(
+                (card_id.to_string(), face_id.to_string()),
+                PresentationFaceMetadata {
+                    card_name: card_name.to_string(),
+                    face_name: face_name.to_string(),
+                    oracle_text_sha256: oracle_text_sha256.to_string(),
+                },
+            );
+        }
+        Ok(registry)
     }
 
     #[cfg(test)]
@@ -1527,6 +1543,15 @@ impl CardRegistry {
     /// Iterate over every loaded card definition (order is unspecified).
     pub fn definitions(&self) -> impl Iterator<Item = &CardDefinition> {
         self.by_id.values()
+    }
+
+    pub fn presentation_face(
+        &self,
+        card_id: &str,
+        face_id: &str,
+    ) -> Option<&PresentationFaceMetadata> {
+        self.presentation_faces
+            .get(&(card_id.to_string(), face_id.to_string()))
     }
 
     pub fn global() -> &'static CardRegistry {
@@ -4134,6 +4159,32 @@ mod tests {
         assert!(h.chars().all(|c| c.is_ascii_hexdigit()));
         // Deterministic within a build (same embedded data → same digest).
         assert_eq!(h, CardRegistry::content_hash());
+    }
+
+    #[test]
+    fn generated_presentation_catalog_covers_normal_and_multiface_cards() {
+        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        for (card_id, face_id, card_name, face_name) in [
+            (
+                "grow_from_the_ashes",
+                "grow_from_the_ashes",
+                "Grow from the Ashes",
+                "Grow from the Ashes",
+            ),
+            ("fire_ice", "fire", "Fire // Ice", "Fire"),
+            ("fire_ice", "ice", "Fire // Ice", "Ice"),
+        ] {
+            let metadata = registry
+                .presentation_face(card_id, face_id)
+                .unwrap_or_else(|| panic!("missing {card_id}/{face_id}"));
+            assert_eq!(metadata.card_name, card_name);
+            assert_eq!(metadata.face_name, face_name);
+            assert_eq!(metadata.oracle_text_sha256.len(), 64);
+            assert!(metadata
+                .oracle_text_sha256
+                .chars()
+                .all(|value| value.is_ascii_hexdigit() && !value.is_ascii_uppercase()));
+        }
     }
 
     #[test]

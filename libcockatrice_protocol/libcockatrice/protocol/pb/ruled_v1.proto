@@ -536,6 +536,43 @@ message RuledEventBatch {
   PaymentPreview payment_preview = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
+// Stable authored presentation identity. Positional command coordinates such as face_index,
+// ability_index, option_index, and branch_index never appear in this path. Oracle text remains
+// external and optional: clients may select oracle_line_indices only when the complete normalized
+// external face matches oracle_text_sha256, otherwise they must use fallback_text verbatim.
+enum PresentationPathKind {
+  PRESENTATION_PATH_KIND_UNSPECIFIED = 0;
+  PRESENTATION_PATH_KIND_SPELL = 1;
+  PRESENTATION_PATH_KIND_ABILITY = 2;
+  PRESENTATION_PATH_KIND_MODE = 3;
+  PRESENTATION_PATH_KIND_CAST_COST_GROUP = 4;
+  PRESENTATION_PATH_KIND_CAST_COST_OPTION = 5;
+  PRESENTATION_PATH_KIND_RESOLUTION_BRANCH = 6;
+  PRESENTATION_PATH_KIND_SEARCH_SLOT = 7;
+  PRESENTATION_PATH_KIND_MANA_RESTRICTION = 8;
+  PRESENTATION_PATH_KIND_CHOICE = 9;
+}
+
+message PresentationPathComponent {
+  PresentationPathKind kind = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+message PresentationRef {
+  string card_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string face_id = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated PresentationPathComponent path = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated uint32 oracle_line_indices = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string fallback_text = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Engine-supplied display lookup names. They do not define card_id or face_id and are never
+  // consulted for rules, legality, identity, or command validation.
+  string external_card_name = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string external_face_name = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Lowercase SHA-256 of the normalized full external face (trimmed nonempty LF-separated lines).
+  // Empty means external rendering is intentionally unavailable and forces fallback_text.
+  string oracle_text_sha256 = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
 // Engine-computed targeting data for one spell or activated ability. Clients use this
 // to prevent invalid target selection before the command is sent. The engine is the
 // sole source of truth; clients must not replicate this logic from Oracle card text.
@@ -620,6 +657,7 @@ message LegalSpellMode {
   bool selectable = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool needs_target = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   SpellTargets targets = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PresentationRef presentation = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 enum HandActionKind {
@@ -651,6 +689,7 @@ message LegalHandAction {
   uint32 generic_cost_reduction = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool has_convoke = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   CastMethod cast_method = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PresentationRef spell_presentation = 15 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // CR 702.34: a spell the player may cast from their own graveyard using flashback.
@@ -677,6 +716,7 @@ message LegalZoneCastAction {
   CastMethod cast_method = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool has_convoke = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint64 zone_change_generation = 15 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PresentationRef spell_presentation = 16 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message ManaPaymentEligibility {
@@ -793,6 +833,7 @@ message LegalCastCostOption {
   repeated uint64 valid_permanent_generations = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Parallel to valid_permanent_ids; the engine-authored generic reduction for each candidate.
   repeated uint32 valid_permanent_generic_reductions = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PresentationRef presentation = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalCastCostGroup {
@@ -803,6 +844,7 @@ message LegalCastCostGroup {
   repeated LegalCastCostOption options = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Label for declining an optional group. Empty on required groups.
   string skip_label = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PresentationRef presentation = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 enum PermanentActionKind {
@@ -1016,6 +1058,7 @@ message TriggerOrderCandidate {
   // trigger whose source has already left the battlefield still renders.
   string source_card_name = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string ability_text = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  PresentationRef ability_presentation = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // A player must choose which of their simultaneous triggered abilities goes on the stack next
@@ -1107,6 +1150,7 @@ message RestrictedManaGroup {
   uint32 g = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint32 c = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string display_label = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  PresentationRef presentation = 9 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // What the candidate object ids of a ResolutionChoiceRequired refer to, so the client can present
@@ -1218,6 +1262,7 @@ message ResolutionBranchOption {
   // zones. Clients render the union as checkboxes and map the checked set back to branch_index;
   // labels remain display-only and are never parsed for legality.
   repeated ChoiceCandidateSourceZone search_zones = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PresentationRef presentation = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // One engine-authored capacity in a heterogeneous concealed-zone search. Candidate indices refer
@@ -1225,6 +1270,7 @@ message ResolutionBranchOption {
 message ResolutionSelectionSlot {
   string label = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated uint32 candidate_indices = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PresentationRef presentation = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A parked custom resolution (CR 608) requesting input from one player. Reused by every tier-3
@@ -1431,6 +1477,9 @@ message StackPushed {
   // The source may be sacrificed (Clue/Lander), so the synthetic stack card cannot recover this
   // metadata from the battlefield after the ability has been pushed.
   TokenIdentity source_token_identity = 12 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  PresentationRef primary_presentation = 13 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated PresentationRef chosen_mode_presentations = 14 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated PresentationRef chosen_cast_cost_presentations = 15 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ActivePublicReveal {
@@ -1509,6 +1558,7 @@ message TriggerNeedsTarget {
   uint32 min_modes = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint32 max_modes = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   repeated LegalSpellMode modes = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PresentationRef ability_presentation = 10 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // Where the resolved spell object ends up (Servatrice maps this to TABLE vs GRAVE).
@@ -1548,6 +1598,7 @@ message AbilityInfo {
   // otherwise it opens the activation menu and collects mana for a command the engine rejects.
   // Mana affordability is deliberately NOT folded in: mana is floated after the ability is chosen.
   bool activatable = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  PresentationRef presentation = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message BattlefieldObject {

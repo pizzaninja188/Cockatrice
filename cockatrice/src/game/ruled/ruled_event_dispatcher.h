@@ -19,6 +19,7 @@
 #include <QSet>
 #include <QString>
 #include <string>
+#include "ruled_presentation_resolver.h"
 
 namespace ruled::v1
 {
@@ -128,6 +129,7 @@ private:
 
     RuledClientState *state;
     RuledClientHost *host;
+    RuledPresentationResolver presentationResolver;
 };
 
 #endif // COCKATRICE_RULED_EVENT_DISPATCHER_H

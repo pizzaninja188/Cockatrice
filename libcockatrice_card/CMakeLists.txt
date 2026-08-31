@@ -17,6 +17,7 @@ set(HEADERS
     libcockatrice/card/printing/printing_info.h
     libcockatrice/card/set/card_set.h
     libcockatrice/card/relation/card_relation.h
+    libcockatrice/card/ruled_oracle_cache.h
 )
 
 if(Qt6_FOUND)
@@ -41,6 +42,7 @@ add_library(
   libcockatrice/card/printing/exact_card.cpp
   libcockatrice/card/printing/printing_info.cpp
   libcockatrice/card/relation/card_relation.cpp
+  libcockatrice/card/ruled_oracle_cache.cpp
   libcockatrice/card/set/card_set.cpp
   libcockatrice/card/set/card_set_list.cpp
   libcockatrice/card/format/format_legality_rules.cpp

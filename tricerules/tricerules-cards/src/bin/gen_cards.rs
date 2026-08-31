@@ -42,6 +42,7 @@ struct Args {
     metadata: PathBuf,
     oracle_tags: Option<String>,
     out_dir: PathBuf,
+    presentation_registry: PathBuf,
     dry_run: bool,
     check: bool,
     include_new: bool,
@@ -56,6 +57,7 @@ fn print_usage() {
          --metadata <path>  bulk metadata sidecar (default: <input>.meta.json)\n  \
          --oracle-tags <path> optional `oracle_tags` .jsonl.gz advisory report\n  \
          --out-dir <path>   output root (default: data/generated, relative to this crate)\n  \
+         --presentation-registry <path> generated Oracle fingerprint TSV\n  \
          --dry-run          report counts + skip reasons, write nothing\n  \
          --check            verify canonical generated output without writing\n  \
          --include-new      include newly qualifying cards (requires author review)\n  \
@@ -69,6 +71,7 @@ fn parse_args() -> Result<Args, String> {
     let mut metadata: Option<PathBuf> = None;
     let mut oracle_tags: Option<String> = None;
     let mut out_dir: Option<PathBuf> = None;
+    let mut presentation_registry: Option<PathBuf> = None;
     let mut dry_run = false;
     let mut check = false;
     let mut include_new = false;
@@ -84,6 +87,11 @@ fn parse_args() -> Result<Args, String> {
             "--oracle-tags" => oracle_tags = Some(it.next().ok_or("--oracle-tags needs a value")?),
             "--out-dir" => {
                 out_dir = Some(PathBuf::from(it.next().ok_or("--out-dir needs a value")?))
+            }
+            "--presentation-registry" => {
+                presentation_registry = Some(PathBuf::from(
+                    it.next().ok_or("--presentation-registry needs a value")?,
+                ))
             }
             "--dry-run" => dry_run = true,
             "--check" => check = true,
@@ -117,11 +125,17 @@ fn parse_args() -> Result<Args, String> {
             .join("data")
             .join("generated")
     });
+    let presentation_registry = presentation_registry.unwrap_or_else(|| {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("presentation")
+            .join("oracle_fingerprints.tsv")
+    });
     Ok(Args {
         input,
         metadata,
         oracle_tags,
         out_dir,
+        presentation_registry,
         dry_run,
         check,
         include_new,
@@ -1407,6 +1421,101 @@ fn bucket(id: &str) -> char {
         .unwrap_or('_')
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SourcePresentationFace {
+    name: String,
+    oracle_text_sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SourcePresentationCard {
+    name: String,
+    faces: Vec<SourcePresentationFace>,
+}
+
+fn normalized_oracle_text_sha256(text: &str) -> String {
+    let normalized = external_oracle_lines(text).join("\n");
+    format!("{:x}", Sha256::digest(normalized.as_bytes()))
+}
+
+fn source_presentation_card(card: &Value) -> Option<SourcePresentationCard> {
+    let name = str_field(card, "name").trim();
+    if name.is_empty() {
+        return None;
+    }
+    let faces = card
+        .get("card_faces")
+        .and_then(Value::as_array)
+        .filter(|faces| !faces.is_empty())
+        .and_then(|faces| {
+            faces
+                .iter()
+                .map(|face| {
+                    let face_name = str_field(face, "name").trim();
+                    let oracle_text = str_field(face, "oracle_text");
+                    (!face_name.is_empty() && !oracle_text.is_empty()).then(|| {
+                        SourcePresentationFace {
+                            name: face_name.to_string(),
+                            oracle_text_sha256: normalized_oracle_text_sha256(oracle_text),
+                        }
+                    })
+                })
+                .collect::<Option<Vec<_>>>()
+        })
+        .or_else(|| {
+            let oracle_text = str_field(card, "oracle_text");
+            (!oracle_text.is_empty()).then(|| {
+                vec![SourcePresentationFace {
+                    name: name.to_string(),
+                    oracle_text_sha256: normalized_oracle_text_sha256(oracle_text),
+                }]
+            })
+        })?;
+    Some(SourcePresentationCard {
+        name: name.to_string(),
+        faces,
+    })
+}
+
+fn render_presentation_registry(
+    provenance: &str,
+    registry: &CardRegistry,
+    source_cards: &HashMap<String, SourcePresentationCard>,
+) -> String {
+    let mut definitions = registry.definitions().collect::<Vec<_>>();
+    definitions.sort_by(|left, right| left.id.cmp(&right.id));
+    let mut output = format!(
+        "# {provenance}\n# card_id\tcard_name\tface_id\tface_name\tnormalized_oracle_text_sha256\n"
+    );
+    for definition in definitions {
+        let Some(source) = source_cards.get(&definition.id) else {
+            continue;
+        };
+        for face in &definition.faces {
+            let matching = if definition.faces.len() == 1 && source.faces.len() == 1 {
+                source.faces.first()
+            } else {
+                source
+                    .faces
+                    .iter()
+                    .find(|candidate| normalize_name(&candidate.name) == normalize_name(&face.name))
+            };
+            let Some(source_face) = matching else {
+                continue;
+            };
+            output.push_str(&format!(
+                "{}\t{}\t{}\t{}\t{}\n",
+                definition.id,
+                source.name.replace(['\t', '\n', '\r'], " "),
+                face.face_id,
+                source_face.name.replace(['\t', '\n', '\r'], " "),
+                source_face.oracle_text_sha256,
+            ));
+        }
+    }
+    output
+}
+
 const GENERATED_PROVENANCE_PREFIX: &str = "// generated by gen-cards from Scryfall ";
 
 fn collect_ron_files(root: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
@@ -1513,8 +1622,26 @@ fn main() -> ExitCode {
     let mut to_emit: Vec<GenCard> = Vec::new();
     let mut stats = GenerationStats::default();
     let mut unsupported_oracle_ids = HashSet::new();
+    let mut presentation_sources: HashMap<String, SourcePresentationCard> = HashMap::new();
+    let mut ambiguous_presentation_sources = HashSet::new();
 
     let read_count = match for_each_gzipped_jsonl(input_path, |card| {
+        if let Some(card_id) = registry.id_for_name(str_field(&card, "name")) {
+            if !ambiguous_presentation_sources.contains(card_id) {
+                if let Some(source) = source_presentation_card(&card) {
+                    match presentation_sources.get(card_id) {
+                        Some(existing) if existing != &source => {
+                            presentation_sources.remove(card_id);
+                            ambiguous_presentation_sources.insert(card_id.to_string());
+                        }
+                        None => {
+                            presentation_sources.insert(card_id.to_string(), source);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
         match evaluate(
             &card,
             &existing_ids,
@@ -1574,6 +1701,9 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    let expected_presentation_registry =
+        render_presentation_registry(&provenance, &registry, &presentation_sources);
+
     if args.check {
         let mut drift = Vec::new();
         let mut expected_paths = HashSet::new();
@@ -1594,6 +1724,17 @@ fn main() -> ExitCode {
             if !expected_paths.contains(path) {
                 drift.push(format!("stale generated output: {}", path.display()));
             }
+        }
+        match fs::read_to_string(&args.presentation_registry) {
+            Ok(actual) if actual == expected_presentation_registry => {}
+            Ok(_) => drift.push(format!(
+                "content drift: {}",
+                args.presentation_registry.display()
+            )),
+            Err(error) => drift.push(format!(
+                "missing {}: {error}",
+                args.presentation_registry.display()
+            )),
         }
         if !drift.is_empty() {
             eprintln!("generated data is not canonical:\n{}", drift.join("\n"));
@@ -1628,6 +1769,25 @@ fn main() -> ExitCode {
         "Wrote {written} RON file(s) under {}.",
         args.out_dir.display()
     );
+    if args.limit.is_none() {
+        if let Some(parent) = args.presentation_registry.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                eprintln!("error: cannot create {}: {error}", parent.display());
+                return ExitCode::FAILURE;
+            }
+        }
+        if let Err(error) = fs::write(&args.presentation_registry, expected_presentation_registry) {
+            eprintln!(
+                "error: cannot write {}: {error}",
+                args.presentation_registry.display()
+            );
+            return ExitCode::FAILURE;
+        }
+        eprintln!(
+            "Wrote external Oracle fingerprint catalog to {}.",
+            args.presentation_registry.display()
+        );
+    }
     eprintln!("Next: `cargo test` (registry + conformance validate every card), then `./scripts/gen-card-checklist.sh --check`.");
 
     ExitCode::SUCCESS

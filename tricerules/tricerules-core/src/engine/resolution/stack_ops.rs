@@ -484,6 +484,16 @@ pub(super) fn copy_target_spell(
             for copy_num in 0..count {
                 let copy_id = engine.state.next_object_id;
                 engine.state.next_object_id += 1;
+                let copy_presentation = engine
+                    .state
+                    .stack_presentations
+                    .get(&src.id)
+                    .cloned()
+                    .unwrap_or_default();
+                engine
+                    .state
+                    .stack_presentations
+                    .insert(copy_id, copy_presentation.clone());
                 let copy_template = StackItem {
                     id: copy_id,
                     controller,
@@ -678,6 +688,9 @@ pub(super) fn copy_target_spell(
                                 .map(|receipt| receipt.label.clone())
                                 .collect(),
                             source_token_identity: None,
+                            primary_presentation: copy_presentation.primary,
+                            chosen_mode_presentations: copy_presentation.chosen_modes,
+                            chosen_cast_cost_presentations: copy_presentation.chosen_cast_costs,
                         })),
                     });
                     events.push(ev_log(format!(

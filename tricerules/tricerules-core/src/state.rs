@@ -543,6 +543,7 @@ pub struct StagedTrigger {
     pub ability_index: usize,
     pub ability: TriggeredAbilityDef,
     pub ability_text: String,
+    pub presentation: Option<tricerules_proto::ruled::v1::PresentationRef>,
     /// The event's affected players and observed objects, kept separate from CR 115 targets and
     /// preserved while this trigger waits for APNAP ordering or target selection.
     pub trigger_context: TriggerContext,
@@ -604,6 +605,7 @@ pub struct PendingTrigger {
     pub ability_index: usize,
     pub ability: TriggeredAbilityDef,
     pub ability_text: String,
+    pub presentation: Option<tricerules_proto::ruled::v1::PresentationRef>,
     pub card_id: String,
     pub controller: PlayerId,
     /// CR 603.5: an optional triggered ability may be declined before it is put on the stack.
@@ -1295,6 +1297,15 @@ pub struct StackItem {
     pub trigger_context: TriggerContext,
 }
 
+/// Presentation-only metadata for a live stack item. It is keyed separately so the mechanical
+/// stack representation and its copy/resolve semantics remain unchanged.
+#[derive(Debug, Clone, Default)]
+pub struct StackPresentation {
+    pub primary: Option<tricerules_proto::ruled::v1::PresentationRef>,
+    pub chosen_modes: Vec<tricerules_proto::ruled::v1::PresentationRef>,
+    pub chosen_cast_costs: Vec<tricerules_proto::ruled::v1::PresentationRef>,
+}
+
 impl StackItem {
     pub fn cast_cost_condition_matches(&self, condition: CastCostReceiptCondition) -> bool {
         self.cast_cost_receipts.iter().any(|receipt| {
@@ -1400,6 +1411,8 @@ pub struct DelayedTriggerPayload {
     pub card_id: String,
     pub card_name: String,
     pub source_face_index: usize,
+    /// Stable display identity captured while the creating stack item still exists.
+    pub presentation: Option<tricerules_proto::ruled::v1::PresentationRef>,
     pub ability: TriggeredAbilityDef,
 }
 
@@ -1696,6 +1709,7 @@ pub struct GameState {
     /// removes this mapping so a returned Battle must choose again.
     pub battle_protectors: HashMap<ObjectId, PlayerId>,
     pub stack: Vec<StackItem>,
+    pub stack_presentations: HashMap<ObjectId, StackPresentation>,
     /// Index into players for who holds priority
     pub priority_idx: usize,
     pub active_player_idx: usize,
@@ -1801,6 +1815,7 @@ pub struct GameState {
     /// Session-lifetime interning table for structurally identical mana restrictions. The
     /// one-based index is the stable public group id used by commands and UI snapshots.
     pub mana_restrictions: Vec<ManaSpendingRestriction>,
+    pub mana_restriction_presentations: Vec<Option<tricerules_proto::ruled::v1::PresentationRef>>,
     /// Mana abilities the priority player has activated this priority window that are still
     /// inconsequential and may be rewound by `UndoManaAbility` (CR 605 float courtesy). Newest
     /// last. Cleared by any consequential action (see [`UndoableManaAbility`]); empty whenever no
@@ -2056,6 +2071,7 @@ impl GameState {
                     controller: delayed.controller,
                     ability_index: 0,
                     ability_text,
+                    presentation: delayed.presentation,
                     trigger_context: TriggerContext {
                         observed_object: Some(watched),
                         ..TriggerContext::default()

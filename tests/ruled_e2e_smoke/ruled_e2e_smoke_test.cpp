@@ -1100,8 +1100,14 @@ public:
                 }
                 if (cardId == QLatin1String("caustic_exhale")) {
                     sawBeholdStackReceipt =
-                        std::any_of(sp.chosen_cast_cost_labels().begin(), sp.chosen_cast_cost_labels().end(),
-                                    [](const std::string &label) { return label == "Behold a Dragon"; });
+                        std::any_of(sp.chosen_cast_cost_presentations().begin(),
+                                    sp.chosen_cast_cost_presentations().end(), [](const auto &presentation) {
+                                        return presentation.card_id() == "caustic_exhale" &&
+                                               presentation.path_size() >= 3 &&
+                                               presentation.path(presentation.path_size() - 1).kind() ==
+                                                   ruled::v1::PRESENTATION_PATH_KIND_CAST_COST_OPTION &&
+                                               presentation.path(presentation.path_size() - 1).id() == "option_01";
+                                    });
                 }
                 if (harmonizeFlowActive && cardId == QLatin1String("unending_whisper")) {
                     sawHarmonizeStackReceipt =
@@ -1113,12 +1119,17 @@ public:
                                     }) &&
                         QString::fromStdString(sp.ability_annotation()).contains(QStringLiteral("Harmonize"));
                 }
-                const QString annotation = QString::fromStdString(sp.ability_annotation());
-                if (annotation == QLatin1String("Ward {2}")) {
-                    sawWardManaAnnotation = true;
-                }
-                if (annotation == QStringLiteral("Ward—Discard a card")) {
-                    sawWardDiscardAnnotation = true;
+                if (sp.is_triggered() && sp.has_primary_presentation() &&
+                    sp.primary_presentation().path_size() > 0 &&
+                    sp.primary_presentation().path(sp.primary_presentation().path_size() - 1).id() ==
+                        "triggered_01") {
+                    if (wardManaFlowActive &&
+                        sp.primary_presentation().card_id() == "dirgur_island_dragon_skimming_strike") {
+                        sawWardManaAnnotation = true;
+                    }
+                    if (wardDiscardFlowActive && sp.primary_presentation().card_id() == "spectral_snatcher") {
+                        sawWardDiscardAnnotation = true;
+                    }
                 }
                 if (cardId == QLatin1String("dirgur_island_dragon_skimming_strike")) {
                     if (omenSuccessOid == 0) {
@@ -1129,8 +1140,12 @@ public:
                     sawOmenStackAnnotation = sawOmenStackAnnotation || (sp.description() == "Skimming Strike" &&
                                                                         sp.ability_annotation() == "Skimming Strike");
                 }
-                if (sp.is_triggered() && QString::fromStdString(sp.ability_annotation())
-                                             .contains(QStringLiteral("draw two cards"), Qt::CaseInsensitive)) {
+                if (sp.is_triggered() && sp.has_primary_presentation() &&
+                    sp.primary_presentation().card_id() == "derelict_attic_widows_walk" &&
+                    sp.primary_presentation().face_id() == "derelict_attic" &&
+                    sp.primary_presentation().path_size() > 0 &&
+                    sp.primary_presentation().path(sp.primary_presentation().path_size() - 1).id() ==
+                        "triggered_01") {
                     sawRoomUnlockTrigger = true;
                 }
             } else if (ev.has_stack_resolved()) {
@@ -4495,9 +4510,25 @@ TEST_F(RuledE2ESmokeTest, KickedAangSearchSlotsArePrivateAndResolveForBothSeats)
     const auto &ownChoice = *p1.pendingChoice;
     EXPECT_EQ(ownChoice.choice_kind(), ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
     ASSERT_EQ(ownChoice.selection_slots_size(), 2);
-    EXPECT_EQ(ownChoice.selection_slots(0).label(), "a basic land card");
+    EXPECT_EQ(ownChoice.selection_slots(0).label(), "Search choice (slot_01)");
+    ASSERT_TRUE(ownChoice.selection_slots(0).has_presentation());
+    EXPECT_EQ(ownChoice.selection_slots(0).presentation().card_id(), "aangs_journey");
+    ASSERT_GT(ownChoice.selection_slots(0).presentation().path_size(), 0);
+    EXPECT_EQ(ownChoice.selection_slots(0)
+                  .presentation()
+                  .path(ownChoice.selection_slots(0).presentation().path_size() - 1)
+                  .id(),
+              "slot_01");
     EXPECT_GT(ownChoice.selection_slots(0).candidate_indices_size(), 0);
-    EXPECT_EQ(ownChoice.selection_slots(1).label(), "a Shrine card");
+    EXPECT_EQ(ownChoice.selection_slots(1).label(), "Search choice (slot_02)");
+    ASSERT_TRUE(ownChoice.selection_slots(1).has_presentation());
+    EXPECT_EQ(ownChoice.selection_slots(1).presentation().card_id(), "aangs_journey");
+    ASSERT_GT(ownChoice.selection_slots(1).presentation().path_size(), 0);
+    EXPECT_EQ(ownChoice.selection_slots(1)
+                  .presentation()
+                  .path(ownChoice.selection_slots(1).presentation().path_size() - 1)
+                  .id(),
+              "slot_02");
     EXPECT_EQ(ownChoice.selection_slots(1).candidate_indices_size(), 0);
     ASSERT_GT(ownChoice.candidate_object_ids_size(), 0);
     EXPECT_EQ(ownChoice.candidate_object_ids_size(), ownChoice.candidate_server_card_ids_size());

@@ -11,6 +11,7 @@ add_executable(
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_event_dispatcher.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_pending_cast.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_payment.cpp
+  ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_presentation_resolver.cpp
 )
 
 target_include_directories(ruled_client_test PRIVATE ${CMAKE_SOURCE_DIR}/cockatrice/src)
@@ -18,6 +19,7 @@ target_include_directories(ruled_client_test PRIVATE ${CMAKE_SOURCE_DIR}/cockatr
 target_link_libraries(
   ruled_client_test
   PRIVATE libcockatrice_protocol
+  PRIVATE libcockatrice_card
   PRIVATE Threads::Threads
   PRIVATE ${GTEST_BOTH_LIBRARIES}
   PRIVATE ${TEST_QT_MODULES}

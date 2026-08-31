@@ -275,6 +275,7 @@ int OracleImporter::importCardsFromSet(const CardSetPtr &currentSet, const QList
         if (faceName.isEmpty()) {
             faceName = name;
         }
+        oracleFaces.append(RuledOracleFace{name, faceName, text});
 
         // card properties
         QVariantHash properties;
@@ -563,8 +564,16 @@ int OracleImporter::startImport()
 bool OracleImporter::saveToFile(const QString &fileName, const QString &sourceUrl, const QString &sourceVersion)
 {
     CockatriceXml4Parser parser(new NoopCardPreferenceProvider(), new NoopCardSetPriorityController());
-
-    return parser.saveToFile(createDefaultMagicFormats(), sets, cards, fileName, sourceUrl, sourceVersion);
+    if (!parser.saveToFile(createDefaultMagicFormats(), sets, cards, fileName, sourceUrl, sourceVersion)) {
+        return false;
+    }
+    QString error;
+    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(fileName);
+    if (!RuledOracleCache::writeAtomic(cachePath, sourceUrl, sourceVersion, oracleFaces, &error)) {
+        qWarning() << "Failed to save ruled Oracle cache" << cachePath << error;
+        return false;
+    }
+    return true;
 }
 
 void OracleImporter::clear()
@@ -572,4 +581,5 @@ void OracleImporter::clear()
     sets.clear();
     cards.clear();
     allSets.clear();
+    oracleFaces.clear();
 }

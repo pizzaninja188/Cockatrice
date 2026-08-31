@@ -168,6 +168,12 @@ impl GameEngine {
             .iter()
             .map(|receipt| receipt.label.clone())
             .collect();
+        let copy_presentation = self
+            .state
+            .stack_presentations
+            .get(&copy_id)
+            .cloned()
+            .unwrap_or_default();
         self.state.stack.push(copy_item);
         self.state.passes_since_stack_change = 0;
 
@@ -197,6 +203,9 @@ impl GameEngine {
                     chosen_mode_labels: vec![],
                     chosen_cast_cost_labels,
                     source_token_identity: None,
+                    primary_presentation: copy_presentation.primary,
+                    chosen_mode_presentations: copy_presentation.chosen_modes,
+                    chosen_cast_cost_presentations: copy_presentation.chosen_cast_costs,
                 })),
             },
             ev_log(format!(

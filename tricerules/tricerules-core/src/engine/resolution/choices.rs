@@ -1,5 +1,6 @@
 use super::{EffectCx, EffectOutcome};
 use crate::engine::events::ev_log;
+use crate::engine::presentation::{ability_presentation, child_presentation_ref, PresentationPath};
 use crate::engine::{rv1, EngineError};
 use crate::state::{
     ParkedStackResolution, PendingResolution, PendingResolutionBranch,
@@ -263,6 +264,20 @@ fn park_resolution_branches_for(
                 cost_text,
                 selectable: true,
                 search_zones: Vec::new(),
+                presentation: cx
+                    .engine
+                    .state
+                    .stack_presentations
+                    .get(&cx.top.id)
+                    .and_then(|stack| stack.primary.as_ref())
+                    .map(|parent| {
+                        child_presentation_ref(
+                            parent,
+                            PresentationPath::ResolutionBranch(&branch.branch_id),
+                            &branch.presentation,
+                            branch.fallback_label(),
+                        )
+                    }),
             }
         })
         .collect();
@@ -348,6 +363,17 @@ pub(super) fn create_reflexive_trigger(
         .map(|definition| definition.name.clone())
         .unwrap_or_else(|| cx.top.card_id.clone());
     let ability_text = ability.fallback_text(&card_name);
+    let definition = cx.engine.ability_definition(
+        source_id,
+        cx.top.face_index,
+        vec![ability.ability_id.clone()],
+    );
+    let presentation = Some(ability_presentation(
+        cx.engine.registry,
+        &definition,
+        &ability.presentation,
+        ability_text.clone(),
+    ));
     cx.engine
         .state
         .staged_trigger_groups
@@ -376,6 +402,7 @@ pub(super) fn create_reflexive_trigger(
                     triggers_only_once: false,
                 },
                 ability_text,
+                presentation,
                 trigger_context: TriggerContext::default(),
                 may: false,
             }],

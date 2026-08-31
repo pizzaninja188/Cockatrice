@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::presentation::{child_presentation_ref, PresentationPath};
 
 impl GameEngine {
     pub(in crate::engine) fn choose_trigger_target(
@@ -128,6 +129,25 @@ impl GameEngine {
         let virtual_id = pending.object_id;
 
         let ability_text = pending.ability_text.clone();
+        let primary_presentation = pending.presentation.clone();
+        let chosen_mode_presentations = primary_presentation
+            .as_ref()
+            .zip(pending.ability.modal.as_ref())
+            .map(|(parent, modal)| {
+                chosen_modes
+                    .iter()
+                    .filter_map(|chosen| modal.mode_by_id(&chosen.mode_id))
+                    .map(|mode| {
+                        child_presentation_ref(
+                            parent,
+                            PresentationPath::Mode(&mode.mode_id),
+                            &mode.presentation,
+                            mode_fallback(&pending.ability_text, &mode.mode_id),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let card_id = pending.card_id.clone();
         let source_id = pending.source_permanent_id;
         let source_face_index = pending.source_face_index;
@@ -144,6 +164,14 @@ impl GameEngine {
             .collect::<Vec<_>>();
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
 
+        self.state.stack_presentations.insert(
+            virtual_id,
+            StackPresentation {
+                primary: primary_presentation.clone(),
+                chosen_modes: chosen_mode_presentations.clone(),
+                chosen_cast_costs: vec![],
+            },
+        );
         self.state.stack.push(StackItem {
             id: virtual_id,
             controller,
@@ -193,6 +221,9 @@ impl GameEngine {
                 chosen_mode_labels,
                 chosen_cast_cost_labels: vec![],
                 source_token_identity: None,
+                primary_presentation,
+                chosen_mode_presentations,
+                chosen_cast_cost_presentations: vec![],
             })),
         });
 

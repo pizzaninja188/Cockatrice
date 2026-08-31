@@ -5,6 +5,7 @@
 #include <QRegularExpression>
 #include <QVariant>
 #include <libcockatrice/card/card_info.h>
+#include <libcockatrice/card/ruled_oracle_cache.h>
 #include <utility>
 
 // many users prefer not to see these sets with non english arts
@@ -138,6 +139,7 @@ private:
     SetNameMap sets;
 
     QList<SetToDownload> allSets;
+    QList<RuledOracleFace> oracleFaces;
 
     CardInfoPtr addCard(QString name,
                         const QString &text,

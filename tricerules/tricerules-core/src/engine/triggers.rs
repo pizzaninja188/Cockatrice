@@ -1,5 +1,6 @@
 use super::damage::{DamageClassification, DamageRecipient};
 use super::events::{ev_log, ev_trigger_order_required};
+use super::presentation::{ability_presentation, child_presentation_ref, PresentationPath};
 use super::targeting::{
     compute_ability_targets_with_context, legal_target_group_has_minimum, target_schema,
     TargetSourceIdentity,
@@ -21,6 +22,7 @@ pub(super) struct CollectedTrigger {
     pub controller: PlayerId,
     pub ability_index: usize,
     pub ability_origin: Option<TriggerAbilityOrigin>,
+    pub presentation: Option<rv1::PresentationRef>,
     pub ability: TriggeredAbilityDef,
     pub ability_text: String,
     /// The event's affected player ("that player"), when distinct from the ability controller.
@@ -165,6 +167,7 @@ impl GameEngine {
             controller,
             ability_index: usize::MAX,
             ability_origin: None,
+            presentation: None,
             ability: ability.clone(),
             ability_text: ability.fallback_text(
                 self.registry
@@ -266,6 +269,7 @@ impl GameEngine {
                 controller: delayed.controller,
                 ability_index: 0,
                 ability_origin: None,
+                presentation: delayed.presentation,
                 ability_text,
                 trigger_context: TriggerContext {
                     observed_object: Some(watched),
@@ -448,6 +452,31 @@ impl GameEngine {
                     .map(str::to_owned)
                     .unwrap_or_default();
                 let may = trigger.ability.may;
+                let ability_definition = trigger
+                    .ability_origin
+                    .as_ref()
+                    .and_then(|origin| match origin {
+                        TriggerAbilityOrigin::Printed(definition)
+                        | TriggerAbilityOrigin::StaticGrant { definition, .. } => {
+                            Some(definition.clone())
+                        }
+                        TriggerAbilityOrigin::ResolvingGrant(_) => None,
+                    })
+                    .unwrap_or_else(|| {
+                        self.ability_definition(
+                            trigger.source_id,
+                            trigger.face_index,
+                            vec![trigger.ability.ability_id.clone()],
+                        )
+                    });
+                let presentation = trigger.presentation.or_else(|| {
+                    Some(ability_presentation(
+                        self.registry,
+                        &ability_definition,
+                        &trigger.ability.presentation,
+                        trigger.ability_text.clone(),
+                    ))
+                });
                 StagedTrigger {
                     object_id,
                     source_permanent_id: trigger.source_id,
@@ -460,6 +489,7 @@ impl GameEngine {
                     ability_index: trigger.ability_index,
                     ability: trigger.ability,
                     ability_text: trigger.ability_text,
+                    presentation,
                     trigger_context: trigger.trigger_context,
                     may,
                 }
@@ -688,6 +718,7 @@ impl GameEngine {
                                             vec![ability.ability_id.clone()],
                                         ),
                                     )),
+                                    presentation: None,
                                     ability: ability.clone(),
                                     ability_text: ability.fallback_text(&face.name),
                                     trigger_context: TriggerContext::default(),
@@ -1497,6 +1528,7 @@ impl GameEngine {
                 controller,
                 ability_index: idx,
                 ability_origin: Some(origin.clone()),
+                presentation: None,
                 ability: ta.clone(),
                 ability_text: ta.fallback_text_with_path(
                     self.registry
@@ -1740,6 +1772,7 @@ impl GameEngine {
                 controller: source.controller,
                 ability_index: *ability_index,
                 ability_origin: Some(origin.clone()),
+                presentation: None,
                 ability: ability.clone(),
                 ability_text: ability.fallback_text_with_path(
                     &source.face_name,
@@ -1922,6 +1955,7 @@ impl GameEngine {
             ability_index,
             ability,
             ability_text,
+            presentation,
             trigger_context,
             may,
         } = trigger;
@@ -1953,6 +1987,14 @@ impl GameEngine {
                         selectable,
                         needs_target: mode_needs_target,
                         targets: Some(targets),
+                        presentation: presentation.as_ref().map(|parent| {
+                            child_presentation_ref(
+                                parent,
+                                PresentationPath::Mode(&mode.mode_id),
+                                &mode.presentation,
+                                mode_fallback(&ability_text, &mode.mode_id),
+                            )
+                        }),
                     }
                 })
                 .collect::<Vec<_>>()
@@ -1997,6 +2039,7 @@ impl GameEngine {
                 ability_index,
                 ability,
                 ability_text: ability_text.clone(),
+                presentation: presentation.clone(),
                 card_id,
                 controller,
                 trigger_context,
@@ -2015,6 +2058,7 @@ impl GameEngine {
                             min_modes,
                             max_modes,
                             modes: modal_modes.unwrap_or_default(),
+                            ability_presentation: presentation.clone(),
                         },
                     )),
                 });
@@ -2026,6 +2070,13 @@ impl GameEngine {
             // CR 603.3d: a targeted trigger with no legal target is removed from the stack. An
             // optional trigger remains pending so its controller can explicitly decline it.
         } else {
+            self.state.stack_presentations.insert(
+                virtual_id,
+                StackPresentation {
+                    primary: presentation.clone(),
+                    ..Default::default()
+                },
+            );
             self.state.stack.push(StackItem {
                 id: virtual_id,
                 controller,
@@ -2067,6 +2118,9 @@ impl GameEngine {
                     chosen_mode_labels: vec![],
                     chosen_cast_cost_labels: vec![],
                     source_token_identity: None,
+                    primary_presentation: presentation,
+                    chosen_mode_presentations: vec![],
+                    chosen_cast_cost_presentations: vec![],
                 })),
             });
             events.push(ev_log(format!("Triggered: {card_name} — {ability_text}")));

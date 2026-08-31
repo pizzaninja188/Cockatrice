@@ -553,6 +553,37 @@ TEST(RuledProtocolVisibilityTest, EveryBroadcastReachableFieldIsClassifiedAndCle
     }
 }
 
+TEST_F(RuledBatchTest, PresentationReferencesFollowTheirOwningPublicAndPerPlayerSurfaces)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *stack = batch.add_events()->mutable_stack_pushed();
+    stack->set_object_id(700);
+    auto *publicPresentation = stack->mutable_primary_presentation();
+    publicPresentation->set_card_id("public_card");
+    publicPresentation->set_face_id("public_face");
+    publicPresentation->set_fallback_text("public fallback");
+
+    auto &privateLegal = (*batch.mutable_legal_by_player())[p1->getPlayerId()];
+    auto *handAction = privateLegal.add_hand_actions();
+    handAction->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    handAction->mutable_spell_presentation()->set_card_id("private_hand_card");
+    handAction->mutable_spell_presentation()->set_fallback_text("private fallback");
+
+    const auto forController = redactFor(batch, p1);
+    ASSERT_EQ(forController.events_size(), 1);
+    ASSERT_TRUE(forController.events(0).stack_pushed().has_primary_presentation());
+    EXPECT_EQ(forController.events(0).stack_pushed().primary_presentation().card_id(), "public_card");
+    ASSERT_TRUE(forController.legal_by_player().contains(p1->getPlayerId()));
+    ASSERT_EQ(forController.legal_by_player().at(p1->getPlayerId()).hand_actions_size(), 1);
+    EXPECT_EQ(forController.legal_by_player().at(p1->getPlayerId()).hand_actions(0).spell_presentation().card_id(),
+              "private_hand_card");
+
+    const auto forOpponent = redactFor(batch, p2);
+    ASSERT_EQ(forOpponent.events_size(), 1);
+    EXPECT_EQ(forOpponent.events(0).stack_pushed().primary_presentation().card_id(), "public_card");
+    EXPECT_FALSE(forOpponent.legal_by_player().contains(p1->getPlayerId()));
+}
+
 TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
 {
     ruled::v1::RuledEventBatch batch;

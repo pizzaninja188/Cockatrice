@@ -75,6 +75,36 @@ bool isCombatPhase(RuledCombatPhase phase)
            phase == RuledCombatPhase::CombatDamage;
 }
 
+QString resolvedStackAnnotation(const ruled::v1::StackPushed &event,
+                                const RuledPresentationResolver &resolver)
+{
+    QStringList parts;
+    if (event.has_primary_presentation()) {
+        parts.append(resolver.resolve(event.primary_presentation()));
+    }
+    for (const auto &presentation : event.chosen_mode_presentations()) {
+        const QString text = resolver.resolve(presentation);
+        if (!parts.contains(text)) {
+            parts.append(text);
+        }
+    }
+    for (const auto &presentation : event.chosen_cast_cost_presentations()) {
+        const QString text = resolver.resolve(presentation);
+        if (!parts.contains(text)) {
+            parts.append(text);
+        }
+    }
+    const QString legacy = QString::fromStdString(event.ability_annotation());
+    if (parts.isEmpty()) {
+        return legacy;
+    }
+    if ((legacy.contains(QStringLiteral("X =")) || legacy == QStringLiteral("(copy)")) &&
+        !parts.contains(legacy)) {
+        parts.append(legacy);
+    }
+    return parts.join(QLatin1Char('\n'));
+}
+
 RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTargets &src)
 {
     RuledClientState::SpellTargetData data;
@@ -131,7 +161,7 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
     return data;
 }
 
-RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
+RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledPresentationResolver &resolver)
 {
     RuledCostData data;
     data.nonManaCostsPayable = src.non_mana_costs_payable();
@@ -198,14 +228,16 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
     for (const auto &group : src.cast_cost_groups()) {
         RuledCastCostGroup parsedGroup;
         parsedGroup.groupIndex = static_cast<int>(group.group_index());
-        parsedGroup.prompt = QString::fromStdString(group.prompt());
+        parsedGroup.prompt = group.has_presentation() ? resolver.resolve(group.presentation())
+                                                        : QString::fromStdString(group.prompt());
         parsedGroup.min = static_cast<int>(group.min());
         parsedGroup.max = static_cast<int>(group.max());
         parsedGroup.skipLabel = QString::fromStdString(group.skip_label());
         for (const auto &option : group.options()) {
             RuledCastCostOption parsedOption;
             parsedOption.optionIndex = static_cast<int>(option.option_index());
-            parsedOption.label = QString::fromStdString(option.label());
+            parsedOption.label = option.has_presentation() ? resolver.resolve(option.presentation())
+                                                            : QString::fromStdString(option.label());
             switch (option.kind()) {
                 case ruled::v1::CAST_COST_OPTION_KIND_BEHOLD:
                     parsedOption.kind = RuledCastCostOptionKind::Behold;
@@ -251,7 +283,8 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src)
 }
 
 /// Copies the engine's structured hand-action contract into the generic client-side indexes.
-QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::LegalActions &actions)
+QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::LegalActions &actions,
+                                                              const RuledPresentationResolver &resolver)
 {
     QHash<RuledHandActionKind, RuledHandActionSet> parsed;
     for (const auto &action : actions.hand_actions()) {
@@ -266,11 +299,12 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         set.handIndices.insert(handIndex);
         const QString cardName = QString::fromStdString(action.card_name());
         set.indicesByCardName.insert(cardName, handIndex);
-        set.faceOptionsByIndex[handIndex].append({faceIndex, cardName, QString::fromStdString(action.cost()),
-                                                  static_cast<int>(action.generic_cost_reduction()), method,
-                                                  action.has_convoke()});
+        set.faceOptionsByIndex[handIndex].append(
+            {faceIndex, cardName, QString::fromStdString(action.cost()),
+             static_cast<int>(action.generic_cost_reduction()), method, action.has_convoke(), 0,
+             action.has_spell_presentation() ? resolver.resolve(action.spell_presentation()) : QString{}});
         if (action.has_cost_choices()) {
-            set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices()));
+            set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices(), resolver));
         }
         QSet<quint32> eligibleGroups;
         for (const quint32 groupId : action.eligible_restricted_mana_group_ids()) {
@@ -287,7 +321,10 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
             modes.reserve(action.modes_size());
             for (const auto &mode : action.modes()) {
                 modes.append(
-                    {static_cast<int>(mode.mode_index()), QString::fromStdString(mode.label()), mode.selectable(),
+                    {static_cast<int>(mode.mode_index()),
+                     mode.has_presentation() ? resolver.resolve(mode.presentation())
+                                             : QString::fromStdString(mode.label()),
+                     mode.selectable(),
                      mode.needs_target(),
                      mode.has_targets() ? parseSpellTargets(mode.targets()) : RuledClientState::SpellTargetData{}});
             }
@@ -355,6 +392,7 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
 
 void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
 {
+    presentationResolver.refreshForCardDatabase(host->cardDatabasePath());
     BatchContext ctx;
 
     for (const auto &event : batch.events()) {
@@ -596,8 +634,9 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
     }
     // Overlay the annotation on the stack card: an ability's text, an X value for an X spell
     // ("X = N", CR 107.3), or the cast face of a multi-face spell (e.g. "Fire" / "Ice").
-    if (!sp.ability_annotation().empty()) {
-        state->stackAnnotationByOid.insert(sp.object_id(), QString::fromStdString(sp.ability_annotation()));
+    const QString stackAnnotation = resolvedStackAnnotation(sp, presentationResolver);
+    if (!stackAnnotation.isEmpty()) {
+        state->stackAnnotationByOid.insert(sp.object_id(), stackAnnotation);
         // Abilities (no card_id) and spell copies (is_copy) both lack a physical CardItem on the
         // stack and need a synthetic one. A normal spell (non-empty card_id, not a copy) already
         // has a real card.
@@ -706,7 +745,9 @@ void RuledEventDispatcher::applyTriggerNeedsTarget(const ruled::v1::TriggerNeeds
     state->lastTriggerSourceOid = tnt.source_permanent_id();
     state->lastTriggerAbilityIndex = tnt.ability_index();
     state->lastTriggerControllerPlayerId = static_cast<int>(tnt.controller_player_id());
-    const QString abilityText = QString::fromStdString(tnt.ability_text());
+    const QString abilityText = tnt.has_ability_presentation()
+                                    ? presentationResolver.resolve(tnt.ability_presentation())
+                                    : QString::fromStdString(tnt.ability_text());
     // Only the controller parks the choice, so that only they can send ChooseTriggerTarget.
     if (state->lastTriggerControllerPlayerId == host->localPlayerId()) {
         RuledClientState::RuledPendingChoice choice;
@@ -720,7 +761,8 @@ void RuledEventDispatcher::applyTriggerNeedsTarget(const ruled::v1::TriggerNeeds
         for (const auto &mode : tnt.modes()) {
             RuledChoiceOption option;
             option.index = static_cast<int>(mode.mode_index());
-            option.label = QString::fromStdString(mode.label());
+            option.label = mode.has_presentation() ? presentationResolver.resolve(mode.presentation())
+                                                   : QString::fromStdString(mode.label());
             option.enabled = mode.selectable();
             option.needsTarget = mode.needs_target();
             if (mode.has_targets()) {
@@ -752,7 +794,9 @@ void RuledEventDispatcher::applyTriggerOrderRequired(const ruled::v1::TriggerOrd
         candidate.oid = c.trigger_object_id();
         candidate.sourceOid = c.source_permanent_id();
         candidate.cardName = QString::fromStdString(c.source_card_name());
-        candidate.abilityText = QString::fromStdString(c.ability_text());
+        candidate.abilityText = c.has_ability_presentation()
+                                    ? presentationResolver.resolve(c.ability_presentation())
+                                    : QString::fromStdString(c.ability_text());
         candidates.append(candidate);
     }
     state->triggerOrderCandidateOids.clear();
@@ -845,7 +889,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         for (const auto &branch : rcr.resolution_branches()) {
             RuledChoiceOption option;
             option.index = static_cast<int>(branch.branch_index());
-            option.label = QString::fromStdString(branch.label());
+            option.label = branch.has_presentation() ? presentationResolver.resolve(branch.presentation())
+                                                     : QString::fromStdString(branch.label());
             option.enabled = branch.selectable();
             for (const int rawZone : branch.search_zones()) {
                 if (rawZone != ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND &&
@@ -1093,7 +1138,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
                 return;
             }
             for (const auto &slot : rcr.selection_slots()) {
-                if (slot.label().empty()) {
+                const QString slotLabel = slot.has_presentation() ? presentationResolver.resolve(slot.presentation())
+                                                                  : QString::fromStdString(slot.label());
+                if (slotLabel.isEmpty()) {
                     qWarning() << "Rejecting ruled library search with an empty slot label";
                     return;
                 }
@@ -1105,7 +1152,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
                     }
                     slotServerCardIds.insert(rcr.candidate_server_card_ids(static_cast<int>(candidateIndex)));
                 }
-                pick.selectionSlotLabels.append(QString::fromStdString(slot.label()));
+                pick.selectionSlotLabels.append(slotLabel);
                 pick.selectionSlotServerCardIds.append(std::move(slotServerCardIds));
             }
             pick.promptText += tr("\nSearch slots: %1").arg(pick.selectionSlotLabels.join(tr("; ")));
@@ -1358,7 +1405,8 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
             QStringList costLabels;
             QVector<bool> activatable;
             for (const auto &ability : battlefieldObject.activated_abilities()) {
-                texts.append(QString::fromStdString(ability.text()));
+                texts.append(ability.has_presentation() ? presentationResolver.resolve(ability.presentation())
+                                                        : QString::fromStdString(ability.text()));
                 manaCosts.append(QString::fromStdString(ability.mana_cost()));
                 manaProduced.append(QString::fromStdString(ability.mana_produced()));
                 costLabels.append(QString::fromStdString(ability.cost_label()));
@@ -1527,7 +1575,9 @@ void RuledEventDispatcher::applyManaPoolUpdated(const ruled::v1::ManaPoolUpdated
     for (const auto &group : mpu.restricted_groups()) {
         groups.append({group.restriction_group_id(), static_cast<int>(group.w()), static_cast<int>(group.u()),
                        static_cast<int>(group.b()), static_cast<int>(group.r()), static_cast<int>(group.g()),
-                       static_cast<int>(group.c()), QString::fromStdString(group.display_label())});
+                       static_cast<int>(group.c()),
+                       group.has_presentation() ? presentationResolver.resolve(group.presentation())
+                                                : QString::fromStdString(group.display_label())});
     }
     std::sort(groups.begin(), groups.end(),
               [](const auto &left, const auto &right) { return left.groupId < right.groupId; });
@@ -1542,7 +1592,7 @@ void RuledEventDispatcher::applyManaPoolUpdated(const ruled::v1::ManaPoolUpdated
 
 void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &actions, BatchContext &ctx)
 {
-    state->handActions = copyHandActions(actions);
+    state->handActions = copyHandActions(actions, presentationResolver);
     for (const auto &action : actions.zone_cast_actions()) {
         const int objectId = static_cast<int>(action.object_id());
         const int faceIndex = static_cast<int>(action.face_index());
@@ -1563,14 +1613,17 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         state->zoneCastActions.faceOptionsByIndex[objectId].append(
             {faceIndex, displayName, QString::fromStdString(action.cost()),
              static_cast<int>(action.generic_cost_reduction()), castMethod, action.has_convoke(),
-             action.zone_change_generation()});
+             action.zone_change_generation(),
+             action.has_spell_presentation() ? presentationResolver.resolve(action.spell_presentation())
+                                             : QString{}});
         state->zoneCastSourceByOid.insert(objectId, source);
         if (action.needs_target()) {
             state->zoneCastActions.needsTargetIndices.insert(objectId);
         }
         state->zoneCastCostsByCastKey.insert(castKey, QString::fromStdString(action.cost()));
         if (action.has_cost_choices()) {
-            state->zoneCastActions.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices()));
+            state->zoneCastActions.costDataByCastKey.insert(castKey,
+                                                            parseCostData(action.cost_choices(), presentationResolver));
         }
         QSet<quint32> eligibleGroups;
         for (const quint32 groupId : action.eligible_restricted_mana_group_ids()) {
@@ -1583,7 +1636,10 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
             QVector<RuledModalSpellOption> modes;
             for (const auto &mode : action.modes()) {
                 modes.append(
-                    {static_cast<int>(mode.mode_index()), QString::fromStdString(mode.label()), mode.selectable(),
+                    {static_cast<int>(mode.mode_index()),
+                     mode.has_presentation() ? presentationResolver.resolve(mode.presentation())
+                                             : QString::fromStdString(mode.label()),
+                     mode.selectable(),
                      mode.needs_target(),
                      mode.has_targets() ? parseSpellTargets(mode.targets()) : RuledClientState::SpellTargetData{}});
             }
@@ -1629,7 +1685,8 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     }
     state->abilityCostData.clear();
     for (const auto &entry : actions.cost_choices_by_ability()) {
-        state->abilityCostData.insert(static_cast<quint64>(entry.first), parseCostData(entry.second));
+        state->abilityCostData.insert(static_cast<quint64>(entry.first),
+                                      parseCostData(entry.second, presentationResolver));
     }
     state->eligibleRestrictedManaByAbility.clear();
     state->waterbendAbilities.clear();
@@ -1683,7 +1740,8 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
             costLabels.append(QString{});
             activatable.append(false);
         }
-        texts[abilityIndex] = QString::fromStdString(ability.text());
+        texts[abilityIndex] = ability.has_presentation() ? presentationResolver.resolve(ability.presentation())
+                                                        : QString::fromStdString(ability.text());
         manaCosts[abilityIndex] = QString::fromStdString(ability.mana_cost());
         manaProduced[abilityIndex] = QString::fromStdString(ability.mana_produced());
         costLabels[abilityIndex] = QString::fromStdString(ability.cost_label());

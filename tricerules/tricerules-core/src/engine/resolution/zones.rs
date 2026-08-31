@@ -1,4 +1,5 @@
 use super::super::events::ev_log_private;
+use super::super::presentation::{child_presentation_ref, PresentationPath};
 use super::candidate_identities;
 use super::*;
 
@@ -790,6 +791,7 @@ pub(super) fn put_in_owners_library(
                                 cost_text: String::new(),
                                 selectable: true,
                                 search_zones: Vec::new(),
+                                presentation: None,
                             },
                             rv1::ResolutionBranchOption {
                                 branch_index: 1,
@@ -798,6 +800,7 @@ pub(super) fn put_in_owners_library(
                                 cost_text: String::new(),
                                 selectable: true,
                                 search_zones: Vec::new(),
+                                presentation: None,
                             },
                         ],
                         mana_cost: String::new(),
@@ -2325,6 +2328,19 @@ pub(in crate::engine) fn park_zone_search_choice(
                     .then_some(index as u32)
                 })
                 .collect(),
+            presentation: engine
+                .state
+                .stack_presentations
+                .get(&top.id)
+                .and_then(|stack| stack.primary.as_ref())
+                .map(|parent| {
+                    child_presentation_ref(
+                        parent,
+                        PresentationPath::SearchSlot(&slot.slot_id),
+                        &slot.presentation,
+                        slot.fallback_label(),
+                    )
+                }),
         })
         .collect();
     let selection_slot_candidates = selection_slots
@@ -2475,6 +2491,7 @@ pub(super) fn search_library(
                     cost_text: String::new(),
                     selectable: true,
                     search_zones: zones.iter().map(|zone| search_zone_proto(*zone)).collect(),
+                    presentation: None,
                 })
                 .collect();
             cx.events.push(rv1::RuledEvent {

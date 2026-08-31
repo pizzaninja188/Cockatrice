@@ -1,6 +1,7 @@
 use super::casting::castable_at_instant_speed;
 use super::combat::priority_locked_for_combat_declaration;
 use super::events::object_display_name;
+use super::presentation::{presentation_ref, PresentationPath};
 use super::priority::{instant_timing_step_allowed, sorcery_speed_available};
 use super::targeting::{
     compute_ability_targets, compute_ability_targets_with_context, compute_spell_targets,
@@ -310,6 +311,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
 fn activated_ability_info(
     eng: &GameEngine,
     source_id: ObjectId,
+    face_index: usize,
     ability_index: usize,
     ability: &ActivatedAbilityDef,
 ) -> rv1::AbilityInfo {
@@ -358,16 +360,30 @@ fn activated_ability_info(
         })
         .collect::<Vec<_>>()
         .join(", ");
+    let fallback = ability.fallback_text(
+        &eng.effective_face(source_id)
+            .map(|face| face.name.clone())
+            .unwrap_or_else(|| "Unknown card".into()),
+    );
+    let definition =
+        eng.ability_definition(source_id, face_index, vec![ability.ability_id.clone()]);
     rv1::AbilityInfo {
-        text: ability.fallback_text(
-            &eng.effective_face(source_id)
-                .map(|face| face.name.clone())
-                .unwrap_or_else(|| "Unknown card".into()),
-        ),
+        text: fallback.clone(),
         mana_cost,
         mana_produced,
         cost_label,
         activatable: eng.ability_activatable(source_id, ability_index, ability),
+        presentation: Some(presentation_ref(
+            eng.registry,
+            &definition.card_id,
+            &definition.face_id,
+            definition
+                .ability_path
+                .iter()
+                .map(PresentationPath::Ability),
+            &ability.presentation,
+            fallback,
+        )),
     }
 }
 
@@ -402,7 +418,7 @@ fn legal_zone_ability_actions(
                 .get(&object_id)
                 .copied()
                 .unwrap_or(0);
-            for (ability_index, ability, _) in
+            for (ability_index, ability, face_index) in
                 eng.authored_zone_activated_abilities(object_id, source_zone)
             {
                 actions.push(rv1::LegalZoneAbilityAction {
@@ -422,6 +438,7 @@ fn legal_zone_ability_actions(
                     ability: Some(activated_ability_info(
                         eng,
                         object_id,
+                        face_index,
                         ability_index,
                         &ability,
                     )),
@@ -707,6 +724,8 @@ fn legal_spell_cost_choices(
     eng: &GameEngine,
     player: PlayerId,
     source: ObjectId,
+    card_id: &str,
+    face: &CardFace,
     costs: &[AdditionalCost],
     cast_cost_groups: &[CastCostGroupDef],
 ) -> rv1::LegalCostChoices {
@@ -832,21 +851,54 @@ fn legal_spell_cost_choices(
                 .iter()
                 .enumerate()
                 .map(|(option_index, option)| match option {
-                    CastCostOptionDef::Mana { cost, .. } => rv1::LegalCastCostOption {
+                    CastCostOptionDef::Mana {
+                        option_id,
+                        presentation,
+                        cost,
+                        ..
+                    } => rv1::LegalCastCostOption {
                         option_index: option_index as u32,
                         label: option.fallback_label(),
                         kind: rv1::CastCostOptionKind::Mana as i32,
                         additional_mana_cost: cost.to_string(),
                         selectable: true,
+                        presentation: Some(presentation_ref(
+                            eng.registry,
+                            card_id,
+                            &face.face_id,
+                            [
+                                PresentationPath::Spell,
+                                PresentationPath::CastCostGroup(&group.group_id),
+                                PresentationPath::CastCostOption(option_id),
+                            ],
+                            presentation,
+                            option.fallback_label(),
+                        )),
                         ..Default::default()
                     },
-                    CastCostOptionDef::Blight { .. } => {
+                    CastCostOptionDef::Blight {
+                        option_id,
+                        presentation,
+                        ..
+                    } => {
                         let candidates = eng.blight_candidates(player);
                         rv1::LegalCastCostOption {
                             option_index: option_index as u32,
                             label: option.fallback_label(),
                             kind: rv1::CastCostOptionKind::Blight as i32,
                             selectable: !candidates.is_empty(),
+                            presentation: Some(presentation_ref(
+                                eng.registry,
+                                card_id,
+                                &face.face_id,
+                                [
+                                    PresentationPath::Spell,
+                                    PresentationPath::CastCostGroup(&group.group_id),
+                                    PresentationPath::CastCostOption(option_id),
+                                ],
+                                presentation,
+                                option.fallback_label(),
+                            )),
                             valid_permanent_generations: candidates
                                 .iter()
                                 .map(|oid| {
@@ -862,6 +914,8 @@ fn legal_spell_cost_choices(
                         }
                     }
                     CastCostOptionDef::Behold {
+                        option_id,
+                        presentation,
                         hand_filter,
                         permanent_filter,
                         ..
@@ -917,6 +971,18 @@ fn legal_spell_cost_choices(
                             valid_permanent_ids,
                             valid_permanent_generations,
                             selectable,
+                            presentation: Some(presentation_ref(
+                                eng.registry,
+                                card_id,
+                                &face.face_id,
+                                [
+                                    PresentationPath::Spell,
+                                    PresentationPath::CastCostGroup(&group.group_id),
+                                    PresentationPath::CastCostOption(option_id),
+                                ],
+                                presentation,
+                                option.fallback_label(),
+                            )),
                             ..Default::default()
                         }
                     }
@@ -932,6 +998,17 @@ fn legal_spell_cost_choices(
                 max: group.max,
                 options,
                 skip_label: String::new(),
+                presentation: Some(presentation_ref(
+                    eng.registry,
+                    card_id,
+                    &face.face_id,
+                    [
+                        PresentationPath::Spell,
+                        PresentationPath::CastCostGroup(&group.group_id),
+                    ],
+                    &group.presentation,
+                    group.fallback_prompt(),
+                )),
             }
         })
         .collect();
@@ -993,6 +1070,7 @@ fn harmonize_cast_cost_group(
             ..Default::default()
         }],
         skip_label: "Pay full Harmonize cost".to_string(),
+        presentation: None,
     }
 }
 
@@ -1060,6 +1138,7 @@ fn hand_action(
         generic_cost_reduction: 0,
         has_convoke: false,
         cast_method: rv1::CastMethod::Normal as i32,
+        spell_presentation: None,
     }
 }
 
@@ -1204,6 +1283,8 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 eng,
                 pid,
                 oid,
+                card_id,
+                face,
                 &face.additional_costs,
                 &face.cast_cost_groups,
             );
@@ -1216,6 +1297,16 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     face_index,
                     target_schema(&face.spell_effect, face.targeting.as_ref()).has_targets(),
                 );
+                action.spell_presentation = face.spell_presentation.as_ref().map(|mapping| {
+                    presentation_ref(
+                        eng.registry,
+                        card_id,
+                        &face.face_id,
+                        [PresentationPath::Spell],
+                        mapping,
+                        face.name.clone(),
+                    )
+                });
                 action.eligible_restricted_mana_group_ids =
                     eng.eligible_restricted_mana_for_spell(player_index, face);
                 action.cost = face.mana_cost.to_string();
@@ -1252,6 +1343,17 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                                 selectable,
                                 needs_target,
                                 targets: Some(targets),
+                                presentation: Some(presentation_ref(
+                                    eng.registry,
+                                    card_id,
+                                    &face.face_id,
+                                    [
+                                        PresentationPath::Spell,
+                                        PresentationPath::Mode(&mode.mode_id),
+                                    ],
+                                    &mode.presentation,
+                                    mode_fallback(&face.name, &mode.mode_id),
+                                )),
                             }
                         })
                         .collect();
@@ -1318,6 +1420,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     eng,
                     pid,
                     oid,
+                    card_id,
+                    face,
                     &face.additional_costs,
                     &face.cast_cost_groups,
                 );
@@ -1363,6 +1467,16 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     ),
                     cast_method: cast_method as i32,
                     has_convoke: face.keywords.contains(&Keyword::Convoke),
+                    spell_presentation: face.spell_presentation.as_ref().map(|mapping| {
+                        presentation_ref(
+                            eng.registry,
+                            card_id,
+                            &face.face_id,
+                            [PresentationPath::Spell],
+                            mapping,
+                            face.name.clone(),
+                        )
+                    }),
                 };
                 if !cost_choices.non_mana_costs_payable {
                     continue;
@@ -1394,6 +1508,17 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                                 selectable,
                                 needs_target,
                                 targets: Some(targets),
+                                presentation: Some(presentation_ref(
+                                    eng.registry,
+                                    card_id,
+                                    &face.face_id,
+                                    [
+                                        PresentationPath::Spell,
+                                        PresentationPath::Mode(&mode.mode_id),
+                                    ],
+                                    &mode.presentation,
+                                    mode_fallback(&face.name, &mode.mode_id),
+                                )),
                             }
                         })
                         .collect();
@@ -1453,6 +1578,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 eng,
                 pid,
                 object.id,
+                &object.card_id,
+                face,
                 &face.additional_costs,
                 &face.cast_cost_groups,
             );
@@ -1483,6 +1610,16 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 ),
                 cast_method: rv1::CastMethod::Normal as i32,
                 has_convoke: face.keywords.contains(&Keyword::Convoke),
+                spell_presentation: face.spell_presentation.as_ref().map(|mapping| {
+                    presentation_ref(
+                        eng.registry,
+                        &object.card_id,
+                        &face.face_id,
+                        [PresentationPath::Spell],
+                        mapping,
+                        face.name.clone(),
+                    )
+                }),
             };
             if !cost_choices.non_mana_costs_payable {
                 continue;
@@ -1512,6 +1649,17 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                             selectable: !needs_target || spell_targets_have_candidate(&targets),
                             needs_target,
                             targets: Some(targets),
+                            presentation: Some(presentation_ref(
+                                eng.registry,
+                                &object.card_id,
+                                &face.face_id,
+                                [
+                                    PresentationPath::Spell,
+                                    PresentationPath::Mode(&mode.mode_id),
+                                ],
+                                &mode.presentation,
+                                mode_fallback(&face.name, &mode.mode_id),
+                            )),
                         }
                     })
                     .collect();
@@ -1765,6 +1913,8 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
                         eng,
                         pid,
                         oid,
+                        cid,
+                        face,
                         &face.additional_costs,
                         &face.cast_cost_groups,
                     );

@@ -295,10 +295,23 @@ fn waterbend_lesson_decline_restores_branch_without_drawing_again() {
         })),
     };
     let branch = engine.apply_command(0, &decline).unwrap();
-    assert_eq!(
-        find_resolution_choice(&branch).unwrap().choice_kind(),
-        rv1::ChoiceKind::ResolutionBranch
-    );
+    let branch = find_resolution_choice(&branch).unwrap();
+    assert_eq!(branch.choice_kind(), rv1::ChoiceKind::ResolutionBranch);
+    assert_eq!(branch.resolution_branches.len(), 2);
+    for (option, expected_id) in branch
+        .resolution_branches
+        .iter()
+        .zip(["waterbend_2", "discard_a_card"])
+    {
+        let presentation = option
+            .presentation
+            .as_ref()
+            .expect("stable resolution branch identity");
+        assert_eq!(presentation.card_id, "waterbending_lesson");
+        assert_eq!(presentation.face_id, "waterbending_lesson");
+        assert!(presentation.oracle_line_indices.is_empty());
+        assert_eq!(presentation.path.last().unwrap().id, expected_id);
+    }
     assert!(!engine.state.objects[&island].tapped);
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
     assert_eq!(engine.state.players[0].hand.len(), before_draw + 3);

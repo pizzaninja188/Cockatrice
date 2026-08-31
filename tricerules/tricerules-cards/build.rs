@@ -20,6 +20,7 @@ fn collect_ron_files(dir: &Path, out: &mut Vec<PathBuf>) {
 fn main() {
     // Directory-level: re-runs on file adds, removes, and edits anywhere under data/.
     println!("cargo:rerun-if-changed=data");
+    println!("cargo:rerun-if-changed=presentation/oracle_fingerprints.tsv");
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
     let mut files = Vec::new();
@@ -57,6 +58,31 @@ fn main() {
     token_list.push_str("];\n");
     generated.push_str(&card_list);
     generated.push_str(&token_list);
+
+    let presentation_source =
+        fs::read_to_string(manifest_dir.join("presentation/oracle_fingerprints.tsv"))
+            .expect("read generated presentation fingerprints");
+    generated.push_str(
+        "/// Generated external Oracle compatibility metadata. No Oracle prose is embedded.\n\
+         const EMBEDDED_PRESENTATION_FACES: &[(&str, &str, &str, &str, &str)] = &[\n",
+    );
+    for (line_number, line) in presentation_source.lines().enumerate() {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<_> = line.split('\t').collect();
+        assert_eq!(
+            fields.len(),
+            5,
+            "presentation fingerprint line {} must have five tab-separated fields",
+            line_number + 1
+        );
+        generated.push_str(&format!(
+            "    ({:?}, {:?}, {:?}, {:?}, {:?}),\n",
+            fields[0], fields[1], fields[2], fields[3], fields[4]
+        ));
+    }
+    generated.push_str("];\n");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("embedded_cards.rs");
     fs::write(&out_path, generated).expect("write embedded_cards.rs");

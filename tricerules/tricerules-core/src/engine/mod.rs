@@ -18,7 +18,7 @@ use crate::state::{
     PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
     PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
     ReplacementPriority, ResolutionContinuation, ResolutionReceipt, RoomState, SpellCastMethod,
-    StackItem, StackObjectRef, StackTarget, StagedTrigger, StagedTriggerGroup,
+    StackItem, StackObjectRef, StackPresentation, StackTarget, StagedTrigger, StagedTriggerGroup,
     TokenBattlefieldEntry, TriggerAbilityOrigin, TriggerContext, TriggerObjectRef, TriggerUseKey,
     TurnHistory, TurnObjectFact, TurnStep, UndoableManaAbility, Zone,
 };
@@ -163,6 +163,7 @@ mod issue_169_taps;
 mod legal_actions;
 mod opening;
 mod payment;
+mod presentation;
 mod priority;
 pub(crate) mod replacement;
 mod resolution;
@@ -975,6 +976,7 @@ impl GameEngine {
             room_states: HashMap::new(),
             battle_protectors: HashMap::new(),
             stack: Vec::new(),
+            stack_presentations: HashMap::new(),
             priority_idx: if skip_opening_sequence {
                 0
             } else {
@@ -1025,6 +1027,7 @@ impl GameEngine {
             death_replacement_effects: Vec::new(),
             next_replacement_application_id: 1,
             mana_restrictions: Vec::new(),
+            mana_restriction_presentations: Vec::new(),
             undoable_mana_abilities: Vec::new(),
             untapped_this_command: Vec::new(),
         };

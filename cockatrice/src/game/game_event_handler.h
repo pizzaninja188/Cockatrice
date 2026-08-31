@@ -175,6 +175,7 @@ private:
     [[nodiscard]] QString stackCardProviderId(quint32 oid) const override;
     [[nodiscard]] bool fallbackCreaturePt(quint32 engineOid, int *power, int *toughness) const override;
     [[nodiscard]] QString battlefieldCardName(quint32 engineOid) const override;
+    [[nodiscard]] QString cardDatabasePath() const override;
     void sendRuledCommand(const ruled::v1::RuledCommand &command) override;
     void sendRuledCommandExpectingAck(const ruled::v1::RuledCommand &command,
                                       std::function<void(bool accepted)> onFinished) override;

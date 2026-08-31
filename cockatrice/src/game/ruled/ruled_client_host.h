@@ -66,6 +66,11 @@ public:
     [[nodiscard]] virtual bool fallbackCreaturePt(quint32 engineOid, int *power, int *toughness) const = 0;
     /// Display name of a battlefield permanent, for prompt text. Empty when unresolvable.
     [[nodiscard]] virtual QString battlefieldCardName(quint32 engineOid) const = 0;
+    /// Active cards.xml path; the presentation resolver watches the adjacent external cache.
+    [[nodiscard]] virtual QString cardDatabasePath() const
+    {
+        return {};
+    }
 
     /// Transport for a ruled command produced by the view-model (resolution picks, combat
     /// damage assignment, previews). The host wraps it in `Command_RuledPayload` and sends it.

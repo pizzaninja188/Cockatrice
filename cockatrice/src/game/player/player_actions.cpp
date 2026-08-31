@@ -2140,6 +2140,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
         if (face.faceIndex == faceIndex && face.castMethod == castMethod) {
             pendingRuledSpellCast.hasConvoke = face.hasConvoke;
             pendingRuledSpellCast.sourceZoneChangeGeneration = face.zoneChangeGeneration;
+            pendingRuledSpellCast.presentationText = face.presentationText;
         }
 
     pendingRuledSpellCast.selectedTargetOids.clear();

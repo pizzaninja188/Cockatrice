@@ -7,6 +7,7 @@ use tricerules_core::state::{
     ActiveEventObserver, DelayedTriggerPayload, EventObserverMatcher, EventObserverPayload,
     TriggerObjectRef,
 };
+use tricerules_proto::ruled::v1 as rv1;
 
 #[test]
 fn infernal_scarring_grants_the_creature_controller_a_dies_trigger() {
@@ -386,6 +387,12 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
         .get(&creature)
         .copied()
         .unwrap_or(0);
+    let delayed_presentation = rv1::PresentationRef {
+        card_id: "grizzly_bears".into(),
+        face_id: "front".into(),
+        fallback_text: "At the beginning of the next end step, tap it.".into(),
+        ..Default::default()
+    };
     e.state.active_event_observers.push(ActiveEventObserver {
         watched: TriggerObjectRef {
             object_id: creature,
@@ -403,6 +410,7 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
             card_id: "grizzly_bears".into(),
             card_name: "Grizzly Bears".into(),
             source_face_index: 0,
+            presentation: Some(delayed_presentation.clone()),
             ability: TriggeredAbilityDef {
                 ability_id: AbilityId::new("delayed_tap").unwrap(),
                 presentation: AbilityPresentation::Fallback,
@@ -434,6 +442,11 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
         .expect("main2 to end step");
 
     assert_eq!(e.state.stack.len(), 1);
+    assert_eq!(
+        e.state.stack_presentations[&e.state.stack[0].id].primary,
+        Some(delayed_presentation),
+        "delayed triggers must retain their stable presentation identity when staged"
+    );
     assert!(e.state.active_event_observers.is_empty());
     resolve_entire_stack_two_player(&mut e);
     assert!(e.state.objects[&creature].tapped);

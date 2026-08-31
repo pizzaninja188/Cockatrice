@@ -718,6 +718,14 @@ fn embercat_restricted_mana_requires_matching_explicit_payment() {
         .expect("restricted pool group");
     assert_eq!(group.r, 1);
     assert!(group.display_label.contains("Elemental"));
+    let presentation = group
+        .presentation
+        .as_ref()
+        .expect("restricted mana presentation identity");
+    assert_eq!(presentation.card_id, "chandras_embercat");
+    assert_eq!(presentation.face_id, "chandra_s_embercat");
+    assert_eq!(presentation.oracle_line_indices, [1]);
+    assert_eq!(presentation.path.last().unwrap().id, "restriction_01");
     let group_id = group.restriction_group_id;
 
     inject_card_into_hand(&mut e, 0, "hill_giant");

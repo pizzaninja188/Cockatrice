@@ -3,6 +3,7 @@
 pub mod card_def;
 pub mod identity;
 pub mod mana;
+pub mod presentation;
 pub mod primitives;
 pub mod registry;
 pub mod slug;
@@ -18,6 +19,7 @@ pub use identity::{
     IdentifiedAbility, ModeId,
 };
 pub use mana::{ColorPip, ManaCost, ManaSymbol};
+pub use presentation::PresentationFaceMetadata;
 pub use primitives::{
     AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivationCondition, ActivationTiming,
     AdditionalCost, Amount, BattlefieldAggregate, BattlefieldCreatureCountFilter,

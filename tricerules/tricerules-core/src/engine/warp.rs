@@ -1,6 +1,7 @@
 //! CR 702.185: Warp's cast receipt, delayed exile, and owner casting permission.
 //! Shared by Knight Luminary, Weftblade Enhancer, and Perigee Beckoner.
 
+use super::presentation::{child_presentation_ref, PresentationPath};
 use super::*;
 
 impl GameEngine {
@@ -29,6 +30,38 @@ impl GameEngine {
         self.state
             .warped_permanent_incarnations
             .insert((object_id, watched.zone_change_generation));
+        let card_name = self
+            .registry
+            .get(&item.card_id)
+            .map(|c| c.name.clone())
+            .unwrap_or_default();
+        let ability = TriggeredAbilityDef {
+            ability_id: tricerules_cards::AbilityId::new("warp_exile")
+                .expect("intrinsic ability id"),
+            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            trigger: TriggerCondition::AtBeginningOfNextEndStep,
+            effect: vec![SpellEffectKind::ExileWarpedObject],
+            modal: None,
+            targeting: None,
+            may: false,
+            intervening_if: None,
+            triggers_only_once: false,
+            max_triggers_per_turn: None,
+        };
+        let ability_text = ability.fallback_text(&card_name);
+        let presentation = self
+            .state
+            .stack_presentations
+            .get(&item.id)
+            .and_then(|stack| stack.primary.as_ref())
+            .map(|parent| {
+                child_presentation_ref(
+                    parent,
+                    PresentationPath::Ability(&ability.ability_id),
+                    &ability.presentation,
+                    ability_text,
+                )
+            });
         self.state.active_event_observers.push(ActiveEventObserver {
             watched,
             matcher: EventObserverMatcher::AtBeginningOfNextEndStep,
@@ -36,25 +69,10 @@ impl GameEngine {
                 source: watched,
                 controller: item.controller,
                 card_id: item.card_id.clone(),
-                card_name: self
-                    .registry
-                    .get(&item.card_id)
-                    .map(|c| c.name.clone())
-                    .unwrap_or_default(),
+                card_name,
                 source_face_index: item.face_index,
-                ability: TriggeredAbilityDef {
-                    ability_id: tricerules_cards::AbilityId::new("warp_exile")
-                        .expect("intrinsic ability id"),
-                    presentation: tricerules_cards::AbilityPresentation::Fallback,
-                    trigger: TriggerCondition::AtBeginningOfNextEndStep,
-                    effect: vec![SpellEffectKind::ExileWarpedObject],
-                    modal: None,
-                    targeting: None,
-                    may: false,
-                    intervening_if: None,
-                    triggers_only_once: false,
-                    max_triggers_per_turn: None,
-                },
+                presentation,
+                ability,
             })),
         });
     }
@@ -248,6 +266,24 @@ mod tests {
             engine.state.stack.len(),
             1,
             "Warp must use a respondable delayed trigger"
+        );
+        let delayed_presentation = engine.state.stack_presentations[&engine.state.stack[0].id]
+            .primary
+            .as_ref()
+            .expect("displayed Warp delayed trigger keeps presentation identity");
+        assert_eq!(delayed_presentation.card_id, "warp_test");
+        assert_eq!(delayed_presentation.face_id, "warp_test");
+        assert_eq!(
+            delayed_presentation
+                .path
+                .iter()
+                .map(|component| component.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["spell", "warp_exile"]
+        );
+        assert_eq!(
+            delayed_presentation.path[1].kind,
+            rv1::PresentationPathKind::Ability as i32
         );
         resolve(&mut engine);
         assert_eq!(engine.state.objects[&oid].zone, Zone::Exile);

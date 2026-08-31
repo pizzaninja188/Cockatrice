@@ -4,6 +4,9 @@ use super::legal_actions::fill_legal;
 #[cfg(test)]
 use super::payment::{commit_mana_payment, pay_mana, plan_mana_payment_with_reduction};
 use super::payment::{PaidCardCost, SacrificeSnapshot};
+use super::presentation::{
+    ability_presentation, child_presentation_ref, spell_stack_presentation, PresentationPath,
+};
 use super::targeting::{
     capture_stack_target, validate_ability_targets, validate_spell_targets, TargetSourceIdentity,
 };
@@ -196,6 +199,11 @@ impl GameEngine {
             .iter()
             .map(|target| capture_stack_target(self, target))
             .collect();
+        let stack_presentation =
+            spell_stack_presentation(self.registry, &card_id, expected_face_index, &[], &[]);
+        self.state
+            .stack_presentations
+            .insert(source_oid, stack_presentation.clone());
         self.state.stack.push(StackItem {
             id: source_oid,
             controller: player,
@@ -252,6 +260,9 @@ impl GameEngine {
                 chosen_mode_labels: vec![],
                 chosen_cast_cost_labels: vec!["Siege defeat".into()],
                 source_token_identity: None,
+                primary_presentation: stack_presentation.primary,
+                chosen_mode_presentations: stack_presentation.chosen_modes,
+                chosen_cast_cost_presentations: stack_presentation.chosen_cast_costs,
             })),
         });
         let fact =
@@ -770,6 +781,16 @@ impl GameEngine {
             .collect();
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
 
+        let stack_presentation = spell_stack_presentation(
+            self.registry,
+            &card_id,
+            face_index,
+            &chosen_modes,
+            &cast_cost_receipts,
+        );
+        self.state
+            .stack_presentations
+            .insert(oid, stack_presentation.clone());
         self.state.stack.push(StackItem {
             id: oid,
             controller: player,
@@ -883,6 +904,9 @@ impl GameEngine {
                 chosen_mode_labels,
                 chosen_cast_cost_labels,
                 source_token_identity: None,
+                primary_presentation: stack_presentation.primary,
+                chosen_mode_presentations: stack_presentation.chosen_modes,
+                chosen_cast_cost_presentations: stack_presentation.chosen_cast_costs,
             })),
         });
         let fact = self.record_spell_cast(player, oid, origin, mana_value);
@@ -1206,9 +1230,24 @@ impl GameEngine {
             .or_else(|| self.registry.get(&card_id).map(|d| d.name.clone()))
             .unwrap_or_else(|| card_id.clone());
         let ability_text = ability.fallback_text_with_path(&card_name, &ability_path);
+        let ability_definition =
+            self.ability_definition(permanent_id, face_up_index, ability_path.clone());
+        let primary_presentation = ability_presentation(
+            self.registry,
+            &ability_definition,
+            &ability.presentation,
+            ability_text.clone(),
+        );
 
         self.state.next_object_id += 1;
 
+        self.state.stack_presentations.insert(
+            virtual_id,
+            StackPresentation {
+                primary: Some(primary_presentation.clone()),
+                ..Default::default()
+            },
+        );
         self.state.stack.push(StackItem {
             id: virtual_id,
             controller: player,
@@ -1284,6 +1323,9 @@ impl GameEngine {
                 chosen_mode_labels: vec![],
                 chosen_cast_cost_labels: vec![],
                 source_token_identity,
+                primary_presentation: Some(primary_presentation),
+                chosen_mode_presentations: vec![],
+                chosen_cast_cost_presentations: vec![],
             })),
         });
         // CR 603.3b: a trigger that fired while the cost was being paid goes on the stack *above*
@@ -1655,7 +1697,29 @@ impl GameEngine {
             {
                 (position + 1) as u32
             } else {
+                let face_index = self.state.objects[&permanent_id].face_up_index;
+                let definition =
+                    self.ability_definition(permanent_id, face_index, ability_path.to_vec());
+                let face_name = self
+                    .effective_face(permanent_id)
+                    .map(|face| face.name.clone())
+                    .unwrap_or_else(|| card_id.to_owned());
+                let parent = ability_presentation(
+                    self.registry,
+                    &definition,
+                    &ability.presentation,
+                    ability.fallback_text_with_path(&face_name, ability_path),
+                );
+                let restriction_presentation = child_presentation_ref(
+                    &parent,
+                    PresentationPath::ManaRestriction(&restriction.restriction_id),
+                    &restriction.presentation,
+                    restriction.fallback_label(),
+                );
                 self.state.mana_restrictions.push(restriction.clone());
+                self.state
+                    .mana_restriction_presentations
+                    .push(Some(restriction_presentation));
                 self.state.mana_restrictions.len() as u32
             }
         });

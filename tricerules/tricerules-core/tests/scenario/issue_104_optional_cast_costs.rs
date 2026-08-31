@@ -4,7 +4,7 @@ use tricerules_core::state::CastCostObjectReceipt;
 use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::{
     cast_cost_group_selection::SelectedObject, ruled_event::Ev, CastCostGroupSelection,
-    CastCostOptionKind, ChoiceKind, HandActionKind, ResolutionChoiceDecision,
+    CastCostOptionKind, ChoiceKind, HandActionKind, PresentationPathKind, ResolutionChoiceDecision,
 };
 
 fn mana_option(group_index: u32, option_index: u32) -> CastCostGroupSelection {
@@ -41,6 +41,19 @@ fn grow_from_the_ashes_publishes_and_records_kicker_as_part_of_total_cost() {
     assert_eq!((group.min, group.max), (0, 1));
     assert_eq!(group.options[0].kind, CastCostOptionKind::Mana as i32);
     assert_eq!(group.options[0].additional_mana_cost, "{2}");
+    let group_presentation = group
+        .presentation
+        .as_ref()
+        .expect("stable kicker group identity");
+    assert_eq!(group_presentation.card_id, "grow_from_the_ashes");
+    assert_eq!(group_presentation.face_id, "grow_from_the_ashes");
+    assert_eq!(group_presentation.path.last().unwrap().id, "cast_cost_01");
+    let option_presentation = group.options[0]
+        .presentation
+        .as_ref()
+        .expect("stable kicker option identity");
+    assert_eq!(option_presentation.oracle_line_indices, [1]);
+    assert_eq!(option_presentation.path.last().unwrap().id, "option_01");
 
     e.state.players[0].mana_pool.colorless = 4;
     let slot = hand_index_for_card(&e, 0, "grow_from_the_ashes");
@@ -64,13 +77,24 @@ fn grow_from_the_ashes_publishes_and_records_kicker_as_part_of_total_cost() {
     let receipt = &e.state.stack.last().unwrap().cast_cost_receipts[0];
     assert_eq!(receipt.label, "Kicker {2}");
     assert!(receipt.object.is_none());
-    assert!(batch.events.iter().any(|event| {
-        matches!(
-            &event.ev,
-            Some(Ev::StackPushed(pushed))
-                if pushed.chosen_cast_cost_labels == ["Kicker {2}"]
-        )
-    }));
+    let pushed = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::StackPushed(pushed)) => Some(pushed),
+            _ => None,
+        })
+        .expect("kicked stack publication");
+    assert_eq!(pushed.chosen_cast_cost_labels, ["Kicker {2}"]);
+    assert_eq!(pushed.chosen_cast_cost_presentations.len(), 1);
+    assert_eq!(
+        pushed.chosen_cast_cost_presentations[0]
+            .path
+            .last()
+            .unwrap()
+            .kind,
+        PresentationPathKind::CastCostOption as i32
+    );
 
     let first = e.state.priority_player_id();
     let second = if first == 0 { 1 } else { 0 };

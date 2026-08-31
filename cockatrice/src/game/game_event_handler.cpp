@@ -1,4 +1,5 @@
 #include "game_event_handler.h"
+#include "../client/settings/cache_settings.h"
 
 #include "../interface/widgets/tabs/tab_game.h"
 #include "abstract_game.h"
@@ -169,6 +170,11 @@ int GameEventHandler::localPlayerId() const
 int GameEventHandler::currentActivePlayerId() const
 {
     return game->getGameState()->getActivePlayer();
+}
+
+QString GameEventHandler::cardDatabasePath() const
+{
+    return SettingsCache::instance().getCardDatabasePath();
 }
 
 void GameEventHandler::setActivePlayerId(int playerId)

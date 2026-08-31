@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::presentation::{child_presentation_ref, PresentationPath};
 use crate::engine::{attempt_untap, set_tapped, UntapOutcome};
 
 pub(super) fn change_source_face(
@@ -388,6 +389,21 @@ pub(super) fn create_delayed_trigger(
             ))
         }
     };
+    let ability_text = ability.fallback_text(&card_name);
+    let presentation = cx
+        .engine
+        .state
+        .stack_presentations
+        .get(&cx.top.id)
+        .and_then(|stack| stack.primary.as_ref())
+        .map(|parent| {
+            child_presentation_ref(
+                parent,
+                PresentationPath::Ability(&ability.ability_id),
+                &ability.presentation,
+                ability_text,
+            )
+        });
     cx.engine
         .state
         .active_event_observers
@@ -408,6 +424,7 @@ pub(super) fn create_delayed_trigger(
                 card_id: cx.top.card_id.clone(),
                 card_name,
                 source_face_index: cx.top.face_index,
+                presentation,
                 ability: *ability,
             })),
         });
