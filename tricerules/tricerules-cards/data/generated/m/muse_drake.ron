@@ -2,10 +2,11 @@
 (
   id: "muse_drake",
   name: "Muse Drake",
+  face_id: "muse_drake",
   mana_cost: "{3}{U}",
   types: ["Creature", "Drake"],
   power: 1,
   toughness: 3,
   keywords: [Flying],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

@@ -1,16 +1,17 @@
 // Oracle and rulings fetched 2026-08-27. CR 613.4c: the Desert bonus remains live.
 (
-  id: "outcaster_greenblade", name: "Outcaster Greenblade", mana_cost: "{2}{G}",
+  id: "outcaster_greenblade", name: "Outcaster Greenblade", face_id: "outcaster_greenblade", mana_cost: "{2}{G}",
   types: ["Creature", "Human", "Mercenary"], power: 1, toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [SearchLibrary(filter: Some((any_of: Some([
       (card_type: Some(BasicLand)), (subtype: Some("Desert")),
     ]))), destination: Hand, shuffle: true, reveal: true)],
-    text: "When this creature enters, search your library for a basic land card or a Desert card, reveal it, put it into your hand, then shuffle.",
   )],
-  static_abilities: [CountScaledSelfPt(
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: CountScaledSelfPt(
     count: BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Desert"])),
     power_per_match: 1, toughness_per_match: 1,
-  )],
+  ))],
 )

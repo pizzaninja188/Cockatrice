@@ -1,12 +1,15 @@
 (
   id: "blood_artist",
   name: "Blood Artist",
+  face_id: "blood_artist",
   mana_cost: "{1}{B}",
   types: ["Creature", "Vampire"],
   power: 0,
   toughness: 1,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WheneverCreatureDies(
         controller: AnyPlayer,
         filter: (exclude_source: false),
@@ -15,7 +18,6 @@
         amount: 1,
         target: (kind: AnyPlayer),
       )],
-      text: "Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.",
     ),
   ],
 )

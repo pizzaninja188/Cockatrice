@@ -528,11 +528,7 @@ impl GameEngine {
                     }
                 }
             };
-            let label = match option {
-                CastCostOptionDef::Mana { label, .. }
-                | CastCostOptionDef::Behold { label, .. }
-                | CastCostOptionDef::Blight { label, .. } => label.clone(),
-            };
+            let label = option.fallback_label();
             cast_cost_receipts.push(CastCostReceipt {
                 group_index: group_index as u32,
                 option_index: selection.option_index,

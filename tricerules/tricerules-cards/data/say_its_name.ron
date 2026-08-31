@@ -2,6 +2,7 @@
 (
   id: "say_its_name",
   name: "Say Its Name",
+  face_id: "say_its_name",
   mana_cost: "{1}{G}",
   types: ["Sorcery"],
   spell_effect: [
@@ -16,6 +17,8 @@
     ),
   ],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
     source_zone: Graveyard,
     costs: [
       ExileSelf,
@@ -33,6 +36,5 @@
       reveal: false,
     )],
     timing: SorcerySpeed,
-    text: "Exile this card and two other cards named Say Its Name from your graveyard: Search your graveyard, hand, and/or library for a card named Altanak, the Thrice-Called and put it onto the battlefield. If you search your library this way, shuffle. Activate only as a sorcery.",
   )],
 )

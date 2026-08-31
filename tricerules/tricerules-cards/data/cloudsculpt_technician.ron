@@ -2,17 +2,18 @@
 (
   id: "cloudsculpt_technician",
   name: "Cloudsculpt Technician",
+  face_id: "cloudsculpt_technician",
   mana_cost: "{2}{U}",
   types: ["Creature", "Jellyfish", "Artificer"],
   power: 1,
   toughness: 4,
   keywords: [Flying],
-  static_abilities: [ConditionalSelfModifier(
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
     condition: BattlefieldAggregate(
       filter: (controllers: Controller, card_type: Some(Artifact)),
       aggregate: Count,
       min: Some(1),
     ),
     delta_power: 1,
-  )],
+  ))],
 )

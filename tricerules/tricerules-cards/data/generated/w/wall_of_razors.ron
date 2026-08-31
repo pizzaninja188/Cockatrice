@@ -2,6 +2,7 @@
 (
   id: "wall_of_razors",
   name: "Wall of Razors",
+  face_id: "wall_of_razors",
   mana_cost: "{1}{R}",
   types: ["Creature", "Wall"],
   power: 4,

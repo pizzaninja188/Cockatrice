@@ -6,7 +6,6 @@ fn issue_105_cards_publish_harmonize_costs_and_complete_effects() {
     let registry = CardRegistry::global();
 
     let whisper = registry.get("unending_whisper").expect("Unending Whisper");
-    assert_eq!(whisper.partial, None);
     assert_eq!(
         whisper
             .primary_face()
@@ -24,7 +23,6 @@ fn issue_105_cards_publish_harmonize_costs_and_complete_effects() {
     ));
 
     let bellow = registry.get("mammoth_bellow").expect("Mammoth Bellow");
-    assert_eq!(bellow.partial, None);
     assert_eq!(
         bellow
             .primary_face()

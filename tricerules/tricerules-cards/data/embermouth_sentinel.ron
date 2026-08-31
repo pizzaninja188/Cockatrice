@@ -2,16 +2,19 @@
 (
   id: "embermouth_sentinel",
   name: "Embermouth Sentinel",
+  face_id: "embermouth_sentinel",
   mana_cost: "{2}",
   types: ["Artifact", "Creature", "Chimera"],
   power: 2,
   toughness: 1,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [ChooseResolutionBranch(
       optional: true,
       branches: [(
-        label: "Search for a basic land",
+        branch_id: "search_for_a_basic_land", presentation: Fallback,
         cost: None,
         effects: [SearchLibrary(
           filter: Some((card_type: Some(BasicLand))),
@@ -29,6 +32,5 @@
         )],
       )],
     )],
-    text: "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top. If you control a Dragon, put that card onto the battlefield tapped instead.",
   )],
 )

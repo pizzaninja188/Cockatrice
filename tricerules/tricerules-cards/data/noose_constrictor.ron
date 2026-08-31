@@ -1,6 +1,7 @@
 (
   id: "noose_constrictor",
   name: "Noose Constrictor",
+  face_id: "noose_constrictor",
   mana_cost: "{1}{G}",
   types: ["Creature", "Snake"],
   power: 2,
@@ -8,9 +9,10 @@
   keywords: [Reach],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
       costs: [Discard],
       effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
-      text: "Discard a card: This creature gets +1/+1 until end of turn.",
     ),
   ],
 )

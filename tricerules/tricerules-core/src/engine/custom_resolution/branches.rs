@@ -409,7 +409,8 @@ impl GameEngine {
             .insert(effect_index, Some(branch_index));
         let mut ev = vec![ev_log(format!(
             "P{} chooses: {}.",
-            pending.deciding_player, branch.label
+            pending.deciding_player,
+            branch.fallback_label()
         ))];
         let is_waterbend = matches!(branch.cost, ResolutionCost::Waterbend(_));
         match branch.cost {

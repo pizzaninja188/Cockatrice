@@ -2,6 +2,7 @@
 (
   id: "fortified_rampart",
   name: "Fortified Rampart",
+  face_id: "fortified_rampart",
   mana_cost: "{1}{W}",
   types: ["Creature", "Wall"],
   power: 0,

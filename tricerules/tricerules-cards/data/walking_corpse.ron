@@ -1,6 +1,7 @@
 (
   id: "walking_corpse",
   name: "Walking Corpse",
+  face_id: "walking_corpse",
   mana_cost: "{1}{B}",
   types: ["Creature", "Zombie"],
   power: 2,

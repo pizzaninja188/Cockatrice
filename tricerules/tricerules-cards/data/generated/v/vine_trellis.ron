@@ -2,10 +2,11 @@
 (
   id: "vine_trellis",
   name: "Vine Trellis",
+  face_id: "vine_trellis",
   mana_cost: "{1}{G}",
   types: ["Creature", "Plant", "Wall"],
   power: 0,
   toughness: 4,
   keywords: [Defender],
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1)])], text: "{T}: Add {G}.")],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([2]), costs: [Tap], effect: [ProduceMana(options: [(g: 1)])])],
 )

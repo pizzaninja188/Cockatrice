@@ -70,14 +70,14 @@ fn gift_grants_its_land_controller_an_annotated_undoable_mana_ability() {
     assert_eq!(
         ability_texts(&mut engine, opponent_land),
         vec![
-            "{T}: Add {G}.".to_string(),
-            "{T}: Add two mana of any one color.".to_string(),
+            "Forest — activated ability (activated_01)".to_string(),
+            "Forest — activated ability (static_01/activated_01)".to_string(),
         ],
         "printed ability precedes the granted ability"
     );
     assert_eq!(
         zone_view_rules_annotation_labels(&mut engine, 1, opponent_land),
-        vec!["{T}: Add two mana of any one color."],
+        vec!["Forest — activated ability (static_01/activated_01)"],
         "only the nonintrinsic ability is annotated"
     );
 
@@ -102,7 +102,7 @@ fn gift_grants_its_land_controller_an_annotated_undoable_mana_ability() {
     remove_permanent(&mut engine, 0, gift);
     assert_eq!(
         ability_texts(&mut engine, opponent_land),
-        vec!["{T}: Add {G}."],
+        vec!["Forest — activated ability (activated_01)"],
         "the grant disappears with its Aura"
     );
     assert!(
@@ -145,11 +145,11 @@ fn hermetic_study_ability_survives_removal_of_the_granting_aura() {
 
     assert_eq!(
         ability_texts(&mut engine, creature),
-        vec!["{T}: This creature deals 1 damage to any target."]
+        vec!["Grizzly Bears — activated ability (static_01/activated_01)"]
     );
     assert_eq!(
         zone_view_rules_annotation_labels(&mut engine, 0, creature),
-        vec!["{T}: This creature deals 1 damage to any target."]
+        vec!["Grizzly Bears — activated ability (static_01/activated_01)"]
     );
     engine
         .apply_command(0, &activate_ability(creature, 0, target_player(1)))

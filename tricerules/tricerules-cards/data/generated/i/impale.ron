@@ -2,7 +2,9 @@
 (
   id: "impale",
   name: "Impale",
+  face_id: "impale",
   mana_cost: "{2}{B}{B}",
   types: ["Sorcery"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [Destroy()],
 )

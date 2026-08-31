@@ -1,6 +1,7 @@
 (
   id: "pharikas_chosen",
   name: "Pharika's Chosen",
+  face_id: "pharika_s_chosen",
   mana_cost: "{B}",
   types: ["Creature", "Snake"],
   power: 1,

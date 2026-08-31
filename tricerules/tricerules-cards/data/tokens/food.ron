@@ -2,10 +2,12 @@
 (
   id: "food",
   name: "Food",
+  face_id: "food",
   types: ["Artifact", "Food"],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
     costs: [Mana("{2}"), Tap, SacrificeSelf],
     effect: [GainLife(amount: 3)],
-    text: "{2}, {T}, Sacrifice this token: You gain 3 life.",
   )],
 )

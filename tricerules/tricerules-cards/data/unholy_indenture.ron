@@ -1,12 +1,15 @@
 (
   id: "unholy_indenture",
   name: "Unholy Indenture",
+  face_id: "unholy_indenture",
   mana_cost: "{2}{B}",
   // Oracle verified 2026-08-14. CR 400.7, 603.3b, 603.6c/e, 603.10a, 704.5d/m, 122.6.
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WheneverAttachedObjectDies,
       effect: [
         ReturnTriggeredCard(
@@ -16,7 +19,6 @@
           entry_counters: [(counter: PlusOnePlusOne, count: 1)],
         ),
       ],
-      text: "When enchanted creature dies, return that card to the battlefield under your control with a +1/+1 counter on it.",
     ),
   ],
 )

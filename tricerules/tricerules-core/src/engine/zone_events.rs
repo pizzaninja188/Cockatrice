@@ -204,7 +204,11 @@ impl GameEngine {
                                 .collect(),
                             all_creature_types: faces.iter().any(|face| {
                                 face.characteristic_defining_abilities
-                                    .contains(&CharacteristicDefiningAbility::Changeling)
+                                    .iter()
+                                    .any(|ability| {
+                                        ability.definition
+                                            == CharacteristicDefiningAbility::Changeling
+                                    })
                             }),
                             keywords: vec![],
                             power: None,

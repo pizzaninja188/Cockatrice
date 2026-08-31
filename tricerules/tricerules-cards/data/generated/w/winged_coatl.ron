@@ -2,6 +2,7 @@
 (
   id: "winged_coatl",
   name: "Winged Coatl",
+  face_id: "winged_coatl",
   mana_cost: "{1}{G}{U}",
   types: ["Creature", "Snake"],
   power: 1,

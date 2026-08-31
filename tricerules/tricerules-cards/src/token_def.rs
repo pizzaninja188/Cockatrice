@@ -9,10 +9,9 @@
 //! registry's token map — `CardRegistry::get` falls back to it, so the engine never branches on
 //! token-ness for a characteristic lookup.
 
-use crate::card_def::{CardDefinition, CardFace};
-use crate::primitives::{
-    ActivatedAbilityDef, Color, Keyword, StaticAbilityDef, TriggeredAbilityDef,
-};
+use crate::card_def::{CardDefinition, CardFace, IdentifiedStaticAbility};
+use crate::primitives::{ActivatedAbilityDef, Color, Keyword, TriggeredAbilityDef};
+use crate::CardFaceId;
 use serde::{Deserialize, Serialize};
 
 /// A token's printed characteristics, authored in `data/tokens/*.ron`. Mirrors the subset of
@@ -28,6 +27,7 @@ pub struct TokenDefinition {
     /// Display name, e.g. `"Soldier"`. Tokens with the same name but different characteristics
     /// (CR 111.4) get distinct ids (see `id`).
     pub name: String,
+    pub face_id: CardFaceId,
     /// Card types followed by subtypes, e.g. `["Creature", "Soldier"]`. Source of the type flags.
     #[serde(default)]
     pub types: Vec<String>,
@@ -47,7 +47,7 @@ pub struct TokenDefinition {
     pub keywords: Vec<Keyword>,
     /// Ordinary static abilities, including evasion and restrictions on what a token can block.
     #[serde(default)]
-    pub static_abilities: Vec<StaticAbilityDef>,
+    pub static_abilities: Vec<IdentifiedStaticAbility>,
     /// Triggered abilities printed on the token. These use the same reusable trigger/effect
     /// vocabulary as ordinary permanent cards.
     #[serde(default)]
@@ -67,6 +67,7 @@ impl TokenDefinition {
             id: self.id.clone(),
             name: self.name.clone(),
             faces: vec![CardFace {
+                face_id: self.face_id.clone(),
                 name: self.name.clone(),
                 types: self.types.clone(),
                 supertypes: self.supertypes.clone(),

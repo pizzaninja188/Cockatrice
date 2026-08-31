@@ -2,9 +2,10 @@
 (
   id: "springmane_cervin",
   name: "Springmane Cervin",
+  face_id: "springmane_cervin",
   mana_cost: "{2}{G}",
   types: ["Creature", "Elk"],
   power: 3,
   toughness: 2,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)], text: "When this creature enters, you gain 2 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)])],
 )

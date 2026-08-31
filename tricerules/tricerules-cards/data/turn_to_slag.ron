@@ -1,6 +1,7 @@
 (
   id: "turn_to_slag",
   name: "Turn to Slag",
+  face_id: "turn_to_slag",
   mana_cost: "{3}{R}{R}",
   types: ["Sorcery"],
   spell_effect: [

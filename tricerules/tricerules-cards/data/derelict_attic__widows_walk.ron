@@ -5,25 +5,29 @@
   faces: [
     (
       name: "Derelict Attic",
+      face_id: "derelict_attic",
       mana_cost: "{2}{B}",
       types: ["Enchantment", "Room"],
       triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: OracleLines([1]),
         trigger: WhenThisDoorUnlocked,
         effect: [Draw(count: 2), LoseLife(amount: Fixed(2))],
-        text: "When you unlock this door, you draw two cards and you lose 2 life.",
       )],
     ),
     (
       name: "Widow's Walk",
+      face_id: "widow_s_walk",
       mana_cost: "{3}{B}",
       types: ["Enchantment", "Room"],
       triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: OracleLines([1]),
         trigger: WheneverControllerAttacks(min_attackers: Some(1), max_attackers: Some(1)),
         effect: [
           PumpTarget(power: 1, toughness: 0, subject: TriggerObject),
           GrantKeywords(subject: TriggerObject, keywords: [Deathtouch]),
         ],
-        text: "Whenever a creature you control attacks alone, it gets +1/+0 and gains deathtouch until end of turn.",
       )],
     ),
   ],

@@ -1,6 +1,7 @@
 (
   id: "diabolic_edict",
   name: "Diabolic Edict",
+  face_id: "diabolic_edict",
   mana_cost: "{1}{B}",
   types: ["Instant"],
   spell_effect: [

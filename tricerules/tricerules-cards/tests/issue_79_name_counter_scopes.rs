@@ -18,7 +18,6 @@ fn issue_79_cards_use_shared_name_and_counter_scope_predicates() {
         (mastiff_face.power, mastiff_face.toughness),
         (Some(2), Some(2))
     );
-    assert!(mastiff.partial.is_none());
     assert!(matches!(
         mastiff_face.activated_abilities[0].costs.as_slice(),
         [AbilityCost::Mana(cost)] if cost.to_string() == "{1}{R}"
@@ -43,7 +42,6 @@ fn issue_79_cards_use_shared_name_and_counter_scope_predicates() {
     assert_eq!(pride_face.mana_cost.to_string(), "{2}{G}");
     assert_eq!(pride_face.types, ["Creature", "Cat"]);
     assert_eq!((pride_face.power, pride_face.toughness), (Some(2), Some(1)));
-    assert!(pridemalkin.partial.is_none());
     assert_eq!(
         pride_face.triggered_abilities[0].trigger,
         TriggerCondition::WhenSelfEntersBattlefield

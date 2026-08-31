@@ -7,9 +7,9 @@
     faces: [
         (
             name: "Fire",
+            face_id: "fire",
             mana_cost: "{1}{R}",
             types: ["Instant"],
-            // Oracle: "Fire deals 2 damage divided as you choose among one or two targets."
             // CR 601.2d: fixed total (2), no per-target surcharge, max 2 targets.
             spell_effect: [DamageTargets(
                 amount: 2,
@@ -26,9 +26,9 @@
         ),
         (
             name: "Ice",
+            face_id: "ice",
             mana_cost: "{1}{U}",
             types: ["Instant"],
-            // Oracle: "Tap target permanent. Draw a card."
             spell_effect: [Tap(subject: Chosen((kind: AnyPermanent))), Draw(count: 1)],
         ),
     ],

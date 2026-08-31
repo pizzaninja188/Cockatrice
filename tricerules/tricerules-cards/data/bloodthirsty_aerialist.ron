@@ -1,6 +1,7 @@
 (
   id: "bloodthirsty_aerialist",
   name: "Bloodthirsty Aerialist",
+  face_id: "bloodthirsty_aerialist",
   mana_cost: "{1}{B}{B}",
   types: ["Creature", "Vampire", "Rogue"],
   power: 2,
@@ -8,9 +9,10 @@
   keywords: [Flying],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WheneverPlayerGainsLife(player: Controller),
       effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
-      text: "Whenever you gain life, put a +1/+1 counter on this creature.",
     ),
   ],
 )

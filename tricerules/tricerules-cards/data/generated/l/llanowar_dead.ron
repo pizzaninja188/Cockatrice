@@ -2,9 +2,10 @@
 (
   id: "llanowar_dead",
   name: "Llanowar Dead",
+  face_id: "llanowar_dead",
   mana_cost: "{B}{G}",
   types: ["Creature", "Zombie", "Elf"],
   power: 2,
   toughness: 2,
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(b: 1)])], text: "{T}: Add {B}.")],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(b: 1)])])],
 )

@@ -2,6 +2,7 @@
 (
   id: "marauding_sphinx",
   name: "Marauding Sphinx",
+  face_id: "marauding_sphinx",
   mana_cost: "{3}{U}{U}",
   types: ["Creature", "Sphinx", "Rogue"],
   power: 3,
@@ -9,15 +10,17 @@
   keywords: [Flying, Vigilance],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
       effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))],
-      text: "Ward {2}",
     ),
     (
+      ability_id: "triggered_02",
+      presentation: Fallback,
       trigger: WheneverPlayerCommitsCrime(player: Controller),
       effect: [LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil)],
       max_triggers_per_turn: Some(1),
-      text: "Whenever you commit a crime, surveil 2. This ability triggers only once each turn.",
     ),
   ],
 )

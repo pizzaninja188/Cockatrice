@@ -1,6 +1,7 @@
 (
   id: "grizzly_bears",
   name: "Grizzly Bears",
+  face_id: "grizzly_bears",
   mana_cost: "{1}{G}",
   types: ["Creature", "Bear"],
   power: 2,

@@ -2,9 +2,10 @@
 (
   id: "devout_monk",
   name: "Devout Monk",
+  face_id: "devout_monk",
   mana_cost: "{W}",
   types: ["Creature", "Human", "Monk", "Cleric"],
   power: 1,
   toughness: 1,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "When this creature enters, you gain 1 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)])],
 )

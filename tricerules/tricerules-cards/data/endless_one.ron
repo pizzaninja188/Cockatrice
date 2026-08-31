@@ -1,11 +1,12 @@
 (
   id: "endless_one",
   name: "Endless One",
+  face_id: "endless_one",
   mana_cost: "{X}",
   types: ["Creature", "Eldrazi"],
   power: 0,
   toughness: 0,
   static_abilities: [
-    EntersWithCounters(counter: PlusOnePlusOne, amount: "X"),
+    (ability_id: "static_01", presentation: Fallback, definition: EntersWithCounters(counter: PlusOnePlusOne, amount: "X")),
   ],
 )

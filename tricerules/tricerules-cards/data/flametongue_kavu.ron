@@ -1,15 +1,17 @@
 (
   id: "flametongue_kavu",
   name: "Flametongue Kavu",
+  face_id: "flametongue_kavu",
   mana_cost: "{3}{R}",
   types: ["Creature", "Kavu"],
   power: 4,
   toughness: 2,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [DamageTarget(amount: 4, target: (kind: Creature))],
-      text: "When this creature enters, it deals 4 damage to target creature.",
     ),
   ],
 )

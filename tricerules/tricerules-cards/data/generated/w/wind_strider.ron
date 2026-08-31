@@ -2,6 +2,7 @@
 (
   id: "wind_strider",
   name: "Wind Strider",
+  face_id: "wind_strider",
   mana_cost: "{4}{U}",
   types: ["Creature", "Merfolk", "Wizard"],
   power: 3,

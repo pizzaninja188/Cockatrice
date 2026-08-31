@@ -1,6 +1,7 @@
 (
   id: "unravel_the_aether",
   name: "Unravel the Aether",
+  face_id: "unravel_the_aether",
   mana_cost: "{1}{G}",
   types: ["Instant"],
   spell_effect: [PutInOwnersLibrary(

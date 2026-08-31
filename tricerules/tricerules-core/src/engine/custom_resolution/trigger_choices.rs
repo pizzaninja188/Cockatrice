@@ -88,9 +88,9 @@ impl GameEngine {
                     }
                     public_targets.extend(selection.targets.iter().cloned());
                     chosen_mode_indices.push(selection.mode_index);
-                    chosen_mode_labels.push(mode.label.clone());
+                    chosen_mode_labels.push(mode_fallback(&pending.ability_text, &mode.mode_id));
                     chosen_modes.push(ChosenMode {
-                        mode_index: selection.mode_index as usize,
+                        mode_id: mode.mode_id.clone(),
                         targets: selection
                             .targets
                             .iter()

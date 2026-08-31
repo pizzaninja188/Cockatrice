@@ -1,6 +1,7 @@
 (
   id: "broken_wings",
   name: "Broken Wings",
+  face_id: "broken_wings",
   mana_cost: "{2}{G}",
   types: ["Instant"],
   spell_effect: [

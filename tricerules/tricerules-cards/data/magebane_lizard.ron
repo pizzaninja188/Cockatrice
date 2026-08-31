@@ -3,16 +3,18 @@
 (
   id: "magebane_lizard",
   name: "Magebane Lizard",
+  face_id: "magebane_lizard",
   mana_cost: "{1}{R}",
   types: ["Creature", "Lizard"],
   power: 1,
   toughness: 4,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (card_type: Some(Noncreature))),
     effect: [DamagePlayer(
       amount: Count(SpellsCastThisTurn(players: AffectedPlayer, filter: (card_type: Some(Noncreature)))),
       who: AffectedPlayer,
     )],
-    text: "Whenever a player casts a noncreature spell, this creature deals damage to that player equal to the number of noncreature spells they've cast this turn.",
   )],
 )

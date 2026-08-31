@@ -2,17 +2,19 @@
 (
   id: "heirloom_auntie",
   name: "Heirloom Auntie",
+  face_id: "heirloom_auntie",
   mana_cost: "{2}{B}",
   types: ["Creature", "Goblin", "Warlock"],
   power: 4,
   toughness: 4,
-  static_abilities: [EntersWithCounters(counter: MinusOneMinusOne, amount: 2)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersWithCounters(counter: MinusOneMinusOne, amount: 2))],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverCreatureDies(controller: Controller, filter: (exclude_source: true)),
     effect: [
       LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil),
       RemoveCounters(counter: MinusOneMinusOne, count: 1, subject: Source),
     ],
-    text: "Whenever another creature you control dies, surveil 1, then remove a -1/-1 counter from this creature.",
   )],
 )

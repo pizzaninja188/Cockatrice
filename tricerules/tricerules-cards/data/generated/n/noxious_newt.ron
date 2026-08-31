@@ -2,10 +2,11 @@
 (
   id: "noxious_newt",
   name: "Noxious Newt",
+  face_id: "noxious_newt",
   mana_cost: "{1}{G}",
   types: ["Creature", "Salamander"],
   power: 1,
   toughness: 2,
   keywords: [Deathtouch],
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1)])], text: "{T}: Add {G}.")],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([2]), costs: [Tap], effect: [ProduceMana(options: [(g: 1)])])],
 )

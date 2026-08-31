@@ -2,9 +2,12 @@
 (
   id: "thaumaton_torpedo",
   name: "Thaumaton Torpedo",
+  face_id: "thaumaton_torpedo",
   mana_cost: "{1}",
   types: ["Artifact"],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
     costs: [Mana("{6}"), Tap, SacrificeSelf],
     cost_modifiers: [ConditionalGenericReduction(
       amount: 3,
@@ -15,6 +18,5 @@
       ),
     )],
     effect: [Destroy(subject: Chosen((kind: AnyPermanent, not_land: true)))],
-    text: "{6}, {T}, Sacrifice this artifact: Destroy target nonland permanent. This ability costs {3} less to activate if you attacked with a Spacecraft this turn.",
   )],
 )

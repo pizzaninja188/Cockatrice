@@ -2,6 +2,7 @@
 (
   id: "village_rites",
   name: "Village Rites",
+  face_id: "village_rites",
   mana_cost: "{B}",
   additional_costs: [
     SacrificePermanent(filter: (kind: Creature, controller: You)),

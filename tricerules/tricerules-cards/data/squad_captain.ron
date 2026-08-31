@@ -1,17 +1,18 @@
 (
   id: "squad_captain",
   name: "Squad Captain",
+  face_id: "squad_captain",
   mana_cost: "{4}{W}",
   types: ["Creature", "Human", "Soldier"],
   power: 2,
   toughness: 2,
   keywords: [Vigilance],
   static_abilities: [
-    EntersWithCounters(
+    (ability_id: "static_01", presentation: Fallback, definition: EntersWithCounters(
       counter: PlusOnePlusOne,
       amount: Count(BattlefieldCreatures(
         filter: (controllers: Controller, exclude_source: true),
       )),
-    ),
+    )),
   ],
 )

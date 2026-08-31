@@ -3,15 +3,17 @@
 (
   id: "foggy_swamp_vinebender",
   name: "Foggy Swamp Vinebender",
+  face_id: "foggy_swamp_vinebender",
   mana_cost: "{3}{G}",
   types: ["Creature", "Human", "Plant", "Ally"],
   power: 4,
   toughness: 3,
-  static_abilities: [SelfCombatRestriction(restriction: (cant_be_blocked_by: [(kind: Creature, power: Some(AtMost(2)))]))],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SelfCombatRestriction(restriction: (cant_be_blocked_by: [(kind: Creature, power: Some(AtMost(2)))])))],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
     costs: [Waterbend("{5}")],
     conditions: [GameCondition(ActivePlayer(players: Controller))],
     effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
-    text: "Waterbend {5}: Put a +1/+1 counter on this creature. Activate only during your turn.",
   )],
 )

@@ -1,6 +1,6 @@
 use super::helpers::*;
 use tricerules_cards::primitives::{ActivationLimit, ContinuousEffectKind, EffectDuration};
-use tricerules_cards::CardRegistry;
+use tricerules_cards::{AbilityId, CardRegistry};
 use tricerules_core::{AffectedScope, ContinuousEffect};
 use tricerules_proto::ruled::v1::ResolutionChoiceDecision;
 
@@ -16,7 +16,7 @@ fn mana_state(engine: &GameEngine, player: usize) -> (u32, u32, u32, u32, u32, u
     )
 }
 
-fn grant_exhaust_ability(engine: &mut GameEngine, source: u32) {
+fn grant_exhaust_ability(engine: &mut GameEngine, source: u32, ability_id: &str) {
     let mut ability = CardRegistry::global()
         .get("temur_devotee")
         .expect("Temur Devotee definition")
@@ -24,7 +24,7 @@ fn grant_exhaust_ability(engine: &mut GameEngine, source: u32) {
         .activated_abilities[0]
         .clone();
     ability.activation_limit = Some(ActivationLimit::PerObject { max_activations: 1 });
-    ability.text = "{1}: Add {G}, {U}, or {R}. Activate only once.".into();
+    ability.ability_id = AbilityId::new(ability_id).unwrap();
     engine.state.continuous_effects.push(ContinuousEffect {
         trigger_grant_origin: None,
         source_id: None,
@@ -40,7 +40,7 @@ fn grant_exhaust_ability(engine: &mut GameEngine, source: u32) {
 fn exhaust_persists_across_turns_and_control_but_resets_for_a_new_object() {
     let mut engine = anthem_engine(15_201, "mountain");
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
-    grant_exhaust_ability(&mut engine, source);
+    grant_exhaust_ability(&mut engine, source, "exhaust_granted");
     give_mana(
         &mut engine,
         0,
@@ -118,8 +118,8 @@ fn exhaust_persists_across_turns_and_control_but_resets_for_a_new_object() {
 fn separate_exhaust_abilities_on_one_object_have_independent_allowances() {
     let mut engine = anthem_engine(15_202, "mountain");
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
-    grant_exhaust_ability(&mut engine, source);
-    grant_exhaust_ability(&mut engine, source);
+    grant_exhaust_ability(&mut engine, source, "exhaust_granted_01");
+    grant_exhaust_ability(&mut engine, source, "exhaust_granted_02");
     give_mana(
         &mut engine,
         0,
@@ -150,7 +150,7 @@ fn separate_exhaust_abilities_on_one_object_have_independent_allowances() {
 fn failed_and_duplicate_commands_do_not_partially_change_exhaust_state() {
     let mut engine = anthem_engine(15_203, "mountain");
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
-    grant_exhaust_ability(&mut engine, source);
+    grant_exhaust_ability(&mut engine, source, "exhaust_granted");
     let command = activate_ability(source, 0, vec![]);
 
     engine
@@ -248,10 +248,10 @@ fn a_countered_exhaust_ability_remains_spent() {
 
 #[test]
 fn same_seed_and_commands_replay_the_same_exhaust_state() {
-    fn replay() -> ((u32, u64, usize, u32), Vec<bool>) {
+    fn replay() -> ((u32, u64, Vec<AbilityId>, u32), Vec<bool>) {
         let mut engine = anthem_engine(15_205, "mountain");
         let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
-        grant_exhaust_ability(&mut engine, source);
+        grant_exhaust_ability(&mut engine, source, "exhaust_granted");
         give_mana(
             &mut engine,
             0,
@@ -273,7 +273,7 @@ fn same_seed_and_commands_replay_the_same_exhaust_state() {
             (
                 key.object_id,
                 key.zone_change_generation,
-                key.ability_index,
+                key.definition.ability_path.clone(),
                 *count,
             ),
             zone_view_ability_flags(&mut engine, 0, source),

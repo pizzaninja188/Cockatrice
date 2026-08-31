@@ -2,23 +2,27 @@
 (
   id: "aangs_journey",
   name: "Aang's Journey",
+  face_id: "aang_s_journey",
   mana_cost: "{2}",
   types: ["Sorcery", "Lesson"],
   cast_cost_groups: [(
-    prompt: "Pay kicker?",
+    group_id: "cast_cost_01",
+    presentation: OracleLines([1]),
     min: 0,
     max: 1,
-    options: [Mana(label: "Kicker {2}", cost: "{2}")],
+    options: [Mana(option_id: "option_01", presentation: OracleLines([1]), kind: Kicker, cost: "{2}")],
   )],
   spell_effect: [
     SearchLibrary(
       slots: [
         (
-          label: "a basic land card",
+          slot_id: "slot_01",
+          presentation: Fallback,
           filter: (card_type: Some(BasicLand)),
         ),
         (
-          label: "a Shrine card",
+          slot_id: "slot_02",
+          presentation: Fallback,
           filter: (subtype: Some("Shrine")),
           enabled_by_cast_cost: Some((
             group_index: 0,

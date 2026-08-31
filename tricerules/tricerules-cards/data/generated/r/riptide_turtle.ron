@@ -2,6 +2,7 @@
 (
   id: "riptide_turtle",
   name: "Riptide Turtle",
+  face_id: "riptide_turtle",
   mana_cost: "{1}{U}",
   types: ["Creature", "Turtle"],
   power: 0,

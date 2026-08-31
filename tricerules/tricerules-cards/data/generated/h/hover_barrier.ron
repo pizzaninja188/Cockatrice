@@ -2,6 +2,7 @@
 (
   id: "hover_barrier",
   name: "Hover Barrier",
+  face_id: "hover_barrier",
   mana_cost: "{2}{U}",
   types: ["Creature", "Illusion", "Wall"],
   power: 0,

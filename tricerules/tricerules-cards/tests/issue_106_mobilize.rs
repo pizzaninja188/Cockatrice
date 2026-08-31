@@ -14,7 +14,6 @@ fn issue_106_mobilize_cards_are_complete_registry_definitions() {
             .get(card_id)
             .unwrap_or_else(|| panic!("missing {name}"));
         assert_eq!(card.name, name);
-        assert_eq!(card.partial, None);
         assert!(card
             .primary_face()
             .triggered_abilities

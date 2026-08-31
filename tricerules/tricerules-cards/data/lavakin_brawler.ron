@@ -3,12 +3,15 @@
 (
   id: "lavakin_brawler",
   name: "Lavakin Brawler",
+  face_id: "lavakin_brawler",
   mana_cost: "{3}{R}",
   types: ["Creature", "Elemental", "Warrior"],
   power: 2,
   toughness: 4,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [
         PumpTarget(
@@ -24,7 +27,6 @@
           subject: Source,
         ),
       ],
-      text: "Whenever this creature attacks, it gets +1/+0 until end of turn for each Elemental you control.",
     ),
   ],
 )

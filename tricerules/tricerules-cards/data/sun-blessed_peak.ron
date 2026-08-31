@@ -2,19 +2,22 @@
 (
   id: "sun-blessed_peak",
   name: "Sun-Blessed Peak",
+  face_id: "sun_blessed_peak",
   mana_cost: "",
   types: ["Land"],
-  static_abilities: [EntersTapped(affected: Self_)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Self_))],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
       costs: [Tap],
       effect: [ProduceMana(options: [(r: 1), (w: 1)])],
-      text: "{T}: Add {R} or {W}.",
     ),
     (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
       costs: [Mana("{4}"), Tap, SacrificeSelf],
       effect: [Draw(count: 1)],
-      text: "{4}, {T}, Sacrifice this land: Draw a card.",
     ),
   ],
 )

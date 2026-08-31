@@ -2,8 +2,9 @@
 (
   id: "snow-covered_wastes",
   name: "Snow-Covered Wastes",
+  face_id: "snow_covered_wastes",
   mana_cost: "",
   types: ["Land"],
   supertypes: ["Basic", "Snow"],
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(c: 1)])], text: "{T}: Add {C}.")],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(c: 1)])])],
 )

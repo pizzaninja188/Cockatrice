@@ -1,9 +1,10 @@
 (
   id: "wind-scarred_crag",
   name: "Wind-Scarred Crag",
+  face_id: "wind_scarred_crag",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(r: 1), (w: 1)])], text: "{T}: Add {R} or {W}.")],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "When Wind-Scarred Crag enters, you gain 1 life.")],
-  static_abilities: [EntersTapped(affected: Self_)],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([3]), costs: [Tap], effect: [ProduceMana(options: [(r: 1), (w: 1)])], )],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], )],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Self_))],
 )

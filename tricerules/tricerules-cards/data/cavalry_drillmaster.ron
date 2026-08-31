@@ -1,18 +1,20 @@
 (
   id: "cavalry_drillmaster",
   name: "Cavalry Drillmaster",
+  face_id: "cavalry_drillmaster",
   mana_cost: "{1}{W}",
   types: ["Creature", "Human", "Knight"],
   power: 2,
   toughness: 1,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
       effect: [
         PumpTarget(power: 2, toughness: 0, subject: Chosen((kind: Creature))),
         GrantKeywords(subject: Chosen((kind: Creature)), keywords: [FirstStrike]),
       ],
-      text: "When this creature enters, target creature gets +2/+0 and gains first strike until end of turn.",
     ),
   ],
 )

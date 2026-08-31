@@ -1,12 +1,15 @@
 (
   id: "champion_of_dusan",
   name: "Champion of Dusan",
+  face_id: "champion_of_dusan",
   mana_cost: "{2}{G}",
   types: ["Creature", "Human", "Warrior"],
   power: 4,
   toughness: 2,
   keywords: [Trample],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
     source_zone: Graveyard,
     costs: [Mana("{1}{G}"), ExileSelf],
     effect: [
@@ -20,6 +23,5 @@
       effect_indices: [0, 1],
     )])),
     timing: SorcerySpeed,
-    text: "Renew {1}{G} — {1}{G}, Exile this card from your graveyard: Put a +1/+1 counter and a trample counter on target creature. Activate only as a sorcery.",
   )],
 )

@@ -2,16 +2,18 @@
 (
   id: "blossombind",
   name: "Blossombind",
+  face_id: "blossombind",
   mana_cost: "{1}{U}",
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [Tap(subject: AttachedObject)],
-    text: "When this Aura enters, tap enchanted creature.",
   )],
   static_abilities: [
-    AttachedModifier(cant_untap: true),
-    ProhibitCounters(affected: AttachedPermanent),
+    (ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(cant_untap: true)),
+    (ability_id: "static_02", presentation: Fallback, definition: ProhibitCounters(affected: AttachedPermanent)),
   ],
 )

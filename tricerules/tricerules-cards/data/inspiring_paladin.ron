@@ -3,19 +3,20 @@
 (
   id: "inspiring_paladin",
   name: "Inspiring Paladin",
+  face_id: "inspiring_paladin",
   mana_cost: "{2}{W}",
   types: ["Creature", "Human", "Knight"],
   power: 3,
   toughness: 3,
   static_abilities: [
-    ConditionalSelfModifier(
+    (ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
       condition: ActivePlayer(players: Controller),
       keywords: [FirstStrike],
-    ),
-    AnthemKeyword(
+    )),
+    (ability_id: "static_02", presentation: Fallback, definition: AnthemKeyword(
       filter: (controller: YouControl, required_counter: PlusOnePlusOne),
       condition: ActivePlayer(players: Controller),
       keyword: FirstStrike,
-    ),
+    )),
   ],
 )

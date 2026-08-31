@@ -3,6 +3,7 @@
 (
   id: "depressurize",
   name: "Depressurize",
+  face_id: "depressurize",
   mana_cost: "{1}{B}",
   types: ["Instant"],
   spell_effect: [

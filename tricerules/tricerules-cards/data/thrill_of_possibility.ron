@@ -2,6 +2,7 @@
 (
   id: "thrill_of_possibility",
   name: "Thrill of Possibility",
+  face_id: "thrill_of_possibility",
   mana_cost: "{1}{R}",
   additional_costs: [DiscardCard],
   types: ["Instant"],

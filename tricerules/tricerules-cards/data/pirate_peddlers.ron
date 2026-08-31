@@ -2,14 +2,16 @@
 (
   id: "pirate_peddlers",
   name: "Pirate Peddlers",
+  face_id: "pirate_peddlers",
   mana_cost: "{2}{B}",
   types: ["Creature", "Human", "Pirate"],
   power: 2,
   toughness: 2,
   keywords: [Deathtouch],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WheneverPlayerSacrificesPermanent(player: Controller, filter: (exclude_source: true),),
     effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
-    text: "Whenever you sacrifice another permanent, put a +1/+1 counter on this creature.",
   )],
 )

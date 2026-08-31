@@ -3,22 +3,24 @@
 (
   id: "servant_of_the_stinger",
   name: "Servant of the Stinger",
+  face_id: "servant_of_the_stinger",
   mana_cost: "{1}{B}",
   types: ["Creature", "Human", "Warlock"],
   power: 1,
   toughness: 3,
   keywords: [Deathtouch],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverSelfDealsCombatDamageToPlayer,
     intervening_if: Some(GameCondition(CrimesCommittedThisTurn(players: Controller, min: Some(1)))),
     effect: [ChooseResolutionBranch(
       optional: true,
       branches: [(
-        label: "Sacrifice Servant of the Stinger",
+        branch_id: "sacrifice_servant_of_the_stinger", presentation: Fallback,
         cost: SacrificePermanent(filter: (kind: AnyPermanent, controller: You), source_only: true),
         effects: [SearchLibrary(filter: None, destination: Hand, shuffle: true, reveal: false)],
       )],
     )],
-    text: "Whenever this creature deals combat damage to a player, if you've committed a crime this turn, you may sacrifice this creature. If you do, search your library for a card, put it into your hand, then shuffle.",
   )],
 )

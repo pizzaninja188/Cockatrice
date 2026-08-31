@@ -2,9 +2,10 @@
 (
   id: "wirewood_elf",
   name: "Wirewood Elf",
+  face_id: "wirewood_elf",
   mana_cost: "{1}{G}",
   types: ["Creature", "Elf", "Druid"],
   power: 1,
   toughness: 2,
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1)])], text: "{T}: Add {G}.")],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(g: 1)])])],
 )

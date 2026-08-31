@@ -2,6 +2,7 @@
 (
     id: "vampire_demon_wb_4_3_flying",
     name: "Vampire Demon",
+    face_id: "vampire_demon",
     types: ["Creature", "Vampire", "Demon"],
     colors: [White, Black],
     power: 4,

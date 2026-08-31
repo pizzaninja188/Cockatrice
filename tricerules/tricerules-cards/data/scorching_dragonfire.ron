@@ -1,6 +1,7 @@
 (
   id: "scorching_dragonfire",
   name: "Scorching Dragonfire",
+  face_id: "scorching_dragonfire",
   mana_cost: "{1}{R}",
   types: ["Instant"],
   spell_effect: [

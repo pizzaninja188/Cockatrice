@@ -2,7 +2,9 @@
 (
   id: "spring_of_eternal_peace",
   name: "Spring of Eternal Peace",
+  face_id: "spring_of_eternal_peace",
   mana_cost: "{3}{G}{G}",
   types: ["Sorcery"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [GainLife(amount: 8)],
 )

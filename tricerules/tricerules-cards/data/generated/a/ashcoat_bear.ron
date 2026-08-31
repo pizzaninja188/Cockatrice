@@ -2,6 +2,7 @@
 (
   id: "ashcoat_bear",
   name: "Ashcoat Bear",
+  face_id: "ashcoat_bear",
   mana_cost: "{1}{G}",
   types: ["Creature", "Bear"],
   power: 2,

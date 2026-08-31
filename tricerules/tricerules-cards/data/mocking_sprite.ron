@@ -3,14 +3,15 @@
 (
   id: "mocking_sprite",
   name: "Mocking Sprite",
+  face_id: "mocking_sprite",
   mana_cost: "{2}{U}",
   types: ["Creature", "Faerie", "Rogue"],
   power: 2,
   toughness: 1,
   keywords: [Flying],
-  static_abilities: [SpellGenericReduction(
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SpellGenericReduction(
     casters: Controller,
     spell_type: Some(InstantOrSorcery),
     amount: 1,
-  )],
+  ))],
 )

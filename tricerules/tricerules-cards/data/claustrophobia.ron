@@ -1,20 +1,20 @@
 (
   id: "claustrophobia",
   name: "Claustrophobia",
+  face_id: "claustrophobia",
   mana_cost: "{1}{U}{U}",
-  // Oracle: Enchant creature. When this Aura enters, tap enchanted creature.
-  // Enchanted creature doesn't untap during its controller's untap step.
   // CR 303.4m, 502.3, 603, 611.3.
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
       effect: [Tap(subject: AttachedObject)],
-      text: "When this Aura enters, tap enchanted creature.",
     ),
   ],
   static_abilities: [
-    AttachedModifier(doesnt_untap_during_untap_step: true),
+    (ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(doesnt_untap_during_untap_step: true)),
   ],
 )

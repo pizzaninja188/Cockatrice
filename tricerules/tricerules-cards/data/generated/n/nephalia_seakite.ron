@@ -2,6 +2,7 @@
 (
   id: "nephalia_seakite",
   name: "Nephalia Seakite",
+  face_id: "nephalia_seakite",
   mana_cost: "{3}{U}",
   types: ["Creature", "Bird"],
   power: 2,

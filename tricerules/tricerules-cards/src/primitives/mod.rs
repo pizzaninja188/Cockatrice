@@ -18,6 +18,87 @@ pub use targeting::*;
 #[cfg(test)]
 mod tests {
     #[test]
+    fn presentation_only_choice_prose_is_rejected() {
+        assert!(ron::from_str::<super::CastCostGroupDef>(
+            r#"(prompt: "Pay kicker?", options: [Mana(label: "Kicker {2}", cost: "{2}")])"#,
+        )
+        .is_err());
+        assert!(ron::from_str::<super::ResolutionBranchDef>(
+            r#"(label: "Draw a card", cost: None, effects: [Draw(count: 1)])"#,
+        )
+        .is_err());
+        assert!(ron::from_str::<super::SearchSelectionSlot>(
+            r#"(label: "a basic land card", filter: (card_type: Some(BasicLand)))"#,
+        )
+        .is_err());
+        assert!(ron::from_str::<super::ManaSpendingRestriction>(
+            r#"(label: "Spend only to cast a creature spell.", cast_spell: [(card_type: Some(Creature))])"#,
+        )
+        .is_err());
+        let rules_only = r#"(id: "tracking_in_rules_data", name: "Tracking in Rules Data", face_id: "tracking_in_rules_data", mana_cost: "{1}", types: ["Creature"], power: 1, toughness: 1)"#;
+        assert!(crate::CardRegistry::from_chunks_and_tokens(&[rules_only], &[]).is_ok());
+        let with_tracking = rules_only.replace(")", ", partial: \"not a rules field\")");
+        assert!(crate::CardRegistry::from_chunks_and_tokens(&[&with_tracking], &[]).is_err());
+    }
+
+    #[test]
+    fn structured_choice_metadata_is_stable_nonmechanical_and_unique() {
+        let group: super::CastCostGroupDef = ron::from_str(
+            r#"(
+                group_id: "cast_cost_01",
+                presentation: Fallback,
+                options: [Mana(
+                    option_id: "option_01",
+                    presentation: OracleLines([1]),
+                    kind: Kicker,
+                    cost: "{2}",
+                )],
+            )"#,
+        )
+        .expect("structured cast-cost presentation");
+        assert!(group.validate().is_ok());
+        assert_eq!(group.fallback_prompt(), "Choose cast cost (cast_cost_01)");
+        assert_eq!(group.options[0].fallback_label(), "Kicker {2}");
+
+        let mut duplicate_options = group.clone();
+        duplicate_options.options.push(group.options[0].clone());
+        assert!(duplicate_options.validate().is_err());
+
+        let branch: super::ResolutionBranchDef = ron::from_str(
+            r#"(branch_id: "draw", presentation: Fallback, cost: None, effects: [Draw(count: 1)])"#,
+        )
+        .expect("structured branch presentation");
+        let mut externally_mapped = branch.clone();
+        externally_mapped.presentation = crate::AbilityPresentation::OracleLines(vec![1]);
+        assert_eq!(branch.fallback_label(), "Choice (draw)");
+        assert_eq!(branch.fallback_label(), externally_mapped.fallback_label());
+
+        let duplicate_slots: super::SpellEffectKind = ron::from_str(
+            r#"SearchLibrary(
+                slots: [
+                    (slot_id: "slot_01", presentation: Fallback, filter: (card_type: Some(BasicLand))),
+                    (slot_id: "slot_01", presentation: Fallback, filter: (subtype: Some("Shrine"))),
+                ],
+                destination: Hand,
+            )"#,
+        )
+        .expect("structured search slots");
+        assert!(duplicate_slots
+            .validate(super::EffectContext::Spell)
+            .is_err());
+
+        let duplicate_groups = r#"(
+            id: "duplicate_groups", name: "Duplicate Groups", face_id: "duplicate_groups",
+            mana_cost: "{1}", types: ["Sorcery"],
+            cast_cost_groups: [
+                (group_id: "cast_cost_01", presentation: Fallback, options: [Mana(option_id: "option_01", presentation: Fallback, kind: AdditionalPayment, cost: "{1}")]),
+                (group_id: "cast_cost_01", presentation: Fallback, options: [Mana(option_id: "option_01", presentation: Fallback, kind: AdditionalPayment, cost: "{2}")]),
+            ],
+        )"#;
+        assert!(crate::CardRegistry::from_chunks_and_tokens(&[duplicate_groups], &[]).is_err());
+    }
+
+    #[test]
     fn earthbend_nonland_permanent_discard_filter_is_shared() {
         let filter: super::CardTypeFilter = ron::from_str("NonlandPermanent")
             .expect("Dai Li Indoctrination and Auntie's Sentence need this filter");
@@ -42,7 +123,7 @@ mod tests {
     }
     #[test]
     fn issue_176_graveyard_cost_reduction_is_a_typed_target_filter() {
-        let card = r#"(id: "test", name: "Test", mana_cost: "{4}{B}", types: ["Sorcery"], cost_modifiers: [TargetMatchGenericReduction(amount: 3, filter: Graveyard((card_type: Some(Creature), max_mana_value: Some(3))))], spell_effect: [MoveGraveyardCards(filter: (card_type: Some(Creature)), destination: Battlefield())])"#;
+        let card = r#"(id: "test", name: "Test", face_id: "test", mana_cost: "{4}{B}", types: ["Sorcery"], cost_modifiers: [TargetMatchGenericReduction(amount: 3, filter: Graveyard((card_type: Some(Creature), max_mana_value: Some(3))))], spell_effect: [MoveGraveyardCards(filter: (card_type: Some(Creature)), destination: Battlefield())])"#;
         assert!(crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_ok());
     }
     #[test]
@@ -53,17 +134,17 @@ mod tests {
         let encoded = ron::to_string(&amount).unwrap();
         assert_eq!(ron::from_str::<super::Amount>(&encoded).unwrap(), amount);
         let invalid = format!(
-            r#"(id: "test", name: "Test", types: ["Instant"], spell_effect: [DamageAll(amount: {source})])"#
+            r#"(id: "test", name: "Test", face_id: "test", types: ["Instant"], spell_effect: [DamageAll(amount: {source})])"#
         );
         assert!(crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[]).is_err());
         let ability = format!(
-            r#"(id: "test", name: "Test", types: ["Creature"], power: 1, toughness: 1, activated_abilities: [(text: "Draw", costs: [Tap], effect: [Draw(count: {source})])])"#
+            r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 1, activated_abilities: [(ability_id: "activated_01", presentation: Fallback, costs: [Tap], effect: [Draw(count: {source})])])"#
         );
         assert!(
             crate::CardRegistry::from_chunks_and_tokens(&[&ability], &[]).is_err(),
             "cast cost receipts are not an ability context"
         );
-        let zero = r#"(id: "test", name: "Test", types: ["Creature"], power: 1, toughness: 1, activated_abilities: [(text: "Blight", costs: [Blight(count: 0)], effect: [Draw(count: 1)])])"#;
+        let zero = r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 1, activated_abilities: [(ability_id: "activated_01", presentation: Fallback, costs: [Blight(count: 0)], effect: [Draw(count: 1)])])"#;
         assert!(crate::CardRegistry::from_chunks_and_tokens(&[zero], &[]).is_err());
     }
 
@@ -131,8 +212,8 @@ mod tests {
         let effect: super::SpellEffectKind = ron::from_str(
             r#"SearchLibrary(
                 slots: [
-                    (label: "a basic land card", filter: (card_type: Some(BasicLand))),
-                    (label: "a Shrine card", filter: (subtype: Some("Shrine")), enabled_by_cast_cost: Some((group_index: 0, option_index: 0, expected_selected: true))),
+                    (slot_id: "slot_01", presentation: Fallback, filter: (card_type: Some(BasicLand))),
+                    (slot_id: "slot_02", presentation: Fallback, filter: (subtype: Some("Shrine")), enabled_by_cast_cost: Some((group_index: 0, option_index: 0, expected_selected: true))),
                 ],
                 destination: Hand,
                 reveal: true,
@@ -185,7 +266,7 @@ mod tests {
             );
             let payment = template.replace("AMOUNT", "Count(CardsMatchingResult(filter: (source: Payment, action: Discard, players: Controller)))");
             let card = format!(
-                r#"(id: "test", name: "Test", types: ["Instant"], spell_effect: [{payment}])"#
+                r#"(id: "test", name: "Test", face_id: "test", types: ["Instant"], spell_effect: [{payment}])"#
             );
             assert!(
                 crate::CardRegistry::from_chunks_and_tokens(&[&card], &[]).is_err(),
@@ -221,8 +302,8 @@ mod tests {
             let expression: super::CountExpression = ron::from_str(count).unwrap();
             assert!(expression.validate_static_count().is_err());
         }
-        let card = r#"(id: "test", name: "Test", types: ["Creature"], power: 1, toughness: 2,
-            static_abilities: [EntersWithCounters(counter: PlusOnePlusOne, amount: Count(SourcePower))])"#;
+        let card = r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 2,
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersWithCounters(counter: PlusOnePlusOne, amount: Count(SourcePower)))])"#;
         assert!(
             crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_err(),
             "entry replacement has no battlefield source power"
@@ -242,9 +323,9 @@ mod tests {
     }
     #[test]
     fn issue_165_static_quantity_accepts_permanents_without_pt_recursion() {
-        let card = r#"(id: "test", name: "Test", types: ["Creature"], power: 1, toughness: 2,
-            static_abilities: [CountScaledSelfPt(count: BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Desert"])),
-                power_per_match: 1, toughness_per_match: 1)])"#;
+        let card = r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 2,
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: CountScaledSelfPt(count: BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Desert"])),
+                power_per_match: 1, toughness_per_match: 1))])"#;
         assert!(crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_ok());
     }
     #[test]
@@ -283,9 +364,10 @@ mod tests {
         for (cardinality, valid) in [("EachObject", true), ("OneOrMorePerAction", false)] {
             let definition = format!(
                 r#"(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WheneverPlayerTapsCreature(player: Controller, controllers: Opponents, cardinality: {cardinality}),
                 effect: [PutCounters(counter: Stun, count: 1, subject: TriggerObject)],
-                text: "Observed creature counter",
             )"#
             );
             let ability: super::TriggeredAbilityDef = ron::from_str(&definition).unwrap();
@@ -315,7 +397,7 @@ mod tests {
     fn special_action_mana_restrictions_validate_without_spell_or_ability_permissions() {
         for purpose in ["UnlockRoomDoor", "TurnFaceUp"] {
             let restriction: ManaSpendingRestriction = ron::from_str(&format!(
-                "(label: \"Special action only\", special_actions: [{purpose}])"
+                "(restriction_id: \"restriction_01\", presentation: Fallback, special_actions: [{purpose}])"
             ))
             .expect("typed special-action restriction");
             assert!(restriction.validate().is_ok(), "{purpose}");
@@ -327,7 +409,7 @@ mod tests {
     #[test]
     fn special_action_mana_restrictions_reject_unknown_purposes() {
         assert!(ron::from_str::<ManaSpendingRestriction>(
-            "(label: \"Invalid\", special_actions: [CastAnything])"
+            "(restriction_id: \"restriction_01\", presentation: Fallback, special_actions: [CastAnything])"
         )
         .is_err());
     }
@@ -624,7 +706,9 @@ mod tests {
     #[test]
     fn first_applicable_resolution_branches_require_a_costless_final_fallback() {
         let conditional = ResolutionBranchDef {
-            label: "Conditional".into(),
+            branch_id: crate::ChoiceId::new("branch_01").unwrap(),
+            presentation: crate::AbilityPresentation::Fallback,
+            runtime_fallback: None,
             cost: ResolutionCost::None,
             requirement: ResolutionBranchRequirement::GameCondition(
                 GameCondition::CreatureDeathsThisTurn {
@@ -638,7 +722,9 @@ mod tests {
             }],
         };
         let fallback = ResolutionBranchDef {
-            label: "Fallback".into(),
+            branch_id: crate::ChoiceId::new("branch_02").unwrap(),
+            presentation: crate::AbilityPresentation::Fallback,
+            runtime_fallback: None,
             cost: ResolutionCost::None,
             requirement: ResolutionBranchRequirement::Always,
             effects: vec![SpellEffectKind::GainLife {
@@ -790,6 +876,8 @@ mod tests {
     #[test]
     fn explicit_and_intrinsic_sorcery_speed_share_one_query() {
         let explicit = ActivatedAbilityDef {
+            ability_id: crate::AbilityId::new("activated_01").unwrap(),
+            presentation: crate::AbilityPresentation::Fallback,
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![],
             cost_modifiers: vec![],
@@ -798,11 +886,12 @@ mod tests {
             timing: ActivationTiming::SorcerySpeed,
             conditions: vec![],
             activation_limit: None,
-            text: String::new(),
         };
         assert!(explicit.requires_sorcery_speed());
 
         let equip = ActivatedAbilityDef {
+            ability_id: crate::AbilityId::new("activated_01").unwrap(),
+            presentation: crate::AbilityPresentation::Fallback,
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![],
             cost_modifiers: vec![],
@@ -813,7 +902,6 @@ mod tests {
             timing: ActivationTiming::Normal,
             conditions: vec![],
             activation_limit: None,
-            text: String::new(),
         };
         assert!(equip.requires_sorcery_speed());
     }
@@ -826,6 +914,8 @@ mod tests {
             ActivationLimit::PerObject { max_activations: 1 }
         );
         let ability_with = |activation_limit| ActivatedAbilityDef {
+            ability_id: crate::AbilityId::new("activated_01").unwrap(),
+            presentation: crate::AbilityPresentation::Fallback,
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![],
             cost_modifiers: vec![],
@@ -841,7 +931,6 @@ mod tests {
             timing: ActivationTiming::Normal,
             conditions: vec![],
             activation_limit: Some(activation_limit),
-            text: "Add {G}.".into(),
         };
         assert!(
             ability_with(ActivationLimit::PerTurn { max_activations: 0 })

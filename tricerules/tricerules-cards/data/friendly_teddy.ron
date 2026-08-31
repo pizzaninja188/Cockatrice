@@ -2,13 +2,15 @@
 (
   id: "friendly_teddy",
   name: "Friendly Teddy",
+  face_id: "friendly_teddy",
   mana_cost: "{2}",
   types: ["Artifact", "Creature", "Bear", "Toy"],
   power: 2,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfDies,
     effect: [Draw(who: EachPlayer, count: 1)],
-    text: "When this creature dies, each player draws a card.",
   )],
 )

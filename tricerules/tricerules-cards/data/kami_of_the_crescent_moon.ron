@@ -3,17 +3,18 @@
 (
     id: "kami_of_the_crescent_moon",
     name: "Kami of the Crescent Moon",
+    face_id: "kami_of_the_crescent_moon",
     mana_cost: "{U}{U}",
     supertypes: ["Legendary"],
     types: ["Creature", "Spirit"],
-    colors: [Blue],
     power: 1,
     toughness: 3,
     triggered_abilities: [
         (
+            ability_id: "triggered_01",
+            presentation: OracleLines([1]),
             trigger: AtBeginningOfDrawStep(player: AnyPlayer),
             effect: [Draw(who: AffectedPlayer, count: 1)],
-            text: "At the beginning of each player's draw step, that player draws an additional card.",
         ),
     ],
 )

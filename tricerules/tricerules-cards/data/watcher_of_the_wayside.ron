@@ -1,16 +1,18 @@
 (
   id: "watcher_of_the_wayside",
   name: "Watcher of the Wayside",
+  face_id: "watcher_of_the_wayside",
   mana_cost: "{3}",
   types: ["Artifact", "Creature", "Golem"],
   power: 3,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     effect: [
       MillTargetPlayer(count: 2, target: (kind: AnyPlayer)),
       GainLife(amount: 2),
     ],
-    text: "When this creature enters, target player mills two cards. You gain 2 life.",
   )],
 )

@@ -2,17 +2,21 @@
 (
   id: "mongoose_lizard",
   name: "Mongoose Lizard",
+  face_id: "mongoose_lizard",
   mana_cost: "{4}{R}{R}",
   types: ["Creature", "Mongoose", "Lizard"],
   power: 5,
   toughness: 6,
   keywords: [Menace],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))],
-    text: "When this creature enters, it deals 1 damage to any target.",
   )],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
     source_zone: Hand,
     costs: [Mana("{2}"), DiscardSelf],
     effect: [SearchLibrary(
@@ -21,6 +25,5 @@
       shuffle: true,
       reveal: true,
     )],
-    text: "Mountaincycling {2}",
   )],
 )

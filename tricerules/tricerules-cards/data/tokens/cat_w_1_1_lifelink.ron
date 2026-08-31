@@ -5,6 +5,7 @@
 (
     id: "cat_w_1_1_lifelink",
     name: "Cat",
+    face_id: "cat",
     types: ["Creature", "Cat"],
     colors: [White],
     power: 1,

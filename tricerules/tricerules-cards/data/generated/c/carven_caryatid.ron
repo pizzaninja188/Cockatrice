@@ -2,10 +2,11 @@
 (
   id: "carven_caryatid",
   name: "Carven Caryatid",
+  face_id: "carven_caryatid",
   mana_cost: "{1}{G}{G}",
   types: ["Creature", "Spirit"],
   power: 2,
   toughness: 5,
   keywords: [Defender],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

@@ -1,11 +1,12 @@
 (
   id: "murky_sewer",
   name: "Murky Sewer",
+  face_id: "murky_sewer",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(u: 1), (b: 1)])], text: "{T}: Add {U} or {B}.")],
-  static_abilities: [EntersTapped(
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([2]), costs: [Tap], effect: [ProduceMana(options: [(u: 1), (b: 1)])], )],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(
     affected: Self_,
     condition: Some(PlayerLifeAggregate(players: All, aggregate: Minimum, min: Some(14))),
-  )],
+  ))],
 )

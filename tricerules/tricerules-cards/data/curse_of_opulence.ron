@@ -1,15 +1,17 @@
 (
   id: "curse_of_opulence",
   name: "Curse of Opulence",
+  face_id: "curse_of_opulence",
   mana_cost: "{R}",
   types: ["Enchantment", "Aura", "Curse"],
   spell_effect: [AuraAttach(target: (kind: AnyPlayer))],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverAttachedPlayerIsAttacked,
     effect: [
       CreateTokens(token: "gold", count: 1),
       CreateTokens(token: "gold", count: 1, who: AttackingOpponentsOfDefendingPlayer),
     ],
-    text: "Whenever enchanted player is attacked, create a Gold token. Each opponent attacking that player does the same.",
   )],
 )

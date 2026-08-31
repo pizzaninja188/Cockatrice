@@ -1,11 +1,12 @@
 (
   id: "holy_strength",
   name: "Holy Strength",
+  face_id: "holy_strength",
   mana_cost: "{W}",
-  // Oracle: Enchant creature. Enchanted creature gets +1/+2.
+  // CR 303.4 and 613.4c.
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
   static_abilities: [
-    AttachedModifier(delta_power: 1, delta_toughness: 2),
+    (ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(delta_power: 1, delta_toughness: 2)),
   ],
 )

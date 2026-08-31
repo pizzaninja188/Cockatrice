@@ -17,7 +17,6 @@ fn issue_53_cards_have_exact_additional_costs_and_effects() {
         ("tormenting_voice", "Tormenting Voice", "{1}{R}", false),
     ] {
         let definition = registry.get(id).unwrap_or_else(|| panic!("missing {name}"));
-        assert!(definition.partial.is_none());
         let face = definition.primary_face();
         assert_eq!(face.mana_cost.to_string(), mana);
         assert_eq!(face.is_instant, instant);
@@ -36,7 +35,6 @@ fn issue_53_cards_have_exact_additional_costs_and_effects() {
         ("village_rites", "Village Rites", "{B}", true, false),
     ] {
         let definition = registry.get(id).unwrap_or_else(|| panic!("missing {name}"));
-        assert!(definition.partial.is_none());
         let face = definition.primary_face();
         assert_eq!(face.mana_cost.to_string(), mana);
         assert_eq!(face.is_instant, instant);

@@ -5,20 +5,23 @@
   faces: [
     (
       name: "Invasion of Ulgrotha",
+      face_id: "invasion_of_ulgrotha",
       mana_cost: "{4}{B}",
       types: ["Battle", "Siege"],
       defense: 5,
       triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: Fallback,
         trigger: WhenSelfEntersBattlefield,
         effect: [
           DamageTarget(amount: 3, target: (kind: AnyTarget, excluded_objects: [Source])),
           GainLife(amount: 3, who: Controller),
         ],
-        text: "When this permanent enters, it deals 3 damage to any other target and you gain 3 life.",
       )],
     ),
     (
       name: "Grandmother Ravi Sengir",
+      face_id: "grandmother_ravi_sengir",
       mana_cost: "",
       supertypes: ["Legendary"],
       types: ["Creature", "Human", "Wizard"],
@@ -26,12 +29,13 @@
       toughness: 3,
       keywords: [Flying],
       triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: Fallback,
         trigger: WheneverCreatureDies(controller: Opponent, filter: (exclude_source: false),),
         effect: [
           PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source),
           GainLife(amount: 1, who: Controller),
         ],
-        text: "Whenever a creature an opponent controls dies, put a +1/+1 counter on this creature and you gain 1 life.",
       )],
     ),
   ],

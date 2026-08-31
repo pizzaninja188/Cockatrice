@@ -1,6 +1,7 @@
 (
   id: "thieving_magpie",
   name: "Thieving Magpie",
+  face_id: "thieving_magpie",
   mana_cost: "{2}{U}{U}",
   types: ["Creature", "Bird"],
   power: 1,
@@ -8,9 +9,10 @@
   keywords: [Flying],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WheneverSelfDealsDamageToOpponent,
       effect: [Draw(count: 1)],
-      text: "Whenever this creature deals damage to an opponent, draw a card.",
     ),
   ],
 )

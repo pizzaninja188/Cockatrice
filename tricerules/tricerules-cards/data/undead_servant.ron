@@ -3,12 +3,15 @@
 (
   id: "undead_servant",
   name: "Undead Servant",
+  face_id: "undead_servant",
   mana_cost: "{3}{B}",
   types: ["Creature", "Zombie"],
   power: 3,
   toughness: 2,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [
         CreateTokens(
@@ -16,7 +19,6 @@
           count: Count(GraveyardCardsNamed(owners: Controller, name: "Undead Servant")),
         ),
       ],
-      text: "When this creature enters, create a 2/2 black Zombie creature token for each card named Undead Servant in your graveyard.",
     ),
   ],
 )

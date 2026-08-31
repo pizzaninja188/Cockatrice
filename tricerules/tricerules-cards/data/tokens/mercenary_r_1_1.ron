@@ -1,14 +1,16 @@
 (
   id: "mercenary_r_1_1",
   name: "Mercenary",
+  face_id: "mercenary",
   types: ["Creature", "Mercenary"],
   colors: [Red],
   power: 1,
   toughness: 1,
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
     costs: [Tap],
     timing: SorcerySpeed,
     effect: [PumpTarget(power: 1, toughness: 0, subject: Chosen((kind: Creature, controller: You)))],
-    text: "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.",
   )],
 )

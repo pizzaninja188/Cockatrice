@@ -1,12 +1,15 @@
 (
   id: "sagu_pummeler",
   name: "Sagu Pummeler",
+  face_id: "sagu_pummeler",
   mana_cost: "{3}{G}",
   types: ["Creature", "Beast"],
   power: 4,
   toughness: 4,
   keywords: [Reach],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
     source_zone: Graveyard,
     costs: [Mana("{4}{G}"), ExileSelf],
     effect: [
@@ -20,6 +23,5 @@
       effect_indices: [0, 1],
     )])),
     timing: SorcerySpeed,
-    text: "Renew {4}{G} — {4}{G}, Exile this card from your graveyard: Put two +1/+1 counters and a reach counter on target creature. Activate only as a sorcery.",
   )],
 )

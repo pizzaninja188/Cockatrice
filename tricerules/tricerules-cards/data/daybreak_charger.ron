@@ -1,15 +1,17 @@
 (
   id: "daybreak_charger",
   name: "Daybreak Charger",
+  face_id: "daybreak_charger",
   mana_cost: "{1}{W}",
   types: ["Creature", "Unicorn"],
   power: 3,
   toughness: 1,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [PumpTarget(power: 2, toughness: 0, subject: Chosen((kind: Creature)))],
-      text: "When this creature enters, target creature gets +2/+0 until end of turn.",
     ),
   ],
 )

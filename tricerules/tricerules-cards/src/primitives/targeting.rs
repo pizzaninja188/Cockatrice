@@ -980,9 +980,9 @@ mod tests {
     fn issue_176_rejects_unbound_object_exclusions() {
         for body in [
             "spell_effect: [ApplyCombatRestriction(scope: Matching((kind: Creature, excluded_objects: [AttachedObject])), restriction: (cant_block: true))]",
-            "static_abilities: [ProhibitSpecialAction(action: TurnFaceUp, affected: Permanents((kind: AnyPermanent, excluded_objects: [AttachedObject])))]",
+            "static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: ProhibitSpecialAction(action: TurnFaceUp, affected: Permanents((kind: AnyPermanent, excluded_objects: [AttachedObject]))))]",
         ] {
-            let card = format!(r#"(id: "test", name: "Test", types: ["Enchantment"], {body})"#);
+            let card = format!(r#"(id: "test", name: "Test", face_id: "test", types: ["Enchantment"], {body})"#);
             let error = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[]).unwrap_err();
             assert!(matches!(error, crate::registry::RegistryError::InvalidCard { .. }), "{error}");
         }

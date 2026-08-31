@@ -2,9 +2,10 @@
 (
   id: "honey_mammoth",
   name: "Honey Mammoth",
+  face_id: "honey_mammoth",
   mana_cost: "{4}{G}{G}",
   types: ["Creature", "Elephant"],
   power: 6,
   toughness: 6,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 4)], text: "When this creature enters, you gain 4 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 4)])],
 )

@@ -2,10 +2,11 @@
 (
   id: "arborback_stomper",
   name: "Arborback Stomper",
+  face_id: "arborback_stomper",
   mana_cost: "{3}{G}{G}",
   types: ["Creature", "Beast"],
   power: 5,
   toughness: 4,
   keywords: [Trample],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 5)], text: "When this creature enters, you gain 5 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 5)])],
 )

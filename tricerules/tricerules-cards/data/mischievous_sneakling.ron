@@ -2,10 +2,11 @@
 (
   id: "mischievous_sneakling",
   name: "Mischievous Sneakling",
+  face_id: "mischievous_sneakling",
   mana_cost: "{1}{U/B}",
   types: ["Creature", "Shapeshifter"],
   power: 2,
   toughness: 2,
-  characteristic_defining_abilities: [Changeling],
+  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)],
   keywords: [Flash],
 )

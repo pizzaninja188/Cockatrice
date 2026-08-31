@@ -3,6 +3,7 @@
 (
   id: "lost_days",
   name: "Lost Days",
+  face_id: "lost_days",
   mana_cost: "{4}{U}",
   types: ["Instant", "Lesson"],
   spell_effect: [

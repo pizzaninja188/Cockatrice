@@ -8,29 +8,31 @@
     faces: [
         (
             name: "Cragcrown Pathway",
+            face_id: "cragcrown_pathway",
             mana_cost: "",
             types: ["Land"],
             supertypes: [],
-            // Oracle: "{T}: Add {R}."
             activated_abilities: [
                 (
+                    ability_id: "activated_01",
+                    presentation: OracleLines([1]),
                     costs: [Tap],
                     effect: [ProduceMana(options: [(r: 1)])],
-                    text: "{T}: Add {R}.",
                 ),
             ],
         ),
         (
             name: "Timbercrown Pathway",
+            face_id: "timbercrown_pathway",
             mana_cost: "",
             types: ["Land"],
             supertypes: [],
-            // Oracle: "{T}: Add {G}."
             activated_abilities: [
                 (
+                    ability_id: "activated_01",
+                    presentation: OracleLines([1]),
                     costs: [Tap],
                     effect: [ProduceMana(options: [(g: 1)])],
-                    text: "{T}: Add {G}.",
                 ),
             ],
         ),

@@ -1,10 +1,11 @@
 // 2/2 white Knight creature token, vanilla (e.g. The Council of Four).
 // Reference variant: same name/P/T/color as `knight_w_2_2_vigilance` (Call the Cavalry) but with
 // NO keywords. The client's token-art matcher (player_event_handler.cpp) uses the keyword set to
-// tell these apart and pick the right Oracle "Knight Token" printing. Not yet created by a card.
+// tell these apart and pick the correct external Knight token printing. Not yet created by a card.
 (
     id: "knight_w_2_2",
     name: "Knight",
+    face_id: "knight",
     types: ["Creature", "Knight"],
     colors: [White],
     power: 2,

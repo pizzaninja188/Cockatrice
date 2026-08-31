@@ -2,12 +2,15 @@
 (
   id: "monastery_messenger",
   name: "Monastery Messenger",
+  face_id: "monastery_messenger",
   mana_cost: "{2/U}{2/R}{2/W}",
   types: ["Creature", "Bird", "Scout"],
   power: 2,
   toughness: 3,
   keywords: [Flying, Vigilance],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [MoveGraveyardCards(
       filter: (owner: Controller, excluded_card_types: [Creature, Land]),
@@ -19,6 +22,5 @@
       prompt: "Choose up to one target noncreature, nonland card from your graveyard",
       effect_indices: [0],
     )])),
-    text: "When this creature enters, put up to one target noncreature, nonland card from your graveyard on top of your library.",
   )],
 )

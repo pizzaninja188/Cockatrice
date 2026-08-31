@@ -1,8 +1,9 @@
 (
   id: "woodland_stream",
   name: "Woodland Stream",
+  face_id: "woodland_stream",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1), (u: 1)])], text: "{T}: Add {G} or {U}.")],
-  static_abilities: [EntersTapped(affected: Self_)],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([2]), costs: [Tap], effect: [ProduceMana(options: [(g: 1), (u: 1)])], )],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Self_))],
 )

@@ -3,6 +3,7 @@
 (
   id: "yip_yip!",
   name: "Yip Yip!",
+  face_id: "yip_yip",
   mana_cost: "{W}",
   types: ["Instant", "Lesson"],
   spell_effect: [

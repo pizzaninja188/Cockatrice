@@ -7,7 +7,7 @@ use super::{
     SpecialActionKind, SpellCastFilter, TargetController, TargetFilter, TargetKind, TargetRole,
     TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
 };
-use crate::ManaCost;
+use crate::{choice_fallback, AbilityPresentation, ChoiceId, ManaCost};
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
 use serde::ser::SerializeStructVariant;
 use serde::{Deserialize, Serialize};
@@ -1529,13 +1529,37 @@ pub enum ResolutionCost {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ResolutionBranchDef {
-    pub label: String,
+    pub branch_id: ChoiceId,
+    pub presentation: AbilityPresentation,
+    /// Engine-derived wording for runtime-only synthetic choices. It cannot be authored in RON.
+    #[serde(skip)]
+    pub runtime_fallback: Option<String>,
     pub cost: ResolutionCost,
     #[serde(default)]
     pub requirement: ResolutionBranchRequirement,
     #[serde(default)]
     pub effects: Vec<SpellEffectKind>,
+}
+
+impl ResolutionBranchDef {
+    pub fn fallback_label(&self) -> String {
+        if let Some(fallback) = &self.runtime_fallback {
+            return fallback.clone();
+        }
+        match &self.cost {
+            ResolutionCost::Waterbend(cost) => format!("Waterbend {cost}"),
+            ResolutionCost::Blight { count } => format!("Blight {count}"),
+            ResolutionCost::Mana(cost) => format!("Pay {cost}"),
+            ResolutionCost::DiscardCard { .. } => "Discard a card".into(),
+            ResolutionCost::SacrificePermanent { .. } => "Sacrifice a permanent".into(),
+            ResolutionCost::TapPermanents { count, .. } => {
+                format!("Tap {count} permanent(s)")
+            }
+            ResolutionCost::None => choice_fallback("Choice", &self.branch_id),
+        }
+    }
 }
 
 /// Selects an engine-owned cohort of cards produced while paying for the resolving stack item or
@@ -1615,11 +1639,19 @@ pub struct CastCostConditionalAmount {
 /// uses a basic-land slot plus a kicked Shrine slot; the same graph represents searches such as
 /// Gem of Becoming without exposing card-type inference to clients.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SearchSelectionSlot {
-    pub label: String,
+    pub slot_id: ChoiceId,
+    pub presentation: AbilityPresentation,
     pub filter: ZoneCardFilter,
     #[serde(default)]
     pub enabled_by_cast_cost: Option<CastCostReceiptCondition>,
+}
+
+impl SearchSelectionSlot {
+    pub fn fallback_label(&self) -> String {
+        choice_fallback("Search choice", &self.slot_id)
+    }
 }
 
 /// Timing for a delayed trigger that sacrifices the full post-replacement token cohort.
@@ -2569,6 +2601,43 @@ impl ManaSpendFilter {
         }
         Ok(())
     }
+
+    fn fallback_card_description(&self) -> String {
+        let type_name = self.card_type.map(|card_type| match card_type {
+            CardTypeFilter::BasicLand => "basic land",
+            CardTypeFilter::Land => "land",
+            CardTypeFilter::Enchantment => "enchantment",
+            CardTypeFilter::Instant => "instant",
+            CardTypeFilter::Sorcery => "sorcery",
+            CardTypeFilter::InstantOrSorcery => "instant or sorcery",
+            CardTypeFilter::Creature => "creature",
+            CardTypeFilter::Artifact => "artifact",
+            CardTypeFilter::Planeswalker => "planeswalker",
+            CardTypeFilter::Battle => "battle",
+            CardTypeFilter::Nonland => "nonland",
+            CardTypeFilter::NonlandPermanent => "nonland permanent",
+            CardTypeFilter::Noncreature => "noncreature",
+        });
+        let description = match (self.subtype.as_deref(), type_name) {
+            (Some(subtype), Some(card_type)) => format!("{subtype} {card_type}"),
+            (Some(subtype), None) => subtype.to_owned(),
+            (None, Some(card_type)) => card_type.to_owned(),
+            (None, None) => "matching".into(),
+        };
+        let article =
+            if description.chars().next().is_some_and(|first| {
+                matches!(first.to_ascii_lowercase(), 'a' | 'e' | 'i' | 'o' | 'u')
+            }) {
+                "an"
+            } else {
+                "a"
+            };
+        format!("{article} {description}")
+    }
+
+    fn fallback_spell_description(&self) -> String {
+        format!("{} spell", self.fallback_card_description())
+    }
 }
 
 /// Payment purposes for the existing Room-unlock and manifest face-up special actions.
@@ -2583,9 +2652,10 @@ pub enum SpecialActionManaPurpose {
 /// that purpose is disallowed. Filters within one list are ORed so one contribution can cover
 /// wording such as "an Elemental spell or a Chandra planeswalker spell."
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ManaSpendingRestriction {
-    /// Engine-authored public hover text; clients display it verbatim and never parse Oracle.
-    pub label: String,
+    pub restriction_id: ChoiceId,
+    pub presentation: AbilityPresentation,
     #[serde(default)]
     pub cast_spell: Vec<ManaSpendFilter>,
     #[serde(default)]
@@ -2596,9 +2666,8 @@ pub struct ManaSpendingRestriction {
 
 impl ManaSpendingRestriction {
     pub fn validate(&self) -> Result<(), String> {
-        if self.label.trim().is_empty() {
-            return Err("mana spending restriction label cannot be empty".into());
-        }
+        self.restriction_id.validate()?;
+        self.presentation.validate()?;
         if self.cast_spell.is_empty()
             && self.activate_ability.is_empty()
             && self.special_actions.is_empty()
@@ -2609,6 +2678,34 @@ impl ManaSpendingRestriction {
             .iter()
             .chain(&self.activate_ability)
             .try_for_each(ManaSpendFilter::validate)
+    }
+
+    pub fn fallback_label(&self) -> String {
+        let mut purposes = self
+            .cast_spell
+            .iter()
+            .map(|filter| format!("cast {}", filter.fallback_spell_description()))
+            .chain(self.activate_ability.iter().map(|filter| {
+                format!(
+                    "activate an ability of {}",
+                    filter.fallback_card_description()
+                )
+            }))
+            .collect::<Vec<_>>();
+        purposes.extend(self.special_actions.iter().map(|purpose| match purpose {
+            SpecialActionManaPurpose::UnlockRoomDoor => "unlock a door".into(),
+            SpecialActionManaPurpose::TurnFaceUp => "turn a permanent face up".into(),
+        }));
+        let joined = match purposes.as_slice() {
+            [] => choice_fallback("Restricted mana", &self.restriction_id),
+            [only] => only.clone(),
+            [first, second] => format!("{first} or {second}"),
+            _ => {
+                let (last, rest) = purposes.split_last().expect("nonempty purpose list");
+                format!("{}, or {last}", rest.join(", "))
+            }
+        };
+        format!("Spend only to {joined}")
     }
 }
 
@@ -3361,7 +3458,16 @@ impl SpellEffectKind {
                 ) {
                     return Err("resolution choice requires exactly one deciding player".into());
                 }
+                let mut branch_ids = std::collections::HashSet::new();
                 for (branch_index, branch) in branches.iter().enumerate() {
+                    branch.branch_id.validate()?;
+                    branch.presentation.validate()?;
+                    if !branch_ids.insert(branch.branch_id.as_str()) {
+                        return Err(format!(
+                            "duplicate resolution branch id '{}'",
+                            branch.branch_id
+                        ));
+                    }
                     let is_first_applicable_noop_fallback = *selection
                         == ResolutionBranchSelection::FirstApplicable
                         && branch_index + 1 == branches.len()
@@ -3370,14 +3476,12 @@ impl SpellEffectKind {
                     // Paying a real cost can be the entire successful branch (Command Bridge,
                     // Transguild Promenade); it needs no fabricated follow-up effect.
                     let is_cost_only_branch = branch.cost != ResolutionCost::None;
-                    if branch.label.trim().is_empty()
-                        || (branch.effects.is_empty()
-                            && !is_first_applicable_noop_fallback
-                            && !is_cost_only_branch)
+                    if branch.effects.is_empty()
+                        && !is_first_applicable_noop_fallback
+                        && !is_cost_only_branch
                     {
                         return Err(
-                            "resolution choice branches require a label and an effect or payment"
-                                .into(),
+                            "resolution choice branches require an effect or payment".into()
                         );
                     }
                     match &branch.cost {
@@ -4099,9 +4203,15 @@ impl SpellEffectKind {
                 if let Some(filter) = filter {
                     filter.validate()?;
                 }
+                let mut slot_ids = std::collections::HashSet::new();
                 for slot in slots {
-                    if slot.label.trim().is_empty() {
-                        return Err("SearchLibrary slot labels cannot be empty".into());
+                    slot.slot_id.validate()?;
+                    slot.presentation.validate()?;
+                    if !slot_ids.insert(slot.slot_id.as_str()) {
+                        return Err(format!(
+                            "duplicate SearchLibrary slot id '{}'",
+                            slot.slot_id
+                        ));
                     }
                     slot.filter.validate()?;
                 }

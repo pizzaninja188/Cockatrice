@@ -2,6 +2,7 @@
 (
   id: "wall_of_granite",
   name: "Wall of Granite",
+  face_id: "wall_of_granite",
   mana_cost: "{2}{R}",
   types: ["Creature", "Wall"],
   power: 0,

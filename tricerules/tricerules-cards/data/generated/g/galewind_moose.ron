@@ -2,6 +2,7 @@
 (
   id: "galewind_moose",
   name: "Galewind Moose",
+  face_id: "galewind_moose",
   mana_cost: "{4}{G}{G}",
   types: ["Creature", "Elemental", "Elk"],
   power: 6,

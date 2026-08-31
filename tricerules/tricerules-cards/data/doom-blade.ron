@@ -1,8 +1,9 @@
 (
   id: "doom_blade",
   name: "Doom Blade",
+  face_id: "doom_blade",
   mana_cost: "{1}{B}",
   types: ["Instant"],
-  // "Destroy target nonblack creature." not_color enforces the nonblack restriction (CR 105).
+  // not_color enforces the nonblack creature restriction (CR 105).
   spell_effect: [Destroy(subject: Chosen((kind: Creature, not_color: Black)))],
 )

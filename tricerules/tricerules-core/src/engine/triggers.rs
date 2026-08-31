@@ -27,6 +27,17 @@ pub(super) struct CollectedTrigger {
     pub trigger_context: TriggerContext,
 }
 
+fn trigger_ability_path(
+    origin: &TriggerAbilityOrigin,
+    ability: &TriggeredAbilityDef,
+) -> Vec<tricerules_cards::AbilityId> {
+    match origin {
+        TriggerAbilityOrigin::Printed(definition)
+        | TriggerAbilityOrigin::StaticGrant { definition, .. } => definition.ability_path.clone(),
+        TriggerAbilityOrigin::ResolvingGrant(_) => vec![ability.ability_id.clone()],
+    }
+}
+
 impl GameEngine {
     pub(super) fn event_object_fact(&self, object_id: ObjectId) -> Option<TurnObjectFact> {
         let object = self.state.objects.get(&object_id)?;
@@ -124,11 +135,13 @@ impl GameEngine {
             return;
         }
         let ability = TriggeredAbilityDef {
+            ability_id: tricerules_cards::AbilityId::new("siege_defeat")
+                .expect("intrinsic ability id"),
+            presentation: tricerules_cards::AbilityPresentation::Fallback,
             trigger: TriggerCondition::WhenSelfDies,
             effect: vec![SpellEffectKind::SiegeDefeat],
             modal: None,
             targeting: None,
-            text: "When the last defense counter is removed from this Siege, exile it, then you may cast it transformed without paying its mana cost.".into(),
             may: false,
             intervening_if: None,
             max_triggers_per_turn: None,
@@ -145,7 +158,7 @@ impl GameEngine {
             .unwrap_or(0);
         self.stage_triggers(vec![CollectedTrigger {
             source_id,
-            card_id,
+            card_id: card_id.clone(),
             face_index,
             source_zone_change: source_generation,
             source_face_change,
@@ -153,7 +166,13 @@ impl GameEngine {
             ability_index: usize::MAX,
             ability_origin: None,
             ability: ability.clone(),
-            ability_text: ability.text.clone(),
+            ability_text: ability.fallback_text(
+                self.registry
+                    .get(&card_id)
+                    .and_then(|definition| definition.faces.get(face_index))
+                    .map(|face| face.name.as_str())
+                    .unwrap_or(&card_id),
+            ),
             trigger_context: TriggerContext::default(),
         }]);
     }
@@ -236,26 +255,25 @@ impl GameEngine {
             }
         }
         let mut collected = self.collect_event_triggers(events);
-        collected.extend(
-            delayed
-                .into_iter()
-                .map(|(watched, delayed)| CollectedTrigger {
-                    source_id: delayed.source.object_id,
-                    card_id: delayed.card_id,
-                    face_index: delayed.source_face_index,
-                    source_zone_change: delayed.source.zone_change_generation,
-                    source_face_change: 0,
-                    controller: delayed.controller,
-                    ability_index: 0,
-                    ability_origin: None,
-                    ability_text: delayed.ability.text.clone(),
-                    trigger_context: TriggerContext {
-                        observed_object: Some(watched),
-                        ..TriggerContext::default()
-                    },
-                    ability: delayed.ability,
-                }),
-        );
+        collected.extend(delayed.into_iter().map(|(watched, delayed)| {
+            let ability_text = delayed.ability.fallback_text(&delayed.card_name);
+            CollectedTrigger {
+                source_id: delayed.source.object_id,
+                card_id: delayed.card_id,
+                face_index: delayed.source_face_index,
+                source_zone_change: delayed.source.zone_change_generation,
+                source_face_change: 0,
+                controller: delayed.controller,
+                ability_index: 0,
+                ability_origin: None,
+                ability_text,
+                trigger_context: TriggerContext {
+                    observed_object: Some(watched),
+                    ..TriggerContext::default()
+                },
+                ability: delayed.ability,
+            }
+        }));
         self.stage_triggers(collected);
     }
 
@@ -667,11 +685,11 @@ impl GameEngine {
                                         self.ability_definition(
                                             source.object_id,
                                             *face_index,
-                                            ability_index,
+                                            vec![ability.ability_id.clone()],
                                         ),
                                     )),
                                     ability: ability.clone(),
-                                    ability_text: ability.text.clone(),
+                                    ability_text: ability.fallback_text(&face.name),
                                     trigger_context: TriggerContext::default(),
                                 }),
                         );
@@ -1478,9 +1496,16 @@ impl GameEngine {
                     .unwrap_or(0),
                 controller,
                 ability_index: idx,
-                ability_origin: Some(origin),
+                ability_origin: Some(origin.clone()),
                 ability: ta.clone(),
-                ability_text: ta.text.clone(),
+                ability_text: ta.fallback_text_with_path(
+                    self.registry
+                        .get(card_id)
+                        .and_then(|definition| definition.faces.get(face_index))
+                        .map(|face| face.name.as_str())
+                        .unwrap_or(card_id),
+                    &trigger_ability_path(&origin, &ta),
+                ),
                 trigger_context: TriggerContext::default(),
             })
             .collect()
@@ -1539,6 +1564,10 @@ impl GameEngine {
             triggered_abilities: self
                 .effective_triggered_abilities(source_id, &card_id, face_index),
             card_id,
+            face_name: self
+                .effective_face(source_id)
+                .map(|face| face.name.clone())
+                .unwrap_or_else(|| object.card_id.clone()),
             controller,
             face_index,
             zone_change_generation: self
@@ -1563,23 +1592,37 @@ impl GameEngine {
         &self,
         source_id: ObjectId,
         face_index: usize,
-        ability_index: usize,
+        ability_path: Vec<tricerules_cards::AbilityId>,
     ) -> AbilityDefinitionId {
         let object = &self.state.objects[&source_id];
         let values = object
             .copiable_values
             .as_ref()
             .or(object.token_origin.as_ref());
+        let card_id = values
+            .filter(|v| !v.source_card_id.is_empty())
+            .map(|v| v.source_card_id.clone())
+            .unwrap_or_else(|| object.card_id.clone());
+        let face_id = values
+            .and_then(|values| {
+                values
+                    .room_faces
+                    .as_ref()
+                    .and_then(|faces| faces.get(face_index))
+                    .or_else(|| values.room_faces.is_none().then_some(&values.face))
+            })
+            .map(|face| face.face_id.clone())
+            .or_else(|| {
+                self.registry
+                    .get(&card_id)
+                    .and_then(|card| card.faces.get(face_index))
+                    .map(|face| face.face_id.clone())
+            })
+            .expect("validated ability provenance has a stable face id");
         AbilityDefinitionId {
-            card_id: values
-                .filter(|v| !v.source_card_id.is_empty())
-                .map(|v| v.source_card_id.clone())
-                .unwrap_or_else(|| object.card_id.clone()),
-            face_index: values
-                .filter(|v| v.room_faces.is_none())
-                .map(|v| v.source_face_index)
-                .unwrap_or(face_index),
-            ability_index,
+            card_id,
+            face_id,
+            ability_path,
         }
     }
 
@@ -1607,18 +1650,26 @@ impl GameEngine {
                     .unwrap_or_default()
                     .unlocked_indices()
                 {
-                    for (slot, ability) in faces[door].triggered_abilities.iter().enumerate() {
+                    for ability in &faces[door].triggered_abilities {
                         printed.push((
                             ability.clone(),
-                            self.ability_definition(source_id, door, slot),
+                            self.ability_definition(
+                                source_id,
+                                door,
+                                vec![ability.ability_id.clone()],
+                            ),
                         ));
                     }
                 }
             } else if let Some(face) = self.effective_face(source_id) {
-                for (slot, ability) in face.triggered_abilities.iter().enumerate() {
+                for ability in &face.triggered_abilities {
                     printed.push((
                         ability.clone(),
-                        self.ability_definition(source_id, face_index, slot),
+                        self.ability_definition(
+                            source_id,
+                            face_index,
+                            vec![ability.ability_id.clone()],
+                        ),
                     ));
                 }
             }
@@ -1690,7 +1741,10 @@ impl GameEngine {
                 ability_index: *ability_index,
                 ability_origin: Some(origin.clone()),
                 ability: ability.clone(),
-                ability_text: ability.text.clone(),
+                ability_text: ability.fallback_text_with_path(
+                    &source.face_name,
+                    &trigger_ability_path(origin, ability),
+                ),
                 trigger_context: TriggerContext::default(),
             })
             .collect()
@@ -1895,7 +1949,7 @@ impl GameEngine {
                             .all(|group| legal_target_group_has_minimum(&self.state, group));
                     rv1::LegalSpellMode {
                         mode_index: mode_index as u32,
-                        label: mode.label.clone(),
+                        label: mode_fallback(&ability_text, &mode.mode_id),
                         selectable,
                         needs_target: mode_needs_target,
                         targets: Some(targets),
@@ -2050,14 +2104,17 @@ impl TriggerSourceSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tricerules_cards::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility};
 
     #[test]
     fn issue_168_entry_observer_uses_shared_subtype_filter() {
-        let data = r#"(id: "entry_probe", name: "Entry Probe", types: ["Creature"],
+        let data = r#"(id: "entry_probe", name: "Entry Probe", face_id: "entry_probe", types: ["Creature"],
             power: 1, toughness: 1, triggered_abilities: [(
+            ability_id: "triggered_01",
+            presentation: Fallback,
             trigger: WheneverPermanentEntersBattlefield(controller: Controller,
                 filter: (any_subtypes: ["Bird", "Fish"])),
-            effect: [GainLife(amount: 1)], text: "Probe")])"#;
+            effect: [GainLife(amount: 1)], )])"#;
         let registry = CardRegistry::from_chunks_and_tokens(&[data], &[]).unwrap();
         let trigger = registry
             .get("entry_probe")
@@ -2078,14 +2135,18 @@ mod tests {
 
     #[test]
     fn issue_168_departure_vocabulary_loads() {
-        let data = r#"(id: "departure_probe", name: "Departure Probe", types: ["Creature"],
+        let data = r#"(id: "departure_probe", name: "Departure Probe", face_id: "departure_probe", types: ["Creature"],
             power: 1, toughness: 1, triggered_abilities: [(
+            ability_id: "triggered_01",
+            presentation: Fallback,
             trigger: WheneverPermanentLeavesBattlefield(controller: Controller,
                 filter: (permanent_type: Some(Creature)), destination: Except([Graveyard])),
-            effect: [GainLife(amount: 1)], text: "Probe"), (
+            effect: [GainLife(amount: 1)], ), (
+            ability_id: "triggered_02",
+            presentation: Fallback,
             trigger: WheneverCardsLeaveGraveyard(owner: Controller,
                 filter: (permanent_type: Some(Creature)), cardinality: OneOrMore),
-            effect: [GainLife(amount: 1)], text: "Probe")])"#;
+            effect: [GainLife(amount: 1)], )])"#;
         CardRegistry::from_chunks_and_tokens(&[data], &[])
             .expect("shared zone observer vocabulary");
     }
@@ -2093,8 +2154,8 @@ mod tests {
     fn test_ability_origin(index: usize) -> TriggerAbilityOrigin {
         TriggerAbilityOrigin::Printed(AbilityDefinitionId {
             card_id: "test_trigger_source".into(),
-            face_index: 0,
-            ability_index: index,
+            face_id: CardFaceId::new("front").unwrap(),
+            ability_path: vec![AbilityId::new(format!("triggered_{:02}", index + 1)).unwrap()],
         })
     }
 
@@ -2294,7 +2355,9 @@ mod tests {
     fn issue_164_printed_slots_control_suppression_and_blink_keep_the_right_identity() {
         let (mut engine, source) = trigger_limit_source();
         let ability = limited_dies_ability(&engine);
-        install_trigger_face(&mut engine, source, vec![ability.clone(), ability.clone()]);
+        let mut second_ability = ability.clone();
+        second_ability.ability_id = AbilityId::new("triggered_02").unwrap();
+        install_trigger_face(&mut engine, source, vec![ability, second_ability]);
         let values = engine.state.objects[&source]
             .copiable_values
             .clone()
@@ -2303,7 +2366,7 @@ mod tests {
         assert_eq!(
             take_staged_count(&mut engine),
             2,
-            "identical printed slots are independent"
+            "mechanically identical abilities with distinct stable IDs are independent"
         );
         engine.state.objects.get_mut(&source).unwrap().controller = 1;
         engine.state.continuous_effects.push(ContinuousEffect {
@@ -2359,17 +2422,23 @@ mod tests {
     fn issue_164_static_grants_survive_refresh_and_conditional_suppression() {
         let (mut engine, source) = trigger_limit_source();
         let ability = limited_dies_ability(&engine);
+        let mut second_ability = ability.clone();
+        second_ability.ability_id = AbilityId::new("triggered_02").unwrap();
         let mut values = engine.copiable_values_for(source).unwrap();
-        values.face.static_abilities = vec![StaticAbilityDef::ConditionalSelfModifier {
-            condition: GameCondition::ActivePlayer {
-                players: RelativePlayerSet::Controller,
+        values.face.static_abilities = vec![IdentifiedAbility::fallback(
+            "static_01",
+            StaticAbilityDef::ConditionalSelfModifier {
+                condition: GameCondition::ActivePlayer {
+                    players: RelativePlayerSet::Controller,
+                },
+                delta_power: 0,
+                delta_toughness: 0,
+                keywords: vec![],
+                triggered_abilities: vec![ability, second_ability],
+                can_attack_as_though_without_defender: false,
             },
-            delta_power: 0,
-            delta_toughness: 0,
-            keywords: vec![],
-            triggered_abilities: vec![ability.clone(), ability],
-            can_attack_as_though_without_defender: false,
-        }];
+        )
+        .unwrap()];
         engine
             .state
             .objects
@@ -2523,6 +2592,7 @@ mod tests {
             event_conditions_checked: false,
             object_id: 100,
             card_id: "wandertale_mentor".into(),
+            face_name: "Wandertale Mentor".into(),
             controller: 1,
             face_index: 0,
             zone_change_generation: 3,
@@ -2772,6 +2842,7 @@ mod tests {
             event_conditions_checked: false,
             object_id: 100,
             card_id: "curse_of_disturbance".into(),
+            face_name: "Curse of Disturbance".into(),
             controller: 0,
             face_index: 0,
             zone_change_generation: 0,
@@ -2780,6 +2851,8 @@ mod tests {
             triggered_abilities: vec![(
                 0,
                 TriggeredAbilityDef {
+                    ability_id: AbilityId::new("triggered_01").unwrap(),
+                    presentation: AbilityPresentation::Fallback,
                     trigger: TriggerCondition::WheneverAttachedPlayerIsAttacked,
                     effect: vec![SpellEffectKind::Draw {
                         who: PlayerRecipient::Controller,
@@ -2787,7 +2860,6 @@ mod tests {
                     }],
                     modal: None,
                     targeting: None,
-                    text: "Whenever enchanted player is attacked, draw a card.".into(),
                     may: false,
                     intervening_if: None,
                     max_triggers_per_turn: None,
@@ -3246,8 +3318,8 @@ mod tests {
             "WheneverPermanentLeavesBattlefield(destination: Except([]))",
             "WheneverCardsLeaveGraveyard(cardinality: OneOrMore)",
         ] {
-            let data = format!(r#"(id: "probe", name: "Probe", types: ["Creature"], power: 1, toughness: 1,
-                triggered_abilities: [(trigger: {trigger}, effect: [PumpTarget(power: 1, toughness: 0, subject: TriggerObject)], text: "Probe")])"#);
+            let data = format!(r#"(id: "probe", name: "Probe", face_id: "probe", types: ["Creature"], power: 1, toughness: 1,
+                triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: {trigger}, effect: [PumpTarget(power: 1, toughness: 0, subject: TriggerObject)], )])"#);
             assert!(CardRegistry::from_chunks_and_tokens(&[&data], &[]).is_err(), "{trigger}");
         }
     }

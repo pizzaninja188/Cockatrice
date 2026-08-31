@@ -1,6 +1,7 @@
 (
   id: "savannah_lions",
   name: "Savannah Lions",
+  face_id: "savannah_lions",
   mana_cost: "{W}",
   types: ["Creature", "Cat"],
   power: 2,

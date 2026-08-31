@@ -2,9 +2,10 @@
 (
   id: "pond_prophet",
   name: "Pond Prophet",
+  face_id: "pond_prophet",
   mana_cost: "{G/U}{G/U}",
   types: ["Creature", "Frog", "Advisor"],
   power: 1,
   toughness: 1,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

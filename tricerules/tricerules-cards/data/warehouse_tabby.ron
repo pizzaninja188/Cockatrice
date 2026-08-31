@@ -2,22 +2,25 @@
 (
   id: "warehouse_tabby",
   name: "Warehouse Tabby",
+  face_id: "warehouse_tabby",
   mana_cost: "{B}",
   types: ["Creature", "Cat"],
   power: 1,
   toughness: 1,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WheneverPermanentLeavesBattlefield(
       controller: Controller,
       filter: (permanent_type: Some(Enchantment)),
       destination: OneOf([Graveyard]),
     ),
     effect: [CreateTokens(token: "rat_b_1_1_cant_block", count: 1)],
-    text: "Whenever an enchantment you control is put into a graveyard from the battlefield, create a 1/1 black Rat creature token with \"This token can't block.\"",
   )],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
     costs: [Mana("{1}{B}")],
     effect: [GrantKeywords(subject: Source, keywords: [Deathtouch])],
-    text: "{1}{B}: This creature gains deathtouch until end of turn.",
   )],
 )

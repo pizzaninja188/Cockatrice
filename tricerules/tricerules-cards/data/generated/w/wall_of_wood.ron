@@ -2,6 +2,7 @@
 (
   id: "wall_of_wood",
   name: "Wall of Wood",
+  face_id: "wall_of_wood",
   mana_cost: "{G}",
   types: ["Creature", "Wall"],
   power: 0,

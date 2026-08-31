@@ -3,18 +3,20 @@
 (
   id: "gloom_sower",
   name: "Gloom Sower",
+  face_id: "gloom_sower",
   mana_cost: "{5}{B}{B}",
   types: ["Creature", "Horror"],
   power: 8,
   toughness: 6,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WheneverSelfBecomesBlockedByCreature(blocker: ()),
       effect: [
         LoseLife(amount: Fixed(2), who: TriggerObjectController),
         GainLife(amount: 2),
       ],
-      text: "Whenever this creature becomes blocked by a creature, that creature's controller loses 2 life and you gain 2 life.",
     ),
   ],
 )

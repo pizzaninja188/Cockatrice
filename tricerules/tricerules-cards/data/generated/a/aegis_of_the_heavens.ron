@@ -2,7 +2,9 @@
 (
   id: "aegis_of_the_heavens",
   name: "Aegis of the Heavens",
+  face_id: "aegis_of_the_heavens",
   mana_cost: "{1}{W}",
   types: ["Instant"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 1, toughness: 7)],
 )

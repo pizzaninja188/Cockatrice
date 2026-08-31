@@ -1,6 +1,7 @@
 (
   id: "gladecover_scout",
   name: "Gladecover Scout",
+  face_id: "gladecover_scout",
   mana_cost: "{G}",
   types: ["Creature", "Elf", "Scout"],
   power: 1,

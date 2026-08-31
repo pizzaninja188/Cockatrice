@@ -2,6 +2,7 @@
 (
   id: "sun-dappled_celebrant",
   name: "Sun-Dappled Celebrant",
+  face_id: "sun_dappled_celebrant",
   mana_cost: "{4}{W}{W}",
   types: ["Creature", "Treefolk", "Cleric"],
   power: 5,

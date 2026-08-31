@@ -54,7 +54,7 @@ impl GameEngine {
                 return false;
             }
             self.effective_face(source).is_some_and(|face| face.static_abilities.iter().any(|ability| {
-                match ability {
+                match &ability.definition {
                     StaticAbilityDef::ProhibitCounters { affected: tricerules_cards::primitives::CounterPlacementAffected::Self_ } => source == target,
                     StaticAbilityDef::ProhibitCounters { affected: tricerules_cards::primitives::CounterPlacementAffected::AttachedPermanent } => object.attached_to == Some(AttachmentRecipient::Object(target)),
                     _ => false,
@@ -105,7 +105,7 @@ impl GameEngine {
                 return false;
             };
             face.static_abilities.iter().any(|ability| {
-                let StaticAbilityDef::ProhibitLifeGain { players } = ability else {
+                let StaticAbilityDef::ProhibitLifeGain { players } = &ability.definition else {
                     return false;
                 };
                 self.controller_of(oid).is_some_and(|controller| {
@@ -205,17 +205,21 @@ impl GameEngine {
                 .unwrap_or_default()
                 .unlocked_indices()
             {
-                for (slot, ability) in faces[door].static_abilities.iter().enumerate() {
+                for ability in &faces[door].static_abilities {
                     statics.push((
-                        self.ability_definition(object_id, door, slot),
+                        self.ability_definition(object_id, door, vec![ability.ability_id.clone()]),
                         ability.clone(),
                     ));
                 }
             }
         } else if let Some(face) = self.effective_face(object_id) {
-            for (slot, ability) in face.static_abilities.iter().enumerate() {
+            for ability in &face.static_abilities {
                 statics.push((
-                    self.ability_definition(object_id, object.face_up_index, slot),
+                    self.ability_definition(
+                        object_id,
+                        object.face_up_index,
+                        vec![ability.ability_id.clone()],
+                    ),
                     ability.clone(),
                 ));
             }
@@ -229,7 +233,7 @@ impl GameEngine {
         let timestamp = self.state.command_index;
 
         for (definition, static_ability) in statics {
-            match static_ability {
+            match static_ability.definition {
                 StaticAbilityDef::ProhibitLifeGain { .. }
                 | StaticAbilityDef::ProhibitCounters { .. } => {
                     // Queried at each life-gain event; no independent effect record is needed.
@@ -449,8 +453,16 @@ impl GameEngine {
                         });
                     }
                     for ability in activated_abilities {
+                        let mut granted_definition = definition.clone();
+                        granted_definition
+                            .ability_path
+                            .push(ability.ability_id.clone());
                         self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
+                            trigger_grant_origin: Some(TriggerAbilityOrigin::StaticGrant {
+                                source_id: object_id,
+                                source_zone_change,
+                                definition: granted_definition,
+                            }),
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::GrantActivatedAbility(Box::new(ability)),
@@ -459,13 +471,16 @@ impl GameEngine {
                             timestamp,
                         });
                     }
-                    for (grant_index, ability) in triggered_abilities.into_iter().enumerate() {
+                    for ability in triggered_abilities {
+                        let mut granted_definition = definition.clone();
+                        granted_definition
+                            .ability_path
+                            .push(ability.ability_id.clone());
                         self.state.add_triggered_ability_grant(ContinuousEffect {
                             trigger_grant_origin: Some(TriggerAbilityOrigin::StaticGrant {
                                 source_id: object_id,
                                 source_zone_change,
-                                definition: definition.clone(),
-                                grant_index,
+                                definition: granted_definition,
                             }),
                             source_id: Some(object_id),
                             affected: affected.clone(),
@@ -589,13 +604,16 @@ impl GameEngine {
                             timestamp,
                         });
                     }
-                    for (grant_index, ability) in triggered_abilities.into_iter().enumerate() {
+                    for ability in triggered_abilities {
+                        let mut granted_definition = definition.clone();
+                        granted_definition
+                            .ability_path
+                            .push(ability.ability_id.clone());
                         self.state.add_triggered_ability_grant(ContinuousEffect {
                             trigger_grant_origin: Some(TriggerAbilityOrigin::StaticGrant {
                                 source_id: object_id,
                                 source_zone_change,
-                                definition: definition.clone(),
-                                grant_index,
+                                definition: granted_definition,
                             }),
                             source_id: Some(object_id),
                             affected: affected.clone(),
@@ -656,7 +674,12 @@ impl GameEngine {
     pub(super) fn effective_activated_abilities(
         &self,
         source_id: ObjectId,
-    ) -> Vec<(usize, ActivatedAbilityDef, bool)> {
+    ) -> Vec<(
+        usize,
+        ActivatedAbilityDef,
+        bool,
+        Vec<tricerules_cards::AbilityId>,
+    )> {
         let face_down = self
             .state
             .objects
@@ -664,23 +687,39 @@ impl GameEngine {
             .is_some_and(|object| object.face_down);
         let removed_at =
             super::characteristics::latest_remove_all_abilities_timestamp(&self.state, source_id);
-        let mut abilities: Vec<(usize, ActivatedAbilityDef, bool)> = (!face_down
-            && removed_at.is_none())
-        .then(|| self.effective_face(source_id))
-        .flatten()
-        .map(|face| {
-            face.activated_abilities
-                .iter()
-                .enumerate()
-                .filter(|(_, ability)| ability.source_zone == AbilitySourceZone::Battlefield)
-                .map(|(index, ability)| (index, ability.clone(), false))
-                .collect()
-        })
-        .unwrap_or_default();
+        let mut abilities: Vec<(
+            usize,
+            ActivatedAbilityDef,
+            bool,
+            Vec<tricerules_cards::AbilityId>,
+        )> = (!face_down && removed_at.is_none())
+            .then(|| self.effective_face(source_id))
+            .flatten()
+            .map(|face| {
+                face.activated_abilities
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, ability)| ability.source_zone == AbilitySourceZone::Battlefield)
+                    .map(|(index, ability)| {
+                        (
+                            index,
+                            ability.clone(),
+                            false,
+                            vec![ability.ability_id.clone()],
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
         let Some(characteristics) = self.characteristics(source_id) else {
             return abilities;
         };
-        let mut granted: Vec<(u64, usize, ActivatedAbilityDef)> = self
+        let mut granted: Vec<(
+            u64,
+            usize,
+            ActivatedAbilityDef,
+            Vec<tricerules_cards::AbilityId>,
+        )> = self
             .state
             .continuous_effects
             .iter()
@@ -699,13 +738,21 @@ impl GameEngine {
                     source_id,
                     &characteristics,
                 )
-                .then(|| (effect.timestamp, insertion_index, (**ability).clone()))
+                .then(|| {
+                    let path = match effect.trigger_grant_origin.as_ref() {
+                        Some(TriggerAbilityOrigin::StaticGrant { definition, .. }) => {
+                            definition.ability_path.clone()
+                        }
+                        _ => vec![ability.ability_id.clone()],
+                    };
+                    (effect.timestamp, insertion_index, (**ability).clone(), path)
+                })
             })
             .collect();
-        granted.sort_by_key(|(timestamp, insertion_index, _)| (*timestamp, *insertion_index));
+        granted.sort_by_key(|(timestamp, insertion_index, _, _)| (*timestamp, *insertion_index));
         let mut next_index = abilities.len();
-        abilities.extend(granted.into_iter().map(|(_, _, ability)| {
-            let indexed = (next_index, ability, true);
+        abilities.extend(granted.into_iter().map(|(_, _, ability, path)| {
+            let indexed = (next_index, ability, true, path);
             next_index += 1;
             indexed
         }));
@@ -803,8 +850,9 @@ impl GameEngine {
             return false;
         }
         self.effective_face(oid).is_some_and(|face| {
-            face.static_abilities
-                .contains(&StaticAbilityDef::UntapsDuringOtherPlayersUntapSteps)
+            face.static_abilities.iter().any(|ability| {
+                ability.definition == StaticAbilityDef::UntapsDuringOtherPlayersUntapSteps
+            })
         })
     }
 

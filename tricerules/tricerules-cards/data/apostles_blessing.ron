@@ -1,9 +1,9 @@
 (
   id: "apostles_blessing",
   name: "Apostle's Blessing",
+  face_id: "apostle_s_blessing",
   mana_cost: "{1}{W/P}",
-  // Oracle checked 2026-08-18: target artifact or creature you control gains protection from
-  // artifacts or from the color of your choice until end of turn.
+  // CR 702.16 protection choice and restricted permanent targeting.
   types: ["Instant"],
   spell_effect: [
     GrantProtection(

@@ -2,6 +2,7 @@
 (
   id: "monoist_sentry",
   name: "Monoist Sentry",
+  face_id: "monoist_sentry",
   mana_cost: "{B}",
   types: ["Artifact", "Creature", "Robot"],
   power: 4,

@@ -1,6 +1,7 @@
 (
   id: "fish_u_1_1",
   name: "Fish",
+  face_id: "fish",
   types: ["Creature", "Fish"],
   colors: [Blue],
   power: 1,

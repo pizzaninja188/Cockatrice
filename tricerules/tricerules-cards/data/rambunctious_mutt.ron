@@ -1,13 +1,16 @@
 (
   id: "rambunctious_mutt",
   name: "Rambunctious Mutt",
+  face_id: "rambunctious_mutt",
   mana_cost: "{3}{W}{W}",
-  // Oracle: When this creature enters, destroy target artifact or enchantment an opponent controls.
+  // ETB targeting is constrained to an opponent's artifact or enchantment.
   types: ["Creature", "Dog"],
   power: 3,
   toughness: 4,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [
         Destroy(
@@ -18,7 +21,6 @@
           )),
         ),
       ],
-      text: "When this creature enters, destroy target artifact or enchantment an opponent controls.",
     ),
   ],
 )

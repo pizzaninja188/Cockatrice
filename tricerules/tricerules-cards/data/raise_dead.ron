@@ -1,6 +1,7 @@
 (
   id: "raise_dead",
   name: "Raise Dead",
+  face_id: "raise_dead",
   mana_cost: "{B}",
   types: ["Sorcery"],
   spell_effect: [MoveGraveyardCards(filter: (owner: Controller, card_type: Some(Creature)), destination: Hand)],

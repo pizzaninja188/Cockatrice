@@ -3,17 +3,20 @@
 (
   id: "gravelgill_scoundrel",
   name: "Gravelgill Scoundrel",
+  face_id: "gravelgill_scoundrel",
   mana_cost: "{1}{U}",
   types: ["Creature", "Merfolk", "Rogue"],
   power: 1,
   toughness: 3,
   keywords: [Vigilance],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
     effect: [ChooseResolutionBranch(
       optional: true,
       branches: [(
-        label: "Tap another untapped creature you control",
+        branch_id: "tap_another_untapped_creature_you_control", presentation: Fallback,
         cost: TapPermanents(
           count: 1,
           filter: (kind: Creature, controller: You),
@@ -25,6 +28,5 @@
         )],
       )],
     )],
-    text: "Whenever this creature attacks, you may tap another untapped creature you control. If you do, this creature can't be blocked this turn.",
   )],
 )

@@ -2,6 +2,7 @@
 (
   id: "benalish_knight",
   name: "Benalish Knight",
+  face_id: "benalish_knight",
   mana_cost: "{2}{W}",
   types: ["Creature", "Human", "Knight"],
   power: 2,

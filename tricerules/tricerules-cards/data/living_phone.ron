@@ -2,17 +2,19 @@
 (
   id: "living_phone",
   name: "Living Phone",
+  face_id: "living_phone",
   mana_cost: "{2}{W}",
   types: ["Artifact", "Creature", "Toy"],
   power: 2,
   toughness: 1,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfDies,
     effect: [LookChooseToHand(
       count: 5,
       filter: (card_type: Some(Creature), printed_power: Some(AtMost(2))),
       bottom_order: Random,
     )],
-    text: "When this creature dies, look at the top five cards of your library. You may reveal a creature card with power 2 or less from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
   )],
 )

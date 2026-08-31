@@ -1,6 +1,7 @@
 (
   id: "instill_infection",
   name: "Instill Infection",
+  face_id: "instill_infection",
   mana_cost: "{3}{B}",
   types: ["Instant"],
   spell_effect: [PutCounters(counter: MinusOneMinusOne, count: 1), Draw(count: 1)],

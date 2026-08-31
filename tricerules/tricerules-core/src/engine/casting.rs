@@ -9,7 +9,7 @@ use super::targeting::{
 };
 use super::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum LimitedActivationUse {
     PerTurn(ActivationUseKey),
     PerObject(PersistentActivationUseKey),
@@ -574,9 +574,9 @@ impl GameEngine {
                 }
                 public_targets.extend(selection.targets.iter().cloned());
                 chosen_mode_indices.push(selection.mode_index);
-                chosen_mode_labels.push(mode.label.clone());
+                chosen_mode_labels.push(mode_fallback(&face_name, &mode.mode_id));
                 chosen_modes.push(ChosenMode {
-                    mode_index: selection.mode_index as usize,
+                    mode_id: mode.mode_id.clone(),
                     targets: selection
                         .targets
                         .iter()
@@ -1041,19 +1041,19 @@ impl GameEngine {
             return Err(EngineError::Illegal("stale ability source generation"));
         }
 
-        let (card_id, face_up_index, ability) = match source_zone {
+        let (card_id, face_up_index, ability, ability_path) = match source_zone {
             AbilitySourceZone::Battlefield => {
                 let (card_id, face_index) = self
                     .effective_card_identity(permanent_id)
                     .map(|(card_id, face_index)| (card_id.to_string(), face_index))
                     .ok_or(EngineError::Illegal("bad face index on permanent"))?;
-                let ability = self
+                let (ability, ability_path) = self
                     .effective_activated_abilities(permanent_id)
                     .into_iter()
-                    .find(|(index, _, _)| *index == ability_index)
-                    .map(|(_, ability, _)| ability)
+                    .find(|(index, _, _, _)| *index == ability_index)
+                    .map(|(_, ability, _, path)| (ability, path))
                     .ok_or(EngineError::Illegal("no such activated ability"))?;
-                (card_id, face_index, ability)
+                (card_id, face_index, ability, ability_path)
             }
             AbilitySourceZone::Hand | AbilitySourceZone::Graveyard => {
                 let card_id = object.card_id.clone();
@@ -1063,7 +1063,8 @@ impl GameEngine {
                     .find(|(index, _, _)| *index == ability_index)
                     .map(|(_, ability, face_index)| (ability, face_index))
                     .ok_or(EngineError::Illegal("no such activated ability"))?;
-                (card_id, face_index, ability)
+                let ability_path = vec![ability.ability_id.clone()];
+                (card_id, face_index, ability, ability_path)
             }
         };
         // The source can leave the battlefield while its activation costs are committed (Clue and
@@ -1121,6 +1122,7 @@ impl GameEngine {
                 ability_index,
                 &card_id,
                 &ability,
+                &ability_path,
                 mana_option_index,
                 targets,
                 flex_payments,
@@ -1197,13 +1199,13 @@ impl GameEngine {
         self.state.undoable_mana_abilities.clear();
         self.record_limited_activations(activation_uses);
 
-        let ability_text = ability.text.clone();
         let card_name = source_token_identity
             .as_ref()
             .map(|identity| identity.name.clone())
             .filter(|name| !name.is_empty())
             .or_else(|| self.registry.get(&card_id).map(|d| d.name.clone()))
             .unwrap_or_else(|| card_id.clone());
+        let ability_text = ability.fallback_text_with_path(&card_name, &ability_path);
 
         self.state.next_object_id += 1;
 
@@ -1393,7 +1395,12 @@ impl GameEngine {
         true
     }
 
-    fn activation_use_key(&self, permanent_id: ObjectId, ability_index: usize) -> ActivationUseKey {
+    fn activation_use_key(
+        &self,
+        permanent_id: ObjectId,
+        ability_path: Vec<tricerules_cards::AbilityId>,
+    ) -> ActivationUseKey {
+        let face_index = self.state.objects[&permanent_id].face_up_index;
         ActivationUseKey {
             object_id: permanent_id,
             zone_change_generation: self
@@ -1402,21 +1409,16 @@ impl GameEngine {
                 .get(&permanent_id)
                 .copied()
                 .unwrap_or(0),
-            face_change_generation: self
-                .state
-                .face_change_generation
-                .get(&permanent_id)
-                .copied()
-                .unwrap_or(0),
-            ability_index,
+            definition: self.ability_definition(permanent_id, face_index, ability_path),
         }
     }
 
     fn persistent_activation_use_key(
         &self,
         permanent_id: ObjectId,
-        ability_index: usize,
+        ability_path: Vec<tricerules_cards::AbilityId>,
     ) -> PersistentActivationUseKey {
+        let face_index = self.state.objects[&permanent_id].face_up_index;
         PersistentActivationUseKey {
             object_id: permanent_id,
             zone_change_generation: self
@@ -1425,7 +1427,7 @@ impl GameEngine {
                 .get(&permanent_id)
                 .copied()
                 .unwrap_or(0),
-            ability_index,
+            definition: self.ability_definition(permanent_id, face_index, ability_path),
         }
     }
 
@@ -1435,22 +1437,30 @@ impl GameEngine {
         ability_index: usize,
         ability: &tricerules_cards::ActivatedAbilityDef,
     ) -> Vec<LimitedActivationUse> {
+        let ability_path = self
+            .effective_activated_abilities(permanent_id)
+            .into_iter()
+            .find(|(index, _, _, _)| *index == ability_index)
+            .map(|(_, _, _, path)| path)
+            .unwrap_or_else(|| vec![ability.ability_id.clone()]);
         let mut uses = Vec::with_capacity(2);
         if ability.is_loyalty_ability() {
-            uses.push(LimitedActivationUse::PerTurn(
-                self.activation_use_key(permanent_id, usize::MAX),
-            ));
+            uses.push(LimitedActivationUse::PerTurn(self.activation_use_key(
+                permanent_id,
+                vec![tricerules_cards::AbilityId::new("loyalty_activation")
+                        .expect("intrinsic ability id")],
+            )));
         }
         if let Some(limit) = ability.activation_limit {
             uses.push(match limit {
                 tricerules_cards::primitives::ActivationLimit::PerTurn { .. } => {
                     LimitedActivationUse::PerTurn(
-                        self.activation_use_key(permanent_id, ability_index),
+                        self.activation_use_key(permanent_id, ability_path.clone()),
                     )
                 }
                 tricerules_cards::primitives::ActivationLimit::PerObject { .. } => {
                     LimitedActivationUse::PerObject(
-                        self.persistent_activation_use_key(permanent_id, ability_index),
+                        self.persistent_activation_use_key(permanent_id, ability_path),
                     )
                 }
             });
@@ -1464,11 +1474,21 @@ impl GameEngine {
         ability_index: usize,
         ability: &tricerules_cards::ActivatedAbilityDef,
     ) -> bool {
+        let ability_path = self
+            .effective_activated_abilities(permanent_id)
+            .into_iter()
+            .find(|(index, _, _, _)| *index == ability_index)
+            .map(|(_, _, _, path)| path)
+            .unwrap_or_else(|| vec![ability.ability_id.clone()]);
         if ability.is_loyalty_ability()
             && self
                 .state
                 .activation_uses_this_turn
-                .get(&self.activation_use_key(permanent_id, usize::MAX))
+                .get(&self.activation_use_key(
+                    permanent_id,
+                    vec![tricerules_cards::AbilityId::new("loyalty_activation")
+                        .expect("intrinsic ability id")],
+                ))
                 .copied()
                 .unwrap_or(0)
                 >= 1
@@ -1480,7 +1500,7 @@ impl GameEngine {
             Some(tricerules_cards::primitives::ActivationLimit::PerTurn { max_activations }) => {
                 self.state
                     .activation_uses_this_turn
-                    .get(&self.activation_use_key(permanent_id, ability_index))
+                    .get(&self.activation_use_key(permanent_id, ability_path.clone()))
                     .copied()
                     .unwrap_or(0)
                     < max_activations
@@ -1488,7 +1508,7 @@ impl GameEngine {
             Some(tricerules_cards::primitives::ActivationLimit::PerObject { max_activations }) => {
                 self.state
                     .activation_uses_per_object
-                    .get(&self.persistent_activation_use_key(permanent_id, ability_index))
+                    .get(&self.persistent_activation_use_key(permanent_id, ability_path))
                     .copied()
                     .unwrap_or(0)
                     < max_activations
@@ -1591,6 +1611,7 @@ impl GameEngine {
         ability_index: usize,
         card_id: &str,
         ability: &tricerules_cards::ActivatedAbilityDef,
+        ability_path: &[tricerules_cards::AbilityId],
         mana_option_index: u32,
         targets: &[rv1::TargetRef],
         flex_payments: &[rv1::FlexPipPayment],
@@ -1673,7 +1694,7 @@ impl GameEngine {
             .get(card_id)
             .map(|d| d.name.clone())
             .unwrap_or_else(|| card_id.to_string());
-        let ability_text = ability.text.clone();
+        let ability_text = ability.fallback_text_with_path(&card_name, ability_path);
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
 
         let mut batch = RuledEventBatch::default();
@@ -2004,8 +2025,10 @@ mod cast_snapshot_tests {
     fn issue_148_warp_publishes_and_pays_a_distinct_hand_method() {
         let mut e = engine_with_extra(
             "",
-            &[r#"(id: "warp_test", name: "Warp Test",
-            mana_cost: "{3}{W}", warp_cost: Some("{1}{W}"), types: ["Creature"], power: 3, toughness: 2)"#],
+            &[
+                r#"(id: "warp_test", name: "Warp Test", face_id: "warp_test",
+            mana_cost: "{3}{W}", warp_cost: Some("{1}{W}"), types: ["Creature"], power: 3, toughness: 2)"#,
+            ],
         );
         let oid = add(&mut e, 0, "warp_test", Zone::Hand);
         let slot = e.state.players[0]
@@ -2043,16 +2066,16 @@ mod cast_snapshot_tests {
 
     fn engine_with_extra(spell_fields: &str, extra: &[&str]) -> GameEngine {
         let spell = format!(
-            r#"(id: "snapshot_spell", name: "Snapshot Spell", mana_cost: "{{B}}", types: ["Instant"], {spell_fields})"#
+            r#"(id: "snapshot_spell", name: "Snapshot Spell", face_id: "snapshot_spell", mana_cost: "{{B}}", types: ["Instant"], {spell_fields})"#
         );
         let mut chunks = vec![
             include_str!("../../../tricerules-cards/data/forest.ron"),
-            r#"(id: "snapshot_faerie", name: "Snapshot Faerie", types: ["Creature", "Faerie", "Mount"], power: 2, toughness: 2)"#,
-            r#"(id: "snapshot_kindred", name: "Snapshot Kindred", types: ["Kindred", "Artifact", "Faerie"],)"#,
+            r#"(id: "snapshot_faerie", name: "Snapshot Faerie", face_id: "snapshot_faerie", types: ["Creature", "Faerie", "Mount"], power: 2, toughness: 2)"#,
+            r#"(id: "snapshot_kindred", name: "Snapshot Kindred", face_id: "snapshot_kindred", types: ["Kindred", "Artifact", "Faerie"],)"#,
             r#"(id: "snapshot_siege_snapshot_reverse", name: "Snapshot Siege // Snapshot Reverse", layout: Transform, faces: [
-                (name: "Snapshot Siege", types: ["Battle", "Siege"], defense: 3,
+                (name: "Snapshot Siege", face_id: "snapshot_siege", types: ["Battle", "Siege"], defense: 3,
                  cast_conditions: [ActivePlayer(players: Opponents)]),
-                (name: "Snapshot Reverse", types: ["Sorcery"],
+                (name: "Snapshot Reverse", face_id: "snapshot_reverse", types: ["Sorcery"],
                  cast_conditions: [ActivePlayer(players: Controller)],
                  spell_effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 1))]),
             ])"#,
@@ -2079,13 +2102,13 @@ mod cast_snapshot_tests {
         let mut e = engine_with_extra(
             "spell_effect: [GainLife(amount: 1)]",
             &[
-                r#"(id: "history_watcher", name: "History Watcher", types: ["Creature"], power: 1, toughness: 4,
+                r#"(id: "history_watcher", name: "History Watcher", face_id: "history_watcher", types: ["Creature"], power: 1, toughness: 4,
                 triggered_abilities: [
-                    (trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (card_type: Some(Noncreature)), ordinal: Some(2)), effect: [GainLife(amount: 1)], text: "All spells"),
-                    (trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (card_type: Some(Noncreature)), ordinal: Some(2), ordinal_scope: MatchingFilter), effect: [GainLife(amount: 1)], text: "Matching spells"),
-                    (trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (any_of: Some([(card_type: Some(Noncreature)), (required_subtypes: ["Otter"])]))), effect: [GainLife(amount: 1)], text: "Noncreature or Otter"),
+                    (ability_id: "triggered_01", presentation: Fallback, trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (card_type: Some(Noncreature)), ordinal: Some(2)), effect: [GainLife(amount: 1)], ),
+                    (ability_id: "triggered_02", presentation: Fallback, trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (card_type: Some(Noncreature)), ordinal: Some(2), ordinal_scope: MatchingFilter), effect: [GainLife(amount: 1)], ),
+                    (ability_id: "triggered_03", presentation: Fallback, trigger: WheneverPlayerCastsSpell(caster: AnyPlayer, filter: (any_of: Some([(card_type: Some(Noncreature)), (required_subtypes: ["Otter"])]))), effect: [GainLife(amount: 1)], ),
                 ])"#,
-                r#"(id: "history_otter", name: "History Otter", types: ["Kindred", "Artifact", "Otter"])"#,
+                r#"(id: "history_otter", name: "History Otter", face_id: "history_otter", types: ["Kindred", "Artifact", "Otter"])"#,
             ],
         );
         // The watcher arrives after these casts; matching ordinals still include all prior casts.
@@ -2165,9 +2188,9 @@ mod cast_snapshot_tests {
                 include_str!(
                     "../../../tricerules-cards/data/multiface/bonecrusher_giant_stomp.ron"
                 ),
-                r#"(id: "history_shifter", name: "History Shifter", types: ["Creature", "Shapeshifter"], power: 1, toughness: 1, characteristic_defining_abilities: [Changeling])"#,
-                r#"(id: "history_static", name: "History Static", types: ["Creature"], power: 1, toughness: 1,
-                    static_abilities: [ConditionalSelfModifier(condition: SpellsCastThisTurn(players: Controller, filter: (origin: Some(Graveyard)), min: Some(1)), delta_power: 2)])"#,
+                r#"(id: "history_shifter", name: "History Shifter", face_id: "history_shifter", types: ["Creature", "Shapeshifter"], power: 1, toughness: 1, characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)])"#,
+                r#"(id: "history_static", name: "History Static", face_id: "history_static", types: ["Creature"], power: 1, toughness: 1,
+                    static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(condition: SpellsCastThisTurn(players: Controller, filter: (origin: Some(Graveyard)), min: Some(1)), delta_power: 2))])"#,
             ],
         );
         let permanent = add(&mut e, 0, "history_static", Zone::Battlefield);
@@ -2486,11 +2509,11 @@ mod cast_snapshot_tests {
         let mut e = engine(&format!(
             r#"
             cast_conditions: [{FAERIE}],
-            modal_spell: (min_modes: 1, max_modes: 1, modes: [(label: "Test", effects: [
+            modal_spell: (min_modes: 1, max_modes: 1, modes: [(mode_id: "mode_01", presentation: Fallback, effects: [
                 Scry(count: 1),
                 ChooseResolutionBranch(selection: FirstApplicable, branches: [
-                    (label: "Snapshot", cost: None, requirement: GameCondition(CastSnapshot(index: 0)), effects: [GainLife(amount: 4)]),
-                    (label: "Fallback", cost: None, requirement: Always, effects: [GainLife(amount: 1)]),
+                    (branch_id: "snapshot", presentation: Fallback, cost: None, requirement: GameCondition(CastSnapshot(index: 0)), effects: [GainLife(amount: 4)]),
+                    (branch_id: "fallback_branch", presentation: Fallback, cost: None, requirement: Always, effects: [GainLife(amount: 1)]),
                 ]),
                 GainLife(amount: Conditional(condition: {FAERIE}, when_true: 8, otherwise: 2)),
             ])]),
@@ -2538,6 +2561,55 @@ mod cast_snapshot_tests {
             e.apply_command(0, &answer).is_err(),
             "completed continuation cannot be replayed"
         );
+    }
+
+    #[test]
+    fn captured_modal_identity_survives_definition_reordering_and_presentation_changes() {
+        let mut e = engine(
+            r#"modal_spell: (min_modes: 1, max_modes: 1, modes: [
+                (mode_id: "gain", presentation: OracleLines([2]), effects: [GainLife(amount: 1)]),
+                (mode_id: "draw", presentation: Fallback, effects: [Draw(count: 1)]),
+            ])"#,
+        );
+        let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+        e.state.players[0].mana_pool.black = 1;
+        let mut cast = command(&e, spell);
+        let Some(rv1::ruled_command::Cmd::CastSpell(ref mut command)) = cast.cmd else {
+            unreachable!()
+        };
+        command.selected_modes = vec![rv1::SelectedSpellMode {
+            mode_index: 0,
+            targets: vec![],
+        }];
+        e.apply_command(0, &cast).unwrap();
+        assert_eq!(
+            e.state.stack.last().unwrap().chosen_modes[0]
+                .mode_id
+                .as_str(),
+            "gain"
+        );
+
+        let reordered = r#"(
+            id: "snapshot_spell", name: "Snapshot Spell", face_id: "snapshot_spell",
+            mana_cost: "{B}", types: ["Instant"],
+            modal_spell: (min_modes: 1, max_modes: 1, modes: [
+                (mode_id: "draw", presentation: OracleLines([1]), effects: [Draw(count: 1)]),
+                (mode_id: "gain", presentation: Fallback, effects: [GainLife(amount: 1)]),
+            ]),
+        )"#;
+        e.registry = Box::leak(Box::new(
+            CardRegistry::from_chunks_and_tokens(
+                &[
+                    include_str!("../../../tricerules-cards/data/forest.ron"),
+                    reordered,
+                ],
+                &[],
+            )
+            .unwrap(),
+        ));
+
+        resolve(&mut e);
+        assert_eq!(e.state.players[0].life, 21);
     }
 
     #[test]
@@ -2736,7 +2808,7 @@ mod mana_payment_tests {
     }
 
     #[test]
-    fn activation_limit_counts_are_independent_per_effective_ability_index() {
+    fn activation_limit_counts_follow_stable_id_across_effective_index_changes() {
         let mut engine = engine_with_priority();
         let object_id = engine.state.players[0].library[0];
         let ability = CardRegistry::global()
@@ -2748,10 +2820,10 @@ mod mana_payment_tests {
 
         assert!(engine.activation_limit_allows(object_id, 0, &ability));
         assert!(engine.activation_limit_allows(object_id, 1, &ability));
-        let key = engine.activation_use_key(object_id, 0);
+        let key = engine.activation_use_key(object_id, vec![ability.ability_id.clone()]);
         engine.record_limited_activations(vec![LimitedActivationUse::PerTurn(key)]);
         assert!(!engine.activation_limit_allows(object_id, 0, &ability));
-        assert!(engine.activation_limit_allows(object_id, 1, &ability));
+        assert!(!engine.activation_limit_allows(object_id, 1, &ability));
     }
 
     #[test]
@@ -2883,17 +2955,28 @@ mod mana_payment_tests {
     fn limited_activation_records_the_pre_cost_object_identity() {
         let mut engine = engine_with_priority();
         let object_id = engine.state.players[0].library[0];
-        let key_before_costs = engine.activation_use_key(object_id, 0);
+        let key_before_costs = engine.activation_use_key(
+            object_id,
+            vec![tricerules_cards::AbilityId::new("activated_01").unwrap()],
+        );
 
         *engine
             .state
             .zone_change_generation
             .entry(object_id)
             .or_insert(0) += 1;
-        engine.record_limited_activations(vec![LimitedActivationUse::PerTurn(key_before_costs)]);
+        engine.record_limited_activations(vec![LimitedActivationUse::PerTurn(
+            key_before_costs.clone(),
+        )]);
 
         assert_eq!(engine.state.activation_uses_this_turn[&key_before_costs], 1);
-        assert_ne!(engine.activation_use_key(object_id, 0), key_before_costs);
+        assert_ne!(
+            engine.activation_use_key(
+                object_id,
+                vec![tricerules_cards::AbilityId::new("activated_01").unwrap()],
+            ),
+            key_before_costs
+        );
     }
 
     #[test]

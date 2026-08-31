@@ -2,6 +2,7 @@
 (
   id: "bone_splinters",
   name: "Bone Splinters",
+  face_id: "bone_splinters",
   mana_cost: "{B}",
   additional_costs: [
     SacrificePermanent(filter: (kind: Creature, controller: You)),

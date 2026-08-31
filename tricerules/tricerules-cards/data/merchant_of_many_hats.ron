@@ -3,14 +3,16 @@
 (
   id: "merchant_of_many_hats",
   name: "Merchant of Many Hats",
+  face_id: "merchant_of_many_hats",
   mana_cost: "{1}{B}",
   types: ["Creature", "Human", "Peasant", "Ally"],
   power: 2,
   toughness: 2,
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
     source_zone: Graveyard,
     costs: [Mana("{2}{B}")],
     effect: [ReturnToOwnersHand(subject: Source)],
-    text: "{2}{B}: Return this card from your graveyard to your hand.",
   )],
 )

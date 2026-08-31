@@ -127,7 +127,6 @@ fn devotee_card_data_matches_oracle() {
             .get(expected.id)
             .unwrap_or_else(|| panic!("{} must be registered", expected.id));
         assert_eq!(definition.name, expected.name);
-        assert!(definition.partial.is_none());
         let face = definition.primary_face();
         assert_eq!(face.mana_cost.to_string(), expected.mana_cost);
         assert_eq!(face.types, expected.types);
@@ -150,7 +149,12 @@ fn devotee_card_data_matches_oracle() {
             [SpellEffectKind::ProduceMana { options, restriction: None, conditional: None }]
                 if options == expected.mana_options
         ));
-        assert!(ability.text.ends_with("Activate only once each turn."));
+        assert_eq!(ability.ability_id.as_str(), "activated_01");
+        assert!(matches!(
+            ability.presentation,
+            tricerules_cards::AbilityPresentation::OracleLines(_)
+                | tricerules_cards::AbilityPresentation::Fallback
+        ));
     }
 }
 
@@ -169,5 +173,10 @@ fn mardu_devotee_reuses_the_generic_scry_trigger() {
             count: tricerules_cards::Amount::Fixed(2)
         }]
     );
-    assert_eq!(trigger.text, "When this creature enters, scry 2.");
+    assert_eq!(trigger.ability_id.as_str(), "triggered_01");
+    assert!(matches!(
+        trigger.presentation,
+        tricerules_cards::AbilityPresentation::OracleLines(_)
+            | tricerules_cards::AbilityPresentation::Fallback
+    ));
 }

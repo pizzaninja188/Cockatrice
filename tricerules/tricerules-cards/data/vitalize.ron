@@ -1,6 +1,7 @@
 (
   id: "vitalize",
   name: "Vitalize",
+  face_id: "vitalize",
   mana_cost: "{G}",
   types: ["Instant"],
   spell_effect: [

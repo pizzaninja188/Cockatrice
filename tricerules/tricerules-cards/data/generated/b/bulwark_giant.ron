@@ -2,9 +2,10 @@
 (
   id: "bulwark_giant",
   name: "Bulwark Giant",
+  face_id: "bulwark_giant",
   mana_cost: "{5}{W}",
   types: ["Creature", "Giant", "Soldier"],
   power: 3,
   toughness: 6,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 5)], text: "When this creature enters, you gain 5 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 5)])],
 )

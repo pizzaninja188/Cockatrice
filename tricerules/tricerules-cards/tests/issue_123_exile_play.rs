@@ -11,7 +11,6 @@ fn issue_123_cards_use_the_generic_exile_play_effect() {
     let percussionist = registry
         .get("clockwork_percussionist")
         .expect("Clockwork Percussionist");
-    assert_eq!(percussionist.partial, None);
     let trigger = &percussionist.primary_face().triggered_abilities[0];
     assert_eq!(trigger.trigger, TriggerCondition::WhenSelfDies);
     assert!(matches!(
@@ -25,7 +24,6 @@ fn issue_123_cards_use_the_generic_exile_play_effect() {
     let inferno = registry
         .get("impossible_inferno")
         .expect("Impossible Inferno");
-    assert_eq!(inferno.partial, None);
     let effects = &inferno.primary_face().spell_effect;
     assert!(matches!(
         effects[0],

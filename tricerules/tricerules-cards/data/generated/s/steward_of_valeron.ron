@@ -2,10 +2,11 @@
 (
   id: "steward_of_valeron",
   name: "Steward of Valeron",
+  face_id: "steward_of_valeron",
   mana_cost: "{G}{W}",
   types: ["Creature", "Human", "Druid", "Knight"],
   power: 2,
   toughness: 2,
   keywords: [Vigilance],
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1)])], text: "{T}: Add {G}.")],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([2]), costs: [Tap], effect: [ProduceMana(options: [(g: 1)])])],
 )

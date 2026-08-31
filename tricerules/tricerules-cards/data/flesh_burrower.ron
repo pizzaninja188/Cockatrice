@@ -1,17 +1,19 @@
 (
   id: "flesh_burrower",
   name: "Flesh Burrower",
+  face_id: "flesh_burrower",
   mana_cost: "{1}{G}",
   types: ["Creature", "Insect"],
   power: 2,
   toughness: 2,
   keywords: [Deathtouch],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
     effect: [GrantKeywords(
       subject: Chosen((kind: Creature, controller: You, excluded_objects: [Source])),
       keywords: [Deathtouch],
     )],
-    text: "Whenever this creature attacks, another target creature you control gains deathtouch until end of turn.",
   )],
 )

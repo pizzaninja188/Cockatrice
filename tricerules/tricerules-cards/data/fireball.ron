@@ -1,9 +1,8 @@
-// Oracle: Fireball deals X damage divided evenly, rounded down, among any number of targets.
-// It costs {1} more to cast for each target beyond the first.
 // CR 601.2f / 608.2d: the surcharge is paid at cast time; division happens on resolution.
 (
   id: "fireball",
   name: "Fireball",
+  face_id: "fireball",
   mana_cost: "{X}{R}",
   types: ["Sorcery"],
   spell_effect: [DamageTargets(

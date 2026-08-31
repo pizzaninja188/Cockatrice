@@ -2,6 +2,7 @@
 (
   id: "vexing_gull",
   name: "Vexing Gull",
+  face_id: "vexing_gull",
   mana_cost: "{2}{U}",
   types: ["Creature", "Bird"],
   power: 2,

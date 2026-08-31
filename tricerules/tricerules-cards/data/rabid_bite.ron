@@ -1,6 +1,7 @@
 (
   id: "rabid_bite",
   name: "Rabid Bite",
+  face_id: "rabid_bite",
   mana_cost: "{1}{G}",
   types: ["Sorcery"],
   spell_effect: [CreatureDealsDamageEqualToPower(

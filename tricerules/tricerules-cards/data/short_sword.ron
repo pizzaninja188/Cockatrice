@@ -1,14 +1,15 @@
 (
   id: "short_sword",
   name: "Short Sword",
+  face_id: "short_sword",
   mana_cost: "{1}",
-  // Oracle: Equipped creature gets +1/+1. Equip {1}.
   // CR 301.5 / 702.6 (Equipment and equip); CR 613.4c (P/T modification).
   types: ["Artifact", "Equipment"],
-  static_abilities: [AttachedModifier(delta_power: 1, delta_toughness: 1)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(delta_power: 1, delta_toughness: 1))],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
     costs: [Mana("{1}")],
     effect: [Equip(target: (kind: Creature, controller: You))],
-    text: "Equip {1}",
   )],
 )

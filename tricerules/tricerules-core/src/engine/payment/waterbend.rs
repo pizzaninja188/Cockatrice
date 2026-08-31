@@ -66,8 +66,8 @@ impl GameEngine {
         let ability = self
             .effective_activated_abilities(source)
             .into_iter()
-            .find(|(index, _, _)| *index == command.ability_index as usize)
-            .map(|(_, ability, _)| ability)
+            .find(|(index, _, _, _)| *index == command.ability_index as usize)
+            .map(|(_, ability, _, _)| ability)
             .ok_or(EngineError::Illegal("missing activated ability"))?;
         if !self.ability_activatable(source, command.ability_index as usize, &ability) {
             return Err(EngineError::Illegal("activation restrictions not met"));

@@ -12,7 +12,6 @@ fn infectious_horror_has_complete_oracle_behavior() {
     assert_eq!(face.mana_cost.to_string(), "{3}{B}");
     assert_eq!(face.types, ["Creature", "Zombie", "Horror"]);
     assert_eq!((face.power, face.toughness), (Some(2), Some(2)));
-    assert!(definition.partial.is_none());
     assert_eq!(face.triggered_abilities.len(), 1);
     assert_eq!(
         face.triggered_abilities[0].trigger,

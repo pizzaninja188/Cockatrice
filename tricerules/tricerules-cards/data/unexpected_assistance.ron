@@ -2,6 +2,7 @@
 (
   id: "unexpected_assistance",
   name: "Unexpected Assistance",
+  face_id: "unexpected_assistance",
   mana_cost: "{3}{U}{U}",
   types: ["Instant"],
   keywords: [Convoke],

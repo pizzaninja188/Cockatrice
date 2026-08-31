@@ -2,6 +2,7 @@
 (
   id: "insect_bg_1_1_flying",
   name: "Insect",
+  face_id: "insect",
   types: ["Creature", "Insect"],
   colors: [Black, Green],
   power: 1,

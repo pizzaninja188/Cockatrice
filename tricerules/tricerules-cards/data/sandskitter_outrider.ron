@@ -1,6 +1,7 @@
 (
   id: "sandskitter_outrider",
   name: "Sandskitter Outrider",
+  face_id: "sandskitter_outrider",
   mana_cost: "{3}{B}",
   types: ["Creature", "Goblin", "Soldier"],
   power: 2,
@@ -8,26 +9,27 @@
   keywords: [Menace],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
       effect: [ChooseResolutionBranch(
         chooser: SourceController,
         optional: false,
         branches: [
           (
-            label: "Put two +1/+1 counters on Sandskitter Outrider",
+            branch_id: "put_two_1_1_counters_on_sandskitter_outrider", presentation: Fallback,
             cost: None,
             requirement: EffectsApplicable,
             effects: [PutCounters(counter: PlusOnePlusOne, count: 2, subject: Source)],
           ),
           (
-            label: "Create a 2/2 white Spirit creature token",
+            branch_id: "create_a_2_2_white_spirit_creature_token", presentation: Fallback,
             cost: None,
             requirement: Always,
             effects: [CreateTokens(token: "spirit_w_2_2", count: 1, who: SourceController)],
           ),
         ],
       )],
-      text: "When this creature enters, endure 2. (Put two +1/+1 counters on it or create a 2/2 white Spirit creature token.)",
     ),
   ],
 )

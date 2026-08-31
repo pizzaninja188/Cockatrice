@@ -1,6 +1,7 @@
 (
   id: "alpine_watchdog",
   name: "Alpine Watchdog",
+  face_id: "alpine_watchdog",
   mana_cost: "{1}{W}",
   types: ["Creature", "Dog"],
   power: 2,

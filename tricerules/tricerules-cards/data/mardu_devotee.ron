@@ -1,23 +1,26 @@
 (
   id: "mardu_devotee",
   name: "Mardu Devotee",
+  face_id: "mardu_devotee",
   mana_cost: "{W}",
   types: ["Creature", "Human", "Scout"],
   power: 1,
   toughness: 2,
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
       costs: [Mana("{1}")],
       effect: [ProduceMana(options: [(r: 1), (w: 1), (b: 1)])],
       activation_limit: Some(PerTurn(max_activations: 1)),
-      text: "{1}: Add {R}, {W}, or {B}. Activate only once each turn.",
     ),
   ],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
       effect: [Scry(count: 2)],
-      text: "When this creature enters, scry 2.",
     ),
   ],
 )

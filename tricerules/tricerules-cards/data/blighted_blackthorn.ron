@@ -1,21 +1,23 @@
 // Oracle and rulings checked 2026-08-27.
 (
-  id: "blighted_blackthorn", name: "Blighted Blackthorn", mana_cost: "{4}{B}",
+  id: "blighted_blackthorn", name: "Blighted Blackthorn", face_id: "blighted_blackthorn", mana_cost: "{4}{B}",
   types: ["Creature", "Treefolk", "Warlock"], power: 3, toughness: 7,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
-      text: "When this creature enters, you may blight 2. If you do, you draw a card and you lose 1 life.",
       effect: [ChooseResolutionBranch(optional: true, branches: [(
-        label: "Blight 2", cost: Blight(count: 2),
+        branch_id: "blight_2", presentation: Fallback, cost: Blight(count: 2),
         effects: [Draw(count: 1), LoseLife(amount: Fixed(1))],
       )])],
     ),
     (
+      ability_id: "triggered_02",
+      presentation: Fallback,
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
-      text: "Whenever this creature attacks, you may blight 2. If you do, you draw a card and you lose 1 life.",
       effect: [ChooseResolutionBranch(optional: true, branches: [(
-        label: "Blight 2", cost: Blight(count: 2),
+        branch_id: "blight_2", presentation: Fallback, cost: Blight(count: 2),
         effects: [Draw(count: 1), LoseLife(amount: Fixed(1))],
       )])],
     ),

@@ -1,19 +1,20 @@
 (
   id: "glaring_aegis",
   name: "Glaring Aegis",
+  face_id: "glaring_aegis",
   mana_cost: "{W}",
-  // Oracle: Enchant creature. When this Aura enters, tap target creature an opponent controls.
-  // Enchanted creature gets +1/+3.
+  // Aura attachment, ETB targeting, and layer effects are modeled independently.
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
       effect: [Tap(subject: Chosen((kind: Creature, controller: Opponent)))],
-      text: "When this Aura enters, tap target creature an opponent controls.",
     ),
   ],
   static_abilities: [
-    AttachedModifier(delta_power: 1, delta_toughness: 3),
+    (ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(delta_power: 1, delta_toughness: 3)),
   ],
 )

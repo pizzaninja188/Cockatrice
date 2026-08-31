@@ -1,6 +1,7 @@
 (
   id: "lightning_bolt",
   name: "Lightning Bolt",
+  face_id: "lightning_bolt",
   mana_cost: "{R}",
   types: ["Instant"],
   spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],

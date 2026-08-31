@@ -1,14 +1,15 @@
 (
   id: "swiftfoot_boots",
   name: "Swiftfoot Boots",
+  face_id: "swiftfoot_boots",
   mana_cost: "{2}",
-  // Oracle: Equipped creature has hexproof and haste. Equip {1}.
   // CR 301.5 / 702.6 (Equipment/equip); CR 702.10 (haste); CR 702.18 (hexproof).
   types: ["Artifact", "Equipment"],
-  static_abilities: [AttachedModifier(keywords: [Hexproof, Haste])],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(keywords: [Hexproof, Haste]))],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
     costs: [Mana("{1}")],
     effect: [Equip(target: (kind: Creature, controller: You))],
-    text: "Equip {1}",
   )],
 )

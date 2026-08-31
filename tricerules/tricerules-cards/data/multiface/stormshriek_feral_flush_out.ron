@@ -6,19 +6,22 @@
   faces: [
     (
       name: "Stormshriek Feral",
+      face_id: "stormshriek_feral",
       mana_cost: "{4}{R}",
       types: ["Creature", "Dragon"],
       power: 3,
       toughness: 3,
       keywords: [Flying, Haste],
       activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([2]),
         costs: [Mana("{1}{R}")],
         effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
-        text: "{1}{R}: This creature gets +1/+0 until end of turn.",
       )],
     ),
     (
       name: "Flush Out",
+      face_id: "flush_out",
       mana_cost: "{1}{R}",
       types: ["Sorcery", "Omen"],
       spell_effect: [DrawDiscard(

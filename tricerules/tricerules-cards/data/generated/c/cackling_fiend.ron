@@ -2,9 +2,10 @@
 (
   id: "cackling_fiend",
   name: "Cackling Fiend",
+  face_id: "cackling_fiend",
   mana_cost: "{2}{B}{B}",
   types: ["Creature", "Zombie"],
   power: 2,
   toughness: 1,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Discard(who: EachOpponent, count: 1)], text: "When this creature enters, each opponent discards a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Discard(who: EachOpponent, count: 1)])],
 )

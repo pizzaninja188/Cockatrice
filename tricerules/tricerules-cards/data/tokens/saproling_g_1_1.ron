@@ -2,6 +2,7 @@
 (
     id: "saproling_g_1_1",
     name: "Saproling",
+    face_id: "saproling",
     types: ["Creature", "Saproling"],
     colors: [Green],
     power: 1,

@@ -2,6 +2,7 @@
 (
     id: "elephant_g_3_3",
     name: "Elephant",
+    face_id: "elephant",
     types: ["Creature", "Elephant"],
     colors: [Green],
     power: 3,

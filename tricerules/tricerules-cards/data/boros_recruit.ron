@@ -1,6 +1,7 @@
 (
   id: "boros_recruit",
   name: "Boros Recruit",
+  face_id: "boros_recruit",
   mana_cost: "{R/W}",
   types: ["Creature", "Goblin", "Soldier"],
   power: 1,

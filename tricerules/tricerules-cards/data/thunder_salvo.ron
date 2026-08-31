@@ -3,6 +3,7 @@
 (
   id: "thunder_salvo",
   name: "Thunder Salvo",
+  face_id: "thunder_salvo",
   mana_cost: "{1}{R}",
   types: ["Instant"],
   spell_effect: [DamageTarget(

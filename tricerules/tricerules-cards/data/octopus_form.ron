@@ -2,6 +2,7 @@
 (
   id: "octopus_form",
   name: "Octopus Form",
+  face_id: "octopus_form",
   mana_cost: "{U}",
   types: ["Instant", "Lesson"],
   spell_effect: [

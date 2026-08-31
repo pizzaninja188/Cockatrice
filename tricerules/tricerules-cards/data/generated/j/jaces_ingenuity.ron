@@ -2,7 +2,9 @@
 (
   id: "jaces_ingenuity",
   name: "Jace's Ingenuity",
+  face_id: "jace_s_ingenuity",
   mana_cost: "{3}{U}{U}",
   types: ["Instant"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [Draw(count: 3)],
 )

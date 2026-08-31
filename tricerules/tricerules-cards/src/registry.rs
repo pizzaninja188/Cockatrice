@@ -9,7 +9,7 @@ use crate::token_def::TokenDefinition;
 use once_cell::sync::Lazy;
 use ron::extensions::Extensions;
 use ron::Options;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 /// `Option` fields need `IMPLICIT_SOME` so bare values (e.g. `2` for `Option<u32>`) deserialize.
@@ -226,7 +226,14 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
 // Shared by deck cards and fixed tokens, so token abilities cannot bypass authoring checks.
 fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(), RegistryError> {
     let attachment_source = face.is_aura || face.types.iter().any(|t| t == "Equipment");
-    for ability in &face.static_abilities {
+    for identified in &face.static_abilities {
+        identified
+            .validate_metadata()
+            .map_err(|reason| RegistryError::InvalidCard {
+                id: card.id.clone(),
+                reason,
+            })?;
+        let ability = &identified.definition;
         if let StaticAbilityDef::EntersTapped {
             condition: Some(condition),
             ..
@@ -692,6 +699,107 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
     Ok(())
 }
 
+fn insert_ability_id(ids: &mut HashSet<String>, id: &crate::AbilityId) -> Result<(), String> {
+    id.validate()?;
+    if !ids.insert(id.as_str().to_owned()) {
+        return Err(format!("duplicate sibling ability id '{}'", id));
+    }
+    Ok(())
+}
+
+fn validate_nested_effect_metadata(effect: &SpellEffectKind) -> Result<(), String> {
+    match effect {
+        SpellEffectKind::CreateReflexiveTrigger { ability } => {
+            ability.validate_shape()?;
+            validate_effect_list_metadata(&ability.effect)
+        }
+        SpellEffectKind::GrantTriggeredAbility { ability, .. }
+        | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
+            ability.validate_shape()?;
+            validate_effect_list_metadata(&ability.effect)
+        }
+        SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
+            for branch in branches {
+                validate_effect_list_metadata(&branch.effects)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn validate_effect_list_metadata(effects: &[SpellEffectKind]) -> Result<(), String> {
+    for effect in effects {
+        validate_nested_effect_metadata(effect)?;
+    }
+    Ok(())
+}
+
+fn validate_face_identity(face: &CardFace) -> Result<(), String> {
+    face.face_id.validate()?;
+    if let Some(presentation) = &face.spell_presentation {
+        presentation.validate()?;
+    }
+    let mut siblings = HashSet::new();
+    for ability in &face.activated_abilities {
+        insert_ability_id(&mut siblings, &ability.ability_id)?;
+        ability.validate_shape()?;
+        validate_effect_list_metadata(&ability.effect)?;
+    }
+    for ability in &face.triggered_abilities {
+        insert_ability_id(&mut siblings, &ability.ability_id)?;
+        ability.validate_shape()?;
+        validate_effect_list_metadata(&ability.effect)?;
+    }
+    for ability in &face.static_abilities {
+        insert_ability_id(&mut siblings, &ability.ability_id)?;
+        ability.validate_metadata()?;
+        let mut nested = HashSet::new();
+        match &ability.definition {
+            StaticAbilityDef::AttachedModifier {
+                activated_abilities,
+                triggered_abilities,
+                ..
+            } => {
+                for nested_ability in activated_abilities {
+                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
+                    nested_ability.validate_shape()?;
+                    validate_effect_list_metadata(&nested_ability.effect)?;
+                }
+                for nested_ability in triggered_abilities {
+                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
+                    nested_ability.validate_shape()?;
+                    validate_effect_list_metadata(&nested_ability.effect)?;
+                }
+            }
+            StaticAbilityDef::ConditionalSelfModifier {
+                triggered_abilities,
+                ..
+            } => {
+                for nested_ability in triggered_abilities {
+                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
+                    nested_ability.validate_shape()?;
+                    validate_effect_list_metadata(&nested_ability.effect)?;
+                }
+            }
+            _ => {}
+        }
+    }
+    for ability in &face.characteristic_defining_abilities {
+        insert_ability_id(&mut siblings, &ability.ability_id)?;
+        ability.validate_metadata()?;
+    }
+    let mut cast_cost_group_ids = HashSet::new();
+    for group in &face.cast_cost_groups {
+        group.validate()?;
+        if !cast_cost_group_ids.insert(group.group_id.as_str()) {
+            return Err(format!("duplicate cast cost group id '{}'", group.group_id));
+        }
+    }
+    validate_effect_list_metadata(&face.spell_effect)?;
+    Ok(())
+}
+
 impl CardRegistry {
     pub fn from_embedded() -> Result<Self, RegistryError> {
         Self::from_chunks_and_tokens(EMBEDDED_RON_CHUNKS, EMBEDDED_TOKEN_CHUNKS)
@@ -727,6 +835,10 @@ impl CardRegistry {
         // regardless of file ordering.
         for (id, token) in &reg.tokens {
             let face = token.primary_face();
+            validate_face_identity(face).map_err(|reason| RegistryError::InvalidCard {
+                id: id.clone(),
+                reason,
+            })?;
             validate_static_abilities(token, face)?;
             let can_reference_attached_object = face_can_reference_attached_object(face);
             let can_reference_attached_player = face_can_reference_attached_player(face);
@@ -789,12 +901,12 @@ impl CardRegistry {
                     }
                     _ => {}
                 }
-                if ability.text.trim().is_empty() {
-                    return Err(RegistryError::InvalidCard {
+                ability
+                    .validate_shape()
+                    .map_err(|reason| RegistryError::InvalidCard {
                         id: id.clone(),
-                        reason: "token triggered ability text must not be empty".into(),
-                    });
-                }
+                        reason,
+                    })?;
                 if ability.effect.is_empty() {
                     return Err(RegistryError::InvalidCard {
                         id: id.clone(),
@@ -903,7 +1015,18 @@ impl CardRegistry {
             // validate each face uniformly. Spell effects have no source permanent, so `Source`
             // subjects are rejected here (EffectContext::Spell); activated/triggered
             // effects bind to a source (Ability).
+            let mut face_ids = HashSet::new();
             for face in card.faces_iter() {
+                validate_face_identity(face).map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+                if !face_ids.insert(face.face_id.as_str()) {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: format!("duplicate face id '{}'", face.face_id),
+                    });
+                }
                 if face.warp_cost.is_some() && (!face.is_permanent() || face.is_land) {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
@@ -1463,7 +1586,7 @@ mod tests {
             ("[Menace, Menace]", false),
         ] {
             let card = format!(
-                r#"(id: "choice_test", name: "Choice Test", types: ["Instant"],
+                r#"(id: "choice_test", name: "Choice Test", face_id: "choice_test", types: ["Instant"],
                 spell_effect: [GrantKeywordChoice(subject: Chosen((kind: Creature)), choices: {choices})])"#
             );
             assert_eq!(
@@ -1483,8 +1606,8 @@ mod tests {
             ("", false),
         ] {
             let card = format!(
-                r#"(id: "crime_test", name: "Crime Test", types: ["Creature"], power: 1, toughness: 1,
-                triggered_abilities: [(trigger: WhenSelfEntersBattlefield, text: "Crime check.", effect: [GainLife(amount: 1)],
+                r#"(id: "crime_test", name: "Crime Test", face_id: "crime_test", types: ["Creature"], power: 1, toughness: 1,
+                triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)],
                     intervening_if: Some(GameCondition(CrimesCommittedThisTurn(players: Controller, {bounds}))) )])"#
             );
             assert_eq!(
@@ -1513,7 +1636,7 @@ mod tests {
                 ("", false),
             ] {
                 let data = format!(
-                    r#"(id: "history_probe", name: "History Probe", types: ["Instant"],
+                    r#"(id: "history_probe", name: "History Probe", face_id: "history_probe", types: ["Instant"],
                     cast_conditions: [{kind}(players: Controller, {fields})], spell_effect: [GainLife(amount: 1)])"#
                 );
                 assert_eq!(
@@ -1527,20 +1650,20 @@ mod tests {
 
     #[test]
     fn issue_164_rejects_zero_trigger_caps_in_printed_and_granted_abilities() {
-        let ability = r#"(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "Gain life.", max_triggers_per_turn: Some(0))"#;
+        let ability = r#"(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], max_triggers_per_turn: Some(0))"#;
         for fields in [
             format!("triggered_abilities: [{ability}]"),
-            format!("static_abilities: [ConditionalSelfModifier(condition: ActivePlayer(players: Controller), triggered_abilities: [{ability}])]"),
-            format!("activated_abilities: [(costs: [], effect: [GrantTriggeredAbility(subject: Source, ability: {ability})], text: \"Grant an ability.\")]"),
+            format!("static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: ConditionalSelfModifier(condition: ActivePlayer(players: Controller), triggered_abilities: [{ability}]))]"),
+            format!("activated_abilities: [(ability_id: \"activated_01\", presentation: Fallback, costs: [], effect: [GrantTriggeredAbility(subject: Source, ability: {ability})])]"),
         ] {
-            let card = format!(r#"(id: "trigger_limit_test", name: "Trigger Limit Test", mana_cost: "{{1}}", types: ["Enchantment"], {fields})"#);
+            let card = format!(r#"(id: "trigger_limit_test", name: "Trigger Limit Test", face_id: "trigger_limit_test", mana_cost: "{{1}}", types: ["Enchantment"], {fields})"#);
             let error = CardRegistry::from_chunks(&[&card]).expect_err("zero cap must be rejected");
             assert!(matches!(&error,
                 RegistryError::InvalidCard { reason, .. } if reason.contains("max_triggers_per_turn")),
                 "a zero trigger cap must fail shape validation: {fields}: {error}");
         }
         let token = format!(
-            r#"(id: "trigger_limit_test", name: "Trigger Limit Test", types: ["Creature"], power: Some(1), toughness: Some(1), triggered_abilities: [{ability}])"#
+            r#"(id: "trigger_limit_test", name: "Trigger Limit Test", face_id: "trigger_limit_test", types: ["Creature"], power: Some(1), toughness: Some(1), triggered_abilities: [{ability}])"#
         );
         let error = CardRegistry::from_chunks_and_tokens(&[], &[&token])
             .expect_err("zero cap on a token must be rejected");
@@ -1558,7 +1681,7 @@ mod tests {
         ] {
             for lifetime in [false, true] {
                 let card = format!(
-                    r#"(id: "trigger_limit_test", name: "Trigger Limit Test", mana_cost: "{{1}}", types: ["Enchantment"], triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "Gain life.", triggers_only_once: {lifetime}, {limit})])"#
+                    r#"(id: "trigger_limit_test", name: "Trigger Limit Test", face_id: "trigger_limit_test", mana_cost: "{{1}}", types: ["Enchantment"], triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], triggers_only_once: {lifetime}, {limit})])"#
                 );
                 let registry = CardRegistry::from_chunks(&[&card]).unwrap();
                 let ability = &registry
@@ -1594,21 +1717,25 @@ mod tests {
         let vinebender = registry
             .get("foggy_swamp_vinebender")
             .expect("Foggy Swamp Vinebender");
+        let [vinebender_restriction] = vinebender.primary_face().static_abilities.as_slice() else {
+            panic!("expected one static ability");
+        };
         assert!(matches!(
-            vinebender.primary_face().static_abilities.as_slice(),
-            [StaticAbilityDef::SelfCombatRestriction { restriction, .. }]
+            &vinebender_restriction.definition,
+            StaticAbilityDef::SelfCombatRestriction { restriction, .. }
                 if restriction.cant_be_blocked_by[0].power == Some(PowerComparison::AtMost(2))
         ));
-        assert!(vinebender.partial.is_none());
 
         let cavalry = registry
             .get("safewright_cavalry")
             .expect("Safewright Cavalry");
+        let [cavalry_restriction] = cavalry.primary_face().static_abilities.as_slice() else {
+            panic!("expected one static ability");
+        };
         assert!(matches!(
-            cavalry.primary_face().static_abilities.as_slice(),
-            [StaticAbilityDef::SelfCombatRestriction { restriction, .. }] if restriction.maximum_blockers == Some(1)
+            &cavalry_restriction.definition,
+            StaticAbilityDef::SelfCombatRestriction { restriction, .. } if restriction.maximum_blockers == Some(1)
         ));
-        assert_eq!(cavalry.partial, None);
     }
 
     #[test]
@@ -1616,22 +1743,25 @@ mod tests {
         let card = r#"(
             id: "issue_161_turn_boundary_card",
             name: "Issue 161 Turn Boundary Card",
+            face_id: "issue_161_turn_boundary_card",
             mana_cost: "{3}",
             types: ["Artifact"],
-            static_abilities: [UntapsDuringOtherPlayersUntapSteps],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: UntapsDuringOtherPlayersUntapSteps)],
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WhenSelfEntersBattlefield,
                 effect: [CreateTokens(
                     token: "issue_161_token",
                     count: 1,
                     sacrifice_timing: Some(ControllerNextTurnEndStep),
                 )],
-                text: "Create a token, then sacrifice it at the beginning of the end step on your next turn.",
             )],
         )"#;
         let token = r#"(
             id: "issue_161_token",
             name: "Issue 161 Token",
+            face_id: "issue_161_token",
             types: ["Artifact"],
         )"#;
 
@@ -1644,6 +1774,7 @@ mod tests {
         let card = r#"(
             id: "issue_162_tapped_token_maker",
             name: "Issue 162 Tapped Token Maker",
+            face_id: "issue_162_tapped_token_maker",
             mana_cost: "{2}",
             types: ["Sorcery"],
             spell_effect: [CreateTokens(
@@ -1655,6 +1786,7 @@ mod tests {
         let token = r#"(
             id: "issue_162_robot",
             name: "Issue 162 Robot",
+            face_id: "issue_162_robot",
             types: ["Artifact", "Creature", "Robot"],
             power: 2,
             toughness: 2,
@@ -1678,6 +1810,7 @@ mod tests {
         let card = r#"(
             id: "bad_previous_result",
             name: "Bad Previous Result",
+            face_id: "bad_previous_result",
             mana_cost: "{1}",
             types: ["Sorcery"],
             spell_effect: [
@@ -1702,13 +1835,15 @@ mod tests {
         let card = r#"(
             id: "bad_payment_result",
             name: "Bad Payment Result",
+            face_id: "bad_payment_result",
             mana_cost: "{1}",
             types: ["Sorcery"],
             spell_effect: [ChooseResolutionBranch(
                 selection: FirstApplicable,
                 branches: [
                     (
-                        label: "Paid discard",
+                        branch_id: "paid_discard",
+                        presentation: Fallback,
                         cost: None,
                         requirement: CardResultCount(
                             filter: (
@@ -1721,7 +1856,7 @@ mod tests {
                         ),
                         effects: [],
                     ),
-                    (label: "Fallback", cost: None, requirement: Always, effects: []),
+                    (branch_id: "fallback_branch", presentation: Fallback, cost: None, requirement: Always, effects: []),
                 ],
             )],
         )"#;
@@ -1770,7 +1905,6 @@ mod tests {
             assert_eq!(targeting.groups[0].min, 1);
             assert_eq!(targeting.groups[0].max, 1);
             assert_eq!(targeting.groups[0].effect_indices, [0, 1]);
-            assert_eq!(card.partial, None);
         }
     }
 
@@ -1793,7 +1927,7 @@ mod tests {
 
     #[test]
     fn issue_148_warp_cost_survives_flat_face_normalization() {
-        let fixture = r#"(id: "warp_test", name: "Warp Test", mana_cost: "{3}{W}",
+        let fixture = r#"(id: "warp_test", name: "Warp Test", face_id: "warp_test", mana_cost: "{3}{W}",
             warp_cost: Some("{1}{W}"), types: ["Creature"], power: 3, toughness: 2)"#;
         let registry = CardRegistry::from_chunks(&[fixture]).expect("Warp face");
         let face = registry.get("warp_test").unwrap().primary_face();
@@ -1806,7 +1940,7 @@ mod tests {
 
     #[test]
     fn issue_148_warp_rejects_nonpermanent_faces() {
-        let fixture = r#"(id: "bad_warp", name: "Bad Warp", mana_cost: "{3}{W}",
+        let fixture = r#"(id: "bad_warp", name: "Bad Warp", face_id: "bad_warp", mana_cost: "{3}{W}",
             warp_cost: Some("{1}{W}"), types: ["Sorcery"], spell_effect: [Draw(count: 1)])"#;
         assert!(matches!(CardRegistry::from_chunks(&[fixture]),
             Err(RegistryError::InvalidCard { reason, .. }) if reason.contains("Warp")));
@@ -1817,6 +1951,7 @@ mod tests {
         let x_cost = r#"(
             id: "bad_x_reduction",
             name: "Bad X Reduction",
+            face_id: "bad_x_reduction",
             mana_cost: "{X}{U}",
             cost_modifiers: [ConditionalGenericReduction(
                 amount: 1,
@@ -1833,6 +1968,7 @@ mod tests {
         let target_surcharge = r#"(
             id: "bad_target_surcharge_reduction",
             name: "Bad Target Surcharge Reduction",
+            face_id: "bad_target_surcharge_reduction",
             mana_cost: "{U}",
             cost_modifiers: [ConditionalGenericReduction(
                 amount: 1,
@@ -1858,17 +1994,19 @@ mod tests {
         let card = r#"(
             id: "bad_block_filter",
             name: "Bad Block Filter",
+            face_id: "bad_block_filter",
             mana_cost: "{G}",
             types: ["Creature"],
             power: 1,
             toughness: 1,
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WheneverSelfBlocksCreature(attacker: (
                     required_keywords: [Flying],
                     excluded_keywords: [Flying],
                 )),
                 effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
-                text: "Bad.",
             )],
         )"#;
         let error = CardRegistry::from_chunks(&[card]).expect_err("contradictory filter");
@@ -1917,17 +2055,19 @@ mod tests {
                 r#"(
                     id: "bad_entry_filter",
                     name: "Bad Entry Filter",
+                    face_id: "bad_entry_filter",
                     mana_cost: "{{1}}{{G}}",
                     types: ["Creature"],
                     power: 1,
                     toughness: 1,
                     triggered_abilities: [(
+                        ability_id: "triggered_01",
+                        presentation: Fallback,
                         trigger: WheneverPermanentEntersBattlefield(
                             filter: (permanent_type: Some({permanent_type})),
                             creature_filter: Some({creature_filter}),
                         ),
                         effect: [Draw(count: 1)],
-                        text: "Bad.",
                     )],
                 )"#
             );
@@ -1944,14 +2084,16 @@ mod tests {
         let card = r#"(
             id: "bad_trigger_reference",
             name: "Bad Trigger Reference",
+            face_id: "bad_trigger_reference",
             mana_cost: "{G}",
             types: ["Creature"],
             power: 1,
             toughness: 1,
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WhenSelfEntersBattlefield,
                 effect: [LoseLife(amount: Fixed(2), who: TriggerObjectController)],
-                text: "Bad.",
             )],
         )"#;
         let error = CardRegistry::from_chunks(&[card]).expect_err("missing trigger object");
@@ -1967,12 +2109,14 @@ mod tests {
         let ordinary_permanent = r#"(
             id: "bad_attachment_trigger",
             name: "Bad Attachment Trigger",
+            face_id: "bad_attachment_trigger",
             mana_cost: "{2}",
             types: ["Artifact"],
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WheneverAttachedObjectAttacks,
                 effect: [Draw(count: 1)],
-                text: "Bad.",
             )],
         )"#;
         let error = CardRegistry::from_chunks(&[ordinary_permanent])
@@ -1986,13 +2130,15 @@ mod tests {
         let wrong_aura_recipient = r#"(
             id: "bad_player_attachment_trigger",
             name: "Bad Player Attachment Trigger",
+            face_id: "bad_player_attachment_trigger",
             mana_cost: "{1}{U}",
             types: ["Enchantment", "Aura"],
             spell_effect: [AuraAttach(target: (kind: Creature))],
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WheneverAttachedPlayerIsAttacked,
                 effect: [Draw(count: 1)],
-                text: "Bad.",
             )],
         )"#;
         let error = CardRegistry::from_chunks(&[wrong_aura_recipient])
@@ -2006,17 +2152,19 @@ mod tests {
         let missing_defender = r#"(
             id: "bad_defender_target",
             name: "Bad Defender Target",
+            face_id: "bad_defender_target",
             mana_cost: "{1}{R}",
             types: ["Creature"],
             power: 1,
             toughness: 1,
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WhenSelfEntersBattlefield,
                 effect: [DamageTarget(
                     amount: 1,
                     target: (kind: Creature, controller: DefendingPlayer),
                 )],
-                text: "Bad.",
             )],
         )"#;
         let error = CardRegistry::from_chunks(&[missing_defender])
@@ -2038,10 +2186,13 @@ mod tests {
                 r#"(
                     id: "bad_entry_counters",
                     name: "Bad Entry Counters",
+                    face_id: "bad_entry_counters",
                     mana_cost: "{{1}}{{B}}",
                     types: ["Enchantment", "Aura"],
                     spell_effect: [AuraAttach(target: (kind: Creature))],
                     triggered_abilities: [(
+                        ability_id: "triggered_01",
+                        presentation: Fallback,
                         trigger: WheneverAttachedObjectDies,
                         effect: [ReturnTriggeredCard(
                             from: [Graveyard],
@@ -2049,7 +2200,6 @@ mod tests {
                             controller: AbilityController,
                             entry_counters: {entry_counters},
                         )],
-                        text: "Bad.",
                     )],
                 )"#
             );
@@ -2070,6 +2220,7 @@ mod tests {
                 r#"(
                     id: "valid_counter_kind",
                     name: "Valid Counter Kind",
+                    face_id: "valid_counter_kind",
                     mana_cost: "{{G}}",
                     types: ["Instant"],
                     spell_effect: [PutCounters(counter: {counter}, count: 1)],
@@ -2081,6 +2232,7 @@ mod tests {
         let invalid = r#"(
             id: "invalid_keyword_counter",
             name: "Invalid Keyword Counter",
+            face_id: "invalid_keyword_counter",
             mana_cost: "{G}",
             types: ["Instant"],
             spell_effect: [PutCounters(counter: Keyword(Defender), count: 1)],
@@ -2102,13 +2254,14 @@ mod tests {
         let empty = r#"(
             id: "bad_conditional",
             name: "Bad Conditional",
+            face_id: "bad_conditional",
             mana_cost: "{G}",
             types: ["Creature", "Test"],
             power: 1,
             toughness: 1,
-            static_abilities: [ConditionalSelfModifier(
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
                 condition: ActivePlayer(players: Controller),
-            )],
+            ))],
         )"#;
         let err = CardRegistry::from_chunks_and_tokens(&[empty], &[]).unwrap_err();
         assert!(matches!(
@@ -2120,18 +2273,19 @@ mod tests {
         let recursive = r#"(
             id: "bad_recursive_conditional",
             name: "Bad Recursive Conditional",
+            face_id: "bad_recursive_conditional",
             mana_cost: "{G}",
             types: ["Creature", "Test"],
             power: 1,
             toughness: 1,
-            static_abilities: [ConditionalSelfModifier(
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
                 condition: BattlefieldAggregate(
                     filter: (controllers: Controller, card_type: Some(Creature)),
                     aggregate: MaximumPower,
                     min: Some(4),
                 ),
                 delta_power: 1,
-            )],
+            ))],
         )"#;
         let err = CardRegistry::from_chunks_and_tokens(&[recursive], &[]).unwrap_err();
         assert!(matches!(
@@ -2146,12 +2300,14 @@ mod tests {
         let bad_trigger = r#"(
             id: "bad_damage_observer",
             name: "Bad Damage Observer",
+            face_id: "bad_damage_observer",
             mana_cost: "{2}",
             types: ["Artifact"],
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WheneverAttachedObjectIsDealtDamage,
                 effect: [Draw(count: 1)],
-                text: "Bad.",
             )],
         )"#;
         let error = CardRegistry::from_chunks(&[bad_trigger]).expect_err("nonattachment observer");
@@ -2164,16 +2320,18 @@ mod tests {
         let conditioned_ability = r#"(
             id: "bad_conditioned_grant",
             name: "Bad Conditioned Grant",
+            face_id: "bad_conditioned_grant",
             mana_cost: "{2}",
             types: ["Artifact", "Equipment"],
-            static_abilities: [AttachedModifier(
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(
                 condition: Some(ActivePlayer(players: Controller)),
                 activated_abilities: [(
+                    ability_id: "triggered_01",
+                    presentation: Fallback,
                     costs: [Tap],
                     effect: [ProduceMana(options: [(g: 1)])],
-                    text: "{T}: Add {G}.",
                 )],
-            )],
+            ))],
         )"#;
         let error = CardRegistry::from_chunks(&[conditioned_ability])
             .expect_err("conditioned ability grant");
@@ -2186,16 +2344,17 @@ mod tests {
         let power_dependency = r#"(
             id: "bad_attached_dependency",
             name: "Bad Attached Dependency",
+            face_id: "bad_attached_dependency",
             mana_cost: "{2}",
             types: ["Artifact", "Equipment"],
-            static_abilities: [AttachedModifier(
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(
                 condition: Some(BattlefieldAggregate(
                     filter: (controllers: Controller, card_type: Some(Creature)),
                     aggregate: MaximumPower,
                     min: Some(4),
                 )),
                 keywords: [FirstStrike],
-            )],
+            ))],
         )"#;
         let error = CardRegistry::from_chunks(&[power_dependency])
             .expect_err("power-dependent attached characteristics");
@@ -2211,11 +2370,12 @@ mod tests {
         let power_dependency = r#"(
             id: "bad_conditioned_anthem",
             name: "Bad Conditioned Anthem",
+            face_id: "bad_conditioned_anthem",
             mana_cost: "{2}{W}",
             types: ["Creature", "Test"],
             power: 2,
             toughness: 2,
-            static_abilities: [AnthemKeyword(
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AnthemKeyword(
                 filter: (controller: YouControl),
                 condition: BattlefieldAggregate(
                     filter: (controllers: Controller, card_type: Some(Creature)),
@@ -2223,7 +2383,7 @@ mod tests {
                     min: Some(4),
                 ),
                 keyword: FirstStrike,
-            )],
+            ))],
         )"#;
         let error = CardRegistry::from_chunks(&[power_dependency])
             .expect_err("power-dependent conditioned anthem");
@@ -2235,45 +2395,27 @@ mod tests {
     }
 
     #[test]
-    fn token_trigger_validation_rejects_empty_text_and_effects() {
-        let empty_text = r#"(
-            id: "bad_token",
-            name: "Bad",
-            types: ["Creature", "Bad"],
-            colors: [Red],
-            power: 1,
-            toughness: 1,
-            triggered_abilities: [(
-                trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
-                effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
-                text: "",
-            )],
-        )"#;
-        let err = CardRegistry::from_chunks_and_tokens(&[], &[empty_text]).unwrap_err();
-        assert!(matches!(
-            err,
-            RegistryError::InvalidCard { reason, .. }
-                if reason.contains("triggered ability text must not be empty")
-        ));
-
+    fn token_trigger_validation_rejects_empty_effects() {
         let empty_effect = r#"(
             id: "bad_token",
             name: "Bad",
+            face_id: "bad",
             types: ["Creature", "Bad"],
             colors: [Red],
             power: 1,
             toughness: 1,
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
                 effect: [],
-                text: "Prowess",
             )],
         )"#;
         let err = CardRegistry::from_chunks_and_tokens(&[], &[empty_effect]).unwrap_err();
         assert!(matches!(
             err,
             RegistryError::InvalidCard { reason, .. }
-                if reason.contains("must contain at least one effect")
+                if reason.contains("requires exactly one of effect or modal")
         ));
     }
 
@@ -2282,6 +2424,7 @@ mod tests {
         let bad = r#"(
             id: "contradictory_filter",
             name: "Contradictory Filter",
+            face_id: "contradictory_filter",
             mana_cost: "{W}",
             types: ["Instant"],
             spell_effect: [Destroy(subject: Chosen((
@@ -2356,6 +2499,7 @@ mod tests {
         let bad = r#"(
             id: "bad_card",
             name: "Bad Card",
+            face_id: "bad_card",
             mana_cost: "{W}",
             types: ["Instant"],
             spell_effect: [TargetPlayerGainsLife(amount: 3, target: (kind: Creature))],
@@ -2372,6 +2516,7 @@ mod tests {
         let bad = r#"(
             id: "bad_combat_prevention",
             name: "Bad Combat Prevention",
+            face_id: "bad_combat_prevention",
             mana_cost: "{W}",
             types: ["Instant"],
             spell_effect: [
@@ -2395,6 +2540,7 @@ mod tests {
                 r#"(
             id: "bad_{}",
             name: "Bad {}",
+            face_id: "bad",
             mana_cost: "{{U}}",
             types: ["Instant"],
             spell_effect: [{}({})],
@@ -2421,15 +2567,17 @@ mod tests {
         let bad = r#"(
             id: "bad_end_step_condition",
             name: "Bad End Step Condition",
+            face_id: "bad_end_step_condition",
             mana_cost: "{G}",
             types: ["Creature"],
             power: 1,
             toughness: 1,
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: AtBeginningOfEndStep(player: Controller),
                 intervening_if: Some(GameCondition(CreatureDeathsThisTurn(min: None, max: None))),
                 effect: [Draw(count: 1)],
-                text: "Bad.",
             )],
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
@@ -2443,6 +2591,7 @@ mod tests {
         let bad = r#"(
             id: "bad_source_untap",
             name: "Bad Source Untap",
+            face_id: "bad_source_untap",
             mana_cost: "{G}",
             types: ["Instant"],
             spell_effect: [Untap(subject: Source)],
@@ -2460,6 +2609,7 @@ mod tests {
         let bad = r#"(
             id: "bad_lose_life",
             name: "Bad Lose Life",
+            face_id: "bad_lose_life",
             mana_cost: "{B}",
             types: ["Sorcery"],
             spell_effect: [LoseLife(amount: TargetManaValue)],
@@ -2471,6 +2621,7 @@ mod tests {
         let bad_player_target = r#"(
             id: "bad_lose_life_player",
             name: "Bad Lose Life Player",
+            face_id: "bad_lose_life_player",
             mana_cost: "{B}",
             types: ["Sorcery"],
             spell_effect: [
@@ -2487,6 +2638,7 @@ mod tests {
         let good = r#"(
             id: "good_lose_life",
             name: "Good Lose Life",
+            face_id: "good_lose_life",
             mana_cost: "{B}",
             types: ["Sorcery"],
             spell_effect: [
@@ -2503,6 +2655,7 @@ mod tests {
         let fixed = r#"(
             id: "fixed_lose_life",
             name: "Fixed Lose Life",
+            face_id: "fixed_lose_life",
             mana_cost: "{B}",
             types: ["Sorcery"],
             spell_effect: [LoseLife(amount: Fixed(2))],
@@ -2515,15 +2668,17 @@ mod tests {
         let bad = r#"(
             id: "bad_trigger",
             name: "Bad Trigger",
+            face_id: "bad_trigger",
             mana_cost: "{G}",
             types: ["Creature"],
             power: 1,
             toughness: 1,
             triggered_abilities: [
                 (
+                    ability_id: "triggered_01",
+                    presentation: Fallback,
                     trigger: WhenSelfEntersBattlefield,
                     effect: [TargetPlayerGainsLife(amount: 3, target: (kind: Creature))],
-                    text: "bad",
                 ),
             ],
         )"#;
@@ -2536,14 +2691,16 @@ mod tests {
         let bad = r#"(
             id: "bad_defender_recipient",
             name: "Bad Defender Recipient",
+            face_id: "bad_defender_recipient",
             mana_cost: "{R}",
             types: ["Creature"],
             power: 1,
             toughness: 1,
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WhenSelfEntersBattlefield,
                 effect: [DamagePlayer(amount: 1, who: DefendingPlayer)],
-                text: "bad",
             )],
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
@@ -2563,20 +2720,23 @@ mod tests {
         let card = r#"(
             id: "multi_effect",
             name: "Multi Effect",
+            face_id: "multi_effect",
             mana_cost: "{B}",
             types: ["Enchantment"],
             activated_abilities: [
                 (
+                    ability_id: "activated_01",
+                    presentation: Fallback,
                     costs: [Mana("{1}")],
                     effect: [Draw(count: 1), LoseLife(amount: Fixed(1))],
-                    text: "{1}: Draw a card and lose 1 life.",
                 ),
             ],
             triggered_abilities: [
                 (
+                    ability_id: "triggered_01",
+                    presentation: Fallback,
                     trigger: WhenSelfEntersBattlefield,
                     effect: [GainLife(amount: 2), Draw(count: 1)],
-                    text: "When this enters, gain 2 life and draw a card.",
                 ),
             ],
         )"#;
@@ -2599,18 +2759,21 @@ mod tests {
         let card = r#"(
             id: "impure_mana",
             name: "Impure Mana",
+            face_id: "impure_mana",
             mana_cost: "{1}",
             types: ["Artifact"],
             activated_abilities: [
                 (
+                    ability_id: "activated_01",
+                    presentation: Fallback,
                     costs: [Tap],
                     effect: [ProduceMana(options: [(c: 1)]), LoseLife(amount: Fixed(1))],
-                    text: "{T}: Add {C}. You lose 1 life.",
                 ),
                 (
+                    ability_id: "activated_02",
+                    presentation: Fallback,
                     costs: [Tap],
                     effect: [ProduceMana(options: [(c: 1)])],
-                    text: "{T}: Add {C}.",
                 ),
             ],
         )"#;
@@ -2627,15 +2790,17 @@ mod tests {
         let good = r#"(
             id: "self_pumper",
             name: "Self Pumper",
+            face_id: "self_pumper",
             mana_cost: "{G}",
             types: ["Creature"],
             power: 1,
             toughness: 1,
             triggered_abilities: [
                 (
+                    ability_id: "triggered_01",
+                    presentation: Fallback,
                     trigger: AtBeginningOfUpkeep(player: Controller),
                     effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
-                    text: "At the beginning of your upkeep, this gets +1/+1.",
                 ),
             ],
         )"#;
@@ -2644,6 +2809,7 @@ mod tests {
         let bad = r#"(
             id: "self_spell",
             name: "Self Spell",
+            face_id: "self_spell",
             mana_cost: "{G}",
             types: ["Instant"],
             spell_effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
@@ -2711,6 +2877,7 @@ mod tests {
         let faceless_split = r#"(
             id: "faceless_split",
             name: "Faceless Split",
+            face_id: "faceless_split",
             layout: Split,
             mana_cost: "{R}",
             types: ["Instant"],
@@ -2728,8 +2895,8 @@ mod tests {
             id: "normal_with_faces",
             name: "Normal With Faces",
             faces: [
-                (name: "A", mana_cost: "{R}", types: ["Instant"]),
-                (name: "B", mana_cost: "{U}", types: ["Instant"]),
+                (name: "A", face_id: "a", mana_cost: "{R}", types: ["Instant"]),
+                (name: "B", face_id: "b", mana_cost: "{U}", types: ["Instant"]),
             ],
         )"#;
         let err = CardRegistry::from_chunks(&[normal_with_faces]).unwrap_err();
@@ -2748,7 +2915,7 @@ mod tests {
             id: "one_door",
             name: "One Door",
             layout: Room,
-            faces: [(name: "Only Door", mana_cost: "{2}", types: ["Enchantment", "Room"])],
+            faces: [(name: "Only Door", face_id: "only_door", mana_cost: "{2}", types: ["Enchantment", "Room"])],
         )"#;
         let err = CardRegistry::from_chunks(&[one_door]).unwrap_err();
         assert!(
@@ -2760,8 +2927,8 @@ mod tests {
             name: "Mismatched Room",
             layout: Room,
             faces: [
-                (name: "Left", mana_cost: "{2}", types: ["Enchantment", "Room"]),
-                (name: "Right", mana_cost: "{3}", types: ["Artifact"]),
+                (name: "Left", face_id: "left", mana_cost: "{2}", types: ["Enchantment", "Room"]),
+                (name: "Right", face_id: "right", mana_cost: "{3}", types: ["Artifact"]),
             ],
         )"#;
         let err = CardRegistry::from_chunks(&[mismatched_types]).unwrap_err();
@@ -2784,12 +2951,14 @@ mod tests {
         let a = r#"(
             id: "dupe_a",
             name: "Dupe",
+            face_id: "dupe",
             mana_cost: "",
             types: ["Land"],
         )"#;
         let b = r#"(
             id: "dupe_b",
             name: " DUPE ",
+            face_id: "dupe",
             mana_cost: "",
             types: ["Land"],
         )"#;
@@ -2808,6 +2977,7 @@ mod tests {
         let card = r#"(
             id: "dupe",
             name: "Dupe",
+            face_id: "dupe",
             mana_cost: "",
             types: ["Land"],
         )"#;
@@ -2867,6 +3037,7 @@ mod tests {
         let bad = r#"(
             id: "bad_maker",
             name: "Bad Maker",
+            face_id: "bad_maker",
             mana_cost: "{W}",
             types: ["Sorcery"],
             spell_effect: [CreateTokens(token: "no_such_token", count: 1)],
@@ -2880,12 +3051,14 @@ mod tests {
         let unsupported = r#"(
             id: "unsupported_requirement",
             name: "Unsupported Requirement",
+            face_id: "unsupported_requirement",
             mana_cost: "{W}",
             types: ["Sorcery"],
             spell_effect: [ChooseResolutionBranch(
                 optional: true,
                 branches: [(
-                    label: "Draw",
+                    branch_id: "draw",
+                    presentation: Fallback,
                     cost: None,
                     requirement: EffectsApplicable,
                     effects: [Draw(count: 1)],
@@ -2902,13 +3075,15 @@ mod tests {
         let multiple_choosers = r#"(
             id: "multiple_choosers",
             name: "Multiple Choosers",
+            face_id: "multiple_choosers",
             mana_cost: "{W}",
             types: ["Sorcery"],
             spell_effect: [ChooseResolutionBranch(
                 chooser: EachPlayer,
                 optional: true,
                 branches: [(
-                    label: "Gain life",
+                    branch_id: "gain_life",
+                    presentation: Fallback,
                     cost: None,
                     effects: [GainLife(amount: 1)],
                 )],
@@ -2924,16 +3099,20 @@ mod tests {
         let missing_fallback = r#"(
             id: "missing_fallback",
             name: "Missing Fallback",
+            face_id: "missing_fallback",
             mana_cost: "{1}{W}",
             types: ["Creature", "Human"],
             power: 1,
             toughness: 1,
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WhenSelfEntersBattlefield,
                 effect: [ChooseResolutionBranch(
                     optional: false,
                     branches: [(
-                        label: "Put a counter on this",
+                        branch_id: "put_a_counter_on_this",
+                        presentation: Fallback,
                         cost: None,
                         requirement: EffectsApplicable,
                         effects: [PutCounters(
@@ -2943,7 +3122,6 @@ mod tests {
                         )],
                     )],
                 )],
-                text: "When this enters, make a mandatory conditional choice.",
             )],
         )"#;
         let err = CardRegistry::from_chunks(&[missing_fallback]).unwrap_err();
@@ -2960,6 +3138,7 @@ mod tests {
         let bad = r#"(
             id: "double_owner",
             name: "Double Owner",
+            face_id: "double_owner",
             mana_cost: "{U}",
             types: ["Instant"],
             spell_effect: [Draw(count: 1)],
@@ -2977,11 +3156,11 @@ mod tests {
 
     #[test]
     fn issue_174_tokens_preserve_and_validate_static_abilities() {
-        let token = r#"(id: "faerie_u_1_1_restricted", name: "Faerie", types: ["Creature", "Faerie"],
+        let token = r#"(id: "faerie_u_1_1_restricted", name: "Faerie", face_id: "faerie", types: ["Creature", "Faerie"],
             colors: [Blue], power: 1, toughness: 1, keywords: [Flying],
-            static_abilities: [SelfCombatRestriction(restriction: (
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SelfCombatRestriction(restriction: (
                 cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])]
-            ))])"#;
+            )))])"#;
         let registry = CardRegistry::from_chunks_and_tokens(&[], &[token]).unwrap();
         assert_eq!(
             registry
@@ -2999,16 +3178,16 @@ mod tests {
     #[test]
     fn issue_174_composable_combat_restrictions_load() {
         let card = r#"(
-            id: "combat_predicates", name: "Combat Predicates",
+            id: "combat_predicates", name: "Combat Predicates", face_id: "combat_predicates",
             types: ["Creature"], power: 2, toughness: 2,
-            static_abilities: [SelfCombatRestriction(
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SelfCombatRestriction(
                 restriction: (
                     cant_be_blocked_by: [(kind: Creature, permanent_types: [Artifact])],
                     cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
                     minimum_blockers: Some(3), maximum_blockers: Some(4),
                 ),
                 condition: Some(GraveyardAggregate(owners: Controller, aggregate: CardCount, min: Some(7))),
-            )],
+            ))],
         )"#;
         CardRegistry::from_chunks(&[card])
             .expect("typed static and conditional combat restrictions");
@@ -3036,10 +3215,11 @@ mod tests {
         let bad = r#"(
             id: "empty_self_combat_restriction",
             name: "Empty Self Combat Restriction",
+            face_id: "empty_self_combat_restriction",
             types: ["Creature"],
             power: 1,
             toughness: 1,
-            static_abilities: [SelfCombatRestriction()],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SelfCombatRestriction())],
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(
@@ -3056,11 +3236,14 @@ mod tests {
             .get("vampire_soulcaller")
             .expect("Vampire Soulcaller")
             .primary_face();
+        let [restriction] = face.static_abilities.as_slice() else {
+            panic!("expected one static ability");
+        };
         assert!(matches!(
-            face.static_abilities.as_slice(),
-            [StaticAbilityDef::SelfCombatRestriction {
+            &restriction.definition,
+            StaticAbilityDef::SelfCombatRestriction {
                 restriction, condition: None,
-            }] if restriction.cant_block
+            } if restriction.cant_block
         ));
     }
 
@@ -3069,14 +3252,15 @@ mod tests {
         let good = r#"(
             id: "modal_test",
             name: "Modal Test",
+            face_id: "modal_test",
             mana_cost: "{W}",
             types: ["Instant"],
             modal_spell: (
                 min_modes: 1,
                 max_modes: 2,
                 modes: [
-                    (label: "Gain life", effects: [GainLife(amount: 3)]),
-                    (label: "Draw a card", effects: [Draw(count: 1)]),
+                    (mode_id: "mode_01", presentation: OracleLines([1]), effects: [GainLife(amount: 3)]),
+                    (mode_id: "mode_02", presentation: OracleLines([2]), effects: [Draw(count: 1)]),
                 ],
             ),
         )"#;
@@ -3093,36 +3277,82 @@ mod tests {
     }
 
     #[test]
+    fn modal_modes_require_stable_identity_and_external_presentation() {
+        let valid = r#"(
+            id: "modal_identity", name: "Modal Identity", face_id: "modal_identity",
+            types: ["Instant"],
+            modal_spell: (
+                min_modes: 1,
+                max_modes: 1,
+                modes: [
+                    (mode_id: "mode_01", presentation: OracleLines([2]), effects: [Draw(count: 1)]),
+                    (mode_id: "mode_02", presentation: Fallback, effects: [GainLife(amount: 1)]),
+                ],
+            ),
+        )"#;
+        CardRegistry::from_chunks(&[valid])
+            .expect("stable modal identity and presentation should load");
+
+        let invalid_modes = [
+            r#"(label: "Draw a card", effects: [Draw(count: 1)])"#,
+            r#"(mode_id: "mode_01", effects: [Draw(count: 1)])"#,
+            r#"(presentation: Fallback, effects: [Draw(count: 1)])"#,
+            r#"(mode_id: "Mode-01", presentation: Fallback, effects: [Draw(count: 1)])"#,
+            r#"(mode_id: "fallback", presentation: Fallback, effects: [Draw(count: 1)])"#,
+            r#"(mode_id: "mode_01", presentation: OracleLines([0]), effects: [Draw(count: 1)])"#,
+        ];
+        for mode in invalid_modes {
+            let card = format!(
+                r#"(
+                    id: "bad_modal_identity", name: "Bad Modal Identity",
+                    face_id: "bad_modal_identity", types: ["Instant"],
+                    modal_spell: (min_modes: 1, max_modes: 1, modes: [{mode}]),
+                )"#
+            );
+            assert!(
+                CardRegistry::from_chunks(&[&card]).is_err(),
+                "must reject {mode}"
+            );
+        }
+
+        let duplicate = r#"(
+            id: "duplicate_modes", name: "Duplicate Modes", face_id: "duplicate_modes",
+            types: ["Instant"],
+            modal_spell: (
+                min_modes: 1,
+                max_modes: 1,
+                modes: [
+                    (mode_id: "mode_01", presentation: Fallback, effects: [Draw(count: 1)]),
+                    (mode_id: "mode_01", presentation: Fallback, effects: [GainLife(amount: 1)]),
+                ],
+            ),
+        )"#;
+        assert!(CardRegistry::from_chunks(&[duplicate]).is_err());
+    }
+
+    #[test]
     fn load_rejects_invalid_modal_spell_definitions() {
         let invalid = [
             r#"(
                 id: "bad_bounds",
                 name: "Bad Bounds",
+                face_id: "bad_bounds",
                 types: ["Instant"],
                 modal_spell: (
                     min_modes: 2,
                     max_modes: 1,
-                    modes: [(label: "Draw", effects: [Draw(count: 1)])],
-                ),
-            )"#,
-            r#"(
-                id: "empty_label",
-                name: "Empty Label",
-                types: ["Instant"],
-                modal_spell: (
-                    min_modes: 1,
-                    max_modes: 1,
-                    modes: [(label: " ", effects: [Draw(count: 1)])],
+                    modes: [(mode_id: "mode_01", presentation: Fallback, effects: [Draw(count: 1)])],
                 ),
             )"#,
             r#"(
                 id: "empty_effects",
                 name: "Empty Effects",
+                face_id: "empty_effects",
                 types: ["Instant"],
                 modal_spell: (
                     min_modes: 1,
                     max_modes: 1,
-                    modes: [(label: "Nothing", effects: [])],
+                    modes: [(mode_id: "mode_01", presentation: Fallback, effects: [])],
                 ),
             )"#,
         ];
@@ -3142,12 +3372,13 @@ mod tests {
         let bad = r#"(
             id: "modal_double_owner",
             name: "Modal Double Owner",
+            face_id: "modal_double_owner",
             types: ["Instant"],
             spell_effect: [Draw(count: 1)],
             modal_spell: (
                 min_modes: 1,
                 max_modes: 1,
-                modes: [(label: "Gain life", effects: [GainLife(amount: 3)])],
+                modes: [(mode_id: "mode_01", presentation: Fallback, effects: [GainLife(amount: 3)])],
             ),
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
@@ -3181,7 +3412,7 @@ mod tests {
         for id in gainlands.into_iter().chain(simple_duals) {
             let face = reg.get(id).unwrap().primary_face();
             assert!(face.static_abilities.iter().any(|ability| matches!(
-                ability,
+                &ability.definition,
                 StaticAbilityDef::EntersTapped {
                     affected: EntersTappedAffected::Self_,
                     ..
@@ -3214,7 +3445,7 @@ mod tests {
 
         let ghoul = reg.get("diregraf_ghoul").unwrap().primary_face();
         assert!(ghoul.static_abilities.iter().any(|ability| matches!(
-            ability,
+            &ability.definition,
             StaticAbilityDef::EntersTapped {
                 affected: EntersTappedAffected::Self_,
                 ..
@@ -3222,7 +3453,7 @@ mod tests {
         )));
         let orb = reg.get("orb_of_dreams").unwrap().primary_face();
         assert!(orb.static_abilities.iter().any(|ability| matches!(
-            ability,
+            &ability.definition,
             StaticAbilityDef::EntersTapped {
                 affected: EntersTappedAffected::Permanents,
                 ..
@@ -3342,7 +3573,7 @@ mod tests {
             );
             assert!(
                 face.static_abilities.iter().any(|ability| matches!(
-                    ability,
+                    &ability.definition,
                     StaticAbilityDef::EntersTapped {
                         affected: EntersTappedAffected::Self_,
                         condition: Some(condition),
@@ -3380,7 +3611,7 @@ mod tests {
             ]
         );
         assert!(globe.static_abilities.iter().any(|ability| matches!(
-            ability,
+            &ability.definition,
             StaticAbilityDef::EntersWithCounters {
                 affected: EntersWithCountersAffected::Creatures(CreatureScopeFilter {
                     controller: Some(CreatureScopeController::YouControl),
@@ -3467,7 +3698,7 @@ mod tests {
                 .primary_face()
                 .static_abilities
                 .iter()
-                .find_map(|ability| match ability {
+                .find_map(|ability| match &ability.definition {
                     StaticAbilityDef::EntersWithCounters {
                         counter, amount, ..
                     } if *counter == CounterKind::PlusOnePlusOne => Some(amount.clone()),
@@ -3522,14 +3753,16 @@ mod tests {
         let bad = r#"(
             id: "bad_flip",
             name: "Bad Flip",
+            face_id: "bad_flip",
             mana_cost: "{R}",
             types: ["Creature"],
             power: 1,
             toughness: 1,
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
                 effect: [ChangeSourceFace(action: Flip)],
-                text: "Flip it.",
             )],
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
@@ -3543,15 +3776,15 @@ mod tests {
                 id: "one_face_adventure",
                 name: "One Face Adventure",
                 layout: Adventure,
-                faces: [(name: "Creature", mana_cost: "{2}{G}", types: ["Creature"])],
+                faces: [(name: "Creature", face_id: "creature", mana_cost: "{2}{G}", types: ["Creature"])],
             )"#,
             r#"(
                 id: "spell_first_adventure",
                 name: "Spell First Adventure",
                 layout: Adventure,
                 faces: [
-                    (name: "Spell", mana_cost: "{G}", types: ["Instant"]),
-                    (name: "Other Spell", mana_cost: "{1}{G}", types: ["Sorcery"]),
+                    (name: "Spell", face_id: "spell", mana_cost: "{G}", types: ["Instant"]),
+                    (name: "Other Spell", face_id: "other_spell", mana_cost: "{1}{G}", types: ["Sorcery"]),
                 ],
             )"#,
             r#"(
@@ -3559,8 +3792,8 @@ mod tests {
                 name: "Permanent Second Adventure",
                 layout: Adventure,
                 faces: [
-                    (name: "Creature", mana_cost: "{2}{G}", types: ["Creature"]),
-                    (name: "Other Creature", mana_cost: "{1}{G}", types: ["Creature"]),
+                    (name: "Creature", face_id: "creature", mana_cost: "{2}{G}", types: ["Creature"]),
+                    (name: "Other Creature", face_id: "other_creature", mana_cost: "{1}{G}", types: ["Creature"]),
                 ],
             )"#,
         ];
@@ -3582,15 +3815,15 @@ mod tests {
                 id: "one_face_omen",
                 name: "One Face Omen",
                 layout: Omen,
-                faces: [(name: "Creature", mana_cost: "{2}{G}", types: ["Creature"])],
+                faces: [(name: "Creature", face_id: "creature", mana_cost: "{2}{G}", types: ["Creature"])],
             )"#,
             r#"(
                 id: "spell_first_omen",
                 name: "Spell First Omen",
                 layout: Omen,
                 faces: [
-                    (name: "Spell", mana_cost: "{G}", types: ["Instant"]),
-                    (name: "Omen", mana_cost: "{1}{G}", types: ["Sorcery", "Omen"]),
+                    (name: "Spell", face_id: "spell", mana_cost: "{G}", types: ["Instant"]),
+                    (name: "Omen", face_id: "omen", mana_cost: "{1}{G}", types: ["Sorcery", "Omen"]),
                 ],
             )"#,
             r#"(
@@ -3598,8 +3831,8 @@ mod tests {
                 name: "Missing Omen Subtype",
                 layout: Omen,
                 faces: [
-                    (name: "Creature", mana_cost: "{2}{G}", types: ["Creature"]),
-                    (name: "Spell", mana_cost: "{1}{G}", types: ["Sorcery"]),
+                    (name: "Creature", face_id: "creature", mana_cost: "{2}{G}", types: ["Creature"]),
+                    (name: "Spell", face_id: "spell", mana_cost: "{1}{G}", types: ["Sorcery"]),
                 ],
             )"#,
         ];
@@ -3620,13 +3853,15 @@ mod tests {
             r#"(
                 id: "aura_without_enchant",
                 name: "Aura Without Enchant",
+                face_id: "aura_without_enchant",
                 mana_cost: "{W}",
                 types: ["Enchantment", "Aura"],
-                static_abilities: [AttachedModifier(keywords: [Flying])],
+                static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(keywords: [Flying]))],
             )"#,
             r#"(
                 id: "instant_aura_attach",
                 name: "Instant Aura Attach",
+                face_id: "instant_aura_attach",
                 mana_cost: "{W}",
                 types: ["Instant"],
                 spell_effect: [AuraAttach(target: (kind: Creature))],
@@ -3634,38 +3869,44 @@ mod tests {
             r#"(
                 id: "ordinary_enchantment_modifier",
                 name: "Ordinary Enchantment Modifier",
+                face_id: "ordinary_enchantment_modifier",
                 mana_cost: "{W}",
                 types: ["Enchantment"],
-                static_abilities: [AttachedModifier(keywords: [Flying])],
+                static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(keywords: [Flying]))],
             )"#,
             r#"(
                 id: "empty_attachment_modifier",
                 name: "Empty Attachment Modifier",
+                face_id: "empty_attachment_modifier",
                 mana_cost: "{1}",
                 types: ["Artifact", "Equipment"],
-                static_abilities: [AttachedModifier()],
+                static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier())],
             )"#,
             r#"(
                 id: "ordinary_enchantment_attached_subject",
                 name: "Ordinary Enchantment Attached Subject",
+                face_id: "ordinary_enchantment_attached_subject",
                 mana_cost: "{1}{U}",
                 types: ["Enchantment"],
                 triggered_abilities: [(
+                    ability_id: "triggered_01",
+                    presentation: Fallback,
                     trigger: WhenSelfEntersBattlefield,
                     effect: [Tap(subject: AttachedObject)],
-                    text: "Tap the attached object.",
                 )],
             )"#,
             r#"(
                 id: "player_aura_attached_object",
                 name: "Player Aura Attached Object",
+                face_id: "player_aura_attached_object",
                 mana_cost: "{1}{U}",
                 types: ["Enchantment", "Aura"],
                 spell_effect: [AuraAttach(target: (kind: AnyPlayer))],
                 triggered_abilities: [(
+                    ability_id: "triggered_01",
+                    presentation: Fallback,
                     trigger: WhenSelfEntersBattlefield,
                     effect: [Tap(subject: AttachedObject)],
-                    text: "Tap the attached object.",
                 )],
             )"#,
         ];
@@ -3686,91 +3927,103 @@ mod tests {
             r#"(
                 id: "duplicate_added_card_type",
                 name: "Duplicate Added Card Type",
+                face_id: "duplicate_added_card_type",
                 mana_cost: "{1}",
                 types: ["Artifact"],
                 activated_abilities: [(
+                    ability_id: "activated_01",
+                    presentation: Fallback,
                     costs: [Tap],
                     effect: [AddTypes(
                         subject: Chosen((kind: AnyPermanent)),
                         addition: (card_types: [Artifact, Artifact]),
                     )],
-                    text: "Duplicate.",
                 )],
             )"#,
             r#"(
                 id: "duplicate_added_creature_type",
                 name: "Duplicate Added Creature Type",
+                face_id: "duplicate_added_creature_type",
                 mana_cost: "{W}",
                 types: ["Enchantment", "Aura"],
                 spell_effect: [AuraAttach(target: (kind: Creature))],
-                static_abilities: [AttachedModifier(
+                static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(
                     add_types: (creature_types: ["Knight", "Knight"]),
-                )],
+                ))],
             )"#,
             r#"(
                 id: "blank_added_creature_type",
                 name: "Blank Added Creature Type",
+                face_id: "blank_added_creature_type",
                 mana_cost: "{W}",
                 types: ["Enchantment", "Aura"],
                 spell_effect: [AuraAttach(target: (kind: Creature))],
-                static_abilities: [AttachedModifier(
+                static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(
                     add_types: (creature_types: [" "]),
-                )],
+                ))],
             )"#,
             r#"(
                 id: "empty_type_addition",
                 name: "Empty Type Addition",
+                face_id: "empty_type_addition",
                 mana_cost: "{1}",
                 types: ["Artifact"],
                 activated_abilities: [(
+                    ability_id: "activated_01",
+                    presentation: Fallback,
                     costs: [Tap],
                     effect: [AddTypes(
                         subject: Chosen((kind: AnyPermanent)),
                         addition: (),
                     )],
-                    text: "Empty.",
                 )],
             )"#,
             r#"(
                 id: "player_type_addition",
                 name: "Player Type Addition",
+                face_id: "player_type_addition",
                 mana_cost: "{1}",
                 types: ["Artifact"],
                 activated_abilities: [(
+                    ability_id: "activated_01",
+                    presentation: Fallback,
                     costs: [Tap],
                     effect: [AddTypes(
                         subject: Chosen((kind: AnyPlayer)),
                         addition: (card_types: [Artifact]),
                     )],
-                    text: "Player.",
                 )],
             )"#,
             r#"(
                 id: "mixed_target_type_addition",
                 name: "Mixed Target Type Addition",
+                face_id: "mixed_target_type_addition",
                 mana_cost: "{1}",
                 types: ["Artifact"],
                 activated_abilities: [(
+                    ability_id: "activated_01",
+                    presentation: Fallback,
                     costs: [Tap],
                     effect: [AddTypes(
                         subject: Chosen((kind: AnyTarget)),
                         addition: (card_types: [Artifact]),
                     )],
-                    text: "Mixed.",
                 )],
             )"#,
             r#"(
                 id: "subtype_on_noncreature",
                 name: "Subtype On Noncreature",
+                face_id: "subtype_on_noncreature",
                 mana_cost: "{1}",
                 types: ["Artifact"],
                 activated_abilities: [(
+                    ability_id: "activated_01",
+                    presentation: Fallback,
                     costs: [Tap],
                     effect: [AddTypes(
                         subject: Chosen((kind: AnyPermanent)),
                         addition: (creature_types: ["Knight"]),
                     )],
-                    text: "Subtype.",
                 )],
             )"#,
         ];
@@ -3791,39 +4044,43 @@ mod tests {
             r#"(
                 id: "empty_replacement_name",
                 name: "Empty Replacement Name",
+                face_id: "empty_replacement_name",
                 mana_cost: "{U}",
                 types: ["Enchantment", "Aura"],
                 spell_effect: [AuraAttach(target: (kind: Creature))],
-                static_abilities: [AttachedModifier(set_name: Some(" "))],
+                static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(set_name: Some(" ")))],
             )"#,
             r#"(
                 id: "duplicate_replacement_color",
                 name: "Duplicate Replacement Color",
+                face_id: "duplicate_replacement_color",
                 mana_cost: "{U}",
                 types: ["Enchantment", "Aura"],
                 spell_effect: [AuraAttach(target: (kind: Creature))],
-                static_abilities: [AttachedModifier(set_colors: Some([White, White]))],
+                static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(set_colors: Some([White, White])))],
             )"#,
             r#"(
                 id: "conflicting_type_operations",
                 name: "Conflicting Type Operations",
+                face_id: "conflicting_type_operations",
                 mana_cost: "{U}",
                 types: ["Enchantment", "Aura"],
                 spell_effect: [AuraAttach(target: (kind: Creature))],
-                static_abilities: [AttachedModifier(
+                static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(
                     add_types: (card_types: [Artifact]),
                     set_types: Some((card_types: [Creature])),
-                )],
+                ))],
             )"#,
             r#"(
                 id: "creature_subtype_without_creature_type",
                 name: "Creature Subtype Without Creature Type",
+                face_id: "creature_subtype_without_creature_type",
                 mana_cost: "{U}",
                 types: ["Enchantment", "Aura"],
                 spell_effect: [AuraAttach(target: (kind: Creature))],
-                static_abilities: [AttachedModifier(set_types: Some(
+                static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(set_types: Some(
                     (card_types: [Artifact], creature_types: ["Citizen"])
-                ))],
+                )))],
             )"#,
         ];
 
@@ -3844,8 +4101,8 @@ mod tests {
             "cast_conditions: [ActivePlayer(players: Controller)], spell_effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 1), when_true: 4, otherwise: 2))]",
             "cast_conditions: [CastSnapshot(index: 0)], spell_effect: [GainLife(amount: 2)]",
             "cast_conditions: [CreatureDeathsThisTurn(min: None, max: None)], spell_effect: [GainLife(amount: 2)]",
-            "cast_conditions: [ActivePlayer(players: Controller)], modal_spell: (min_modes: 1, max_modes: 1, modes: [(label: \"Mode\", effects: [GainLife(amount: Conditional(condition: CastSnapshot(index: 1), when_true: 4, otherwise: 2))])])",
-            "spell_effect: [ChooseResolutionBranch(selection: FirstApplicable, branches: [(label: \"Bonus\", cost: None, requirement: GameCondition(CastSnapshot(index: 0)), effects: [GainLife(amount: 4)]), (label: \"Fallback\", cost: None, requirement: Always, effects: [])])]",
+            "cast_conditions: [ActivePlayer(players: Controller)], modal_spell: (min_modes: 1, max_modes: 1, modes: [(mode_id: \"mode_01\", presentation: Fallback, effects: [GainLife(amount: Conditional(condition: CastSnapshot(index: 1), when_true: 4, otherwise: 2))])])",
+            "spell_effect: [ChooseResolutionBranch(selection: FirstApplicable, branches: [(branch_id: \"bonus\", presentation: Fallback, cost: None, requirement: GameCondition(CastSnapshot(index: 0)), effects: [GainLife(amount: 4)]), (branch_id: \"fallback_branch\", presentation: Fallback, cost: None, requirement: Always, effects: [])])]",
         ] {
             let card = format!("(id: \"snapshot_test\", name: \"Snapshot Test\", types: [\"Instant\"], {fields})");
             assert!(matches!(CardRegistry::from_chunks(&[&card]), Err(RegistryError::InvalidCard { .. })), "must reject: {fields}");
@@ -3856,16 +4113,16 @@ mod tests {
     fn issue_173_rejects_snapshots_outside_spell_resolution() {
         for fields in [
             "cost_modifiers: [ConditionalGenericReduction(amount: 1, condition: CastSnapshot(index: 0))]",
-            "static_abilities: [ConditionalSelfModifier(condition: CastSnapshot(index: 0), delta_power: 1)]",
-            "static_abilities: [EntersWithCounters(counter: PlusOnePlusOne, amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))]",
-            "activated_abilities: [(costs: [], effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))], text: \"Gain life.\")]",
-            "activated_abilities: [(costs: [], conditions: [GameCondition(CastSnapshot(index: 0))], effect: [GainLife(amount: 1)], text: \"Gain life.\")]",
-            "triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))], text: \"Gain life.\")]",
-            "triggered_abilities: [(trigger: WhenSelfEntersBattlefield, intervening_if: GameCondition(CastSnapshot(index: 0)), effect: [GainLife(amount: 1)], text: \"Gain life.\")]",
-            "triggered_abilities: [(trigger: WheneverSelfAttacks(minimum_other_attackers: 0), effect: [DamageAttackedPlayerOrPlaneswalker(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))], text: \"Damage the defender.\")]",
-            "spell_effect: [GrantTriggeredAbility(subject: Chosen((kind: Creature)), ability: (trigger: WhenSelfDies, effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))], text: \"Gain life.\"))]",
+            "static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: ConditionalSelfModifier(condition: CastSnapshot(index: 0), delta_power: 1))]",
+            "static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: EntersWithCounters(counter: PlusOnePlusOne, amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2)))]",
+            "activated_abilities: [(ability_id: \"activated_01\", presentation: Fallback, costs: [], effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))])]",
+            "activated_abilities: [(ability_id: \"activated_01\", presentation: Fallback, costs: [], conditions: [GameCondition(CastSnapshot(index: 0))], effect: [GainLife(amount: 1)])]",
+            "triggered_abilities: [(ability_id: \"triggered_01\", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))])]",
+            "triggered_abilities: [(ability_id: \"triggered_01\", presentation: Fallback, trigger: WhenSelfEntersBattlefield, intervening_if: GameCondition(CastSnapshot(index: 0)), effect: [GainLife(amount: 1)])]",
+            "triggered_abilities: [(ability_id: \"triggered_01\", presentation: Fallback, trigger: WheneverSelfAttacks(minimum_other_attackers: 0), effect: [DamageAttackedPlayerOrPlaneswalker(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))])]",
+            "spell_effect: [GrantTriggeredAbility(subject: Chosen((kind: Creature)), ability: (ability_id: \"triggered_01\", presentation: Fallback, trigger: WhenSelfDies, effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))]))]",
         ] {
-            let card = format!("(id: \"snapshot_test\", name: \"Snapshot Test\", types: [\"Creature\"], power: 1, toughness: 1, cast_conditions: [ActivePlayer(players: Controller)], {fields})");
+            let card = format!("(id: \"snapshot_test\", name: \"Snapshot Test\", face_id: \"snapshot_test\", types: [\"Creature\"], power: 1, toughness: 1, cast_conditions: [ActivePlayer(players: Controller)], {fields})");
             assert!(matches!(CardRegistry::from_chunks(&[&card]), Err(RegistryError::InvalidCard { .. })), "must reject: {fields}");
         }
     }
@@ -3877,5 +4134,139 @@ mod tests {
         assert!(h.chars().all(|c| c.is_ascii_hexdigit()));
         // Deterministic within a build (same embedded data → same digest).
         assert_eq!(h, CardRegistry::content_hash());
+    }
+
+    #[test]
+    fn stable_identity_and_external_presentation_schema_is_fail_closed() {
+        let missing_identity = r#"(
+            id: "schema_probe", name: "Schema Probe", types: ["Creature"],
+            power: 1, toughness: 1,
+            triggered_abilities: [(
+                trigger: WhenSelfEntersBattlefield,
+                effect: [GainLife(amount: 1)],
+                text: "When this creature enters, you gain 1 life.",
+            )],
+        )"#;
+        assert!(CardRegistry::from_chunks(&[missing_identity]).is_err());
+
+        let valid_external_mapping = r#"(
+            id: "schema_probe", name: "Schema Probe", face_id: "schema_probe",
+            types: ["Creature"], power: 1, toughness: 1,
+            triggered_abilities: [(
+                ability_id: "triggered_01", presentation: OracleLines([1, 3]),
+                trigger: WhenSelfEntersBattlefield,
+                effect: [GainLife(amount: 1)],
+            )],
+        )"#;
+        CardRegistry::from_chunks(&[valid_external_mapping])
+            .expect("stable identity and external Oracle line references should load");
+
+        let valid_fallback = r#"(
+            id: "schema_probe", name: "Schema Probe", face_id: "schema_probe",
+            types: ["Creature"], power: 1, toughness: 1,
+            activated_abilities: [(
+                ability_id: "activated_01", presentation: Fallback,
+                costs: [], effect: [GainLife(amount: 1)],
+            )],
+        )"#;
+        CardRegistry::from_chunks(&[valid_fallback])
+            .expect("explicit fallback should load without external Oracle text");
+
+        for invalid_id in ["", "Upper", "has-dash", "two__underscores", "fallback"] {
+            let data = format!(
+                r#"(
+                    id: "schema_probe", name: "Schema Probe", face_id: "schema_probe",
+                    types: ["Creature"], power: 1, toughness: 1,
+                    activated_abilities: [(
+                        ability_id: "{invalid_id}", presentation: Fallback,
+                        costs: [], effect: [GainLife(amount: 1)],
+                    )],
+                )"#
+            );
+            assert!(
+                CardRegistry::from_chunks(&[&data]).is_err(),
+                "{invalid_id:?}"
+            );
+        }
+
+        let duplicate_siblings = r#"(
+            id: "schema_probe", name: "Schema Probe", face_id: "schema_probe",
+            types: ["Creature"], power: 1, toughness: 1,
+            activated_abilities: [
+                (ability_id: "ability_01", presentation: Fallback, costs: [], effect: [GainLife(amount: 1)]),
+                (ability_id: "ability_01", presentation: Fallback, costs: [], effect: [GainLife(amount: 2)]),
+            ],
+        )"#;
+        assert!(CardRegistry::from_chunks(&[duplicate_siblings]).is_err());
+
+        let nested_collision = r#"(
+            id: "schema_probe", name: "Schema Probe", face_id: "schema_probe",
+            types: ["Creature"], power: 1, toughness: 1,
+            static_abilities: [(
+                ability_id: "static_01", presentation: Fallback,
+                definition: AttachedModifier(
+                    activated_abilities: [(
+                        ability_id: "granted_01", presentation: Fallback,
+                        costs: [], effect: [GainLife(amount: 1)],
+                    )],
+                    triggered_abilities: [(
+                        ability_id: "granted_01", presentation: Fallback,
+                        trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)],
+                    )],
+                ),
+            )],
+        )"#;
+        assert!(CardRegistry::from_chunks(&[nested_collision]).is_err());
+
+        let absent_presentation = r#"(
+            id: "schema_probe", name: "Schema Probe", face_id: "schema_probe",
+            types: ["Creature"], power: 1, toughness: 1,
+            activated_abilities: [(
+                ability_id: "activated_01", costs: [], effect: [GainLife(amount: 1)],
+            )],
+        )"#;
+        assert!(CardRegistry::from_chunks(&[absent_presentation]).is_err());
+
+        for invalid in [
+            "OracleLines([])",
+            "OracleLines([0])",
+            "OracleLines([2, 1])",
+            "OracleLines([1, 1])",
+        ] {
+            let data = format!(
+                r#"(
+                    id: "schema_probe", name: "Schema Probe", face_id: "schema_probe",
+                    types: ["Creature"], power: 1, toughness: 1,
+                    activated_abilities: [(
+                        ability_id: "activated_01", presentation: {invalid},
+                        costs: [], effect: [GainLife(amount: 1)],
+                    )],
+                )"#
+            );
+            assert!(CardRegistry::from_chunks(&[&data]).is_err(), "{invalid}");
+        }
+
+        for obsolete in ["text: \"legacy copy\",", "oracle_text: \"legacy copy\","] {
+            let data = format!(
+                r#"(
+                    id: "schema_probe", name: "Schema Probe", face_id: "schema_probe",
+                    types: ["Creature"], power: 1, toughness: 1,
+                    activated_abilities: [(
+                        ability_id: "activated_01", presentation: Fallback, {obsolete}
+                        costs: [], effect: [GainLife(amount: 1)],
+                    )],
+                )"#
+            );
+            assert!(CardRegistry::from_chunks(&[&data]).is_err(), "{obsolete}");
+        }
+    }
+
+    #[test]
+    fn migrated_token_schema_probe() {
+        for chunk in EMBEDDED_TOKEN_CHUNKS {
+            RON_OPTS
+                .from_str::<TokenDefinition>(chunk)
+                .unwrap_or_else(|error| panic!("{error}: {chunk}"));
+        }
     }
 }

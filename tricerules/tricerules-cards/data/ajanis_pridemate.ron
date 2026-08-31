@@ -1,15 +1,17 @@
 (
   id: "ajanis_pridemate",
   name: "Ajani's Pridemate",
+  face_id: "ajani_s_pridemate",
   mana_cost: "{1}{W}",
   types: ["Creature", "Cat", "Soldier"],
   power: 2,
   toughness: 2,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WheneverPlayerGainsLife(player: Controller),
       effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
-      text: "Whenever you gain life, put a +1/+1 counter on this creature.",
     ),
   ],
 )

@@ -2,7 +2,9 @@
 (
   id: "phytoburst",
   name: "Phytoburst",
+  face_id: "phytoburst",
   mana_cost: "{1}{G}",
   types: ["Sorcery"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 5, toughness: 5)],
 )

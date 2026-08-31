@@ -2,7 +2,9 @@
 (
   id: "qilins_blessing",
   name: "Qilin's Blessing",
+  face_id: "qilin_s_blessing",
   mana_cost: "{W}",
   types: ["Instant"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 2, toughness: 2)],
 )

@@ -1,6 +1,7 @@
 (
   id: "aggressive_negotiations",
   name: "Aggressive Negotiations",
+  face_id: "aggressive_negotiations",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
   spell_effect: [

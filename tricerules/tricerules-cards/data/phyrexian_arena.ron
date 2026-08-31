@@ -5,13 +5,15 @@
 (
   id: "phyrexian_arena",
   name: "Phyrexian Arena",
+  face_id: "phyrexian_arena",
   mana_cost: "{1}{B}{B}",
   types: ["Enchantment"],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: AtBeginningOfUpkeep(player: Controller),
       effect: [Draw(count: 1), LoseLife(amount: Fixed(1))],
-      text: "At the beginning of your upkeep, you draw a card and you lose 1 life.",
     ),
   ],
 )

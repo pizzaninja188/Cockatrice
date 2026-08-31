@@ -1,12 +1,15 @@
 (
   id: "pack_mastiff",
   name: "Pack Mastiff",
+  face_id: "pack_mastiff",
   mana_cost: "{1}{R}",
   types: ["Creature", "Dog"],
   power: 2,
   toughness: 2,
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
       costs: [Mana("{1}{R}")],
       effect: [
         PumpAll(
@@ -15,7 +18,6 @@
           toughness: 0,
         ),
       ],
-      text: "{1}{R}: Each creature you control named Pack Mastiff gets +1/+0 until end of turn.",
     ),
   ],
 )

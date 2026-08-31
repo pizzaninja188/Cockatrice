@@ -2,12 +2,13 @@
 (
   id: "foggy_swamp_hunters",
   name: "Foggy Swamp Hunters",
+  face_id: "foggy_swamp_hunters",
   mana_cost: "{3}{B}",
   types: ["Creature", "Human", "Ranger", "Ally"],
   power: 3,
   toughness: 4,
-  static_abilities: [ConditionalSelfModifier(
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
     condition: CardsDrawnThisTurn(players: Controller, min: Some(2)),
     keywords: [Lifelink, Menace],
-  )],
+  ))],
 )

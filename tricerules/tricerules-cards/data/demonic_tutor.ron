@@ -1,6 +1,7 @@
 (
     id: "demonic_tutor",
     name: "Demonic Tutor",
+    face_id: "demonic_tutor",
     mana_cost: "{1}{B}",
     types: ["Sorcery"],
     spell_effect: [

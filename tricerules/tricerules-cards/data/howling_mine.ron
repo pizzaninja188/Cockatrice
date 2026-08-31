@@ -3,14 +3,16 @@
 (
     id: "howling_mine",
     name: "Howling Mine",
+    face_id: "howling_mine",
     mana_cost: "{2}",
     types: ["Artifact"],
     triggered_abilities: [
         (
+            ability_id: "triggered_01",
+            presentation: OracleLines([1]),
             trigger: AtBeginningOfDrawStep(player: AnyPlayer),
             intervening_if: Some(SourceUntapped),
             effect: [Draw(who: AffectedPlayer, count: 1)],
-            text: "At the beginning of each player's draw step, if this artifact is untapped, that player draws an additional card.",
         ),
     ],
 )

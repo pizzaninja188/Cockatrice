@@ -745,7 +745,11 @@ impl GameEngine {
             types,
             all_creature_types: face
                 .characteristic_defining_abilities
-                .contains(&tricerules_cards::CharacteristicDefiningAbility::Changeling),
+                .iter()
+                .any(|ability| {
+                    ability.definition
+                        == tricerules_cards::CharacteristicDefiningAbility::Changeling
+                }),
             mana_value,
             matched_card_types: CardTypeFilter::ALL
                 .into_iter()
@@ -1404,7 +1408,7 @@ mod tests {
 
     #[test]
     fn issue_168_celebration_excludes_land_entries() {
-        let data = r#"(id: "entry_probe", name: "Entry Probe", types: ["Instant"],
+        let data = r#"(id: "entry_probe", name: "Entry Probe", face_id: "entry_probe", types: ["Instant"],
             cast_conditions: [PermanentsEnteredThisTurn(controllers: Controller,
                 filter: (excluded_types: [Land]), min: Some(2))],
             spell_effect: [GainLife(amount: 1)])"#;
@@ -1442,7 +1446,7 @@ mod tests {
         count: u32,
     ) -> GameCondition {
         let data = format!(
-            r#"(id: "history_probe", name: "History Probe", types: ["Instant"],
+            r#"(id: "history_probe", name: "History Probe", face_id: "history_probe", types: ["Instant"],
             cast_conditions: [{kind}(players: {players}, permanent_type: {card_type}, min: Some({count}), max: Some({count}))],
             spell_effect: [GainLife(amount: 1)])"#
         );
@@ -1909,9 +1913,9 @@ mod tests {
         let instant = move_to_graveyard(&mut engine, 0, "island");
         let opponent = move_to_graveyard(&mut engine, 1, "forest");
         let registry = Box::leak(Box::new(CardRegistry::from_chunks_and_tokens(&[
-            r#"(id: "test_cave", name: "Test Cave", types: ["Land", "Cave"])"#,
-            r#"(id: "test_artifact", name: "Test Artifact", types: ["Artifact", "Creature"], power: 1, toughness: 1)"#,
-            r#"(id: "test_instant", name: "Test Instant", types: ["Instant"] , spell_effect: [GainLife(amount: 1)])"#,
+            r#"(id: "test_cave", name: "Test Cave", face_id: "test_cave", types: ["Land", "Cave"])"#,
+            r#"(id: "test_artifact", name: "Test Artifact", face_id: "test_artifact", types: ["Artifact", "Creature"], power: 1, toughness: 1)"#,
+            r#"(id: "test_instant", name: "Test Instant", face_id: "test_instant", types: ["Instant"] , spell_effect: [GainLife(amount: 1)])"#,
             include_str!("../../../tricerules-cards/data/island.ron"),
             include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
         ], &[]).unwrap()));
@@ -2266,9 +2270,9 @@ mod tests {
         .unwrap();
         let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
         move_to_battlefield(&mut engine, 0, "hill_giant");
-        let registry = CardRegistry::from_chunks_and_tokens(&[r#"(id: "test", name: "Test", types: ["Creature"], power: 1, toughness: 1,
-            triggered_abilities: [(trigger: WhenSelfEntersBattlefield, text: "Sacrifice this.", effect: [ChooseResolutionBranch(optional: true,
-                branches: [(label: "Sacrifice this", cost: SacrificePermanent(filter: (kind: AnyPermanent, controller: You), source_only: true), effects: [Draw(count: 1)])])])])"#], &[]).unwrap();
+        let registry = CardRegistry::from_chunks_and_tokens(&[r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 1,
+            triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [ChooseResolutionBranch(optional: true,
+                branches: [(branch_id: "sacrifice_this", presentation: Fallback, cost: SacrificePermanent(filter: (kind: AnyPermanent, controller: You), source_only: true), effects: [Draw(count: 1)])])])])"#], &[]).unwrap();
         let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &registry
             .get("test")
             .unwrap()

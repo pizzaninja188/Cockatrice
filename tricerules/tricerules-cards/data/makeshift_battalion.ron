@@ -4,15 +4,17 @@
 (
   id: "makeshift_battalion",
   name: "Makeshift Battalion",
+  face_id: "makeshift_battalion",
   mana_cost: "{2}{W}",
   types: ["Creature", "Human", "Soldier"],
   power: 3,
   toughness: 2,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 2),
       effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
-      text: "Battalion — Whenever this creature and at least two other creatures attack, put a +1/+1 counter on this creature.",
     ),
   ],
 )

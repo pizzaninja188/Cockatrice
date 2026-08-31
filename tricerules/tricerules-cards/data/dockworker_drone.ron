@@ -2,14 +2,16 @@
 (
   id: "dockworker_drone",
   name: "Dockworker Drone",
+  face_id: "dockworker_drone",
   mana_cost: "{1}{W}",
   types: ["Artifact", "Creature", "Robot"],
   power: 1,
   toughness: 1,
-  static_abilities: [EntersWithCounters(counter: PlusOnePlusOne, amount: 1)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersWithCounters(counter: PlusOnePlusOne, amount: 1))],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfDies,
     effect: [PutCounterSnapshot(from: Source, subject: Chosen((kind: Creature, controller: You)))],
-    text: "When this creature dies, put its counters on target creature you control.",
   )],
 )

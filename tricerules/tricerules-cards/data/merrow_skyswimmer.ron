@@ -2,14 +2,16 @@
 (
   id: "merrow_skyswimmer",
   name: "Merrow Skyswimmer",
+  face_id: "merrow_skyswimmer",
   mana_cost: "{3}{W/U}{W/U}",
   types: ["Creature", "Merfolk", "Soldier"],
   power: 2,
   toughness: 2,
   keywords: [Convoke, Flying, Vigilance],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
     trigger: WhenSelfEntersBattlefield,
     effect: [CreateTokens(token: "merfolk_wu_1_1", count: 1)],
-    text: "When this creature enters, create a 1/1 white and blue Merfolk creature token.",
   )],
 )

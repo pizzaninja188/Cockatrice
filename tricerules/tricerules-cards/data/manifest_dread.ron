@@ -1,6 +1,7 @@
 (
   id: "manifest_dread",
   name: "Manifest Dread",
+  face_id: "manifest_dread",
   mana_cost: "{1}{G}",
   types: ["Sorcery"],
   spell_effect: [ManifestDread],

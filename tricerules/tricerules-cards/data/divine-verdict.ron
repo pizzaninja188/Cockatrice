@@ -1,8 +1,9 @@
 (
   id: "divine_verdict",
   name: "Divine Verdict",
+  face_id: "divine_verdict",
   mana_cost: "{3}{W}",
   types: ["Instant"],
-  // "Destroy target attacking or blocking creature." (CR 508/509).
+  // The destroy effect restricts its creature target to an attacker or blocker (CR 508/509).
   spell_effect: [Destroy(subject: Chosen((kind: Creature, combat_role: AttackingOrBlocking)))],
 )

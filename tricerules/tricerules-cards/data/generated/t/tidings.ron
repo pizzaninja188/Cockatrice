@@ -2,7 +2,9 @@
 (
   id: "tidings",
   name: "Tidings",
+  face_id: "tidings",
   mana_cost: "{3}{U}{U}",
   types: ["Sorcery"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [Draw(count: 4)],
 )

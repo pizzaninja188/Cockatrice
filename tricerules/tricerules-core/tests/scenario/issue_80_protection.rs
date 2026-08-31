@@ -82,7 +82,7 @@ fn protection_from_red_prevents_pyroclasm_damage() {
     };
     let branches = &branch.branches;
     assert_eq!(branches.len(), 5);
-    assert_eq!(branches[3].label, "Red");
+    assert_eq!(branches[3].fallback_label(), "Red");
     engine
         .apply_command(0, &select_branch(3))
         .expect("choose protection from red");
@@ -318,7 +318,7 @@ fn protection_from_artifacts_detaches_equipment() {
     };
     let branches = &branch.branches;
     assert_eq!(branches.len(), 6);
-    assert_eq!(branches[0].label, "artifacts");
+    assert_eq!(branches[0].fallback_label(), "artifacts");
     engine
         .apply_command(0, &select_branch(0))
         .expect("choose protection from artifacts");

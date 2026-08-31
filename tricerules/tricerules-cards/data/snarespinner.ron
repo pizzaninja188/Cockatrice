@@ -3,6 +3,7 @@
 (
   id: "snarespinner",
   name: "Snarespinner",
+  face_id: "snarespinner",
   mana_cost: "{1}{G}",
   types: ["Creature", "Spider"],
   power: 1,
@@ -10,9 +11,10 @@
   keywords: [Reach],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WheneverSelfBlocksCreature(attacker: (required_keywords: [Flying])),
       effect: [PumpTarget(power: 2, toughness: 0, subject: Source)],
-      text: "Whenever this creature blocks a creature with flying, this creature gets +2/+0 until end of turn.",
     ),
   ],
 )

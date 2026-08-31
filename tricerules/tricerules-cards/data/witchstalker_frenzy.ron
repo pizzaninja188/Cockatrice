@@ -1,7 +1,7 @@
 // Oracle and rulings fetched 2026-08-27. CR 601.2f, 608.2i: declared creatures remain
 // counted after departing combat; the reduction cannot pay the red pip.
 (
-  id: "witchstalker_frenzy", name: "Witchstalker Frenzy", mana_cost: "{3}{R}", types: ["Instant"],
+  id: "witchstalker_frenzy", name: "Witchstalker Frenzy", face_id: "witchstalker_frenzy", mana_cost: "{3}{R}", types: ["Instant"],
   cost_modifiers: [GenericReduction(amount: Count(DeclaredAttackers(players: All)))],
   spell_effect: [DamageTarget(amount: 5, target: (kind: Creature))],
 )

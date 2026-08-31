@@ -1,6 +1,7 @@
 (
   id: "uncomfortable_chill",
   name: "Uncomfortable Chill",
+  face_id: "uncomfortable_chill",
   mana_cost: "{2}{U}",
   types: ["Instant"],
   // CR 611.2c / 613.4c: snapshot opposing creatures as this resolves, then draw a card.

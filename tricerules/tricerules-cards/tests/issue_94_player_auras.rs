@@ -31,7 +31,6 @@ fn curses_have_exact_attachment_data_and_complete_rewards() {
                 },
             }]
         );
-        assert!(definition.partial.is_none());
         assert_eq!(face.triggered_abilities.len(), 1);
         let ability = &face.triggered_abilities[0];
         assert_eq!(

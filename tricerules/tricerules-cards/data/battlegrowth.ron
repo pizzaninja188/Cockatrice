@@ -1,6 +1,7 @@
 (
   id: "battlegrowth",
   name: "Battlegrowth",
+  face_id: "battlegrowth",
   mana_cost: "{G}",
   types: ["Instant"],
   spell_effect: [PutCounters(counter: PlusOnePlusOne, count: 1)],

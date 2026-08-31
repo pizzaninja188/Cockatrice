@@ -1,17 +1,19 @@
 (
   id: "avacynian_priest",
   name: "Avacynian Priest",
+  face_id: "avacynian_priest",
   mana_cost: "{1}{W}",
   types: ["Creature", "Human", "Cleric"],
   power: 1,
   toughness: 2,
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
       costs: [Mana("{1}"), Tap],
       // excluded_subtypes enforces the non-Human restriction (CR 205.3) — the Priest is itself
       // a Human, so it can never tap its own kind.
       effect: [Tap(subject: Chosen((kind: Creature, excluded_subtypes: ["Human"])))],
-      text: "{1}, {T}: Tap target non-Human creature.",
     ),
   ],
 )

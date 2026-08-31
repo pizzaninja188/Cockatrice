@@ -51,7 +51,8 @@ pub(super) fn choose_resolution_branch(
         };
         cx.events.push(ev_log(format!(
             "P{} resolves: {}.",
-            deciding_player, branch.label
+            deciding_player,
+            branch.fallback_label()
         )));
         return Ok(EffectOutcome::RestartResolutionBranch(Some(*branch_index)));
     }
@@ -66,7 +67,8 @@ pub(super) fn choose_resolution_branch(
         (false, [(branch_index, branch)]) => {
             cx.events.push(ev_log(format!(
                 "P{} chooses: {}.",
-                deciding_player, branch.label
+                deciding_player,
+                branch.fallback_label()
             )));
             Ok(EffectOutcome::RestartResolutionBranch(Some(*branch_index)))
         }
@@ -256,7 +258,7 @@ fn park_resolution_branches_for(
             };
             rv1::ResolutionBranchOption {
                 branch_index: index as u32,
-                label: branch.label.clone(),
+                label: branch.fallback_label(),
                 cost_kind: kind as i32,
                 cost_text,
                 selectable: true,
@@ -345,7 +347,7 @@ pub(super) fn create_reflexive_trigger(
         .get(&cx.top.card_id)
         .map(|definition| definition.name.clone())
         .unwrap_or_else(|| cx.top.card_id.clone());
-    let ability_text = ability.text.clone();
+    let ability_text = ability.fallback_text(&card_name);
     cx.engine
         .state
         .staged_trigger_groups
@@ -361,12 +363,13 @@ pub(super) fn create_reflexive_trigger(
                 controller: cx.controller,
                 ability_index: 0,
                 ability: TriggeredAbilityDef {
+                    ability_id: ability.ability_id,
+                    presentation: ability.presentation,
                     // This definition is staged directly; the condition is never scanned.
                     trigger: TriggerCondition::WhenSelfEntersBattlefield,
                     effect: ability.effect,
                     modal: None,
                     targeting: ability.targeting,
-                    text: ability_text.clone(),
                     may: false,
                     intervening_if: None,
                     max_triggers_per_turn: None,

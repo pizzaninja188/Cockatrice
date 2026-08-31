@@ -2,9 +2,10 @@
 (
   id: "hecteyes",
   name: "Hecteyes",
+  face_id: "hecteyes",
   mana_cost: "{1}{B}",
   types: ["Creature", "Ooze", "Horror"],
   power: 1,
   toughness: 1,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Discard(who: EachOpponent, count: 1)], text: "When this creature enters, each opponent discards a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Discard(who: EachOpponent, count: 1)])],
 )

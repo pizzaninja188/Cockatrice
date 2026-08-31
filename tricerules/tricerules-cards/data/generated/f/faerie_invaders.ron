@@ -2,6 +2,7 @@
 (
   id: "faerie_invaders",
   name: "Faerie Invaders",
+  face_id: "faerie_invaders",
   mana_cost: "{4}{U}",
   types: ["Creature", "Faerie", "Rogue"],
   power: 3,

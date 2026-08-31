@@ -1,13 +1,15 @@
 (
   id: "tundra",
   name: "Tundra",
+  face_id: "tundra",
   mana_cost: "",
   types: ["Land", "Plains", "Island"],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: Fallback,
       costs: [Tap],
       effect: [ProduceMana(options: [(w: 1), (u: 1)])],
-      text: "{T}: Add {W} or {U}.",
     ),
   ],
 )

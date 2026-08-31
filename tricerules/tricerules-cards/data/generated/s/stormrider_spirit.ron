@@ -2,6 +2,7 @@
 (
   id: "stormrider_spirit",
   name: "Stormrider Spirit",
+  face_id: "stormrider_spirit",
   mana_cost: "{4}{U}",
   types: ["Creature", "Spirit"],
   power: 3,

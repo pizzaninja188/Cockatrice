@@ -3,6 +3,7 @@
 (
   id: "faerie_miscreant",
   name: "Faerie Miscreant",
+  face_id: "faerie_miscreant",
   mana_cost: "{U}",
   types: ["Creature", "Faerie", "Rogue"],
   power: 1,
@@ -10,9 +11,10 @@
   keywords: [Flying],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
       effect: [Draw(count: 1)],
-      text: "When this creature enters, if you control another creature named Faerie Miscreant, draw a card.",
       intervening_if: Some(GameCondition(BattlefieldAggregate(
         filter: (
           controllers: Controller,

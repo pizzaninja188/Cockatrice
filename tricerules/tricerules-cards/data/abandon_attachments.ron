@@ -2,6 +2,7 @@
 (
   id: "abandon_attachments",
   name: "Abandon Attachments",
+  face_id: "abandon_attachments",
   mana_cost: "{1}{U/R}",
   types: ["Instant", "Lesson"],
   spell_effect: [DrawDiscard(

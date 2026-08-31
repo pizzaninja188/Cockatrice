@@ -1,10 +1,10 @@
 // Into the Fae Court; Scryfall token 0f9a993f-1f2b-4b17-b415-e975b7873e18.
 // CR 509.1b: this token can block only creatures with flying; reach alone is insufficient.
 (
-  id: "faerie_u_1_1_flying_only_blocks_flying", name: "Faerie",
+  id: "faerie_u_1_1_flying_only_blocks_flying", name: "Faerie", face_id: "faerie",
   types: ["Creature", "Faerie"], colors: [Blue], power: 1, toughness: 1,
   keywords: [Flying],
-  static_abilities: [SelfCombatRestriction(restriction: (
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SelfCombatRestriction(restriction: (
     cant_block_creatures_matching: [(kind: Creature, excluded_keywords: [Flying])],
-  ))],
+  )))],
 )

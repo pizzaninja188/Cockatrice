@@ -1,14 +1,16 @@
 (
   id: "dwynens_elite",
   name: "Dwynen's Elite",
+  face_id: "dwynen_s_elite",
   mana_cost: "{1}{G}",
   types: ["Creature", "Elf", "Warrior"],
   power: 2,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [CreateTokens(token: "elf_warrior_g_1_1", count: 1, who: SourceController)],
-    text: "When this creature enters, if you control another Elf, create a 1/1 green Elf Warrior creature token.",
     intervening_if: Some(GameCondition(BattlefieldCreatureCount(
       filter: (controllers: Controller, subtype: Some("Elf"), exclude_source: true),
       min: Some(1),

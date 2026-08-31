@@ -2,17 +2,20 @@
 (
   id: "meltstriders_gear",
   name: "Meltstrider's Gear",
+  face_id: "meltstrider_s_gear",
   mana_cost: "{G}",
   types: ["Artifact", "Equipment"],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [AttachSource(target: (kind: Creature, controller: You))],
-    text: "When this Equipment enters, attach it to target creature you control.",
   )],
-  static_abilities: [AttachedModifier(delta_power: 2, delta_toughness: 1, keywords: [Reach])],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(delta_power: 2, delta_toughness: 1, keywords: [Reach]))],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
     costs: [Mana("{5}")],
     effect: [Equip(target: (kind: Creature, controller: You))],
-    text: "Equip {5}",
   )],
 )

@@ -112,7 +112,7 @@ fn failed_payment_does_not_consume_the_activation() {
 }
 
 #[test]
-fn control_changes_preserve_the_limit_but_new_generations_reset_identity() {
+fn control_and_face_changes_preserve_the_limit_but_zone_changes_reset_identity() {
     let mut engine = anthem_engine(10_203, "mountain");
     let devotee = inject_creature_on_battlefield(&mut engine, 0, "temur_devotee");
     give_mana(
@@ -170,9 +170,9 @@ fn control_changes_preserve_the_limit_but_new_generations_reset_identity() {
             ..Default::default()
         },
     );
-    assert_eq!(zone_view_ability_flags(&mut engine, 1, devotee), [true]);
+    assert_eq!(zone_view_ability_flags(&mut engine, 1, devotee), [false]);
     apply_ability(&mut engine, 1, devotee, 0, vec![])
-        .expect("a face-generation change creates a new ability identity");
+        .expect_err("a face-status change preserves the authored ability identity");
 }
 
 #[test]

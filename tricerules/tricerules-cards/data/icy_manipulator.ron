@@ -1,16 +1,18 @@
 (
   id: "icy_manipulator",
   name: "Icy Manipulator",
+  face_id: "icy_manipulator",
   mana_cost: "{4}",
   types: ["Artifact"],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
       costs: [Mana("{1}"), Tap],
       effect: [Tap(subject: Chosen((
         kind: AnyPermanent,
         permanent_types: [Artifact, Creature, Land],
       )))],
-      text: "{1}, {T}: Tap target artifact, creature, or land.",
     ),
   ],
 )

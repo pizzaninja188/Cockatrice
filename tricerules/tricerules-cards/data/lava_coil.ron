@@ -1,6 +1,7 @@
 (
   id: "lava_coil",
   name: "Lava Coil",
+  face_id: "lava_coil",
   mana_cost: "{1}{R}",
   types: ["Sorcery"],
   spell_effect: [

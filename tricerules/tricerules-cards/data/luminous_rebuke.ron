@@ -3,6 +3,7 @@
 (
   id: "luminous_rebuke",
   name: "Luminous Rebuke",
+  face_id: "luminous_rebuke",
   mana_cost: "{4}{W}",
   cost_modifiers: [TargetMatchGenericReduction(
     amount: 3,

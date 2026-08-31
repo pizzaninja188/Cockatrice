@@ -1,6 +1,7 @@
 (
   id: "dai_li_indoctrination",
   name: "Dai Li Indoctrination",
+  face_id: "dai_li_indoctrination",
   mana_cost: "{1}{B}",
   types: ["Sorcery", "Lesson"],
   // Scryfall Oracle/rulings checked 2026-08-28; CR 701.66.
@@ -9,7 +10,8 @@
     max_modes: 1,
     modes: [
       (
-        label: "Reveal target opponent's hand and discard a nonland permanent card",
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
         effects: [DiscardCards(
           count: 1,
           target: (kind: OpponentPlayer),
@@ -19,7 +21,8 @@
         )],
       ),
       (
-        label: "Earthbend 2",
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
         effects: [Earthbend(count: 2)],
       ),
     ],

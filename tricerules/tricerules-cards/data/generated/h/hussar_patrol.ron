@@ -2,6 +2,7 @@
 (
   id: "hussar_patrol",
   name: "Hussar Patrol",
+  face_id: "hussar_patrol",
   mana_cost: "{2}{W}{U}",
   types: ["Creature", "Human", "Knight"],
   power: 2,

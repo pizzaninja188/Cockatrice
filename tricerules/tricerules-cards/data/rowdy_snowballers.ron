@@ -2,16 +2,18 @@
 (
   id: "rowdy_snowballers",
   name: "Rowdy Snowballers",
+  face_id: "rowdy_snowballers",
   mana_cost: "{2}{U}",
   types: ["Creature", "Human", "Peasant", "Ally"],
   power: 2,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     effect: [
       Tap(subject: Chosen((kind: Creature, controller: Opponent))),
       PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature, controller: Opponent))),
     ],
-    text: "When this creature enters, tap target creature an opponent controls and put a stun counter on it.",
   )],
 )

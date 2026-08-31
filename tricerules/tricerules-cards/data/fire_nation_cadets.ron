@@ -3,16 +3,18 @@
 (
   id: "fire_nation_cadets",
   name: "Fire Nation Cadets",
+  face_id: "fire_nation_cadets",
   mana_cost: "{R}",
   types: ["Creature", "Human", "Soldier"],
   power: 1,
   toughness: 2,
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
     costs: [Mana("{2}")],
     effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
-    text: "{2}: This creature gets +1/+0 until end of turn.",
   )],
-  static_abilities: [ConditionalSelfModifier(
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
     condition: GraveyardAggregate(
       owners: Controller,
       aggregate: CardCount,
@@ -20,9 +22,10 @@
       min: Some(1),
     ),
     triggered_abilities: [(
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [AddMana(amount: (r: 2), retention: EndOfCombat)],
-      text: "Firebending 2",
     )],
-  )],
+  ))],
 )

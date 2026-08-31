@@ -1,6 +1,7 @@
 (
   id: "wrath_of_god",
   name: "Wrath of God",
+  face_id: "wrath_of_god",
   mana_cost: "{2}{W}{W}",
   types: ["Sorcery"],
   spell_effect: [DestroyAll(kind: (kind: Creature), prevent_regeneration: true)],

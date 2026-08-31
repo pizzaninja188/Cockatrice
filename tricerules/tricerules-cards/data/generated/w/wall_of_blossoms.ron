@@ -2,10 +2,11 @@
 (
   id: "wall_of_blossoms",
   name: "Wall of Blossoms",
+  face_id: "wall_of_blossoms",
   mana_cost: "{1}{G}",
   types: ["Creature", "Plant", "Wall"],
   power: 0,
   toughness: 4,
   keywords: [Defender],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

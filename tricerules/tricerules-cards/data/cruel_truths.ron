@@ -2,6 +2,7 @@
 (
   id: "cruel_truths",
   name: "Cruel Truths",
+  face_id: "cruel_truths",
   mana_cost: "{3}{B}",
   types: ["Instant"],
   spell_effect: [

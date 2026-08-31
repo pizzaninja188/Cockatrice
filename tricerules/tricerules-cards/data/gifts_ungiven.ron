@@ -1,11 +1,11 @@
 (
   id: "gifts_ungiven",
   name: "Gifts Ungiven",
+  face_id: "gifts_ungiven",
   mana_cost: "{3}{U}",
   types: ["Instant"],
   // Tier-3: "Search your library for up to four cards with different names and reveal them. Target
   // opponent chooses two of those cards. Put the chosen cards into your graveyard and the rest into
   // your hand. Then shuffle." The opponent decides part of resolution (see custom/gifts_ungiven.rs).
   custom_effect: "gifts_ungiven",
-  partial: "1v1 opponent is the automatic target (no separate target step for multi-player)",
 )

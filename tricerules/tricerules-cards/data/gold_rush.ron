@@ -1,7 +1,7 @@
 // Oracle and rulings fetched 2026-08-27. Count the new Treasure; an illegal chosen target
 // prevents the entire spell resolving, while choosing no target still creates the token.
 (
-  id: "gold_rush", name: "Gold Rush", mana_cost: "{1}{G}", types: ["Instant"],
+  id: "gold_rush", name: "Gold Rush", face_id: "gold_rush", mana_cost: "{1}{G}", types: ["Instant"],
   targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target creature", effect_indices: [1])])),
   spell_effect: [
     CreateTokens(token: "treasure", count: 1),

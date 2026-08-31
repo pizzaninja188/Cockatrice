@@ -2,14 +2,16 @@
 (
   id: "glider_kids",
   name: "Glider Kids",
+  face_id: "glider_kids",
   mana_cost: "{2}{W}",
   types: ["Creature", "Human", "Pilot", "Ally"],
   power: 2,
   toughness: 3,
   keywords: [Flying],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     effect: [Scry(count: 1)],
-    text: "When this creature enters, scry 1.",
   )],
 )

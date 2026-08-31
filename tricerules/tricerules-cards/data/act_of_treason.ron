@@ -1,6 +1,7 @@
 (
   id: "act_of_treason",
   name: "Act of Treason",
+  face_id: "act_of_treason",
   mana_cost: "{2}{R}",
   types: ["Sorcery"],
   spell_effect: [

@@ -3,23 +3,25 @@
     id: "akki_lavarunner_tok-tok,_volcano_born",
     name: "Akki Lavarunner // Tok-Tok, Volcano Born",
     layout: Flip,
-    partial: "Tok-Tok's protection from red and damage-replacement ability are unsupported",
     faces: [
         (
             name: "Akki Lavarunner",
+            face_id: "akki_lavarunner",
             mana_cost: "{3}{R}",
             types: ["Creature", "Goblin", "Warrior"],
             power: Some(1),
             toughness: Some(1),
             keywords: [Haste],
             triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
                 trigger: WheneverSelfDealsDamageToOpponent,
                 effect: [ChangeSourceFace(action: Flip)],
-                text: "Whenever Akki Lavarunner deals damage to an opponent, flip it.",
             )],
         ),
         (
             name: "Tok-Tok, Volcano Born",
+            face_id: "tok_tok_volcano_born",
             mana_cost: "",
             types: ["Creature", "Goblin", "Shaman"],
             supertypes: ["Legendary"],

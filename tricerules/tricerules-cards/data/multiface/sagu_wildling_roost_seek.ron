@@ -6,19 +6,22 @@
   faces: [
     (
       name: "Sagu Wildling",
+      face_id: "sagu_wildling",
       mana_cost: "{4}{G}",
       types: ["Creature", "Dragon"],
       power: 3,
       toughness: 3,
       keywords: [Flying],
       triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: OracleLines([2]),
         trigger: WhenSelfEntersBattlefield,
         effect: [GainLife(amount: 3)],
-        text: "When this creature enters, you gain 3 life.",
       )],
     ),
     (
       name: "Roost Seek",
+      face_id: "roost_seek",
       mana_cost: "{G}",
       types: ["Sorcery", "Omen"],
       spell_effect: [SearchLibrary(

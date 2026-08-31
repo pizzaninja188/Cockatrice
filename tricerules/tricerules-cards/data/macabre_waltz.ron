@@ -3,6 +3,7 @@
 (
   id: "macabre_waltz",
   name: "Macabre Waltz",
+  face_id: "macabre_waltz",
   mana_cost: "{1}{B}",
   types: ["Sorcery"],
   spell_effect: [

@@ -1,6 +1,7 @@
 (
   id: "fleeting_flight",
   name: "Fleeting Flight",
+  face_id: "fleeting_flight",
   mana_cost: "{W}",
   // Oracle checked 2026-08-20.
   types: ["Instant"],

@@ -2,20 +2,23 @@
 (
   id: "wary_thespian",
   name: "Wary Thespian",
+  face_id: "wary_thespian",
   mana_cost: "{1}{G}",
   types: ["Creature", "Cat", "Druid"],
   power: 3,
   toughness: 1,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
       effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
-      text: "When this creature enters or dies, surveil 1.",
     ),
     (
+      ability_id: "triggered_02",
+      presentation: Fallback,
       trigger: WhenSelfDies,
       effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
-      text: "When this creature enters or dies, surveil 1.",
     ),
   ],
 )

@@ -3,11 +3,14 @@
 (
   id: "fanatic_of_the_harrowing",
   name: "Fanatic of the Harrowing",
+  face_id: "fanatic_of_the_harrowing",
   mana_cost: "{3}{B}",
   types: ["Creature", "Human", "Cleric"],
   power: 2,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [
       Discard(who: EachPlayer, count: 1),
@@ -15,7 +18,7 @@
         selection: FirstApplicable,
         branches: [
           (
-            label: "Draw a card",
+            branch_id: "draw_a_card", presentation: Fallback,
             cost: None,
             requirement: CardResultCount(
               filter: (
@@ -28,7 +31,7 @@
             effects: [Draw(count: 1)],
           ),
           (
-            label: "Do not draw",
+            branch_id: "do_not_draw", presentation: Fallback,
             cost: None,
             requirement: Always,
             effects: [],
@@ -36,6 +39,5 @@
         ],
       ),
     ],
-    text: "When this creature enters, each player discards a card. If you discarded a card this way, draw a card.",
   )],
 )

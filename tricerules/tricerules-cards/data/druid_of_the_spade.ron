@@ -2,13 +2,14 @@
 (
   id: "druid_of_the_spade",
   name: "Druid of the Spade",
+  face_id: "druid_of_the_spade",
   mana_cost: "{2}{G}",
   types: ["Creature", "Rabbit", "Druid"],
   power: 2,
   toughness: 3,
-  static_abilities: [ConditionalSelfModifier(
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
     condition: BattlefieldAggregate(filter: (controllers: Controller, token: Some(true)), aggregate: Count, min: Some(1)),
     delta_power: 2,
     keywords: [Trample],
-  )],
+  ))],
 )

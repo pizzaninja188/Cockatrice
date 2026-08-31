@@ -3,34 +3,37 @@
 (
   id: "flaring_cinder",
   name: "Flaring Cinder",
+  face_id: "flaring_cinder",
   mana_cost: "{1}{U/R}{U/R}",
   types: ["Creature", "Elemental", "Sorcerer"],
   power: 3,
   toughness: 2,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
       effect: [ChooseResolutionBranch(
         optional: true,
         branches: [(
-          label: "Discard a card",
+          branch_id: "discard_a_card", presentation: Fallback,
           cost: DiscardCard(filter: None),
           effects: [Draw(count: 1)],
         )],
       )],
-      text: "When this creature enters, you may discard a card. If you do, draw a card.",
     ),
     (
+      ability_id: "triggered_02",
+      presentation: Fallback,
       trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (min_mana_value: Some(4))),
       effect: [ChooseResolutionBranch(
         optional: true,
         branches: [(
-          label: "Discard a card",
+          branch_id: "discard_a_card", presentation: Fallback,
           cost: DiscardCard(filter: None),
           effects: [Draw(count: 1)],
         )],
       )],
-      text: "Whenever you cast a spell with mana value 4 or greater, you may discard a card. If you do, draw a card.",
     ),
   ],
 )

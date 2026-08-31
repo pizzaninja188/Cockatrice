@@ -2,6 +2,7 @@
 (
   id: "midnight_haunting",
   name: "Midnight Haunting",
+  face_id: "midnight_haunting",
   mana_cost: "{2}{W}",
   types: ["Instant"],
   spell_effect: [CreateTokens(token: "spirit_w_1_1_flying", count: 2)],

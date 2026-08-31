@@ -1,13 +1,15 @@
 (
   id: "volcanic_island",
   name: "Volcanic Island",
+  face_id: "volcanic_island",
   mana_cost: "",
   types: ["Land", "Island", "Mountain"],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: Fallback,
       costs: [Tap],
       effect: [ProduceMana(options: [(u: 1), (r: 1)])],
-      text: "{T}: Add {U} or {R}.",
     ),
   ],
 )

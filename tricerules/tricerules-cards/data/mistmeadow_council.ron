@@ -3,6 +3,7 @@
 (
   id: "mistmeadow_council",
   name: "Mistmeadow Council",
+  face_id: "mistmeadow_council",
   mana_cost: "{4}{G}",
   cost_modifiers: [ConditionalGenericReduction(
     amount: 1,
@@ -15,8 +16,9 @@
   power: 4,
   toughness: 3,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [Draw(count: 1)],
-    text: "When this creature enters, draw a card.",
   )],
 )

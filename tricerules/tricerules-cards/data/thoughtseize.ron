@@ -1,6 +1,7 @@
 (
   id: "thoughtseize",
   name: "Thoughtseize",
+  face_id: "thoughtseize",
   mana_cost: "{B}",
   types: ["Sorcery"],
   // Oracle order. `DiscardCards(chooser: Controller)` suspends for the caster's choice;

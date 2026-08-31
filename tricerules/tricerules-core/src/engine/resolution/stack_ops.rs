@@ -448,24 +448,39 @@ pub(super) fn copy_target_spell(
                 src.chosen_modes.iter().map(|mode| mode.targets.len()).sum()
             };
             let needs_target_choice = target_count > 0;
-            let chosen_mode_indices: Vec<u32> = src
-                .chosen_modes
-                .iter()
-                .map(|mode| mode.mode_index as u32)
-                .collect();
-            let chosen_mode_labels: Vec<String> = engine
+            let copied_face = engine
                 .registry
                 .get(&src.card_id)
-                .and_then(|definition| definition.face(src.face_index))
-                .and_then(|face| face.modal_spell.as_ref())
-                .map(|modal| {
-                    src.chosen_modes
-                        .iter()
-                        .filter_map(|chosen| modal.modes.get(chosen.mode_index))
-                        .map(|mode| mode.label.clone())
-                        .collect()
-                })
-                .unwrap_or_default();
+                .and_then(|definition| definition.face(src.face_index));
+            let copied_modal = copied_face.and_then(|face| face.modal_spell.as_ref());
+            let (chosen_mode_indices, chosen_mode_labels) = if src.chosen_modes.is_empty() {
+                (Vec::new(), Vec::new())
+            } else {
+                let modal = copied_modal.ok_or(EngineError::Illegal(
+                    "copied modal spell has no mode definition",
+                ))?;
+                let indices = src
+                    .chosen_modes
+                    .iter()
+                    .map(|chosen| {
+                        modal
+                            .mode_index(&chosen.mode_id)
+                            .map(|index| index as u32)
+                            .ok_or(EngineError::Illegal("copied modal mode no longer exists"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let labels = src
+                    .chosen_modes
+                    .iter()
+                    .map(|chosen| {
+                        modal
+                            .mode_by_id(&chosen.mode_id)
+                            .map(|mode| mode_fallback(&copied_name, &mode.mode_id))
+                            .ok_or(EngineError::Illegal("copied modal mode no longer exists"))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                (indices, labels)
+            };
             for copy_num in 0..count {
                 let copy_id = engine.state.next_object_id;
                 engine.state.next_object_id += 1;
@@ -519,7 +534,7 @@ pub(super) fn copy_target_spell(
                                         .get(&src.card_id)
                                         .and_then(|definition| definition.face(src.face_index))
                                         .and_then(|face| face.modal_spell.as_ref())
-                                        .and_then(|modal| modal.modes.get(chosen.mode_index))
+                                        .and_then(|modal| modal.mode_by_id(&chosen.mode_id))
                                         .map(|mode| mode.effects.clone())
                                 })
                                 .collect()

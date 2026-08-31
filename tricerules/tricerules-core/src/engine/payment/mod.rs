@@ -210,7 +210,7 @@ impl GameEngine {
                         actors,
                         actions,
                         amount,
-                    } = ability
+                    } = &ability.definition
                     else {
                         return None;
                     };
@@ -355,7 +355,7 @@ impl GameEngine {
                     actors,
                     actions,
                     amount,
-                } = ability
+                } = &ability.definition
                 else {
                     continue;
                 };
@@ -596,7 +596,7 @@ impl GameEngine {
                         spell_type,
                         amount,
                         condition,
-                    } = ability
+                    } = &ability.definition
                     else {
                         return total;
                     };

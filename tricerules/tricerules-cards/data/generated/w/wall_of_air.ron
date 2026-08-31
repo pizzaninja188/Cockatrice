@@ -2,6 +2,7 @@
 (
   id: "wall_of_air",
   name: "Wall of Air",
+  face_id: "wall_of_air",
   mana_cost: "{1}{U}{U}",
   types: ["Creature", "Wall"],
   power: 1,

@@ -2,9 +2,12 @@
 (
   id: "solitary_sanctuary",
   name: "Solitary Sanctuary",
+  face_id: "solitary_sanctuary",
   mana_cost: "{2}{W}",
   types: ["Enchantment"],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     effect: [
       Tap(subject: Chosen((kind: Creature, controller: Opponent))),
@@ -13,10 +16,10 @@
     targeting: Some((groups: [(
       min: 1, max: 1, prompt: "Choose target creature an opponent controls", effect_indices: [0, 1],
     )])),
-    text: "When this enchantment enters, tap target creature an opponent controls and put a stun counter on it.",
   ), (
+    ability_id: "triggered_02",
+    presentation: OracleLines([2]),
     trigger: WheneverPlayerTapsCreature(player: Controller, controllers: Opponents, cardinality: EachObject),
     effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature, controller: You)))],
-    text: "Whenever you tap an untapped creature an opponent controls, put a +1/+1 counter on target creature you control.",
   )],
 )

@@ -2,16 +2,18 @@
 (
   id: "vengeful_tracker",
   name: "Vengeful Tracker",
+  face_id: "vengeful_tracker",
   mana_cost: "{1}{R}",
   types: ["Creature", "Human", "Detective"],
   power: 2,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverPlayerSacrificesPermanent(
       player: Opponent,
       filter: (permanent_type: Some(Artifact)),
     ),
     effect: [DamagePlayer(amount: 2, who: AffectedPlayer)],
-    text: "Whenever an opponent sacrifices an artifact, this creature deals 2 damage to that player.",
   )],
 )

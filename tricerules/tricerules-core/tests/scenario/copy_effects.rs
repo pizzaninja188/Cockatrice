@@ -975,7 +975,11 @@ fn clone_copies_safewright_cavalrys_blocker_cap() {
     let clone = battlefield_object_for_card(&engine, 0, "clone");
     assert!(matches!(
         engine.state.objects[&clone].copiable_values.as_ref().unwrap().face.static_abilities.as_slice(),
-        [StaticAbilityDef::SelfCombatRestriction { restriction, .. }] if restriction.maximum_blockers == Some(1)
+        [ability] if matches!(
+            &ability.definition,
+            StaticAbilityDef::SelfCombatRestriction { restriction, .. }
+                if restriction.maximum_blockers == Some(1)
+        )
     ));
 }
 

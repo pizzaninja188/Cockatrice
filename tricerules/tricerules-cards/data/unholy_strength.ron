@@ -1,11 +1,12 @@
 (
   id: "unholy_strength",
   name: "Unholy Strength",
+  face_id: "unholy_strength",
   mana_cost: "{B}",
-  // Oracle: Enchant creature. Enchanted creature gets +2/+1.
+  // CR 303.4 and 613.4c.
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
   static_abilities: [
-    AttachedModifier(delta_power: 2, delta_toughness: 1),
+    (ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(delta_power: 2, delta_toughness: 1)),
   ],
 )

@@ -2,9 +2,10 @@
 (
   id: "sylvan_brushstrider",
   name: "Sylvan Brushstrider",
+  face_id: "sylvan_brushstrider",
   mana_cost: "{2}{G}",
   types: ["Creature", "Beast"],
   power: 3,
   toughness: 2,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)], text: "When this creature enters, you gain 2 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)])],
 )

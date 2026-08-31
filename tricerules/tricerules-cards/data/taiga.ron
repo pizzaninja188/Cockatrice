@@ -1,13 +1,15 @@
 (
   id: "taiga",
   name: "Taiga",
+  face_id: "taiga",
   mana_cost: "",
   types: ["Land", "Mountain", "Forest"],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: Fallback,
       costs: [Tap],
       effect: [ProduceMana(options: [(r: 1), (g: 1)])],
-      text: "{T}: Add {R} or {G}.",
     ),
   ],
 )

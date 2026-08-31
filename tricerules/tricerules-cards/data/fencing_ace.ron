@@ -1,6 +1,7 @@
 (
   id: "fencing_ace",
   name: "Fencing Ace",
+  face_id: "fencing_ace",
   mana_cost: "{1}{W}",
   types: ["Creature", "Human", "Soldier"],
   power: 1,

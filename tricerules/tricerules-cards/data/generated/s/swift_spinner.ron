@@ -2,6 +2,7 @@
 (
   id: "swift_spinner",
   name: "Swift Spinner",
+  face_id: "swift_spinner",
   mana_cost: "{3}{G}",
   types: ["Creature", "Spider"],
   power: 2,

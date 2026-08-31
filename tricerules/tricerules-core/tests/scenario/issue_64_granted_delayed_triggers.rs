@@ -2,6 +2,7 @@ use crate::helpers::*;
 use tricerules_cards::primitives::{
     EffectSubject, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
+use tricerules_cards::{AbilityId, AbilityPresentation};
 use tricerules_core::state::{
     ActiveEventObserver, DelayedTriggerPayload, EventObserverMatcher, EventObserverPayload,
     TriggerObjectRef,
@@ -403,13 +404,14 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
             card_name: "Grizzly Bears".into(),
             source_face_index: 0,
             ability: TriggeredAbilityDef {
+                ability_id: AbilityId::new("delayed_tap").unwrap(),
+                presentation: AbilityPresentation::Fallback,
                 trigger: TriggerCondition::AtBeginningOfNextEndStep,
                 effect: vec![SpellEffectKind::Tap {
                     subject: EffectSubject::TriggerObject,
                 }],
                 modal: None,
                 targeting: None,
-                text: "At the beginning of the next end step, tap it.".into(),
                 may: false,
                 intervening_if: None,
                 max_triggers_per_turn: None,

@@ -1,6 +1,7 @@
 (
   id: "soul_salvage",
   name: "Soul Salvage",
+  face_id: "soul_salvage",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
   spell_effect: [MoveGraveyardCards(

@@ -1,21 +1,22 @@
 (
   id: "goblin_chieftain",
   name: "Goblin Chieftain",
+  face_id: "goblin_chieftain",
   mana_cost: "{1}{R}{R}",
   types: ["Creature", "Goblin"],
   power: 2,
   toughness: 2,
   keywords: [Haste],
-  // "Other Goblin creatures you control get +1/+1 and have haste." CR 604/613 layer 7c + layer 6.
+  // Other controlled Goblins receive a layer 7c +1/+1 modification and layer 6 haste (CR 604/613).
   static_abilities: [
-    AnthemPt(
+    (ability_id: "static_01", presentation: Fallback, definition: AnthemPt(
       filter: (controller: YouControl, subtype: "Goblin", exclude_self: true),
       delta_power: 1,
       delta_toughness: 1,
-    ),
-    AnthemKeyword(
+    )),
+    (ability_id: "static_02", presentation: Fallback, definition: AnthemKeyword(
       filter: (controller: YouControl, subtype: "Goblin", exclude_self: true),
       keyword: Haste,
-    ),
+    )),
   ],
 )

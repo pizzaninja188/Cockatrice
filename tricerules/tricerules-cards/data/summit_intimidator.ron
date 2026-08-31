@@ -1,17 +1,19 @@
 (
   id: "summit_intimidator",
   name: "Summit Intimidator",
+  face_id: "summit_intimidator",
   mana_cost: "{3}{R}",
   types: ["Creature", "Yeti"],
   power: 4,
   toughness: 3,
   keywords: [Reach],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [ApplyCombatRestriction(
       scope: Chosen((kind: Creature)),
       restriction: (cant_block: true),
     )],
-    text: "When this creature enters, target creature can't block this turn.",
   )],
 )

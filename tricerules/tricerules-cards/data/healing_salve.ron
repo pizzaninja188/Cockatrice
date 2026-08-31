@@ -1,6 +1,7 @@
 (
   id: "healing_salve",
   name: "Healing Salve",
+  face_id: "healing_salve",
   mana_cost: "{W}",
   types: ["Instant"],
   modal_spell: (
@@ -8,11 +9,13 @@
     max_modes: 1,
     modes: [
       (
-        label: "Target player gains 3 life",
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
         effects: [TargetPlayerGainsLife(amount: 3, target: (kind: AnyPlayer))],
       ),
       (
-        label: "Prevent the next 3 damage to any target",
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
         effects: [PreventNextDamage(amount: 3, target: (kind: AnyTarget))],
       ),
     ],

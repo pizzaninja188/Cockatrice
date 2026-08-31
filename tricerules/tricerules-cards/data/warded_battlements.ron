@@ -1,6 +1,7 @@
 (
   id: "warded_battlements",
   name: "Warded Battlements",
+  face_id: "warded_battlements",
   mana_cost: "{2}{W}",
   types: ["Creature", "Wall"],
   power: 0,
@@ -8,10 +9,10 @@
   keywords: [Defender],
   // CR 508.1k / 611.3 / 613.4c: continuously follow attacking creatures you control.
   static_abilities: [
-    AnthemPt(
+    (ability_id: "static_01", presentation: Fallback, definition: AnthemPt(
       filter: (controller: YouControl, attacking: true),
       delta_power: 1,
       delta_toughness: 0,
-    ),
+    )),
   ],
 )

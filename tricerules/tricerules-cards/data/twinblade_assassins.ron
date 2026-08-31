@@ -3,16 +3,18 @@
 (
   id: "twinblade_assassins",
   name: "Twinblade Assassins",
+  face_id: "twinblade_assassins",
   mana_cost: "{3}{B}{G}",
   types: ["Creature", "Elf", "Assassin"],
   power: 5,
   toughness: 4,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: AtBeginningOfEndStep(player: Controller),
       intervening_if: Some(GameCondition(CreatureDeathsThisTurn(min: Some(1), max: None))),
       effect: [Draw(count: 1)],
-      text: "At the beginning of your end step, if a creature died this turn, draw a card.",
     ),
   ],
 )

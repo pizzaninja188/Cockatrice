@@ -2,7 +2,9 @@
 (
   id: "fists_of_the_anvil",
   name: "Fists of the Anvil",
+  face_id: "fists_of_the_anvil",
   mana_cost: "{1}{R}",
   types: ["Instant"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 4, toughness: 0)],
 )

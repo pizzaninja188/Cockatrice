@@ -1,8 +1,9 @@
 (
   id: "negate",
   name: "Negate",
+  face_id: "negate",
   mana_cost: "{1}{U}",
   types: ["Instant"],
-  // "Counter target noncreature spell." (CR 701.5).
+  // The counter effect restricts its target to a noncreature spell (CR 701.5).
   spell_effect: [CounterTargetSpell(spell_filter: Noncreature, unless_controller_pays: None)],
 )

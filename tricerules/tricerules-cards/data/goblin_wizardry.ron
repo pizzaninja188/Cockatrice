@@ -2,6 +2,7 @@
 (
   id: "goblin_wizardry",
   name: "Goblin Wizardry",
+  face_id: "goblin_wizardry",
   mana_cost: "{3}{R}",
   types: ["Instant"],
   spell_effect: [CreateTokens(token: "goblin_wizard_r_1_1_prowess", count: 2)],

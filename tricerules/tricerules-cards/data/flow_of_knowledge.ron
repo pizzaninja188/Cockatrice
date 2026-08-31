@@ -1,6 +1,6 @@
 // Oracle and rulings fetched 2026-08-27. CR 608.2h: count Islands before drawing.
 (
-  id: "flow_of_knowledge", name: "Flow of Knowledge", mana_cost: "{4}{U}",
+  id: "flow_of_knowledge", name: "Flow of Knowledge", face_id: "flow_of_knowledge", mana_cost: "{4}{U}",
   types: ["Instant"],
   spell_effect: [
     Draw(count: Count(BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Island"])))),

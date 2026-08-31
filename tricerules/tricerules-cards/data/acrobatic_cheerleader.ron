@@ -3,14 +3,16 @@
 (
   id: "acrobatic_cheerleader",
   name: "Acrobatic Cheerleader",
+  face_id: "acrobatic_cheerleader",
   mana_cost: "{1}{W}",
   types: ["Creature", "Human", "Survivor"],
   power: 2,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: AtBeginningOfSecondMainPhase(player: Controller),
     effect: [PutCounters(counter: Keyword(Flying), count: 1, subject: Source)],
-    text: "Survival — At the beginning of your second main phase, if this creature is tapped, put a flying counter on it. This ability triggers only once.",
     intervening_if: Some(SourceTapped),
     triggers_only_once: true,
   )],

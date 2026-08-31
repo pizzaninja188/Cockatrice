@@ -132,7 +132,7 @@ fn issue_139_refresh_publishes_targets_from_stored_non_primary_face_ability() {
         source_face_change: 1,
         ability_index: 0,
         ability: ability.clone(),
-        ability_text: ability.text.clone(),
+        ability_text: ability.fallback_text("Village Ironsmith"),
         card_id: "village_ironsmith_ironfang".into(),
         controller: 0,
         may: ability.may,

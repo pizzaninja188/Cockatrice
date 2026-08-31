@@ -2,11 +2,14 @@
 (
   id: "boggart_prankster",
   name: "Boggart Prankster",
+  face_id: "boggart_prankster",
   mana_cost: "{1}{B}",
   types: ["Creature", "Goblin", "Warrior"],
   power: 1,
   toughness: 3,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WheneverControllerAttacks(),
     effect: [PumpTarget(
       power: 1,
@@ -18,6 +21,5 @@
         required_subtypes: ["Goblin"],
       )),
     )],
-    text: "Whenever you attack, target attacking Goblin you control gets +1/+0 until end of turn.",
   )],
 )

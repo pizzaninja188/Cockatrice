@@ -2,10 +2,11 @@
 (
   id: "tome_raider",
   name: "Tome Raider",
+  face_id: "tome_raider",
   mana_cost: "{2}{U}",
   types: ["Creature", "Faerie"],
   power: 1,
   toughness: 1,
   keywords: [Flying],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

@@ -2,9 +2,10 @@
 (
   id: "cathedral_sanctifier",
   name: "Cathedral Sanctifier",
+  face_id: "cathedral_sanctifier",
   mana_cost: "{W}",
   types: ["Creature", "Human", "Cleric"],
   power: 1,
   toughness: 1,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)], text: "When this creature enters, you gain 3 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)])],
 )

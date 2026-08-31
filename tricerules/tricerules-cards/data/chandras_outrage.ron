@@ -1,6 +1,7 @@
 (
   id: "chandras_outrage",
   name: "Chandra's Outrage",
+  face_id: "chandra_s_outrage",
   mana_cost: "{2}{R}{R}",
   types: ["Instant"],
   spell_effect: [

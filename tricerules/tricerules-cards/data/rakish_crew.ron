@@ -2,22 +2,25 @@
 (
   id: "rakish_crew",
   name: "Rakish Crew",
+  face_id: "rakish_crew",
   mana_cost: "{2}{B}",
   types: ["Enchantment"],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [CreateTokens(token: "mercenary_r_1_1", count: 1)],
-      text: "When this enchantment enters, create a 1/1 red Mercenary creature token with \"{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.\"",
     ),
     (
+      ability_id: "triggered_02",
+      presentation: Fallback,
       trigger: WheneverPermanentLeavesBattlefield(
         controller: Controller,
         filter: (any_subtypes: ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"]),
         destination: OneOf([Graveyard]),
       ),
       effect: [LoseLife(amount: Fixed(1), who: EachOpponent), GainLife(amount: 1)],
-      text: "Whenever an outlaw you control dies, each opponent loses 1 life and you gain 1 life.",
     ),
   ],
 )

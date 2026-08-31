@@ -3,17 +3,20 @@
 (
     id: "canonized_in_blood",
     name: "Canonized in Blood",
+    face_id: "canonized_in_blood",
     mana_cost: "{1}{B}",
     types: ["Enchantment"],
     triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: Fallback,
         trigger: AtBeginningOfEndStep(player: Controller),
         intervening_if: Some(GameCondition(PermanentCardsEnteredGraveyardThisTurn(players: Controller, min: Some(1)))),
         effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature, controller: You)))],
-        text: "At the beginning of your end step, if you descended this turn, put a +1/+1 counter on target creature you control.",
     )],
     activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([2]),
         costs: [Mana("{5}{B}{B}"), SacrificeSelf],
         effect: [CreateTokens(token: "vampire_demon_wb_4_3_flying", count: 1)],
-        text: "{5}{B}{B}, Sacrifice this enchantment: Create a 4/3 white and black Vampire Demon creature token with flying.",
     )],
 )

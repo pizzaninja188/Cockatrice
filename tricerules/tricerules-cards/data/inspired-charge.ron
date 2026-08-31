@@ -1,8 +1,9 @@
 (
   id: "inspired_charge",
   name: "Inspired Charge",
+  face_id: "inspired_charge",
   mana_cost: "{2}{W}{W}",
   types: ["Instant"],
-  // CR 613.4 layer 7c (one-shot): "Creatures you control get +2/+1 until end of turn."
+  // CR 613.4 layer 7c one-shot controller-wide +2/+1 modification through end of turn.
   spell_effect: [PumpAll(filter: (controller: YouControl), power: 2, toughness: 1)],
 )

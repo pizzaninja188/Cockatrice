@@ -1,6 +1,7 @@
 (
   id: "twincast",
   name: "Twincast",
+  face_id: "twincast",
   mana_cost: "{U}{U}",
   types: ["Instant"],
   // CR 707.10 / 707.10c: copy target instant or sorcery spell; the copy's controller

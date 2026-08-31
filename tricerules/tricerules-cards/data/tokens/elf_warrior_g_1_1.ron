@@ -2,6 +2,7 @@
 (
   id: "elf_warrior_g_1_1",
   name: "Elf Warrior",
+  face_id: "elf_warrior",
   types: ["Creature", "Elf", "Warrior"],
   colors: [Green],
   power: 1,

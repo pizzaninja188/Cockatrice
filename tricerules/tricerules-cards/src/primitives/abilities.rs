@@ -6,7 +6,7 @@ use super::{
     PowerComparison, RelativePlayerSet, SpellEffectKind, TargetController, TargetFilter,
     TargetKind, TargetingDef,
 };
-use crate::{ManaAmount, ModalDef};
+use crate::{AbilityId, AbilityPresentation, ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
 
 /// The rules zones used by Three Tree Scribe and Slagstone Refinery's departure predicates.
@@ -49,7 +49,10 @@ pub enum ZoneEventCardinality {
 
 /// One activated ability on a permanent (RON data tier). Cost + effect compose freely.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ActivatedAbilityDef {
+    pub ability_id: AbilityId,
+    pub presentation: AbilityPresentation,
     /// Zone in which this printed activated ability functions.
     #[serde(default)]
     pub source_zone: AbilitySourceZone,
@@ -74,8 +77,6 @@ pub struct ActivatedAbilityDef {
     /// Maximum successful activations allowed for this object identity in a turn.
     #[serde(default)]
     pub activation_limit: Option<ActivationLimit>,
-    /// Oracle-style ability text shown as annotation on the stack card.
-    pub text: String,
 }
 
 /// A public CR 602.5 activation restriction attached to one activated ability.
@@ -160,6 +161,17 @@ impl ActivationCondition {
 }
 
 impl ActivatedAbilityDef {
+    pub fn fallback_text(&self, face_name: &str) -> String {
+        self.fallback_text_with_path(face_name, std::slice::from_ref(&self.ability_id))
+    }
+
+    pub fn fallback_text_with_path(
+        &self,
+        face_name: &str,
+        ability_path: &[crate::AbilityId],
+    ) -> String {
+        crate::ability_fallback(face_name, "activated ability", ability_path)
+    }
     /// CR 605.1a: a mana ability produces mana, doesn't target, and isn't a loyalty ability.
     /// Modelled as "the ability's *sole* effect is `ProduceMana`" — an ability that produced
     /// mana alongside another effect would not use the fast no-stack path, and deliberately
@@ -210,9 +222,8 @@ impl ActivatedAbilityDef {
     }
 
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
-        if self.text.trim().is_empty() {
-            return Err("activated ability text must not be empty".into());
-        }
+        self.ability_id.validate()?;
+        self.presentation.validate()?;
         if self.effect.is_empty() {
             return Err("activated ability must contain at least one effect".into());
         }
@@ -1023,7 +1034,10 @@ pub enum InterveningIf {
 /// self-referencing effect (e.g. an upkeep self-pump) uses [`EffectSubject::Source`] rather than
 /// a dedicated effect variant.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TriggeredAbilityDef {
+    pub ability_id: AbilityId,
+    pub presentation: AbilityPresentation,
     pub trigger: TriggerCondition,
     /// CR 608.2: the ability's effects, resolved in the order written — the same shape and the
     /// same semantics as a spell's `spell_effect`. Phyrexian Arena's "you draw a card and you
@@ -1036,8 +1050,6 @@ pub struct TriggeredAbilityDef {
     pub modal: Option<ModalDef>,
     #[serde(default)]
     pub targeting: Option<TargetingDef>,
-    /// Oracle-style ability text shown as annotation on the stack card.
-    pub text: String,
     /// CR 603.5: true when the triggered ability says "you may" and its controller may decline
     /// it while choosing targets.
     #[serde(default)]
@@ -1061,6 +1073,17 @@ pub struct TriggeredAbilityDef {
 }
 
 impl TriggeredAbilityDef {
+    pub fn fallback_text(&self, face_name: &str) -> String {
+        self.fallback_text_with_path(face_name, std::slice::from_ref(&self.ability_id))
+    }
+
+    pub fn fallback_text_with_path(
+        &self,
+        face_name: &str,
+        ability_path: &[crate::AbilityId],
+    ) -> String {
+        crate::ability_fallback(face_name, "triggered ability", ability_path)
+    }
     pub(crate) fn validate_trigger_limit(&self) -> Result<(), String> {
         if self.max_triggers_per_turn == Some(0) {
             return Err("max_triggers_per_turn must be positive".into());
@@ -1071,9 +1094,8 @@ impl TriggeredAbilityDef {
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
         self.trigger.validate()?;
         self.validate_trigger_limit()?;
-        if self.text.trim().is_empty() {
-            return Err("triggered ability text must not be empty".into());
-        }
+        self.ability_id.validate()?;
+        self.presentation.validate()?;
         if self.effect.is_empty() == self.modal.is_none() {
             return Err("triggered ability requires exactly one of effect or modal".into());
         }
@@ -1140,17 +1162,28 @@ impl TriggeredAbilityDef {
 /// independent trigger condition: the creating effect stages it immediately after the qualifying
 /// payment, then normal target selection and stack placement apply.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReflexiveTriggeredAbilityDef {
+    pub ability_id: AbilityId,
+    pub presentation: AbilityPresentation,
     pub effect: Vec<SpellEffectKind>,
     #[serde(default)]
     pub targeting: Option<TargetingDef>,
-    pub text: String,
 }
 
 impl ReflexiveTriggeredAbilityDef {
+    pub fn fallback_text(&self, face_name: &str) -> String {
+        crate::ability_fallback(
+            face_name,
+            "reflexive triggered ability",
+            std::slice::from_ref(&self.ability_id),
+        )
+    }
     pub(crate) fn validate_shape(&self) -> Result<(), String> {
-        if self.text.trim().is_empty() || self.effect.is_empty() {
-            return Err("reflexive triggered ability requires text and effects".into());
+        self.ability_id.validate()?;
+        self.presentation.validate()?;
+        if self.effect.is_empty() {
+            return Err("reflexive triggered ability requires effects".into());
         }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;

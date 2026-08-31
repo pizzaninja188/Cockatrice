@@ -1,12 +1,15 @@
 (
   id: "dwarven_priest",
   name: "Dwarven Priest",
+  face_id: "dwarven_priest",
   mana_cost: "{3}{W}",
   types: ["Creature", "Dwarf", "Cleric"],
   power: 2,
   toughness: 4,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [
         GainLife(
@@ -15,7 +18,6 @@
           )),
         ),
       ],
-      text: "When this creature enters, you gain 1 life for each creature you control.",
     ),
   ],
 )

@@ -2,6 +2,7 @@
 (
   id: "riverwalk_technique",
   name: "Riverwalk Technique",
+  face_id: "riverwalk_technique",
   mana_cost: "{3}{U}",
   types: ["Instant"],
   modal_spell: (
@@ -9,14 +10,16 @@
     max_modes: 1,
     modes: [
       (
-        label: "Owner puts target nonland permanent on top or bottom",
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
         effects: [PutInOwnersLibrary(
           subject: Chosen((kind: AnyPermanent, not_land: true)),
           placement: OwnerChoiceTopOrBottom,
         )],
       ),
       (
-        label: "Counter target noncreature spell",
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
         effects: [CounterTargetSpell(
           spell_filter: Noncreature,
           unless_controller_pays: None,

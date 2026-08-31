@@ -1,13 +1,15 @@
 (
   id: "helpful_hunter",
   name: "Helpful Hunter",
+  face_id: "helpful_hunter",
   mana_cost: "{1}{W}",
   types: ["Creature", "Cat"],
   power: 1,
   toughness: 1,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [Draw(count: 1)],
-    text: "When this creature enters, draw a card.",
   )],
 )

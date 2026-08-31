@@ -2,7 +2,9 @@
 (
   id: "chaplains_blessing",
   name: "Chaplain's Blessing",
+  face_id: "chaplain_s_blessing",
   mana_cost: "{W}",
   types: ["Sorcery"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [GainLife(amount: 5)],
 )

@@ -1,6 +1,7 @@
 (
   id: "ornithopter",
   name: "Ornithopter",
+  face_id: "ornithopter",
   mana_cost: "{0}",
   types: ["Artifact", "Creature", "Thopter"],
   power: 0,

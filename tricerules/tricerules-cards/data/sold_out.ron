@@ -3,6 +3,7 @@
 (
   id: "sold_out",
   name: "Sold Out",
+  face_id: "sold_out",
   mana_cost: "{3}{B}",
   types: ["Instant"],
   spell_effect: [
@@ -11,14 +12,14 @@
       selection: FirstApplicable,
       branches: [
         (
-          label: "Create a Clue",
+          branch_id: "create_a_clue", presentation: Fallback,
           cost: None,
           requirement: GameCondition(ObjectWasDealtDamageThisTurn(
             object: ChosenTarget(group_index: 0, target_index: 0),
           )),
           effects: [CreateTokens(token: "clue", count: 1)],
         ),
-        (label: "No additional effect", cost: None, requirement: Always, effects: []),
+        (branch_id: "no_additional_effect", presentation: Fallback, cost: None, requirement: Always, effects: []),
       ],
     ),
   ],

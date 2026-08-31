@@ -1,6 +1,7 @@
 (
   id: "trumpet_blast",
   name: "Trumpet Blast",
+  face_id: "trumpet_blast",
   mana_cost: "{2}{R}",
   types: ["Instant"],
   // CR 508.1k / 611.2c / 613.4c: snapshot the creatures attacking as this resolves.

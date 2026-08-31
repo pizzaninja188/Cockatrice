@@ -1,6 +1,7 @@
 (
   id: "threaten",
   name: "Threaten",
+  face_id: "threaten",
   mana_cost: "{2}{R}",
   types: ["Sorcery"],
   spell_effect: [

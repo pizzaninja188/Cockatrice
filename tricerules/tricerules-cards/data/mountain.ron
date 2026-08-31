@@ -1,14 +1,16 @@
 (
   id: "mountain",
   name: "Mountain",
+  face_id: "mountain",
   mana_cost: "",
   types: ["Land", "Mountain"],
   supertypes: ["Basic"],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: Fallback,
       costs: [Tap],
       effect: [ProduceMana(options: [(r: 1)])],
-      text: "{T}: Add {R}.",
     ),
   ],
 )

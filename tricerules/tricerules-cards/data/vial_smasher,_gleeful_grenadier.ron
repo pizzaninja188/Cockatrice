@@ -2,16 +2,18 @@
 (
   id: "vial_smasher,_gleeful_grenadier",
   name: "Vial Smasher, Gleeful Grenadier",
+  face_id: "vial_smasher_gleeful_grenadier",
   mana_cost: "{B}{R}",
   types: ["Legendary", "Creature", "Goblin", "Mercenary"],
   power: 3,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverPermanentEntersBattlefield(
       controller: Controller,
       filter: (any_subtypes: ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"], exclude_source: true),
     ),
     effect: [DamageTarget(amount: 1, target: (kind: OpponentPlayer))],
-    text: "Whenever another outlaw you control enters, Vial Smasher deals 1 damage to target opponent.",
   )],
 )

@@ -2,6 +2,7 @@
 (
   id: "murmuring_phantasm",
   name: "Murmuring Phantasm",
+  face_id: "murmuring_phantasm",
   mana_cost: "{1}{U}",
   types: ["Creature", "Spirit"],
   power: 0,

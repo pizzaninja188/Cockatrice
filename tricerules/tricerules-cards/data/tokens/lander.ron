@@ -2,8 +2,11 @@
 (
   id: "lander",
   name: "Lander",
+  face_id: "lander",
   types: ["Artifact", "Lander"],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
     costs: [Mana("{2}"), Tap, SacrificeSelf],
     effect: [SearchLibrary(
       filter: Some((card_type: Some(BasicLand))),
@@ -11,6 +14,5 @@
       shuffle: true,
       reveal: false,
     )],
-    text: "{2}, {T}, Sacrifice this token: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
   )],
 )

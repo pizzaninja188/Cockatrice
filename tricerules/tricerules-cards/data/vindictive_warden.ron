@@ -2,19 +2,22 @@
 (
   id: "vindictive_warden",
   name: "Vindictive Warden",
+  face_id: "vindictive_warden",
   mana_cost: "{2}{B/R}",
   types: ["Creature", "Human", "Soldier"],
   power: 2,
   toughness: 3,
   keywords: [Menace],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
     costs: [Mana("{3}")],
     effect: [DamagePlayer(amount: 1, who: EachOpponent)],
-    text: "{3}: This creature deals 1 damage to each opponent.",
   )],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
     effect: [AddMana(amount: (r: 1), retention: EndOfCombat)],
-    text: "Firebending 1",
   )],
 )

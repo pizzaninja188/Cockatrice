@@ -1,8 +1,9 @@
 (
   id: "white_knight",
   name: "White Knight",
+  face_id: "white_knight",
   mana_cost: "{W}{W}",
-  // Oracle checked 2026-08-18: First strike; protection from black.
+  // CR 702.7 first strike and CR 702.16 protection.
   types: ["Creature", "Human", "Knight"],
   power: 2,
   toughness: 2,

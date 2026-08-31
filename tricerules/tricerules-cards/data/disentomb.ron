@@ -1,6 +1,7 @@
 (
   id: "disentomb",
   name: "Disentomb",
+  face_id: "disentomb",
   mana_cost: "{B}",
   types: ["Sorcery"],
   spell_effect: [MoveGraveyardCards(filter: (owner: Controller, card_type: Some(Creature)), destination: Hand)],

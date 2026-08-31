@@ -2,6 +2,7 @@
 (
   id: "wall_of_spears",
   name: "Wall of Spears",
+  face_id: "wall_of_spears",
   mana_cost: "{3}",
   types: ["Artifact", "Creature", "Wall"],
   power: 2,

@@ -1,6 +1,7 @@
 (
   id: "mammoth_bellow",
   name: "Mammoth Bellow",
+  face_id: "mammoth_bellow",
   mana_cost: "{2}{G}{U}{R}",
   harmonize_cost: Some("{5}{G}{U}{R}"),
   types: ["Sorcery"],

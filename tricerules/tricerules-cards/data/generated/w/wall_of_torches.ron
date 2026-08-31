@@ -2,6 +2,7 @@
 (
   id: "wall_of_torches",
   name: "Wall of Torches",
+  face_id: "wall_of_torches",
   mana_cost: "{1}{R}",
   types: ["Creature", "Wall"],
   power: 4,

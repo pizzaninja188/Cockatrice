@@ -2,6 +2,7 @@
 (
   id: "wall_of_mist",
   name: "Wall of Mist",
+  face_id: "wall_of_mist",
   mana_cost: "{1}{U}",
   types: ["Creature", "Wall"],
   power: 0,

@@ -2,6 +2,7 @@
 (
   id: "consulate_skygate",
   name: "Consulate Skygate",
+  face_id: "consulate_skygate",
   mana_cost: "{2}",
   types: ["Artifact", "Creature", "Wall"],
   power: 0,

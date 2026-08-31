@@ -2,6 +2,7 @@
 (
   id: "havenwood_wurm",
   name: "Havenwood Wurm",
+  face_id: "havenwood_wurm",
   mana_cost: "{6}{G}",
   types: ["Creature", "Wurm"],
   power: 5,

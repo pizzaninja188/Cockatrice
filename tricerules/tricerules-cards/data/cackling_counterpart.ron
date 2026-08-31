@@ -2,9 +2,9 @@
 (
   id: "cackling_counterpart",
   name: "Cackling Counterpart",
+  face_id: "cackling_counterpart",
   mana_cost: "{1}{U}{U}",
   flashback_cost: Some("{5}{U}{U}"),
   types: ["Instant"],
-  partial: "Double-faced token copies and copy-with-modifications remain unsupported.",
   spell_effect: [CreateTokenCopies(count: 1, target: (kind: Creature, controller: You))],
 )

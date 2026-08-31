@@ -1,6 +1,7 @@
 (
   id: "rabbit_w_1_1",
   name: "Rabbit",
+  face_id: "rabbit",
   types: ["Creature", "Rabbit"],
   colors: [White],
   power: 1,

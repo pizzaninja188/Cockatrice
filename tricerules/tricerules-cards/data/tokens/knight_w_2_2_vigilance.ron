@@ -2,6 +2,7 @@
 (
     id: "knight_w_2_2_vigilance",
     name: "Knight",
+    face_id: "knight",
     types: ["Creature", "Knight"],
     colors: [White],
     power: 2,

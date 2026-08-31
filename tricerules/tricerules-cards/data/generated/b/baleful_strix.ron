@@ -2,10 +2,11 @@
 (
   id: "baleful_strix",
   name: "Baleful Strix",
+  face_id: "baleful_strix",
   mana_cost: "{U}{B}",
   types: ["Artifact", "Creature", "Bird"],
   power: 1,
   toughness: 1,
   keywords: [Flying, Deathtouch],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

@@ -2,14 +2,16 @@
 (
   id: "kraul_whipcracker",
   name: "Kraul Whipcracker",
+  face_id: "kraul_whipcracker",
   mana_cost: "{B}{G}",
   types: ["Creature", "Insect", "Assassin"],
   power: 3,
   toughness: 2,
   keywords: [Reach],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [Destroy(subject: Chosen((kind: AnyPermanent, controller: Opponent, token: Some(true))))],
-    text: "When this creature enters, destroy target token an opponent controls.",
   )],
 )

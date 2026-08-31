@@ -2,12 +2,13 @@
 (
   id: "armory_mice",
   name: "Armory Mice",
+  face_id: "armory_mice",
   mana_cost: "{1}{W}",
   types: ["Creature", "Mouse"],
   power: 3,
   toughness: 1,
-  static_abilities: [ConditionalSelfModifier(
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
     condition: PermanentsEnteredThisTurn(controllers: Controller, filter: (excluded_types: [Land]), min: Some(2)),
     delta_toughness: 2,
-  )],
+  ))],
 )

@@ -2,9 +2,10 @@
 (
   id: "spirited_companion",
   name: "Spirited Companion",
+  face_id: "spirited_companion",
   mana_cost: "{1}{W}",
   types: ["Enchantment", "Creature", "Dog"],
   power: 1,
   toughness: 1,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

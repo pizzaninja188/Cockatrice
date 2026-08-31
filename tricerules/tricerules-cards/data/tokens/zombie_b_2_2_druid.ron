@@ -1,6 +1,7 @@
 (
   id: "zombie_b_2_2_druid",
   name: "Zombie",
+  face_id: "zombie",
   types: ["Creature", "Zombie", "Druid"],
   colors: [Black],
   power: 2,

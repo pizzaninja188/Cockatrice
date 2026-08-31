@@ -3,16 +3,18 @@
 (
   id: "otter-penguin",
   name: "Otter-Penguin",
+  face_id: "otter_penguin",
   mana_cost: "{1}{U}",
   types: ["Creature", "Otter", "Bird"],
   power: 2,
   toughness: 1,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WheneverPlayerDrawsNthCard(drawer: Controller, ordinal: 2),
     effect: [
       PumpTarget(power: 1, toughness: 2, subject: Source),
       ApplyCombatRestriction(scope: Source, restriction: (cant_be_blocked: true)),
     ],
-    text: "Whenever you draw your second card each turn, this creature gets +1/+2 until end of turn and can't be blocked this turn.",
   )],
 )

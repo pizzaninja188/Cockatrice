@@ -2,6 +2,7 @@
 (
   id: "wall_of_heat",
   name: "Wall of Heat",
+  face_id: "wall_of_heat",
   mana_cost: "{2}{R}",
   types: ["Creature", "Wall"],
   power: 2,

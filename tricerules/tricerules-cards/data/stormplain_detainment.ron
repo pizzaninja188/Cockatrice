@@ -1,13 +1,14 @@
 (
   id: "stormplain_detainment",
   name: "Stormplain Detainment",
+  face_id: "stormplain_detainment",
   mana_cost: "{2}{W}",
-  // Oracle: When Stormplain Detainment enters the battlefield, exile target nonland permanent an
-  // opponent controls until Stormplain Detainment leaves the battlefield. CR 610.3.
+  // CR 610.3 linked one-shot zone-change effect.
   types: ["Enchantment"],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     effect: [ExileUntilSourceLeaves(target: (kind: AnyPermanent, controller: Opponent, not_land: true))],
-    text: "When Stormplain Detainment enters, exile target nonland permanent an opponent controls until Stormplain Detainment leaves the battlefield.",
   )],
 )

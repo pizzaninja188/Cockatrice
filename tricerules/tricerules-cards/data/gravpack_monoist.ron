@@ -1,14 +1,16 @@
 (
   id: "gravpack_monoist",
   name: "Gravpack Monoist",
+  face_id: "gravpack_monoist",
   mana_cost: "{2}{B}",
   types: ["Creature", "Human", "Scout"],
   power: 2,
   toughness: 1,
   keywords: [Flying],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfDies,
     effect: [CreateTokens(token: "robot_c_2_2", count: 1, tapped: true)],
-    text: "When this creature dies, create a tapped 2/2 colorless Robot artifact creature token.",
   )],
 )

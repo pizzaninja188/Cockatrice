@@ -4,21 +4,24 @@
 (
   id: "cackling_prowler",
   name: "Cackling Prowler",
+  face_id: "cackling_prowler",
   mana_cost: "{3}{G}",
   types: ["Creature", "Hyena", "Rogue"],
   power: 4,
   toughness: 3,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
       effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))],
-      text: "Ward {2}",
     ),
     (
+      ability_id: "triggered_02",
+      presentation: Fallback,
       trigger: AtBeginningOfEndStep(player: Controller),
       intervening_if: Some(GameCondition(CreatureDeathsThisTurn(min: Some(1), max: None))),
       effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
-      text: "At the beginning of your end step, if a creature died this turn, put a +1/+1 counter on Cackling Prowler.",
     ),
   ],
 )

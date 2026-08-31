@@ -1,6 +1,7 @@
 (
   id: "portcullis_vine",
   name: "Portcullis Vine",
+  face_id: "portcullis_vine",
   mana_cost: "{G}",
   types: ["Creature", "Plant", "Wall"],
   power: 0,
@@ -8,13 +9,14 @@
   keywords: [Defender],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
       costs: [
         Mana("{2}"),
         Tap,
         SacrificePermanent(filter: (kind: Creature, controller: You, required_keywords: [Defender])),
       ],
       effect: [Draw(count: 1)],
-      text: "{2}, {T}, Sacrifice a creature with defender: Draw a card.",
     ),
   ],
 )

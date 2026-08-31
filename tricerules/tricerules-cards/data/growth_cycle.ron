@@ -3,6 +3,7 @@
 (
   id: "growth_cycle",
   name: "Growth Cycle",
+  face_id: "growth_cycle",
   mana_cost: "{1}{G}",
   types: ["Instant"],
   spell_effect: [

@@ -2,13 +2,16 @@
 (
   id: "rooftop_percher",
   name: "Rooftop Percher",
+  face_id: "rooftop_percher",
   mana_cost: "{5}",
   types: ["Creature", "Shapeshifter"],
   power: 3,
   toughness: 3,
-  characteristic_defining_abilities: [Changeling],
+  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)],
   keywords: [Flying],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     effect: [
       MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile),
@@ -21,6 +24,5 @@
       effect_indices: [0],
       same_graveyard: true,
     )])),
-    text: "When this creature enters, exile up to two target cards from a single graveyard. You gain 3 life.",
   )],
 )

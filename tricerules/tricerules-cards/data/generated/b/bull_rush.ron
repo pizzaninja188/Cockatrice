@@ -2,7 +2,9 @@
 (
   id: "bull_rush",
   name: "Bull Rush",
+  face_id: "bull_rush",
   mana_cost: "{R}",
   types: ["Instant"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 2, toughness: 0)],
 )

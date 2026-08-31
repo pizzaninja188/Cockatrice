@@ -1,23 +1,26 @@
 (
   id: "cult_healer",
   name: "Cult Healer",
+  face_id: "cult_healer",
   mana_cost: "{2}{W}",
   types: ["Creature", "Human", "Doctor"],
   power: 3,
   toughness: 3,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WheneverPermanentEntersBattlefield(
         controller: Controller,
         filter: (permanent_type: Some(Enchantment)),
       ),
       effect: [GrantKeywords(subject: Source, keywords: [Lifelink])],
-      text: "Whenever an enchantment you control enters, this creature gains lifelink until end of turn.",
     ),
     (
+      ability_id: "triggered_02",
+      presentation: Fallback,
       trigger: WheneverPlayerFullyUnlocksRoom(player: Controller),
       effect: [GrantKeywords(subject: Source, keywords: [Lifelink])],
-      text: "Whenever you fully unlock a Room, this creature gains lifelink until end of turn.",
     ),
   ],
 )

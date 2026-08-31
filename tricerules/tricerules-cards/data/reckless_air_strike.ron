@@ -1,6 +1,7 @@
 (
   id: "reckless_air_strike",
   name: "Reckless Air Strike",
+  face_id: "reckless_air_strike",
   mana_cost: "{R}",
   types: ["Sorcery"],
   modal_spell: (
@@ -8,7 +9,8 @@
     max_modes: 1,
     modes: [
       (
-        label: "Deal 3 damage to target creature with flying",
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
         effects: [
           DamageTarget(
             amount: 3,
@@ -17,7 +19,8 @@
         ],
       ),
       (
-        label: "Destroy target artifact",
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
         effects: [
           Destroy(
             subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])),

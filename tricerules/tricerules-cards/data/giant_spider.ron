@@ -1,6 +1,7 @@
 (
   id: "giant_spider",
   name: "Giant Spider",
+  face_id: "giant_spider",
   mana_cost: "{3}{G}",
   types: ["Creature", "Spider"],
   power: 2,

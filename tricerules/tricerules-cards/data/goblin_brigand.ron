@@ -1,6 +1,7 @@
 (
   id: "goblin_brigand",
   name: "Goblin Brigand",
+  face_id: "goblin_brigand",
   mana_cost: "{1}{R}",
   types: ["Creature", "Goblin", "Warrior"],
   power: 2,

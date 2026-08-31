@@ -2,10 +2,11 @@
 (
   id: "tatterkite",
   name: "Tatterkite",
+  face_id: "tatterkite",
   mana_cost: "{3}",
   types: ["Artifact", "Creature", "Scarecrow"],
   power: 2,
   toughness: 1,
   keywords: [Flying],
-  static_abilities: [ProhibitCounters(affected: Self_)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ProhibitCounters(affected: Self_))],
 )

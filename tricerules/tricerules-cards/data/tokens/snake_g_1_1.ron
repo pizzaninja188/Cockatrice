@@ -2,6 +2,7 @@
 (
     id: "snake_g_1_1",
     name: "Snake",
+    face_id: "snake",
     types: ["Creature", "Snake"],
     colors: [Green],
     power: 1,

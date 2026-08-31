@@ -2,12 +2,15 @@
 (
   id: "ambush_wolf",
   name: "Ambush Wolf",
+  face_id: "ambush_wolf",
   mana_cost: "{2}{G}",
   types: ["Creature", "Wolf"],
   power: 4,
   toughness: 2,
   keywords: [Flash],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile)],
     targeting: Some((groups: [(
@@ -16,6 +19,5 @@
       prompt: "Choose up to one target card from a graveyard",
       effect_indices: [0],
     )])),
-    text: "When this creature enters, exile up to one target card from a graveyard.",
   )],
 )

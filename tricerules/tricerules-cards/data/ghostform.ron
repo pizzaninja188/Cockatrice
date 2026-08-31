@@ -1,6 +1,7 @@
 (
   id: "ghostform",
   name: "Ghostform",
+  face_id: "ghostform",
   mana_cost: "{1}{U}",
   types: ["Sorcery"],
   spell_effect: [ApplyCombatRestriction(

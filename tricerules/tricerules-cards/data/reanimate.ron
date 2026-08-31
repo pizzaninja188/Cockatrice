@@ -1,9 +1,10 @@
 (
   id: "reanimate",
   name: "Reanimate",
+  face_id: "reanimate",
   mana_cost: "{B}",
   types: ["Sorcery"],
-  // "from a graveyard" — any player's (GraveyardOwner::AnyPlayer), entering under the caster's
+  // GraveyardOwner::AnyPlayer permits any graveyard, with the returned card entering under the caster's
   // control (CR 110.2). LoseLife is untargeted and reads the mana value of the same target the
   // MoveGraveyardCards declared, so the two must stay in one effect list.
   spell_effect: [

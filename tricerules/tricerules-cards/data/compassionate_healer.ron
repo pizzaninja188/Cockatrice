@@ -2,16 +2,18 @@
 (
   id: "compassionate_healer",
   name: "Compassionate Healer",
+  face_id: "compassionate_healer",
   mana_cost: "{1}{W}",
   types: ["Creature", "Human", "Cleric", "Ally"],
   power: 2,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverSelfBecomesTapped,
     effect: [
       GainLife(who: Controller, amount: 1),
       Scry(count: 1),
     ],
-    text: "Whenever this creature becomes tapped, you gain 1 life and scry 1.",
   )],
 )

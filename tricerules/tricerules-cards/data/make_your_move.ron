@@ -1,6 +1,7 @@
 (
   id: "make_your_move",
   name: "Make Your Move",
+  face_id: "make_your_move",
   mana_cost: "{2}{W}",
   types: ["Instant"],
   spell_effect: [

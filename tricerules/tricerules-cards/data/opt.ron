@@ -1,9 +1,10 @@
 (
   id: "opt",
   name: "Opt",
+  face_id: "opt",
   mana_cost: "{U}",
   types: ["Instant"],
-  // "Scry 1. Draw a card." Scry suspends for the player's decision and the draw runs on resume
+  // Scry suspends for the player's decision and the following draw runs on resume
   // (PendingResolution::resume_effect_index), so the drawn card reflects the scry.
   spell_effect: [
     Scry(count: 1),

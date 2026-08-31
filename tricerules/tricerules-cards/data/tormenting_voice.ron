@@ -2,6 +2,7 @@
 (
   id: "tormenting_voice",
   name: "Tormenting Voice",
+  face_id: "tormenting_voice",
   mana_cost: "{1}{R}",
   additional_costs: [DiscardCard],
   types: ["Sorcery"],

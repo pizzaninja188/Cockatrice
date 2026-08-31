@@ -11,8 +11,8 @@ fn earthbend_fixture() -> (GameEngine, u32, u32) {
 fn earthbend_fixture_count(count: u32) -> (GameEngine, u32, u32) {
     use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration};
     use tricerules_core::{AffectedScope, ContinuousEffect};
-    let fixture = r#"(id: "test", name: "Test", types: ["Creature"], power: 1, toughness: 1,
-            activated_abilities: [(text: "Earthbend.", costs: [], effect: [Earthbend(count: AMOUNT)])])"#.replace("AMOUNT", &count.to_string());
+    let fixture = r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 1,
+            activated_abilities: [(ability_id: "activated_01", presentation: Fallback, costs: [], effect: [Earthbend(count: AMOUNT)])])"#.replace("AMOUNT", &count.to_string());
     let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(&[&fixture], &[])
         .expect("Earthbend must be a reusable authored action");
     let mut engine = GameEngine::new(

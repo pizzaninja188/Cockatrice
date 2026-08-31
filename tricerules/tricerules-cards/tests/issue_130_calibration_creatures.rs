@@ -248,7 +248,6 @@ fn issue_130_cohort_has_exact_oracle_characteristics() {
             .unwrap_or_else(|| panic!("missing issue #130 card {}", expected.id));
         assert_eq!(definition.name, expected.name, "{}", expected.id);
         assert_eq!(registry.id_for_name(expected.name), Some(expected.id));
-        assert!(definition.partial.is_none(), "{} must be full", expected.id);
         let face = definition.primary_face();
         assert_eq!(
             face.mana_cost.to_string(),

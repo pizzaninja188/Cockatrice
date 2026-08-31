@@ -1,6 +1,7 @@
 (
   id: "captain_of_the_watch",
   name: "Captain of the Watch",
+  face_id: "captain_of_the_watch",
   mana_cost: "{4}{W}{W}",
   types: ["Creature", "Human", "Soldier"],
   power: 3,
@@ -8,21 +9,22 @@
   keywords: [Vigilance],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([3]),
       trigger: WhenSelfEntersBattlefield,
       effect: [CreateTokens(token: "soldier_w_1_1", count: 3)],
-      text: "When this creature enters, create three 1/1 white Soldier creature tokens.",
     ),
   ],
-  // "Other Soldier creatures you control get +1/+1 and have vigilance." CR 604/613.4 layer 7c + layer 6.
+  // Other controlled Soldiers receive a layer 7c +1/+1 modification and layer 6 vigilance (CR 604/613.4).
   static_abilities: [
-    AnthemPt(
+    (ability_id: "static_01", presentation: Fallback, definition: AnthemPt(
       filter: (controller: YouControl, subtype: "Soldier", exclude_self: true),
       delta_power: 1,
       delta_toughness: 1,
-    ),
-    AnthemKeyword(
+    )),
+    (ability_id: "static_02", presentation: Fallback, definition: AnthemKeyword(
       filter: (controller: YouControl, subtype: "Soldier", exclude_self: true),
       keyword: Vigilance,
-    ),
+    )),
   ],
 )

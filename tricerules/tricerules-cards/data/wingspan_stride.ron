@@ -1,15 +1,17 @@
 (
   id: "wingspan_stride",
   name: "Wingspan Stride",
+  face_id: "wingspan_stride",
   mana_cost: "{U}",
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
-  static_abilities: [AttachedModifier(delta_power: 1, delta_toughness: 1, keywords: [Flying])],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(delta_power: 1, delta_toughness: 1, keywords: [Flying]))],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([3]),
       costs: [Mana("{2}{U}")],
       effect: [ReturnToOwnersHand(subject: Source)],
-      text: "{2}{U}: Return this Aura to its owner's hand.",
     ),
   ],
 )

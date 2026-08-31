@@ -1,0 +1,9 @@
+# Authoring/checklist metadata only. Rules RON and the runtime registry do not load these notes.
+anti-venom,_horrifying_healer	Cast-conditioned ETB creature reanimation trigger is not implemented
+cackling_counterpart	Double-faced token copies and copy-with-modifications remain unsupported.
+firdoch_core	{4}: Firdoch Core becomes a 4/4 Shapeshifter artifact creature until end of turn is unsupported
+gifts_ungiven	1v1 opponent is the automatic target (no separate target step for multi-player)
+juggernaut	can't be blocked by Walls not enforced
+akki_lavarunner_tok-tok,_volcano_born	Tok-Tok's protection from red and damage-replacement ability are unsupported
+sulfuric_vortex	the lifegain-prevention clause (a CR 614 replacement effect) is not implemented
+wake_the_reflections	Double-faced token copies and copy-with-modifications remain unsupported.

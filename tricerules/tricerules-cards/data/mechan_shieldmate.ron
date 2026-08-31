@@ -3,17 +3,18 @@
 (
   id: "mechan_shieldmate",
   name: "Mechan Shieldmate",
+  face_id: "mechan_shieldmate",
   mana_cost: "{1}{U}",
   types: ["Artifact", "Creature", "Robot", "Soldier"],
   power: 3,
   toughness: 2,
   keywords: [Defender],
-  static_abilities: [ConditionalSelfModifier(
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
     condition: PermanentsEnteredThisTurn(
       controllers: Controller,
       filter: (permanent_type: Some(Artifact)),
       min: Some(1),
     ),
     can_attack_as_though_without_defender: true,
-  )],
+  ))],
 )

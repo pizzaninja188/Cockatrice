@@ -22,7 +22,6 @@ fn pegasus_courser_has_complete_oracle_behavior() {
     assert_eq!(face.types, ["Creature", "Pegasus"]);
     assert_eq!((face.power, face.toughness), (Some(1), Some(3)));
     assert_eq!(face.keywords, [Keyword::Flying]);
-    assert!(definition.partial.is_none());
     assert_eq!(face.triggered_abilities.len(), 1);
     assert_eq!(
         face.triggered_abilities[0].trigger,
@@ -55,7 +54,6 @@ fn legion_guildmage_has_complete_oracle_behavior() {
     assert_eq!(face.mana_cost.to_string(), "{R}{W}");
     assert_eq!(face.types, ["Creature", "Human", "Wizard"]);
     assert_eq!((face.power, face.toughness), (Some(2), Some(2)));
-    assert!(definition.partial.is_none());
     assert_eq!(face.activated_abilities.len(), 2);
 
     assert_tap_and_mana(&face.activated_abilities[0].costs, "{5}{R}");

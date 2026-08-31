@@ -2,18 +2,20 @@
 (
   id: "goblin_wizard_r_1_1_prowess",
   name: "Goblin Wizard",
+  face_id: "goblin_wizard",
   types: ["Creature", "Goblin", "Wizard"],
   colors: [Red],
   power: 1,
   toughness: 1,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WheneverPlayerCastsSpell(
         caster: Controller,
         filter: (card_type: Some(Noncreature)),
       ),
       effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
-      text: "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)",
     ),
   ],
 )

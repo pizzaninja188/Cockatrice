@@ -1,8 +1,9 @@
 (
   id: "beloved_chaplain",
   name: "Beloved Chaplain",
+  face_id: "beloved_chaplain",
   mana_cost: "{1}{W}",
-  // Oracle checked 2026-08-18: Protection from creatures.
+  // CR 702.16 protection.
   types: ["Creature", "Human", "Cleric"],
   power: 1,
   toughness: 1,

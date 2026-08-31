@@ -2,7 +2,9 @@
 (
   id: "brilliant_plan",
   name: "Brilliant Plan",
+  face_id: "brilliant_plan",
   mana_cost: "{4}{U}",
   types: ["Sorcery"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [Draw(count: 3)],
 )

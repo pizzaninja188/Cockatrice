@@ -2,12 +2,14 @@
 (
   id: "benders_waterskin",
   name: "Bender's Waterskin",
+  face_id: "bender_s_waterskin",
   mana_cost: "{3}",
   types: ["Artifact"],
-  static_abilities: [UntapsDuringOtherPlayersUntapSteps],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: UntapsDuringOtherPlayersUntapSteps)],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
     costs: [Tap],
     effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
-    text: "{T}: Add one mana of any color.",
   )],
 )

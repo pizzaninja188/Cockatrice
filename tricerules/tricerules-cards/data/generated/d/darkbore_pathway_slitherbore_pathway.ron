@@ -6,15 +6,17 @@
   faces: [
     (
       name: "Darkbore Pathway",
+      face_id: "darkbore_pathway",
       mana_cost: "",
       types: ["Land"],
-      activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(b: 1)])], text: "{T}: Add {B}.")],
+      activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(b: 1)])])],
     ),
     (
       name: "Slitherbore Pathway",
+      face_id: "slitherbore_pathway",
       mana_cost: "",
       types: ["Land"],
-      activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1)])], text: "{T}: Add {G}.")],
+      activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(g: 1)])])],
     ),
   ],
 )

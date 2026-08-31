@@ -2,14 +2,16 @@
 (
   id: "shock_brigade",
   name: "Shock Brigade",
+  face_id: "shock_brigade",
   mana_cost: "{1}{R}",
   types: ["Creature", "Goblin", "Soldier"],
   power: 1,
   toughness: 3,
   keywords: [Menace],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
     effect: [CreateAttackingTokens(token: "warrior_r_1_1", count: 1, sacrifice_timing: Some(NextEndStep))],
-    text: "Mobilize 1",
   )],
 )

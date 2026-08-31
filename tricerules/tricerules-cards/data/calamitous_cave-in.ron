@@ -1,7 +1,7 @@
 // Oracle and rulings fetched 2026-08-27. CR 608.2h: one cross-zone quantity for
 // the entire simultaneous damage instruction.
 (
-  id: "calamitous_cave-in", name: "Calamitous Cave-In", mana_cost: "{3}{R}", types: ["Sorcery"],
+  id: "calamitous_cave-in", name: "Calamitous Cave-In", face_id: "calamitous_cave_in", mana_cost: "{3}{R}", types: ["Sorcery"],
   spell_effect: [DamageAll(amount: Count(Affine(terms: [
     (coefficient: 1, quantity: BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Cave"]))),
     (coefficient: 1, quantity: GraveyardCards(owners: Controller, filter: Some((subtype: Some("Cave"))))),

@@ -2,6 +2,7 @@
 (
   id: "uncharted_voyage",
   name: "Uncharted Voyage",
+  face_id: "uncharted_voyage",
   mana_cost: "{3}{U}",
   types: ["Instant"],
   spell_effect: [

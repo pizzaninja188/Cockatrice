@@ -2,6 +2,7 @@
 (
   id: "raging_kavu",
   name: "Raging Kavu",
+  face_id: "raging_kavu",
   mana_cost: "{1}{R}{G}",
   types: ["Creature", "Kavu"],
   power: 3,

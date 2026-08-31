@@ -1,9 +1,10 @@
 (
   id: "swiftwater_cliffs",
   name: "Swiftwater Cliffs",
+  face_id: "swiftwater_cliffs",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(u: 1), (r: 1)])], text: "{T}: Add {U} or {R}.")],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "When Swiftwater Cliffs enters, you gain 1 life.")],
-  static_abilities: [EntersTapped(affected: Self_)],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([3]), costs: [Tap], effect: [ProduceMana(options: [(u: 1), (r: 1)])], )],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], )],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Self_))],
 )

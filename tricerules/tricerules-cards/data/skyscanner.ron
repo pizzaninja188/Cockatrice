@@ -1,6 +1,7 @@
 (
   id: "skyscanner",
   name: "Skyscanner",
+  face_id: "skyscanner",
   mana_cost: "{3}",
   types: ["Artifact", "Creature", "Thopter"],
   power: 1,
@@ -8,9 +9,10 @@
   keywords: [Flying],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
       effect: [Draw(count: 1)],
-      text: "When this creature enters, draw a card.",
     ),
   ],
 )

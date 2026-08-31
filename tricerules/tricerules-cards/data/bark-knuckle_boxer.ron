@@ -2,13 +2,15 @@
 (
   id: "bark-knuckle_boxer",
   name: "Bark-Knuckle Boxer",
+  face_id: "bark_knuckle_boxer",
   mana_cost: "{1}{G}",
   types: ["Creature", "Raccoon", "Berserker"],
   power: 3,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverPlayerExpendsMana(amount: 4),
     effect: [GrantKeywords(subject: Source, keywords: [Indestructible])],
-    text: "Whenever you expend 4, this creature gains indestructible until end of turn.",
   )],
 )

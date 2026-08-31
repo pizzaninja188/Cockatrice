@@ -2,18 +2,21 @@
 (
   id: "prosperity_tycoon",
   name: "Prosperity Tycoon",
+  face_id: "prosperity_tycoon",
   mana_cost: "{3}{W}",
   types: ["Creature", "Human", "Noble"],
   power: 4,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [CreateTokens(token: "mercenary_r_1_1", count: 1)],
-    text: "When this creature enters, create a 1/1 red Mercenary creature token with \"{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.\"",
   )],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
     costs: [Mana("{2}"), SacrificePermanent(filter: (kind: AnyPermanent, controller: You, token: Some(true)))],
     effect: [GrantKeywords(subject: Source, keywords: [Indestructible]), Tap(subject: Source)],
-    text: "{2}, Sacrifice a token: This creature gains indestructible until end of turn. Tap it.",
   )],
 )

@@ -3,6 +3,7 @@
 (
   id: "dark_endurance",
   name: "Dark Endurance",
+  face_id: "dark_endurance",
   mana_cost: "{1}{B}",
   cost_modifiers: [TargetMatchGenericReduction(
     amount: 1,

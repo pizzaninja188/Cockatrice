@@ -5,25 +5,29 @@
   faces: [
     (
       name: "Ticket Booth",
+      face_id: "ticket_booth",
       mana_cost: "{2}{R}",
       types: ["Enchantment", "Room"],
       triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: OracleLines([1]),
         trigger: WhenThisDoorUnlocked,
         effect: [ManifestDread],
-        text: "When you unlock this door, manifest dread.",
       )],
     ),
     (
       name: "Tunnel of Hate",
+      face_id: "tunnel_of_hate",
       mana_cost: "{4}{R}{R}",
       types: ["Enchantment", "Room"],
       triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: OracleLines([1]),
         trigger: WheneverControllerAttacks(min_attackers: Some(1), max_attackers: None),
         effect: [GrantKeywords(
           subject: Chosen((kind: Creature, combat_role: AttackingOrBlocking)),
           keywords: [DoubleStrike],
         )],
-        text: "Whenever you attack, target attacking creature gains double strike until end of turn.",
       )],
     ),
   ],

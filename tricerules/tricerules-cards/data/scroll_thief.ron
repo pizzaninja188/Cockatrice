@@ -1,15 +1,17 @@
 (
   id: "scroll_thief",
   name: "Scroll Thief",
+  face_id: "scroll_thief",
   mana_cost: "{2}{U}",
   types: ["Creature", "Merfolk", "Rogue"],
   power: 1,
   toughness: 3,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WheneverSelfDealsCombatDamageToPlayer,
       effect: [Draw(count: 1)],
-      text: "Whenever this creature deals combat damage to a player, draw a card.",
     ),
   ],
 )

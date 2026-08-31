@@ -1,6 +1,7 @@
 (
   id: "cloudkin_seer",
   name: "Cloudkin Seer",
+  face_id: "cloudkin_seer",
   mana_cost: "{2}{U}",
   types: ["Creature", "Elemental", "Wizard"],
   power: 2,
@@ -8,9 +9,10 @@
   keywords: [Flying],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
       effect: [Draw(count: 1)],
-      text: "When this creature enters, draw a card.",
     ),
   ],
 )

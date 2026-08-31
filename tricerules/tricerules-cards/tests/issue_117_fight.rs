@@ -23,7 +23,6 @@ fn issue_117_prey_upon_uses_two_distinct_chosen_fighters() {
     let definition = CardRegistry::global()
         .get("prey_upon")
         .expect("Prey Upon is registered");
-    assert!(definition.partial.is_none());
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{G}");
     assert_eq!(face.types, ["Sorcery"]);
@@ -44,7 +43,6 @@ fn issue_117_bushwhack_has_search_and_two_target_fight_modes() {
     let definition = CardRegistry::global()
         .get("bushwhack")
         .expect("Bushwhack is registered");
-    assert!(definition.partial.is_none());
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{G}");
     assert_eq!(face.types, ["Sorcery"]);

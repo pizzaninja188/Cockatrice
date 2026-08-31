@@ -2,6 +2,7 @@
 (
   id: "plumeveil",
   name: "Plumeveil",
+  face_id: "plumeveil",
   mana_cost: "{W/U}{W/U}{W/U}",
   types: ["Creature", "Elemental"],
   power: 4,

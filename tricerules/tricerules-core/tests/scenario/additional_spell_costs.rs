@@ -328,9 +328,8 @@ fn sacrifice_dies_trigger_is_stacked_above_the_new_spell_with_lki() {
     assert_eq!(e.state.stack.len(), 2);
     let top = e.state.stack.last().unwrap();
     assert_eq!(top.source_permanent_id, Some(elk));
-    assert!(top
-        .ability_text
-        .as_deref()
-        .unwrap_or_default()
-        .contains("gain 2 life"));
+    assert_eq!(
+        top.ability_text.as_deref(),
+        Some("Highland Game — triggered ability (triggered_01)")
+    );
 }

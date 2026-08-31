@@ -12,7 +12,7 @@ fn granted_ability(card_id: &str) -> &tricerules_cards::ActivatedAbilityDef {
         .primary_face()
         .static_abilities
         .iter()
-        .find_map(|ability| match ability {
+        .find_map(|ability| match &ability.definition {
             StaticAbilityDef::AttachedModifier {
                 condition: None,
                 activated_abilities,
@@ -45,7 +45,7 @@ fn gift_of_paradise_grants_the_exact_land_mana_ability() {
         }]
     );
     assert!(face.triggered_abilities.iter().any(|ability| {
-        ability.text == "When Gift of Paradise enters, you gain 3 life."
+        ability.ability_id.as_str() == "triggered_01"
             && ability.effect
                 == [SpellEffectKind::GainLife {
                     amount: Amount::Fixed(3),
@@ -82,7 +82,7 @@ fn gift_of_paradise_grants_the_exact_land_mana_ability() {
             },
         ]
     );
-    assert_eq!(ability.text, "{T}: Add two mana of any one color.");
+    assert_eq!(ability.ability_id.as_str(), "activated_01");
 }
 
 #[test]
@@ -107,8 +107,5 @@ fn hermetic_study_grants_a_targeted_damage_ability() {
             },
         }]
     );
-    assert_eq!(
-        ability.text,
-        "{T}: This creature deals 1 damage to any target."
-    );
+    assert_eq!(ability.ability_id.as_str(), "activated_01");
 }

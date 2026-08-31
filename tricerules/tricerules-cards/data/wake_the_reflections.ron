@@ -2,8 +2,8 @@
 (
   id: "wake_the_reflections",
   name: "Wake the Reflections",
+  face_id: "wake_the_reflections",
   mana_cost: "{W}",
   types: ["Sorcery"],
-  partial: "Double-faced token copies and copy-with-modifications remain unsupported.",
   spell_effect: [Populate],
 )

@@ -1,10 +1,13 @@
 (
   id: "evolving_wilds",
   name: "Evolving Wilds",
+  face_id: "evolving_wilds",
   mana_cost: "",
   types: ["Land"],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
       costs: [Tap, SacrificeSelf],
       effect: [
         SearchLibrary(
@@ -14,7 +17,6 @@
           reveal: false,
         ),
       ],
-      text: "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
     ),
   ],
 )

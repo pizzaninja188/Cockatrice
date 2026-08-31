@@ -1,6 +1,7 @@
 (
   id: "unending_whisper",
   name: "Unending Whisper",
+  face_id: "unending_whisper",
   mana_cost: "{U}",
   harmonize_cost: Some("{5}{U}"),
   types: ["Sorcery"],

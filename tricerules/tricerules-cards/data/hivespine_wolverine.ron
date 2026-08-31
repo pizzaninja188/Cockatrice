@@ -2,17 +2,19 @@
 (
   id: "hivespine_wolverine",
   name: "Hivespine Wolverine",
+  face_id: "hivespine_wolverine",
   mana_cost: "{3}{G}{G}",
   types: ["Creature", "Elemental", "Wolverine"],
   power: 5,
   toughness: 4,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     modal: Some((min_modes: 1, max_modes: 1, modes: [
-      (label: "Put a +1/+1 counter on target creature you control", effects: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature, controller: You)))]),
-      (label: "Fight target creature token", effects: [Fight(first: Source, second: Chosen((kind: Creature, token: Some(true))))]),
-      (label: "Destroy target artifact or enchantment", effects: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Enchantment])))]),
+      (mode_id: "mode_01", presentation: OracleLines([2]), effects: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature, controller: You)))]),
+      (mode_id: "mode_02", presentation: OracleLines([3]), effects: [Fight(first: Source, second: Chosen((kind: Creature, token: Some(true))))]),
+      (mode_id: "mode_03", presentation: OracleLines([4]), effects: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Enchantment])))]),
     ])),
-    text: "When this creature enters, choose one — Put a +1/+1 counter on target creature you control; this creature fights target creature token; or destroy target artifact or enchantment.",
   )],
 )

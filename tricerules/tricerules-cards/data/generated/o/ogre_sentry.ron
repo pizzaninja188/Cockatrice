@@ -2,6 +2,7 @@
 (
   id: "ogre_sentry",
   name: "Ogre Sentry",
+  face_id: "ogre_sentry",
   mana_cost: "{1}{R}",
   types: ["Creature", "Ogre", "Warrior"],
   power: 3,

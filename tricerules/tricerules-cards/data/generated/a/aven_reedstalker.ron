@@ -2,6 +2,7 @@
 (
   id: "aven_reedstalker",
   name: "Aven Reedstalker",
+  face_id: "aven_reedstalker",
   mana_cost: "{3}{U}",
   types: ["Creature", "Bird", "Warrior"],
   power: 2,

@@ -1,6 +1,7 @@
 (
   id: "ray_of_command",
   name: "Ray of Command",
+  face_id: "ray_of_command",
   mana_cost: "{3}{U}",
   types: ["Instant"],
   spell_effect: [
@@ -13,9 +14,10 @@
     CreateDelayedTrigger(
       subject: Chosen((kind: Creature)),
       ability: (
+        ability_id: "triggered_01",
+        presentation: Fallback,
         trigger: WhenControllerLosesControlOf,
         effect: [Tap(subject: TriggerObject)],
-        text: "When you lose control of the creature, tap it.",
       ),
     ),
   ],

@@ -1,19 +1,20 @@
-// Oracle (M19): "This creature gets +2/+0 as long as you control a blue creature."
+// The battlefield condition is reevaluated continuously (CR 611.3 and 613.4c).
 (
   id: "gearsmith_guardian",
   name: "Gearsmith Guardian",
+  face_id: "gearsmith_guardian",
   mana_cost: "{5}",
   types: ["Artifact", "Creature", "Construct"],
   power: 3,
   toughness: 5,
   static_abilities: [
-    ConditionalSelfModifier(
+    (ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
       condition: BattlefieldAggregate(
         filter: (controllers: Controller, card_type: Some(Creature), color: Some(Blue)),
         aggregate: Count,
         min: Some(1),
       ),
       delta_power: 2,
-    ),
+    )),
   ],
 )

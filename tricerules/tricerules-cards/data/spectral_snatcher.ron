@@ -3,16 +3,20 @@
 (
   id: "spectral_snatcher",
   name: "Spectral Snatcher",
+  face_id: "spectral_snatcher",
   mana_cost: "{4}{B}{B}",
   types: ["Creature", "Spirit"],
   power: 6,
   toughness: 5,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
     effect: [CounterTriggeringStackObjectUnlessPays(cost: DiscardCard(filter: None))],
-    text: "Ward—Discard a card",
   )],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
     source_zone: Hand,
     costs: [Mana("{2}"), DiscardSelf],
     effect: [SearchLibrary(
@@ -21,6 +25,5 @@
       shuffle: true,
       reveal: true,
     )],
-    text: "Swampcycling {2} ({2}, Discard this card: Search your library for a Swamp card, reveal it, put it into your hand, then shuffle.)",
   )],
 )

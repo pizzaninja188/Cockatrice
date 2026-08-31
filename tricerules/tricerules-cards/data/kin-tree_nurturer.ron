@@ -1,6 +1,7 @@
 (
   id: "kin-tree_nurturer",
   name: "Kin-Tree Nurturer",
+  face_id: "kin_tree_nurturer",
   mana_cost: "{2}{B}",
   types: ["Creature", "Human", "Druid"],
   power: 2,
@@ -8,26 +9,27 @@
   keywords: [Lifelink],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
       effect: [ChooseResolutionBranch(
         chooser: SourceController,
         optional: false,
         branches: [
           (
-            label: "Put a +1/+1 counter on Kin-Tree Nurturer",
+            branch_id: "put_a_1_1_counter_on_kin_tree_nurturer", presentation: Fallback,
             cost: None,
             requirement: EffectsApplicable,
             effects: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
           ),
           (
-            label: "Create a 1/1 white Spirit creature token",
+            branch_id: "create_a_1_1_white_spirit_creature_token", presentation: Fallback,
             cost: None,
             requirement: Always,
             effects: [CreateTokens(token: "spirit_w_1_1", count: 1, who: SourceController)],
           ),
         ],
       )],
-      text: "When this creature enters, endure 1. (Put a +1/+1 counter on it or create a 1/1 white Spirit creature token.)",
     ),
   ],
 )

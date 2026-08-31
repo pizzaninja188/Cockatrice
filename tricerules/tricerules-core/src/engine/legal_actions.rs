@@ -96,7 +96,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 if !eng.state.objects.contains_key(&poid) {
                     continue;
                 }
-                for (ai, ability, _) in eng.effective_activated_abilities(poid) {
+                for (ai, ability, _, _) in eng.effective_activated_abilities(poid) {
                     let key = (poid as u64) << 32 | ai as u64;
                     mana_payment_by_ability.insert(
                         key,
@@ -359,7 +359,11 @@ fn activated_ability_info(
         .collect::<Vec<_>>()
         .join(", ");
     rv1::AbilityInfo {
-        text: ability.text.clone(),
+        text: ability.fallback_text(
+            &eng.effective_face(source_id)
+                .map(|face| face.name.clone())
+                .unwrap_or_else(|| "Unknown card".into()),
+        ),
         mana_cost,
         mana_produced,
         cost_label,
@@ -828,19 +832,19 @@ fn legal_spell_cost_choices(
                 .iter()
                 .enumerate()
                 .map(|(option_index, option)| match option {
-                    CastCostOptionDef::Mana { label, cost } => rv1::LegalCastCostOption {
+                    CastCostOptionDef::Mana { cost, .. } => rv1::LegalCastCostOption {
                         option_index: option_index as u32,
-                        label: label.clone(),
+                        label: option.fallback_label(),
                         kind: rv1::CastCostOptionKind::Mana as i32,
                         additional_mana_cost: cost.to_string(),
                         selectable: true,
                         ..Default::default()
                     },
-                    CastCostOptionDef::Blight { label, .. } => {
+                    CastCostOptionDef::Blight { .. } => {
                         let candidates = eng.blight_candidates(player);
                         rv1::LegalCastCostOption {
                             option_index: option_index as u32,
-                            label: label.clone(),
+                            label: option.fallback_label(),
                             kind: rv1::CastCostOptionKind::Blight as i32,
                             selectable: !candidates.is_empty(),
                             valid_permanent_generations: candidates
@@ -858,9 +862,9 @@ fn legal_spell_cost_choices(
                         }
                     }
                     CastCostOptionDef::Behold {
-                        label,
                         hand_filter,
                         permanent_filter,
+                        ..
                     } => {
                         let valid_hand_indices = eng.state.players[player_idx]
                             .hand
@@ -906,7 +910,7 @@ fn legal_spell_cost_choices(
                             !valid_hand_indices.is_empty() || !valid_permanent_ids.is_empty();
                         rv1::LegalCastCostOption {
                             option_index: option_index as u32,
-                            label: label.clone(),
+                            label: option.fallback_label(),
                             kind: rv1::CastCostOptionKind::Behold as i32,
                             additional_mana_cost: String::new(),
                             valid_hand_indices,
@@ -923,7 +927,7 @@ fn legal_spell_cost_choices(
             }
             rv1::LegalCastCostGroup {
                 group_index: group_index as u32,
-                prompt: group.prompt.clone(),
+                prompt: group.fallback_prompt(),
                 min: group.min,
                 max: group.max,
                 options,
@@ -1244,7 +1248,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                                 !needs_target || spell_targets_have_candidate(&targets);
                             rv1::LegalSpellMode {
                                 mode_index: mode_index as u32,
-                                label: mode.label.clone(),
+                                label: mode_fallback(&face.name, &mode.mode_id),
                                 selectable,
                                 needs_target,
                                 targets: Some(targets),
@@ -1386,7 +1390,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                                 !needs_target || spell_targets_have_candidate(&targets);
                             rv1::LegalSpellMode {
                                 mode_index: mode_index as u32,
-                                label: mode.label.clone(),
+                                label: mode_fallback(&face.name, &mode.mode_id),
                                 selectable,
                                 needs_target,
                                 targets: Some(targets),
@@ -1504,7 +1508,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                         );
                         rv1::LegalSpellMode {
                             mode_index: mode_index as u32,
-                            label: mode.label.clone(),
+                            label: mode_fallback(&face.name, &mode.mode_id),
                             selectable: !needs_target || spell_targets_have_candidate(&targets),
                             needs_target,
                             targets: Some(targets),

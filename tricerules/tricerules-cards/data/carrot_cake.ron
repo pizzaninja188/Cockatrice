@@ -2,23 +2,27 @@
 (
   id: "carrot_cake",
   name: "Carrot Cake",
+  face_id: "carrot_cake",
   mana_cost: "{1}{W}",
   types: ["Artifact", "Food"],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
       effect: [CreateTokens(token: "rabbit_w_1_1", count: 1), Scry(count: 1)],
-      text: "When this artifact enters, create a 1/1 white Rabbit creature token and scry 1.",
     ),
     (
+      ability_id: "triggered_02",
+      presentation: Fallback,
       trigger: WheneverPlayerSacrificesPermanent(player: Controller, filter: (source_only: true)),
       effect: [CreateTokens(token: "rabbit_w_1_1", count: 1), Scry(count: 1)],
-      text: "When you sacrifice this artifact, create a 1/1 white Rabbit creature token and scry 1.",
     ),
   ],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
     costs: [Mana("{2}"), Tap, SacrificeSelf],
     effect: [GainLife(amount: 3)],
-    text: "{2}, {T}, Sacrifice this artifact: You gain 3 life.",
   )],
 )

@@ -2,6 +2,7 @@
 (
   id: "captains_call",
   name: "Captain's Call",
+  face_id: "captain_s_call",
   mana_cost: "{3}{W}",
   types: ["Sorcery"],
   spell_effect: [CreateTokens(token: "soldier_w_1_1", count: 3)],

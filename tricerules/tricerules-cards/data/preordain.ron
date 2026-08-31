@@ -1,9 +1,10 @@
 (
   id: "preordain",
   name: "Preordain",
+  face_id: "preordain",
   mana_cost: "{U}",
   types: ["Sorcery"],
-  // "Scry 2, then draw a card." Keeping both scried cards on top prompts a second, ordering
+  // Keeping both cards on top during the two-card scry prompts a second, ordering
   // choice (CR 701.18a) before the draw resumes.
   spell_effect: [
     Scry(count: 2),

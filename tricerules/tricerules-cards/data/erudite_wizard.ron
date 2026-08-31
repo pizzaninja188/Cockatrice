@@ -3,13 +3,15 @@
 (
   id: "erudite_wizard",
   name: "Erudite Wizard",
+  face_id: "erudite_wizard",
   mana_cost: "{2}{U}",
   types: ["Creature", "Human", "Wizard"],
   power: 2,
   toughness: 3,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WheneverPlayerDrawsNthCard(drawer: Controller, ordinal: 2),
     effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
-    text: "Whenever you draw your second card each turn, put a +1/+1 counter on this creature.",
   )],
 )

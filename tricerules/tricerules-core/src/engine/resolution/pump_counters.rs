@@ -242,11 +242,17 @@ pub(super) fn grant_keyword_choice(
     } else {
         let branches = choices
             .into_iter()
-            .map(|keyword| ResolutionBranchDef {
-                label: keyword.as_str().to_string(),
-                cost: ResolutionCost::None,
-                requirement: Default::default(),
-                effects: Vec::new(),
+            .map(|keyword| {
+                let label = keyword.as_str().to_string();
+                ResolutionBranchDef {
+                    branch_id: tricerules_cards::ChoiceId::new(tricerules_cards::slugify(&label))
+                        .expect("keyword names produce stable choice ids"),
+                    presentation: tricerules_cards::AbilityPresentation::Fallback,
+                    runtime_fallback: Some(label),
+                    cost: ResolutionCost::None,
+                    requirement: Default::default(),
+                    effects: Vec::new(),
+                }
             })
             .collect();
         super::choices::park_resolution_branches(cx, false, branches)
@@ -281,11 +287,19 @@ pub(super) fn grant_protection(
             } else {
                 let branches = options
                     .into_iter()
-                    .map(|option| ResolutionBranchDef {
-                        label: option.choice_label().to_string(),
-                        cost: ResolutionCost::None,
-                        requirement: Default::default(),
-                        effects: Vec::new(),
+                    .map(|option| {
+                        let label = option.choice_label().to_string();
+                        ResolutionBranchDef {
+                            branch_id: tricerules_cards::ChoiceId::new(tricerules_cards::slugify(
+                                &label,
+                            ))
+                            .expect("protection qualities produce stable choice ids"),
+                            presentation: tricerules_cards::AbilityPresentation::Fallback,
+                            runtime_fallback: Some(label),
+                            cost: ResolutionCost::None,
+                            requirement: Default::default(),
+                            effects: Vec::new(),
+                        }
                     })
                     .collect();
                 return super::choices::park_resolution_branches(cx, false, branches);
@@ -384,7 +398,7 @@ pub(super) fn grant_triggered_ability(
     };
 
     let target_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
-    let ability_text = ability.text.clone();
+    let ability_text = ability.fallback_text(cx.spell_label);
     cx.engine
         .state
         .add_triggered_ability_grant(ContinuousEffect {
@@ -460,20 +474,31 @@ pub(super) fn earthbend(
         tricerules_cards::primitives::CounterKind::PlusOnePlusOne,
         count,
     );
-    super::misc::create_delayed_trigger(cx, SpellEffectKind::CreateDelayedTrigger {
-        subject: EffectSubject::Chosen(Box::new(filter.clone())),
-        ability: Box::new(TriggeredAbilityDef {
-            trigger: TriggerCondition::WhenWatchedObjectDiesOrIsExiled,
-            effect: vec![SpellEffectKind::ReturnTriggeredCard {
-                reference: TriggeredCardReference::TriggerObject,
-                from: vec![EventZone::Graveyard, EventZone::Exile],
-                tapped: true, controller: ReturnController::AbilityController, entry_counters: vec![],
-            }],
-            modal: None, targeting: None,
-            text: "When that land dies or is put into exile, return it to the battlefield tapped under your control.".into(),
-            may: false, intervening_if: None, max_triggers_per_turn: None, triggers_only_once: false,
-        }),
-    })?;
+    super::misc::create_delayed_trigger(
+        cx,
+        SpellEffectKind::CreateDelayedTrigger {
+            subject: EffectSubject::Chosen(Box::new(filter.clone())),
+            ability: Box::new(TriggeredAbilityDef {
+                ability_id: tricerules_cards::AbilityId::new("earthbend_return")
+                    .expect("intrinsic ability id"),
+                presentation: tricerules_cards::AbilityPresentation::Fallback,
+                trigger: TriggerCondition::WhenWatchedObjectDiesOrIsExiled,
+                effect: vec![SpellEffectKind::ReturnTriggeredCard {
+                    reference: TriggeredCardReference::TriggerObject,
+                    from: vec![EventZone::Graveyard, EventZone::Exile],
+                    tapped: true,
+                    controller: ReturnController::AbilityController,
+                    entry_counters: vec![],
+                }],
+                modal: None,
+                targeting: None,
+                may: false,
+                intervening_if: None,
+                max_triggers_per_turn: None,
+                triggers_only_once: false,
+            }),
+        },
+    )?;
     cx.events.push(ev_log(format!(
         "{} earthbends {oid} for {count}.",
         cx.spell_label

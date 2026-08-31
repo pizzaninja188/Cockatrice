@@ -4,21 +4,22 @@
 // CR 120.3a: damage to a player, so a prevention shield (CR 615.1) applies — deliberately not
 // modelled as life loss.
 //
-// Partial: the second ability ("If a player would gain life, that player gains no life instead")
-// is a CR 614 replacement effect with no engine primitive. Consequence while it is unimplemented:
+// The unimplemented CR 614 life-gain replacement is tracked in authoring/partial-cards.tsv.
+// Consequence while it is unimplemented:
 // life gain still resolves normally and lifegain payoffs (Ajani's Pridemate, Soul Warden) still
 // trigger with a Vortex on the battlefield.
 (
   id: "sulfuric_vortex",
   name: "Sulfuric Vortex",
+  face_id: "sulfuric_vortex",
   mana_cost: "{1}{R}{R}",
   types: ["Enchantment"],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: AtBeginningOfUpkeep(player: AnyPlayer),
       effect: [DamagePlayer(amount: 2, who: AffectedPlayer)],
-      text: "At the beginning of each player's upkeep, this enchantment deals 2 damage to that player.",
     ),
   ],
-  partial: "the lifegain-prevention clause (a CR 614 replacement effect) is not implemented",
 )

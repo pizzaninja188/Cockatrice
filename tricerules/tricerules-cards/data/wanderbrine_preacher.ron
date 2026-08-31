@@ -2,13 +2,15 @@
 (
   id: "wanderbrine_preacher",
   name: "Wanderbrine Preacher",
+  face_id: "wanderbrine_preacher",
   mana_cost: "{1}{W}",
   types: ["Creature", "Merfolk", "Cleric"],
   power: 2,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WheneverSelfBecomesTapped,
     effect: [GainLife(who: Controller, amount: 2)],
-    text: "Whenever this creature becomes tapped, you gain 2 life.",
   )],
 )

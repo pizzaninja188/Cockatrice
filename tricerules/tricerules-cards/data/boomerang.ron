@@ -1,6 +1,7 @@
 (
   id: "boomerang",
   name: "Boomerang",
+  face_id: "boomerang",
   mana_cost: "{U}{U}",
   types: ["Instant"],
   spell_effect: [ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent)))],

@@ -326,8 +326,11 @@ mod tests {
             engine.state.players.push(PlayerState::new(30, 20));
             let source = prohibition_source(&mut engine, 20);
             let mut values = engine.copiable_values_for(source).unwrap();
-            values.face.static_abilities =
-                vec![StaticAbilityDef::ProhibitLifeGain { players: scope }];
+            values.face.static_abilities = vec![tricerules_cards::IdentifiedAbility::fallback(
+                "static_01",
+                StaticAbilityDef::ProhibitLifeGain { players: scope },
+            )
+            .unwrap()];
             engine
                 .state
                 .objects

@@ -1,12 +1,15 @@
 (
   id: "keldon_raider",
   name: "Keldon Raider",
+  face_id: "keldon_raider",
   mana_cost: "{2}{R}{R}",
   types: ["Creature", "Human", "Warrior"],
   power: 4,
   toughness: 3,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [DrawDiscard(
         draw_count: 1,
@@ -14,7 +17,6 @@
         order: DiscardThenDraw,
         optional: true,
       )],
-      text: "When this creature enters, you may discard a card. If you do, draw a card.",
     ),
   ],
 )

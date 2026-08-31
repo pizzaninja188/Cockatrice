@@ -1,6 +1,7 @@
 (
   id: "bladebrand",
   name: "Bladebrand",
+  face_id: "bladebrand",
   mana_cost: "{1}{B}",
   types: ["Instant"],
   spell_effect: [

@@ -1,13 +1,15 @@
 (
   id: "jayemdae_tome",
   name: "Jayemdae Tome",
+  face_id: "jayemdae_tome",
   mana_cost: "{4}",
   types: ["Artifact", "Book"],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
       costs: [Mana("{4}"), Tap],
       effect: [Draw(count: 1)],
-      text: "{4}, {T}: Draw a card.",
     ),
   ],
 )

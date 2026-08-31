@@ -188,11 +188,6 @@ fn issue_163_cohort_has_exact_oracle_characteristics() {
             .unwrap_or_else(|| panic!("missing issue #163 card {}", expected.id));
         assert_eq!(definition.name, expected.name, "{}", expected.id);
         assert_eq!(registry.id_for_name(expected.name), Some(expected.id));
-        assert!(
-            definition.partial.is_none(),
-            "{} must be complete",
-            expected.id
-        );
         let face = definition.primary_face();
         assert_eq!(
             face.mana_cost.to_string(),
@@ -339,15 +334,16 @@ fn issue_163_uses_generic_typecycling_condition_and_ordinal_shapes() {
         .get("cloudsculpt_technician")
         .unwrap()
         .primary_face();
+    let [cloudsculpt_modifier] = cloudsculpt.static_abilities.as_slice() else {
+        panic!("expected one static ability");
+    };
     assert!(matches!(
-        cloudsculpt.static_abilities.as_slice(),
-        [
-            tricerules_cards::primitives::StaticAbilityDef::ConditionalSelfModifier {
-                condition: GameCondition::BattlefieldAggregate { min: Some(1), .. },
-                delta_power: 1,
-                ..
-            }
-        ]
+        &cloudsculpt_modifier.definition,
+        tricerules_cards::primitives::StaticAbilityDef::ConditionalSelfModifier {
+            condition: GameCondition::BattlefieldAggregate { min: Some(1), .. },
+            delta_power: 1,
+            ..
+        }
     ));
 
     let council = registry.get("mistmeadow_council").unwrap().primary_face();

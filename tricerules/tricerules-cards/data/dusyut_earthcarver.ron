@@ -1,6 +1,7 @@
 (
   id: "dusyut_earthcarver",
   name: "Dusyut Earthcarver",
+  face_id: "dusyut_earthcarver",
   mana_cost: "{5}{G}",
   types: ["Creature", "Elephant", "Druid"],
   power: 4,
@@ -8,26 +9,27 @@
   keywords: [Reach],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
       effect: [ChooseResolutionBranch(
         chooser: SourceController,
         optional: false,
         branches: [
           (
-            label: "Put three +1/+1 counters on Dusyut Earthcarver",
+            branch_id: "put_three_1_1_counters_on_dusyut_earthcarver", presentation: Fallback,
             cost: None,
             requirement: EffectsApplicable,
             effects: [PutCounters(counter: PlusOnePlusOne, count: 3, subject: Source)],
           ),
           (
-            label: "Create a 3/3 white Spirit creature token",
+            branch_id: "create_a_3_3_white_spirit_creature_token", presentation: Fallback,
             cost: None,
             requirement: Always,
             effects: [CreateTokens(token: "spirit_w_3_3", count: 1, who: SourceController)],
           ),
         ],
       )],
-      text: "When this creature enters, endure 3. (Put three +1/+1 counters on it or create a 3/3 white Spirit creature token.)",
     ),
   ],
 )

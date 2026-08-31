@@ -1,8 +1,9 @@
 (
   id: "counterspell",
   name: "Counterspell",
+  face_id: "counterspell",
   mana_cost: "{U}{U}",
   types: ["Instant"],
-  // "Counter target spell." No type restriction (CR 701.5).
+  // The counter effect has no spell-type restriction (CR 701.5).
   spell_effect: [CounterTargetSpell(spell_filter: None, unless_controller_pays: None)],
 )

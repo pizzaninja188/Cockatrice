@@ -1,13 +1,15 @@
 (
   id: "badlands",
   name: "Badlands",
+  face_id: "badlands",
   mana_cost: "",
   types: ["Land", "Swamp", "Mountain"],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: Fallback,
       costs: [Tap],
       effect: [ProduceMana(options: [(b: 1), (r: 1)])],
-      text: "{T}: Add {B} or {R}.",
     ),
   ],
 )

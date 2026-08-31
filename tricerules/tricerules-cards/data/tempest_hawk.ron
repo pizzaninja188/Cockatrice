@@ -2,17 +2,20 @@
 (
   id: "tempest_hawk",
   name: "Tempest Hawk",
+  face_id: "tempest_hawk",
   mana_cost: "{2}{W}",
   types: ["Creature", "Bird"],
   power: 2,
   toughness: 2,
   keywords: [Flying],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WheneverSelfDealsCombatDamageToPlayer,
     effect: [ChooseResolutionBranch(
       optional: true,
       branches: [(
-        label: "Search for Tempest Hawk",
+        branch_id: "search_for_tempest_hawk", presentation: Fallback,
         cost: None,
         effects: [SearchLibrary(
           filter: Some((exact_name: Some("Tempest Hawk"))),
@@ -22,6 +25,5 @@
         )],
       )],
     )],
-    text: "Whenever this creature deals combat damage to a player, you may search your library for a card named Tempest Hawk, reveal it, put it into your hand, then shuffle.",
   )],
 )

@@ -3,6 +3,7 @@
 (
   id: "grab_the_prize",
   name: "Grab the Prize",
+  face_id: "grab_the_prize",
   mana_cost: "{1}{R}",
   types: ["Sorcery"],
   additional_costs: [DiscardCard],
@@ -12,7 +13,7 @@
       selection: FirstApplicable,
       branches: [
         (
-          label: "Deal 2 damage to each opponent",
+          branch_id: "deal_2_damage_to_each_opponent", presentation: Fallback,
           cost: None,
           requirement: CardResultCount(
             filter: (
@@ -26,7 +27,7 @@
           effects: [DamagePlayer(amount: 2, who: EachOpponent)],
         ),
         (
-          label: "No additional effect",
+          branch_id: "no_additional_effect", presentation: Fallback,
           cost: None,
           requirement: Always,
           effects: [],

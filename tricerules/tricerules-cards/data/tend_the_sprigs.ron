@@ -3,6 +3,7 @@
 (
   id: "tend_the_sprigs",
   name: "Tend the Sprigs",
+  face_id: "tend_the_sprigs",
   mana_cost: "{2}{G}",
   types: ["Sorcery"],
   spell_effect: [
@@ -16,7 +17,7 @@
       selection: FirstApplicable,
       branches: [
         (
-          label: "Create a Treefolk",
+          branch_id: "create_a_treefolk", presentation: Fallback,
           cost: None,
           requirement: GameCondition(BattlefieldAggregate(
             filter: (
@@ -31,7 +32,7 @@
           )),
           effects: [CreateTokens(token: "treefolk_g_3_4_reach", count: 1)],
         ),
-        (label: "No additional effect", cost: None, requirement: Always, effects: []),
+        (branch_id: "no_additional_effect", presentation: Fallback, cost: None, requirement: Always, effects: []),
       ],
     ),
   ],

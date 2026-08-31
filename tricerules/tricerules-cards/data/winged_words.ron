@@ -3,6 +3,7 @@
 (
   id: "winged_words",
   name: "Winged Words",
+  face_id: "winged_words",
   mana_cost: "{2}{U}",
   cost_modifiers: [
     ConditionalGenericReduction(

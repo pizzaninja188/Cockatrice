@@ -2,15 +2,17 @@
 (
   id: "raven_of_fell_omens",
   name: "Raven of Fell Omens",
+  face_id: "raven_of_fell_omens",
   mana_cost: "{1}{B}",
   types: ["Creature", "Bird"],
   power: 1,
   toughness: 2,
   keywords: [Flying],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverPlayerCommitsCrime(player: Controller),
     effect: [LoseLife(amount: Fixed(1), who: EachOpponent), GainLife(amount: 1)],
     max_triggers_per_turn: Some(1),
-    text: "Whenever you commit a crime, each opponent loses 1 life and you gain 1 life. This ability triggers only once each turn.",
   )],
 )

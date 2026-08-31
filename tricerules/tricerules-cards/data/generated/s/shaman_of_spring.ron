@@ -2,9 +2,10 @@
 (
   id: "shaman_of_spring",
   name: "Shaman of Spring",
+  face_id: "shaman_of_spring",
   mana_cost: "{3}{G}",
   types: ["Creature", "Elf", "Shaman"],
   power: 2,
   toughness: 2,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

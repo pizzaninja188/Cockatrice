@@ -2,17 +2,19 @@
 (
   id: "path_to_redemption",
   name: "Path to Redemption",
+  face_id: "path_to_redemption",
   mana_cost: "{1}{W}",
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
-  static_abilities: [AttachedModifier(cant_attack: true, cant_block: true)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(cant_attack: true, cant_block: true))],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
     costs: [Mana("{5}"), SacrificeSelf],
     conditions: [GameCondition(ActivePlayer(players: Controller))],
     effect: [
       Exile(subject: AttachedObject),
       CreateTokens(token: "ally_w_1_1", count: 1),
     ],
-    text: "{5}, Sacrifice this Aura: Exile enchanted creature. Create a 1/1 white Ally creature token. Activate only during your turn.",
   )],
 )

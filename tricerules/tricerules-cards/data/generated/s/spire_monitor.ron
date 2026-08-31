@@ -2,6 +2,7 @@
 (
   id: "spire_monitor",
   name: "Spire Monitor",
+  face_id: "spire_monitor",
   mana_cost: "{4}{U}",
   types: ["Creature", "Phyrexian", "Drake"],
   power: 3,

@@ -146,7 +146,7 @@ impl GameEngine {
         if !entering.face_down {
             if let Some(face) = self.battlefield_entry_face(event) {
                 for (ability_index, ability) in face.static_abilities.iter().enumerate() {
-                    let (priority, label) = match ability {
+                    let (priority, label) = match &ability.definition {
                         StaticAbilityDef::EntersAsCopy { .. } => (
                             ReplacementPriority::EntryCopy,
                             Some(format!("{} — enters as a copy", face.name)),
@@ -212,7 +212,7 @@ impl GameEngine {
                 continue;
             };
             for (ability_index, ability) in face.static_abilities.iter().enumerate() {
-                let label = match ability {
+                let label = match &ability.definition {
                     StaticAbilityDef::EntersTapped {
                         affected: EntersTappedAffected::Permanents,
                         condition,
@@ -284,10 +284,11 @@ impl GameEngine {
         if object.copy_revision != *copy_revision {
             return None;
         }
-        match self
+        match &self
             .effective_face(*object_id)?
             .static_abilities
             .get(*ability_index)?
+            .definition
         {
             StaticAbilityDef::EntersAsCopy { filter } => Some(filter.clone()),
             _ => None,
@@ -413,7 +414,8 @@ impl GameEngine {
                     .and_then(|_| self.battlefield_entry_face(event));
                 let ability = effective_face
                     .as_deref()
-                    .and_then(|face| face.static_abilities.get(*ability_index));
+                    .and_then(|face| face.static_abilities.get(*ability_index))
+                    .map(|ability| &ability.definition);
                 match ability {
                     Some(StaticAbilityDef::EntersAsCopy { .. }) => {
                         debug_assert!(false, "copy source choice must be completed before apply")
@@ -471,7 +473,8 @@ impl GameEngine {
                     .and_then(|_| self.effective_face(*source_id));
                 let ability = effective_face
                     .as_deref()
-                    .and_then(|face| face.static_abilities.get(*ability_index));
+                    .and_then(|face| face.static_abilities.get(*ability_index))
+                    .map(|ability| &ability.definition);
                 match ability {
                     Some(StaticAbilityDef::EntersTapped {
                         affected: EntersTappedAffected::Permanents,
@@ -967,7 +970,7 @@ impl GameEngine {
                     .get(&item.card_id)
                     .map(|definition| definition.name.clone())
                     .unwrap_or_else(|| item.card_id.clone());
-                let (matcher, trigger, text) = match delayed_sacrifice {
+                let (matcher, trigger, _text) = match delayed_sacrifice {
                     DelayedTokenSacrificeTiming::NextEndStep => (
                         EventObserverMatcher::AtBeginningOfNextEndStep,
                         TriggerCondition::AtBeginningOfNextEndStep,
@@ -1001,11 +1004,13 @@ impl GameEngine {
                             card_name,
                             source_face_index: item.face_index,
                             ability: TriggeredAbilityDef {
+                                ability_id: tricerules_cards::AbilityId::new("delayed_sacrifice")
+                                    .expect("intrinsic ability id"),
+                                presentation: tricerules_cards::AbilityPresentation::Fallback,
                                 trigger,
                                 effect: vec![SpellEffectKind::SacrificeObservedObjects],
                                 modal: None,
                                 targeting: None,
-                                text: text.to_string(),
                                 may: false,
                                 intervening_if: None,
                                 max_triggers_per_turn: None,

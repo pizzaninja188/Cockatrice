@@ -2,6 +2,7 @@
 (
   id: "appeal_to_eirdu",
   name: "Appeal to Eirdu",
+  face_id: "appeal_to_eirdu",
   mana_cost: "{3}{W}",
   types: ["Instant"],
   keywords: [Convoke],

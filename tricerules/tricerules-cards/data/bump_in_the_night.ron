@@ -1,6 +1,7 @@
 (
   id: "bump_in_the_night",
   name: "Bump in the Night",
+  face_id: "bump_in_the_night",
   mana_cost: "{B}",
   flashback_cost: Some("{5}{R}"),
   types: ["Sorcery"],

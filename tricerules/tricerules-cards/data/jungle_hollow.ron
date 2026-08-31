@@ -1,9 +1,10 @@
 (
   id: "jungle_hollow",
   name: "Jungle Hollow",
+  face_id: "jungle_hollow",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(b: 1), (g: 1)])], text: "{T}: Add {B} or {G}.")],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], text: "When Jungle Hollow enters, you gain 1 life.")],
-  static_abilities: [EntersTapped(affected: Self_)],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([3]), costs: [Tap], effect: [ProduceMana(options: [(b: 1), (g: 1)])], )],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)], )],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Self_))],
 )

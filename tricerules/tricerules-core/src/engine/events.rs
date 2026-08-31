@@ -63,9 +63,14 @@ impl GameEngine {
             labels.push("Doesn't untap during its controller's untap step".to_string());
         }
 
-        for (_, ability, granted) in self.effective_activated_abilities(oid) {
-            if granted && !labels.contains(&ability.text) {
-                labels.push(ability.text);
+        let face_name = self
+            .effective_face(oid)
+            .map(|face| face.name.clone())
+            .unwrap_or_else(|| object.card_id.clone());
+        for (_, ability, granted, path) in self.effective_activated_abilities(oid) {
+            let fallback = ability.fallback_text_with_path(&face_name, &path);
+            if granted && !labels.contains(&fallback) {
+                labels.push(fallback);
             }
         }
 
@@ -234,7 +239,7 @@ impl GameEngine {
                     r: amount.r,
                     g: amount.g,
                     c: amount.c,
-                    display_label: restriction.label.clone(),
+                    display_label: restriction.fallback_label(),
                 })
             })
             .collect();
@@ -427,7 +432,7 @@ impl GameEngine {
                         let activated_abilities = self
                             .effective_activated_abilities(oid)
                             .into_iter()
-                            .map(|(ability_index, ability, _)| {
+                            .map(|(ability_index, ability, _, path)| {
                                 let mana_cost = self.effective_ability_mana_cost(
                                     object.controller,
                                     oid,
@@ -478,7 +483,12 @@ impl GameEngine {
                                     .collect::<Vec<_>>()
                                     .join(", ");
                                 rv1::AbilityInfo {
-                                    text: ability.text.clone(),
+                                    text: ability.fallback_text_with_path(
+                                        face.as_deref()
+                                            .map(|face| face.name.as_str())
+                                            .unwrap_or(&object.card_id),
+                                        &path,
+                                    ),
                                     mana_cost,
                                     mana_produced,
                                     cost_label,

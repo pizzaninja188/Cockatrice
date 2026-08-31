@@ -2,6 +2,7 @@
 (
   id: "glacial_wall",
   name: "Glacial Wall",
+  face_id: "glacial_wall",
   mana_cost: "{2}{U}",
   types: ["Creature", "Wall"],
   power: 0,

@@ -2,6 +2,7 @@
 (
   id: "azula_always_lies",
   name: "Azula Always Lies",
+  face_id: "azula_always_lies",
   mana_cost: "{1}{B}",
   types: ["Instant", "Lesson"],
   modal_spell: (
@@ -9,11 +10,13 @@
     max_modes: 2,
     modes: [
       (
-        label: "Target creature gets -1/-1 until end of turn",
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
         effects: [PumpTarget(power: -1, toughness: -1, subject: Chosen((kind: Creature)))],
       ),
       (
-        label: "Put a +1/+1 counter on target creature",
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
         effects: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))],
       ),
     ],

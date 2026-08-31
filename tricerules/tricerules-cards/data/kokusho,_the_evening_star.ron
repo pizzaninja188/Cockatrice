@@ -1,6 +1,7 @@
 (
   id: "kokusho,_the_evening_star",
   name: "Kokusho, the Evening Star",
+  face_id: "kokusho_the_evening_star",
   mana_cost: "{4}{B}{B}",
   types: ["Creature", "Dragon", "Spirit"],
   supertypes: ["Legendary"],
@@ -9,9 +10,10 @@
   keywords: [Flying],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WhenSelfDies,
       effect: [EachOpponentLosesLifeYouGainEqual(amount: 5)],
-      text: "When Kokusho dies, each opponent loses 5 life. You gain life equal to the life lost this way.",
     ),
   ],
 )

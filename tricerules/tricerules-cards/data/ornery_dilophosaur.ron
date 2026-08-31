@@ -3,6 +3,7 @@
 (
   id: "ornery_dilophosaur",
   name: "Ornery Dilophosaur",
+  face_id: "ornery_dilophosaur",
   mana_cost: "{3}{G}",
   types: ["Creature", "Dinosaur"],
   power: 2,
@@ -10,9 +11,10 @@
   keywords: [Deathtouch],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
-      text: "Whenever this creature attacks, if you control a creature with power 4 or greater, this creature gets +2/+2 until end of turn.",
       intervening_if: Some(GameCondition(BattlefieldAggregate(
         filter: (controllers: Controller, card_type: Some(Creature)),
         aggregate: MaximumPower,

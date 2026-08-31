@@ -1,6 +1,7 @@
 (
   id: "temur_devotee",
   name: "Temur Devotee",
+  face_id: "temur_devotee",
   mana_cost: "{1}{U}",
   types: ["Creature", "Human", "Druid"],
   power: 3,
@@ -8,10 +9,11 @@
   keywords: [Defender],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
       costs: [Mana("{1}")],
       effect: [ProduceMana(options: [(g: 1), (u: 1), (r: 1)])],
       activation_limit: Some(PerTurn(max_activations: 1)),
-      text: "{1}: Add {G}, {U}, or {R}. Activate only once each turn.",
     ),
   ],
 )

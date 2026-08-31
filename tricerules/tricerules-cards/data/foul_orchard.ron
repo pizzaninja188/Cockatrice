@@ -1,8 +1,9 @@
 (
   id: "foul_orchard",
   name: "Foul Orchard",
+  face_id: "foul_orchard",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(b: 1), (g: 1)])], text: "{T}: Add {B} or {G}.")],
-  static_abilities: [EntersTapped(affected: Self_)],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([2]), costs: [Tap], effect: [ProduceMana(options: [(b: 1), (g: 1)])], )],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Self_))],
 )

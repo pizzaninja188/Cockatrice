@@ -12,9 +12,9 @@ fn trigger_targets(object_id: u32) -> Vec<TargetRef> {
 #[test]
 fn issue_171_crime_is_committed_only_after_a_successful_cast() {
     let mut e = anthem_engine(171_001, "lightning_bolt");
-    let watcher = r#"(id: "grizzly_bears", name: "Grizzly Bears", mana_cost: "{1}{G}", types: ["Creature", "Bear"], power: 2, toughness: 2,
-        triggered_abilities: [(trigger: WheneverPlayerCommitsCrime(player: Controller),
-            effect: [GainLife(amount: 1)], max_triggers_per_turn: Some(1), text: "Crime payoff.")])"#;
+    let watcher = r#"(id: "grizzly_bears", name: "Grizzly Bears", face_id: "grizzly_bears", mana_cost: "{1}{G}", types: ["Creature", "Bear"], power: 2, toughness: 2,
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WheneverPlayerCommitsCrime(player: Controller),
+            effect: [GainLife(amount: 1)], max_triggers_per_turn: Some(1), )])"#;
     let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(&[watcher], &[])
         .expect("Crime vocabulary must load");
     let source = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");

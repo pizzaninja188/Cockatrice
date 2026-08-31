@@ -1,6 +1,7 @@
 (
   id: "totally_lost",
   name: "Totally Lost",
+  face_id: "totally_lost",
   mana_cost: "{4}{U}",
   types: ["Instant"],
   spell_effect: [PutInOwnersLibrary(

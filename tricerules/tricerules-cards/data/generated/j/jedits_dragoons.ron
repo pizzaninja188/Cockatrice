@@ -2,10 +2,11 @@
 (
   id: "jedits_dragoons",
   name: "Jedit's Dragoons",
+  face_id: "jedit_s_dragoons",
   mana_cost: "{5}{W}",
   types: ["Creature", "Cat", "Soldier"],
   power: 2,
   toughness: 5,
   keywords: [Vigilance],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 4)], text: "When this creature enters, you gain 4 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 4)])],
 )

@@ -2,6 +2,7 @@
 (
   id: "king_cheetah",
   name: "King Cheetah",
+  face_id: "king_cheetah",
   mana_cost: "{3}{G}",
   types: ["Creature", "Cat"],
   power: 3,

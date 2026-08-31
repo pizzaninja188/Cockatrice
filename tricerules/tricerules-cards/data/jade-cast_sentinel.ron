@@ -2,14 +2,16 @@
 (
   id: "jade-cast_sentinel",
   name: "Jade-Cast Sentinel",
+  face_id: "jade_cast_sentinel",
   mana_cost: "{4}",
   types: ["Artifact", "Creature", "Ape", "Snake"],
   power: 1,
   toughness: 5,
   keywords: [Reach],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
     costs: [Mana("{2}"), Tap],
     effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: LibraryBottom)],
-    text: "{2}, {T}: Put target card from a graveyard on the bottom of its owner's library.",
   )],
 )

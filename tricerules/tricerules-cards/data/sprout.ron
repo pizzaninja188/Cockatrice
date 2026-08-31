@@ -2,6 +2,7 @@
 (
   id: "sprout",
   name: "Sprout",
+  face_id: "sprout",
   mana_cost: "{G}",
   types: ["Instant"],
   spell_effect: [CreateTokens(token: "saproling_g_1_1", count: 1)],

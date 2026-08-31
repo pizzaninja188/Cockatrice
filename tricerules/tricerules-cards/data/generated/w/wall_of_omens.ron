@@ -2,10 +2,11 @@
 (
   id: "wall_of_omens",
   name: "Wall of Omens",
+  face_id: "wall_of_omens",
   mana_cost: "{1}{W}",
   types: ["Creature", "Wall"],
   power: 0,
   toughness: 4,
   keywords: [Defender],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

@@ -3,12 +3,15 @@
 (
   id: "leafkin_druid",
   name: "Leafkin Druid",
+  face_id: "leafkin_druid",
   mana_cost: "{1}{G}",
   types: ["Creature", "Elemental", "Druid"],
   power: 0,
   toughness: 3,
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
       costs: [Tap],
       effect: [ProduceMana(
         options: [(g: 1)],
@@ -20,7 +23,6 @@
           options: [(g: 2)],
         )),
       )],
-      text: "{T}: Add {G}. If you control four or more creatures, add {G}{G} instead.",
     ),
   ],
 )

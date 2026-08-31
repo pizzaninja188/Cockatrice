@@ -3,6 +3,7 @@
 (
   id: "bestial_menace",
   name: "Bestial Menace",
+  face_id: "bestial_menace",
   mana_cost: "{3}{G}{G}",
   types: ["Sorcery"],
   spell_effect: [

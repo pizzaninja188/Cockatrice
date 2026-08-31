@@ -2,6 +2,7 @@
 (
   id: "robot_c_2_2",
   name: "Robot",
+  face_id: "robot",
   types: ["Artifact", "Creature", "Robot"],
   power: 2,
   toughness: 2,

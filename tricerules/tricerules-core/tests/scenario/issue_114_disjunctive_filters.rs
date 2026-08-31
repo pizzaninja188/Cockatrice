@@ -465,7 +465,7 @@ fn publish_graveyard_fixture(engine: &mut GameEngine, filter: GraveyardFilter) -
         source_face_change: 0,
         ability_index: 0,
         ability: ability.clone(),
-        ability_text: ability.text.clone(),
+        ability_text: ability.fallback_text("Grizzly Bears"),
         card_id: "grizzly_bears".into(),
         controller: 0,
         may: ability.may,

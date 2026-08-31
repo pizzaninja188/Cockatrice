@@ -1,6 +1,7 @@
 (
   id: "coral_merfolk",
   name: "Coral Merfolk",
+  face_id: "coral_merfolk",
   mana_cost: "{1}{U}",
   types: ["Creature", "Merfolk"],
   power: 2,

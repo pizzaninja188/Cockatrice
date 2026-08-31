@@ -2,6 +2,7 @@
 (
   id: "feed_the_cauldron",
   name: "Feed the Cauldron",
+  face_id: "feed_the_cauldron",
   mana_cost: "{2}{B}",
   types: ["Instant"],
   spell_effect: [

@@ -9,7 +9,7 @@ The repository-root `AGENTS.md` still applies. This file owns Rust rules, card d
 | `cards.xml` (Oracle/Scryfall) | Cockatrice client and freeform | Display only: images, names, type lines, search |
 | `tricerules-cards` (`data/`, `primitives/`, and custom Rust) | tricerules engine | Rules logic, costs, types, abilities, and effects |
 
-Rules come from tricerules and display metadata comes from Oracle. Never query `CardDatabaseQuerier` or other Oracle data for a ruled mechanical decision. Oracle must remain absent from the Rust rules crates.
+Rules come from tricerules and display wording comes from Oracle. Never query `CardDatabaseQuerier`, `cards.xml`, or external Oracle data for a ruled mechanical decision. Rules RON stores no copied Oracle prose: each spell, identified ability, modal option, cast-cost choice, resolution branch, heterogeneous search slot, and mana restriction carries stable identity plus either non-mechanical `OracleLines([..])` references into one external face or an explicit `Fallback` decision. Freeform choice labels and cast-cost prompts are forbidden. `TargetGroupDef.prompt` is the narrow exception: keep it short, effect-specific targeting guidance rather than copied Oracle wording. Missing or invalid external data must use the deterministic engine fallback, never a partial line selection.
 
 Card identity is engine-owned. Decks cross IPC as Oracle names; the engine resolves them through `CardRegistry`, emits the server-only `CardCatalog`, and Servatrice maps catalog IDs without deriving them from names. RON IDs must equal `slugify(name)`, enforced by registry tests.
 
@@ -38,7 +38,7 @@ Custom-effect registration is drop-in:
 ## Implementing a card
 
 1. Fetch exact Scryfall Oracle data with a User-Agent and then fetch `rulings_uri`. If lookup fails or the name is ambiguous, stop before authoring RON or Rust.
-2. Copy `mana_cost` exactly in brace syntax. Verify type line, power/toughness, Oracle text, and rulings. Verify exact CR citations against the current official Comprehensive Rules text.
+2. Copy `mana_cost` exactly in brace syntax. Verify type line, power/toughness, Oracle text, and rulings. Record presentation only as exact one-based `OracleLines` for the correct face, or explicitly choose `Fallback`; never paste Oracle prose into RON. Verify exact CR citations against the current official Comprehensive Rules text.
 3. Drop RON anywhere under `tricerules-cards/data/`; `build.rs` embeds it automatically. Touch shared primitives only when the card cannot be expressed with existing data.
 4. For Rust engine behavior, return `EngineError::Illegal` rather than panicking, reject ambiguous combat, keep steps and priority explicit, and add happy plus illegal scenarios with step, priority, and zone assertions.
 5. Regenerate `tricerules/CARDS.md` for card-data changes and run the checklist name gate from the repository root:
@@ -47,7 +47,7 @@ Custom-effect registration is drop-in:
 ./scripts/gen-card-checklist.ps1 --check
 ```
 
-Use `partial: "<missing behavior>"` only for a real implementation gap. It is tracking metadata, not a rules switch.
+Record genuine implementation gaps in `tricerules-cards/authoring/partial-cards.tsv`. Checklist tracking metadata must not be placed in rules RON or loaded by the runtime registry.
 
 ### Scryfall lookup
 
@@ -59,7 +59,7 @@ $rulings = Invoke-RestMethod -Uri $card.rulings_uri -Headers $headers
 
 ### Batch generation
 
-Vanilla and supported french-vanilla creatures come from the Scryfall bulk dump; do not hand-author them. Use `fetch-scryfall-bulk` followed by `gen-cards --dry-run`, then generate. The generator accepts normal-layout creatures with integer P/T, supported mana symbols, and no text beyond supported keywords. It skips existing IDs, names, and slug collisions.
+Vanilla and supported french-vanilla creatures come from the Scryfall bulk dump; do not hand-author them. Use `fetch-scryfall-bulk` followed by `gen-cards --dry-run`, then generate. Generated RON contains stable face/ability IDs and Oracle line references, never Oracle prose. Refresh may replace only files with valid generator provenance; run `gen-cards --check` against the pinned SHA-verified snapshot to detect drift without writing. Oracle Tags are advisory only and cannot select mechanics, IDs, or presentation mappings.
 
 After generation, run full Rust tests plus the checklist name gate. Keep RON `mana_cost` verbatim from Scryfall.
 

@@ -1,21 +1,21 @@
-// Oracle (M21): Defender. As long as you control a creature with power 4 or greater, Drowsing
-// Tyrannodon can attack as though it didn't have defender.
+// The attack permission is reevaluated from the controller's battlefield aggregate.
 (
   id: "drowsing_tyrannodon",
   name: "Drowsing Tyrannodon",
+  face_id: "drowsing_tyrannodon",
   mana_cost: "{1}{G}",
   types: ["Creature", "Dinosaur"],
   power: 3,
   toughness: 3,
   keywords: [Defender],
   static_abilities: [
-    ConditionalSelfModifier(
+    (ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
       condition: BattlefieldAggregate(
         filter: (controllers: Controller, card_type: Some(Creature)),
         aggregate: MaximumPower,
         min: Some(4),
       ),
       can_attack_as_though_without_defender: true,
-    ),
+    )),
   ],
 )

@@ -2,23 +2,26 @@
 (
   id: "altanak,_the_thrice-called",
   name: "Altanak, the Thrice-Called",
+  face_id: "altanak_the_thrice_called",
   mana_cost: "{5}{G}{G}",
   types: ["Legendary", "Creature", "Insect", "Beast"],
   power: 9,
   toughness: 9,
   keywords: [Trample],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
     effect: [Draw(count: 1)],
-    text: "Whenever Altanak becomes the target of a spell or ability an opponent controls, draw a card.",
   )],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
     source_zone: Hand,
     costs: [Mana("{1}{G}"), DiscardSelf],
     effect: [MoveGraveyardCards(
       filter: (owner: Controller, card_type: Some(Land)),
       destination: Battlefield(tapped: true),
     )],
-    text: "{1}{G}, Discard this card: Return target land card from your graveyard to the battlefield tapped.",
   )],
 )

@@ -2,14 +2,16 @@
 (
   id: "rattleback_apothecary",
   name: "Rattleback Apothecary",
+  face_id: "rattleback_apothecary",
   mana_cost: "{2}{B}",
   types: ["Creature", "Gorgon", "Warlock"],
   power: 3,
   toughness: 2,
   keywords: [Deathtouch],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverPlayerCommitsCrime(player: Controller),
     effect: [GrantKeywordChoice(subject: Chosen((kind: Creature, controller: You)), choices: [Menace, Lifelink])],
-    text: "Whenever you commit a crime, target creature you control gains your choice of menace or lifelink until end of turn.",
   )],
 )

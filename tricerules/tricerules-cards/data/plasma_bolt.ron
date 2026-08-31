@@ -2,6 +2,7 @@
 (
   id: "plasma_bolt",
   name: "Plasma Bolt",
+  face_id: "plasma_bolt",
   mana_cost: "{R}",
   types: ["Sorcery"],
   spell_effect: [DamageTarget(amount: Conditional(condition: Void, when_true: 3, otherwise: 2), target: (kind: AnyTarget))],

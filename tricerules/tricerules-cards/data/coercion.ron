@@ -1,6 +1,7 @@
 (
   id: "coercion",
   name: "Coercion",
+  face_id: "coercion",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
   spell_effect: [DiscardCards(

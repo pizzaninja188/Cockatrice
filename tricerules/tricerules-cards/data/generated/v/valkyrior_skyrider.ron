@@ -2,10 +2,11 @@
 (
   id: "valkyrior_skyrider",
   name: "Valkyrior Skyrider",
+  face_id: "valkyrior_skyrider",
   mana_cost: "{4}{W}",
   types: ["Creature", "God", "Warrior", "Hero"],
   power: 3,
   toughness: 4,
   keywords: [Flying],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 4)], text: "When this creature enters, you gain 4 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 4)])],
 )

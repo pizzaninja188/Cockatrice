@@ -2,10 +2,11 @@
 (
   id: "gangly_stompling",
   name: "Gangly Stompling",
+  face_id: "gangly_stompling",
   mana_cost: "{2}{R/G}",
   types: ["Creature", "Shapeshifter"],
   power: 4,
   toughness: 2,
-  characteristic_defining_abilities: [Changeling],
+  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)],
   keywords: [Trample],
 )

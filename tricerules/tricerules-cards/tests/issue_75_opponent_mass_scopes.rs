@@ -14,7 +14,6 @@ fn opponent_mass_scope_cards_have_complete_oracle_behavior() {
     assert_eq!(chill.name, "Uncomfortable Chill");
     assert_eq!(chill_face.mana_cost.to_string(), "{2}{U}");
     assert_eq!(chill_face.types, ["Instant"]);
-    assert!(chill.partial.is_none());
     assert_eq!(
         chill_face.spell_effect,
         [
@@ -40,7 +39,6 @@ fn opponent_mass_scope_cards_have_complete_oracle_behavior() {
     assert_eq!(obsolete.name, "Make Obsolete");
     assert_eq!(obsolete_face.mana_cost.to_string(), "{2}{B}");
     assert_eq!(obsolete_face.types, ["Instant"]);
-    assert!(obsolete.partial.is_none());
     assert_eq!(
         obsolete_face.spell_effect,
         [SpellEffectKind::PumpAll {

@@ -3,6 +3,7 @@
 (
   id: "impossible_inferno",
   name: "Impossible Inferno",
+  face_id: "impossible_inferno",
   mana_cost: "{4}{R}",
   types: ["Instant"],
   spell_effect: [
@@ -11,7 +12,7 @@
       selection: FirstApplicable,
       branches: [
         (
-          label: "Exile the top card",
+          branch_id: "exile_the_top_card", presentation: Fallback,
           cost: None,
           requirement: GameCondition(GraveyardAggregate(
             owners: Controller,
@@ -20,7 +21,7 @@
           )),
           effects: [ExileTopWithPlayPermission(player: Controller)],
         ),
-        (label: "No additional effect", cost: None, requirement: Always, effects: []),
+        (branch_id: "no_additional_effect", presentation: Fallback, cost: None, requirement: Always, effects: []),
       ],
     ),
   ],

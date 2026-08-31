@@ -2,6 +2,7 @@
 (
   id: "bounding_wolf",
   name: "Bounding Wolf",
+  face_id: "bounding_wolf",
   mana_cost: "{2}{G}",
   types: ["Creature", "Wolf"],
   power: 3,

@@ -2,6 +2,7 @@
 (
   id: "zealous_guardian",
   name: "Zealous Guardian",
+  face_id: "zealous_guardian",
   mana_cost: "{W/U}",
   types: ["Creature", "Kithkin", "Soldier"],
   power: 1,

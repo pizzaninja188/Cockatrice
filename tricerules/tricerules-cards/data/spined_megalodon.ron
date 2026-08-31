@@ -1,6 +1,7 @@
 (
   id: "spined_megalodon",
   name: "Spined Megalodon",
+  face_id: "spined_megalodon",
   mana_cost: "{5}{U}{U}",
   types: ["Creature", "Shark"],
   power: 5,
@@ -8,9 +9,10 @@
   keywords: [Hexproof],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [Scry(count: 1)],
-      text: "Whenever this creature attacks, scry 1.",
     ),
   ],
 )

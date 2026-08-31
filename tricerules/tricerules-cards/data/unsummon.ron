@@ -1,6 +1,7 @@
 (
   id: "unsummon",
   name: "Unsummon",
+  face_id: "unsummon",
   mana_cost: "{U}",
   types: ["Instant"],
   spell_effect: [ReturnToOwnersHand(subject: Chosen((kind: Creature)))],

@@ -1,17 +1,19 @@
 (
   id: "quick-draw_katana",
   name: "Quick-Draw Katana",
+  face_id: "quick_draw_katana",
   mana_cost: "{2}",
   // Oracle verified 2026-08-20. CR 301.5, 611.3, 613.1f-g, 702.6.
   types: ["Artifact", "Equipment"],
-  static_abilities: [AttachedModifier(
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(
     condition: Some(ActivePlayer(players: Controller)),
     delta_power: 2,
     keywords: [FirstStrike],
-  )],
+  ))],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
     costs: [Mana("{2}")],
     effect: [Equip(target: (kind: Creature, controller: You))],
-    text: "Equip {2}",
   )],
 )

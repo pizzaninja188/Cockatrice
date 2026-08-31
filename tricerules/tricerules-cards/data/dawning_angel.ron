@@ -1,6 +1,7 @@
 (
   id: "dawning_angel",
   name: "Dawning Angel",
+  face_id: "dawning_angel",
   mana_cost: "{4}{W}",
   types: ["Creature", "Angel"],
   power: 3,
@@ -8,9 +9,10 @@
   keywords: [Flying],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
       effect: [GainLife(amount: 4)],
-      text: "When this creature enters, you gain 4 life.",
     ),
   ],
 )

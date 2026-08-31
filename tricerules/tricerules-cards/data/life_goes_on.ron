@@ -1,6 +1,7 @@
 (
   id: "life_goes_on",
   name: "Life Goes On",
+  face_id: "life_goes_on",
   mana_cost: "{G}",
   types: ["Instant"],
   spell_effect: [

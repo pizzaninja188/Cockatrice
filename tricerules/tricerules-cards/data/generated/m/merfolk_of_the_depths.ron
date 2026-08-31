@@ -2,6 +2,7 @@
 (
   id: "merfolk_of_the_depths",
   name: "Merfolk of the Depths",
+  face_id: "merfolk_of_the_depths",
   mana_cost: "{4}{G/U}{G/U}",
   types: ["Creature", "Merfolk", "Soldier"],
   power: 4,

@@ -2,12 +2,15 @@
 (
   id: "hoarding_recluse",
   name: "Hoarding Recluse",
+  face_id: "hoarding_recluse",
   mana_cost: "{3}{G}",
   types: ["Creature", "Spider"],
   power: 2,
   toughness: 3,
   keywords: [Reach, Deathtouch],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfDies,
     effect: [MoveGraveyardCards(filter: (owner: AnyPlayer, excluded_objects: [Source]), destination: LibraryBottom)],
     targeting: Some((groups: [(
@@ -15,6 +18,5 @@
       prompt: "Choose up to one other target card from a graveyard",
       effect_indices: [0],
     )])),
-    text: "When this creature dies, put up to one other target card from a graveyard on the bottom of its owner's library.",
   )],
 )

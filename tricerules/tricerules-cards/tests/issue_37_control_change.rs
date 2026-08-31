@@ -13,10 +13,9 @@ fn issue_37_cards_are_registered_as_complete() {
         "threaten",
         "cartouche_of_knowledge",
     ] {
-        let definition = registry
+        registry
             .get(id)
             .unwrap_or_else(|| panic!("{id} must be registered"));
-        assert!(definition.partial.is_none(), "{id} must not be partial");
     }
 }
 

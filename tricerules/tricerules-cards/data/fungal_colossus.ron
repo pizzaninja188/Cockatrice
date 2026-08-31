@@ -2,6 +2,7 @@
 (
   id: "fungal_colossus",
   name: "Fungal Colossus",
+  face_id: "fungal_colossus",
   mana_cost: "{6}{G}",
   types: ["Creature", "Fungus", "Beast"],
   power: 5,

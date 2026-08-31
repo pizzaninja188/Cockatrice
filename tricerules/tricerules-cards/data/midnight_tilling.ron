@@ -3,6 +3,7 @@
 (
   id: "midnight_tilling",
   name: "Midnight Tilling",
+  face_id: "midnight_tilling",
   mana_cost: "{1}{G}",
   types: ["Instant"],
   spell_effect: [

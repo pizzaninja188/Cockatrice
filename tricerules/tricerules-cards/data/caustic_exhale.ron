@@ -2,15 +2,18 @@
 (
   id: "caustic_exhale",
   name: "Caustic Exhale",
+  face_id: "caustic_exhale",
   mana_cost: "{B}",
   types: ["Instant"],
   cast_cost_groups: [(
-    prompt: "Behold a Dragon or pay {1}",
+    group_id: "cast_cost_01",
+    presentation: OracleLines([1]),
     min: 1,
     max: 1,
     options: [
       Behold(
-        label: "Behold a Dragon",
+        option_id: "option_01",
+        presentation: Fallback,
         hand_filter: (subtype: Some("Dragon")),
         permanent_filter: (
           kind: AnyPermanent,
@@ -18,7 +21,7 @@
           required_subtypes: ["Dragon"],
         ),
       ),
-      Mana(label: "Pay {1}", cost: "{1}"),
+      Mana(option_id: "option_02", presentation: Fallback, kind: AdditionalPayment, cost: "{1}"),
     ],
   )],
   spell_effect: [PumpTarget(power: -3, toughness: -3)],

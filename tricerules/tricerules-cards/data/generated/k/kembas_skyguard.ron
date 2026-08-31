@@ -2,10 +2,11 @@
 (
   id: "kembas_skyguard",
   name: "Kemba's Skyguard",
+  face_id: "kemba_s_skyguard",
   mana_cost: "{1}{W}{W}",
   types: ["Creature", "Cat", "Knight"],
   power: 2,
   toughness: 2,
   keywords: [Flying],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)], text: "When this creature enters, you gain 2 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)])],
 )

@@ -1,13 +1,15 @@
 (
   id: "plateau",
   name: "Plateau",
+  face_id: "plateau",
   mana_cost: "",
   types: ["Land", "Mountain", "Plains"],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: Fallback,
       costs: [Tap],
       effect: [ProduceMana(options: [(r: 1), (w: 1)])],
-      text: "{T}: Add {R} or {W}.",
     ),
   ],
 )

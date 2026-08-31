@@ -88,7 +88,7 @@ fn issue_159_divert_disaster_uses_the_committed_payment_receipt() {
         .expect("paid Divert Disaster creates a Lander token");
     assert_eq!(
         lander.identity.as_ref().unwrap().ability_texts,
-        vec!["{2}, {T}, Sacrifice this token: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle."]
+        vec!["Lander — activated ability (activated_01)"]
     );
     assert!(paid.state.stack.iter().any(|item| item.id == bolt));
     assert_eq!(
@@ -156,7 +156,7 @@ fn issue_159_lander_ability_stack_preserves_its_token_display_identity() {
     assert_eq!(identity.types, vec!["Artifact", "Lander"]);
     assert_eq!(
         identity.ability_texts,
-        vec!["{2}, {T}, Sacrifice this token: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle."]
+        vec!["Lander — activated ability (activated_01)"]
     );
     assert!(!engine.state.players[1].battlefield.contains(&lander));
 }
@@ -480,7 +480,7 @@ fn issue_159_lost_days_owner_places_the_exact_target_second_from_top() {
         .expect("Lost Days creates a Clue token");
     assert_eq!(
         clue.identity.as_ref().unwrap().ability_texts,
-        vec!["{2}, Sacrifice this token: Draw a card."]
+        vec!["Clue — activated ability (activated_01)"]
     );
 }
 

@@ -1,21 +1,22 @@
 (
   id: "trapped_in_the_screen",
   name: "Trapped in the Screen",
+  face_id: "trapped_in_the_screen",
   mana_cost: "{2}{W}",
-  // Oracle: Ward {2}. When Trapped in the Screen enters the battlefield, exile target artifact,
-  // creature, or enchantment an opponent controls until Trapped in the Screen leaves the
-  // battlefield. CR 610.3 and 702.21.
+  // CR 610.3 and 702.21.
   types: ["Enchantment"],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
       effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))],
-      text: "Ward {2}",
     ),
     (
+      ability_id: "triggered_02",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
       effect: [ExileUntilSourceLeaves(target: (kind: AnyPermanent, controller: Opponent, permanent_types: [Artifact, Creature, Enchantment]))],
-      text: "When Trapped in the Screen enters, exile target artifact, creature, or enchantment an opponent controls until Trapped in the Screen leaves the battlefield.",
     ),
   ],
 )

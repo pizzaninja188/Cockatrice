@@ -3,21 +3,24 @@
 (
   id: "vodalian_arcanist",
   name: "Vodalian Arcanist",
+  face_id: "vodalian_arcanist",
   mana_cost: "{1}{U}",
   types: ["Creature", "Merfolk", "Wizard"],
   power: 1,
   toughness: 3,
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
       costs: [Tap],
       effect: [ProduceMana(
         options: [(c: 1)],
         restriction: Some((
-          label: "Spend only to cast an instant or sorcery spell.",
+          restriction_id: "restriction_01",
+          presentation: OracleLines([1]),
           cast_spell: [(card_type: Some(InstantOrSorcery))],
         )),
       )],
-      text: "{T}: Add {C}. Spend this mana only to cast an instant or sorcery spell.",
     ),
   ],
 )

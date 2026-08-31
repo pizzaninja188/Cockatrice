@@ -2,14 +2,17 @@
 (
   id: "dispelling_exhale",
   name: "Dispelling Exhale",
+  face_id: "dispelling_exhale",
   mana_cost: "{1}{U}",
   types: ["Instant"],
   cast_cost_groups: [(
-    prompt: "Behold a Dragon?",
+    group_id: "cast_cost_01",
+    presentation: OracleLines([1]),
     min: 0,
     max: 1,
     options: [Behold(
-      label: "Behold a Dragon",
+      option_id: "option_01",
+      presentation: OracleLines([1]),
       hand_filter: (subtype: Some("Dragon")),
       permanent_filter: (
         kind: AnyPermanent,

@@ -2,13 +2,15 @@
 (
   id: "starfighter_pilot",
   name: "Starfighter Pilot",
+  face_id: "starfighter_pilot",
   mana_cost: "{1}{W}",
   types: ["Creature", "Human", "Pilot"],
   power: 2,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverSelfBecomesTapped,
     effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
-    text: "Whenever this creature becomes tapped, surveil 1.",
   )],
 )

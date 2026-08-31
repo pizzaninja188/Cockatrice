@@ -6,15 +6,17 @@
   faces: [
     (
       name: "Riverglide Pathway",
+      face_id: "riverglide_pathway",
       mana_cost: "",
       types: ["Land"],
-      activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(u: 1)])], text: "{T}: Add {U}.")],
+      activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(u: 1)])])],
     ),
     (
       name: "Lavaglide Pathway",
+      face_id: "lavaglide_pathway",
       mana_cost: "",
       types: ["Land"],
-      activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(r: 1)])], text: "{T}: Add {R}.")],
+      activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(r: 1)])])],
     ),
   ],
 )

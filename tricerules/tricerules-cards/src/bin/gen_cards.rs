@@ -17,7 +17,7 @@
 //!     --input oracle-cards.jsonl.gz --dry-run
 //! ```
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -29,9 +29,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tricerules_cards::primitives::{EffectSubject, PlayerRecipient, TargetFilter};
 use tricerules_cards::{
-    slugify, AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivationTiming, Amount,
-    CardRegistry, Color, Keyword, ManaAmount, ManaCost, SpellEffectKind, TriggerCondition,
-    TriggeredAbilityDef,
+    external_oracle_lines, slugify, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
+    ActivatedAbilityDef, ActivationTiming, Amount, CardFaceId, CardRegistry, Color, Keyword,
+    ManaAmount, ManaCost, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 /// MTG supertypes (CR 205.4). Everything else on the left of the em dash is a card type.
@@ -43,6 +43,8 @@ struct Args {
     oracle_tags: Option<String>,
     out_dir: PathBuf,
     dry_run: bool,
+    check: bool,
+    include_new: bool,
     limit: Option<usize>,
 }
 
@@ -55,6 +57,8 @@ fn print_usage() {
          --oracle-tags <path> optional `oracle_tags` .jsonl.gz advisory report\n  \
          --out-dir <path>   output root (default: data/generated, relative to this crate)\n  \
          --dry-run          report counts + skip reasons, write nothing\n  \
+         --check            verify canonical generated output without writing\n  \
+         --include-new      include newly qualifying cards (requires author review)\n  \
          --limit <N>        emit at most N cards (for spot checks)\n  \
          -h, --help         show this help"
     );
@@ -66,6 +70,8 @@ fn parse_args() -> Result<Args, String> {
     let mut oracle_tags: Option<String> = None;
     let mut out_dir: Option<PathBuf> = None;
     let mut dry_run = false;
+    let mut check = false;
+    let mut include_new = false;
     let mut limit: Option<usize> = None;
 
     let mut it = std::env::args().skip(1);
@@ -80,6 +86,8 @@ fn parse_args() -> Result<Args, String> {
                 out_dir = Some(PathBuf::from(it.next().ok_or("--out-dir needs a value")?))
             }
             "--dry-run" => dry_run = true,
+            "--check" => check = true,
+            "--include-new" => include_new = true,
             "--limit" => {
                 limit = Some(
                     it.next()
@@ -97,6 +105,12 @@ fn parse_args() -> Result<Args, String> {
     }
 
     let input = input.ok_or("--input <path> is required")?;
+    if dry_run && check {
+        return Err("--dry-run and --check are mutually exclusive".into());
+    }
+    if check && limit.is_some() {
+        return Err("--check cannot be combined with --limit".into());
+    }
     let metadata = metadata.unwrap_or_else(|| PathBuf::from(format!("{input}.meta.json")));
     let out_dir = out_dir.unwrap_or_else(|| {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -109,6 +123,8 @@ fn parse_args() -> Result<Args, String> {
         oracle_tags,
         out_dir,
         dry_run,
+        check,
+        include_new,
         limit,
     })
 }
@@ -402,6 +418,7 @@ struct ParsedRules {
     spell_effect: Vec<SpellEffectKind>,
     activated_abilities: Vec<ActivatedAbilityDef>,
     triggered_abilities: Vec<TriggeredAbilityDef>,
+    spell_presentation: Option<AbilityPresentation>,
     recipe_labels: Vec<&'static str>,
 }
 
@@ -487,7 +504,11 @@ fn parse_spell_recipe(text: &str) -> Option<(SpellEffectKind, &'static str)> {
     parse_pump_effect(text).map(|effect| (effect, "fixed creature pump"))
 }
 
-fn parse_etb_recipe(text: &str) -> Option<(TriggeredAbilityDef, &'static str)> {
+fn parse_etb_recipe(
+    text: &str,
+    ability_id: AbilityId,
+    presentation: AbilityPresentation,
+) -> Option<(TriggeredAbilityDef, &'static str)> {
     let instruction = text.strip_prefix("When this creature enters, ")?;
     let (effect, label) = if let Some(effect) = parse_draw_effect(&capitalize(instruction)) {
         (effect, "ETB draw")
@@ -506,11 +527,12 @@ fn parse_etb_recipe(text: &str) -> Option<(TriggeredAbilityDef, &'static str)> {
     };
     Some((
         TriggeredAbilityDef {
+            ability_id,
+            presentation,
             trigger: TriggerCondition::WhenSelfEntersBattlefield,
             effect: vec![effect],
             modal: None,
             targeting: None,
-            text: text.to_string(),
             may: false,
             intervening_if: None,
             max_triggers_per_turn: None,
@@ -542,7 +564,11 @@ fn parse_mana_amount(symbol: char) -> Option<ManaAmount> {
     Some(amount)
 }
 
-fn parse_mana_ability_recipe(text: &str) -> Option<(ActivatedAbilityDef, &'static str)> {
+fn parse_mana_ability_recipe(
+    text: &str,
+    ability_id: AbilityId,
+    presentation: AbilityPresentation,
+) -> Option<(ActivatedAbilityDef, &'static str)> {
     let symbol = text.strip_prefix("{T}: Add {")?.strip_suffix("}.")?;
     let mut chars = symbol.chars();
     let amount = parse_mana_amount(chars.next()?)?;
@@ -551,6 +577,8 @@ fn parse_mana_ability_recipe(text: &str) -> Option<(ActivatedAbilityDef, &'stati
     }
     Some((
         ActivatedAbilityDef {
+            ability_id,
+            presentation,
             cost_modifiers: Vec::new(),
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![AbilityCost::Tap],
@@ -563,20 +591,22 @@ fn parse_mana_ability_recipe(text: &str) -> Option<(ActivatedAbilityDef, &'stati
             timing: ActivationTiming::Normal,
             conditions: Vec::new(),
             activation_limit: None,
-            text: text.to_string(),
         },
         "tap for one mana",
     ))
 }
 
 fn parse_rules_text(oracle_text: &str, is_spell: bool) -> Option<ParsedRules> {
-    let cleaned = strip_reminder(oracle_text);
     let mut parsed = ParsedRules::default();
-    for clause in cleaned
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-    {
+    let external_lines = external_oracle_lines(oracle_text);
+    for (line_index, external_line) in external_lines.iter().enumerate() {
+        let cleaned = strip_reminder(external_line);
+        let clause = cleaned.trim();
+        if clause.is_empty() {
+            continue;
+        }
+        let line_index = u16::try_from(line_index + 1).ok()?;
+        let presentation = AbilityPresentation::OracleLines(vec![line_index]);
         if let Some(keywords) = french_vanilla_keywords(clause).filter(|values| !values.is_empty())
         {
             for keyword in keywords {
@@ -592,15 +622,29 @@ fn parse_rules_text(oracle_text: &str, is_spell: bool) -> Option<ParsedRules> {
                 return None;
             }
             parsed.spell_effect.push(effect);
+            parsed.spell_presentation = Some(presentation);
             parsed.recipe_labels.push(label);
             continue;
         }
-        if let Some((ability, label)) = parse_etb_recipe(clause) {
+        let triggered_id = AbilityId::new(format!(
+            "triggered_{:02}",
+            parsed.triggered_abilities.len() + 1
+        ))
+        .ok()?;
+        if let Some((ability, label)) = parse_etb_recipe(clause, triggered_id, presentation.clone())
+        {
             parsed.triggered_abilities.push(ability);
             parsed.recipe_labels.push(label);
             continue;
         }
-        if let Some((ability, label)) = parse_mana_ability_recipe(clause) {
+        let activated_id = AbilityId::new(format!(
+            "activated_{:02}",
+            parsed.activated_abilities.len() + 1
+        ))
+        .ok()?;
+        if let Some((ability, label)) =
+            parse_mana_ability_recipe(clause, activated_id, presentation)
+        {
             parsed.activated_abilities.push(ability);
             parsed.recipe_labels.push(label);
             continue;
@@ -669,6 +713,7 @@ impl GenLayout {
 #[derive(Debug, PartialEq, Eq)]
 struct GenFace {
     name: String,
+    face_id: CardFaceId,
     mana_cost: String,
     supertypes: Vec<String>,
     /// Card types followed by subtypes, the on-disk `types` convention.
@@ -678,6 +723,7 @@ struct GenFace {
     color_indicator: Option<Vec<Color>>,
     keywords: Vec<Keyword>,
     spell_effect: Vec<SpellEffectKind>,
+    spell_presentation: Option<AbilityPresentation>,
     activated_abilities: Vec<ActivatedAbilityDef>,
     triggered_abilities: Vec<TriggeredAbilityDef>,
     recipe_labels: Vec<&'static str>,
@@ -704,6 +750,7 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
     if include_name {
         s.push_str(&format!("{indent}name: {:?},\n", face.name));
     }
+    s.push_str(&format!("{indent}face_id: {:?},\n", face.face_id.as_str()));
     s.push_str(&format!("{indent}mana_cost: {:?},\n", face.mana_cost));
     s.push_str(&format!("{indent}types: [{}],\n", quoted_list(&face.types)));
     if !face.supertypes.is_empty() {
@@ -736,6 +783,12 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
         s.push_str(&format!("{indent}keywords: [{}],\n", keywords));
     }
     if !face.spell_effect.is_empty() {
+        if let Some(presentation) = &face.spell_presentation {
+            s.push_str(&format!(
+                "{indent}spell_presentation: {},\n",
+                render_presentation(presentation)
+            ));
+        }
         s.push_str(&format!(
             "{indent}spell_effect: [{}],\n",
             face.spell_effect
@@ -830,6 +883,20 @@ fn render_mana_amount(amount: ManaAmount) -> String {
     ron::ser::to_string(&amount).expect("generated mana amount should serialize")
 }
 
+fn render_presentation(presentation: &AbilityPresentation) -> String {
+    match presentation {
+        AbilityPresentation::OracleLines(lines) => format!(
+            "OracleLines([{}])",
+            lines
+                .iter()
+                .map(u16::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        AbilityPresentation::Fallback => "Fallback".into(),
+    }
+}
+
 fn render_generated_activated_ability(ability: &ActivatedAbilityDef) -> String {
     if ability.source_zone == AbilitySourceZone::Battlefield
         && ability.costs == [AbilityCost::Tap]
@@ -839,14 +906,15 @@ fn render_generated_activated_ability(ability: &ActivatedAbilityDef) -> String {
         && ability.activation_limit.is_none()
     {
         return format!(
-            "(costs: [Tap], effect: [{}], text: {:?})",
+            "(ability_id: {:?}, presentation: {}, costs: [Tap], effect: [{}])",
+            ability.ability_id.as_str(),
+            render_presentation(&ability.presentation),
             ability
                 .effect
                 .iter()
                 .map(render_generated_effect)
                 .collect::<Vec<_>>()
-                .join(", "),
-            ability.text
+                .join(", ")
         );
     }
     ron::ser::to_string(ability).expect("generated activated ability should serialize")
@@ -861,14 +929,15 @@ fn render_generated_triggered_ability(ability: &TriggeredAbilityDef) -> String {
         && !ability.triggers_only_once
     {
         return format!(
-            "(trigger: WhenSelfEntersBattlefield, effect: [{}], text: {:?})",
+            "(ability_id: {:?}, presentation: {}, trigger: WhenSelfEntersBattlefield, effect: [{}])",
+            ability.ability_id.as_str(),
+            render_presentation(&ability.presentation),
             ability
                 .effect
                 .iter()
                 .map(render_generated_effect)
                 .collect::<Vec<_>>()
-                .join(", "),
-            ability.text
+                .join(", ")
         );
     }
     ron::ser::to_string(ability).expect("generated triggered ability should serialize")
@@ -930,6 +999,7 @@ enum Skip {
     SlugCollision,
     NameCollision,
     AlreadyImplemented,
+    NewCandidate,
 }
 
 impl Skip {
@@ -949,6 +1019,7 @@ impl Skip {
             Skip::SlugCollision => "slug collides with another generated card",
             Skip::NameCollision => "whole-card or face name collision",
             Skip::AlreadyImplemented => "already present in data/",
+            Skip::NewCandidate => "new candidate requires --include-new",
         }
     }
 
@@ -1036,6 +1107,23 @@ fn str_field<'a>(card: &'a Value, key: &str) -> &'a str {
 
 fn normalize_name(name: &str) -> String {
     name.trim().to_lowercase()
+}
+
+fn canonical_face_id(name: &str) -> Result<CardFaceId, Skip> {
+    let mut id = String::new();
+    let mut separator_pending = false;
+    for character in name.chars() {
+        if character.is_ascii_alphanumeric() {
+            if separator_pending && !id.is_empty() {
+                id.push('_');
+            }
+            id.push(character.to_ascii_lowercase());
+            separator_pending = false;
+        } else {
+            separator_pending = true;
+        }
+    }
+    CardFaceId::new(id).map_err(|_| Skip::MalformedFaces)
 }
 
 fn parse_color(value: &Value) -> Result<Color, Skip> {
@@ -1145,6 +1233,7 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, Skip> {
     }
 
     Ok(GenFace {
+        face_id: canonical_face_id(&name)?,
         name,
         mana_cost,
         supertypes,
@@ -1154,6 +1243,7 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, Skip> {
         color_indicator,
         keywords: rules.keywords,
         spell_effect: rules.spell_effect,
+        spell_presentation: rules.spell_presentation,
         activated_abilities: rules.activated_abilities,
         triggered_abilities: rules.triggered_abilities,
         recipe_labels: rules.recipe_labels,
@@ -1196,6 +1286,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, Skip> {
         name: name.clone(),
         layout: GenLayout::Normal,
         faces: vec![GenFace {
+            face_id: canonical_face_id(&name)?,
             name,
             mana_cost,
             supertypes,
@@ -1205,6 +1296,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, Skip> {
             color_indicator: None,
             keywords: rules.keywords,
             spell_effect: rules.spell_effect,
+            spell_presentation: rules.spell_presentation,
             activated_abilities: rules.activated_abilities,
             triggered_abilities: rules.triggered_abilities,
             recipe_labels: rules.recipe_labels,
@@ -1315,6 +1407,49 @@ fn bucket(id: &str) -> char {
         .unwrap_or('_')
 }
 
+const GENERATED_PROVENANCE_PREFIX: &str = "// generated by gen-cards from Scryfall ";
+
+fn collect_ron_files(root: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+    if !root.exists() {
+        return Ok(());
+    }
+    for entry in
+        fs::read_dir(root).map_err(|error| format!("cannot read {}: {error}", root.display()))?
+    {
+        let path = entry
+            .map_err(|error| format!("cannot read {} entry: {error}", root.display()))?
+            .path();
+        if path.is_dir() {
+            collect_ron_files(&path, files)?;
+        } else if path.extension().and_then(|value| value.to_str()) == Some("ron") {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn generated_outputs(root: &Path) -> Result<HashMap<String, PathBuf>, String> {
+    let mut files = Vec::new();
+    collect_ron_files(root, &mut files)?;
+    let mut generated = HashMap::new();
+    for path in files {
+        let source = fs::read_to_string(&path)
+            .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+        if !source.starts_with(GENERATED_PROVENANCE_PREFIX) {
+            continue;
+        }
+        let id = path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| format!("generated path has no UTF-8 stem: {}", path.display()))?
+            .to_string();
+        if generated.insert(id.clone(), path.clone()).is_some() {
+            return Err(format!("duplicate generated card id {id}"));
+        }
+    }
+    Ok(generated)
+}
+
 fn main() -> ExitCode {
     let args = match parse_args() {
         Ok(a) => a,
@@ -1325,7 +1460,17 @@ fn main() -> ExitCode {
         }
     };
 
-    // Existing corpus (the registry is embedded from the current data/ at build time).
+    let tracked_generated = match generated_outputs(&args.out_dir) {
+        Ok(outputs) => outputs,
+        Err(error) => {
+            eprintln!("error: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let tracked_generated_ids: HashSet<_> = tracked_generated.keys().cloned().collect();
+
+    // Existing handwritten corpus (the registry is embedded from current data/ at build time).
+    // Valid generated provenance is the only authority that permits refresh to replace a file.
     let registry = match CardRegistry::from_embedded() {
         Ok(r) => r,
         Err(e) => {
@@ -1333,9 +1478,16 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let existing_ids: HashSet<String> = registry.definitions().map(|d| d.id.clone()).collect();
+    let existing_ids: HashSet<String> = registry
+        .definitions()
+        .filter(|definition| !tracked_generated_ids.contains(&definition.id))
+        .map(|definition| definition.id.clone())
+        .collect();
     let mut existing_names: HashSet<String> = HashSet::new();
     for definition in registry.definitions() {
+        if tracked_generated_ids.contains(&definition.id) {
+            continue;
+        }
         existing_names.insert(normalize_name(&definition.name));
         if definition.is_multiface() {
             existing_names.extend(
@@ -1371,6 +1523,10 @@ fn main() -> ExitCode {
             &generated_names,
         ) {
             Ok(gen) => {
+                if !args.include_new && !tracked_generated_ids.contains(&gen.id) {
+                    stats.record_skip(Skip::NewCandidate);
+                    return true;
+                }
                 generated_ids.insert(gen.id.clone());
                 generated_names.extend(gen.names().into_iter().map(normalize_name));
                 stats.record_qualified(gen.layout);
@@ -1418,6 +1574,35 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
 
+    if args.check {
+        let mut drift = Vec::new();
+        let mut expected_paths = HashSet::new();
+        for gen in &to_emit {
+            let path = args
+                .out_dir
+                .join(bucket(&gen.id).to_string())
+                .join(format!("{}.ron", gen.id));
+            expected_paths.insert(path.clone());
+            let expected = gen.to_ron(&provenance);
+            match fs::read_to_string(&path) {
+                Ok(actual) if actual == expected => {}
+                Ok(_) => drift.push(format!("content drift: {}", path.display())),
+                Err(error) => drift.push(format!("missing {}: {error}", path.display())),
+            }
+        }
+        for path in tracked_generated.values() {
+            if !expected_paths.contains(path) {
+                drift.push(format!("stale generated output: {}", path.display()));
+            }
+        }
+        if !drift.is_empty() {
+            eprintln!("generated data is not canonical:\n{}", drift.join("\n"));
+            return ExitCode::FAILURE;
+        }
+        eprintln!("Generated data is canonical ({} files).", to_emit.len());
+        return ExitCode::SUCCESS;
+    }
+
     let mut written = 0usize;
     for gen in &to_emit {
         let dir = args.out_dir.join(bucket(&gen.id).to_string());
@@ -1426,6 +1611,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
         let path = dir.join(format!("{}.ron", gen.id));
+        if path.exists() && !tracked_generated.values().any(|tracked| tracked == &path) {
+            eprintln!(
+                "error: refusing to overwrite non-generated file {}",
+                path.display()
+            );
+            return ExitCode::FAILURE;
+        }
         if let Err(e) = fs::write(&path, gen.to_ron(&provenance)) {
             eprintln!("error: cannot write {}: {e}", path.display());
             return ExitCode::FAILURE;
@@ -1646,7 +1838,7 @@ mod tests {
         let generated = evaluate_fresh(&card).expect("normal card should qualify");
         assert_eq!(
             generated.to_ron("fixture"),
-            "// fixture\n(\n  id: \"test_bear\",\n  name: \"Test Bear\",\n  mana_cost: \"{1}{G}\",\n  types: [\"Creature\", \"Bear\"],\n  power: 2,\n  toughness: 2,\n  keywords: [Vigilance],\n)\n"
+            "// fixture\n(\n  id: \"test_bear\",\n  name: \"Test Bear\",\n  face_id: \"test_bear\",\n  mana_cost: \"{1}{G}\",\n  types: [\"Creature\", \"Bear\"],\n  power: 2,\n  toughness: 2,\n  keywords: [Vigilance],\n)\n"
         );
     }
 

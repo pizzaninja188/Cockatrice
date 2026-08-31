@@ -1,15 +1,15 @@
 (
   id: "hermetic_study",
   name: "Hermetic Study",
+  face_id: "hermetic_study",
   mana_cost: "{1}{U}",
-  // Oracle: Enchant creature. Enchanted creature has
-  // "{T}: This creature deals 1 damage to any target."
   // CR 113.7a, 113.10a, 303.4, 602.2a, 611.3, and 613.1f.
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
-  static_abilities: [AttachedModifier(activated_abilities: [(
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
     costs: [Tap],
     effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))],
-    text: "{T}: This creature deals 1 damage to any target.",
-  )])],
+  )]))],
 )

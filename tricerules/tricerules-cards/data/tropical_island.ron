@@ -1,13 +1,15 @@
 (
   id: "tropical_island",
   name: "Tropical Island",
+  face_id: "tropical_island",
   mana_cost: "",
   types: ["Land", "Forest", "Island"],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: Fallback,
       costs: [Tap],
       effect: [ProduceMana(options: [(g: 1), (u: 1)])],
-      text: "{T}: Add {G} or {U}.",
     ),
   ],
 )

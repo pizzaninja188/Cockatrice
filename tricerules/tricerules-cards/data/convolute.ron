@@ -1,8 +1,9 @@
 (
   id: "convolute",
   name: "Convolute",
+  face_id: "convolute",
   mana_cost: "{2}{U}",
   types: ["Instant"],
-  // "Counter target spell unless its controller pays {4}."
+  // Typed soft-counter payment requires the targeted spell's controller to pay {4}.
   spell_effect: [CounterTargetSpell(spell_filter: None, unless_controller_pays: Some(4))],
 )

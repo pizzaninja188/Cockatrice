@@ -1,6 +1,7 @@
 (
   id: "cryptic_command",
   name: "Cryptic Command",
+  face_id: "cryptic_command",
   mana_cost: "{1}{U}{U}{U}",
   types: ["Instant"],
   modal_spell: (
@@ -8,19 +9,23 @@
     max_modes: 2,
     modes: [
       (
-        label: "Counter target spell",
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
         effects: [CounterTargetSpell(spell_filter: None, unless_controller_pays: None)],
       ),
       (
-        label: "Return target permanent to its owner's hand",
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
         effects: [ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent)))],
       ),
       (
-        label: "Tap all creatures your opponents control",
+        mode_id: "mode_03",
+        presentation: OracleLines([4]),
         effects: [TapAllCreatures(players: Opponents)],
       ),
       (
-        label: "Draw a card",
+        mode_id: "mode_04",
+        presentation: OracleLines([5]),
         effects: [Draw(count: 1)],
       ),
     ],

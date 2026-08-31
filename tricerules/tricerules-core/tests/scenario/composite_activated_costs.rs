@@ -20,7 +20,7 @@ fn apparatus_pays_mana_tap_and_self_sacrifice_before_resolution() {
         matches!(
             &event.ev,
             Some(Ev::Log(log))
-                if log.text == "P0 activates Explosive Apparatus sacrificing Explosive Apparatus: {3}, {T}, Sacrifice this artifact: It deals 2 damage to any target. — P1"
+                if log.text == "P0 activates Explosive Apparatus sacrificing Explosive Apparatus: Explosive Apparatus — activated ability (activated_01) — P1"
         )
     }));
     assert_eq!(e.state.players[0].mana_pool.colorless, 0);
@@ -219,7 +219,7 @@ fn discard_cost_uses_authoritative_hand_slot() {
         matches!(
             &event.ev,
             Some(Ev::Log(log))
-                if log.text == "P0 activates Noose Constrictor discarding Forest: Discard a card: This creature gets +1/+1 until end of turn."
+                if log.text == "P0 activates Noose Constrictor discarding Forest: Noose Constrictor — activated ability (activated_01)"
         )
     }));
 

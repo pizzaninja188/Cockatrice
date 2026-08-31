@@ -1,9 +1,10 @@
 (
   id: "overrun",
   name: "Overrun",
+  face_id: "overrun",
   mana_cost: "{2}{G}{G}{G}",
   types: ["Sorcery"],
-  // "Creatures you control get +3/+3 and gain trample until end of turn."
+  // Controller-wide +3/+3 and trample modification through end of turn.
   // CR 613 layer 7c (PumpAll) + layer 6 (GrantKeywordsAll), both UntilEndOfTurn.
   spell_effect: [
     PumpAll(

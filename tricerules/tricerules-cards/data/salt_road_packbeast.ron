@@ -3,6 +3,7 @@
 (
   id: "salt_road_packbeast",
   name: "Salt Road Packbeast",
+  face_id: "salt_road_packbeast",
   mana_cost: "{5}{W}",
   cost_modifiers: [BattlefieldCountGenericReduction(
     amount_per_match: 1,
@@ -12,8 +13,9 @@
   power: 4,
   toughness: 3,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [Draw(count: 1)],
-    text: "When this creature enters, draw a card.",
   )],
 )

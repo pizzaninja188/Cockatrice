@@ -1,6 +1,7 @@
 (
   id: "finishing_blow",
   name: "Finishing Blow",
+  face_id: "finishing_blow",
   mana_cost: "{4}{B}",
   types: ["Instant"],
   spell_effect: [Destroy(subject: Chosen((any_of: Some([

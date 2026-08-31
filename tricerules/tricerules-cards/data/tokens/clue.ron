@@ -2,10 +2,12 @@
 (
   id: "clue",
   name: "Clue",
+  face_id: "clue",
   types: ["Artifact", "Clue"],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
     costs: [Mana("{2}"), SacrificeSelf],
     effect: [Draw(count: 1)],
-    text: "{2}, Sacrifice this token: Draw a card.",
   )],
 )

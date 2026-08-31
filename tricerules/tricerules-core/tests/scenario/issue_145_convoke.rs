@@ -387,7 +387,8 @@ fn convoke_combines_restricted_mana_and_refreshes_unavailable_group_amounts() {
         .state
         .mana_restrictions
         .push(ManaSpendingRestriction {
-            label: "Spend only on an instant or sorcery".into(),
+            restriction_id: tricerules_cards::ChoiceId::new("restriction_01").unwrap(),
+            presentation: tricerules_cards::AbilityPresentation::Fallback,
             cast_spell: vec![ManaSpendFilter {
                 card_type: Some(CardTypeFilter::InstantOrSorcery),
                 subtype: None,

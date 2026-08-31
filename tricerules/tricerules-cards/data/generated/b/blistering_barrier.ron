@@ -2,6 +2,7 @@
 (
   id: "blistering_barrier",
   name: "Blistering Barrier",
+  face_id: "blistering_barrier",
   mana_cost: "{2}{R}",
   types: ["Creature", "Wall"],
   power: 5,

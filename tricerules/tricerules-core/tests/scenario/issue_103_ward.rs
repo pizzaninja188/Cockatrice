@@ -68,7 +68,10 @@ fn opponent_targeting_dirgur_creates_a_public_ward_trigger() {
     assert_eq!(engine.state.stack.len(), 2, "Ward must be above Unsummon");
     let ward = engine.state.stack.last().expect("Ward trigger");
     assert!(ward.is_triggered);
-    assert_eq!(ward.ability_text.as_deref(), Some("Ward {2}"));
+    assert_eq!(
+        ward.ability_text.as_deref(),
+        Some("Dirgur Island Dragon — triggered ability (triggered_01)")
+    );
 }
 
 #[test]
@@ -511,7 +514,7 @@ fn ward_can_counter_a_targeting_spell_copy_without_moving_a_card() {
             .expect("Ward trigger")
             .ability_text
             .as_deref(),
-        Some("Ward {2}")
+        Some("Dirgur Island Dragon — triggered ability (triggered_01)")
     );
 
     pass_both_players(&mut engine);

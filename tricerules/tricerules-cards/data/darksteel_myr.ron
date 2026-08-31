@@ -1,6 +1,7 @@
 (
   id: "darksteel_myr",
   name: "Darksteel Myr",
+  face_id: "darksteel_myr",
   mana_cost: "{3}",
   types: ["Artifact", "Creature", "Myr"],
   power: 0,

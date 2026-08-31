@@ -1,6 +1,7 @@
 (
   id: "fog",
   name: "Fog",
+  face_id: "fog",
   mana_cost: "{G}",
   types: ["Instant"],
   spell_effect: [PreventAllCombatDamageTurn],

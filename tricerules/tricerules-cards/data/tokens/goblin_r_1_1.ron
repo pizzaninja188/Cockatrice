@@ -2,6 +2,7 @@
 (
     id: "goblin_r_1_1",
     name: "Goblin",
+    face_id: "goblin",
     types: ["Creature", "Goblin"],
     colors: [Red],
     power: 1,

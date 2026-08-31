@@ -2,17 +2,19 @@
 (
   id: "platypus-bear",
   name: "Platypus-Bear",
+  face_id: "platypus_bear",
   mana_cost: "{1}{G/U}",
   types: ["Creature", "Platypus", "Bear"],
   power: 2,
   toughness: 3,
   keywords: [Defender],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     effect: [Mill(count: 2, player: Controller)],
-    text: "When this creature enters, mill two cards.",
   )],
-  static_abilities: [ConditionalSelfModifier(
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
     condition: GraveyardAggregate(
       owners: Controller,
       aggregate: CardCount,
@@ -20,5 +22,5 @@
       min: Some(1),
     ),
     can_attack_as_though_without_defender: true,
-  )],
+  ))],
 )

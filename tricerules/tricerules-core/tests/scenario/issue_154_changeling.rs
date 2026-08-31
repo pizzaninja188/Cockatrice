@@ -42,7 +42,10 @@ fn issue_154_authors_the_seven_changeling_cards() {
     let spikeling = registry.get("feisty_spikeling").unwrap().primary_face();
     assert!(matches!(
         spikeling.static_abilities.as_slice(),
-        [StaticAbilityDef::ConditionalSelfModifier { .. }]
+        [ability] if matches!(
+            ability.definition,
+            StaticAbilityDef::ConditionalSelfModifier { .. }
+        )
     ));
     let sneakling = registry
         .get("mischievous_sneakling")
@@ -51,10 +54,6 @@ fn issue_154_authors_the_seven_changeling_cards() {
     assert!(sneakling.keywords.contains(&Keyword::Flash));
 
     let core = registry.get("firdoch_core").unwrap();
-    assert!(core
-        .partial
-        .as_deref()
-        .is_some_and(|reason| reason.contains("4/4")));
     let core_face = core.primary_face();
     assert!(core_face.is_artifact);
     assert!(!core_face.is_creature);

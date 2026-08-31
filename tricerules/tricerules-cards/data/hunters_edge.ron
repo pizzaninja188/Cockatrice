@@ -1,6 +1,7 @@
 (
   id: "hunters_edge",
   name: "Hunter's Edge",
+  face_id: "hunter_s_edge",
   mana_cost: "{3}{G}",
   types: ["Sorcery"],
   spell_effect: [

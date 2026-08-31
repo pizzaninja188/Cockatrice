@@ -2,6 +2,7 @@
 (
   id: "crystacean",
   name: "Crystacean",
+  face_id: "crystacean",
   mana_cost: "{3}{U}",
   types: ["Creature", "Crab"],
   power: 1,

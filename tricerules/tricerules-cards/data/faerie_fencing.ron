@@ -3,6 +3,7 @@
 (
   id: "faerie_fencing",
   name: "Faerie Fencing",
+  face_id: "faerie_fencing",
   mana_cost: "{X}{B}",
   types: ["Instant"],
   cast_conditions: [BattlefieldAggregate(

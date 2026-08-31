@@ -115,6 +115,38 @@ fn child_text<'a>(node: roxmltree::Node<'a, 'a>, tag: &str) -> Option<&'a str> {
         .and_then(|c| c.text())
 }
 
+fn partial_card_notes() -> Result<HashMap<&'static str, &'static str>, String> {
+    let mut notes = HashMap::new();
+    for (line_index, line) in include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/authoring/partial-cards.tsv"
+    ))
+    .lines()
+    .enumerate()
+    {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((card_id, note)) = line.split_once('\t') else {
+            return Err(format!(
+                "partial-cards.tsv line {} must be card_id<TAB>note",
+                line_index + 1
+            ));
+        };
+        if card_id.is_empty() || note.trim().is_empty() {
+            return Err(format!(
+                "partial-cards.tsv line {} has an empty card id or note",
+                line_index + 1
+            ));
+        }
+        if notes.insert(card_id, note.trim()).is_some() {
+            return Err(format!("duplicate partial card id '{card_id}'"));
+        }
+    }
+    Ok(notes)
+}
+
 fn main() -> ExitCode {
     let args = match parse_args() {
         Ok(a) => a,
@@ -134,14 +166,21 @@ fn main() -> ExitCode {
         }
     };
     let mut implemented: HashMap<String, Status> = HashMap::new();
+    let partial_notes = match partial_card_notes() {
+        Ok(notes) => notes,
+        Err(error) => {
+            eprintln!("error: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
     // For each face name added as an alias, track its parent composite card name.
     // Used so that face-name aliases whose parent was matched by Oracle are not flagged as
     // missing: e.g. "Fire" is an alias for "Fire // Ice"; if "Fire // Ice" is matched (Oracle
     // stores split cards combined) then "Fire" must not be reported as unmatched.
     let mut face_alias_parent: HashMap<String, String> = HashMap::new();
     for def in registry.definitions() {
-        let status = match &def.partial {
-            Some(note) => Status::Partial(note.clone()),
+        let status = match partial_notes.get(def.id.as_str()) {
+            Some(note) => Status::Partial((*note).to_owned()),
             None => Status::Full,
         };
         let composite = def.name.trim().to_string();
@@ -158,6 +197,12 @@ fn main() -> ExitCode {
                     .entry(face_name)
                     .or_insert_with(|| composite.clone());
             }
+        }
+    }
+    for card_id in partial_notes.keys() {
+        if registry.get(card_id).is_none() {
+            eprintln!("error: partial-cards.tsv references unknown card id '{card_id}'");
+            return ExitCode::FAILURE;
         }
     }
     // Track which implemented names we actually find in Oracle, to flag mismatches.

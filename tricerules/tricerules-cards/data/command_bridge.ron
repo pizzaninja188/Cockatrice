@@ -3,19 +3,23 @@
 (
   id: "command_bridge",
   name: "Command Bridge",
+  face_id: "command_bridge",
   mana_cost: "",
   types: ["Land"],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
     costs: [Tap],
     effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
-    text: "{T}: Add one mana of any color.",
   )],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [ChooseResolutionBranch(
       branches: [
         (
-          label: "Tap an untapped permanent you control",
+          branch_id: "tap_an_untapped_permanent_you_control", presentation: Fallback,
           cost: TapPermanents(
             count: 1,
             filter: (kind: AnyPermanent, controller: You),
@@ -24,13 +28,12 @@
           effects: [],
         ),
         (
-          label: "Sacrifice Command Bridge",
+          branch_id: "sacrifice_command_bridge", presentation: Fallback,
           cost: None,
           effects: [Sacrifice(subject: Source)],
         ),
       ],
     )],
-    text: "When this land enters, sacrifice it unless you tap an untapped permanent you control.",
   )],
-  static_abilities: [EntersTapped(affected: Self_)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Self_))],
 )

@@ -1,13 +1,16 @@
 // Oracle and ruling checked against Scryfall on 2026-08-26. CR 603.4 checks the committed
-// event-time "another creature entered" fact at trigger creation and resolution.
+// event-time other-creature entry fact at trigger creation and resolution.
 (
   id: "wary_farmer",
   name: "Wary Farmer",
+  face_id: "wary_farmer",
   mana_cost: "{1}{G/W}{G/W}",
   types: ["Creature", "Kithkin", "Citizen"],
   power: 3,
   toughness: 3,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: AtBeginningOfEndStep(player: Controller),
     effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
     intervening_if: Some(GameCondition(PermanentsEnteredThisTurn(
@@ -15,6 +18,5 @@
       filter: (permanent_type: Some(Creature), exclude_source: true),
       min: Some(1),
     ))),
-    text: "At the beginning of your end step, if another creature entered the battlefield under your control this turn, surveil 1.",
   )],
 )

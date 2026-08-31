@@ -2,9 +2,10 @@
 (
   id: "healer_of_the_glade",
   name: "Healer of the Glade",
+  face_id: "healer_of_the_glade",
   mana_cost: "{G}",
   types: ["Creature", "Elemental"],
   power: 1,
   toughness: 2,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)], text: "When this creature enters, you gain 3 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)])],
 )

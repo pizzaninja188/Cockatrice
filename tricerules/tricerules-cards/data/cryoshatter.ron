@@ -2,17 +2,20 @@
 (
   id: "cryoshatter",
   name: "Cryoshatter",
+  face_id: "cryoshatter",
   mana_cost: "{U}",
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverAttachedObjectBecomesTapped,
     effect: [Destroy(subject: TriggerObject)],
-    text: "When enchanted creature becomes tapped, destroy it.",
   ), (
+    ability_id: "triggered_02",
+    presentation: Fallback,
     trigger: WheneverAttachedObjectIsDealtDamage,
     effect: [Destroy(subject: TriggerObject)],
-    text: "When enchanted creature is dealt damage, destroy it.",
   )],
-  static_abilities: [AttachedModifier(delta_power: -5, delta_toughness: 0)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(delta_power: -5, delta_toughness: 0))],
 )

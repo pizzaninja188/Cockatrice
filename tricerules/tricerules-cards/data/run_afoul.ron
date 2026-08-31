@@ -1,6 +1,7 @@
 (
   id: "run_afoul",
   name: "Run Afoul",
+  face_id: "run_afoul",
   mana_cost: "{G}",
   types: ["Instant"],
   spell_effect: [

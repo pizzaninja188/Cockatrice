@@ -2,10 +2,11 @@
 (
   id: "chitinous_graspling",
   name: "Chitinous Graspling",
+  face_id: "chitinous_graspling",
   mana_cost: "{3}{G/U}",
   types: ["Creature", "Shapeshifter"],
   power: 3,
   toughness: 4,
-  characteristic_defining_abilities: [Changeling],
+  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)],
   keywords: [Reach],
 )

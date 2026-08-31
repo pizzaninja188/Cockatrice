@@ -2,6 +2,7 @@
 (
   id: "haunted_guardian",
   name: "Haunted Guardian",
+  face_id: "haunted_guardian",
   mana_cost: "{2}",
   types: ["Artifact", "Creature", "Construct"],
   power: 2,

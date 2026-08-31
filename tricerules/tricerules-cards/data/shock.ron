@@ -1,6 +1,7 @@
 (
   id: "shock",
   name: "Shock",
+  face_id: "shock",
   mana_cost: "{R}",
   types: ["Instant"],
   spell_effect: [DamageTarget(amount: 2, target: (kind: AnyTarget))],

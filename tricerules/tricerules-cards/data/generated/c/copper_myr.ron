@@ -2,9 +2,10 @@
 (
   id: "copper_myr",
   name: "Copper Myr",
+  face_id: "copper_myr",
   mana_cost: "{2}",
   types: ["Artifact", "Creature", "Myr"],
   power: 1,
   toughness: 1,
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1)])], text: "{T}: Add {G}.")],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(g: 1)])])],
 )

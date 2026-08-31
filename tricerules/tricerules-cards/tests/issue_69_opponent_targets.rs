@@ -13,7 +13,6 @@ fn glaring_aegis_has_complete_oracle_behavior() {
     assert_eq!(definition.name, "Glaring Aegis");
     assert_eq!(face.mana_cost.to_string(), "{W}");
     assert_eq!(face.types, ["Enchantment", "Aura"]);
-    assert!(definition.partial.is_none());
     assert_eq!(
         face.spell_effect,
         [SpellEffectKind::AuraAttach {
@@ -73,7 +72,6 @@ fn rambunctious_mutt_has_complete_oracle_behavior() {
     assert_eq!(face.mana_cost.to_string(), "{3}{W}{W}");
     assert_eq!(face.types, ["Creature", "Dog"]);
     assert_eq!((face.power, face.toughness), (Some(3), Some(4)));
-    assert!(definition.partial.is_none());
     assert_eq!(face.triggered_abilities.len(), 1);
     assert_eq!(
         face.triggered_abilities[0].trigger,

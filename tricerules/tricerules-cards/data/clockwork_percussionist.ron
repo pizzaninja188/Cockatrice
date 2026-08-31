@@ -3,14 +3,16 @@
 (
   id: "clockwork_percussionist",
   name: "Clockwork Percussionist",
+  face_id: "clockwork_percussionist",
   mana_cost: "{R}",
   types: ["Artifact", "Creature", "Monkey", "Toy"],
   power: 1,
   toughness: 1,
   keywords: [Haste],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfDies,
     effect: [ExileTopWithPlayPermission(player: Controller)],
-    text: "When Clockwork Percussionist dies, exile the top card of your library. You may play it until the end of your next turn.",
   )],
 )

@@ -3,11 +3,14 @@
 (
   id: "mentor_of_the_meek",
   name: "Mentor of the Meek",
+  face_id: "mentor_of_the_meek",
   mana_cost: "{2}{W}",
   types: ["Creature", "Human", "Soldier"],
   power: 2,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WheneverPermanentEntersBattlefield(
       controller: Controller,
       filter: (permanent_type: Some(Creature), exclude_source: true),
@@ -16,11 +19,10 @@
     effect: [ChooseResolutionBranch(
       optional: true,
       branches: [(
-        label: "Pay {1}",
+        branch_id: "pay_1", presentation: Fallback,
         cost: Mana("{1}"),
         effects: [Draw(count: 1)],
       )],
     )],
-    text: "Whenever another creature you control with power 2 or less enters, you may pay {1}. If you do, draw a card.",
   )],
 )

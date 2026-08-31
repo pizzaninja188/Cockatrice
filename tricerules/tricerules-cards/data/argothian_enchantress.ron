@@ -1,6 +1,7 @@
 (
   id: "argothian_enchantress",
   name: "Argothian Enchantress",
+  face_id: "argothian_enchantress",
   mana_cost: "{1}{G}",
   types: ["Creature", "Human", "Druid"],
   power: 0,
@@ -8,9 +9,10 @@
   keywords: [Shroud],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WheneverPlayerCastsSpell(filter: (card_type: Some(Enchantment))),
       effect: [Draw(count: 1)],
-      text: "Whenever you cast an enchantment spell, draw a card.",
     ),
   ],
 )

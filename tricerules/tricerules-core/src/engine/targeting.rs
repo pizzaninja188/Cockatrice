@@ -2055,7 +2055,7 @@ fn compute_targets_with_context(
 mod tests {
     #[test]
     fn issue_176_exile_role_accepts_noncreature_artifacts() {
-        let card = r#"(id: "test", name: "Test", types: ["Instant"], spell_effect: [Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact], excluded_permanent_types: [Creature])))])"#;
+        let card = r#"(id: "test", name: "Test", face_id: "test", types: ["Instant"], spell_effect: [Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact], excluded_permanent_types: [Creature])))])"#;
         let registry = CardRegistry::from_chunks_and_tokens(&[card], &[]).unwrap();
         let effect = &registry.get("test").unwrap().primary_face().spell_effect[0];
         let decks = Some(vec![
@@ -2202,7 +2202,7 @@ mod tests {
     }
     fn issue_176_target(source: &str) -> TargetFilter {
         let card = format!(
-            r#"(id: "test", name: "Test", types: ["Instant"], spell_effect: [DamageTarget(target: {source}, amount: 1)])"#
+            r#"(id: "test", name: "Test", face_id: "test", types: ["Instant"], spell_effect: [DamageTarget(target: {source}, amount: 1)])"#
         );
         let registry = CardRegistry::from_chunks_and_tokens(&[&card], &[]).unwrap();
         let SpellEffectKind::DamageTarget { target, .. } =
@@ -2215,7 +2215,7 @@ mod tests {
 
     fn issue_176_graveyard(source: &str) -> GraveyardFilter {
         let card = format!(
-            r#"(id: "test", name: "Test", types: ["Instant"], spell_effect: [MoveGraveyardCards(filter: {source}, destination: Hand)])"#
+            r#"(id: "test", name: "Test", face_id: "test", types: ["Instant"], spell_effect: [MoveGraveyardCards(filter: {source}, destination: Hand)])"#
         );
         let registry = CardRegistry::from_chunks_and_tokens(&[&card], &[]).unwrap();
         let SpellEffectKind::MoveGraveyardCards { filter, .. } =

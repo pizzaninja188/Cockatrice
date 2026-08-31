@@ -1,6 +1,7 @@
 (
   id: "feat_of_resistance",
   name: "Feat of Resistance",
+  face_id: "feat_of_resistance",
   mana_cost: "{1}{W}",
   // Oracle and rulings checked 2026-08-18: the color is chosen as this spell resolves.
   types: ["Instant"],

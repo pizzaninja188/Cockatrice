@@ -3,8 +3,8 @@
     Regenerates tricerules/CARDS.md, the implemented-card checklist grouped by set.
 .DESCRIPTION
     Implementation status (full / partial / not started) comes from the tricerules card
-    registry; set grouping and release dates come from the Oracle cards.xml. Each card is
-    filed under its first/original printing.
+    registry plus its authoring-only partial-card manifest; set grouping and release dates come
+    from the Oracle cards.xml. Each card is filed under its first/original printing.
 
     Any extra arguments are passed straight through to the generator, e.g.:
         --sets ZNR,DOM        only emit those sets

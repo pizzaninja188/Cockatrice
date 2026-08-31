@@ -2,10 +2,11 @@
 (
   id: "aven_battle_priest",
   name: "Aven Battle Priest",
+  face_id: "aven_battle_priest",
   mana_cost: "{5}{W}",
   types: ["Creature", "Bird", "Cleric"],
   power: 3,
   toughness: 3,
   keywords: [Flying],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)], text: "When this creature enters, you gain 3 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)])],
 )

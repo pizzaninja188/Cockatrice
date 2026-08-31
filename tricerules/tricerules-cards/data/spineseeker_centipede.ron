@@ -1,15 +1,16 @@
-// Oracle (DSK): When this creature enters, search your library for a basic land card, reveal it,
-// put it into your hand, then shuffle. Delirium — As long as there are four or more card types
-// among cards in your graveyard, this creature gets +1/+2 and has vigilance.
+// The graveyard card-type condition is reevaluated continuously.
 (
   id: "spineseeker_centipede",
   name: "Spineseeker Centipede",
+  face_id: "spineseeker_centipede",
   mana_cost: "{2}{G}",
   types: ["Creature", "Insect"],
   power: 2,
   toughness: 1,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [
         SearchLibrary(
@@ -19,11 +20,10 @@
           reveal: true,
         ),
       ],
-      text: "When this creature enters, search your library for a basic land card, reveal it, put it into your hand, then shuffle.",
     ),
   ],
   static_abilities: [
-    ConditionalSelfModifier(
+    (ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
       condition: GraveyardAggregate(
         owners: Controller,
         aggregate: DistinctCardTypes,
@@ -32,6 +32,6 @@
       delta_power: 1,
       delta_toughness: 2,
       keywords: [Vigilance],
-    ),
+    )),
   ],
 )

@@ -1,6 +1,7 @@
 (
   id: "steadfast_sentry",
   name: "Steadfast Sentry",
+  face_id: "steadfast_sentry",
   mana_cost: "{2}{W}",
   types: ["Creature", "Human", "Soldier"],
   power: 3,
@@ -8,6 +9,8 @@
   keywords: [Vigilance],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WhenSelfDies,
       effect: [
         PutCounters(
@@ -16,7 +19,6 @@
           subject: Chosen((kind: Creature, controller: You)),
         ),
       ],
-      text: "When this creature dies, put a +1/+1 counter on target creature you control.",
     ),
   ],
 )

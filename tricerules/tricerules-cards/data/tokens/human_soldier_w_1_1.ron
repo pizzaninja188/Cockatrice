@@ -1,6 +1,7 @@
 (
   id: "human_soldier_w_1_1",
   name: "Human Soldier",
+  face_id: "human_soldier",
   types: ["Creature", "Human", "Soldier"],
   colors: [White],
   power: 1,

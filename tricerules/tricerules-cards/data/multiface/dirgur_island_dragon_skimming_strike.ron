@@ -6,22 +6,25 @@
   faces: [
     (
       name: "Dirgur Island Dragon",
+      face_id: "dirgur_island_dragon",
       mana_cost: "{5}{U}",
       types: ["Creature", "Dragon"],
       power: 4,
       toughness: 4,
       keywords: [Flying],
       triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: Fallback,
         trigger: WheneverSelfBecomesTarget(
           source: SpellOrAbility,
           source_controller: Opponent,
         ),
         effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))],
-        text: "Ward {2}",
       )],
     ),
     (
       name: "Skimming Strike",
+      face_id: "skimming_strike",
       mana_cost: "{1}{U}",
       types: ["Instant", "Omen"],
       spell_effect: [

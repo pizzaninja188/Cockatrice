@@ -2,14 +2,16 @@
 (
     id: "enterprising_scallywag",
     name: "Enterprising Scallywag",
+    face_id: "enterprising_scallywag",
     mana_cost: "{1}{R}",
     types: ["Creature", "Goblin", "Pirate"],
     power: 2,
     toughness: 2,
     triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: Fallback,
         trigger: AtBeginningOfEndStep(player: Controller),
         intervening_if: Some(GameCondition(PermanentCardsEnteredGraveyardThisTurn(players: Controller, min: Some(1)))),
         effect: [CreateTokens(token: "treasure", count: 1)],
-        text: "At the beginning of your end step, if you descended this turn, create a Treasure token.",
     )],
 )

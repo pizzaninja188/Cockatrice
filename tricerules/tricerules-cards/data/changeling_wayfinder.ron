@@ -2,12 +2,15 @@
 (
   id: "changeling_wayfinder",
   name: "Changeling Wayfinder",
+  face_id: "changeling_wayfinder",
   mana_cost: "{3}",
   types: ["Creature", "Shapeshifter"],
   power: 1,
   toughness: 2,
-  characteristic_defining_abilities: [Changeling],
+  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     effect: [
       SearchLibrary(
@@ -17,6 +20,5 @@
         reveal: true,
       ),
     ],
-    text: "When this creature enters, search your library for a basic land card, reveal it, put it into your hand, then shuffle.",
   )],
 )

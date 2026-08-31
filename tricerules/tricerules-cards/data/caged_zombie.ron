@@ -1,16 +1,18 @@
 (
   id: "caged_zombie",
   name: "Caged Zombie",
+  face_id: "caged_zombie",
   mana_cost: "{2}{B}",
   types: ["Creature", "Zombie"],
   power: 2,
   toughness: 3,
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
       costs: [Mana("{1}{B}"), Tap],
       effect: [LoseLife(amount: Fixed(2), who: EachOpponent)],
       conditions: [GameCondition(CreatureDeathsThisTurn(min: Some(1), max: None))],
-      text: "{1}{B}, {T}: Each opponent loses 2 life. Activate only if a creature died this turn.",
     ),
   ],
 )

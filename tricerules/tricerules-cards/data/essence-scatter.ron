@@ -1,8 +1,9 @@
 (
   id: "essence_scatter",
   name: "Essence Scatter",
+  face_id: "essence_scatter",
   mana_cost: "{1}{U}",
   types: ["Instant"],
-  // "Counter target creature spell." (CR 701.5).
+  // The counter effect restricts its target to a creature spell (CR 701.5).
   spell_effect: [CounterTargetSpell(spell_filter: Creature, unless_controller_pays: None)],
 )

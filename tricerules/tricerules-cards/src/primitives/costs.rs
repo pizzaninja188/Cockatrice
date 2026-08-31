@@ -2,6 +2,7 @@
 
 use super::{BattlefieldPermanentFilter, GameCondition, TargetFilter, ZoneCardFilter};
 use crate::mana::ManaCost;
+use crate::{choice_fallback, AbilityPresentation, ChoiceId};
 use serde::{Deserialize, Serialize};
 
 /// Cost to activate an activated ability (CR 602). Shared by every activated ability,
@@ -130,8 +131,10 @@ pub enum AdditionalCost {
 /// vocabulary: both record an option before targets are chosen, then let later rules text query
 /// the stable receipt instead of re-examining the paid object.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CastCostGroupDef {
-    pub prompt: String,
+    pub group_id: ChoiceId,
+    pub presentation: AbilityPresentation,
     #[serde(default)]
     pub min: u32,
     #[serde(default = "default_one")]
@@ -144,17 +147,35 @@ fn default_one() -> u32 {
 }
 
 /// One mutually distinguishable option in a cast-cost group.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ManaCostChoiceKind {
+    AdditionalPayment,
+    Kicker,
+}
+
+/// One mutually distinguishable option in a cast-cost group.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub enum CastCostOptionDef {
     /// Cinder Strike's optional payment and Wild Unraveling's Blight-or-mana group.
-    Blight { label: String, count: u32 },
+    Blight {
+        option_id: ChoiceId,
+        presentation: AbilityPresentation,
+        count: u32,
+    },
     /// Pay this additional mana as part of the spell's single total cost. Grow from the Ashes and
     /// Gnarlid Colony use this for kicker.
-    Mana { label: String, cost: ManaCost },
+    Mana {
+        option_id: ChoiceId,
+        presentation: AbilityPresentation,
+        kind: ManaCostChoiceKind,
+        cost: ManaCost,
+    },
     /// CR 701.4: reveal one matching hand card or choose one matching permanent you control.
     /// Caustic Exhale and Osseous Exhale use the same typed selection.
     Behold {
-        label: String,
+        option_id: ChoiceId,
+        presentation: AbilityPresentation,
         hand_filter: ZoneCardFilter,
         permanent_filter: Box<TargetFilter>,
     },
@@ -162,47 +183,74 @@ pub enum CastCostOptionDef {
 
 impl CastCostGroupDef {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        if self.prompt.trim().is_empty() {
-            return Err("cast cost group prompt must not be empty".into());
-        }
+        self.group_id.validate()?;
+        self.presentation.validate()?;
         if self.options.is_empty() || self.min > self.max || self.max != 1 {
             return Err("cast cost group requires min <= max = 1".into());
         }
-        let mut labels = std::collections::HashSet::new();
+        let mut option_ids = std::collections::HashSet::new();
         for option in &self.options {
-            let label = match option {
-                CastCostOptionDef::Mana { label, .. }
-                | CastCostOptionDef::Behold { label, .. }
-                | CastCostOptionDef::Blight { label, .. } => label,
-            };
-            if !labels.insert(label.trim()) {
-                return Err("cast cost group option labels must be unique".into());
+            let option_id = option.option_id();
+            option_id.validate()?;
+            option.presentation().validate()?;
+            if !option_ids.insert(option_id.as_str()) {
+                return Err(format!("duplicate cast cost option id '{option_id}'"));
             }
             match option {
-                CastCostOptionDef::Blight { label, count } => {
-                    if label.trim().is_empty() || *count == 0 {
-                        return Err("blight option requires a label and positive count".into());
+                CastCostOptionDef::Blight { count, .. } => {
+                    if *count == 0 {
+                        return Err("blight option requires a positive count".into());
                     }
                 }
-                CastCostOptionDef::Mana { label, cost } => {
-                    if label.trim().is_empty() || cost.is_empty() {
-                        return Err("cast mana option requires a label and nonempty cost".into());
+                CastCostOptionDef::Mana { cost, .. } => {
+                    if cost.is_empty() {
+                        return Err("cast mana option requires a nonempty cost".into());
                     }
                 }
                 CastCostOptionDef::Behold {
-                    label,
                     hand_filter,
                     permanent_filter,
+                    ..
                 } => {
-                    if label.trim().is_empty() {
-                        return Err("behold option requires a label".into());
-                    }
                     hand_filter.validate()?;
                     permanent_filter.validate_target_constraints()?;
                 }
             }
         }
         Ok(())
+    }
+
+    pub fn fallback_prompt(&self) -> String {
+        choice_fallback("Choose cast cost", &self.group_id)
+    }
+}
+
+impl CastCostOptionDef {
+    pub fn option_id(&self) -> &ChoiceId {
+        match self {
+            Self::Blight { option_id, .. }
+            | Self::Mana { option_id, .. }
+            | Self::Behold { option_id, .. } => option_id,
+        }
+    }
+
+    pub fn presentation(&self) -> &AbilityPresentation {
+        match self {
+            Self::Blight { presentation, .. }
+            | Self::Mana { presentation, .. }
+            | Self::Behold { presentation, .. } => presentation,
+        }
+    }
+
+    pub fn fallback_label(&self) -> String {
+        match self {
+            Self::Blight { count, .. } => format!("Blight {count}"),
+            Self::Mana { kind, cost, .. } => match kind {
+                ManaCostChoiceKind::AdditionalPayment => format!("Pay {cost}"),
+                ManaCostChoiceKind::Kicker => format!("Kicker {cost}"),
+            },
+            Self::Behold { option_id, .. } => choice_fallback("Behold", option_id),
+        }
     }
 }
 

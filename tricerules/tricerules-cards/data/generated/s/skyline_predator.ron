@@ -2,6 +2,7 @@
 (
   id: "skyline_predator",
   name: "Skyline Predator",
+  face_id: "skyline_predator",
   mana_cost: "{4}{U}{U}",
   types: ["Creature", "Drake"],
   power: 3,

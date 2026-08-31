@@ -2,6 +2,7 @@
 (
   id: "archers_of_qarsi",
   name: "Archers of Qarsi",
+  face_id: "archers_of_qarsi",
   mana_cost: "{3}{G}",
   types: ["Creature", "Snake", "Archer"],
   power: 5,

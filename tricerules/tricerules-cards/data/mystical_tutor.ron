@@ -1,6 +1,7 @@
 (
     id: "mystical_tutor",
     name: "Mystical Tutor",
+    face_id: "mystical_tutor",
     mana_cost: "{U}",
     types: ["Instant"],
     spell_effect: [

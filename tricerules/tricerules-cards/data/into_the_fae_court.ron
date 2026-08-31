@@ -1,6 +1,6 @@
 // Oracle and rulings fetched 2026-08-27. Draw before creating the restricted Faerie (CR 608.2c).
 (
-  id: "into_the_fae_court", name: "Into the Fae Court", mana_cost: "{3}{U}{U}",
+  id: "into_the_fae_court", name: "Into the Fae Court", face_id: "into_the_fae_court", mana_cost: "{3}{U}{U}",
   types: ["Sorcery"],
   spell_effect: [Draw(count: 3), CreateTokens(token: "faerie_u_1_1_flying_only_blocks_flying", count: 1)],
 )

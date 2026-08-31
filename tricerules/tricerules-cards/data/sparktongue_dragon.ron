@@ -1,6 +1,7 @@
 (
   id: "sparktongue_dragon",
   name: "Sparktongue Dragon",
+  face_id: "sparktongue_dragon",
   mana_cost: "{3}{R}{R}",
   types: ["Creature", "Dragon"],
   power: 3,
@@ -8,21 +9,23 @@
   keywords: [Flying],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
       effect: [ChooseResolutionBranch(
         optional: true,
         branches: [
           (
-            label: "Pay {2}{R}",
+            branch_id: "pay_2_r", presentation: Fallback,
             cost: Mana("{2}{R}"),
             effects: [CreateReflexiveTrigger(ability: (
+              ability_id: "reflexive_01",
+              presentation: Fallback,
               effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
-              text: "When you do, Sparktongue Dragon deals 3 damage to any target.",
             ))],
           ),
         ],
       )],
-      text: "When this creature enters, you may pay {2}{R}. When you do, it deals 3 damage to any target.",
     ),
   ],
 )

@@ -2,12 +2,14 @@
 (
   id: "gristle_glutton",
   name: "Gristle Glutton",
+  face_id: "gristle_glutton",
   mana_cost: "{1}{R}",
   types: ["Creature", "Goblin", "Scout"],
   power: 1,
   toughness: 3,
   activated_abilities: [(
-    text: "{T}, Blight 1: Discard a card. If you do, draw a card.",
+    ability_id: "activated_01",
+    presentation: Fallback,
     costs: [Tap, Blight(count: 1)],
     effect: [DrawDiscard(draw_count: 1, discard_count: 1, order: DiscardThenDraw)],
   )],

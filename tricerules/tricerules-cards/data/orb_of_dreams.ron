@@ -1,7 +1,8 @@
 (
   id: "orb_of_dreams",
   name: "Orb of Dreams",
+  face_id: "orb_of_dreams",
   mana_cost: "{3}",
   types: ["Artifact"],
-  static_abilities: [EntersTapped(affected: Permanents)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Permanents))],
 )

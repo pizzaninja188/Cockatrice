@@ -1,6 +1,7 @@
 (
   id: "goblin_striker",
   name: "Goblin Striker",
+  face_id: "goblin_striker",
   mana_cost: "{1}{R}",
   types: ["Creature", "Goblin", "Berserker"],
   power: 1,

@@ -2,6 +2,7 @@
 (
   id: "temporal_intervention",
   name: "Temporal Intervention",
+  face_id: "temporal_intervention",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
   cost_modifiers: [ConditionalGenericReduction(amount: 2, condition: Void)],

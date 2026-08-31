@@ -1,6 +1,7 @@
 (
   id: "merfolk_wu_1_1",
   name: "Merfolk",
+  face_id: "merfolk",
   types: ["Creature", "Merfolk"],
   colors: [White, Blue],
   power: 1,

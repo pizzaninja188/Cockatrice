@@ -1,6 +1,7 @@
 (
   id: "pegasus_courser",
   name: "Pegasus Courser",
+  face_id: "pegasus_courser",
   mana_cost: "{2}{W}",
   types: ["Creature", "Pegasus"],
   power: 1,
@@ -8,6 +9,8 @@
   keywords: [Flying],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [GrantKeywords(
         subject: Chosen((
@@ -17,7 +20,6 @@
         )),
         keywords: [Flying],
       )],
-      text: "Whenever this creature attacks, another target attacking creature gains flying until end of turn.",
     ),
   ],
 )

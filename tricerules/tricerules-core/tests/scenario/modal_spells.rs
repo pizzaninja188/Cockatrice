@@ -46,7 +46,13 @@ fn boros_charm_damage_mode_is_atomic_and_public() {
     assert_eq!(pushed.chosen_mode_indices, vec![0]);
     assert_eq!(
         pushed.chosen_mode_labels,
-        vec!["Deal 4 damage to target player"]
+        vec!["Boros Charm — mode (mode_01)"]
+    );
+    assert_eq!(
+        e.state.stack.last().unwrap().chosen_modes[0]
+            .mode_id
+            .as_str(),
+        "mode_01"
     );
     assert_eq!(pushed.targets[0].object_id, 1);
 

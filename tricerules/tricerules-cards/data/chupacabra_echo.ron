@@ -1,9 +1,11 @@
 // Oracle and rulings fetched 2026-08-27. Fathomless descent counts the current
 // graveyard cohort, not historical deaths or battlefield animation.
 (
-  id: "chupacabra_echo", name: "Chupacabra Echo", mana_cost: "{2}{B}{B}",
+  id: "chupacabra_echo", name: "Chupacabra Echo", face_id: "chupacabra_echo", mana_cost: "{2}{B}{B}",
   types: ["Creature", "Beast", "Horror", "Spirit"], power: 3, toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     effect: [PumpTarget(power: 0, toughness: 0, subject: Chosen((kind: Creature, controller: Opponent)), scale: Some((
       amount: Count(GraveyardCards(owners: Controller, filter: Some((any_of: Some([
@@ -11,6 +13,5 @@
         (card_type: Some(Land)), (card_type: Some(Planeswalker)), (card_type: Some(Battle)),
       ]))))), power_per_unit: -1, toughness_per_unit: -1,
     )))],
-    text: "When this creature enters, target creature an opponent controls gets -X/-X until end of turn, where X is the number of permanent cards in your graveyard.",
   )],
 )

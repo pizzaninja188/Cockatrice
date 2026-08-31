@@ -2,6 +2,7 @@
 (
   id: "sentinels_of_glen_elendra",
   name: "Sentinels of Glen Elendra",
+  face_id: "sentinels_of_glen_elendra",
   mana_cost: "{3}{U}",
   types: ["Creature", "Faerie", "Soldier"],
   power: 2,

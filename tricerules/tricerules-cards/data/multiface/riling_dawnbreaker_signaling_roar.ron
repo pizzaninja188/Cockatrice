@@ -6,23 +6,26 @@
   faces: [
     (
       name: "Riling Dawnbreaker",
+      face_id: "riling_dawnbreaker",
       mana_cost: "{4}{W}",
       types: ["Creature", "Dragon"],
       power: 3,
       toughness: 4,
       keywords: [Flying, Vigilance],
       triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: OracleLines([2]),
         trigger: AtBeginningOfCombat(player: Controller),
         effect: [PumpTarget(
           power: 1,
           toughness: 0,
           subject: Chosen((kind: Creature, controller: You, excluded_objects: [Source])),
         )],
-        text: "At the beginning of combat on your turn, another target creature you control gets +1/+0 until end of turn.",
       )],
     ),
     (
       name: "Signaling Roar",
+      face_id: "signaling_roar",
       mana_cost: "{1}{W}",
       types: ["Sorcery", "Omen"],
       spell_effect: [CreateTokens(token: "soldier_w_2_2", count: 1)],

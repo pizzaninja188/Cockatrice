@@ -1,6 +1,7 @@
 (
   id: "deglamer",
   name: "Deglamer",
+  face_id: "deglamer",
   mana_cost: "{1}{G}",
   types: ["Instant"],
   spell_effect: [PutInOwnersLibrary(

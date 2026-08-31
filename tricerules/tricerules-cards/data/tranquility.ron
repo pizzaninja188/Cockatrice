@@ -1,6 +1,7 @@
 (
   id: "tranquility",
   name: "Tranquility",
+  face_id: "tranquility",
   mana_cost: "{2}{G}",
   types: ["Sorcery"],
   spell_effect: [DestroyAll(kind: (kind: AnyPermanent, permanent_types: [Enchantment]))],

@@ -1,13 +1,15 @@
 (
   id: "scorch_spitter",
   name: "Scorch Spitter",
+  face_id: "scorch_spitter",
   mana_cost: "{R}",
   types: ["Creature", "Elemental", "Lizard"],
   power: 1,
   toughness: 1,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
     effect: [DamageAttackedPlayerOrPlaneswalker(amount: 1)],
-    text: "Whenever this creature attacks, it deals 1 damage to the player or planeswalker it's attacking.",
   )],
 )

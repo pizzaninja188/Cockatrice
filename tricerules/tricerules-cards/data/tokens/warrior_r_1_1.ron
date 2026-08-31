@@ -2,6 +2,7 @@
 (
   id: "warrior_r_1_1",
   name: "Warrior",
+  face_id: "warrior",
   types: ["Creature", "Warrior"],
   colors: [Red],
   power: 1,

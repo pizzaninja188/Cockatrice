@@ -1,9 +1,12 @@
 // Oracle and rulings checked 2026-08-27.
 (
-  id: "wild_unraveling", name: "Wild Unraveling", mana_cost: "{U}{U}", types: ["Instant"],
+  id: "wild_unraveling", name: "Wild Unraveling", face_id: "wild_unraveling", mana_cost: "{U}{U}", types: ["Instant"],
   cast_cost_groups: [(
-    prompt: "Blight 2 or pay {1}", min: 1, max: 1,
-    options: [Blight(label: "Blight 2", count: 2), Mana(label: "Pay {1}", cost: "{1}")],
+    group_id: "cast_cost_01", presentation: OracleLines([1]), min: 1, max: 1,
+    options: [
+      Blight(option_id: "option_01", presentation: Fallback, count: 2),
+      Mana(option_id: "option_02", presentation: Fallback, kind: AdditionalPayment, cost: "{1}"),
+    ],
   )],
   spell_effect: [CounterTargetSpell(spell_filter: None, unless_controller_pays: None)],
 )

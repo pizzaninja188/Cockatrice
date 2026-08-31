@@ -2,12 +2,13 @@
 (
   id: "decode_transmissions",
   name: "Decode Transmissions",
+  face_id: "decode_transmissions",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
   spell_effect: [ChooseResolutionBranch(selection: FirstApplicable, branches: [
-    (label: "Draw two cards; each opponent loses 2 life", cost: None,
+    (branch_id: "draw_two_cards_each_opponent_loses_2_life", presentation: Fallback, cost: None,
       requirement: GameCondition(Void), effects: [Draw(count: 2), LoseLife(amount: Fixed(2), who: EachOpponent)]),
-    (label: "Draw two cards and lose 2 life", cost: None,
+    (branch_id: "draw_two_cards_and_lose_2_life", presentation: Fallback, cost: None,
       requirement: Always, effects: [Draw(count: 2), LoseLife(amount: Fixed(2))]),
   ])],
 )

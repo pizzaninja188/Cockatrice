@@ -8,7 +8,6 @@ fn issue_71_cards_use_shared_power_and_keyword_filters() {
     let judgment_definition = registry
         .get("legions_judgment")
         .expect("Legion's Judgment is registered");
-    assert!(judgment_definition.partial.is_none());
     let judgment = judgment_definition.primary_face();
     assert!(matches!(
         judgment.spell_effect.as_slice(),
@@ -20,7 +19,6 @@ fn issue_71_cards_use_shared_power_and_keyword_filters() {
     let air_strike_definition = registry
         .get("reckless_air_strike")
         .expect("Reckless Air Strike is registered");
-    assert!(air_strike_definition.partial.is_none());
     let air_strike = air_strike_definition.primary_face();
     let modal = air_strike
         .modal_spell
@@ -41,7 +39,6 @@ fn issue_71_cards_use_shared_power_and_keyword_filters() {
     ));
 
     let run_afoul_definition = registry.get("run_afoul").expect("Run Afoul is registered");
-    assert!(run_afoul_definition.partial.is_none());
     let run_afoul = run_afoul_definition.primary_face();
     assert!(matches!(
         run_afoul.spell_effect.as_slice(),

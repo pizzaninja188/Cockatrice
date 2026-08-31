@@ -2,6 +2,7 @@
 (
   id: "cloaked_siren",
   name: "Cloaked Siren",
+  face_id: "cloaked_siren",
   mana_cost: "{3}{U}",
   types: ["Creature", "Siren"],
   power: 3,

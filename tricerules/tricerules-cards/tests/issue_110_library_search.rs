@@ -115,7 +115,6 @@ fn issue_110_say_its_name_and_altanak_are_complete() {
     );
 
     let altanak = card("altanak,_the_thrice-called");
-    assert!(altanak.partial.is_none());
     assert!(matches!(
         altanak.primary_face().activated_abilities[0]
             .effect

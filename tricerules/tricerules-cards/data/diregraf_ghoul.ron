@@ -1,9 +1,10 @@
 (
   id: "diregraf_ghoul",
   name: "Diregraf Ghoul",
+  face_id: "diregraf_ghoul",
   mana_cost: "{B}",
   types: ["Creature", "Zombie"],
   power: 2,
   toughness: 2,
-  static_abilities: [EntersTapped(affected: Self_)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Self_))],
 )

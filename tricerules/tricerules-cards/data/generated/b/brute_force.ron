@@ -2,7 +2,9 @@
 (
   id: "brute_force",
   name: "Brute Force",
+  face_id: "brute_force",
   mana_cost: "{R}",
   types: ["Instant"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 3, toughness: 3)],
 )

@@ -2,6 +2,7 @@
 (
   id: "biosynthic_burst",
   name: "Biosynthic Burst",
+  face_id: "biosynthic_burst",
   mana_cost: "{1}{G}",
   types: ["Instant"],
   spell_effect: [

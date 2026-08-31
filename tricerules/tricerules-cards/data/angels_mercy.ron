@@ -1,6 +1,7 @@
 (
   id: "angels_mercy",
   name: "Angel's Mercy",
+  face_id: "angel_s_mercy",
   mana_cost: "{2}{W}{W}",
   types: ["Instant"],
   spell_effect: [GainLife(amount: 7)],

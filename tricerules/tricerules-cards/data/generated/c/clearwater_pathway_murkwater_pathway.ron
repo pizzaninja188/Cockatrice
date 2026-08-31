@@ -6,15 +6,17 @@
   faces: [
     (
       name: "Clearwater Pathway",
+      face_id: "clearwater_pathway",
       mana_cost: "",
       types: ["Land"],
-      activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(u: 1)])], text: "{T}: Add {U}.")],
+      activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(u: 1)])])],
     ),
     (
       name: "Murkwater Pathway",
+      face_id: "murkwater_pathway",
       mana_cost: "",
       types: ["Land"],
-      activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(b: 1)])], text: "{T}: Add {B}.")],
+      activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(b: 1)])])],
     ),
   ],
 )

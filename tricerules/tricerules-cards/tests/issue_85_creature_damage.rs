@@ -38,9 +38,9 @@ fn issue_157_counter_costs_distinguish_fixed_kind_from_any_one() {
 fn issue_157_departure_snapshot_requires_an_observed_object() {
     let result = CardRegistry::from_chunks_and_tokens(
         &[r#"(
-        id: "invalid_snapshot", name: "Invalid snapshot", mana_cost: "{1}", types: ["Artifact"],
-        triggered_abilities: [(trigger: WhenSelfEntersBattlefield,
-            effect: [PutCounterSnapshot(from: TriggerObject, subject: Source)], text: "Invalid snapshot")]
+        id: "invalid_snapshot", name: "Invalid snapshot", face_id: "invalid_snapshot", mana_cost: "{1}", types: ["Artifact"],
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield,
+            effect: [PutCounterSnapshot(from: TriggerObject, subject: Source)], )]
     )"#],
         &[],
     );
@@ -55,7 +55,6 @@ fn issue_85_cards_share_the_grouped_creature_damage_primitive() {
     let rabid_definition = registry
         .get("rabid_bite")
         .expect("Rabid Bite is registered");
-    assert!(rabid_definition.partial.is_none());
     let rabid = rabid_definition.primary_face();
     assert_eq!(rabid.mana_cost.to_string(), "{1}{G}");
     assert_eq!(rabid.types, ["Sorcery"]);
@@ -76,7 +75,6 @@ fn issue_85_cards_share_the_grouped_creature_damage_primitive() {
     let hunter_definition = registry
         .get("hunters_edge")
         .expect("Hunter's Edge is registered");
-    assert!(hunter_definition.partial.is_none());
     let hunter = hunter_definition.primary_face();
     assert_eq!(hunter.mana_cost.to_string(), "{3}{G}");
     assert_eq!(hunter.types, ["Sorcery"]);

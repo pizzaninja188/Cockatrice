@@ -1,8 +1,9 @@
 // Oracle and rulings checked 2026-08-21. CR 601.2f locks the generic reduction before payment;
-// the current spell is not recorded as cast until CR 601.2i, so "another spell" reads prior casts.
+// the current spell is not recorded as cast until CR 601.2i, so the condition reads prior casts.
 (
   id: "focus_the_mind",
   name: "Focus the Mind",
+  face_id: "focus_the_mind",
   mana_cost: "{4}{U}",
   cost_modifiers: [
     ConditionalGenericReduction(

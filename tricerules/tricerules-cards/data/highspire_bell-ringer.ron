@@ -3,12 +3,13 @@
 (
   id: "highspire_bell-ringer",
   name: "Highspire Bell-Ringer",
+  face_id: "highspire_bell_ringer",
   mana_cost: "{2}{U}",
   types: ["Creature", "Djinn", "Monk"],
   power: 1,
   toughness: 4,
   keywords: [Flying],
-  static_abilities: [SpellGenericReduction(
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SpellGenericReduction(
     casters: Controller,
     amount: 1,
     condition: Some(SpellsCastThisTurn(
@@ -16,5 +17,5 @@
       min: Some(1),
       max: Some(1),
     )),
-  )],
+  ))],
 )

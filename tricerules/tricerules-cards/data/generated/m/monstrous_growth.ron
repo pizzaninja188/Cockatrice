@@ -2,7 +2,9 @@
 (
   id: "monstrous_growth",
   name: "Monstrous Growth",
+  face_id: "monstrous_growth",
   mana_cost: "{1}{G}",
   types: ["Sorcery"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 4, toughness: 4)],
 )

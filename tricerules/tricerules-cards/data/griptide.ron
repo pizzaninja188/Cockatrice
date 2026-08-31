@@ -1,6 +1,7 @@
 (
   id: "griptide",
   name: "Griptide",
+  face_id: "griptide",
   mana_cost: "{3}{U}",
   types: ["Instant"],
   spell_effect: [PutInOwnersLibrary(

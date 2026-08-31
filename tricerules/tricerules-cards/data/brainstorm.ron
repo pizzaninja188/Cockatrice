@@ -1,6 +1,7 @@
 (
   id: "brainstorm",
   name: "Brainstorm",
+  face_id: "brainstorm",
   mana_cost: "{U}",
   types: ["Instant"],
   // Tier-3: "Draw three cards, then put two cards from your hand on top of your library in any

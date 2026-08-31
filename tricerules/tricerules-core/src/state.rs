@@ -8,7 +8,7 @@ use tricerules_cards::primitives::{
     TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
-use tricerules_cards::{is_creature_type, CardFace, ManaCost, ManaSymbol};
+use tricerules_cards::{is_creature_type, CardFace, ManaCost, ManaSymbol, ModeId};
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
 pub type PlayerId = i32;
@@ -64,30 +64,29 @@ impl From<CardResultCohort> for EffectResult {
 }
 
 /// The exact activated ability on the exact incarnation of a permanent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ActivationUseKey {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
-    pub face_change_generation: u64,
-    pub ability_index: usize,
+    pub definition: AbilityDefinitionId,
 }
 
 /// One activated ability on one CR 400.7 permanent object. Unlike [`ActivationUseKey`], this key
 /// deliberately omits turn and face-status identity: only a zone change creates a fresh object
 /// and restores a once-per-object allowance.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PersistentActivationUseKey {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
-    pub ability_index: usize,
+    pub definition: AbilityDefinitionId,
 }
 
 /// Authored ability slot, independent of display names and flattened live ability indexes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AbilityDefinitionId {
     pub card_id: String,
-    pub face_index: usize,
-    pub ability_index: usize,
+    pub face_id: tricerules_cards::CardFaceId,
+    pub ability_path: Vec<tricerules_cards::AbilityId>,
 }
 
 /// CR 113.2c identity of an ability occurrence. Infernal Scarring's static grant and
@@ -99,7 +98,6 @@ pub enum TriggerAbilityOrigin {
         source_id: ObjectId,
         source_zone_change: u64,
         definition: AbilityDefinitionId,
-        grant_index: usize,
     },
     ResolvingGrant(u64),
 }
@@ -1160,7 +1158,8 @@ pub(crate) struct PendingBattlefieldEntry {
 
 #[derive(Debug, Clone)]
 pub struct ChosenMode {
-    pub mode_index: usize,
+    /// Stable authored identity captured when the positional command coordinate is accepted.
+    pub mode_id: ModeId,
     pub targets: Vec<StackTarget>,
 }
 
@@ -2045,6 +2044,7 @@ impl GameState {
             .map(|(watched, delayed)| {
                 let object_id = self.next_object_id;
                 self.next_object_id += 1;
+                let ability_text = delayed.ability.fallback_text(&delayed.card_name);
                 StagedTrigger {
                     object_id,
                     source_permanent_id: delayed.source.object_id,
@@ -2055,7 +2055,7 @@ impl GameState {
                     card_name: delayed.card_name,
                     controller: delayed.controller,
                     ability_index: 0,
-                    ability_text: delayed.ability.text.clone(),
+                    ability_text,
                     trigger_context: TriggerContext {
                         observed_object: Some(watched),
                         ..TriggerContext::default()

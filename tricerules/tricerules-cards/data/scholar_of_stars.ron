@@ -3,15 +3,17 @@
 (
   id: "scholar_of_stars",
   name: "Scholar of Stars",
+  face_id: "scholar_of_stars",
   mana_cost: "{3}{U}",
   types: ["Creature", "Human", "Artificer"],
   power: 3,
   toughness: 2,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [Draw(count: 1)],
-      text: "When this creature enters, if you control an artifact, draw a card.",
       intervening_if: Some(GameCondition(BattlefieldAggregate(
         filter: (controllers: Controller, card_type: Some(Artifact)),
         aggregate: Count,

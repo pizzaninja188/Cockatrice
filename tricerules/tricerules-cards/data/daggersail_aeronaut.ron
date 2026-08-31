@@ -1,15 +1,16 @@
-// Oracle (M20): "During your turn, this creature has flying."
+// The active-player condition is reevaluated continuously (CR 611.3 and 613.1f).
 (
   id: "daggersail_aeronaut",
   name: "Daggersail Aeronaut",
+  face_id: "daggersail_aeronaut",
   mana_cost: "{3}{R}",
   types: ["Creature", "Goblin"],
   power: 3,
   toughness: 2,
   static_abilities: [
-    ConditionalSelfModifier(
+    (ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
       condition: ActivePlayer(players: Controller),
       keywords: [Flying],
-    ),
+    )),
   ],
 )

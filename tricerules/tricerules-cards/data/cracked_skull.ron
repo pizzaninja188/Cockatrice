@@ -1,12 +1,15 @@
 (
   id: "cracked_skull",
   name: "Cracked Skull",
+  face_id: "cracked_skull",
   mana_cost: "{2}{B}",
   // Oracle/ruling verified 2026-08-20. CR 113.7a, 113.8, 120.4b, 303.4, 603.2.
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
       effect: [DiscardCards(
         count: 1,
@@ -15,12 +18,12 @@
         card_filter: Some(Nonland),
         optional: true,
       )],
-      text: "When this Aura enters, look at target player's hand. You may choose a nonland card from it. If you do, that player discards that card.",
     ),
     (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
       trigger: WheneverAttachedObjectIsDealtDamage,
       effect: [Destroy(subject: TriggerObject)],
-      text: "When enchanted creature is dealt damage, destroy it.",
     ),
   ],
 )

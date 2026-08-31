@@ -20,13 +20,18 @@ use crate::primitives::{
     Evasion, GameCondition, Keyword, PermanentTypeFilter, ProtectionQuality, SpellCostModifier,
     SpellEffectKind, StaticAbilityDef, TargetingDef, TriggeredAbilityDef,
 };
+use crate::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility, ModeId};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 /// One printed mode of a modal spell. Its effects resolve in authored order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ModeDef {
-    /// Short client-facing description of the mode, without the card name.
-    pub label: String,
+    /// Stable authored identity. Positional mode indices remain command-batch coordinates only.
+    pub mode_id: ModeId,
+    /// External Oracle-line mapping, or an explicit decision to use the deterministic fallback.
+    pub presentation: AbilityPresentation,
     /// Data-driven effects for this mode, resolved from this mode's own target group.
     #[serde(default)]
     pub effects: Vec<SpellEffectKind>,
@@ -45,6 +50,14 @@ pub struct ModalDef {
 }
 
 impl ModalDef {
+    pub fn mode_by_id(&self, mode_id: &ModeId) -> Option<&ModeDef> {
+        self.modes.iter().find(|mode| mode.mode_id == *mode_id)
+    }
+
+    pub fn mode_index(&self, mode_id: &ModeId) -> Option<usize> {
+        self.modes.iter().position(|mode| mode.mode_id == *mode_id)
+    }
+
     pub(crate) fn validate(&self, context: EffectContext) -> Result<(), String> {
         if self.min_modes == 0
             || self.max_modes < self.min_modes
@@ -57,14 +70,17 @@ impl ModalDef {
                 self.modes.len()
             ));
         }
+        let mut mode_ids = HashSet::new();
         for mode in &self.modes {
-            if mode.label.trim().is_empty() {
-                return Err("modal mode label must not be empty".into());
+            mode.mode_id.validate()?;
+            mode.presentation.validate()?;
+            if !mode_ids.insert(&mode.mode_id) {
+                return Err(format!("duplicate mode id '{}'", mode.mode_id));
             }
             if mode.effects.is_empty() {
                 return Err(format!(
                     "modal mode '{}' must contain at least one effect",
-                    mode.label
+                    mode.mode_id
                 ));
             }
             for effect in &mode.effects {
@@ -113,6 +129,9 @@ pub enum CharacteristicDefiningAbility {
     /// CR 702.73: this object is every creature type in every zone.
     Changeling,
 }
+
+pub type IdentifiedStaticAbility = IdentifiedAbility<StaticAbilityDef>;
+pub type IdentifiedCharacteristicDefiningAbility = IdentifiedAbility<CharacteristicDefiningAbility>;
 
 /// Current CR 205.3m creature-type vocabulary. Changeling queries this shared rules vocabulary
 /// instead of expanding every card definition into a hundreds-entry subtype snapshot.
@@ -448,14 +467,19 @@ pub fn is_creature_type(subtype: &str) -> bool {
 }
 
 /// One face of a card (CR 712.4: a card has the characteristics of its current face only) — the
-/// single home for every per-card characteristic. The whole-card fields (`id`, `name`, `layout`,
-/// `partial`) live on [`CardDefinition`].
+/// single home for every per-card characteristic. The whole-card fields (`id`, `name`, and
+/// `layout`) live on [`CardDefinition`].
 ///
 /// A `Normal` card has exactly one of these, built at registry load from the flat authoring
 /// fields; multi-face layouts author theirs directly.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CardFace {
+    pub face_id: CardFaceId,
     pub name: String,
+    /// Optional non-mechanical presentation mapping for the castable face on the stack.
+    #[serde(default)]
+    pub spell_presentation: Option<AbilityPresentation>,
     /// Scryfall brace syntax, copied verbatim from this face's `card_faces[i].mana_cost`.
     #[serde(default)]
     pub mana_cost: ManaCost,
@@ -539,10 +563,10 @@ pub struct CardFace {
     /// Static abilities (CR 604): anthems and lords (Glorious Anthem, Crusade, Bad Moon). Omit or
     /// leave empty for faces with none. Emitted as a continuous effect on ETB, drained at LTB.
     #[serde(default)]
-    pub static_abilities: Vec<StaticAbilityDef>,
+    pub static_abilities: Vec<IdentifiedStaticAbility>,
     /// Characteristic-defining abilities operate in every zone and feed their own CR 613 layer.
     #[serde(default)]
-    pub characteristic_defining_abilities: Vec<CharacteristicDefiningAbility>,
+    pub characteristic_defining_abilities: Vec<IdentifiedCharacteristicDefiningAbility>,
     /// CR 508.1d: "attacks each combat if able". This creature must be declared as an attacker
     /// whenever it is a legal attacker. Cards: Crazed Goblin, Goblin Brigand, Juggernaut.
     #[serde(default)]
@@ -611,7 +635,7 @@ impl CardFace {
             };
             let already_materialized = self.static_abilities.iter().any(|ability| {
                 matches!(
-                    ability,
+                    &ability.definition,
                     StaticAbilityDef::EntersWithCounters {
                         affected: EntersWithCountersAffected::Self_,
                         counter: existing,
@@ -621,13 +645,21 @@ impl CardFace {
                 )
             });
             if !already_materialized {
-                self.static_abilities
-                    .push(StaticAbilityDef::EntersWithCounters {
+                self.static_abilities.push(IdentifiedAbility {
+                    ability_id: AbilityId::new(match counter {
+                        CounterKind::Loyalty => "intrinsic_loyalty",
+                        CounterKind::Defense => "intrinsic_defense",
+                        _ => unreachable!("only printed entry counters are materialized here"),
+                    })
+                    .expect("intrinsic identity is canonical"),
+                    presentation: AbilityPresentation::Fallback,
+                    definition: StaticAbilityDef::EntersWithCounters {
                         affected: EntersWithCountersAffected::Self_,
                         counter,
                         amount: Amount::Fixed(amount),
                         cast_cost_condition: None,
-                    });
+                    },
+                });
             }
         }
     }
@@ -696,7 +728,8 @@ impl CardFace {
             || (is_creature_type(subtype)
                 && self
                     .characteristic_defining_abilities
-                    .contains(&CharacteristicDefiningAbility::Changeling))
+                    .iter()
+                    .any(|ability| ability.definition == CharacteristicDefiningAbility::Changeling))
     }
 }
 
@@ -710,12 +743,18 @@ pub type FaceRef<'a> = &'a CardFace;
 /// Single-face cards are authored flat (no `faces:` wrapper) — this is the schema the ~870
 /// hand-authored and generated files use, and it is deliberately unchanged.
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RawCardDefinition {
     pub id: String,
     /// The whole-card Oracle name. For multi-face cards this is the `//` name
     /// (e.g. `"Fire // Ice"`) that `cards.xml` stores and decks reference; the slug invariant
     /// (`id == slugify(name)`) keys off it. Per-face names live in [`CardFace::name`].
     pub name: String,
+    /// Stable identity for the flat face of a normal-layout card.
+    #[serde(default)]
+    pub face_id: CardFaceId,
+    #[serde(default)]
+    pub spell_presentation: Option<AbilityPresentation>,
     /// Physical layout (CR 709/710/712/715). `Normal` (default) is authored flat; every other
     /// layout authors [`Self::faces`].
     #[serde(default)]
@@ -724,10 +763,6 @@ pub struct RawCardDefinition {
     /// transform/adventure/flip). Empty for `Normal`, whose lone face is the flat fields below.
     #[serde(default)]
     pub faces: Vec<CardFace>,
-    /// Implementation tracking only (ignored by the engine):
-    /// `Some("what's missing")` = partially implemented; `None` = fully implemented.
-    #[serde(default)]
-    pub partial: Option<String>,
     // ---- Flat single-face authoring fields; mirror [`CardFace`] one-for-one. ----
     /// Scryfall brace syntax, copied verbatim (e.g. `"{1}{R}"`, `""` for lands). See [`ManaCost`].
     #[serde(default)]
@@ -781,9 +816,9 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub triggered_abilities: Vec<TriggeredAbilityDef>,
     #[serde(default)]
-    pub static_abilities: Vec<StaticAbilityDef>,
+    pub static_abilities: Vec<IdentifiedStaticAbility>,
     #[serde(default)]
-    pub characteristic_defining_abilities: Vec<CharacteristicDefiningAbility>,
+    pub characteristic_defining_abilities: Vec<IdentifiedCharacteristicDefiningAbility>,
     #[serde(default)]
     pub must_attack_if_able: bool,
     #[serde(default)]
@@ -820,7 +855,9 @@ impl RawCardDefinition {
         }
         let faces = if self.faces.is_empty() {
             vec![CardFace {
+                face_id: self.face_id,
                 name: self.name.clone(),
+                spell_presentation: self.spell_presentation,
                 mana_cost: self.mana_cost,
                 flashback_cost: self.flashback_cost,
                 harmonize_cost: self.harmonize_cost,
@@ -860,7 +897,6 @@ impl RawCardDefinition {
             name: self.name,
             layout: self.layout,
             faces,
-            partial: self.partial,
         })
     }
 }
@@ -879,9 +915,6 @@ pub struct CardDefinition {
     /// The card's faces in printed order, always non-empty: one for `Normal`, two for
     /// split/MDFC/transform/adventure/flip.
     pub faces: Vec<CardFace>,
-    /// Implementation tracking only (ignored by the engine):
-    /// `Some("what's missing")` = partially implemented; `None` = fully implemented.
-    pub partial: Option<String>,
 }
 
 impl CardDefinition {
@@ -981,8 +1014,14 @@ impl CardDefinition {
                 .static_abilities
                 .extend(door.static_abilities.clone());
             for ability in &door.characteristic_defining_abilities {
-                if !result.characteristic_defining_abilities.contains(ability) {
-                    result.characteristic_defining_abilities.push(*ability);
+                if !result
+                    .characteristic_defining_abilities
+                    .iter()
+                    .any(|existing| existing.ability_id == ability.ability_id)
+                {
+                    result
+                        .characteristic_defining_abilities
+                        .push(ability.clone());
                 }
             }
             result.must_attack_if_able |= door.must_attack_if_able;
@@ -1122,7 +1161,6 @@ mod tests {
             name: "Test Card".to_owned(),
             layout,
             faces,
-            partial: None,
         }
     }
 
@@ -1226,8 +1264,11 @@ mod tests {
         }
 
         let mut changeling = face(&["Kindred", "Artifact", "Shapeshifter"]);
-        changeling.characteristic_defining_abilities =
-            vec![CharacteristicDefiningAbility::Changeling];
+        changeling.characteristic_defining_abilities = vec![IdentifiedAbility {
+            ability_id: AbilityId::new("characteristic_01").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            definition: CharacteristicDefiningAbility::Changeling,
+        }];
         assert!(changeling.has_subtype("Elf"));
         assert!(changeling.has_subtype("Time Lord"));
         assert!(!changeling.has_subtype("Forest"));
@@ -1237,7 +1278,11 @@ mod tests {
     #[test]
     fn nonstack_layout_queries_preserve_changeling() {
         let mut front = face(&["Creature", "Shapeshifter"]);
-        front.characteristic_defining_abilities = vec![CharacteristicDefiningAbility::Changeling];
+        front.characteristic_defining_abilities = vec![IdentifiedAbility {
+            ability_id: AbilityId::new("characteristic_01").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            definition: CharacteristicDefiningAbility::Changeling,
+        }];
         let mut back = face(&["Instant", "Omen"]);
         back.name = "Back".into();
         let card = definition(Layout::Omen, vec![front, back]);

@@ -2,9 +2,10 @@
 (
   id: "kindly_customer",
   name: "Kindly Customer",
+  face_id: "kindly_customer",
   mana_cost: "{1}{W}",
   types: ["Creature", "Human", "Citizen"],
   power: 1,
   toughness: 1,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

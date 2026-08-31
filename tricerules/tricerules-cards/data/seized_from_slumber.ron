@@ -3,6 +3,7 @@
 (
   id: "seized_from_slumber",
   name: "Seized from Slumber",
+  face_id: "seized_from_slumber",
   mana_cost: "{4}{W}",
   cost_modifiers: [TargetMatchGenericReduction(
     amount: 3,

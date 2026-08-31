@@ -2,7 +2,9 @@
 (
   id: "weave_fate",
   name: "Weave Fate",
+  face_id: "weave_fate",
   mana_cost: "{3}{U}",
   types: ["Instant"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [Draw(count: 2)],
 )

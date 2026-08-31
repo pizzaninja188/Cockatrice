@@ -2,6 +2,7 @@
 (
   id: "fire_nation_ambushers",
   name: "Fire Nation Ambushers",
+  face_id: "fire_nation_ambushers",
   mana_cost: "{2}{B}",
   types: ["Creature", "Human", "Soldier"],
   power: 3,

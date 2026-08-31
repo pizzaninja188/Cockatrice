@@ -1,15 +1,17 @@
 (
   id: "elvish_visionary",
   name: "Elvish Visionary",
+  face_id: "elvish_visionary",
   mana_cost: "{1}{G}",
   types: ["Creature", "Elf", "Shaman"],
   power: 1,
   toughness: 1,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [Draw(count: 1)],
-      text: "When this creature enters, draw a card.",
     ),
   ],
 )

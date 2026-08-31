@@ -2,12 +2,15 @@
 (
   id: "sharae_of_numbing_depths",
   name: "Sharae of Numbing Depths",
+  face_id: "sharae_of_numbing_depths",
   mana_cost: "{2}{W}{U}",
   types: ["Creature", "Merfolk", "Wizard"],
   supertypes: ["Legendary"],
   power: 2,
   toughness: 3,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     effect: [
       Tap(subject: Chosen((kind: Creature, controller: Opponent))),
@@ -16,11 +19,11 @@
     targeting: Some((groups: [(
       min: 1, max: 1, prompt: "Choose target creature an opponent controls", effect_indices: [0, 1],
     )])),
-    text: "When Sharae enters, tap target creature an opponent controls and put a stun counter on it.",
   ), (
+    ability_id: "triggered_02",
+    presentation: OracleLines([2]),
     trigger: WheneverPlayerTapsCreature(player: Controller, controllers: Opponents, cardinality: OneOrMorePerAction),
     max_triggers_per_turn: Some(1),
     effect: [Draw(count: 1)],
-    text: "Whenever you tap one or more untapped creatures your opponents control, draw a card. This ability triggers only once each turn.",
   )],
 )

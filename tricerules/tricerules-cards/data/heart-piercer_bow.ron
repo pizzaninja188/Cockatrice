@@ -1,18 +1,22 @@
 (
   id: "heart-piercer_bow",
   name: "Heart-Piercer Bow",
+  face_id: "heart_piercer_bow",
   mana_cost: "{2}",
   // Oracle verified 2026-08-14. CR 113.7a, 508.1m, 508.3a, 603.3d, 608.2b.
   types: ["Artifact", "Equipment"],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: Fallback,
       costs: [Mana("{1}")],
       effect: [Equip(target: (kind: Creature, controller: You))],
-      text: "Equip {1}",
     ),
   ],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WheneverAttachedObjectAttacks,
       effect: [
         DamageTarget(
@@ -20,7 +24,6 @@
           target: (kind: Creature, controller: DefendingPlayer),
         ),
       ],
-      text: "Whenever equipped creature attacks, Heart-Piercer Bow deals 1 damage to target creature defending player controls.",
     ),
   ],
 )

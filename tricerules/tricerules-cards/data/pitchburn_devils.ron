@@ -1,13 +1,15 @@
 (
   id: "pitchburn_devils",
   name: "Pitchburn Devils",
+  face_id: "pitchburn_devils",
   mana_cost: "{4}{R}",
   types: ["Creature", "Devil"],
   power: 3,
   toughness: 3,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfDies,
     effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
-    text: "When this creature dies, it deals 3 damage to any target.",
   )],
 )

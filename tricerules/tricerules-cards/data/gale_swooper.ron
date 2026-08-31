@@ -1,6 +1,7 @@
 (
   id: "gale_swooper",
   name: "Gale Swooper",
+  face_id: "gale_swooper",
   mana_cost: "{3}{W}",
   types: ["Creature", "Griffin"],
   power: 3,
@@ -8,9 +9,10 @@
   keywords: [Flying],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
       effect: [GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Flying])],
-      text: "When this creature enters, target creature gains flying until end of turn.",
     ),
   ],
 )

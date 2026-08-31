@@ -1,6 +1,7 @@
 (
   id: "prey_upon",
   name: "Prey Upon",
+  face_id: "prey_upon",
   mana_cost: "{G}",
   types: ["Sorcery"],
   spell_effect: [Fight(

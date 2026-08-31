@@ -1,6 +1,7 @@
 (
   id: "giant_growth",
   name: "Giant Growth",
+  face_id: "giant_growth",
   mana_cost: "{G}",
   types: ["Instant"],
   spell_effect: [PumpTarget(power: 3, toughness: 3)],

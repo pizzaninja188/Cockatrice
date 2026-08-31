@@ -2,9 +2,10 @@
 (
   id: "iron_myr",
   name: "Iron Myr",
+  face_id: "iron_myr",
   mana_cost: "{2}",
   types: ["Artifact", "Creature", "Myr"],
   power: 1,
   toughness: 1,
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(r: 1)])], text: "{T}: Add {R}.")],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(r: 1)])])],
 )

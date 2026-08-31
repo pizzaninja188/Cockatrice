@@ -2,6 +2,7 @@
 (
     id: "spirit_w_1_1_flying",
     name: "Spirit",
+    face_id: "spirit",
     types: ["Creature", "Spirit"],
     colors: [White],
     power: 1,

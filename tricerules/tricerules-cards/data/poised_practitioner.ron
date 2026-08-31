@@ -3,16 +3,18 @@
 (
   id: "poised_practitioner",
   name: "Poised Practitioner",
+  face_id: "poised_practitioner",
   mana_cost: "{2}{W}",
   types: ["Creature", "Human", "Monk"],
   power: 2,
   toughness: 3,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WheneverPlayerCastsSpell(caster: Controller, ordinal: Some(2)),
     effect: [
       PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source),
       Scry(count: 1),
     ],
-    text: "Flurry — Whenever you cast your second spell each turn, put a +1/+1 counter on this creature, then scry 1.",
   )],
 )

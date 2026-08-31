@@ -1,14 +1,16 @@
 (
   id: "goblin_arsonist",
   name: "Goblin Arsonist",
+  face_id: "goblin_arsonist",
   mana_cost: "{R}",
   types: ["Creature", "Goblin", "Shaman"],
   power: 1,
   toughness: 1,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfDies,
     effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))],
-    text: "When this creature dies, you may have it deal 1 damage to any target.",
     may: true,
   )],
 )

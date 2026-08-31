@@ -54,8 +54,8 @@ use tricerules_cards::primitives::{
     TriggerCondition, TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
 };
 use tricerules_cards::{
-    is_creature_type, CardDefinition, CardFace, CardRegistry, CharacteristicDefiningAbility,
-    FaceRef, Layout,
+    is_creature_type, mode_fallback, CardDefinition, CardFace, CardRegistry,
+    CharacteristicDefiningAbility, FaceRef, Layout,
 };
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::{
@@ -384,6 +384,7 @@ struct TriggerSourceSnapshot {
     power_toughness: (Option<i64>, Option<i64>),
     object_id: ObjectId,
     card_id: String,
+    face_name: String,
     controller: PlayerId,
     face_index: usize,
     zone_change_generation: u64,

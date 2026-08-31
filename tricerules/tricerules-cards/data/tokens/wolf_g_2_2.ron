@@ -2,6 +2,7 @@
 (
     id: "wolf_g_2_2",
     name: "Wolf",
+    face_id: "wolf",
     types: ["Creature", "Wolf"],
     colors: [Green],
     power: 2,

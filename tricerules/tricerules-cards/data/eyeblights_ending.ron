@@ -1,9 +1,9 @@
 (
   id: "eyeblights_ending",
   name: "Eyeblight's Ending",
+  face_id: "eyeblight_s_ending",
   mana_cost: "{2}{B}",
-  // Oracle type line: "Kindred Instant — Elf". Kindred is a card type (CR 205.1a), not a
-  // supertype — the supertype list is Basic/Legendary/Snow/World/Ongoing/Host.
+  // Kindred is a card type under CR 205.1a, not a supertype.
   types: ["Kindred", "Instant", "Elf"],
   spell_effect: [Destroy(subject: Chosen((kind: Creature, excluded_subtypes: ["Elf"])))],
 )

@@ -2,9 +2,10 @@
 (
   id: "kavu_climber",
   name: "Kavu Climber",
+  face_id: "kavu_climber",
   mana_cost: "{3}{G}{G}",
   types: ["Creature", "Kavu"],
   power: 3,
   toughness: 3,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

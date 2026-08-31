@@ -11,7 +11,6 @@ fn issue_128_cards_are_complete_registry_definitions() {
         .get("riling_dawnbreaker_signaling_roar")
         .expect("Riling Dawnbreaker // Signaling Roar");
     assert_eq!(riling.faces[0].triggered_abilities.len(), 1);
-    assert_eq!(riling.partial, None);
     let riling_trigger = &riling.faces[0].triggered_abilities[0];
     assert_eq!(
         riling_trigger.trigger,
@@ -44,7 +43,6 @@ fn issue_128_cards_are_complete_registry_definitions() {
     assert_eq!(cheerleader_face.power, Some(2));
     assert_eq!(cheerleader_face.toughness, Some(2));
     assert_eq!(cheerleader_face.triggered_abilities.len(), 1);
-    assert_eq!(cheerleader.partial, None);
     let survival = &cheerleader_face.triggered_abilities[0];
     assert_eq!(
         survival.trigger,

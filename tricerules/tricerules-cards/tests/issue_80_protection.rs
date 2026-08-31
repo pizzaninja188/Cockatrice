@@ -14,10 +14,9 @@ fn issue_80_calibration_cards_are_registered() {
         "white_knight",
         "black_knight",
     ] {
-        let definition = registry
+        registry
             .get(card_id)
             .unwrap_or_else(|| panic!("issue #80 calibration card {card_id} is not registered"));
-        assert!(definition.partial.is_none());
     }
 }
 

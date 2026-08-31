@@ -2,7 +2,9 @@
 (
   id: "cancel",
   name: "Cancel",
+  face_id: "cancel",
   mana_cost: "{1}{U}{U}",
   types: ["Instant"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [CounterTargetSpell(spell_filter: None, unless_controller_pays: None)],
 )

@@ -2,13 +2,14 @@
 (
   id: "waterbending_lesson",
   name: "Waterbending Lesson",
+  face_id: "waterbending_lesson",
   mana_cost: "{3}{U}",
   types: ["Sorcery", "Lesson"],
   spell_effect: [
     Draw(count: 3),
     ChooseResolutionBranch(optional: false, branches: [
-      (label: "Waterbend {2}", cost: Waterbend("{2}"), effects: []),
-      (label: "Discard a card", cost: None, effects: [Discard(count: 1)]),
+      (branch_id: "waterbend_2", presentation: Fallback, cost: Waterbend("{2}"), effects: []),
+      (branch_id: "discard_a_card", presentation: Fallback, cost: None, effects: [Discard(count: 1)]),
     ]),
   ],
 )

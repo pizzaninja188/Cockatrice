@@ -2,6 +2,7 @@
 (
   id: "living_tempest",
   name: "Living Tempest",
+  face_id: "living_tempest",
   mana_cost: "{4}{U}",
   types: ["Creature", "Elemental"],
   power: 3,

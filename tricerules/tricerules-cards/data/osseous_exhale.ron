@@ -2,14 +2,17 @@
 (
   id: "osseous_exhale",
   name: "Osseous Exhale",
+  face_id: "osseous_exhale",
   mana_cost: "{1}{W}",
   types: ["Instant"],
   cast_cost_groups: [(
-    prompt: "Behold a Dragon?",
+    group_id: "cast_cost_01",
+    presentation: OracleLines([1]),
     min: 0,
     max: 1,
     options: [Behold(
-      label: "Behold a Dragon",
+      option_id: "option_01",
+      presentation: OracleLines([1]),
       hand_filter: (subtype: Some("Dragon")),
       permanent_filter: (
         kind: AnyPermanent,
@@ -27,7 +30,7 @@
       selection: FirstApplicable,
       branches: [
         (
-          label: "Gain 2 life",
+          branch_id: "gain_2_life", presentation: Fallback,
           cost: None,
           requirement: CastCostReceipt((
             group_index: 0,
@@ -36,7 +39,7 @@
           )),
           effects: [GainLife(amount: 2)],
         ),
-        (label: "No additional effect", cost: None, requirement: Always, effects: []),
+        (branch_id: "no_additional_effect", presentation: Fallback, cost: None, requirement: Always, effects: []),
       ],
     ),
   ],

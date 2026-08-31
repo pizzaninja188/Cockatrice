@@ -2,20 +2,23 @@
 (
   id: "thawbringer",
   name: "Thawbringer",
+  face_id: "thawbringer",
   mana_cost: "{2}{G}",
   types: ["Creature", "Insect", "Scout"],
   power: 4,
   toughness: 2,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
       effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
-      text: "When this creature enters or dies, surveil 1.",
     ),
     (
+      ability_id: "triggered_02",
+      presentation: Fallback,
       trigger: WhenSelfDies,
       effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
-      text: "When this creature enters or dies, surveil 1.",
     ),
   ],
 )

@@ -2,18 +2,20 @@
 (
   id: "tributary_vaulter",
   name: "Tributary Vaulter",
+  face_id: "tributary_vaulter",
   mana_cost: "{2}{W}",
   types: ["Creature", "Merfolk", "Warrior"],
   power: 1,
   toughness: 3,
   keywords: [Flying],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WheneverSelfBecomesTapped,
     effect: [PumpTarget(
       power: 2,
       toughness: 0,
       subject: Chosen((kind: Creature, controller: You, required_subtypes: ["Merfolk"], excluded_objects: [Source])),
     )],
-    text: "Whenever this creature becomes tapped, another target Merfolk you control gets +2/+0 until end of turn.",
   )],
 )

@@ -1,10 +1,11 @@
 (
   id: "giant_cindermaw",
   name: "Giant Cindermaw",
+  face_id: "giant_cindermaw",
   mana_cost: "{2}{R}",
   types: ["Creature", "Dinosaur", "Beast"],
   power: 4,
   toughness: 3,
   keywords: [Trample],
-  static_abilities: [ProhibitLifeGain(players: All)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ProhibitLifeGain(players: All))],
 )

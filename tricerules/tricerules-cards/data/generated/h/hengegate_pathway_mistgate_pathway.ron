@@ -6,15 +6,17 @@
   faces: [
     (
       name: "Hengegate Pathway",
+      face_id: "hengegate_pathway",
       mana_cost: "",
       types: ["Land"],
-      activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(w: 1)])], text: "{T}: Add {W}.")],
+      activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(w: 1)])])],
     ),
     (
       name: "Mistgate Pathway",
+      face_id: "mistgate_pathway",
       mana_cost: "",
       types: ["Land"],
-      activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(u: 1)])], text: "{T}: Add {U}.")],
+      activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(u: 1)])])],
     ),
   ],
 )

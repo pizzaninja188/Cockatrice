@@ -1,6 +1,7 @@
 (
   id: "mind_sculpt",
   name: "Mind Sculpt",
+  face_id: "mind_sculpt",
   mana_cost: "{1}{U}",
   types: ["Sorcery"],
   spell_effect: [MillTargetPlayer(count: 7, target: (kind: OpponentPlayer))],

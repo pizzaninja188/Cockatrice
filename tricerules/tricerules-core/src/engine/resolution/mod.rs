@@ -247,11 +247,11 @@ pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
         ability_texts: face
             .activated_abilities
             .iter()
-            .map(|ability| ability.text.clone())
+            .map(|ability| ability.fallback_text(&values.display_name))
             .chain(
                 face.triggered_abilities
                     .iter()
-                    .map(|ability| ability.text.clone()),
+                    .map(|ability| ability.fallback_text(&values.display_name)),
             )
             .collect(),
     }
@@ -639,7 +639,7 @@ impl GameEngine {
                 return;
             };
             for chosen in &mut top.chosen_modes {
-                let Some(mode) = modal.modes.get(chosen.mode_index) else {
+                let Some(mode) = modal.mode_by_id(&chosen.mode_id) else {
                     continue;
                 };
                 let requirements = target_roles_by_group(&mode.effects, mode.targeting.as_ref());
@@ -1183,7 +1183,7 @@ impl GameEngine {
             };
             if let Some(modal) = modal {
                 for chosen in &top.chosen_modes {
-                    if let Some(mode) = modal.modes.get(chosen.mode_index) {
+                    if let Some(mode) = modal.mode_by_id(&chosen.mode_id) {
                         resolution_effects.extend(build_entries(
                             &mode.effects,
                             mode.targeting.as_ref(),
@@ -3106,8 +3106,8 @@ mod attached_subject_tests {
                 CardRegistry::from_chunks_and_tokens(
                     &[
                         r#"(id: "brainstorm", name: "Brainstorm", layout: ModalDfc, faces: [
-                (name: "Body", types: ["Creature"], power: 2, toughness: 2),
-                (name: "Thought", types: ["Instant"], custom_effect: "brainstorm")])"#,
+                (name: "Body", face_id: "body", types: ["Creature"], power: 2, toughness: 2),
+                (name: "Thought", face_id: "thought", types: ["Instant"], custom_effect: "brainstorm")])"#,
                         include_str!("../../../../tricerules-cards/data/island.ron"),
                         include_str!("../../../../tricerules-cards/data/forest.ron"),
                     ],
@@ -4108,9 +4108,13 @@ mod attached_subject_tests {
         let second = add_battlefield_object(&mut engine, 1, "grizzly_bears");
         engine.place_counters(first, CounterKind::PlusOnePlusOne, 1);
         let mut values = engine.copiable_values_for(aura).unwrap();
-        values.face.static_abilities = vec![StaticAbilityDef::ProhibitCounters {
-            affected: CounterPlacementAffected::AttachedPermanent,
-        }];
+        values.face.static_abilities = vec![tricerules_cards::IdentifiedAbility::fallback(
+            "static_01",
+            StaticAbilityDef::ProhibitCounters {
+                affected: CounterPlacementAffected::AttachedPermanent,
+            },
+        )
+        .unwrap()];
         engine.state.objects.get_mut(&aura).unwrap().copiable_values = Some(values);
         engine.state.objects.get_mut(&aura).unwrap().attached_to =
             Some(AttachmentRecipient::Object(first));
@@ -4190,6 +4194,8 @@ mod attached_subject_tests {
             .unwrap_or(0);
         let mut item = triggered_item(source, generation);
         item.triggered_ability = Some(TriggeredAbilityDef {
+            ability_id: tricerules_cards::AbilityId::new("triggered_01").unwrap(),
+            presentation: tricerules_cards::AbilityPresentation::Fallback,
             trigger: TriggerCondition::WhenSelfEntersBattlefield,
             effect: vec![
                 SpellEffectKind::ChooseResolutionBranch {
@@ -4198,7 +4204,9 @@ mod attached_subject_tests {
                     selection:
                         tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice,
                     branches: vec![ResolutionBranchDef {
-                        label: "Gain one life".into(),
+                        branch_id: tricerules_cards::ChoiceId::new("branch_01").unwrap(),
+                        presentation: tricerules_cards::AbilityPresentation::Fallback,
+                        runtime_fallback: None,
                         cost: ResolutionCost::None,
                         requirement:
                             tricerules_cards::primitives::ResolutionBranchRequirement::Always,
@@ -4213,7 +4221,6 @@ mod attached_subject_tests {
             ],
             modal: None,
             targeting: None,
-            text: "Choose, then gain more life.".into(),
             may: false,
             intervening_if: None,
             max_triggers_per_turn: None,
@@ -4249,6 +4256,8 @@ mod attached_subject_tests {
             .unwrap_or(0);
         let mut item = triggered_item(source, generation);
         item.triggered_ability = Some(TriggeredAbilityDef {
+            ability_id: tricerules_cards::AbilityId::new("triggered_01").unwrap(),
+            presentation: tricerules_cards::AbilityPresentation::Fallback,
             trigger: TriggerCondition::WhenSelfEntersBattlefield,
             effect: vec![
                 SpellEffectKind::ChooseResolutionBranch {
@@ -4258,7 +4267,9 @@ mod attached_subject_tests {
                         tricerules_cards::primitives::ResolutionBranchSelection::FirstApplicable,
                     branches: vec![
                         ResolutionBranchDef {
-                            label: "Gain one life".into(),
+                            branch_id: tricerules_cards::ChoiceId::new("branch_01").unwrap(),
+                            presentation: tricerules_cards::AbilityPresentation::Fallback,
+                            runtime_fallback: None,
                             cost: ResolutionCost::None,
                             requirement: tricerules_cards::primitives::ResolutionBranchRequirement::GameCondition(
                                 GameCondition::ActivePlayer {
@@ -4270,7 +4281,9 @@ mod attached_subject_tests {
                             }],
                         },
                         ResolutionBranchDef {
-                            label: "Gain five life".into(),
+                            branch_id: tricerules_cards::ChoiceId::new("branch_02").unwrap(),
+                            presentation: tricerules_cards::AbilityPresentation::Fallback,
+                            runtime_fallback: None,
                             cost: ResolutionCost::None,
                             requirement:
                                 tricerules_cards::primitives::ResolutionBranchRequirement::Always,
@@ -4286,7 +4299,6 @@ mod attached_subject_tests {
             ],
             modal: None,
             targeting: None,
-            text: "Use the first live branch, then gain more life.".into(),
             may: false,
             intervening_if: None,
             max_triggers_per_turn: None,
@@ -4322,6 +4334,8 @@ mod attached_subject_tests {
             .unwrap_or(0);
         let mut item = triggered_item(source, generation.saturating_add(1));
         item.triggered_ability = Some(TriggeredAbilityDef {
+            ability_id: tricerules_cards::AbilityId::new("triggered_01").unwrap(),
+            presentation: tricerules_cards::AbilityPresentation::Fallback,
             trigger: TriggerCondition::WhenSelfEntersBattlefield,
             effect: vec![
                 SpellEffectKind::ChooseResolutionBranch {
@@ -4330,7 +4344,9 @@ mod attached_subject_tests {
                     selection:
                         tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice,
                     branches: vec![ResolutionBranchDef {
-                        label: "Put a counter on the stale source".into(),
+                        branch_id: tricerules_cards::ChoiceId::new("branch_01").unwrap(),
+                        presentation: tricerules_cards::AbilityPresentation::Fallback,
+                        runtime_fallback: None,
                         cost: ResolutionCost::None,
                         requirement:
                             tricerules_cards::primitives::ResolutionBranchRequirement::EffectsApplicable,
@@ -4347,7 +4363,6 @@ mod attached_subject_tests {
             ],
             modal: None,
             targeting: None,
-            text: "Choose if possible, then gain life.".into(),
             may: false,
             intervening_if: None,
             max_triggers_per_turn: None,

@@ -1,16 +1,18 @@
 (
   id: "viashino_pyromancer",
   name: "Viashino Pyromancer",
+  face_id: "viashino_pyromancer",
   mana_cost: "{1}{R}",
   types: ["Creature", "Viashino", "Wizard"],
   power: 2,
   toughness: 1,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [DamageTarget(amount: 2, target: (any_of: Some([
       (kind: AnyPlayer),
       (kind: AnyPermanent, permanent_types: [Planeswalker]),
     ])))],
-    text: "When this creature enters, it deals 2 damage to target player or planeswalker.",
   )],
 )

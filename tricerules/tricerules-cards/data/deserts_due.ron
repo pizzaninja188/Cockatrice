@@ -1,6 +1,6 @@
 // Oracle and rulings fetched 2026-08-27. CR 608.2h, 613.4c.
 (
-  id: "deserts_due", name: "Desert's Due", mana_cost: "{1}{B}", types: ["Instant"],
+  id: "deserts_due", name: "Desert's Due", face_id: "desert_s_due", mana_cost: "{1}{B}", types: ["Instant"],
   spell_effect: [PumpTarget(power: -2, toughness: -2, scale: Some((
     amount: Count(BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Desert"]))),
     power_per_unit: -1, toughness_per_unit: -1,

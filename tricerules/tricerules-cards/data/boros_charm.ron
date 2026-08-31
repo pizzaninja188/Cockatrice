@@ -1,6 +1,7 @@
 (
   id: "boros_charm",
   name: "Boros Charm",
+  face_id: "boros_charm",
   mana_cost: "{R}{W}",
   types: ["Instant"],
   modal_spell: (
@@ -8,11 +9,13 @@
     max_modes: 1,
     modes: [
       (
-        label: "Deal 4 damage to target player",
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
         effects: [DamageTarget(amount: 4, target: (kind: AnyPlayer))],
       ),
       (
-        label: "Permanents you control gain indestructible",
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
         effects: [
           GrantKeywordsAllPermanents(
             filter: (kind: AnyPermanent, controller: You),
@@ -21,7 +24,8 @@
         ],
       ),
       (
-        label: "Target creature gains double strike",
+        mode_id: "mode_03",
+        presentation: OracleLines([4]),
         effects: [
           GrantKeywords(
             subject: Chosen((kind: Creature)),

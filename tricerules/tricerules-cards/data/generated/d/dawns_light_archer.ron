@@ -2,6 +2,7 @@
 (
   id: "dawns_light_archer",
   name: "Dawn's Light Archer",
+  face_id: "dawn_s_light_archer",
   mana_cost: "{2}{G}",
   types: ["Creature", "Elf", "Archer"],
   power: 4,

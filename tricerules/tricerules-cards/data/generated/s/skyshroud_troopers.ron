@@ -2,9 +2,10 @@
 (
   id: "skyshroud_troopers",
   name: "Skyshroud Troopers",
+  face_id: "skyshroud_troopers",
   mana_cost: "{3}{G}",
   types: ["Creature", "Elf", "Druid", "Warrior"],
   power: 3,
   toughness: 3,
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1)])], text: "{T}: Add {G}.")],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(g: 1)])])],
 )

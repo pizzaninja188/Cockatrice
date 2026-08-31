@@ -1,9 +1,10 @@
 (
   id: "exploration",
   name: "Exploration",
+  face_id: "exploration",
   mana_cost: "{G}",
   types: ["Enchantment"],
   static_abilities: [
-    ExtraLandPlays(count: 1),
+    (ability_id: "static_01", presentation: Fallback, definition: ExtraLandPlays(count: 1)),
   ],
 )

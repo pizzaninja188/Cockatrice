@@ -1,21 +1,21 @@
 (
   id: "unable_to_scream",
   name: "Unable to Scream",
+  face_id: "unable_to_scream",
   mana_cost: "{U}",
-  // Oracle checked 2026-08-19: enchanted creature loses all abilities; it is additionally a
-  // Toy artifact creature with base P/T 0/2; while face down it cannot be turned face up.
+  // Layered type, ability, and base-P/T changes are modeled independently.
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
   static_abilities: [
-    AttachedModifier(
+    (ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(
       add_types: (card_types: [Artifact], creature_types: ["Toy"]),
       set_power: 0,
       set_toughness: 2,
       remove_all_abilities: true,
-    ),
-    ProhibitSpecialAction(
+    )),
+    (ability_id: "static_02", presentation: Fallback, definition: ProhibitSpecialAction(
       action: TurnFaceUp,
       affected: AttachedPermanent,
-    ),
+    )),
   ],
 )

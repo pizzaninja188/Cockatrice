@@ -6,15 +6,17 @@
   faces: [
     (
       name: "Barkchannel Pathway",
+      face_id: "barkchannel_pathway",
       mana_cost: "",
       types: ["Land"],
-      activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(g: 1)])], text: "{T}: Add {G}.")],
+      activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(g: 1)])])],
     ),
     (
       name: "Tidechannel Pathway",
+      face_id: "tidechannel_pathway",
       mana_cost: "",
       types: ["Land"],
-      activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(u: 1)])], text: "{T}: Add {U}.")],
+      activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(u: 1)])])],
     ),
   ],
 )

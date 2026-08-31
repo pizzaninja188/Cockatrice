@@ -1,6 +1,7 @@
 (
   id: "abnormal_endurance",
   name: "Abnormal Endurance",
+  face_id: "abnormal_endurance",
   mana_cost: "{1}{B}",
   types: ["Instant"],
   spell_effect: [
@@ -8,6 +9,8 @@
     GrantTriggeredAbility(
       subject: Chosen((kind: Creature)),
       ability: (
+        ability_id: "triggered_01",
+        presentation: Fallback,
         trigger: WhenSelfDies,
         effect: [
         ReturnTriggeredCard(
@@ -17,7 +20,6 @@
             controller: Owner,
           ),
         ],
-        text: "When this creature dies, return it to the battlefield tapped under its owner's control.",
       ),
     ),
   ],

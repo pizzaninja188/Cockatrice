@@ -1,6 +1,7 @@
 (
   id: "divination",
   name: "Divination",
+  face_id: "divination",
   mana_cost: "{2}{U}",
   types: ["Sorcery"],
   spell_effect: [Draw(count: 2)],

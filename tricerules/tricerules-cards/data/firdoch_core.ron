@@ -3,13 +3,14 @@
 (
   id: "firdoch_core",
   name: "Firdoch Core",
+  face_id: "firdoch_core",
   mana_cost: "{3}",
   types: ["Kindred", "Artifact", "Shapeshifter"],
-  characteristic_defining_abilities: [Changeling],
+  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
     costs: [Tap],
     effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
-    text: "{T}: Add one mana of any color.",
   )],
-  partial: "{4}: Firdoch Core becomes a 4/4 Shapeshifter artifact creature until end of turn is unsupported",
 )

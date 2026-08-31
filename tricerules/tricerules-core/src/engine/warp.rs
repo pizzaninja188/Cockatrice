@@ -43,10 +43,11 @@ impl GameEngine {
                     .unwrap_or_default(),
                 source_face_index: item.face_index,
                 ability: TriggeredAbilityDef {
+                    ability_id: tricerules_cards::AbilityId::new("warp_exile")
+                        .expect("intrinsic ability id"),
+                    presentation: tricerules_cards::AbilityPresentation::Fallback,
                     trigger: TriggerCondition::AtBeginningOfNextEndStep,
                     effect: vec![SpellEffectKind::ExileWarpedObject],
-                    text: "Warp — Exile this permanent. Its owner may cast it on a later turn."
-                        .into(),
                     modal: None,
                     targeting: None,
                     may: false,
@@ -140,9 +141,9 @@ mod tests {
         let registry = CardRegistry::from_chunks_and_tokens(
             &[
                 include_str!("../../../tricerules-cards/data/forest.ron"),
-                r#"(id: "warp_test", name: "Warp Test", mana_cost: "{3}{W}",
+                r#"(id: "warp_test", name: "Warp Test", face_id: "warp_test", mana_cost: "{3}{W}",
                 warp_cost: Some("{1}{W}"), types: ["Creature"], power: 3, toughness: 2)"#,
-                r#"(id: "copy_test", name: "Copy Test", mana_cost: "{U}", types: ["Instant"],
+                r#"(id: "copy_test", name: "Copy Test", face_id: "copy_test", mana_cost: "{U}", types: ["Instant"],
                 spell_effect: [CopyTargetSpell()])"#,
             ],
             &[],

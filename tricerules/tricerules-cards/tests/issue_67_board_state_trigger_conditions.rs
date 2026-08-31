@@ -8,7 +8,6 @@ fn face(card_id: &str) -> &'static tricerules_cards::CardFace {
     let definition = CardRegistry::global()
         .get(card_id)
         .unwrap_or_else(|| panic!("{card_id} must be registered"));
-    assert!(definition.partial.is_none());
     definition.primary_face()
 }
 

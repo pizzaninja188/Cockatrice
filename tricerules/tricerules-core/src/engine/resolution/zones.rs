@@ -2311,7 +2311,7 @@ pub(in crate::engine) fn park_zone_search_choice(
     let selection_slots: Vec<rv1::ResolutionSelectionSlot> = slots
         .iter()
         .map(|slot| rv1::ResolutionSelectionSlot {
-            label: slot.label.clone(),
+            label: slot.fallback_label(),
             candidate_indices: candidates
                 .iter()
                 .enumerate()

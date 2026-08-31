@@ -2,9 +2,10 @@
 (
   id: "striped_bears",
   name: "Striped Bears",
+  face_id: "striped_bears",
   mana_cost: "{3}{G}",
   types: ["Creature", "Bear"],
   power: 2,
   toughness: 2,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

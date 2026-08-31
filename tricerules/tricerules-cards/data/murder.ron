@@ -1,6 +1,7 @@
 (
   id: "murder",
   name: "Murder",
+  face_id: "murder",
   mana_cost: "{1}{B}{B}",
   types: ["Instant"],
   spell_effect: [Destroy()],

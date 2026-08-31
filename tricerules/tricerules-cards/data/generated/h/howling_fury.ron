@@ -2,7 +2,9 @@
 (
   id: "howling_fury",
   name: "Howling Fury",
+  face_id: "howling_fury",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
+  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 4, toughness: 0)],
 )

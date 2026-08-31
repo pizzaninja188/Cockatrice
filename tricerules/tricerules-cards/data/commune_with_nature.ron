@@ -1,6 +1,7 @@
 (
   id: "commune_with_nature",
   name: "Commune with Nature",
+  face_id: "commune_with_nature",
   mana_cost: "{G}",
   types: ["Sorcery"],
   spell_effect: [

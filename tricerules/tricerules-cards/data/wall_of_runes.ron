@@ -1,6 +1,7 @@
 (
   id: "wall_of_runes",
   name: "Wall of Runes",
+  face_id: "wall_of_runes",
   mana_cost: "{U}",
   types: ["Creature", "Wall"],
   power: 0,
@@ -8,9 +9,10 @@
   keywords: [Defender],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: Fallback,
       trigger: WhenSelfEntersBattlefield,
       effect: [Scry(count: 1)],
-      text: "When this creature enters, scry 1.",
     ),
   ],
 )

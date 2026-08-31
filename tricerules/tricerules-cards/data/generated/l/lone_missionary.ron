@@ -2,9 +2,10 @@
 (
   id: "lone_missionary",
   name: "Lone Missionary",
+  face_id: "lone_missionary",
   mana_cost: "{1}{W}",
   types: ["Creature", "Kor", "Monk"],
   power: 2,
   toughness: 1,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 4)], text: "When this creature enters, you gain 4 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 4)])],
 )

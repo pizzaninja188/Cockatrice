@@ -2,10 +2,11 @@
 (
   id: "courier_griffin",
   name: "Courier Griffin",
+  face_id: "courier_griffin",
   mana_cost: "{3}{W}",
   types: ["Creature", "Griffin"],
   power: 2,
   toughness: 3,
   keywords: [Flying],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)], text: "When this creature enters, you gain 2 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)])],
 )

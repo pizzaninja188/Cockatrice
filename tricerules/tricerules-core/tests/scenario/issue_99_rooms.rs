@@ -474,6 +474,6 @@ fn room_trigger_stack_card_uses_the_physical_double_sided_name() {
     assert_eq!(pushed.description, "Glassworks // Shattered Yard");
     assert_eq!(
         pushed.ability_annotation,
-        "At the beginning of your end step, this Room deals 1 damage to each opponent."
+        "Shattered Yard — triggered ability (triggered_01)"
     );
 }

@@ -3,11 +3,14 @@
 (
   id: "gene_pollinator",
   name: "Gene Pollinator",
+  face_id: "gene_pollinator",
   mana_cost: "{G}",
   types: ["Artifact", "Creature", "Robot", "Insect"],
   power: 1,
   toughness: 2,
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
     costs: [
       Tap,
       TapPermanents(
@@ -17,6 +20,5 @@
       ),
     ],
     effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
-    text: "{T}, Tap an untapped permanent you control: Add one mana of any color.",
   )],
 )

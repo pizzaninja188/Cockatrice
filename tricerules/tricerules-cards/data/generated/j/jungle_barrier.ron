@@ -2,10 +2,11 @@
 (
   id: "jungle_barrier",
   name: "Jungle Barrier",
+  face_id: "jungle_barrier",
   mana_cost: "{2}{G}{U}",
   types: ["Creature", "Plant", "Wall"],
   power: 2,
   toughness: 6,
   keywords: [Defender],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

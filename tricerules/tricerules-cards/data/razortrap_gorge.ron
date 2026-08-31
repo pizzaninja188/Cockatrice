@@ -1,11 +1,12 @@
 (
   id: "razortrap_gorge",
   name: "Razortrap Gorge",
+  face_id: "razortrap_gorge",
   mana_cost: "",
   types: ["Land"],
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(b: 1), (r: 1)])], text: "{T}: Add {B} or {R}.")],
-  static_abilities: [EntersTapped(
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([2]), costs: [Tap], effect: [ProduceMana(options: [(b: 1), (r: 1)])], )],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(
     affected: Self_,
     condition: Some(PlayerLifeAggregate(players: All, aggregate: Minimum, min: Some(14))),
-  )],
+  ))],
 )

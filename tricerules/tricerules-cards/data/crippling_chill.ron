@@ -1,6 +1,7 @@
 (
   id: "crippling_chill",
   name: "Crippling Chill",
+  face_id: "crippling_chill",
   mana_cost: "{2}{U}",
   types: ["Instant"],
   spell_effect: [

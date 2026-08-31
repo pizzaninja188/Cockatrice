@@ -1,12 +1,13 @@
 // Oracle and rulings checked 2026-08-27. CR 701.68 and 118.12.
 (
-  id: "dream_seizer", name: "Dream Seizer", mana_cost: "{3}{B}",
+  id: "dream_seizer", name: "Dream Seizer", face_id: "dream_seizer", mana_cost: "{3}{B}",
   types: ["Creature", "Faerie", "Rogue"], power: 3, toughness: 2, keywords: [Flying],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
-    text: "When this creature enters, you may blight 1. If you do, each opponent discards a card.",
     effect: [ChooseResolutionBranch(optional: true, branches: [(
-      label: "Blight 1", cost: Blight(count: 1),
+      branch_id: "blight_1", presentation: Fallback, cost: Blight(count: 1),
       effects: [Discard(who: EachOpponent, count: 1)],
     )])],
   )],

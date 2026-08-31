@@ -9,17 +9,19 @@ fn issue_115_cards_and_treasure_have_exact_shared_shapes() {
     let registry = CardRegistry::global();
 
     let pick = registry.get("goldvein_pick").expect("Goldvein Pick");
-    assert!(pick.partial.is_none());
     let pick_face = pick.primary_face();
     assert_eq!(pick_face.mana_cost.to_string(), "{2}");
+    let [pick_modifier] = pick_face.static_abilities.as_slice() else {
+        panic!("expected one static ability");
+    };
     assert!(matches!(
-        pick_face.static_abilities.as_slice(),
-        [StaticAbilityDef::AttachedModifier {
+        &pick_modifier.definition,
+        StaticAbilityDef::AttachedModifier {
             condition: None,
             delta_power: 1,
             delta_toughness: 1,
             ..
-        }]
+        }
     ));
     assert!(matches!(
         pick_face.triggered_abilities.as_slice(),
@@ -38,7 +40,6 @@ fn issue_115_cards_and_treasure_have_exact_shared_shapes() {
     ));
 
     let skull = registry.get("cracked_skull").expect("Cracked Skull");
-    assert!(skull.partial.is_none());
     let skull_face = skull.primary_face();
     assert_eq!(skull_face.mana_cost.to_string(), "{2}{B}");
     assert!(matches!(
@@ -65,10 +66,12 @@ fn issue_115_cards_and_treasure_have_exact_shared_shapes() {
     let katana = registry
         .get("quick-draw_katana")
         .expect("Quick-Draw Katana");
-    assert!(katana.partial.is_none());
+    let [katana_modifier] = katana.primary_face().static_abilities.as_slice() else {
+        panic!("expected one static ability");
+    };
     assert!(matches!(
-        katana.primary_face().static_abilities.as_slice(),
-        [StaticAbilityDef::AttachedModifier {
+        &katana_modifier.definition,
+        StaticAbilityDef::AttachedModifier {
             condition: Some(GameCondition::ActivePlayer {
                 players: RelativePlayerSet::Controller,
             }),
@@ -76,7 +79,7 @@ fn issue_115_cards_and_treasure_have_exact_shared_shapes() {
             delta_toughness: 0,
             keywords,
             ..
-        }] if *keywords == [Keyword::FirstStrike]
+        } if *keywords == [Keyword::FirstStrike]
     ));
 
     let treasure = registry.get("treasure").expect("Treasure token");

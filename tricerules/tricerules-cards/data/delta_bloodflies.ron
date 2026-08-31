@@ -1,15 +1,17 @@
 (
   id: "delta_bloodflies",
   name: "Delta Bloodflies",
+  face_id: "delta_bloodflies",
   mana_cost: "{1}{B}",
   types: ["Creature", "Insect"],
   power: 1,
   toughness: 2,
   keywords: [Flying],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
     effect: [LoseLife(amount: Fixed(1), who: EachOpponent)],
-    text: "Whenever this creature attacks, if you control a creature with a counter on it, each opponent loses 1 life.",
     intervening_if: Some(GameCondition(BattlefieldCreatureCount(
       filter: (controllers: Controller, requires_any_counter: true),
       min: Some(1),

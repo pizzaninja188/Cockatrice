@@ -2,6 +2,7 @@
 (
   id: "aerial_assault",
   name: "Aerial Assault",
+  face_id: "aerial_assault",
   mana_cost: "{2}{W}",
   types: ["Sorcery"],
   spell_effect: [

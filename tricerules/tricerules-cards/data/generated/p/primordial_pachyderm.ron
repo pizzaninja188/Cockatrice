@@ -2,10 +2,11 @@
 (
   id: "primordial_pachyderm",
   name: "Primordial Pachyderm",
+  face_id: "primordial_pachyderm",
   mana_cost: "{3}{G}",
   types: ["Creature", "Elephant", "Avatar"],
   power: 4,
   toughness: 4,
   keywords: [Reach, Trample],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)], text: "When this creature enters, you gain 2 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)])],
 )

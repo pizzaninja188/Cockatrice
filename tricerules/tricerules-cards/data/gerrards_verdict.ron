@@ -3,6 +3,7 @@
 (
   id: "gerrards_verdict",
   name: "Gerrard's Verdict",
+  face_id: "gerrard_s_verdict",
   mana_cost: "{W}{B}",
   types: ["Sorcery"],
   spell_effect: [
@@ -11,7 +12,7 @@
       selection: FirstApplicable,
       branches: [
         (
-          label: "Gain 6 life",
+          branch_id: "gain_6_life", presentation: Fallback,
           cost: None,
           requirement: CardResultCount(
             filter: (
@@ -25,7 +26,7 @@
           effects: [GainLife(amount: 6)],
         ),
         (
-          label: "Gain 3 life",
+          branch_id: "gain_3_life", presentation: Fallback,
           cost: None,
           requirement: CardResultCount(
             filter: (
@@ -39,7 +40,7 @@
           effects: [GainLife(amount: 3)],
         ),
         (
-          label: "Gain no life",
+          branch_id: "gain_no_life", presentation: Fallback,
           cost: None,
           requirement: Always,
           effects: [],

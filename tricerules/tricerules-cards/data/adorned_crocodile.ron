@@ -1,16 +1,20 @@
 (
   id: "adorned_crocodile",
   name: "Adorned Crocodile",
+  face_id: "adorned_crocodile",
   mana_cost: "{4}{B}",
   types: ["Creature", "Crocodile"],
   power: 5,
   toughness: 3,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfDies,
     effect: [CreateTokens(token: "zombie_b_2_2_druid", count: 1)],
-    text: "When this creature dies, create a 2/2 black Zombie Druid creature token.",
   )],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
     source_zone: Graveyard,
     costs: [Mana("{B}"), ExileSelf],
     effect: [PutCounters(
@@ -25,6 +29,5 @@
       effect_indices: [0],
     )])),
     timing: SorcerySpeed,
-    text: "Renew {B} — {B}, Exile this card from your graveyard: Put a +1/+1 counter on target creature. Activate only as a sorcery.",
   )],
 )

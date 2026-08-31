@@ -2,9 +2,10 @@
 (
   id: "mandroid_squadron",
   name: "Mandroid Squadron",
+  face_id: "mandroid_squadron",
   mana_cost: "{1}{W}",
   types: ["Artifact", "Creature", "Human", "Soldier"],
   power: 0,
   toughness: 4,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)], text: "When this creature enters, you gain 2 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 2)])],
 )

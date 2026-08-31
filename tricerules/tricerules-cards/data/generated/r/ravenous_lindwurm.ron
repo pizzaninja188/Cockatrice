@@ -2,9 +2,10 @@
 (
   id: "ravenous_lindwurm",
   name: "Ravenous Lindwurm",
+  face_id: "ravenous_lindwurm",
   mana_cost: "{4}{G}{G}",
   types: ["Creature", "Wurm"],
   power: 6,
   toughness: 6,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 4)], text: "When this creature enters, you gain 4 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 4)])],
 )

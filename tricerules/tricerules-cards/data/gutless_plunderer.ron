@@ -3,15 +3,17 @@
 (
   id: "gutless_plunderer",
   name: "Gutless Plunderer",
+  face_id: "gutless_plunderer",
   mana_cost: "{2}{B}",
   types: ["Creature", "Skeleton", "Pirate"],
   power: 2,
   toughness: 2,
   keywords: [Deathtouch],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [LibraryPartition(count: 3, top_min: 0, top_max: Some(1), kind: Look)],
-    text: "Raid — When this creature enters, if you attacked this turn, look at the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.",
     intervening_if: Some(GameCondition(AttackedThisTurn(players: Controller))),
   )],
 )

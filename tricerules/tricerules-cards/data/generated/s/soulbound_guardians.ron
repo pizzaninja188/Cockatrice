@@ -2,6 +2,7 @@
 (
   id: "soulbound_guardians",
   name: "Soulbound Guardians",
+  face_id: "soulbound_guardians",
   mana_cost: "{4}{W}",
   types: ["Creature", "Kor", "Spirit"],
   power: 4,

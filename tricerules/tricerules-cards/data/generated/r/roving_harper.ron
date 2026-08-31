@@ -2,9 +2,10 @@
 (
   id: "roving_harper",
   name: "Roving Harper",
+  face_id: "roving_harper",
   mana_cost: "{2}{W}",
   types: ["Creature", "Elf", "Scout"],
   power: 2,
   toughness: 2,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

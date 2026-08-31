@@ -1,13 +1,15 @@
 (
   id: "silent_dart",
   name: "Silent Dart",
+  face_id: "silent_dart",
   mana_cost: "{1}",
   types: ["Artifact"],
   activated_abilities: [
     (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
       costs: [Mana("{4}"), Tap, SacrificeSelf],
       effect: [DamageTarget(amount: 3, target: (kind: Creature))],
-      text: "{4}, {T}, Sacrifice this artifact: It deals 3 damage to target creature.",
     ),
   ],
 )

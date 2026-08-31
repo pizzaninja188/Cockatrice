@@ -2,14 +2,16 @@
 (
   id: "rooftop_assassin",
   name: "Rooftop Assassin",
+  face_id: "rooftop_assassin",
   mana_cost: "{3}{B}",
   types: ["Creature", "Vampire", "Assassin"],
   power: 2,
   toughness: 2,
   keywords: [Flash, Flying, Lifelink],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
     trigger: WhenSelfEntersBattlefield,
     effect: [Destroy(subject: Chosen((kind: Creature, controller: Opponent, was_dealt_damage_this_turn: Some(true))))],
-    text: "When this creature enters, destroy target creature an opponent controls that was dealt damage this turn.",
   )],
 )

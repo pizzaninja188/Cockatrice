@@ -2,6 +2,7 @@
 (
   id: "angelic_wall",
   name: "Angelic Wall",
+  face_id: "angelic_wall",
   mana_cost: "{1}{W}",
   types: ["Creature", "Wall"],
   power: 0,

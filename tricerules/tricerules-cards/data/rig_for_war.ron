@@ -2,6 +2,7 @@
 (
   id: "rig_for_war",
   name: "Rig for War",
+  face_id: "rig_for_war",
   mana_cost: "{1}{R}",
   types: ["Instant"],
   spell_effect: [

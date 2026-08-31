@@ -1,16 +1,16 @@
 // Oracle and rulings fetched 2026-08-27. CR 611.3/613: live threshold; 509.1h preserves blocks.
 (
-  id: "nightwhorl_hermit", name: "Nightwhorl Hermit", mana_cost: "{2}{U}",
+  id: "nightwhorl_hermit", name: "Nightwhorl Hermit", face_id: "nightwhorl_hermit", mana_cost: "{2}{U}",
   types: ["Creature", "Rat", "Rogue"], power: 1, toughness: 4,
   keywords: [Vigilance],
   static_abilities: [
-    ConditionalSelfModifier(
+    (ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
       condition: GraveyardAggregate(owners: Controller, aggregate: CardCount, min: Some(7)),
       delta_power: 1,
-    ),
-    SelfCombatRestriction(
+    )),
+    (ability_id: "static_02", presentation: Fallback, definition: SelfCombatRestriction(
       restriction: (cant_be_blocked: true),
       condition: Some(GraveyardAggregate(owners: Controller, aggregate: CardCount, min: Some(7))),
-    ),
+    )),
   ],
 )

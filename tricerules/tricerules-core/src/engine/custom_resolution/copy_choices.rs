@@ -48,8 +48,7 @@ impl GameEngine {
                 .get(offset..end)
                 .ok_or(EngineError::Illegal("wrong number of copied modal targets"))?;
             let mode = modal
-                .modes
-                .get(chosen_mode.mode_index)
+                .mode_by_id(&chosen_mode.mode_id)
                 .ok_or(EngineError::Illegal("copied modal mode no longer exists"))?;
             self.validate_copy_target_group(
                 controller,

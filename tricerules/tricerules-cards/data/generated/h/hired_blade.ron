@@ -2,6 +2,7 @@
 (
   id: "hired_blade",
   name: "Hired Blade",
+  face_id: "hired_blade",
   mana_cost: "{2}{B}",
   types: ["Creature", "Human", "Assassin"],
   power: 3,

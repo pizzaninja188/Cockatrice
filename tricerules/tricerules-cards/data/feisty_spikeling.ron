@@ -2,13 +2,14 @@
 (
   id: "feisty_spikeling",
   name: "Feisty Spikeling",
+  face_id: "feisty_spikeling",
   mana_cost: "{1}{R/W}",
   types: ["Creature", "Shapeshifter"],
   power: 2,
   toughness: 1,
-  characteristic_defining_abilities: [Changeling],
-  static_abilities: [ConditionalSelfModifier(
+  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
     condition: ActivePlayer(players: Controller),
     keywords: [FirstStrike],
-  )],
+  ))],
 )

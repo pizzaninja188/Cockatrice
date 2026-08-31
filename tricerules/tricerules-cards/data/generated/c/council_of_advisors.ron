@@ -2,9 +2,10 @@
 (
   id: "council_of_advisors",
   name: "Council of Advisors",
+  face_id: "council_of_advisors",
   mana_cost: "{2}{U}",
   types: ["Creature", "Human", "Advisor"],
   power: 1,
   toughness: 1,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

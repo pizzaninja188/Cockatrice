@@ -1,15 +1,17 @@
 (
   id: "infectious_horror",
   name: "Infectious Horror",
+  face_id: "infectious_horror",
   mana_cost: "{3}{B}",
   types: ["Creature", "Zombie", "Horror"],
   power: 2,
   toughness: 2,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [LoseLife(amount: Fixed(2), who: EachOpponent)],
-      text: "Whenever this creature attacks, each opponent loses 2 life.",
     ),
   ],
 )

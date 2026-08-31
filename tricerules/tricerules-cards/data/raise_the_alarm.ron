@@ -2,6 +2,7 @@
 (
   id: "raise_the_alarm",
   name: "Raise the Alarm",
+  face_id: "raise_the_alarm",
   mana_cost: "{1}{W}",
   types: ["Instant"],
   spell_effect: [CreateTokens(token: "soldier_w_1_1", count: 2)],

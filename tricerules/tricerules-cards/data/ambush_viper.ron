@@ -1,6 +1,7 @@
 (
   id: "ambush_viper",
   name: "Ambush Viper",
+  face_id: "ambush_viper",
   mana_cost: "{1}{G}",
   types: ["Creature", "Snake"],
   power: 2,

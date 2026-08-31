@@ -3,21 +3,24 @@
 (
   id: "flamecache_gecko",
   name: "Flamecache Gecko",
+  face_id: "flamecache_gecko",
   mana_cost: "{1}{R}",
   types: ["Creature", "Lizard", "Warlock"],
   power: 2,
   toughness: 2,
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     intervening_if: Some(GameCondition(LifeChangedThisTurn(
       players: Relative(Opponents), change: Loss, quantifier: Any,
     ))),
     effect: [AddMana(amount: (b: 1, r: 1), retention: EndOfStep)],
-    text: "When this creature enters, if an opponent lost life this turn, add {B}{R}.",
   )],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
     costs: [Mana("{1}{R}"), Discard],
     effect: [Draw(count: 1)],
-    text: "{1}{R}, Discard a card: Draw a card.",
   )],
 )

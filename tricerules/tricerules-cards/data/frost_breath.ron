@@ -1,6 +1,7 @@
 (
   id: "frost_breath",
   name: "Frost Breath",
+  face_id: "frost_breath",
   mana_cost: "{2}{U}",
   types: ["Instant"],
   spell_effect: [

@@ -2,6 +2,7 @@
 (
   id: "wall_of_denial",
   name: "Wall of Denial",
+  face_id: "wall_of_denial",
   mana_cost: "{1}{W}{U}",
   types: ["Creature", "Wall"],
   power: 0,

@@ -1,6 +1,7 @@
 (
   id: "storm_crow",
   name: "Storm Crow",
+  face_id: "storm_crow",
   mana_cost: "{1}{U}",
   types: ["Creature", "Bird"],
   power: 1,

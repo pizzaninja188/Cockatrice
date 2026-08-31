@@ -1,6 +1,7 @@
 (
   id: "go_for_the_throat",
   name: "Go for the Throat",
+  face_id: "go_for_the_throat",
   mana_cost: "{1}{B}",
   types: ["Instant"],
   spell_effect: [Destroy(subject: Chosen((kind: Creature, not_artifact: true)))],

@@ -1,6 +1,7 @@
 (
   id: "destructive_tampering",
   name: "Destructive Tampering",
+  face_id: "destructive_tampering",
   mana_cost: "{2}{R}",
   types: ["Sorcery"],
   modal_spell: (
@@ -8,13 +9,15 @@
     max_modes: 1,
     modes: [
       (
-        label: "Destroy target artifact",
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
         effects: [Destroy(
           subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])),
         )],
       ),
       (
-        label: "Creatures without flying can't block this turn",
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
         effects: [ApplyCombatRestriction(
           scope: Matching((kind: Creature, excluded_keywords: [Flying])),
           restriction: (cant_block: true),

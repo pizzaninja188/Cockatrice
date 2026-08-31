@@ -3,6 +3,7 @@
 (
   id: "steer_clear",
   name: "Steer Clear",
+  face_id: "steer_clear",
   mana_cost: "{W}",
   types: ["Instant"],
   cast_conditions: [BattlefieldAggregate(

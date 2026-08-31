@@ -2,11 +2,12 @@
 (
   id: "cinder_strike",
   name: "Cinder Strike",
+  face_id: "cinder_strike",
   mana_cost: "{R}",
   types: ["Sorcery"],
   cast_cost_groups: [(
-    prompt: "Blight 1?", min: 0, max: 1,
-    options: [Blight(label: "Blight 1", count: 1)],
+    group_id: "cast_cost_01", presentation: OracleLines([1]), min: 0, max: 1,
+    options: [Blight(option_id: "option_01", presentation: OracleLines([1]), count: 1)],
   )],
   spell_effect: [DamageTarget(
     amount: CastCost(cast_cost: (group_index: 0, option_index: 0), when_true: 4, otherwise: 2),

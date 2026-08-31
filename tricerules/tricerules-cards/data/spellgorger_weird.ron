@@ -1,18 +1,20 @@
 (
   id: "spellgorger_weird",
   name: "Spellgorger Weird",
+  face_id: "spellgorger_weird",
   mana_cost: "{2}{R}",
   types: ["Creature", "Weird"],
   power: 2,
   toughness: 2,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WheneverPlayerCastsSpell(
         caster: Controller,
         filter: (card_type: Some(Noncreature)),
       ),
       effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
-      text: "Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.",
     ),
   ],
 )

@@ -1,15 +1,17 @@
 (
   id: "gravedigger",
   name: "Gravedigger",
+  face_id: "gravedigger",
   mana_cost: "{3}{B}",
   types: ["Creature", "Zombie"],
   power: 2,
   toughness: 2,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [MoveGraveyardCards(filter: (owner: Controller, card_type: Some(Creature)), destination: Hand)],
-      text: "When this creature enters, you may return target creature card from your graveyard to your hand.",
       may: true,
     ),
   ],

@@ -1,6 +1,7 @@
 (
   id: "wall_of_stone",
   name: "Wall of Stone",
+  face_id: "wall_of_stone",
   mana_cost: "{1}{R}{R}",
   types: ["Creature", "Wall"],
   power: 0,

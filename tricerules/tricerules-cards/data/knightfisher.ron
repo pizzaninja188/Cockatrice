@@ -2,17 +2,19 @@
 (
   id: "knightfisher",
   name: "Knightfisher",
+  face_id: "knightfisher",
   mana_cost: "{3}{U}{U}",
   types: ["Creature", "Bird", "Knight"],
   power: 4,
   toughness: 5,
   keywords: [Flying],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
     trigger: WheneverPermanentEntersBattlefield(
       controller: Controller,
       filter: (required_subtypes: ["Bird"], token: Some(false), exclude_source: true),
     ),
     effect: [CreateTokens(token: "fish_u_1_1", count: 1)],
-    text: "Whenever another nontoken Bird you control enters, create a 1/1 blue Fish creature token.",
   )],
 )

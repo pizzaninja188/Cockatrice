@@ -2,9 +2,10 @@
 (
   id: "inspiring_cleric",
   name: "Inspiring Cleric",
+  face_id: "inspiring_cleric",
   mana_cost: "{2}{W}",
   types: ["Creature", "Vampire", "Cleric"],
   power: 3,
   toughness: 2,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 4)], text: "When this creature enters, you gain 4 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 4)])],
 )

@@ -3,6 +3,7 @@
 (
   id: "radiant_strike",
   name: "Radiant Strike",
+  face_id: "radiant_strike",
   mana_cost: "{3}{W}",
   types: ["Instant"],
   spell_effect: [

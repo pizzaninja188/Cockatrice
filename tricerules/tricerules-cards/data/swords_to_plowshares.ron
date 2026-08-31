@@ -1,6 +1,7 @@
 (
   id: "swords_to_plowshares",
   name: "Swords to Plowshares",
+  face_id: "swords_to_plowshares",
   mana_cost: "{W}",
   types: ["Instant"],
   spell_effect: [ExileTargetGainLifeEqualToPower],

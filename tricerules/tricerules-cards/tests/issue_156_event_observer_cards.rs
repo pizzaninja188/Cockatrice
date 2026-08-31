@@ -89,11 +89,6 @@ fn issue_156_cohort_has_exact_oracle_characteristics() {
             .unwrap_or_else(|| panic!("missing issue #156 card {}", expected.id));
         assert_eq!(definition.name, expected.name, "{}", expected.id);
         assert_eq!(registry.id_for_name(expected.name), Some(expected.id));
-        assert!(
-            definition.partial.is_none(),
-            "{} must be complete",
-            expected.id
-        );
         let face = definition.primary_face();
         assert_eq!(
             face.mana_cost.to_string(),
@@ -175,13 +170,16 @@ fn issue_156_attachment_leave_and_sacrifice_cards_use_shared_shapes() {
             subject: EffectSubject::TriggerObject
         }]
     ));
+    let [cryoshatter_modifier] = cryoshatter.static_abilities.as_slice() else {
+        panic!("expected one static ability");
+    };
     assert!(matches!(
-        cryoshatter.static_abilities.as_slice(),
-        [StaticAbilityDef::AttachedModifier {
+        &cryoshatter_modifier.definition,
+        StaticAbilityDef::AttachedModifier {
             delta_power: -5,
             delta_toughness: 0,
             ..
-        }]
+        }
     ));
 
     let relic = registry.get("cryogen_relic").unwrap().primary_face();
@@ -299,7 +297,6 @@ fn issue_168_complete_cohort_has_exact_oracle_characteristics() {
         let card = registry
             .get(id)
             .unwrap_or_else(|| panic!("missing complete issue #168 card {id}"));
-        assert!(card.partial.is_none(), "{id}");
         assert_eq!(card.name, name);
         let face = card.primary_face();
         assert_eq!(face.mana_cost.to_string(), mana, "{id}");

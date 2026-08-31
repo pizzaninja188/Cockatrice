@@ -5,7 +5,6 @@ use tricerules_cards::{AbilityCost, CardRegistry, CounterKind};
 fn issue_120_creatures_use_source_excluding_sacrifice_costs() {
     for (id, activation_mana) in [("hungry_ghoul", "{1}"), ("unburied_earthcarver", "{2}")] {
         let definition = CardRegistry::global().get(id).expect("card is registered");
-        assert!(definition.partial.is_none());
         let face = definition.primary_face();
         assert_eq!((face.power, face.toughness), (Some(2), Some(2)));
         let [ability] = face.activated_abilities.as_slice() else {
@@ -38,7 +37,6 @@ fn issue_120_wingspan_stride_returns_its_untargeted_source() {
     let definition = CardRegistry::global()
         .get("wingspan_stride")
         .expect("Wingspan Stride is registered");
-    assert!(definition.partial.is_none());
     let face = definition.primary_face();
     assert_eq!(face.mana_cost.to_string(), "{U}");
     assert_eq!(face.types, ["Enchantment", "Aura"]);

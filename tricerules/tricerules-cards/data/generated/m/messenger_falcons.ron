@@ -2,10 +2,11 @@
 (
   id: "messenger_falcons",
   name: "Messenger Falcons",
+  face_id: "messenger_falcons",
   mana_cost: "{2}{G/U}{W}",
   types: ["Creature", "Bird"],
   power: 2,
   toughness: 2,
   keywords: [Flying],
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)], text: "When this creature enters, draw a card.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Draw(count: 1)])],
 )

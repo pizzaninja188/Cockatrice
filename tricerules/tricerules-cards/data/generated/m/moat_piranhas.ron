@@ -2,6 +2,7 @@
 (
   id: "moat_piranhas",
   name: "Moat Piranhas",
+  face_id: "moat_piranhas",
   mana_cost: "{1}{U}",
   types: ["Creature", "Fish"],
   power: 3,

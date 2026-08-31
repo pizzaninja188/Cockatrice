@@ -2,6 +2,7 @@
 (
   id: "wall_of_vines",
   name: "Wall of Vines",
+  face_id: "wall_of_vines",
   mana_cost: "{G}",
   types: ["Creature", "Plant", "Wall"],
   power: 0,

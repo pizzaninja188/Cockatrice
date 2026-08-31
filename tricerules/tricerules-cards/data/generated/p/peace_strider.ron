@@ -2,9 +2,10 @@
 (
   id: "peace_strider",
   name: "Peace Strider",
+  face_id: "peace_strider",
   mana_cost: "{4}",
   types: ["Artifact", "Creature", "Construct"],
   power: 3,
   toughness: 3,
-  triggered_abilities: [(trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)], text: "When this creature enters, you gain 3 life.")],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)])],
 )

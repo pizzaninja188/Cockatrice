@@ -1,6 +1,7 @@
 (
   id: "mind_rot",
   name: "Mind Rot",
+  face_id: "mind_rot",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
   spell_effect: [DiscardCards(count: 2, target: (kind: AnyPlayer))],

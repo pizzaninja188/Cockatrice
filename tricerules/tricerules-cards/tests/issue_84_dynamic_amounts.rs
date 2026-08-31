@@ -53,7 +53,6 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
             .get(id)
             .unwrap_or_else(|| panic!("missing Issue #84 card {id}"));
         assert_eq!(definition.name, name, "{id}");
-        assert!(definition.partial.is_none(), "{id} must be complete");
         let face = definition.primary_face();
         assert_eq!(face.mana_cost.to_string(), mana_cost, "{id}");
         assert_eq!(

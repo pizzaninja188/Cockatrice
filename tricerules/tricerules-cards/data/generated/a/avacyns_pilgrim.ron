@@ -2,9 +2,10 @@
 (
   id: "avacyns_pilgrim",
   name: "Avacyn's Pilgrim",
+  face_id: "avacyn_s_pilgrim",
   mana_cost: "{G}",
   types: ["Creature", "Human", "Monk"],
   power: 1,
   toughness: 1,
-  activated_abilities: [(costs: [Tap], effect: [ProduceMana(options: [(w: 1)])], text: "{T}: Add {W}.")],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(w: 1)])])],
 )

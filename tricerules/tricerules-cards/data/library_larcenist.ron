@@ -1,15 +1,17 @@
 (
   id: "library_larcenist",
   name: "Library Larcenist",
+  face_id: "library_larcenist",
   mana_cost: "{2}{U}",
   types: ["Creature", "Merfolk", "Rogue"],
   power: 1,
   toughness: 2,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [Draw(count: 1)],
-      text: "Whenever this creature attacks, draw a card.",
     ),
   ],
 )

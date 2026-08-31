@@ -1,6 +1,7 @@
 (
   id: "bushwhack",
   name: "Bushwhack",
+  face_id: "bushwhack",
   mana_cost: "{G}",
   types: ["Sorcery"],
   modal_spell: (
@@ -8,7 +9,8 @@
     max_modes: 1,
     modes: [
       (
-        label: "Search for a basic land",
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
         effects: [SearchLibrary(
           filter: Some((card_type: Some(BasicLand))),
           destination: Hand,
@@ -17,7 +19,8 @@
         )],
       ),
       (
-        label: "Have two target creatures fight",
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
         effects: [Fight(
           first: Chosen((kind: Creature, controller: You)),
           second: Chosen((kind: Creature, controller: NotYou)),

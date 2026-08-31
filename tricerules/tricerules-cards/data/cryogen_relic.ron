@@ -2,18 +2,23 @@
 (
   id: "cryogen_relic",
   name: "Cryogen Relic",
+  face_id: "cryogen_relic",
   mana_cost: "{1}{U}",
   types: ["Artifact"],
   triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     effect: [Draw(count: 1)],
-    text: "When this artifact enters the battlefield, draw a card.",
   ), (
+    ability_id: "triggered_02",
+    presentation: Fallback,
     trigger: WhenSelfLeavesBattlefield,
     effect: [Draw(count: 1)],
-    text: "When this artifact leaves the battlefield, draw a card.",
   )],
   activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
     costs: [Mana("{1}{U}"), SacrificeSelf],
     effect: [PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature, tapped: true)))],
     targeting: Some((groups: [(
@@ -22,6 +27,5 @@
       prompt: "Choose up to one target tapped creature",
       effect_indices: [0],
     )])),
-    text: "{1}{U}, Sacrifice this artifact: Put a stun counter on up to one target tapped creature.",
   )],
 )

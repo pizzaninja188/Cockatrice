@@ -145,7 +145,8 @@ impl CharacteristicsEvaluator<'_> {
             types: face.types.to_vec(),
             all_creature_types: face
                 .characteristic_defining_abilities
-                .contains(&CharacteristicDefiningAbility::Changeling),
+                .iter()
+                .any(|ability| ability.definition == CharacteristicDefiningAbility::Changeling),
             supertypes: face.supertypes.to_vec(),
             colors: if copied.is_none()
                 && definition.is_some_and(|definition| definition.layout == Layout::Flip)
@@ -1225,7 +1226,12 @@ mod tests {
             .expect("Cavalry Drillmaster definition")
             .primary_face()
             .clone();
-        face.characteristic_defining_abilities = vec![CharacteristicDefiningAbility::Changeling];
+        face.characteristic_defining_abilities =
+            vec![tricerules_cards::IdentifiedAbility::fallback(
+                "characteristic_01",
+                CharacteristicDefiningAbility::Changeling,
+            )
+            .unwrap()];
         let object = engine.state.objects.get_mut(&oid).expect("library object");
         object.zone = Zone::Battlefield;
         object.face_down = face_down;

@@ -1,6 +1,7 @@
 (
   id: "shanodin_dryads",
   name: "Shanodin Dryads",
+  face_id: "shanodin_dryads",
   mana_cost: "{G}",
   types: ["Creature", "Nymph", "Dryad"],
   power: 1,

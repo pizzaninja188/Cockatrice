@@ -1,20 +1,22 @@
 (
   id: "rampaging_ferocidon",
   name: "Rampaging Ferocidon",
+  face_id: "rampaging_ferocidon",
   mana_cost: "{2}{R}",
   types: ["Creature", "Dinosaur"],
   power: 3,
   toughness: 3,
   keywords: [Menace],
-  static_abilities: [ProhibitLifeGain(players: All)],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ProhibitLifeGain(players: All))],
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([3]),
       trigger: WheneverPermanentEntersBattlefield(
         controller: AnyPlayer,
         filter: (permanent_type: Some(Creature), exclude_source: true),
       ),
       effect: [DamagePlayer(amount: 1, who: TriggerObjectController)],
-      text: "Whenever another creature enters, this creature deals 1 damage to that creature's controller.",
     ),
   ],
 )

@@ -2,6 +2,7 @@
 (
   id: "dragons_eye_sentry",
   name: "Dragon's Eye Sentry",
+  face_id: "dragon_s_eye_sentry",
   mana_cost: "{W}",
   types: ["Creature", "Human", "Monk"],
   power: 1,

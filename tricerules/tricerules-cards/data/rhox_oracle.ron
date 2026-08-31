@@ -1,15 +1,17 @@
 (
   id: "rhox_oracle",
   name: "Rhox Oracle",
+  face_id: "rhox_oracle",
   mana_cost: "{4}{G}",
   types: ["Creature", "Rhino", "Monk"],
   power: 4,
   toughness: 2,
   triggered_abilities: [
     (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [Draw(count: 1)],
-      text: "When this creature enters, draw a card.",
     ),
   ],
 )
