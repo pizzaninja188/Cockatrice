@@ -211,6 +211,9 @@ pub(super) fn spell_cast_matches(
     filter
         .card_type
         .is_none_or(|kind| fact.matched_card_types.contains(&kind))
+        && filter
+            .targeted_permanent_type
+            .is_none_or(|kind| fact.targeted_permanent_types.contains(&kind))
         && filter.required_subtypes.iter().all(|subtype| {
             fact.types.contains(subtype)
                 || (fact.all_creature_types && tricerules_cards::is_creature_type(subtype))
@@ -703,12 +706,45 @@ impl GameEngine {
         origin: Zone,
         mana_value: u32,
     ) -> crate::state::SpellCastFact {
-        let item = self
+        let item_index = self
             .state
             .stack
-            .iter_mut()
-            .find(|item| item.id == object_id)
+            .iter()
+            .position(|item| item.id == object_id)
             .expect("committed cast has a stack item");
+        let targets = self.state.stack[item_index].targets.clone();
+        let targeted_characteristics = targets
+            .iter()
+            .filter_map(|target| {
+                let expected_generation = target.zone_change_generation?;
+                let object = self.state.objects.get(&target.object_id)?;
+                let current_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&target.object_id)
+                    .copied()
+                    .unwrap_or(0);
+                (object.zone == Zone::Battlefield && current_generation == expected_generation)
+                    .then(|| self.characteristics(target.object_id))
+                    .flatten()
+            })
+            .collect::<Vec<_>>();
+        let targeted_permanent_types = [
+            PermanentTypeFilter::Creature,
+            PermanentTypeFilter::Artifact,
+            PermanentTypeFilter::Enchantment,
+            PermanentTypeFilter::Land,
+            PermanentTypeFilter::Planeswalker,
+            PermanentTypeFilter::Battle,
+        ]
+        .into_iter()
+        .filter(|kind| {
+            targeted_characteristics
+                .iter()
+                .any(|characteristics| characteristics.has_type(kind.as_str()))
+        })
+        .collect();
+        let item = &mut self.state.stack[item_index];
         let occurrence = StackObjectRef {
             object_id,
             zone_change_generation: self.state.objects.contains_key(&object_id).then(|| {
@@ -755,6 +791,7 @@ impl GameEngine {
                 .into_iter()
                 .filter(|filter| face.matches_card_type(*filter))
                 .collect(),
+            targeted_permanent_types,
             ordinal: 0,
         };
         self.state.turn_history.current.spells_cast = self

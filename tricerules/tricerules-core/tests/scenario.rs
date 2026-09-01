@@ -151,6 +151,8 @@ mod issue_169_actor_aware_taps;
 mod issue_177_multi_option_cast_costs;
 #[path = "scenario/issue_178_aggregate_object_payments.rs"]
 mod issue_178_aggregate_object_payments;
+#[path = "scenario/issue_191_repartee.rs"]
+mod issue_191_repartee;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

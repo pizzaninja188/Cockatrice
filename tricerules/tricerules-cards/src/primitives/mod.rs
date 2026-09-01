@@ -267,6 +267,15 @@ mod tests {
     }
 
     #[test]
+    fn issue_191_cast_filter_accepts_targeted_permanent_type() {
+        let trigger: super::TriggerCondition = ron::from_str(
+            "WheneverPlayerCastsSpell(filter: (card_type: Some(InstantOrSorcery), targeted_permanent_type: Some(Creature)))",
+        )
+        .expect("Repartee needs a typed existential target predicate");
+        assert!(trigger.validate().is_ok());
+    }
+
+    #[test]
     fn issue_165_dynamic_consumers_reject_unavailable_result_contexts() {
         for template in [
             "Scry(count: AMOUNT)",

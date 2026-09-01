@@ -1,0 +1,44 @@
+// Secrets of Strixhaven. CR 601.2c/601.2i, 603, 702.21, and 115.9b.
+(
+  id: "forum_necroscribe",
+  name: "Forum Necroscribe",
+  face_id: "forum_necroscribe",
+  mana_cost: "{5}{B}",
+  types: ["Creature", "Troll", "Warlock"],
+  power: 5,
+  toughness: 4,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverSelfBecomesTarget(
+        source: SpellOrAbility,
+        source_controller: Opponent,
+      ),
+      effect: [CounterTriggeringStackObjectUnlessPays(
+        cost: DiscardCard(filter: None),
+      )],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WheneverPlayerCastsSpell(
+        caster: Controller,
+        filter: (
+          card_type: Some(InstantOrSorcery),
+          targeted_permanent_type: Some(Creature),
+        ),
+      ),
+      effect: [MoveGraveyardCards(
+        filter: (owner: Controller, card_type: Some(Creature)),
+        destination: Battlefield(),
+      )],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature card from your graveyard",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

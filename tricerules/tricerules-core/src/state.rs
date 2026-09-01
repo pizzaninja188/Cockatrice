@@ -4,8 +4,8 @@ use tricerules_cards::primitives::{
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, Keyword, LibraryBottomOrder,
-    LibraryPlacement, ManaAmount, ManaSpendingRestriction, SearchDestination, TargetFilter,
-    TriggeredAbilityDef, ZoneCardFilter,
+    LibraryPlacement, ManaAmount, ManaSpendingRestriction, PermanentTypeFilter, SearchDestination,
+    TargetFilter, TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{is_creature_type, CardFace, ChoiceId, ManaCost, ManaSymbol, ModeId};
@@ -1668,6 +1668,9 @@ pub struct SpellCastFact {
     pub all_creature_types: bool,
     pub mana_value: u32,
     pub matched_card_types: Vec<CardTypeFilter>,
+    /// Deduplicated derived types of generation-matching battlefield permanents targeted when the
+    /// spell became cast. No target identities are retained in turn history.
+    pub targeted_permanent_types: Vec<PermanentTypeFilter>,
     pub ordinal: u32,
 }
 

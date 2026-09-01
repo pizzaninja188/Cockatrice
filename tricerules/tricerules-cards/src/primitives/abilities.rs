@@ -933,6 +933,10 @@ pub struct SpellCastFilter {
     pub any_of: Option<Vec<Self>>,
     #[serde(default)]
     pub card_type: Option<CardTypeFilter>,
+    /// CR 115.9b: at least one target is currently a battlefield permanent of this derived type
+    /// when the spell becomes cast. Forum Necroscribe and Graduation Day use `Creature`.
+    #[serde(default)]
+    pub targeted_permanent_type: Option<PermanentTypeFilter>,
     #[serde(default)]
     pub required_subtypes: Vec<String>,
     #[serde(default)]

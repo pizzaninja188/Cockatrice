@@ -2338,6 +2338,231 @@ mod cast_snapshot_tests {
     }
 
     #[test]
+    fn issue_191_cast_filter_matches_one_committed_creature_target() {
+        let mut e = engine_with_extra(
+            "spell_effect: [PumpTarget(power: 1, toughness: 1, subject: Chosen((kind: Creature)))]",
+            &[
+                r#"(id: "repartee_watcher", name: "Repartee Watcher", face_id: "repartee_watcher", types: ["Creature"], power: 1, toughness: 1,
+                triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                    trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(InstantOrSorcery), targeted_permanent_type: Some(Creature))),
+                    effect: [GainLife(amount: 1)])])"#,
+            ],
+        );
+        add(&mut e, 0, "repartee_watcher", Zone::Battlefield);
+        let target = add(&mut e, 1, "snapshot_faerie", Zone::Battlefield);
+        let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+        e.state.players[0].mana_pool.black = 1;
+        let mut cast = command(&e, spell);
+        let Some(rv1::ruled_command::Cmd::CastSpell(ref mut command)) = cast.cmd else {
+            unreachable!()
+        };
+        command.targets = vec![rv1::TargetRef {
+            object_id: target,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            ..Default::default()
+        }];
+        e.apply_command(0, &cast).expect("cast at a creature");
+        assert_eq!(
+            e.state.stack.len(),
+            2,
+            "Repartee triggers once above the spell"
+        );
+        assert!(e.state.stack.last().unwrap().is_triggered);
+    }
+
+    fn issue_191_watcher() -> &'static str {
+        r#"(id: "repartee_watcher", name: "Repartee Watcher", face_id: "repartee_watcher", types: ["Creature"], power: 1, toughness: 1,
+            triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(InstantOrSorcery), targeted_permanent_type: Some(Creature))),
+                effect: [GainLife(amount: 1)])])"#
+    }
+
+    #[test]
+    fn issue_191_repeated_and_mixed_targets_match_once_and_snapshot_immutably() {
+        for second_target_is_player in [false, true] {
+            let mut e = engine_with_extra(
+                r#"spell_effect: [
+                    PumpTarget(power: 1, toughness: 1, subject: Chosen((kind: Creature))),
+                    DamageTarget(amount: 1, target: (kind: AnyTarget)),
+                ],
+                targeting: Some((groups: [
+                    (min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0]),
+                    (min: 1, max: 1, prompt: "Choose any target", effect_indices: [1]),
+                ]))"#,
+                &[issue_191_watcher()],
+            );
+            add(&mut e, 0, "repartee_watcher", Zone::Battlefield);
+            let target = add(&mut e, 1, "snapshot_faerie", Zone::Battlefield);
+            let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+            e.state.players[0].mana_pool.black = 1;
+            let mut cast = command(&e, spell);
+            let Some(rv1::ruled_command::Cmd::CastSpell(ref mut cast_spell_command)) = cast.cmd
+            else {
+                unreachable!()
+            };
+            cast_spell_command.targets = vec![
+                rv1::TargetRef {
+                    object_id: target,
+                    group_index: 0,
+                    kind: rv1::TargetRefKind::Permanent as i32,
+                    ..Default::default()
+                },
+                rv1::TargetRef {
+                    object_id: if second_target_is_player { 1 } else { target },
+                    group_index: 1,
+                    kind: if second_target_is_player {
+                        rv1::TargetRefKind::Player as i32
+                    } else {
+                        rv1::TargetRefKind::Permanent as i32
+                    },
+                    ..Default::default()
+                },
+            ];
+            e.apply_command(0, &cast)
+                .expect("cast with two target roles");
+            assert_eq!(e.state.stack.len(), 2, "one trigger per cast event");
+            let fact = e
+                .state
+                .turn_history
+                .current
+                .spell_casts
+                .last()
+                .unwrap()
+                .clone();
+            assert_eq!(
+                fact.targeted_permanent_types,
+                [PermanentTypeFilter::Creature]
+            );
+
+            e.state.players[1].battlefield.retain(|oid| *oid != target);
+            e.state.players[1].hand.push(target);
+            e.state.objects.get_mut(&target).unwrap().zone = Zone::Hand;
+            *e.state.zone_change_generation.entry(target).or_insert(0) += 1;
+            let filter = SpellCastFilter {
+                card_type: Some(CardTypeFilter::InstantOrSorcery),
+                targeted_permanent_type: Some(PermanentTypeFilter::Creature),
+                ..Default::default()
+            };
+            assert!(
+                super::super::history::spell_cast_matches(&filter, &fact),
+                "later target changes do not rewrite the committed cast fact"
+            );
+
+            let facts_before_copy = e.state.turn_history.current.spell_casts.len();
+            let original = e
+                .state
+                .stack
+                .iter()
+                .find(|item| !item.is_triggered)
+                .unwrap();
+            let mut copy = original.clone();
+            copy.id = e.state.next_object_id;
+            e.state.next_object_id += 1;
+            copy.is_copy = true;
+            copy.cast_occurrence = None;
+            e.state.stack.push(copy);
+            assert_eq!(
+                e.state.turn_history.current.spell_casts.len(),
+                facts_before_copy,
+                "a direct stack copy is not cast"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_191_player_targets_and_targeted_permanent_spells_do_not_match() {
+        let mut player_target = engine_with_extra(
+            "spell_effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))]",
+            &[issue_191_watcher()],
+        );
+        add(&mut player_target, 0, "repartee_watcher", Zone::Battlefield);
+        let spell = add(&mut player_target, 0, "snapshot_spell", Zone::Hand);
+        player_target.state.players[0].mana_pool.black = 1;
+        let mut cast = command(&player_target, spell);
+        let Some(rv1::ruled_command::Cmd::CastSpell(ref mut cast_spell_command)) = cast.cmd else {
+            unreachable!()
+        };
+        cast_spell_command.targets = vec![rv1::TargetRef {
+            object_id: 1,
+            kind: rv1::TargetRefKind::Player as i32,
+            ..Default::default()
+        }];
+        player_target.apply_command(0, &cast).unwrap();
+        assert_eq!(player_target.state.stack.len(), 1);
+        assert!(player_target.state.turn_history.current.spell_casts[0]
+            .targeted_permanent_types
+            .is_empty());
+
+        let aura = r#"(id: "snapshot_aura", name: "Snapshot Aura", face_id: "snapshot_aura", mana_cost: "{B}", types: ["Enchantment", "Aura"], spell_effect: [AuraAttach(target: (kind: Creature))])"#;
+        let mut permanent_spell = engine_with_extra(
+            "spell_effect: [GainLife(amount: 1)]",
+            &[issue_191_watcher(), aura],
+        );
+        add(
+            &mut permanent_spell,
+            0,
+            "repartee_watcher",
+            Zone::Battlefield,
+        );
+        let target = add(
+            &mut permanent_spell,
+            1,
+            "snapshot_faerie",
+            Zone::Battlefield,
+        );
+        let aura = add(&mut permanent_spell, 0, "snapshot_aura", Zone::Hand);
+        permanent_spell.state.players[0].mana_pool.black = 1;
+        let mut cast = command(&permanent_spell, aura);
+        let Some(rv1::ruled_command::Cmd::CastSpell(ref mut cast_spell_command)) = cast.cmd else {
+            unreachable!()
+        };
+        cast_spell_command.targets = vec![rv1::TargetRef {
+            object_id: target,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            ..Default::default()
+        }];
+        permanent_spell.apply_command(0, &cast).unwrap();
+        assert_eq!(permanent_spell.state.stack.len(), 1);
+        assert_eq!(
+            permanent_spell.state.turn_history.current.spell_casts[0].targeted_permanent_types,
+            [PermanentTypeFilter::Creature]
+        );
+    }
+
+    #[test]
+    fn issue_191_target_sacrificed_during_cast_is_absent_at_cast_commitment() {
+        let mut e = engine_with_extra(
+            r#"additional_costs: [SacrificePermanent(filter: (kind: Creature, controller: You))],
+                spell_effect: [PumpTarget(power: 1, toughness: 1, subject: Chosen((kind: Creature)))]"#,
+            &[issue_191_watcher()],
+        );
+        add(&mut e, 0, "repartee_watcher", Zone::Battlefield);
+        let target = add(&mut e, 0, "snapshot_faerie", Zone::Battlefield);
+        let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+        e.state.players[0].mana_pool.black = 1;
+        let mut cast = command(&e, spell);
+        let Some(rv1::ruled_command::Cmd::CastSpell(ref mut cast_spell_command)) = cast.cmd else {
+            unreachable!()
+        };
+        cast_spell_command.targets = vec![rv1::TargetRef {
+            object_id: target,
+            kind: rv1::TargetRefKind::Permanent as i32,
+            ..Default::default()
+        }];
+        cast_spell_command.cost_selections = vec![rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::PermanentId(target)),
+        }];
+        e.apply_command(0, &cast)
+            .expect("sacrifice the chosen target while casting");
+        assert_eq!(e.state.objects[&target].zone, Zone::Graveyard);
+        assert_eq!(e.state.stack.len(), 1, "Repartee does not trigger");
+        assert!(e.state.turn_history.current.spell_casts[0]
+            .targeted_permanent_types
+            .is_empty());
+    }
+
+    #[test]
     fn issue_166_history_preserves_cast_faces_origins_and_subtypes() {
         let mut e = engine_with_extra(
             r#"flashback_cost: Some("{B}"),

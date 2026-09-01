@@ -1,0 +1,30 @@
+// Secrets of Strixhaven. CR 601.2c/601.2i, 603, and 115.9b.
+(
+  id: "graduation_day",
+  name: "Graduation Day",
+  face_id: "graduation_day",
+  mana_cost: "{W}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(
+      caster: Controller,
+      filter: (
+        card_type: Some(InstantOrSorcery),
+        targeted_permanent_type: Some(Creature),
+      ),
+    ),
+    effect: [PutCounters(
+      counter: PlusOnePlusOne,
+      count: 1,
+      subject: Chosen((kind: Creature, controller: You)),
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature you control",
+      effect_indices: [0],
+    )])),
+  )],
+)
