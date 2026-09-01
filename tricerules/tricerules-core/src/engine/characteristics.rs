@@ -1109,8 +1109,8 @@ impl CharacteristicsEvaluator<'_> {
                 toughness: set_toughness,
             } = effect.kind
             {
-                power = Some(set_power as i64);
-                toughness = Some(set_toughness as i64);
+                power = Some(set_power);
+                toughness = Some(set_toughness);
             }
         }
 

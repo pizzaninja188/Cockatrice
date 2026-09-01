@@ -424,7 +424,10 @@ impl GameEngine {
                             trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer7bSetPt { power, toughness },
+                            kind: ContinuousEffectKind::Layer7bSetPt {
+                                power: i64::from(power),
+                                toughness: i64::from(toughness),
+                            },
                             condition: condition.clone(),
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,

@@ -621,6 +621,58 @@ pub(super) fn add_types(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn set_base_power_toughness(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::SetBasePowerToughness {
+        target,
+        power,
+        toughness,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(tid) = cx.targets.first().copied().filter(|tid| {
+        target_filter_legal_at_resolution(
+            cx.engine,
+            &target,
+            *tid,
+            cx.controller,
+            TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+            cx.top.trigger_context,
+        )
+    }) else {
+        return Ok(EffectOutcome::Continue);
+    };
+
+    let source_values = cx
+        .engine
+        .source_power_toughness(AmountContext::for_stack_item(cx.top, cx.controller));
+    let resolve = |value: BasePowerToughnessValue| match value {
+        BasePowerToughnessValue::Fixed(value) => value,
+        BasePowerToughnessValue::Source(PowerToughnessCharacteristic::Power) => source_values.0,
+        BasePowerToughnessValue::Source(PowerToughnessCharacteristic::Toughness) => source_values.1,
+    };
+    let power = resolve(power);
+    let toughness = resolve(toughness);
+    let target_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
+    cx.engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: Some(cx.top.id),
+        affected: AffectedScope::Single(tid),
+        kind: ContinuousEffectKind::Layer7bSetPt { power, toughness },
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: cx.engine.state.command_index,
+    });
+    cx.events.push(ev_log(format!(
+        "{} sets {target_name}'s base power and toughness to {power}/{toughness} until end of turn",
+        cx.spell_label
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn grant_keywords_all_permanents(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

@@ -1029,6 +1029,7 @@ fn validate_effect_targets(
             subject: EffectSubject::Chosen(_),
         }
         | SpellEffectKind::Earthbend { .. }
+        | SpellEffectKind::SetBasePowerToughness { .. }
         | SpellEffectKind::ExileUntilSourceLeaves { target: _ }
         | SpellEffectKind::DestroyAttached { target: _, .. }
         | SpellEffectKind::AttachSource { target: _ }

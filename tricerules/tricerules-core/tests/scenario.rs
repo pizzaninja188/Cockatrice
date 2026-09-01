@@ -151,6 +151,8 @@ mod issue_169_actor_aware_taps;
 mod issue_177_multi_option_cast_costs;
 #[path = "scenario/issue_178_aggregate_object_payments.rs"]
 mod issue_178_aggregate_object_payments;
+#[path = "scenario/issue_187_base_pt.rs"]
+mod issue_187_base_pt;
 #[path = "scenario/issue_189_disappear.rs"]
 mod issue_189_disappear;
 #[path = "scenario/issue_191_repartee.rs"]

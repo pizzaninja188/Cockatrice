@@ -1380,6 +1380,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::PumpTarget { .. } => {
                         pump_counters::pump_target(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::SetBasePowerToughness { .. } => {
+                        pump_counters::set_base_power_toughness(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::PumpAll { .. } => {
                         pump_counters::pump_all(&mut cx, effect)?
                     }

@@ -1386,32 +1386,7 @@ impl GameEngine {
                 context.controller,
                 context.resolving_spell_id,
             ) as i64,
-            CountExpression::SourcePower => {
-                let oid = context.source_object_id;
-                if self
-                    .state
-                    .objects
-                    .get(&oid)
-                    .is_some_and(|object| object.zone == Zone::Battlefield)
-                    && self
-                        .state
-                        .zone_change_generation
-                        .get(&oid)
-                        .copied()
-                        .unwrap_or(0)
-                        == context.source_zone_change
-                {
-                    self.characteristics(oid)
-                        .and_then(|c| c.signed_power)
-                        .unwrap_or(0)
-                } else {
-                    self.state
-                        .last_known_pt_by_generation
-                        .get(&(oid, context.source_zone_change))
-                        .and_then(|pt| pt.0)
-                        .unwrap_or(0)
-                }
-            }
+            CountExpression::SourcePower => self.source_power_toughness(context).0,
             CountExpression::DeclaredAttackers { players, filter } => self
                 .state
                 .turn_history
@@ -1474,6 +1449,35 @@ impl GameEngine {
                     super::resolution::card_result_count(self, top, previous, filter)
                 }) as i64,
         }
+    }
+
+    /// CR 608.2h: read the exact source incarnation's current public characteristics, or its
+    /// generation-keyed LKI after it leaves. Missing numerical information is 0 under CR 107.2.
+    pub(super) fn source_power_toughness(&self, context: AmountContext<'_>) -> (i64, i64) {
+        let oid = context.source_object_id;
+        if self
+            .state
+            .objects
+            .get(&oid)
+            .is_some_and(|object| object.zone == Zone::Battlefield)
+            && self
+                .state
+                .zone_change_generation
+                .get(&oid)
+                .copied()
+                .unwrap_or(0)
+                == context.source_zone_change
+        {
+            return self
+                .characteristics(oid)
+                .map(|c| (c.signed_power.unwrap_or(0), c.signed_toughness.unwrap_or(0)))
+                .unwrap_or((0, 0));
+        }
+        self.state
+            .last_known_pt_by_generation
+            .get(&(oid, context.source_zone_change))
+            .map(|(power, toughness)| (power.unwrap_or(0), toughness.unwrap_or(0)))
+            .unwrap_or((0, 0))
     }
 }
 

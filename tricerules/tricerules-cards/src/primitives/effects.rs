@@ -699,6 +699,15 @@ pub enum PowerToughnessCharacteristic {
     Toughness,
 }
 
+/// One independently authored value for a resolving base-power/toughness setter. Fixed setters
+/// (Mind Transfer Protocol, Quandrix Charm) and source-relative setters (Galion) freeze their
+/// signed values as the instruction resolves rather than remaining linked to the source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BasePowerToughnessValue {
+    Fixed(i64),
+    Source(PowerToughnessCharacteristic),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuantityTerm {
     pub coefficient: i32,
@@ -1882,6 +1891,13 @@ pub enum SpellEffectKind {
         #[serde(default)]
         subject: EffectSubject,
     },
+    /// CR 611.2d / 613.4b: set one target permanent's base P/T until end of turn. `power` and
+    /// `toughness` are independent so Galion can snapshot unequal source characteristics.
+    SetBasePowerToughness {
+        target: TargetFilter,
+        power: BasePowerToughnessValue,
+        toughness: BasePowerToughnessValue,
+    },
     /// CR 701.19: tap `subject`. `Chosen` preserves ordinary permanent targeting.
     Tap {
         #[serde(default)]
@@ -2997,6 +3013,9 @@ impl SpellEffectKind {
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target } => {
                 vec![TargetRole::Filtered(source), TargetRole::Filtered(target)]
             }
+            SpellEffectKind::SetBasePowerToughness { target, .. } => {
+                vec![TargetRole::Filtered(target)]
+            }
             SpellEffectKind::Fight { first, second } => [first, second]
                 .into_iter()
                 .filter_map(|subject| match subject {
@@ -3446,6 +3465,27 @@ impl SpellEffectKind {
                 return Err(
                     "CreatureDealsDamageEqualToPower requires two creature target filters".into(),
                 );
+            }
+            SpellEffectKind::SetBasePowerToughness {
+                target,
+                power,
+                toughness,
+            } => {
+                if !target.all_terminal_filters_match(|leaf| {
+                    matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                }) {
+                    return Err(
+                        "SetBasePowerToughness requires a battlefield-permanent target".into(),
+                    );
+                }
+                if context == EffectContext::Spell
+                    && (matches!(power, BasePowerToughnessValue::Source(_))
+                        || matches!(toughness, BasePowerToughnessValue::Source(_)))
+                {
+                    return Err(
+                        "source-relative base P/T values require a permanent ability source".into(),
+                    );
+                }
             }
             SpellEffectKind::Fight { first, second } => {
                 for subject in [first, second] {
@@ -4548,8 +4588,8 @@ pub enum ContinuousEffectKind {
     Layer6RemoveAllAbilities,
     /// CR 613 layer 7b — set base power and toughness before modifiers and counters.
     Layer7bSetPt {
-        power: u32,
-        toughness: u32,
+        power: i64,
+        toughness: i64,
     },
     /// CR 101.2 / 116.2: prohibit a non-stack special action for affected permanents.
     ProhibitSpecialAction(SpecialActionKind),
@@ -4586,7 +4626,28 @@ pub enum ContinuousEffectKind {
     /// CR 305.2b / layer 5 (rule-change): controller may play `count` additional lands per turn.
     /// Covers Exploration, Oracle of Mul Daya, and similar enchantments/permanents.
     ExtraLandPlays(u32),
-    // Future: Layer7bSetPt { power: i32, toughness: i32 }, …
+}
+
+#[cfg(test)]
+mod issue_187_base_pt_tests {
+    use super::*;
+
+    #[test]
+    fn source_relative_base_pt_requires_an_ability_source() {
+        let effect = SpellEffectKind::SetBasePowerToughness {
+            target: TargetFilter {
+                kind: TargetKind::Creature,
+                ..Default::default()
+            },
+            power: BasePowerToughnessValue::Source(PowerToughnessCharacteristic::Power),
+            toughness: BasePowerToughnessValue::Source(PowerToughnessCharacteristic::Toughness),
+        };
+        assert!(effect.validate(EffectContext::Ability).is_ok());
+        assert_eq!(
+            effect.validate(EffectContext::Spell),
+            Err("source-relative base P/T values require a permanent ability source".into())
+        );
+    }
 }
 
 #[cfg(test)]

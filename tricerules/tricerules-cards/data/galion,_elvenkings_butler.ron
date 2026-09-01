@@ -1,0 +1,28 @@
+// Oracle and rulings verified 2026-09-01. Galion's values are sampled when
+// the attack trigger resolves, then remain fixed for the turn.
+(
+  id: "galion,_elvenkings_butler",
+  name: "Galion, Elvenking's Butler",
+  face_id: "galion_elvenkings_butler",
+  mana_cost: "{2}{G}{G}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Elf", "Advisor"],
+  power: 4,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [SetBasePowerToughness(
+      target: (kind: Creature, controller: You, excluded_objects: [Source]),
+      power: Source(Power),
+      toughness: Source(Toughness),
+    )],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 1,
+      prompt: "Choose up to one other target creature you control",
+      effect_indices: [0],
+    )])),
+  )],
+)
