@@ -155,6 +155,8 @@ mod issue_178_aggregate_object_payments;
 mod issue_187_base_pt;
 #[path = "scenario/issue_189_disappear.rs"]
 mod issue_189_disappear;
+#[path = "scenario/issue_190_restricted_mana_any_ability.rs"]
+mod issue_190_restricted_mana_any_ability;
 #[path = "scenario/issue_191_repartee.rs"]
 mod issue_191_repartee;
 #[path = "scenario/issue_57_targeting_costs.rs"]

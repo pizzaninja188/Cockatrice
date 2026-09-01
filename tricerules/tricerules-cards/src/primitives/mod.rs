@@ -439,6 +439,34 @@ mod tests {
     }
 
     #[test]
+    fn unrestricted_ability_and_all_nonspell_permissions_are_distinct_and_canonical() {
+        let any_ability: ManaSpendingRestriction = ron::from_str(
+            "(restriction_id: \"restriction_01\", presentation: Fallback, cast_spell: [(card_type: Some(Artifact))], activate_any_ability: true)",
+        )
+        .expect("unrestricted ability permission");
+        assert!(any_ability.validate().is_ok());
+        assert!(any_ability.activate_any_ability);
+        assert!(!any_ability.all_nonspell_costs);
+
+        let all_nonspell: ManaSpendingRestriction = ron::from_str(
+            "(restriction_id: \"restriction_01\", presentation: Fallback, cast_spell: [(card_type: Some(Artifact))], all_nonspell_costs: true)",
+        )
+        .expect("all-nonspell permission");
+        assert!(all_nonspell.validate().is_ok());
+        assert!(!all_nonspell.activate_any_ability);
+        assert!(all_nonspell.all_nonspell_costs);
+
+        for redundant in [
+            "(restriction_id: \"restriction_01\", presentation: Fallback, activate_ability: [(card_type: Some(Artifact))], activate_any_ability: true)",
+            "(restriction_id: \"restriction_01\", presentation: Fallback, all_nonspell_costs: true, activate_any_ability: true)",
+            "(restriction_id: \"restriction_01\", presentation: Fallback, all_nonspell_costs: true, special_actions: [TurnFaceUp])",
+        ] {
+            let restriction: ManaSpendingRestriction = ron::from_str(redundant).unwrap();
+            assert!(restriction.validate().is_err(), "{redundant}");
+        }
+    }
+
+    #[test]
     fn firebending_uses_a_resolving_combat_retained_mana_effect() {
         let effect = SpellEffectKind::AddMana {
             amount: ManaAmount {

@@ -395,6 +395,8 @@ fn convoke_combines_restricted_mana_and_refreshes_unavailable_group_amounts() {
                 subtype: None,
             }],
             activate_ability: vec![],
+            activate_any_ability: false,
+            all_nonspell_costs: false,
             special_actions: vec![],
         });
     engine.state.players[0]

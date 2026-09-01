@@ -2699,9 +2699,10 @@ pub enum SpecialActionManaPurpose {
     TurnFaceUp,
 }
 
-/// CR 106.6 restriction carried by an individual mana contribution. Empty purpose lists mean
-/// that purpose is disallowed. Filters within one list are ORed so one contribution can cover
-/// wording such as "an Elemental spell or a Chandra planeswalker spell."
+/// CR 106.6 restriction carried by an individual mana contribution. A purpose is disallowed
+/// unless its filter list or broader purpose flag permits it. Filters within one list are ORed so
+/// one contribution can cover wording such as "an Elemental spell or a Chandra planeswalker
+/// spell."
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ManaSpendingRestriction {
@@ -2711,6 +2712,16 @@ pub struct ManaSpendingRestriction {
     pub cast_spell: Vec<ManaSpendFilter>,
     #[serde(default)]
     pub activate_ability: Vec<ManaSpendFilter>,
+    /// This mana may pay for any activated ability, regardless of the source's characteristics.
+    /// Purple Dragon Punks is the first consumer. Keep this separate from `activate_ability` so
+    /// an empty characteristic filter never ambiguously means either "any" or "invalid".
+    #[serde(default)]
+    pub activate_any_ability: bool,
+    /// This mana may pay any cost whose purpose is not casting a spell. Hydraulic Helper is the
+    /// first consumer; this includes activated abilities, special actions, Ward, and authored
+    /// resolution payments while leaving spell additional costs classified with their cast.
+    #[serde(default)]
+    pub all_nonspell_costs: bool,
     #[serde(default)]
     pub special_actions: Vec<SpecialActionManaPurpose>,
 }
@@ -2721,9 +2732,25 @@ impl ManaSpendingRestriction {
         self.presentation.validate()?;
         if self.cast_spell.is_empty()
             && self.activate_ability.is_empty()
+            && !self.activate_any_ability
+            && !self.all_nonspell_costs
             && self.special_actions.is_empty()
         {
             return Err("mana spending restriction must allow a spending purpose".into());
+        }
+        if self.activate_any_ability && !self.activate_ability.is_empty() {
+            return Err(
+                "activate_any_ability cannot be combined with filtered ability permissions".into(),
+            );
+        }
+        if self.all_nonspell_costs
+            && (self.activate_any_ability
+                || !self.activate_ability.is_empty()
+                || !self.special_actions.is_empty())
+        {
+            return Err(
+                "all_nonspell_costs cannot be combined with narrower nonspell permissions".into(),
+            );
         }
         self.cast_spell
             .iter()
@@ -2736,6 +2763,10 @@ impl ManaSpendingRestriction {
             .cast_spell
             .iter()
             .map(|filter| format!("cast {}", filter.fallback_spell_description()))
+            .chain(
+                self.activate_any_ability
+                    .then_some("activate an ability".into()),
+            )
             .chain(self.activate_ability.iter().map(|filter| {
                 format!(
                     "activate an ability of {}",
@@ -2747,6 +2778,9 @@ impl ManaSpendingRestriction {
             SpecialActionManaPurpose::UnlockRoomDoor => "unlock a door".into(),
             SpecialActionManaPurpose::TurnFaceUp => "turn a permanent face up".into(),
         }));
+        if self.all_nonspell_costs {
+            purposes.push("pay a nonspell cost".into());
+        }
         let joined = match purposes.as_slice() {
             [] => choice_fallback("Restricted mana", &self.restriction_id),
             [only] => only.clone(),

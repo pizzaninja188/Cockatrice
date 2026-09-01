@@ -1,0 +1,25 @@
+// Oracle and ruling checked 2026-09-01. CR 106.6, 602.1c, and 605: the restricted red mana
+// may cast an artifact spell or pay the cost of any activated ability, including a mana ability.
+(
+  id: "purple_dragon_punks",
+  name: "Purple Dragon Punks",
+  face_id: "purple_dragon_punks",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap],
+    effect: [ProduceMana(
+      options: [(r: 1)],
+      restriction: Some((
+        restriction_id: "restriction_01",
+        presentation: OracleLines([1]),
+        cast_spell: [(card_type: Some(Artifact))],
+        activate_any_ability: true,
+      )),
+    )],
+  )],
+)

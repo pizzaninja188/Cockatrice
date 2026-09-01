@@ -1,0 +1,26 @@
+// Oracle and ruling checked 2026-09-01. CR 106.6: the blue mana cannot cast a nonartifact
+// spell, but may pay every nonspell cost, including activated abilities, Ward, and special actions.
+(
+  id: "hydraulic_helper",
+  name: "Hydraulic Helper",
+  face_id: "hydraulic_helper",
+  mana_cost: "{1}{U}",
+  types: ["Artifact", "Creature", "Robot"],
+  power: 2,
+  toughness: 3,
+  keywords: [Defender],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Tap],
+    effect: [ProduceMana(
+      options: [(u: 1)],
+      restriction: Some((
+        restriction_id: "restriction_01",
+        presentation: OracleLines([2]),
+        cast_spell: [(card_type: Some(Artifact))],
+        all_nonspell_costs: true,
+      )),
+    )],
+  )],
+)

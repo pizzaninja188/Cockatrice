@@ -326,7 +326,7 @@ impl GameEngine {
             generic_reduction: 0,
             flex_payments: vec![],
             restricted_mana: restricted_mana.to_vec(),
-            eligible_restricted_mana: vec![],
+            eligible_restricted_mana: self.eligible_restricted_mana_for_resolution_payment(idx),
         })
     }
 

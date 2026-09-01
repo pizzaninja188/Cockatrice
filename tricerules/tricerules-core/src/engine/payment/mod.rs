@@ -20,6 +20,7 @@ pub(in crate::engine) use transaction::{
 };
 
 use super::*;
+use tricerules_cards::ManaSpendingRestriction;
 
 fn mana_filter_matches_face(filter: &ManaSpendFilter, face: &CardFace) -> bool {
     filter
@@ -74,6 +75,38 @@ fn mana_filter_matches_characteristics(
         .is_none_or(|subtype| characteristics.has_type(subtype))
 }
 
+#[derive(Clone, Copy)]
+enum ManaSpendPurpose<'a> {
+    CastSpell(&'a CardFace),
+    ActivateAbility(&'a Characteristics),
+    SpecialAction(SpecialActionManaPurpose),
+    ResolutionPayment,
+}
+
+fn restriction_allows_purpose(
+    restriction: &ManaSpendingRestriction,
+    purpose: ManaSpendPurpose<'_>,
+) -> bool {
+    match purpose {
+        ManaSpendPurpose::CastSpell(face) => restriction
+            .cast_spell
+            .iter()
+            .any(|filter| mana_filter_matches_face(filter, face)),
+        ManaSpendPurpose::ActivateAbility(characteristics) => {
+            restriction.all_nonspell_costs
+                || restriction.activate_any_ability
+                || restriction
+                    .activate_ability
+                    .iter()
+                    .any(|filter| mana_filter_matches_characteristics(filter, characteristics))
+        }
+        ManaSpendPurpose::SpecialAction(action) => {
+            restriction.all_nonspell_costs || restriction.special_actions.contains(&action)
+        }
+        ManaSpendPurpose::ResolutionPayment => restriction.all_nonspell_costs,
+    }
+}
+
 /// Pays `cost` after first proving the whole mana component is affordable.
 #[cfg(test)]
 pub(super) fn pay_mana(
@@ -98,6 +131,28 @@ pub(super) fn pay_mana(
 }
 
 impl GameEngine {
+    fn eligible_restricted_mana_for_purpose(
+        &self,
+        player_idx: usize,
+        purpose: ManaSpendPurpose<'_>,
+    ) -> Vec<u32> {
+        let mut ids: Vec<u32> = self.state.players[player_idx]
+            .restricted_mana
+            .iter()
+            .filter_map(|entry| {
+                let restriction = self
+                    .state
+                    .mana_restrictions
+                    .get(entry.restriction_group_id.checked_sub(1)? as usize)?;
+                restriction_allows_purpose(restriction, purpose)
+                    .then_some(entry.restriction_group_id)
+            })
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    }
+
     pub(in crate::engine) fn activated_generic_reduction(
         &self,
         controller: PlayerId,
@@ -526,23 +581,10 @@ impl GameEngine {
         player_idx: usize,
         purpose: SpecialActionManaPurpose,
     ) -> Vec<u32> {
-        let mut ids: Vec<u32> = self.state.players[player_idx]
-            .restricted_mana
-            .iter()
-            .filter_map(|entry| {
-                let restriction = self
-                    .state
-                    .mana_restrictions
-                    .get(entry.restriction_group_id.checked_sub(1)? as usize)?;
-                restriction
-                    .special_actions
-                    .contains(&purpose)
-                    .then_some(entry.restriction_group_id)
-            })
-            .collect();
-        ids.sort_unstable();
-        ids.dedup();
-        ids
+        self.eligible_restricted_mana_for_purpose(
+            player_idx,
+            ManaSpendPurpose::SpecialAction(purpose),
+        )
     }
 
     pub(super) fn eligible_restricted_mana_for_spell(
@@ -550,24 +592,7 @@ impl GameEngine {
         player_idx: usize,
         face: &CardFace,
     ) -> Vec<u32> {
-        let mut ids: Vec<u32> = self.state.players[player_idx]
-            .restricted_mana
-            .iter()
-            .filter_map(|entry| {
-                let restriction = self
-                    .state
-                    .mana_restrictions
-                    .get(entry.restriction_group_id.checked_sub(1)? as usize)?;
-                restriction
-                    .cast_spell
-                    .iter()
-                    .any(|filter| mana_filter_matches_face(filter, face))
-                    .then_some(entry.restriction_group_id)
-            })
-            .collect();
-        ids.sort_unstable();
-        ids.dedup();
-        ids
+        self.eligible_restricted_mana_for_purpose(player_idx, ManaSpendPurpose::CastSpell(face))
     }
 
     pub(super) fn eligible_restricted_mana_for_ability(
@@ -578,24 +603,17 @@ impl GameEngine {
         let Some(characteristics) = self.characteristics(source_oid) else {
             return Vec::new();
         };
-        let mut ids: Vec<u32> = self.state.players[player_idx]
-            .restricted_mana
-            .iter()
-            .filter_map(|entry| {
-                let restriction = self
-                    .state
-                    .mana_restrictions
-                    .get(entry.restriction_group_id.checked_sub(1)? as usize)?;
-                restriction
-                    .activate_ability
-                    .iter()
-                    .any(|filter| mana_filter_matches_characteristics(filter, &characteristics))
-                    .then_some(entry.restriction_group_id)
-            })
-            .collect();
-        ids.sort_unstable();
-        ids.dedup();
-        ids
+        self.eligible_restricted_mana_for_purpose(
+            player_idx,
+            ManaSpendPurpose::ActivateAbility(&characteristics),
+        )
+    }
+
+    pub(super) fn eligible_restricted_mana_for_resolution_payment(
+        &self,
+        player_idx: usize,
+    ) -> Vec<u32> {
+        self.eligible_restricted_mana_for_purpose(player_idx, ManaSpendPurpose::ResolutionPayment)
     }
 
     pub(super) fn spell_generic_reduction(
