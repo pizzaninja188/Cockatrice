@@ -439,6 +439,112 @@ function Test-ExpandedCalibration {
     }
 }
 
+function Test-CurrentStandardCalibration {
+    param([string] $Repo, [string] $Stem)
+
+    $docs = Join-Path $Repo 'docs'
+    $rows = @(Import-Csv (Join-Path $docs "$Stem.csv"))
+    $population = @(Import-Csv (Join-Path $docs "$Stem-population.csv"))
+    $gaps = @(Import-Csv (Join-Path $docs "$Stem-gaps.csv"))
+    $manifest = Get-Content (Join-Path $docs "$Stem-manifest.json") -Raw | ConvertFrom-Json
+    $authority = Get-Content (Join-Path $docs "$Stem-authority.json") -Raw | ConvertFrom-Json
+
+    Assert-Equal 6 $manifest.version "$Stem manifest version"
+    Assert-Equal 160 $manifest.sample_size "$Stem manifest sample size"
+    Assert-Equal 20 $manifest.rows_per_stratum "$Stem rows per stratum"
+    Assert-Equal 8 @($manifest.strata).Count "$Stem manifest strata"
+    Assert-Equal 14 @($manifest.new_issue_numbers).Count "$Stem new issue count"
+    Assert-Equal 14 @($manifest.new_issues).Count "$Stem new issue metadata count"
+    Assert-Equal 'published_and_verified' $manifest.publication_status "$Stem publication status"
+    Assert-Equal 610 $population.Count "$Stem population count"
+    if ($manifest.baseline_commit -notmatch '^[0-9a-f]{40}$') { throw "$Stem has invalid baseline SHA." }
+    if ($manifest.cards_xml_sha256 -notmatch '^[0-9a-f]{64}$') { throw "$Stem has invalid cards.xml SHA." }
+
+    foreach ($file in $manifest.files_sha256.PSObject.Properties) {
+        if ($file.Name -notmatch ('^' + [regex]::Escape($Stem) + '[a-z-]*\.(csv|json)$')) {
+            throw "$Stem contains an unsafe checksum path '$($file.Name)'."
+        }
+        $actual = (Get-FileHash (Join-Path $docs $file.Name) -Algorithm SHA256).Hash.ToLowerInvariant()
+        Assert-Equal $file.Value $actual "$Stem checksum $($file.Name)"
+    }
+    Assert-Equal 4 @($manifest.files_sha256.PSObject.Properties).Count "$Stem checksum file count"
+
+    foreach ($field in 'standard_format', 'comprehensive_rules') {
+        if ($authority.$field -notmatch '^https://') { throw "$Stem authority lacks $field URL." }
+    }
+    Assert-Equal 4 @($authority.release_notes.PSObject.Properties).Count "$Stem release-note source count"
+    Assert-Equal $manifest.cards_xml_sha256 $authority.local_card_database.sha256 "$Stem cards.xml authority hash"
+
+    Assert-Equal $population.Count @($population.printing_id | Sort-Object -Unique).Count "$Stem population printing IDs"
+    Assert-Equal $population.Count @($population.selection_hash | Sort-Object -Unique).Count "$Stem population hashes"
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        foreach ($card in $population) {
+            $bytes = [Text.Encoding]::UTF8.GetBytes($manifest.selection_salt + $card.printing_id)
+            $expected = [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
+            Assert-Equal $expected $card.selection_hash "$Stem selection hash $($card.printing_id)"
+        }
+    }
+    finally { $sha.Dispose() }
+
+    $expectedSampleId = 0
+    $accounted = 0
+    foreach ($stratum in $manifest.strata) {
+        $eligible = @($population | Where-Object stratum -eq $stratum.stratum | Sort-Object selection_hash)
+        $selected = @($rows | Where-Object stratum -eq $stratum.stratum | Sort-Object { [int]$_.stratum_rank })
+        Assert-Equal $stratum.eligible_cards $eligible.Count "$Stem eligible $($stratum.stratum)"
+        Assert-Equal $stratum.selected_cards $selected.Count "$Stem selected $($stratum.stratum)"
+        Assert-Equal 20 $selected.Count "$Stem fixed stratum quota"
+        if ($stratum.source_cards -lt $eligible.Count) { throw "$Stem invalid source population size." }
+        $accounted += $eligible.Count
+        for ($index = 0; $index -lt $selected.Count; $index++) {
+            $expectedSampleId++
+            Assert-Equal ($index + 1) ([int]$selected[$index].stratum_rank) "$Stem rank"
+            Assert-Equal $expectedSampleId ([int]$selected[$index].sample_id) "$Stem sample order"
+            foreach ($field in 'printing_id', 'selection_hash', 'name', 'oracle_text') {
+                Assert-Equal $eligible[$index].$field $selected[$index].$field "$Stem selected $field"
+            }
+            Assert-Equal $selected[$index].printing_id $selected[$index].oracle_id "$Stem Oracle alias"
+        }
+    }
+    Assert-Equal $population.Count $accounted "$Stem accounted population"
+
+    $gapMap = @{}
+    foreach ($gap in $gaps) {
+        if ($gapMap.ContainsKey($gap.gap)) { throw "$Stem duplicates gap '$($gap.gap)'." }
+        if ($gap.disposition -notin @('new_engine', 'deferred')) {
+            throw "$Stem unknown disposition '$($gap.disposition)'."
+        }
+        foreach ($field in 'gap', 'capability', 'title', 'scope_reason', 'code_evidence') {
+            if (-not $gap.$field) { throw "$Stem gap '$($gap.gap)' lacks $field." }
+        }
+        if ($gap.disposition -eq 'new_engine' -and [int]$gap.issue -notin $manifest.new_issue_numbers) {
+            throw "$Stem unexpected new issue '$($gap.issue)'."
+        }
+        if ($gap.disposition -eq 'deferred' -and $gap.issue) {
+            throw "$Stem deferred gap '$($gap.gap)' unexpectedly has issue '$($gap.issue)'."
+        }
+        $gapMap[$gap.gap] = $gap
+    }
+    $observed = [Collections.Generic.HashSet[string]]::new()
+    foreach ($row in $rows) {
+        foreach ($field in 'rationale', 'code_evidence', 'type_line', 'layout', 'authority_url') {
+            if (-not $row.$field) { throw "$Stem row $($row.sample_id) lacks $field." }
+        }
+        $rowGaps = @(@($row.primary_gap) + @($row.secondary_gaps -split ';') | Where-Object { $_ })
+        Assert-Equal $rowGaps.Count @($rowGaps | Sort-Object -Unique).Count "$Stem duplicate row gaps"
+        if ($row.classification -eq 'full_now' -and $rowGaps.Count) { throw "$Stem full row has gaps." }
+        if ($row.classification -ne 'full_now' -and -not $row.primary_gap) { throw "$Stem non-full row lacks primary gap." }
+        foreach ($gap in $rowGaps) {
+            if (-not $gapMap.ContainsKey($gap)) { throw "$Stem unmapped gap '$gap'." }
+            [void]$observed.Add($gap)
+        }
+    }
+    Assert-Equal $gaps.Count $observed.Count "$Stem exact raw gap coverage"
+    Assert-Equal 54 $observed.Count "$Stem raw gap count"
+    Assert-Equal 14 @($gaps | Where-Object disposition -eq new_engine).Count "$Stem filed raw gaps"
+}
+
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $calibrations = @(
     @{
@@ -462,6 +568,13 @@ $calibrations = @(
         ExpectedRows = 360
         ExpectedStrata = 12
         RowsPerStratum = 30
+    },
+    @{
+        Csv = Join-Path $repo 'docs\card-coverage-calibration-2026-09-01.csv'
+        Markdown = Join-Path $repo 'docs\card-coverage-calibration-2026-09-01.md'
+        ExpectedRows = 160
+        ExpectedStrata = 8
+        RowsPerStratum = 20
     }
 )
 
@@ -474,5 +587,6 @@ foreach ($calibration in $calibrations) {
 }
 
 Test-ExpandedCalibration -Repo $repo -Stem 'card-coverage-calibration-2026-08-27'
+Test-CurrentStandardCalibration -Repo $repo -Stem 'card-coverage-calibration-2026-09-01'
 
 Write-Output 'PASS card-coverage calibration consistency'

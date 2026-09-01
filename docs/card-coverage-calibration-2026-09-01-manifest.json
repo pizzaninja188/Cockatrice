@@ -1,0 +1,172 @@
+{
+  "version": 6,
+  "baseline_commit": "3aaf6db956be6210dde7bde4d351924076daa862",
+  "captured_at_utc": "2026-09-01T16:56:17.9105601Z",
+  "sample_size": 160,
+  "rows_per_stratum": 20,
+  "selection_salt": "cockatrice-card-coverage-2026-09-current-v6\n",
+  "registry_full": 1548,
+  "registry_partial": 10,
+  "registry_checklist_sha256": "45329b17371d8d572a65b1c4b12ce4f5a47ff30308a8ed363cd21db8feca1158",
+  "cards_xml_sha256": "bd001fcea73c3c3763d729fbad9d0528a456ca4a8219e76ad5ef55058e08d729",
+  "strata": [
+    {
+      "stratum": "TMT-common",
+      "source_cards": 63,
+      "eligible_cards": 63,
+      "selected_cards": 20
+    },
+    {
+      "stratum": "TMT-uncommon",
+      "source_cards": 55,
+      "eligible_cards": 55,
+      "selected_cards": 20
+    },
+    {
+      "stratum": "SOS-common",
+      "source_cards": 82,
+      "eligible_cards": 82,
+      "selected_cards": 20
+    },
+    {
+      "stratum": "SOS-uncommon",
+      "source_cards": 100,
+      "eligible_cards": 100,
+      "selected_cards": 20
+    },
+    {
+      "stratum": "MSH-common",
+      "source_cards": 90,
+      "eligible_cards": 90,
+      "selected_cards": 20
+    },
+    {
+      "stratum": "MSH-uncommon",
+      "source_cards": 100,
+      "eligible_cards": 100,
+      "selected_cards": 20
+    },
+    {
+      "stratum": "HOB-common",
+      "source_cards": 65,
+      "eligible_cards": 65,
+      "selected_cards": 20
+    },
+    {
+      "stratum": "HOB-uncommon",
+      "source_cards": 55,
+      "eligible_cards": 55,
+      "selected_cards": 20
+    }
+  ],
+  "new_issue_numbers": [
+    179,
+    180,
+    181,
+    182,
+    183,
+    184,
+    185,
+    186,
+    187,
+    188,
+    189,
+    190,
+    191,
+    192
+  ],
+  "new_issues": [
+    {
+      "slug": "sneak",
+      "number": 179,
+      "title": "Sneak casting through the declare-blockers payment lifecycle",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/179"
+    },
+    {
+      "slug": "preparation",
+      "number": 180,
+      "title": "Preparation cards and engine-authored prepared spell-copy actions",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/180"
+    },
+    {
+      "slug": "cast-spending-context",
+      "number": 181,
+      "title": "Per-spell actual mana-spent context for Opus and Increment",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/181"
+    },
+    {
+      "slug": "teamwork-object-cast-costs",
+      "number": 182,
+      "title": "Object-backed cast-cost options and Teamwork receipts",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/182"
+    },
+    {
+      "slug": "power-up",
+      "number": 183,
+      "title": "Power-up entered-this-turn activation cost reduction",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/183"
+    },
+    {
+      "slug": "storied",
+      "number": 184,
+      "title": "Storied and the persistent enduring-story player designation",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/184"
+    },
+    {
+      "slug": "sagas",
+      "number": 185,
+      "title": "Saga lore progression and chapter-trigger lifecycle",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/185"
+    },
+    {
+      "slug": "amass",
+      "number": 186,
+      "title": "Reusable Amass action with Army choice and subtype addition",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/186"
+    },
+    {
+      "slug": "one-shot-base-pt",
+      "number": 187,
+      "title": "One-shot base power/toughness setters with source-relative values",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/187"
+    },
+    {
+      "slug": "chosen-attachment",
+      "number": 188,
+      "title": "Attach a chosen Equipment to a chosen creature",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/188"
+    },
+    {
+      "slug": "departed-this-turn",
+      "number": 189,
+      "title": "Controller-relative permanent-left-battlefield turn facts for Disappear",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/189"
+    },
+    {
+      "slug": "unrestricted-ability-mana",
+      "number": 190,
+      "title": "Restricted mana that may activate any ability",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/190"
+    },
+    {
+      "slug": "cast-targets-creature",
+      "number": 191,
+      "title": "Spell-cast triggers filtered by whether the spell targets a creature",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/191"
+    },
+    {
+      "slug": "data-batch",
+      "number": 192,
+      "title": "Author the next 20 fully supported current-Standard calibration cards",
+      "url": "https://github.com/pizzaninja188/Cockatrice/issues/192"
+    }
+  ],
+  "publication_status": "published_and_verified",
+  "files_sha256": {
+    "card-coverage-calibration-2026-09-01.csv": "7674cd1e792a310181bdc72cd539392c964c89f01f626c2cbdea6de04d57a6db",
+    "card-coverage-calibration-2026-09-01-population.csv": "a4ce4f5eb8d91eb04a941486831d1df68702105d2cadeb691adc3693a7b46846",
+    "card-coverage-calibration-2026-09-01-gaps.csv": "08c4b20c07f176009947aa096709fed02c816afbfcfc4272e31f4a38a6a6f1a3",
+    "card-coverage-calibration-2026-09-01-authority.json": "611b9521e2bfcf4c6b9827ead3531e2cfee04775a42a5b204522ee5bf85c7b20"
+  },
+  "evidence_note": "The committed population and authority capture preserve the sample. The source cards.xml and live Standard page may change after capture."
+}
