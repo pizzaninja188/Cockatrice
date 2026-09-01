@@ -1,6 +1,6 @@
 //! Target kinds and composable target filters.
 
-use super::{Color, Keyword, SpellEffectKind};
+use super::{Color, ConditionObjectRef, Keyword, PermanentChoiceConstraint, SpellEffectKind};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
@@ -55,6 +55,16 @@ impl TargetRole<'_> {
             Self::Filtered(filter) => filter.all_terminal_filters_match(|leaf| {
                 matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
             }),
+            Self::CreaturePermanent => true,
+            Self::StackSpell(_) | Self::GraveyardCard(_) => false,
+        }
+    }
+
+    fn is_creature_only(self) -> bool {
+        match self {
+            Self::Filtered(filter) => {
+                filter.all_terminal_filters_match(|leaf| matches!(leaf.kind, TargetKind::Creature))
+            }
             Self::CreaturePermanent => true,
             Self::StackSpell(_) | Self::GraveyardCard(_) => false,
         }
@@ -201,6 +211,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             effect_role_counts,
         };
         schema.validate_player_recipient_groups(effects)?;
+        schema.validate_permanent_choice_constraints(effects)?;
         for group in &schema.groups {
             if group.bindings.iter().any(|binding| {
                 matches!(
@@ -267,6 +278,61 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                         .into(),
                 );
             }
+        }
+        Ok(())
+    }
+
+    fn validate_permanent_choice_constraints(
+        &self,
+        effects: &[SpellEffectKind],
+    ) -> Result<(), String> {
+        fn visit(schema: &TargetSchema<'_, '_>, effect: &SpellEffectKind) -> Result<(), String> {
+            let SpellEffectKind::ChoosePermanents { constraints, .. } = effect else {
+                if let SpellEffectKind::Conditional { effect, .. } = effect {
+                    return visit(schema, effect);
+                }
+                return Ok(());
+            };
+            for constraint in constraints {
+                let PermanentChoiceConstraint::EquipmentAttachableTo { recipient } = constraint;
+                let ConditionObjectRef::ChosenTarget {
+                    group_index,
+                    target_index,
+                } = recipient
+                else {
+                    return Err(
+                        "Equipment attachment choice must reference a chosen creature target"
+                            .into(),
+                    );
+                };
+                if *target_index != 0 {
+                    return Err(
+                        "Equipment attachment choice requires the first target of an exactly-one group"
+                            .into(),
+                    );
+                }
+                let group = schema.groups.get(*group_index as usize).ok_or_else(|| {
+                    "Equipment attachment choice references an unknown target group".to_string()
+                })?;
+                if group.min != 1
+                    || group.max != 1
+                    || group.bindings.is_empty()
+                    || group
+                        .bindings
+                        .iter()
+                        .any(|binding| !binding.role.is_creature_only())
+                {
+                    return Err(
+                        "Equipment attachment choice requires an exactly-one creature target group"
+                            .into(),
+                    );
+                }
+            }
+            Ok(())
+        }
+
+        for effect in effects {
+            visit(self, effect)?;
         }
         Ok(())
     }

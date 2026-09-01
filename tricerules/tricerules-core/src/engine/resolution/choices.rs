@@ -1,16 +1,16 @@
 use super::{EffectCx, EffectOutcome};
 use crate::engine::events::ev_log;
 use crate::engine::presentation::{ability_presentation, child_presentation_ref, PresentationPath};
-use crate::engine::{rv1, EngineError};
+use crate::engine::{rv1, ConditionContext, EngineError};
 use crate::state::{
     ParkedStackResolution, PendingResolution, PendingResolutionBranch,
     PendingResolutionBranchStage, PendingResolutionPresentation, ResolutionContinuation, StackItem,
     StagedTrigger, StagedTriggerGroup, TriggerContext, TriggerObjectRef,
 };
 use tricerules_cards::primitives::{
-    PlayerRecipient, ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection,
-    ResolutionCost, SpellEffectKind, TargetController, TargetFilter, TargetKind, TriggerCondition,
-    TriggeredAbilityDef,
+    PermanentChoiceConstraint, PlayerRecipient, ResolutionBranchDef, ResolutionBranchRequirement,
+    ResolutionBranchSelection, ResolutionCost, SpellEffectKind, TargetController, TargetFilter,
+    TargetKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 fn permanent_choice_prompt(filter: &TargetFilter, min: u32, max: u32) -> String {
@@ -119,6 +119,7 @@ pub(super) fn choose_permanents(
         filter,
         min,
         max,
+        constraints,
     } = effect
     else {
         unreachable!();
@@ -131,6 +132,7 @@ pub(super) fn choose_permanents(
     };
     let deciding_player = *deciding_player;
     let source = crate::engine::targeting::TargetSourceIdentity::for_stack_item(cx.engine, cx.top);
+    let condition_context = ConditionContext::for_stack_item(cx.top);
     let candidates = cx
         .engine
         .state
@@ -145,13 +147,34 @@ pub(super) fn choose_permanents(
                 deciding_player,
                 source,
                 cx.top.trigger_context,
-            )
+            ) && constraints.iter().all(|constraint| match constraint {
+                PermanentChoiceConstraint::EquipmentAttachableTo { recipient } => cx
+                    .engine
+                    .condition_object_identity(*recipient, condition_context)
+                    .is_some_and(|(recipient_id, expected_generation)| {
+                        cx.engine
+                            .state
+                            .zone_change_generation
+                            .get(&recipient_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == expected_generation
+                            && crate::engine::targeting::equipment_attachment_legal(
+                                cx.engine,
+                                *oid,
+                                recipient_id,
+                            )
+                    }),
+            })
         })
         .collect::<Vec<_>>();
     if candidates.len() < min as usize {
         cx.events.push(ev_log(format!(
             "P{deciding_player} has no legal permanent to choose."
         )));
+        return Ok(EffectOutcome::Continue);
+    }
+    if candidates.is_empty() && min == 0 {
         return Ok(EffectOutcome::Continue);
     }
     if min == max && candidates.len() == min as usize {

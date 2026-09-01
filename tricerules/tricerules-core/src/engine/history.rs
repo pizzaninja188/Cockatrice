@@ -1184,7 +1184,7 @@ impl GameEngine {
         }
     }
 
-    fn condition_object_identity(
+    pub(super) fn condition_object_identity(
         &self,
         object: ConditionObjectRef,
         context: ConditionContext<'_>,

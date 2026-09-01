@@ -1341,6 +1341,9 @@ impl GameEngine {
                                 effect @ SpellEffectKind::GrantKeywords { .. } => {
                                     pump_counters::grant_keywords(&mut cx, effect)?
                                 }
+                                effect @ SpellEffectKind::ChoosePermanents { .. } => {
+                                    choices::choose_permanents(&mut cx, effect)?
+                                }
                                 _ => {
                                     return Err(EngineError::Illegal(
                                         "unsupported conditional inner effect",
@@ -1528,6 +1531,9 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::AttachSource { .. } => {
                         misc::attach_source(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::AttachEquipment { .. } => {
+                        misc::attach_equipment(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Equip { .. } => misc::equip(&mut cx, effect)?,
                     effect @ SpellEffectKind::PreventNextDamage { .. } => {

@@ -508,18 +508,7 @@ fn attach_equipment_source(
         return Ok(EffectOutcome::Continue);
     }
     if let Some(&target_id) = targets.first() {
-        let valid = engine
-            .state
-            .objects
-            .get(&target_id)
-            .is_some_and(|t| t.zone == Zone::Battlefield)
-            && engine
-                .characteristics(target_id)
-                .is_some_and(|value| value.is_creature());
-        let source_is_equipment = engine
-            .characteristics(equip_oid)
-            .is_some_and(|value| value.has_type("Equipment"));
-        if valid && source_is_equipment {
+        if super::super::targeting::equipment_attachment_legal(engine, equip_oid, target_id) {
             let tgt = object_display_name(&engine.state, engine.registry, target_id);
             let eq_name = object_display_name(&engine.state, engine.registry, equip_oid);
             let recipient = AttachmentRecipient::Object(target_id);
@@ -546,6 +535,92 @@ fn attach_equipment_source(
         }
     }
 
+    Ok(EffectOutcome::Continue)
+}
+
+fn previous_effect_object(cx: &EffectCx<'_>) -> Option<ObjectId> {
+    let selected = cx.previous_effect_result.selected_objects.first()?;
+    let generation = cx
+        .engine
+        .state
+        .zone_change_generation
+        .get(&selected.object_id)
+        .copied()
+        .unwrap_or(0);
+    (generation == selected.zone_change_generation
+        && cx
+            .engine
+            .state
+            .objects
+            .get(&selected.object_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield))
+    .then_some(selected.object_id)
+}
+
+fn attach_equipment_subject(
+    cx: &EffectCx<'_>,
+    subject: &EffectSubject,
+    chosen_role: &mut usize,
+) -> Option<ObjectId> {
+    match subject {
+        EffectSubject::Chosen(_) => {
+            let object = cx.targets_by_role.get(*chosen_role)?.first().copied();
+            *chosen_role += 1;
+            object
+        }
+        EffectSubject::PreviousEffectObject => previous_effect_object(cx),
+        EffectSubject::Source | EffectSubject::AttachedObject | EffectSubject::TriggerObject => {
+            None
+        }
+    }
+}
+
+pub(super) fn attach_equipment(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::AttachEquipment {
+        equipment,
+        creature,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let mut chosen_role = 0;
+    let Some(equipment_id) = attach_equipment_subject(cx, &equipment, &mut chosen_role) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(creature_id) = attach_equipment_subject(cx, &creature, &mut chosen_role) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if !super::super::targeting::equipment_attachment_legal(cx.engine, equipment_id, creature_id) {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let recipient = AttachmentRecipient::Object(creature_id);
+    if cx.engine.state.objects[&equipment_id].attached_to == Some(recipient) {
+        return Ok(EffectOutcome::Continue);
+    }
+    cx.engine
+        .state
+        .objects
+        .get_mut(&equipment_id)
+        .expect("validated Equipment")
+        .attached_to = Some(recipient);
+    let timestamp = cx.engine.state.command_index;
+    for continuous in &mut cx.engine.state.continuous_effects {
+        if continuous.source_id == Some(equipment_id)
+            && continuous.duration == EffectDuration::WhileSourceOnBattlefield
+        {
+            continuous.timestamp = timestamp;
+        }
+    }
+    let equipment_name = object_display_name(&cx.engine.state, cx.engine.registry, equipment_id);
+    let creature_name = object_display_name(&cx.engine.state, cx.engine.registry, creature_id);
+    cx.events.push(ev_log(format!(
+        "{} attaches {equipment_name} to {creature_name}.",
+        cx.spell_label
+    )));
     Ok(EffectOutcome::Continue)
 }
 

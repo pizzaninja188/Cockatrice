@@ -717,6 +717,45 @@ pub(super) fn attachment_protection_legal(
         .any(|protection| protection.matches(&attachment.colors, &attachment.types))
 }
 
+/// Current legality for an Equipment already on the battlefield to equip one creature. Target
+/// legality is deliberately separate: Vow to Erebor makes an untargeted resolution choice, while
+/// Swordsman's ability targets through its own source and can still fail to attach because of the
+/// Equipment's characteristics or the recipient's protection.
+pub(super) fn equipment_attachment_legal(
+    engine: &GameEngine,
+    equipment_id: ObjectId,
+    recipient_id: ObjectId,
+) -> bool {
+    if equipment_id == recipient_id {
+        return false;
+    }
+    let Some(equipment_object) = engine.state.objects.get(&equipment_id) else {
+        return false;
+    };
+    let Some(recipient_object) = engine.state.objects.get(&recipient_id) else {
+        return false;
+    };
+    if equipment_object.zone != Zone::Battlefield || recipient_object.zone != Zone::Battlefield {
+        return false;
+    }
+    let Some(equipment) = engine.characteristics(equipment_id) else {
+        return false;
+    };
+    let Some(recipient) = engine.characteristics(recipient_id) else {
+        return false;
+    };
+    equipment.has_type("Equipment")
+        // Reconfigure is not modeled. CR 301.5c therefore makes every currently supported
+        // creature Equipment unable to equip a creature.
+        && !equipment.is_creature()
+        && recipient.is_creature()
+        && attachment_protection_legal(
+            engine,
+            AttachmentRecipient::Object(recipient_id),
+            equipment_id,
+        )
+}
+
 /// Convert a validated Aura target into explicit attachment identity. Mixed AnyTarget Auras are
 /// rejected by card-data validation, so the filter kind unambiguously owns the conversion.
 pub(super) fn attachment_recipient_for_target(
@@ -1017,7 +1056,9 @@ fn validate_effect_targets(
                 trigger_context,
             );
         }
-        SpellEffectKind::CreatureDealsDamageEqualToPower { .. } | SpellEffectKind::Fight { .. } => {
+        SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
+        | SpellEffectKind::Fight { .. }
+        | SpellEffectKind::AttachEquipment { .. } => {
             return Err(EngineError::Illegal(
                 "creature damage targets require grouped target-role validation",
             ));

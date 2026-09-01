@@ -1218,6 +1218,17 @@ pub enum EffectSubject {
     Chosen(Box<TargetFilter>),
 }
 
+/// Additional legality applied to a public battlefield-permanent choice. The ordinary
+/// [`TargetFilter`] still owns characteristics and controller scope; constraints compose facts
+/// involving another object already bound to the resolving stack item.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermanentChoiceConstraint {
+    /// CR 301.5 / 608.2d / 701.3: the chosen permanent must be an Equipment that can currently
+    /// attach to the referenced creature. Vow to Erebor uses this to avoid offering impossible
+    /// resolution choices without turning the Equipment into a target.
+    EquipmentAttachableTo { recipient: ConditionObjectRef },
+}
+
 /// A battlefield attachment subtype that an effect may enumerate through the authoritative
 /// attachment-recipient relation. Aura and Equipment are deliberately distinct: both
 /// attach to another game entity, but they have different legality and state-based actions.
@@ -1859,6 +1870,8 @@ pub enum SpellEffectKind {
         filter: TargetFilter,
         min: u32,
         max: u32,
+        #[serde(default)]
+        constraints: Vec<PermanentChoiceConstraint>,
     },
     /// Stage a reflexive triggered ability created by the immediately preceding paid branch.
     /// Sparktongue Dragon and Heart-Piercer Manticore share this CR 603.12 primitive.
@@ -2043,6 +2056,13 @@ pub enum SpellEffectKind {
     AttachSource {
         #[serde(default = "TargetFilter::default_creature")]
         target: TargetFilter,
+    },
+    /// CR 301.5 / 701.3: attach one independently selected Equipment to one selected creature.
+    /// Swordsman, Sharp Scoundrel binds both subjects as targets; Vow to Erebor consumes a
+    /// generation-bound non-target Equipment choice followed by its existing creature target.
+    AttachEquipment {
+        equipment: EffectSubject,
+        creature: EffectSubject,
     },
     /// CR 613 layer 6: grant one or more keyword abilities to every creature matching `filter`
     /// until end of turn. Untargeted — the one-shot keyword-grant sibling of
@@ -3102,6 +3122,19 @@ impl SpellEffectKind {
                     | EffectSubject::PreviousEffectObject => None,
                 })
                 .collect(),
+            SpellEffectKind::AttachEquipment {
+                equipment,
+                creature,
+            } => [equipment, creature]
+                .into_iter()
+                .filter_map(|subject| match subject {
+                    EffectSubject::Chosen(filter) => Some(TargetRole::Filtered(filter)),
+                    EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject
+                    | EffectSubject::PreviousEffectObject => None,
+                })
+                .collect(),
             SpellEffectKind::Destroy { subject }
             | SpellEffectKind::Sacrifice { subject }
             | SpellEffectKind::PumpTarget { subject, .. }
@@ -3394,6 +3427,27 @@ impl SpellEffectKind {
                         .into(),
                 );
             }
+            let previous_is_at_most_one_permanent_choice = match previous {
+                Some(SpellEffectKind::ChoosePermanents { max: 1, .. }) => true,
+                Some(SpellEffectKind::Conditional { effect, .. }) => matches!(
+                    effect.as_ref(),
+                    SpellEffectKind::ChoosePermanents { max: 1, .. }
+                ),
+                _ => false,
+            };
+            if matches!(
+                effect,
+                SpellEffectKind::AttachEquipment {
+                    equipment: EffectSubject::PreviousEffectObject,
+                    ..
+                }
+            ) && !previous_is_at_most_one_permanent_choice
+            {
+                return Err(
+                    "AttachEquipment PreviousEffectObject requires an immediately preceding at-most-one ChoosePermanents"
+                        .into(),
+                );
+            }
             if let Some(filter) = amount.and_then(Amount::card_result_filter) {
                 if filter.source == CardResultSource::PreviousEffect
                     && !previous.is_some_and(|effect| produces_card_result(effect, filter.action))
@@ -3500,10 +3554,13 @@ impl SpellEffectKind {
                 }
                 if !matches!(
                     effect.as_ref(),
-                    SpellEffectKind::Destroy { .. } | SpellEffectKind::GrantKeywords { .. }
+                    SpellEffectKind::Destroy { .. }
+                        | SpellEffectKind::GrantKeywords { .. }
+                        | SpellEffectKind::ChoosePermanents { .. }
                 ) {
                     return Err(
-                        "Conditional currently supports Destroy and GrantKeywords effects".into(),
+                        "Conditional currently supports Destroy, GrantKeywords, and ChoosePermanents effects"
+                            .into(),
                     );
                 }
                 effect.validate(context)?;
@@ -3633,6 +3690,7 @@ impl SpellEffectKind {
                 filter,
                 min,
                 max,
+                constraints,
             } => {
                 if matches!(
                     chooser,
@@ -3648,6 +3706,20 @@ impl SpellEffectKind {
                     matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
                 }) {
                     return Err("permanent choice requires permanent-only filters".into());
+                }
+                if !constraints.is_empty()
+                    && !filter.all_terminal_filters_match(|leaf| {
+                        matches!(leaf.kind, TargetKind::AnyPermanent)
+                            && leaf
+                                .required_subtypes
+                                .iter()
+                                .any(|subtype| subtype == "Equipment")
+                    })
+                {
+                    return Err(
+                        "Equipment attachment choice constraints require an Equipment-only filter"
+                            .into(),
+                    );
                 }
             }
             SpellEffectKind::ChooseResolutionBranch {
@@ -4546,6 +4618,45 @@ impl SpellEffectKind {
                 } else {
                     Ok(())
                 }
+            }
+            SpellEffectKind::AttachEquipment {
+                equipment,
+                creature,
+            } => {
+                match equipment {
+                    EffectSubject::Chosen(filter) => {
+                        if !filter.all_terminal_filters_match(|leaf| {
+                            leaf.kind == TargetKind::AnyPermanent
+                                && leaf
+                                    .required_subtypes
+                                    .iter()
+                                    .any(|subtype| subtype == "Equipment")
+                        }) {
+                            return Err(
+                                "AttachEquipment equipment target must require Equipment".into()
+                            );
+                        }
+                    }
+                    EffectSubject::PreviousEffectObject => {}
+                    _ => {
+                        return Err(
+                            "AttachEquipment equipment must be Chosen or PreviousEffectObject"
+                                .into(),
+                        );
+                    }
+                }
+                match creature {
+                    EffectSubject::Chosen(filter)
+                        if filter.all_terminal_filters_match(|leaf| {
+                            leaf.kind == TargetKind::Creature
+                        }) => {}
+                    _ => {
+                        return Err(
+                            "AttachEquipment creature must be a creature-only Chosen target".into(),
+                        );
+                    }
+                }
+                Ok(())
             }
             // CR 702.6a: equip is an activated ability that only attaches to creatures you
             // control — never a spell effect, and the filter must be creature-typed.

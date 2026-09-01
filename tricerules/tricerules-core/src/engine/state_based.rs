@@ -231,17 +231,7 @@ impl GameEngine {
                     && eq.attached_to.is_some_and(|recipient| match recipient {
                         AttachmentRecipient::Player(_) => true,
                         AttachmentRecipient::Object(target_id) => {
-                            self.state.objects.get(&target_id).is_none_or(|target| {
-                                target.zone != Zone::Battlefield
-                                    || !self
-                                        .characteristics(target_id)
-                                        .is_some_and(|value| value.is_creature())
-                                    || !super::targeting::attachment_protection_legal(
-                                        self,
-                                        AttachmentRecipient::Object(target_id),
-                                        eq.id,
-                                    )
-                            })
+                            !super::targeting::equipment_attachment_legal(self, eq.id, target_id)
                         }
                     })
             })

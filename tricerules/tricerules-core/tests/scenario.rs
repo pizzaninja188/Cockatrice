@@ -155,6 +155,8 @@ mod issue_178_aggregate_object_payments;
 mod issue_181_spell_mana_spent;
 #[path = "scenario/issue_187_base_pt.rs"]
 mod issue_187_base_pt;
+#[path = "scenario/issue_188_chosen_equipment_attachment.rs"]
+mod issue_188_chosen_equipment_attachment;
 #[path = "scenario/issue_189_disappear.rs"]
 mod issue_189_disappear;
 #[path = "scenario/issue_190_restricted_mana_any_ability.rs"]
