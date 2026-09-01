@@ -580,14 +580,11 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerAction
             }
             costSelection->set_hand_index(static_cast<quint32>(handSlot));
         } else if (selection.zone == RuledCostChoiceZone::Graveyard) {
-            auto *graveyard = costSelection->mutable_graveyard_object_ids();
-            for (const quint32 objectId : selection.selectedIds) {
-                graveyard->add_object_ids(objectId);
-            }
+            ruledWriteCostObjectRefs(selection, *costSelection);
         } else if (const auto choice = std::find_if(
                        pendingRuledSpellCast.costChoices.cbegin(), pendingRuledSpellCast.costChoices.cend(),
                        [&selection](const auto &entry) { return entry.costIndex == selection.costIndex; });
-                   choice != pendingRuledSpellCast.costChoices.cend() && ruledCostUsesObjectRefs(choice->kind)) {
+                   choice != pendingRuledSpellCast.costChoices.cend() && ruledCostUsesObjectRefs(*choice)) {
             ruledWriteCostObjectRefs(selection, *costSelection);
         } else {
             costSelection->set_permanent_id(selection.selectedIds.value(0));
@@ -681,14 +678,11 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(Pl
             }
             costSelection->set_hand_index(static_cast<quint32>(handSlot));
         } else if (selection.zone == RuledCostChoiceZone::Graveyard) {
-            auto *graveyard = costSelection->mutable_graveyard_object_ids();
-            for (const quint32 objectId : selection.selectedIds) {
-                graveyard->add_object_ids(objectId);
-            }
+            ruledWriteCostObjectRefs(selection, *costSelection);
         } else if (const auto choice = std::find_if(
                        pendingActivatedAbility.costChoices.cbegin(), pendingActivatedAbility.costChoices.cend(),
                        [&selection](const auto &entry) { return entry.costIndex == selection.costIndex; });
-                   choice != pendingActivatedAbility.costChoices.cend() && ruledCostUsesObjectRefs(choice->kind)) {
+                   choice != pendingActivatedAbility.costChoices.cend() && ruledCostUsesObjectRefs(*choice)) {
             ruledWriteCostObjectRefs(selection, *costSelection);
         } else {
             costSelection->set_permanent_id(selection.selectedIds.value(0));

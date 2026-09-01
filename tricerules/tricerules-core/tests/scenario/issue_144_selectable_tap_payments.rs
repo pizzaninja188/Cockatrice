@@ -464,11 +464,12 @@ fn gene_pollinator_publishes_and_atomically_pays_another_untapped_permanent() {
     assert_eq!(choices.choices.len(), 1);
     assert_eq!(choices.choices[0].kind(), CostChoiceKind::Tap);
     assert_eq!(choices.choices[0].candidate_ids, [bear]);
-    assert_eq!(choices.choices[0].candidate_objects[0].object_id, bear);
-    assert_eq!(
-        choices.choices[0].candidate_objects[0].zone_change_generation,
-        generation
-    );
+    let candidate = choices.choices[0].candidate_objects[0]
+        .object
+        .as_ref()
+        .expect("generation-bound tap candidate");
+    assert_eq!(candidate.object_id, bear);
+    assert_eq!(candidate.zone_change_generation, generation);
 
     engine
         .apply_command(

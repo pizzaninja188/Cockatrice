@@ -35,7 +35,13 @@ enum CostDebit {
         generation: u64,
     },
     /// One authored multi-permanent tap component, distinct from a separate source {T} cost.
-    TapGroup(Vec<(ObjectId, u64)>),
+    TapGroup {
+        objects: Vec<(ObjectId, u64)>,
+        constraint: Option<ObjectPaymentConstraint>,
+        filter: Option<TargetFilter>,
+        source: Option<ObjectId>,
+        exclude_source: bool,
+    },
     Mana(ManaPaymentPlan),
     Discard {
         object_id: ObjectId,
@@ -48,7 +54,13 @@ enum CostDebit {
         owner: PlayerId,
     },
     /// All cards selected for one exile instruction leave simultaneously.
-    ExileGroup(Vec<(ObjectId, u64, PlayerId)>),
+    ExileGroup {
+        objects: Vec<(ObjectId, u64, PlayerId)>,
+        constraint: ObjectPaymentConstraint,
+        filter: ZoneCardFilter,
+        source: ObjectId,
+        exclude_source: bool,
+    },
     Sacrifice {
         snapshot: SacrificeSnapshot,
         owner: PlayerId,
@@ -94,6 +106,11 @@ pub(in crate::engine) enum PaidCardCost {
         card_name: String,
         result: CardResultEntry,
     },
+    Tap {
+        object_id: ObjectId,
+        card_name: String,
+        result: CardResultEntry,
+    },
 }
 
 impl PaidCardCost {
@@ -101,7 +118,8 @@ impl PaidCardCost {
         match self {
             Self::Discard { object_id, .. }
             | Self::Exile { object_id, .. }
-            | Self::Sacrifice { object_id, .. } => *object_id,
+            | Self::Sacrifice { object_id, .. }
+            | Self::Tap { object_id, .. } => *object_id,
         }
     }
 
@@ -110,6 +128,7 @@ impl PaidCardCost {
             Self::Discard { card_name, .. } => format!("discarding {card_name}"),
             Self::Exile { card_name, .. } => format!("exiling {card_name}"),
             Self::Sacrifice { card_name, .. } => format!("sacrificing {card_name}"),
+            Self::Tap { card_name, .. } => format!("tapping {card_name}"),
         }
     }
 
@@ -117,7 +136,8 @@ impl PaidCardCost {
         match self {
             Self::Discard { result, .. }
             | Self::Exile { result, .. }
-            | Self::Sacrifice { result, .. } => result,
+            | Self::Sacrifice { result, .. }
+            | Self::Tap { result, .. } => result,
         }
     }
 }
@@ -184,7 +204,7 @@ impl PreparedPaymentCosts {
     pub fn can_convoke(&self, oid: ObjectId) -> bool {
         !self.transaction.debits.iter().any(|d| match d {
             CostDebit::Tap { object_id, .. } => *object_id == oid,
-            CostDebit::TapGroup(objects) => objects.iter().any(|(id, _)| *id == oid),
+            CostDebit::TapGroup { objects, .. } => objects.iter().any(|(id, _)| *id == oid),
             _ => false,
         })
     }
@@ -213,7 +233,16 @@ impl PreparedPaymentCosts {
         // CR 601.2h permits tapping for Convoke before sacrificing the same creature as another
         // cost. A second tap is forbidden by can_convoke; sacrifice is deliberately not excluded.
         if !taps.is_empty() {
-            self.transaction.debits.insert(0, CostDebit::TapGroup(taps));
+            self.transaction.debits.insert(
+                0,
+                CostDebit::TapGroup {
+                    objects: taps,
+                    constraint: None,
+                    filter: None,
+                    source: None,
+                    exclude_source: false,
+                },
+            );
         }
         self.transaction.debits.insert(0, CostDebit::Mana(mana));
         Ok(self.transaction)
@@ -237,6 +266,27 @@ impl PreparedPaymentCosts {
 }
 
 impl GameEngine {
+    fn object_payment_selection_satisfies(
+        &self,
+        constraint: ObjectPaymentConstraint,
+        objects: &[rv1::CostObjectRef],
+    ) -> bool {
+        match constraint {
+            ObjectPaymentConstraint::ExactCount(count) => objects.len() == count as usize,
+            ObjectPaymentConstraint::AggregateMinimum {
+                minimum,
+                contribution,
+            } => objects
+                .iter()
+                .map(|object| {
+                    self.object_payment_contribution(object.object_id, contribution)
+                        .unwrap_or(i64::MIN)
+                })
+                .try_fold(0_i64, |total, value| total.checked_add(value))
+                .is_some_and(|total| total >= i64::from(minimum)),
+        }
+    }
+
     pub(in crate::engine) fn prepare_resolution_payment_costs(
         &self,
         player: PlayerId,
@@ -687,7 +737,7 @@ impl GameEngine {
                     debits.push(CostDebit::Sacrifice { snapshot, owner });
                 }
                 AdditionalCost::TapPermanents {
-                    count,
+                    constraint,
                     filter,
                     exclude_source,
                 } => {
@@ -698,8 +748,10 @@ impl GameEngine {
                             "tap cost requires battlefield object references",
                         ));
                     };
-                    if selected.objects.len() != *count as usize {
-                        return Err(EngineError::Illegal("incorrect tap cost selection count"));
+                    if !self.object_payment_selection_satisfies(*constraint, &selected.objects) {
+                        return Err(EngineError::Illegal(
+                            "tap cost selection does not satisfy its constraint",
+                        ));
                     }
                     let mut taps = Vec::new();
                     for selected in &selected.objects {
@@ -728,7 +780,69 @@ impl GameEngine {
                         }
                         taps.push((oid, generation));
                     }
-                    debits.push(CostDebit::TapGroup(taps));
+                    debits.push(CostDebit::TapGroup {
+                        objects: taps,
+                        constraint: Some(*constraint),
+                        filter: Some(filter.clone()),
+                        source: None,
+                        exclude_source: *exclude_source,
+                    });
+                }
+                AdditionalCost::ExileGraveyardCards {
+                    constraint,
+                    filter,
+                    exclude_source,
+                } => {
+                    let Some(Selection::GraveyardObjects(selected)) = selection.selection.as_ref()
+                    else {
+                        return Err(EngineError::Illegal(
+                            "graveyard-card cost requires generation-bound object references",
+                        ));
+                    };
+                    if !self.object_payment_selection_satisfies(*constraint, &selected.objects) {
+                        return Err(EngineError::Illegal(
+                            "graveyard-card selection does not satisfy its constraint",
+                        ));
+                    }
+                    let mut exiles = Vec::new();
+                    for selected in &selected.objects {
+                        let oid = selected.object_id;
+                        if (*exclude_source && oid == source_oid)
+                            || !self.state.players[player_idx].graveyard.contains(&oid)
+                            || !super::super::resolution::library_card_matches_filter(
+                                &self.state,
+                                self.registry,
+                                oid,
+                                Some(filter),
+                            )
+                        {
+                            return Err(EngineError::Illegal(
+                                "illegal graveyard-card cost selection",
+                            ));
+                        }
+                        let generation = self
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0);
+                        if generation != selected.zone_change_generation {
+                            return Err(EngineError::Illegal(
+                                "stale graveyard-card cost selection",
+                            ));
+                        }
+                        if !consumed.insert(oid) {
+                            return Err(EngineError::Illegal("one object cannot pay two costs"));
+                        }
+                        exiles.push((oid, generation, self.state.objects[&oid].owner));
+                    }
+                    debits.push(CostDebit::ExileGroup {
+                        objects: exiles,
+                        constraint: *constraint,
+                        filter: filter.clone(),
+                        source: source_oid,
+                        exclude_source: *exclude_source,
+                    });
                 }
             }
         }
@@ -908,7 +1022,7 @@ impl GameEngine {
                     });
                 }
                 AbilityCost::TapPermanents {
-                    count,
+                    constraint,
                     filter,
                     exclude_source,
                 } => {
@@ -923,8 +1037,10 @@ impl GameEngine {
                             "tap cost requires battlefield object references",
                         ));
                     };
-                    if selected.objects.len() != *count as usize {
-                        return Err(EngineError::Illegal("incorrect tap cost selection count"));
+                    if !self.object_payment_selection_satisfies(*constraint, &selected.objects) {
+                        return Err(EngineError::Illegal(
+                            "tap cost selection does not satisfy its constraint",
+                        ));
                     }
                     let mut taps = Vec::new();
                     for selected in &selected.objects {
@@ -958,7 +1074,13 @@ impl GameEngine {
                         }
                         taps.push((oid, generation));
                     }
-                    debits.push(CostDebit::TapGroup(taps));
+                    debits.push(CostDebit::TapGroup {
+                        objects: taps,
+                        constraint: Some(*constraint),
+                        filter: Some(filter.clone()),
+                        source: Some(permanent_id),
+                        exclude_source: *exclude_source,
+                    });
                 }
                 AbilityCost::Mana(cost) | AbilityCost::Waterbend(cost) => {
                     if matches!(costs[cost_index], AbilityCost::Waterbend(_)) {
@@ -1069,7 +1191,7 @@ impl GameEngine {
                     debits.push(CostDebit::Sacrifice { snapshot, owner });
                 }
                 AbilityCost::ExileGraveyardCards {
-                    count,
+                    constraint,
                     filter,
                     exclude_source,
                 } => {
@@ -1079,20 +1201,20 @@ impl GameEngine {
                             "missing graveyard-card cost selection",
                         ));
                     };
-                    let Some(Selection::GraveyardObjectIds(selected)) =
-                        selection.selection.as_ref()
+                    let Some(Selection::GraveyardObjects(selected)) = selection.selection.as_ref()
                     else {
                         return Err(EngineError::Illegal(
-                            "graveyard-card cost requires graveyard object ids",
+                            "graveyard-card cost requires generation-bound object references",
                         ));
                     };
-                    if selected.object_ids.len() != *count as usize {
+                    if !self.object_payment_selection_satisfies(*constraint, &selected.objects) {
                         return Err(EngineError::Illegal(
-                            "incorrect graveyard-card cost selection count",
+                            "graveyard-card selection does not satisfy its constraint",
                         ));
                     }
                     let mut exiles = Vec::new();
-                    for &oid in &selected.object_ids {
+                    for selected in &selected.objects {
+                        let oid = selected.object_id;
                         if (*exclude_source && oid == permanent_id)
                             || !self.state.players[idx].graveyard.contains(&oid)
                             || !super::super::resolution::library_card_matches_filter(
@@ -1109,18 +1231,27 @@ impl GameEngine {
                         if !consumed.insert(oid) {
                             return Err(EngineError::Illegal("one object cannot pay two costs"));
                         }
+                        let generation = self
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0);
+                        if generation != selected.zone_change_generation {
+                            return Err(EngineError::Illegal(
+                                "stale graveyard-card cost selection",
+                            ));
+                        }
                         let object = &self.state.objects[&oid];
-                        exiles.push((
-                            oid,
-                            self.state
-                                .zone_change_generation
-                                .get(&oid)
-                                .copied()
-                                .unwrap_or(0),
-                            object.owner,
-                        ));
+                        exiles.push((oid, generation, object.owner));
                     }
-                    debits.push(CostDebit::ExileGroup(exiles));
+                    debits.push(CostDebit::ExileGroup {
+                        objects: exiles,
+                        constraint: *constraint,
+                        filter: filter.clone(),
+                        source: permanent_id,
+                        exclude_source: *exclude_source,
+                    });
                 }
             }
         }
@@ -1175,7 +1306,7 @@ impl GameEngine {
                     debit,
                     CostDebit::Sacrifice { .. }
                         | CostDebit::Exile { .. }
-                        | CostDebit::ExileGroup(_)
+                        | CostDebit::ExileGroup { .. }
                         | CostDebit::Discard { .. }
                 )
             });
@@ -1196,7 +1327,9 @@ impl GameEngine {
         for debit in plan.debits {
             let zones = matches!(
                 &debit,
-                CostDebit::Exile { .. } | CostDebit::ExileGroup(_) | CostDebit::Sacrifice { .. }
+                CostDebit::Exile { .. }
+                    | CostDebit::ExileGroup { .. }
+                    | CostDebit::Sacrifice { .. }
             )
             .then(|| self.snapshot_zone_event());
             match debit {
@@ -1240,8 +1373,27 @@ impl GameEngine {
                         .trigger_events
                         .extend(self.tap_permanents(plan.player, &[object_id]));
                 }
-                CostDebit::TapGroup(objects) => {
+                CostDebit::TapGroup {
+                    objects,
+                    constraint,
+                    ..
+                } => {
                     let ids = objects.into_iter().map(|(oid, _)| oid).collect::<Vec<_>>();
+                    if constraint.is_some() {
+                        for &oid in &ids {
+                            payment.paid_card_costs.push(PaidCardCost::Tap {
+                                object_id: oid,
+                                card_name: object_display_name(&self.state, self.registry, oid),
+                                result: card_result_entry(
+                                    &self.state,
+                                    self.registry,
+                                    CardResultAction::Tap,
+                                    plan.player,
+                                    oid,
+                                ),
+                            });
+                        }
+                    }
                     payment
                         .trigger_events
                         .extend(self.tap_permanents(plan.player, &ids));
@@ -1293,7 +1445,7 @@ impl GameEngine {
                 CostDebit::Exile {
                     object_id, owner, ..
                 } => self.commit_exile_cost(&mut payment, object_id, owner),
-                CostDebit::ExileGroup(objects) => {
+                CostDebit::ExileGroup { objects, .. } => {
                     for (oid, _, owner) in objects {
                         self.commit_exile_cost(&mut payment, oid, owner);
                     }
@@ -1469,19 +1621,46 @@ impl GameEngine {
                             .unwrap_or(0)
                             == *generation
                 }
-                CostDebit::TapGroup(objects) => objects.iter().all(|(oid, generation)| {
-                    self.state.objects.get(oid).is_some_and(|object| {
-                        object.zone == Zone::Battlefield
-                            && !object.tapped
-                            && object.controller == plan.player
-                    }) && self
-                        .state
-                        .zone_change_generation
-                        .get(oid)
-                        .copied()
-                        .unwrap_or(0)
-                        == *generation
-                }),
+                CostDebit::TapGroup {
+                    objects,
+                    constraint,
+                    filter,
+                    source,
+                    exclude_source,
+                } => {
+                    let refs = objects
+                        .iter()
+                        .map(|(object_id, zone_change_generation)| rv1::CostObjectRef {
+                            object_id: *object_id,
+                            zone_change_generation: *zone_change_generation,
+                        })
+                        .collect::<Vec<_>>();
+                    constraint.is_none_or(|constraint| {
+                        self.object_payment_selection_satisfies(constraint, &refs)
+                    }) && objects.iter().all(|(oid, generation)| {
+                        (!*exclude_source || source.is_none_or(|source| source != *oid))
+                            && filter.as_ref().is_none_or(|filter| {
+                                self.ability_cost_permanent_matches(
+                                    plan.player,
+                                    *source,
+                                    *oid,
+                                    filter,
+                                )
+                            })
+                            && self.state.objects.get(oid).is_some_and(|object| {
+                                object.zone == Zone::Battlefield
+                                    && !object.tapped
+                                    && object.controller == plan.player
+                            })
+                            && self
+                                .state
+                                .zone_change_generation
+                                .get(oid)
+                                .copied()
+                                .unwrap_or(0)
+                                == *generation
+                    })
+                }
                 CostDebit::Discard {
                     object_id,
                     generation,
@@ -1507,9 +1686,39 @@ impl GameEngine {
                 } => {
                     self.exile_cost_object_current(plan.player_idx, *object_id, *generation, *owner)
                 }
-                CostDebit::ExileGroup(objects) => objects.iter().all(|(oid, generation, owner)| {
-                    self.exile_cost_object_current(plan.player_idx, *oid, *generation, *owner)
-                }),
+                CostDebit::ExileGroup {
+                    objects,
+                    constraint,
+                    filter,
+                    source,
+                    exclude_source,
+                } => {
+                    let refs = objects
+                        .iter()
+                        .map(
+                            |(object_id, zone_change_generation, _)| rv1::CostObjectRef {
+                                object_id: *object_id,
+                                zone_change_generation: *zone_change_generation,
+                            },
+                        )
+                        .collect::<Vec<_>>();
+                    self.object_payment_selection_satisfies(*constraint, &refs)
+                        && objects.iter().all(|(oid, generation, owner)| {
+                            (!*exclude_source || *source != *oid)
+                                && super::super::resolution::library_card_matches_filter(
+                                    &self.state,
+                                    self.registry,
+                                    *oid,
+                                    Some(filter),
+                                )
+                                && self.exile_cost_object_current(
+                                    plan.player_idx,
+                                    *oid,
+                                    *generation,
+                                    *owner,
+                                )
+                        })
+                }
                 CostDebit::Sacrifice { snapshot, owner } => {
                     let object_id = snapshot.source.object_id;
                     self.state.objects.get(&object_id).is_some_and(|object| {
@@ -1633,6 +1842,144 @@ impl GameEngine {
 #[cfg(test)]
 mod convoke_transaction_tests {
     use super::*;
+
+    fn object_ref(engine: &GameEngine, object_id: ObjectId) -> rv1::CostObjectRef {
+        rv1::CostObjectRef {
+            object_id,
+            zone_change_generation: engine.state.zone_change_generation[&object_id],
+        }
+    }
+
+    #[test]
+    fn aggregate_power_and_mana_value_payments_revalidate_atomically() {
+        let mut engine = GameEngine::new(178_001, &[0, 1], 20, None, true).unwrap();
+        let objects = engine.state.players[0].hand[..5].to_vec();
+        for (oid, card_id, zone) in [
+            (objects[0], "ornithopter", Zone::Battlefield),
+            (objects[1], "grizzly_bears", Zone::Battlefield),
+            (objects[2], "grizzly_bears", Zone::Battlefield),
+            (objects[3], "lightning_bolt", Zone::Graveyard),
+            (objects[4], "grizzly_bears", Zone::Graveyard),
+        ] {
+            engine.state.objects.get_mut(&oid).unwrap().card_id = card_id.into();
+            move_object_to_zone(&mut engine.state, engine.registry, oid, zone, Some(0)).unwrap();
+        }
+        let source = objects[0];
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .summoning_sick = false;
+        engine
+            .state
+            .objects
+            .get_mut(&objects[2])
+            .unwrap()
+            .set_counter(CounterKind::PlusOnePlusOne, 1);
+        assert_eq!(
+            engine.object_payment_contribution(objects[1], ObjectContributionKind::CurrentPower),
+            Some(2)
+        );
+        assert_eq!(
+            engine.object_payment_contribution(objects[2], ObjectContributionKind::CurrentPower),
+            Some(3)
+        );
+        let tap_cost = [AbilityCost::TapPermanents {
+            constraint: ObjectPaymentConstraint::AggregateMinimum {
+                minimum: 5,
+                contribution: ObjectContributionKind::CurrentPower,
+            },
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..Default::default()
+            },
+            exclude_source: true,
+        }];
+        let insufficient = [rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::BattlefieldObjects(
+                rv1::CostObjectRefs {
+                    objects: vec![object_ref(&engine, objects[1])],
+                },
+            )),
+        }];
+        assert!(engine
+            .plan_ability_costs(0, 0, source, &tap_cost, &[], &insufficient, &[], 0, 0)
+            .is_err());
+
+        let tap_selection = [rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::BattlefieldObjects(
+                rv1::CostObjectRefs {
+                    objects: vec![
+                        object_ref(&engine, objects[1]),
+                        object_ref(&engine, objects[2]),
+                    ],
+                },
+            )),
+        }];
+        let stale_plan = engine
+            .plan_ability_costs(0, 0, source, &tap_cost, &[], &tap_selection, &[], 0, 0)
+            .unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&objects[2])
+            .unwrap()
+            .set_counter(CounterKind::PlusOnePlusOne, 0);
+        let before = format!("{:?}", engine.state);
+        assert!(engine.commit_cost_transaction(stale_plan).is_err());
+        assert_eq!(format!("{:?}", engine.state), before);
+        engine
+            .state
+            .objects
+            .get_mut(&objects[2])
+            .unwrap()
+            .set_counter(CounterKind::PlusOnePlusOne, 1);
+
+        let plan = engine
+            .plan_ability_costs(0, 0, source, &tap_cost, &[], &tap_selection, &[], 0, 0)
+            .unwrap();
+        let receipt = engine.commit_cost_transaction(plan).unwrap();
+        assert!(engine.state.objects[&objects[1]].tapped);
+        assert!(engine.state.objects[&objects[2]].tapped);
+        assert_eq!(
+            receipt
+                .paid_card_costs
+                .iter()
+                .filter(|cost| matches!(cost, PaidCardCost::Tap { .. }))
+                .count(),
+            2
+        );
+
+        let exile_cost = [AbilityCost::ExileGraveyardCards {
+            constraint: ObjectPaymentConstraint::AggregateMinimum {
+                minimum: 3,
+                contribution: ObjectContributionKind::ManaValue,
+            },
+            filter: ZoneCardFilter::default(),
+            exclude_source: false,
+        }];
+        let exile_selection = [rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::GraveyardObjects(
+                rv1::CostObjectRefs {
+                    objects: vec![
+                        object_ref(&engine, objects[3]),
+                        object_ref(&engine, objects[4]),
+                    ],
+                },
+            )),
+        }];
+        let plan = engine
+            .plan_ability_costs(0, 0, source, &exile_cost, &[], &exile_selection, &[], 0, 0)
+            .unwrap();
+        engine.commit_cost_transaction(plan).unwrap();
+        assert_eq!(engine.state.objects[&objects[3]].zone, Zone::Exile);
+        assert_eq!(engine.state.objects[&objects[4]].zone, Zone::Exile);
+    }
 
     #[test]
     fn waterbend_cap_modifiers_double_taps_and_completion_use_one_transaction() {
@@ -1893,15 +2240,21 @@ mod convoke_transaction_tests {
             .unwrap();
         }
         let costs = [AbilityCost::ExileGraveyardCards {
-            count: 2,
+            constraint: ObjectPaymentConstraint::ExactCount(2),
             filter: Default::default(),
             exclude_source: true,
         }];
         let selections = [rv1::CostSelection {
             cost_index: 0,
-            selection: Some(rv1::cost_selection::Selection::GraveyardObjectIds(
-                rv1::GraveyardObjectIds {
-                    object_ids: ids[1..].to_vec(),
+            selection: Some(rv1::cost_selection::Selection::GraveyardObjects(
+                rv1::CostObjectRefs {
+                    objects: ids[1..]
+                        .iter()
+                        .map(|object_id| rv1::CostObjectRef {
+                            object_id: *object_id,
+                            zone_change_generation: engine.state.zone_change_generation[object_id],
+                        })
+                        .collect(),
                 },
             )),
         }];
@@ -1954,10 +2307,16 @@ mod convoke_transaction_tests {
                     object_id: objects[0],
                     generation: references[0].1,
                 },
-                CostDebit::TapGroup(vec![
-                    references[1],
-                    (objects[2], references[2].1 + u64::from(stale)),
-                ]),
+                CostDebit::TapGroup {
+                    objects: vec![
+                        references[1],
+                        (objects[2], references[2].1 + u64::from(stale)),
+                    ],
+                    constraint: None,
+                    filter: None,
+                    source: None,
+                    exclude_source: false,
+                },
             ],
         };
         let before = format!("{:?}", engine.state);
@@ -2252,7 +2611,7 @@ mod convoke_transaction_tests {
             .unwrap();
         // The debit order carries the rule, and revalidation happens before either mutation.
         assert!(
-            matches!(&plan.debits[1], CostDebit::TapGroup(objects) if objects.len() == 1 && objects[0].0 == bear)
+            matches!(&plan.debits[1], CostDebit::TapGroup { objects, .. } if objects.len() == 1 && objects[0].0 == bear)
         );
         assert!(matches!(plan.debits[2], CostDebit::Sacrifice { .. }));
         let probe = PreparedPaymentCosts {

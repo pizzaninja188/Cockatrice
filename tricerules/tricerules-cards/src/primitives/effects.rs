@@ -1589,6 +1589,7 @@ pub enum CardResultAction {
     Exile,
     Sacrifice,
     Mill,
+    Tap,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -3218,6 +3219,7 @@ impl SpellEffectKind {
                     effect,
                     SpellEffectKind::Mill { .. } | SpellEffectKind::MillTargetPlayer { .. }
                 ),
+                CardResultAction::Tap => false,
             }
         }
 

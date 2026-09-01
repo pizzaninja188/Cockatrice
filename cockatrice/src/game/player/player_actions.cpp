@@ -108,8 +108,7 @@ void PlayerActions::reconcilePendingRuledTargetSelections()
         if (choice->kind == RuledCostChoiceKind::RemoveCounters) {
             return ruledCounterSelectionStillLegal(selection, *choice);
         }
-        if (selection.selectedIds.isEmpty() || selection.selectedIds.size() < choice->min ||
-            selection.selectedIds.size() > choice->max) {
+        if (selection.selectedIds.isEmpty() || selection.selectedIds.size() > choice->max) {
             return false;
         }
         return std::all_of(selection.selectedIds.cbegin(), selection.selectedIds.cend(), [&](quint32 selectedId) {
@@ -120,7 +119,7 @@ void PlayerActions::reconcilePendingRuledTargetSelections()
             if (!choice->candidateIds.contains(selectedId)) {
                 return false;
             }
-            if (ruledCostUsesObjectRefs(choice->kind)) {
+            if (ruledCostUsesObjectRefs(*choice)) {
                 const int selectedIndex = selection.selectedIds.indexOf(selectedId);
                 return selectedIndex >= 0 && selection.selectedGenerations.value(selectedIndex) ==
                                                  choice->candidateGenerations.value(selectedId);
@@ -551,7 +550,11 @@ QString PlayerActions::pendingRuledSpellPromptText() const
     }
     if (isAwaitingRuledSpellCostSelection()) {
         const auto &choice = pendingRuledSpellCast.costChoices.at(pendingRuledSpellCast.nextCostChoice);
-        return ruledCostSelectionPrompt(choice, pendingRuledSpellCast.cardName);
+        const QString prompt = ruledCostSelectionPrompt(choice, pendingRuledSpellCast.cardName);
+        const auto progress = ruledPendingGraveyardCostSelectionProgress(pendingRuledSpellCast);
+        return choice.aggregateMinimum > 0 && progress
+                   ? tr("%1\nTotal: %2 / %3").arg(prompt).arg(progress->selected).arg(progress->required)
+                   : prompt;
     }
     if (totalRemainingForCost(pendingRuledSpellCast.remainingCost, pendingRuledSpellCast.flexPips) == 0) {
         return {};
@@ -1138,10 +1141,10 @@ void PlayerActions::continuePendingActivatedAbilityAfterChoice()
         const auto &choice = pendingActivatedAbility.costChoices.at(pendingActivatedAbility.nextCostChoice);
         emit ruledAbilityCostPromptChanged();
         player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(pendingRuledAbilityCostPromptText());
-        if (choice.zone == RuledCostChoiceZone::Graveyard || ruledCostUsesObjectRefs(choice.kind)) {
+        if (ruledCostUsesObjectRefs(choice)) {
             const auto progress = ruledPendingGraveyardCostSelectionProgress(pendingActivatedAbility);
             emit ruledGraveyardCostSelectionChanged(progress && progress->zone == RuledCostChoiceZone::Graveyard,
-                                                   choice.min, 0);
+                                                   static_cast<int>(progress ? progress->required : choice.min), 0);
         }
         return;
     }
@@ -1698,7 +1701,11 @@ QString PlayerActions::pendingRuledAbilityCostPromptText() const
         return {};
     }
     const auto &choice = pendingActivatedAbility.costChoices.at(pendingActivatedAbility.nextCostChoice);
-    return ruledCostSelectionPrompt(choice, pendingActivatedAbility.cardName);
+    const QString prompt = ruledCostSelectionPrompt(choice, pendingActivatedAbility.cardName);
+    const auto progress = ruledPendingGraveyardCostSelectionProgress(pendingActivatedAbility);
+    return choice.aggregateMinimum > 0 && progress
+               ? tr("%1\nTotal: %2 / %3").arg(prompt).arg(progress->selected).arg(progress->required)
+               : prompt;
 }
 
 bool PlayerActions::isAwaitingRuledGraveyardCostSelection() const
@@ -1707,10 +1714,10 @@ bool PlayerActions::isAwaitingRuledGraveyardCostSelection() const
         isAwaitingRuledAbilityCostSelection() &&
         (pendingActivatedAbility.costChoices.at(pendingActivatedAbility.nextCostChoice).zone ==
              RuledCostChoiceZone::Graveyard ||
-         ruledCostUsesObjectRefs(pendingActivatedAbility.costChoices.at(pendingActivatedAbility.nextCostChoice).kind));
+         ruledCostUsesObjectRefs(pendingActivatedAbility.costChoices.at(pendingActivatedAbility.nextCostChoice)));
     const bool spellTap =
         isAwaitingRuledSpellCostSelection() &&
-        ruledCostUsesObjectRefs(pendingRuledSpellCast.costChoices.at(pendingRuledSpellCast.nextCostChoice).kind);
+        ruledCostUsesObjectRefs(pendingRuledSpellCast.costChoices.at(pendingRuledSpellCast.nextCostChoice));
     return abilityMulti || spellTap;
 }
 
@@ -1732,8 +1739,8 @@ bool PlayerActions::getRuledGraveyardCostSelectionProgress(int &required, int &s
         selected = 0;
         return false;
     }
-    required = progress->required;
-    selected = progress->selected;
+    required = static_cast<int>(progress->required);
+    selected = static_cast<int>(progress->selected);
     return true;
 }
 
@@ -1748,7 +1755,7 @@ void PlayerActions::confirmRuledGraveyardCostSelection()
     }
     const bool spellTap =
         isAwaitingRuledSpellCostSelection() &&
-        ruledCostUsesObjectRefs(pendingRuledSpellCast.costChoices.at(pendingRuledSpellCast.nextCostChoice).kind);
+        ruledCostUsesObjectRefs(pendingRuledSpellCast.costChoices.at(pendingRuledSpellCast.nextCostChoice));
     const auto progress = spellTap ? ruledPendingGraveyardCostSelectionProgress(pendingRuledSpellCast)
                                    : ruledPendingGraveyardCostSelectionProgress(pendingActivatedAbility);
     if (!progress.has_value() || !progress->confirmable) {
@@ -5631,6 +5638,13 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
             }
             candidateId = static_cast<quint32>(handSlot);
             stableId = static_cast<quint32>(card->getId());
+        } else if (choice.zone == RuledCostChoiceZone::Graveyard) {
+            if (card->getZone()->getName() != ZoneNames::GRAVE || ownerPlayerId != player->getPlayerInfo()->getId()) {
+                handler->emitLocalLog(tr("Choose a card from your graveyard."));
+                return true;
+            }
+            candidateId = handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId());
+            stableId = candidateId;
         } else {
             if (card->getZone()->getName() != ZoneNames::TABLE) {
                 handler->emitLocalLog(ruledCostSelectionPrompt(choice, pendingRuledSpellCast.cardName));
@@ -5649,7 +5663,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
                 return true;
             }
         }
-        if (ruledCostUsesObjectRefs(choice.kind)) {
+        if (ruledCostUsesObjectRefs(choice)) {
             auto existing = std::find_if(pendingRuledSpellCast.costSelections.begin(),
                                          pendingRuledSpellCast.costSelections.end(), [&choice](const auto &entry) {
                                              return entry.costIndex == choice.costIndex;
@@ -5668,7 +5682,8 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
             card->update();
             const auto progress = ruledPendingGraveyardCostSelectionProgress(pendingRuledSpellCast);
             emit ruledGraveyardCostSelectionChanged(progress && progress->zone == RuledCostChoiceZone::Graveyard,
-                                                   choice.min, progress ? progress->selected : 0);
+                                                   static_cast<int>(progress ? progress->required : choice.min),
+                                                   static_cast<int>(progress ? progress->selected : 0));
             return true;
         }
         pendingRuledSpellCast.costSelections.append({choice.costIndex, choice.zone, {stableId}});
@@ -5730,7 +5745,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
                 return true;
             }
         }
-        if (choice.zone == RuledCostChoiceZone::Graveyard || ruledCostUsesObjectRefs(choice.kind)) {
+        if (ruledCostUsesObjectRefs(choice)) {
             auto existing = std::find_if(pendingActivatedAbility.costSelections.begin(),
                                          pendingActivatedAbility.costSelections.end(), [&choice](const auto &entry) {
                                              return entry.costIndex == choice.costIndex && entry.zone == choice.zone;
@@ -5741,7 +5756,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
                     {choice.costIndex,
                      choice.zone,
                      {stableId},
-                     ruledCostUsesObjectRefs(choice.kind)
+                     ruledCostUsesObjectRefs(choice)
                          ? QVector<quint64>{choice.candidateGenerations.value(stableId)}
                          : QVector<quint64>{}});
                 selectedCount = 1;
@@ -5754,7 +5769,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
                 selectedCount = existing->selectedIds.size();
             } else if (existing->selectedIds.size() < choice.max) {
                 existing->selectedIds.append(stableId);
-                if (ruledCostUsesObjectRefs(choice.kind)) {
+                if (ruledCostUsesObjectRefs(choice)) {
                     existing->selectedGenerations.append(choice.candidateGenerations.value(stableId));
                 }
                 selectedCount = existing->selectedIds.size();
@@ -5764,7 +5779,8 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
             card->update();
             const auto progress = ruledPendingGraveyardCostSelectionProgress(pendingActivatedAbility);
             emit ruledGraveyardCostSelectionChanged(progress && progress->zone == RuledCostChoiceZone::Graveyard,
-                                                   choice.min, selectedCount);
+                                                   static_cast<int>(progress ? progress->required : choice.min),
+                                                   static_cast<int>(progress ? progress->selected : selectedCount));
             return true;
         } else {
             pendingActivatedAbility.costSelections.append({choice.costIndex, choice.zone, {stableId}});

@@ -14,7 +14,7 @@
     costs: [
       Tap,
       TapPermanents(
-        count: 1,
+        constraint: ExactCount(1),
         filter: (kind: AnyPermanent, controller: You),
         exclude_source: true,
       ),

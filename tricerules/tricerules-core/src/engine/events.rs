@@ -467,9 +467,10 @@ impl GameEngine {
                                         ),
                                         AbilityCost::Tap => "{T}".to_string(),
                                         AbilityCost::Blight { count } => format!("Blight {count}"),
-                                        AbilityCost::TapPermanents { count, .. } => {
-                                            format!("Tap {count} permanents")
-                                        }
+                                        AbilityCost::TapPermanents { constraint, .. } => match constraint {
+                                            ObjectPaymentConstraint::ExactCount(count) => format!("Tap {count} permanents"),
+                                            ObjectPaymentConstraint::AggregateMinimum { minimum, .. } => format!("Tap permanents with total power {minimum} or greater"),
+                                        },
                                         AbilityCost::Loyalty(delta) if *delta >= 0 => {
                                             format!("+{delta}")
                                         }
@@ -483,9 +484,10 @@ impl GameEngine {
                                         AbilityCost::SacrificePermanent { .. } => {
                                             "Sacrifice a permanent".to_string()
                                         }
-                                        AbilityCost::ExileGraveyardCards { count, .. } => {
-                                            format!("Exile {count} graveyard cards")
-                                        }
+                                        AbilityCost::ExileGraveyardCards { constraint, .. } => match constraint {
+                                            ObjectPaymentConstraint::ExactCount(count) => format!("Exile {count} graveyard cards"),
+                                            ObjectPaymentConstraint::AggregateMinimum { minimum, .. } => format!("Collect evidence {minimum}"),
+                                        },
                                     })
                                     .collect::<Vec<_>>()
                                     .join(", ");

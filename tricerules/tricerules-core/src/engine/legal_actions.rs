@@ -343,7 +343,12 @@ fn activated_ability_info(
                     .unwrap_or_default()
             ),
             AbilityCost::Tap => "{T}".to_string(),
-            AbilityCost::TapPermanents { count, .. } => format!("Tap {count} permanents"),
+            AbilityCost::TapPermanents { constraint, .. } => match constraint {
+                ObjectPaymentConstraint::ExactCount(count) => format!("Tap {count} permanents"),
+                ObjectPaymentConstraint::AggregateMinimum { minimum, .. } => {
+                    format!("Tap permanents with total power {minimum} or greater")
+                }
+            },
             AbilityCost::Blight { count } => format!("Blight {count}"),
             AbilityCost::Loyalty(delta) if *delta >= 0 => format!("+{delta}"),
             AbilityCost::Loyalty(delta) => delta.to_string(),
@@ -354,9 +359,14 @@ fn activated_ability_info(
             AbilityCost::ExileSelf => "Exile this card".to_string(),
             AbilityCost::SacrificeSelf => "Sacrifice this".to_string(),
             AbilityCost::SacrificePermanent { .. } => "Sacrifice a permanent".to_string(),
-            AbilityCost::ExileGraveyardCards { count, .. } => {
-                format!("Exile {count} graveyard cards")
-            }
+            AbilityCost::ExileGraveyardCards { constraint, .. } => match constraint {
+                ObjectPaymentConstraint::ExactCount(count) => {
+                    format!("Exile {count} graveyard cards")
+                }
+                ObjectPaymentConstraint::AggregateMinimum { minimum, .. } => {
+                    format!("Collect evidence {minimum}")
+                }
+            },
         })
         .collect::<Vec<_>>()
         .join(", ");
@@ -533,22 +543,178 @@ fn legal_permanent_actions(eng: &GameEngine, player: PlayerId) -> Vec<rv1::Legal
     actions
 }
 
-fn distinct_assignment_exists(
-    candidates: &[Vec<ObjectId>],
-    choice_index: usize,
+enum ObjectPaymentRequirement {
+    Exact {
+        candidates: Vec<ObjectId>,
+        count: u32,
+    },
+    Aggregate {
+        candidates: Vec<(ObjectId, i64)>,
+        minimum: u32,
+    },
+}
+
+#[derive(Clone, Copy)]
+struct AggregateAssignmentProgress {
+    start: usize,
+    total: i64,
+    minimum: i64,
+}
+
+fn payment_assignment_exists(
+    requirements: &[ObjectPaymentRequirement],
+    requirement_index: usize,
     consumed: &mut HashSet<ObjectId>,
+    memo: &mut HashMap<(usize, Vec<ObjectId>), bool>,
 ) -> bool {
-    if choice_index == candidates.len() {
+    if requirement_index == requirements.len() {
         return true;
     }
-    candidates[choice_index].iter().copied().any(|oid| {
+    let mut consumed_key: Vec<_> = consumed.iter().copied().collect();
+    consumed_key.sort_unstable();
+    let memo_key = (requirement_index, consumed_key);
+    if let Some(result) = memo.get(&memo_key) {
+        return *result;
+    }
+    let result = match &requirements[requirement_index] {
+        ObjectPaymentRequirement::Exact { candidates, count } => choose_exact_assignment(
+            requirements,
+            requirement_index,
+            candidates,
+            0,
+            *count,
+            consumed,
+            memo,
+        ),
+        ObjectPaymentRequirement::Aggregate {
+            candidates,
+            minimum,
+        } => choose_aggregate_assignment(
+            requirements,
+            requirement_index,
+            candidates,
+            AggregateAssignmentProgress {
+                start: 0,
+                total: 0,
+                minimum: i64::from(*minimum),
+            },
+            consumed,
+            memo,
+        ),
+    };
+    memo.insert(memo_key, result);
+    result
+}
+
+fn choose_exact_assignment(
+    requirements: &[ObjectPaymentRequirement],
+    requirement_index: usize,
+    candidates: &[ObjectId],
+    start: usize,
+    remaining: u32,
+    consumed: &mut HashSet<ObjectId>,
+    memo: &mut HashMap<(usize, Vec<ObjectId>), bool>,
+) -> bool {
+    if remaining == 0 {
+        return payment_assignment_exists(requirements, requirement_index + 1, consumed, memo);
+    }
+    (start..candidates.len()).any(|index| {
+        let oid = candidates[index];
         if !consumed.insert(oid) {
             return false;
         }
-        let works = distinct_assignment_exists(candidates, choice_index + 1, consumed);
+        let works = choose_exact_assignment(
+            requirements,
+            requirement_index,
+            candidates,
+            index + 1,
+            remaining - 1,
+            consumed,
+            memo,
+        );
         consumed.remove(&oid);
         works
     })
+}
+
+fn choose_aggregate_assignment(
+    requirements: &[ObjectPaymentRequirement],
+    requirement_index: usize,
+    candidates: &[(ObjectId, i64)],
+    progress: AggregateAssignmentProgress,
+    consumed: &mut HashSet<ObjectId>,
+    memo: &mut HashMap<(usize, Vec<ObjectId>), bool>,
+) -> bool {
+    if progress.total >= progress.minimum
+        && payment_assignment_exists(requirements, requirement_index + 1, consumed, memo)
+    {
+        return true;
+    }
+    let remaining_positive: i64 = candidates[progress.start..]
+        .iter()
+        .filter(|(_, contribution)| *contribution > 0)
+        .map(|(_, contribution)| *contribution)
+        .sum();
+    if progress.total + remaining_positive < progress.minimum {
+        return false;
+    }
+    (progress.start..candidates.len()).any(|index| {
+        let (oid, contribution) = candidates[index];
+        if contribution <= 0 || !consumed.insert(oid) {
+            return false;
+        }
+        let works = choose_aggregate_assignment(
+            requirements,
+            requirement_index,
+            candidates,
+            AggregateAssignmentProgress {
+                start: index + 1,
+                total: progress.total + contribution,
+                ..progress
+            },
+            consumed,
+            memo,
+        );
+        consumed.remove(&oid);
+        works
+    })
+}
+
+fn contribution_kind_proto(kind: ObjectContributionKind) -> i32 {
+    match kind {
+        ObjectContributionKind::ManaValue => rv1::ObjectContributionKind::ManaValue as i32,
+        ObjectContributionKind::CurrentPower => rv1::ObjectContributionKind::CurrentPower as i32,
+    }
+}
+
+fn aggregate_constraint_proto(
+    constraint: ObjectPaymentConstraint,
+) -> Option<rv1::AggregateMinimumConstraint> {
+    constraint
+        .aggregate_minimum()
+        .map(|(minimum, contribution)| rv1::AggregateMinimumConstraint {
+            minimum,
+            contribution_kind: contribution_kind_proto(contribution),
+        })
+}
+
+fn cost_object_candidate(
+    eng: &GameEngine,
+    oid: ObjectId,
+    contribution: i64,
+) -> rv1::CostObjectCandidate {
+    rv1::CostObjectCandidate {
+        object: Some(rv1::CostObjectRef {
+            object_id: oid,
+            zone_change_generation: eng
+                .state
+                .zone_change_generation
+                .get(&oid)
+                .copied()
+                .unwrap_or(0),
+        }),
+        contribution,
+    }
 }
 
 fn legal_ability_cost_choices(
@@ -562,7 +728,7 @@ fn legal_ability_cost_choices(
         return rv1::LegalCostChoices::default();
     };
     let mut choices = vec![];
-    let mut assignment_candidates = vec![];
+    let mut requirements = vec![];
     let mut consumed = HashSet::new();
     let mut structurally_payable = eng.ability_activatable(source, ability_index, ability);
 
@@ -580,7 +746,10 @@ fn legal_ability_cost_choices(
                 let candidate_ids: Vec<u32> = (0..eng.state.players[player_idx].hand.len())
                     .map(|slot| slot as u32)
                     .collect();
-                assignment_candidates.push(eng.state.players[player_idx].hand.clone());
+                requirements.push(ObjectPaymentRequirement::Exact {
+                    candidates: eng.state.players[player_idx].hand.clone(),
+                    count: 1,
+                });
                 choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Hand as i32,
@@ -591,6 +760,7 @@ fn legal_ability_cost_choices(
                     counter_removal: None,
                     kind: rv1::CostChoiceKind::Discard as i32,
                     candidate_objects: vec![],
+                    aggregate_minimum: None,
                 });
             }
             AbilityCost::SacrificeSelf | AbilityCost::DiscardSelf | AbilityCost::ExileSelf => {
@@ -606,7 +776,10 @@ fn legal_ability_cost_choices(
                         eng.ability_cost_permanent_matches(player, Some(source), oid, filter)
                     })
                     .collect();
-                assignment_candidates.push(candidate_ids.clone());
+                requirements.push(ObjectPaymentRequirement::Exact {
+                    candidates: candidate_ids.clone(),
+                    count: 1,
+                });
                 choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Battlefield as i32,
@@ -618,20 +791,13 @@ fn legal_ability_cost_choices(
                     kind: rv1::CostChoiceKind::Sacrifice as i32,
                     candidate_objects: candidate_ids
                         .iter()
-                        .map(|oid| rv1::CostObjectRef {
-                            object_id: *oid,
-                            zone_change_generation: eng
-                                .state
-                                .zone_change_generation
-                                .get(oid)
-                                .copied()
-                                .unwrap_or(0),
-                        })
+                        .map(|oid| cost_object_candidate(eng, *oid, 0))
                         .collect(),
+                    aggregate_minimum: None,
                 });
             }
             AbilityCost::TapPermanents {
-                count,
+                constraint,
                 filter,
                 exclude_source,
             } => {
@@ -646,34 +812,55 @@ fn legal_ability_cost_choices(
                             && !eng.state.objects[&oid].tapped
                     })
                     .collect();
-                for _ in 0..*count {
-                    assignment_candidates.push(candidate_ids.clone());
+                match *constraint {
+                    ObjectPaymentConstraint::ExactCount(count) => {
+                        requirements.push(ObjectPaymentRequirement::Exact {
+                            candidates: candidate_ids.clone(),
+                            count,
+                        });
+                    }
+                    ObjectPaymentConstraint::AggregateMinimum {
+                        minimum,
+                        contribution,
+                    } => requirements.push(ObjectPaymentRequirement::Aggregate {
+                        candidates: candidate_ids
+                            .iter()
+                            .filter_map(|oid| {
+                                eng.object_payment_contribution(*oid, contribution)
+                                    .map(|value| (*oid, value))
+                            })
+                            .collect(),
+                        minimum,
+                    }),
                 }
+                let exact_count = constraint.exact_count();
+                let contribution_kind = constraint.aggregate_minimum().map(|(_, kind)| kind);
                 choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Battlefield as i32,
                     candidate_ids: candidate_ids.clone(),
-                    min: *count,
-                    max: *count,
+                    min: exact_count.unwrap_or(0),
+                    max: exact_count.unwrap_or(candidate_ids.len() as u32),
                     blight_count: 0,
                     counter_removal: None,
                     kind: rv1::CostChoiceKind::Tap as i32,
                     candidate_objects: candidate_ids
                         .iter()
-                        .map(|oid| rv1::CostObjectRef {
-                            object_id: *oid,
-                            zone_change_generation: eng
-                                .state
-                                .zone_change_generation
-                                .get(oid)
-                                .copied()
-                                .unwrap_or(0),
+                        .map(|oid| {
+                            cost_object_candidate(
+                                eng,
+                                *oid,
+                                contribution_kind
+                                    .and_then(|kind| eng.object_payment_contribution(*oid, kind))
+                                    .unwrap_or(0),
+                            )
                         })
                         .collect(),
+                    aggregate_minimum: aggregate_constraint_proto(*constraint),
                 });
             }
             AbilityCost::ExileGraveyardCards {
-                count,
+                constraint,
                 filter,
                 exclude_source,
             } => {
@@ -691,19 +878,51 @@ fn legal_ability_cost_choices(
                         )
                     })
                     .collect();
-                for _ in 0..*count {
-                    assignment_candidates.push(candidate_ids.clone());
+                match *constraint {
+                    ObjectPaymentConstraint::ExactCount(count) => {
+                        requirements.push(ObjectPaymentRequirement::Exact {
+                            candidates: candidate_ids.clone(),
+                            count,
+                        });
+                    }
+                    ObjectPaymentConstraint::AggregateMinimum {
+                        minimum,
+                        contribution,
+                    } => requirements.push(ObjectPaymentRequirement::Aggregate {
+                        candidates: candidate_ids
+                            .iter()
+                            .filter_map(|oid| {
+                                eng.object_payment_contribution(*oid, contribution)
+                                    .map(|value| (*oid, value))
+                            })
+                            .collect(),
+                        minimum,
+                    }),
                 }
+                let exact_count = constraint.exact_count();
+                let contribution_kind = constraint.aggregate_minimum().map(|(_, kind)| kind);
                 choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Graveyard as i32,
-                    candidate_ids,
-                    min: *count,
-                    max: *count,
+                    candidate_ids: candidate_ids.clone(),
+                    min: exact_count.unwrap_or(0),
+                    max: exact_count.unwrap_or(candidate_ids.len() as u32),
                     blight_count: 0,
                     counter_removal: None,
                     kind: rv1::CostChoiceKind::Exile as i32,
-                    candidate_objects: vec![],
+                    candidate_objects: candidate_ids
+                        .iter()
+                        .map(|oid| {
+                            cost_object_candidate(
+                                eng,
+                                *oid,
+                                contribution_kind
+                                    .and_then(|kind| eng.object_payment_contribution(*oid, kind))
+                                    .unwrap_or(0),
+                            )
+                        })
+                        .collect(),
+                    aggregate_minimum: aggregate_constraint_proto(*constraint),
                 });
             }
             AbilityCost::Tap
@@ -712,7 +931,8 @@ fn legal_ability_cost_choices(
             | AbilityCost::Loyalty(_) => {}
         }
     }
-    structurally_payable &= distinct_assignment_exists(&assignment_candidates, 0, &mut consumed);
+    structurally_payable &=
+        payment_assignment_exists(&requirements, 0, &mut consumed, &mut HashMap::new());
     rv1::LegalCostChoices {
         non_mana_costs_payable: structurally_payable,
         choices,
@@ -733,7 +953,7 @@ fn legal_spell_cost_choices(
         return rv1::LegalCostChoices::default();
     };
     let mut choices = vec![];
-    let mut assignment_candidates = vec![];
+    let mut requirements = vec![];
     for (cost_index, cost) in costs.iter().enumerate() {
         match cost {
             AdditionalCost::Blight { count } => {
@@ -748,7 +968,10 @@ fn legal_spell_cost_choices(
                     .filter(|(_, oid)| *oid != source)
                     .map(|(slot, oid)| (slot as u32, oid))
                     .collect();
-                assignment_candidates.push(candidates.iter().map(|(_, oid)| *oid).collect());
+                requirements.push(ObjectPaymentRequirement::Exact {
+                    candidates: candidates.iter().map(|(_, oid)| *oid).collect(),
+                    count: 1,
+                });
                 choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Hand as i32,
@@ -759,6 +982,7 @@ fn legal_spell_cost_choices(
                     counter_removal: None,
                     kind: rv1::CostChoiceKind::Discard as i32,
                     candidate_objects: vec![],
+                    aggregate_minimum: None,
                 });
             }
             AdditionalCost::SacrificePermanent { filter } => {
@@ -769,7 +993,10 @@ fn legal_spell_cost_choices(
                     .flat_map(|state| state.battlefield.iter().copied())
                     .filter(|&oid| eng.ability_cost_permanent_matches(player, None, oid, filter))
                     .collect();
-                assignment_candidates.push(candidate_ids.clone());
+                requirements.push(ObjectPaymentRequirement::Exact {
+                    candidates: candidate_ids.clone(),
+                    count: 1,
+                });
                 choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Battlefield as i32,
@@ -781,20 +1008,13 @@ fn legal_spell_cost_choices(
                     kind: rv1::CostChoiceKind::Sacrifice as i32,
                     candidate_objects: candidate_ids
                         .iter()
-                        .map(|oid| rv1::CostObjectRef {
-                            object_id: *oid,
-                            zone_change_generation: eng
-                                .state
-                                .zone_change_generation
-                                .get(oid)
-                                .copied()
-                                .unwrap_or(0),
-                        })
+                        .map(|oid| cost_object_candidate(eng, *oid, 0))
                         .collect(),
+                    aggregate_minimum: None,
                 });
             }
             AdditionalCost::TapPermanents {
-                count,
+                constraint,
                 filter,
                 exclude_source,
             } => {
@@ -809,36 +1029,123 @@ fn legal_spell_cost_choices(
                             && !eng.state.objects[&oid].tapped
                     })
                     .collect();
-                for _ in 0..*count {
-                    assignment_candidates.push(candidate_ids.clone());
+                match *constraint {
+                    ObjectPaymentConstraint::ExactCount(count) => {
+                        requirements.push(ObjectPaymentRequirement::Exact {
+                            candidates: candidate_ids.clone(),
+                            count,
+                        });
+                    }
+                    ObjectPaymentConstraint::AggregateMinimum {
+                        minimum,
+                        contribution,
+                    } => requirements.push(ObjectPaymentRequirement::Aggregate {
+                        candidates: candidate_ids
+                            .iter()
+                            .filter_map(|oid| {
+                                eng.object_payment_contribution(*oid, contribution)
+                                    .map(|value| (*oid, value))
+                            })
+                            .collect(),
+                        minimum,
+                    }),
                 }
+                let exact_count = constraint.exact_count();
+                let contribution_kind = constraint.aggregate_minimum().map(|(_, kind)| kind);
                 choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Battlefield as i32,
                     candidate_ids: candidate_ids.clone(),
-                    min: *count,
-                    max: *count,
+                    min: exact_count.unwrap_or(0),
+                    max: exact_count.unwrap_or(candidate_ids.len() as u32),
                     blight_count: 0,
                     counter_removal: None,
                     kind: rv1::CostChoiceKind::Tap as i32,
                     candidate_objects: candidate_ids
                         .iter()
-                        .map(|oid| rv1::CostObjectRef {
-                            object_id: *oid,
-                            zone_change_generation: eng
-                                .state
-                                .zone_change_generation
-                                .get(oid)
-                                .copied()
-                                .unwrap_or(0),
+                        .map(|oid| {
+                            cost_object_candidate(
+                                eng,
+                                *oid,
+                                contribution_kind
+                                    .and_then(|kind| eng.object_payment_contribution(*oid, kind))
+                                    .unwrap_or(0),
+                            )
                         })
                         .collect(),
+                    aggregate_minimum: aggregate_constraint_proto(*constraint),
+                });
+            }
+            AdditionalCost::ExileGraveyardCards {
+                constraint,
+                filter,
+                exclude_source,
+            } => {
+                let candidate_ids: Vec<ObjectId> = eng.state.players[player_idx]
+                    .graveyard
+                    .iter()
+                    .copied()
+                    .filter(|oid| !exclude_source || *oid != source)
+                    .filter(|oid| {
+                        super::resolution::library_card_matches_filter(
+                            &eng.state,
+                            eng.registry,
+                            *oid,
+                            Some(filter),
+                        )
+                    })
+                    .collect();
+                match *constraint {
+                    ObjectPaymentConstraint::ExactCount(count) => {
+                        requirements.push(ObjectPaymentRequirement::Exact {
+                            candidates: candidate_ids.clone(),
+                            count,
+                        });
+                    }
+                    ObjectPaymentConstraint::AggregateMinimum {
+                        minimum,
+                        contribution,
+                    } => requirements.push(ObjectPaymentRequirement::Aggregate {
+                        candidates: candidate_ids
+                            .iter()
+                            .filter_map(|oid| {
+                                eng.object_payment_contribution(*oid, contribution)
+                                    .map(|value| (*oid, value))
+                            })
+                            .collect(),
+                        minimum,
+                    }),
+                }
+                let exact_count = constraint.exact_count();
+                let contribution_kind = constraint.aggregate_minimum().map(|(_, kind)| kind);
+                choices.push(rv1::LegalCostChoice {
+                    cost_index: cost_index as u32,
+                    zone: rv1::CostChoiceZone::Graveyard as i32,
+                    candidate_ids: candidate_ids.clone(),
+                    min: exact_count.unwrap_or(0),
+                    max: exact_count.unwrap_or(candidate_ids.len() as u32),
+                    blight_count: 0,
+                    counter_removal: None,
+                    kind: rv1::CostChoiceKind::Exile as i32,
+                    candidate_objects: candidate_ids
+                        .iter()
+                        .map(|oid| {
+                            cost_object_candidate(
+                                eng,
+                                *oid,
+                                contribution_kind
+                                    .and_then(|kind| eng.object_payment_contribution(*oid, kind))
+                                    .unwrap_or(0),
+                            )
+                        })
+                        .collect(),
+                    aggregate_minimum: aggregate_constraint_proto(*constraint),
                 });
             }
         }
     }
     let mut non_mana_costs_payable =
-        distinct_assignment_exists(&assignment_candidates, 0, &mut HashSet::new())
+        payment_assignment_exists(&requirements, 0, &mut HashSet::new(), &mut HashMap::new())
             && choices
                 .iter()
                 .all(|choice| !choice.candidate_ids.is_empty());

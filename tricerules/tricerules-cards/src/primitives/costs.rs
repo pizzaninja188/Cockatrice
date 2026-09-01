@@ -5,6 +5,59 @@ use crate::mana::ManaCost;
 use crate::{choice_fallback, AbilityPresentation, ChoiceId};
 use serde::{Deserialize, Serialize};
 
+/// Engine-computed quantity contributed by one public-zone object payment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ObjectContributionKind {
+    ManaValue,
+    CurrentPower,
+}
+
+/// Typed cardinality for a selected-object cost. This deliberately models only the two
+/// payment shapes used by object costs rather than a general constraint language.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ObjectPaymentConstraint {
+    ExactCount(u32),
+    AggregateMinimum {
+        minimum: u32,
+        contribution: ObjectContributionKind,
+    },
+}
+
+impl ObjectPaymentConstraint {
+    pub fn exact_count(self) -> Option<u32> {
+        match self {
+            Self::ExactCount(count) => Some(count),
+            Self::AggregateMinimum { .. } => None,
+        }
+    }
+
+    pub fn aggregate_minimum(self) -> Option<(u32, ObjectContributionKind)> {
+        match self {
+            Self::AggregateMinimum {
+                minimum,
+                contribution,
+            } => Some((minimum, contribution)),
+            Self::ExactCount(_) => None,
+        }
+    }
+
+    pub(crate) fn validate_for(
+        self,
+        expected: ObjectContributionKind,
+        label: &str,
+    ) -> Result<(), String> {
+        match self {
+            Self::ExactCount(0) | Self::AggregateMinimum { minimum: 0, .. } => {
+                Err(format!("{label} cost requires a positive constraint"))
+            }
+            Self::AggregateMinimum { contribution, .. } if contribution != expected => Err(
+                format!("{label} cost uses an incompatible aggregate contribution"),
+            ),
+            _ => Ok(()),
+        }
+    }
+}
+
 /// Cost to activate an activated ability (CR 602). Shared by every activated ability,
 /// including mana abilities: an ability is classified as a mana ability (CR 605.1a) by its
 /// *effect* being [`SpellEffectKind::ProduceMana`], not by its cost — so a `{T}` land, a
@@ -28,7 +81,7 @@ pub enum AbilityCost {
     /// `filter`. This is a selection cost, not targeting, and summoning sickness does not apply
     /// unless the selected object is also paying a separate `{T}` source cost.
     TapPermanents {
-        count: u32,
+        constraint: ObjectPaymentConstraint,
         filter: TargetFilter,
         #[serde(default)]
         exclude_source: bool,
@@ -54,7 +107,7 @@ pub enum AbilityCost {
     /// selection cost, not targeting. Say Its Name excludes its own source object; Bearscape and
     /// Grim Lavamancer reuse the same bounded graveyard-cohort payment without source exclusion.
     ExileGraveyardCards {
-        count: u32,
+        constraint: ObjectPaymentConstraint,
         filter: ZoneCardFilter,
         #[serde(default)]
         exclude_source: bool,
@@ -81,14 +134,24 @@ impl AbilityCost {
                 Ok(())
             }
             Self::Blight { count: 0 } => Err("blight cost requires a positive count".into()),
-            Self::TapPermanents { count: 0, .. } => {
-                Err("permanent tap cost requires a positive count".into())
+            Self::TapPermanents {
+                constraint, filter, ..
+            } => {
+                constraint.validate_for(ObjectContributionKind::CurrentPower, "permanent tap")?;
+                filter.validate_characteristic_constraints()
             }
-            Self::TapPermanents { filter, .. } => filter.validate_characteristic_constraints(),
-            Self::ExileGraveyardCards { count: 0, .. } => {
-                Err("graveyard-card exile cost requires a positive count".into())
+            Self::ExileGraveyardCards {
+                constraint, filter, ..
+            } => {
+                constraint
+                    .validate_for(ObjectContributionKind::ManaValue, "graveyard-card exile")?;
+                if constraint.aggregate_minimum().is_some() && filter == &ZoneCardFilter::default()
+                {
+                    Ok(())
+                } else {
+                    filter.validate()
+                }
             }
-            Self::ExileGraveyardCards { filter, .. } => filter.validate(),
             _ => Ok(()),
         }
     }
@@ -120,8 +183,16 @@ pub enum AdditionalCost {
     SacrificePermanent { filter: TargetFilter },
     /// Tap exactly `count` matching untapped permanents the caster controls.
     TapPermanents {
-        count: u32,
+        constraint: ObjectPaymentConstraint,
         filter: TargetFilter,
+        #[serde(default)]
+        exclude_source: bool,
+    },
+    /// Exile selected cards from the caster's graveyard, either by exact count or by an
+    /// engine-computed mana-value minimum (Collect Evidence).
+    ExileGraveyardCards {
+        constraint: ObjectPaymentConstraint,
+        filter: ZoneCardFilter,
         #[serde(default)]
         exclude_source: bool,
     },

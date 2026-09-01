@@ -23,7 +23,7 @@
     costs: [
       ExileSelf,
       ExileGraveyardCards(
-        count: 2,
+        constraint: ExactCount(2),
         filter: (exact_name: Some("Say Its Name")),
         exclude_source: true,
       ),

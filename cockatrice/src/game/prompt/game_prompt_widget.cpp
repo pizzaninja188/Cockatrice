@@ -765,9 +765,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     declineClickChoiceButton->setVisible(
         (mode == PromptMode::ClickChoice || mode == PromptMode::ChoiceOptions) && promptState.canDecline);
     if (mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection) {
-        resolutionHandPickConfirmButton->setEnabled(mode == PromptMode::CostSelection
-                                                        ? promptState.selected == promptState.required
-                                                        : promptState.selected >= promptState.required);
+        resolutionHandPickConfirmButton->setEnabled(promptState.selected >= promptState.required);
     }
 
     // Every take-over mode suppresses the priority / combat / targeting controls.

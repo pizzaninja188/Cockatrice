@@ -29,11 +29,12 @@ pub use primitives::{
     CombatRole, ConditionalManaOutput, ConditionalSearchDestination, ContinuousEffectKind,
     ControllerReference, CountExpression, CounterKind, DelayedTokenSacrificeTiming, EffectContext,
     EffectDuration, Evasion, GameCondition, GraveyardAggregate, Keyword, LibraryPartitionKind,
-    ManaAmount, ManaSpendFilter, ManaSpendingRestriction, PermanentTypeFilter, PowerComparison,
-    PowerToughnessCharacteristic, PtScale, QuantityTerm, RelativePlayerSet, SearchDestination,
-    SearchZoneSelection, SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin,
-    SpellCostModifier, SpellEffectKind, TargetMatchFilter, TargetObjectExclusion, TriggerCondition,
-    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
+    ManaAmount, ManaSpendFilter, ManaSpendingRestriction, ObjectContributionKind,
+    ObjectPaymentConstraint, PermanentTypeFilter, PowerComparison, PowerToughnessCharacteristic,
+    PtScale, QuantityTerm, RelativePlayerSet, SearchDestination, SearchZoneSelection,
+    SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin, SpellCostModifier, SpellEffectKind,
+    TargetMatchFilter, TargetObjectExclusion, TriggerCondition, TriggeredAbilityDef,
+    TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

@@ -527,21 +527,21 @@ mod tests {
             ..Default::default()
         };
         assert!(AbilityCost::ExileGraveyardCards {
-            count: 2,
+            constraint: ObjectPaymentConstraint::ExactCount(2),
             filter: namesake.clone(),
             exclude_source: true,
         }
         .validate()
         .is_ok());
         assert!(AbilityCost::ExileGraveyardCards {
-            count: 0,
+            constraint: ObjectPaymentConstraint::ExactCount(0),
             filter: namesake,
             exclude_source: true,
         }
         .validate()
         .is_err());
         assert!(AbilityCost::ExileGraveyardCards {
-            count: 1,
+            constraint: ObjectPaymentConstraint::ExactCount(1),
             filter: ZoneCardFilter::default(),
             exclude_source: false,
         }

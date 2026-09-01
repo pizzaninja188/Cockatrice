@@ -221,7 +221,26 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
             parsed.candidateIds.insert(candidate);
         }
         for (const auto &candidate : choice.candidate_objects()) {
-            parsed.candidateGenerations.insert(candidate.object_id(), candidate.zone_change_generation());
+            if (!candidate.has_object()) {
+                continue;
+            }
+            parsed.candidateGenerations.insert(candidate.object().object_id(),
+                                               candidate.object().zone_change_generation());
+            parsed.candidateContributions.insert(candidate.object().object_id(), candidate.contribution());
+        }
+        if (choice.has_aggregate_minimum()) {
+            parsed.aggregateMinimum = static_cast<qint64>(choice.aggregate_minimum().minimum());
+            switch (choice.aggregate_minimum().contribution_kind()) {
+                case ruled::v1::OBJECT_CONTRIBUTION_KIND_MANA_VALUE:
+                    parsed.contributionKind = RuledObjectContributionKind::ManaValue;
+                    break;
+                case ruled::v1::OBJECT_CONTRIBUTION_KIND_CURRENT_POWER:
+                    parsed.contributionKind = RuledObjectContributionKind::CurrentPower;
+                    break;
+                default:
+                    parsed.contributionKind = RuledObjectContributionKind::Unspecified;
+                    break;
+            }
         }
         data.choices.append(parsed);
     }

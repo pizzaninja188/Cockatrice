@@ -3504,8 +3504,9 @@ public:
                     ability->set_ability_index(action->ability_index());
                     auto *selection = ability->add_cost_selections();
                     selection->set_cost_index(graveyardCost->cost_index());
-                    selection->mutable_graveyard_object_ids()->add_object_ids(graveyardCost->candidate_ids(0));
-                    selection->mutable_graveyard_object_ids()->add_object_ids(graveyardCost->candidate_ids(1));
+                    ASSERT_GE(graveyardCost->candidate_objects_size(), 2);
+                    *selection->mutable_graveyard_objects()->add_objects() = graveyardCost->candidate_objects(0).object();
+                    *selection->mutable_graveyard_objects()->add_objects() = graveyardCost->candidate_objects(1).object();
                     sayItsNameActivated = true;
                     sendRuled(cmd, QStringLiteral("activate Say Its Name with two exact graveyard cards"));
                     return;
@@ -7315,8 +7316,9 @@ TEST_F(RuledE2ESmokeTest, SelectableTapAndBlightPaymentsPreservePrivacyAndExactC
     }
     ASSERT_NE(tapCost, nullptr);
     ASSERT_EQ(tapCost->candidate_objects_size(), 1);
-    EXPECT_EQ(tapCost->candidate_objects(0).object_id(), bear->oid);
-    EXPECT_EQ(tapCost->candidate_objects(0).zone_change_generation(), bear->generation);
+    ASSERT_TRUE(tapCost->candidate_objects(0).has_object());
+    EXPECT_EQ(tapCost->candidate_objects(0).object().object_id(), bear->oid);
+    EXPECT_EQ(tapCost->candidate_objects(0).object().zone_change_generation(), bear->generation);
 
     ruled::v1::RuledCommand activate;
     auto *ability = activate.mutable_activate_ability();
@@ -7437,6 +7439,211 @@ TEST_F(RuledE2ESmokeTest, SelectableTapAndBlightPaymentsPreservePrivacyAndExactC
     EXPECT_FALSE(findPermanent(p2, p1.myId, QStringLiteral("grizzly_bears")));
     EXPECT_EQ(p1.graveyardOwnerByEngineOid[bear->oid], p1.myId);
     EXPECT_EQ(p2.graveyardOwnerByEngineOid[bear->oid], p1.myId);
+}
+
+TEST_F(RuledE2ESmokeTest, AggregatePowerAndManaValuePaymentsReachBothClientsWithExactPhysicalObjects)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("aggregatep1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("aggregatep2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "issue 178 game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "issue 178 game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto putPermanent = [&](int playerId, const char *name) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(playerId);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(name);
+        put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        put->set_ready(true);
+        return send(p1, command, QStringLiteral("issue 178 put %1").arg(name));
+    };
+    auto putInGraveyard = [&](const char *name) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(name);
+        put->set_zone(ruled::v1::DEV_ZONE_HAND);
+        if (!send(p1, command, QStringLiteral("issue 178 stage %1").arg(name))) {
+            return false;
+        }
+        command.Clear();
+        dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        auto *move = dev->mutable_move_card();
+        move->set_card_name(name);
+        move->set_zone(ruled::v1::DEV_ZONE_GRAVEYARD);
+        return send(p1, command, QStringLiteral("issue 178 graveyard %1").arg(name));
+    };
+    auto findPermanent = [](const SmokeClient &client, int controller,
+                            const QString &cardId) -> std::optional<SmokeClient::Permanent> {
+        const auto battlefield = client.battlefieldByPlayer.find(controller);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return std::nullopt;
+        }
+        const auto permanent =
+            std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                         [&cardId](const SmokeClient::Permanent &candidate) { return candidate.cardId == cardId; });
+        return permanent == battlefield->second.end() ? std::nullopt : std::optional(*permanent);
+    };
+    auto pass = [&]() {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(p1.priorityPlayer == p1.myId ? p1 : p2, command, QStringLiteral("resolve aggregate ability"));
+    };
+
+    ASSERT_TRUE(putPermanent(p1.myId, "Forensic Researcher"));
+    ASSERT_TRUE(putPermanent(p2.myId, "Grizzly Bears"));
+    ASSERT_TRUE(putInGraveyard("Lightning Bolt"));
+    ASSERT_TRUE(putInGraveyard("Grizzly Bears"));
+    const auto researcher = findPermanent(p1, p1.myId, QStringLiteral("forensic_researcher"));
+    const auto opposingBear = findPermanent(p1, p2.myId, QStringLiteral("grizzly_bears"));
+    ASSERT_TRUE(researcher && opposingBear);
+
+    const quint64 researcherKey = (static_cast<quint64>(researcher->oid) << 32) | 1;
+    const auto researcherCosts = p1.latestLegal.cost_choices_by_ability().find(researcherKey);
+    ASSERT_NE(researcherCosts, p1.latestLegal.cost_choices_by_ability().end());
+    const ruled::v1::LegalCostChoice *evidence = nullptr;
+    for (const auto &choice : researcherCosts->second.choices()) {
+        if (choice.zone() == ruled::v1::COST_CHOICE_ZONE_GRAVEYARD && choice.has_aggregate_minimum()) {
+            evidence = &choice;
+            break;
+        }
+    }
+    ASSERT_NE(evidence, nullptr);
+    EXPECT_EQ(evidence->aggregate_minimum().minimum(), 3u);
+    EXPECT_EQ(evidence->aggregate_minimum().contribution_kind(), ruled::v1::OBJECT_CONTRIBUTION_KIND_MANA_VALUE);
+    const ruled::v1::CostObjectCandidate *mvOne = nullptr;
+    const ruled::v1::CostObjectCandidate *mvTwo = nullptr;
+    for (const auto &candidate : evidence->candidate_objects()) {
+        if (candidate.contribution() == 1)
+            mvOne = &candidate;
+        if (candidate.contribution() == 2)
+            mvTwo = &candidate;
+    }
+    ASSERT_NE(mvOne, nullptr);
+    ASSERT_NE(mvTwo, nullptr);
+    ASSERT_TRUE(mvOne->has_object() && mvTwo->has_object());
+    const quint32 boltOid = mvOne->object().object_id();
+    const quint32 graveBearOid = mvTwo->object().object_id();
+    ASSERT_EQ(p1.graveyardOwnerByEngineOid[boltOid], p1.myId);
+    ASSERT_EQ(p2.graveyardOwnerByEngineOid[boltOid], p1.myId);
+    ASSERT_EQ(p1.serverCardByEngineOid[boltOid], p2.serverCardByEngineOid[boltOid]);
+    ASSERT_EQ(p1.serverCardByEngineOid[graveBearOid], p2.serverCardByEngineOid[graveBearOid]);
+
+    ruled::v1::RuledCommand collectEvidence;
+    auto *research = collectEvidence.mutable_activate_ability();
+    p1.setBattlefieldAbilitySource(research, researcher->oid);
+    research->set_ability_index(1);
+    research->add_targets()->set_object_id(opposingBear->oid);
+    auto *evidenceSelection = research->add_cost_selections();
+    evidenceSelection->set_cost_index(evidence->cost_index());
+    *evidenceSelection->mutable_graveyard_objects()->add_objects() = mvOne->object();
+    *evidenceSelection->mutable_graveyard_objects()->add_objects() = mvTwo->object();
+    ASSERT_TRUE(send(p1, collectEvidence, QStringLiteral("Forensic Researcher collect evidence 3")));
+    EXPECT_TRUE(findPermanent(p1, p1.myId, QStringLiteral("forensic_researcher"))->tapped);
+    EXPECT_TRUE(findPermanent(p2, p1.myId, QStringLiteral("forensic_researcher"))->tapped);
+    EXPECT_EQ(p1.serverCardByEngineOid[boltOid], p2.serverCardByEngineOid[boltOid]);
+    EXPECT_EQ(p1.serverCardByEngineOid[graveBearOid], p2.serverCardByEngineOid[graveBearOid]);
+    ASSERT_TRUE(pass());
+    ASSERT_TRUE(pass());
+    EXPECT_TRUE(findPermanent(p1, p2.myId, QStringLiteral("grizzly_bears"))->tapped);
+    EXPECT_TRUE(findPermanent(p2, p2.myId, QStringLiteral("grizzly_bears"))->tapped);
+
+    ASSERT_TRUE(putPermanent(p1.myId, "Mossbridge Troll"));
+    ASSERT_TRUE(putPermanent(p1.myId, "Colossal Dreadmaw"));
+    ASSERT_TRUE(putPermanent(p1.myId, "Serra Angel"));
+    const auto troll = findPermanent(p1, p1.myId, QStringLiteral("mossbridge_troll"));
+    ASSERT_TRUE(troll);
+    const auto trollCosts = p1.latestLegal.cost_choices_by_ability().find(static_cast<quint64>(troll->oid) << 32);
+    ASSERT_NE(trollCosts, p1.latestLegal.cost_choices_by_ability().end());
+    ASSERT_EQ(trollCosts->second.choices_size(), 1);
+    const auto &powerCost = trollCosts->second.choices(0);
+    ASSERT_TRUE(powerCost.has_aggregate_minimum());
+    EXPECT_EQ(powerCost.aggregate_minimum().minimum(), 10u);
+    EXPECT_EQ(powerCost.aggregate_minimum().contribution_kind(), ruled::v1::OBJECT_CONTRIBUTION_KIND_CURRENT_POWER);
+    std::vector<ruled::v1::CostObjectRef> powerObjects;
+    int totalPower = 0;
+    for (const auto &candidate : powerCost.candidate_objects()) {
+        EXPECT_NE(candidate.object().object_id(), troll->oid);
+        if (candidate.contribution() == 6 || candidate.contribution() == 4) {
+            powerObjects.push_back(candidate.object());
+            totalPower += static_cast<int>(candidate.contribution());
+        }
+    }
+    ASSERT_EQ(totalPower, 10);
+    ASSERT_EQ(powerObjects.size(), 2u);
+
+    ruled::v1::RuledCommand pumpTroll;
+    auto *pump = pumpTroll.mutable_activate_ability();
+    p1.setBattlefieldAbilitySource(pump, troll->oid);
+    auto *powerSelection = pump->add_cost_selections();
+    powerSelection->set_cost_index(powerCost.cost_index());
+    for (const auto &object : powerObjects) {
+        *powerSelection->mutable_battlefield_objects()->add_objects() = object;
+    }
+    ASSERT_TRUE(send(p1, pumpTroll, QStringLiteral("Mossbridge Troll tap power ten")));
+    for (const auto &object : powerObjects) {
+        ASSERT_TRUE(p1.serverCardByEngineOid.count(object.object_id()));
+        ASSERT_TRUE(p2.serverCardByEngineOid.count(object.object_id()));
+        EXPECT_EQ(p1.serverCardByEngineOid[object.object_id()], p2.serverCardByEngineOid[object.object_id()]);
+        EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[object.object_id()]));
+        EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[object.object_id()]));
+    }
+    EXPECT_FALSE(findPermanent(p1, p1.myId, QStringLiteral("mossbridge_troll"))->tapped);
+    ASSERT_TRUE(pass());
+    ASSERT_TRUE(pass());
+    EXPECT_EQ(findPermanent(p1, p1.myId, QStringLiteral("mossbridge_troll"))->power, 25);
+    EXPECT_EQ(findPermanent(p2, p1.myId, QStringLiteral("mossbridge_troll"))->power, 25);
 }
 
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can

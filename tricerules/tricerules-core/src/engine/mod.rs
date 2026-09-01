@@ -43,15 +43,16 @@ use tricerules_cards::primitives::{
     EffectDuration, EffectSubject, EntersTappedAffected, EntersWithCountersAffected, Evasion,
     FaceChangeAction, GameCondition, GraveyardAggregate, HandChoiceVisibility, InterveningIf,
     Keyword, LibraryBottomOrder, LibraryPartitionKind, LibraryPlacement, LifeAmount,
-    LifeChangeKind, ManaAmount, ManaSpendFilter, PermanentEventFilter, PermanentTypeFilter,
-    PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison, PreventionAmountBasis,
-    ProtectionCardType, ProtectionGrant, ProtectionQuality, RelativePlayerSet, ResolutionBranchDef,
-    ResolutionCost, ReturnController, SearchDestination, SearchSelectionSlot, SearchZoneSelection,
-    SpecialActionAffected, SpecialActionKind, SpecialActionManaPurpose, SpellCastFilter,
-    SpellCastOrigin, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
-    StaticDamagePreventionAmount, TapTriggerCardinality, TargetController, TargetFilter,
-    TargetKind, TargetingCostAction, TargetingCostProtected, TargetingSourceFilter,
-    TriggerCondition, TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
+    LifeChangeKind, ManaAmount, ManaSpendFilter, ObjectContributionKind, ObjectPaymentConstraint,
+    PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier,
+    PlayerRecipient, PowerComparison, PreventionAmountBasis, ProtectionCardType, ProtectionGrant,
+    ProtectionQuality, RelativePlayerSet, ResolutionBranchDef, ResolutionCost, ReturnController,
+    SearchDestination, SearchSelectionSlot, SearchZoneSelection, SpecialActionAffected,
+    SpecialActionKind, SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin,
+    SpellCostModifier, SpellEffectKind, StaticAbilityDef, StaticDamagePreventionAmount,
+    TapTriggerCardinality, TargetController, TargetFilter, TargetKind, TargetingCostAction,
+    TargetingCostProtected, TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef,
+    TriggeredCardReference, ZoneCardFilter,
 };
 use tricerules_cards::{
     is_creature_type, mode_fallback, CardDefinition, CardFace, CardRegistry,
@@ -702,6 +703,23 @@ fn set_tapped(state: &mut GameState, oid: ObjectId, tapped: bool) -> bool {
 }
 
 impl GameEngine {
+    fn object_payment_contribution(
+        &self,
+        oid: ObjectId,
+        kind: ObjectContributionKind,
+    ) -> Option<i64> {
+        match kind {
+            ObjectContributionKind::ManaValue => {
+                let object = self.state.objects.get(&oid)?;
+                self.registry
+                    .get(&object.card_id)
+                    .map(|definition| i64::from(definition.mana_value_outside_stack()))
+            }
+            ObjectContributionKind::CurrentPower => {
+                Some(self.characteristics(oid)?.signed_power.unwrap_or(0))
+            }
+        }
+    }
     /// CR 701.26 / 603.10: finish the simultaneous status changes before observing the event.
     /// Callers supply the instructed player explicitly (not the source spell's controller).
     /// Entry state and rollback restoration deliberately bypass this helper.

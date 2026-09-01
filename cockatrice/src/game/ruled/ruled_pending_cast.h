@@ -24,6 +24,7 @@
 #include <QtGlobal>
 #include <algorithm>
 #include <optional>
+#include <numeric>
 
 class QWidget;
 class CardItem;
@@ -90,7 +91,8 @@ inline void ruledWriteCounterRemoval(const RuledPendingCostSelection &selection,
 
 inline void ruledWriteCostObjectRefs(const RuledPendingCostSelection &selection, ruled::v1::CostSelection &command)
 {
-    auto *objects = command.mutable_battlefield_objects();
+    auto *objects = selection.zone == RuledCostChoiceZone::Graveyard ? command.mutable_graveyard_objects()
+                                                                     : command.mutable_battlefield_objects();
     for (int i = 0; i < selection.selectedIds.size(); ++i) {
         auto *object = objects->add_objects();
         object->set_object_id(selection.selectedIds.at(i));
@@ -175,8 +177,8 @@ struct PendingActivatedAbility
 
 struct RuledGraveyardCostSelectionProgress
 {
-    int required = 0;
-    int selected = 0;
+    qint64 required = 0;
+    qint64 selected = 0;
     bool confirmable = false;
     RuledCostChoiceZone zone = RuledCostChoiceZone::Graveyard;
 };
@@ -204,7 +206,7 @@ ruledPendingGraveyardCostSelectionProgress(const PendingPayment &pending)
         });
     if (selection != pending.costSelections.cend()) {
         for (const quint32 objectId : selection->selectedIds) {
-            if (ruledCostUsesObjectRefs(choice.kind)) {
+            if (ruledCostUsesObjectRefs(choice)) {
                 const int index = selection->selectedIds.indexOf(objectId);
                 if (!choice.candidateGenerations.contains(objectId) || index >= selection->selectedGenerations.size() ||
                     selection->selectedGenerations.at(index) != choice.candidateGenerations.value(objectId))
@@ -216,11 +218,17 @@ ruledPendingGraveyardCostSelectionProgress(const PendingPayment &pending)
         }
     }
 
-    const int selected = validSelectedIds.size();
+    const qint64 selected = choice.aggregateMinimum > 0
+                                ? std::accumulate(validSelectedIds.cbegin(), validSelectedIds.cend(), qint64{0},
+                                                  [&choice](qint64 total, quint32 objectId) {
+                                                      return total + choice.candidateContributions.value(objectId);
+                                                  })
+                                : validSelectedIds.size();
+    const qint64 required = choice.aggregateMinimum > 0 ? choice.aggregateMinimum : choice.min;
     return RuledGraveyardCostSelectionProgress{
-        choice.min,
+        required,
         selected,
-        selected >= choice.min && selected <= choice.max,
+        selected >= required && (choice.aggregateMinimum > 0 || selected <= choice.max),
         choice.zone,
     };
 }

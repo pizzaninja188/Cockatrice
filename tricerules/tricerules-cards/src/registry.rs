@@ -2,8 +2,9 @@ use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
     AbilityCost, AdditionalCost, Amount, BattlefieldAggregate, CardResultAction, CardResultSource,
     CastCostGroupDef, CastCostReceiptCondition, EffectContext, FaceChangeAction, GameCondition,
-    InterveningIf, ResolutionBranchRequirement, SpecialActionAffected, SpellEffectKind,
-    StaticAbilityDef, TargetController, TargetKind, TargetingDef, TriggerCondition,
+    InterveningIf, ObjectContributionKind, ResolutionBranchRequirement, SpecialActionAffected,
+    SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TargetingDef,
+    TriggerCondition, ZoneCardFilter,
 };
 use crate::token_def::TokenDefinition;
 use crate::PresentationFaceMetadata;
@@ -205,8 +206,10 @@ fn additional_cost_result_actions(costs: &[AdditionalCost]) -> Vec<CardResultAct
         .iter()
         .filter_map(|cost| match cost {
             AdditionalCost::DiscardCard => Some(CardResultAction::Discard),
+            AdditionalCost::ExileGraveyardCards { .. } => Some(CardResultAction::Exile),
             AdditionalCost::SacrificePermanent { .. } => Some(CardResultAction::Sacrifice),
-            AdditionalCost::TapPermanents { .. } | AdditionalCost::Blight { .. } => None,
+            AdditionalCost::TapPermanents { .. } => Some(CardResultAction::Tap),
+            AdditionalCost::Blight { .. } => None,
         })
         .collect()
 }
@@ -228,7 +231,9 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
             | AbilityCost::TapPermanents { .. }
             | AbilityCost::Mana(_)
             | AbilityCost::Waterbend(_)
-            | AbilityCost::Loyalty(_) => None,
+            | AbilityCost::Loyalty(_) => {
+                matches!(cost, AbilityCost::TapPermanents { .. }).then_some(CardResultAction::Tap)
+            }
         })
         .collect()
 }
@@ -1393,16 +1398,52 @@ impl CardRegistry {
                     }
                 }
                 for cost in &face.additional_costs {
-                    if matches!(
-                        cost,
-                        AdditionalCost::TapPermanents { count: 0, .. }
-                            | AdditionalCost::Blight { count: 0 }
-                    ) {
+                    if matches!(cost, AdditionalCost::Blight { count: 0 }) {
                         return Err(RegistryError::InvalidCard {
                             id: card.id.clone(),
                             reason: "additional tap or Blight cost requires a positive count"
                                 .into(),
                         });
+                    }
+                    if let AdditionalCost::TapPermanents {
+                        constraint, filter, ..
+                    } = cost
+                    {
+                        constraint
+                            .validate_for(ObjectContributionKind::CurrentPower, "additional tap")
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
+                        filter
+                            .validate_characteristic_constraints()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
+                    }
+                    if let AdditionalCost::ExileGraveyardCards {
+                        constraint, filter, ..
+                    } = cost
+                    {
+                        constraint
+                            .validate_for(
+                                ObjectContributionKind::ManaValue,
+                                "additional graveyard exile",
+                            )
+                            .and_then(|_| {
+                                if constraint.aggregate_minimum().is_some()
+                                    && filter == &ZoneCardFilter::default()
+                                {
+                                    Ok(())
+                                } else {
+                                    filter.validate()
+                                }
+                            })
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
                     }
                     if let AdditionalCost::SacrificePermanent { filter }
                     | AdditionalCost::TapPermanents { filter, .. } = cost

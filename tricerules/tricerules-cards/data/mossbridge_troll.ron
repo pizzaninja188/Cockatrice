@@ -1,0 +1,21 @@
+// Oracle and rulings verified 2026-08-31. Only the second ability is authored here; the first
+// automatic regeneration-shield ability remains tracked as an explicit partial-card gap.
+(
+  id: "mossbridge_troll",
+  name: "Mossbridge Troll",
+  face_id: "mossbridge_troll",
+  mana_cost: "{5}{G}{G}",
+  types: ["Creature", "Troll"],
+  power: 5,
+  toughness: 5,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [TapPermanents(
+      constraint: AggregateMinimum(minimum: 10, contribution: CurrentPower),
+      filter: (kind: Creature, controller: You),
+      exclude_source: true,
+    )],
+    effect: [PumpTarget(power: 20, toughness: 20, subject: Source)],
+  )],
+)

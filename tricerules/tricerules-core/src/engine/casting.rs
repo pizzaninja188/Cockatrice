@@ -3036,7 +3036,7 @@ mod mana_payment_tests {
             .clone();
         // A mechanic-shaped two-creature payment with no source {T} component.
         ability.costs = vec![AbilityCost::TapPermanents {
-            count: 2,
+            constraint: ObjectPaymentConstraint::ExactCount(2),
             filter: TargetFilter {
                 kind: TargetKind::Creature,
                 controller: TargetController::You,
@@ -3240,7 +3240,7 @@ mod mana_payment_tests {
         let costs = [
             AbilityCost::ExileSelf,
             AbilityCost::ExileGraveyardCards {
-                count: 2,
+                constraint: ObjectPaymentConstraint::ExactCount(2),
                 filter: ZoneCardFilter {
                     exact_name: Some(namesake),
                     ..Default::default()
@@ -3248,10 +3248,21 @@ mod mana_payment_tests {
                 exclude_source: true,
             },
         ];
-        let select = |ids| rv1::CostSelection {
+        let select = |ids: Vec<ObjectId>| rv1::CostSelection {
             cost_index: 1,
-            selection: Some(Selection::GraveyardObjectIds(rv1::GraveyardObjectIds {
-                object_ids: ids,
+            selection: Some(Selection::GraveyardObjects(rv1::CostObjectRefs {
+                objects: ids
+                    .into_iter()
+                    .map(|object_id| rv1::CostObjectRef {
+                        object_id,
+                        zone_change_generation: e
+                            .state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0),
+                    })
+                    .collect(),
             })),
         };
 

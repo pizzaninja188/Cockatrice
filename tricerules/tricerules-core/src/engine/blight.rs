@@ -84,16 +84,20 @@ impl GameEngine {
             kind: rv1::CostChoiceKind::Blight as i32,
             blight_count: count,
             counter_removal: None,
+            aggregate_minimum: None,
             candidate_objects: candidate_ids
                 .iter()
-                .map(|&oid| rv1::CostObjectRef {
-                    object_id: oid,
-                    zone_change_generation: self
-                        .state
-                        .zone_change_generation
-                        .get(&oid)
-                        .copied()
-                        .unwrap_or(0),
+                .map(|&oid| rv1::CostObjectCandidate {
+                    object: Some(rv1::CostObjectRef {
+                        object_id: oid,
+                        zone_change_generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0),
+                    }),
+                    contribution: 0,
                 })
                 .collect(),
             candidate_ids,

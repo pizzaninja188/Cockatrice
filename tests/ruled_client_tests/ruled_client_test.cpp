@@ -1618,8 +1618,8 @@ TEST_F(RuledClientTest, ParsesAuthoritativeActivatedCostChoicesAndPayability)
     sacrifice->set_kind(ruled::v1::COST_CHOICE_KIND_SACRIFICE);
     sacrifice->add_candidate_ids(100);
     auto *sacrificeRef = sacrifice->add_candidate_objects();
-    sacrificeRef->set_object_id(100);
-    sacrificeRef->set_zone_change_generation(7);
+    sacrificeRef->mutable_object()->set_object_id(100);
+    sacrificeRef->mutable_object()->set_zone_change_generation(7);
     auto *graveyard = costs.add_choices();
     graveyard->set_cost_index(3);
     graveyard->set_zone(ruled::v1::COST_CHOICE_ZONE_GRAVEYARD);
@@ -1650,8 +1650,15 @@ TEST(RuledPendingCostSelectionTest, GraveyardSelectionMembershipTracksPhysicalOb
     PendingActivatedAbility pending;
     pending.valid = true;
     pending.waitingForCost = true;
-    pending.costChoices.append({3, RuledCostChoiceZone::Graveyard, QSet<quint32>({501u, 502u}), 2, 2});
-    pending.costSelections.append({3, RuledCostChoiceZone::Graveyard, QVector<quint32>({501u, 502u})});
+    RuledCostChoice choice;
+    choice.costIndex = 3;
+    choice.zone = RuledCostChoiceZone::Graveyard;
+    choice.candidateIds = {501u, 502u};
+    choice.candidateGenerations = {{501u, 7u}, {502u, 8u}};
+    choice.min = choice.max = 2;
+    pending.costChoices.append(choice);
+    pending.costSelections.append(
+        {3, RuledCostChoiceZone::Graveyard, QVector<quint32>({501u, 502u}), QVector<quint64>({7u, 8u})});
 
     EXPECT_TRUE(ruledPendingGraveyardCostSelectionContains(pending, 501u));
     EXPECT_TRUE(ruledPendingGraveyardCostSelectionContains(pending, 502u));
@@ -1671,13 +1678,14 @@ TEST(RuledPendingCostSelectionTest, GraveyardProgressCountsOnlyCurrentEngineCand
     choice.costIndex = 4;
     choice.zone = RuledCostChoiceZone::Graveyard;
     choice.candidateIds = {501u, 502u};
+    choice.candidateGenerations = {{501u, 7u}, {502u, 8u}};
     choice.min = 2;
     choice.max = 2;
     pending.costChoices = {choice};
 
     // 500 is the activated source and is intentionally absent from the engine-authored cohort.
     // It must not make Confirm legal even if a stale local transaction contains it.
-    pending.costSelections = {{4, RuledCostChoiceZone::Graveyard, {500u, 501u, 501u}}};
+    pending.costSelections = {{4, RuledCostChoiceZone::Graveyard, {500u, 501u, 501u}, {0u, 7u, 7u}}};
 
     const auto progress = ruledPendingGraveyardCostSelectionProgress(pending);
     ASSERT_TRUE(progress.has_value());
@@ -1705,6 +1713,59 @@ TEST(RuledPendingCostSelectionTest, TapPaymentProgressDoesNotRequestAGraveyardVi
     EXPECT_EQ(progress->zone, RuledCostChoiceZone::Battlefield);
     EXPECT_EQ(progress->required, 1);
     EXPECT_FALSE(progress->confirmable);
+}
+
+TEST_F(RuledClientTest, AggregateObjectPaymentUsesAuthoritativeContributionsAndGenerations)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &costs = (*(*batch.mutable_legal_by_player())[kLocalPlayer].mutable_cost_choices_by_ability())[178];
+    costs.set_non_mana_costs_payable(true);
+    auto *choice = costs.add_choices();
+    choice->set_cost_index(0);
+    choice->set_zone(ruled::v1::COST_CHOICE_ZONE_GRAVEYARD);
+    choice->set_kind(ruled::v1::COST_CHOICE_KIND_EXILE);
+    choice->set_max(2);
+    choice->mutable_aggregate_minimum()->set_minimum(3);
+    choice->mutable_aggregate_minimum()->set_contribution_kind(
+        ruled::v1::OBJECT_CONTRIBUTION_KIND_MANA_VALUE);
+    for (const auto &[objectId, generation, contribution] :
+         std::array<std::tuple<quint32, quint64, qint64>, 2>{{{501, 7, 1}, {502, 9, 2}}}) {
+        choice->add_candidate_ids(objectId);
+        auto *candidate = choice->add_candidate_objects();
+        candidate->mutable_object()->set_object_id(objectId);
+        candidate->mutable_object()->set_zone_change_generation(generation);
+        candidate->set_contribution(contribution);
+    }
+    apply(batch);
+
+    const auto parsed = state->abilityCostChoices(0, 178);
+    ASSERT_EQ(parsed.size(), 1);
+    EXPECT_EQ(parsed[0].aggregateMinimum, 3);
+    EXPECT_EQ(parsed[0].contributionKind, RuledObjectContributionKind::ManaValue);
+    EXPECT_EQ(parsed[0].candidateContributions.value(502), 2);
+    EXPECT_EQ(parsed[0].candidateGenerations.value(502), 9u);
+
+    PendingActivatedAbility pending;
+    pending.valid = true;
+    pending.waitingForCost = true;
+    pending.costChoices = parsed;
+    pending.costSelections = {{0, RuledCostChoiceZone::Graveyard, {501}, {7}}};
+    auto progress = ruledPendingGraveyardCostSelectionProgress(pending);
+    ASSERT_TRUE(progress);
+    EXPECT_EQ(progress->selected, 1);
+    EXPECT_FALSE(progress->confirmable);
+    pending.costSelections[0].selectedIds.append(502);
+    pending.costSelections[0].selectedGenerations.append(9);
+    progress = ruledPendingGraveyardCostSelectionProgress(pending);
+    ASSERT_TRUE(progress);
+    EXPECT_EQ(progress->selected, 3);
+    EXPECT_TRUE(progress->confirmable);
+
+    ruled::v1::CostSelection command;
+    ruledWriteCostObjectRefs(pending.costSelections[0], command);
+    ASSERT_EQ(command.graveyard_objects().objects_size(), 2);
+    EXPECT_EQ(command.graveyard_objects().objects(1).object_id(), 502u);
+    EXPECT_EQ(command.graveyard_objects().objects(1).zone_change_generation(), 9u);
 }
 
 TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
@@ -4133,8 +4194,8 @@ TEST_F(RuledClientTest, BlightCostsUseAnAuthoritativeCreaturePicker)
     choice->set_max(1);
     choice->add_candidate_ids(900);
     auto *ref = choice->add_candidate_objects();
-    ref->set_object_id(900);
-    ref->set_zone_change_generation(12);
+    ref->mutable_object()->set_object_id(900);
+    ref->mutable_object()->set_zone_change_generation(12);
     auto *group = hand->mutable_cost_choices()->add_cast_cost_groups();
     group->set_group_index(0);
     group->set_max(1);

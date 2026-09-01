@@ -622,6 +622,16 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     counterRemoval->mutable_source()->set_zone_change_generation(4);
     counterRemoval->set_count(1);
     counterRemoval->add_options()->set_option_id(3);
+    auto *aggregateChoice = (*p1Legal.mutable_cost_choices_by_ability())[178].add_choices();
+    aggregateChoice->set_kind(ruled::v1::COST_CHOICE_KIND_EXILE);
+    aggregateChoice->set_zone(ruled::v1::COST_CHOICE_ZONE_GRAVEYARD);
+    aggregateChoice->mutable_aggregate_minimum()->set_minimum(3);
+    aggregateChoice->mutable_aggregate_minimum()->set_contribution_kind(
+        ruled::v1::OBJECT_CONTRIBUTION_KIND_MANA_VALUE);
+    auto *aggregateCandidate = aggregateChoice->add_candidate_objects();
+    aggregateCandidate->mutable_object()->set_object_id(501);
+    aggregateCandidate->mutable_object()->set_zone_change_generation(8);
+    aggregateCandidate->set_contribution(2);
     auto *p1Reduction = (*p1Legal.mutable_valid_targets_by_hand_slot())[0].add_targeted_cost_reduction_applications();
     p1Reduction->set_application_id(701);
     p1Reduction->set_generic_mana(3);
@@ -691,6 +701,11 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     EXPECT_EQ(privateCounters.source().zone_change_generation(), 4u);
     ASSERT_EQ(privateCounters.options_size(), 1);
     EXPECT_EQ(privateCounters.options(0).option_id(), 3u);
+    const auto &privateAggregate =
+        forP1.legal_by_player().at(1).cost_choices_by_ability().at(178).choices(0);
+    EXPECT_EQ(privateAggregate.aggregate_minimum().minimum(), 3u);
+    EXPECT_EQ(privateAggregate.candidate_objects(0).object().zone_change_generation(), 8u);
+    EXPECT_EQ(privateAggregate.candidate_objects(0).contribution(), 2);
     EXPECT_EQ(forP1.legal_by_player()
                   .at(1)
                   .valid_targets_by_hand_slot()

@@ -99,7 +99,7 @@ fn issue_110_say_its_name_and_altanak_are_complete() {
         [
             AbilityCost::ExileSelf,
             AbilityCost::ExileGraveyardCards {
-                count: 2,
+                constraint: tricerules_cards::ObjectPaymentConstraint::ExactCount(2),
                 exclude_source: true,
                 ..
             }

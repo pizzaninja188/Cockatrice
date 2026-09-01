@@ -182,6 +182,13 @@ enum class RuledCostChoiceKind : int
     RemoveCounters,
 };
 
+enum class RuledObjectContributionKind : int
+{
+    Unspecified,
+    ManaValue,
+    CurrentPower,
+};
+
 struct RuledCounterRemovalOption
 {
     quint32 optionId = 0;
@@ -198,6 +205,9 @@ struct RuledCostChoice
     int max = 1;
     RuledCostChoiceKind kind = RuledCostChoiceKind::Unspecified;
     QHash<quint32, quint64> candidateGenerations;
+    QHash<quint32, qint64> candidateContributions;
+    qint64 aggregateMinimum = 0;
+    RuledObjectContributionKind contributionKind = RuledObjectContributionKind::Unspecified;
     quint32 blightCount = 0;
     quint32 counterSourceId = 0;
     quint64 counterSourceGeneration = 0;
