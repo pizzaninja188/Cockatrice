@@ -1607,6 +1607,9 @@ pub struct PlayerTurnRecord {
     pub mana_spent_casting_spells: u64,
     pub cards_drawn: u32,
     pub attacked: bool,
+    /// A permanent this player controlled immediately before departure left the battlefield.
+    /// Identity and destination are intentionally not retained for this public boolean fact.
+    pub permanent_left_battlefield: bool,
 }
 
 /// Event-time public characteristics for one committed attacker or battlefield entrant.

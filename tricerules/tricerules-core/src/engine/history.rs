@@ -559,6 +559,25 @@ impl GameEngine {
                 movement.origin == Zone::Battlefield && movement.destination != Zone::Battlefield
                     && !movement.before.has_type("Land")))
         });
+        let departed_controllers = events.iter().flat_map(|event| match event {
+            GameEvent::ZoneChanges(batch) => batch
+                .moves
+                .iter()
+                .filter(|movement| {
+                    movement.origin == Zone::Battlefield
+                        && movement.destination != Zone::Battlefield
+                })
+                .map(|movement| movement.before.controller)
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        });
+        for controller in departed_controllers {
+            self.state
+                .turn_history
+                .current
+                .player_mut(controller)
+                .permanent_left_battlefield = true;
+        }
         let deaths = events
             .iter()
             .filter(|event| {
@@ -842,6 +861,25 @@ impl GameEngine {
     ) -> bool {
         match condition {
             GameCondition::Void => self.state.turn_history.current.void_holds(),
+            GameCondition::PermanentLeftBattlefieldThisTurn { controllers } => self
+                .state
+                .players
+                .iter()
+                .filter(|player| {
+                    relative_player_set_contains(
+                        &self.state,
+                        *controllers,
+                        context.controller,
+                        player.id,
+                    )
+                })
+                .any(|player| {
+                    self.state
+                        .turn_history
+                        .current
+                        .player(player.id)
+                        .permanent_left_battlefield
+                }),
             GameCondition::CastSnapshot { index } => context
                 .stack_item
                 .filter(|item| item.ability_text.is_none() && !item.is_copy)
@@ -1442,6 +1480,122 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issue_189_controller_relative_departure_condition_is_available() {
+        let data = r#"(id: "departure_probe", name: "Departure Probe", face_id: "departure_probe", types: ["Instant"],
+            cast_conditions: [PermanentLeftBattlefieldThisTurn(controllers: Controller)],
+            spell_effect: [GainLife(amount: 1)])"#;
+        let registry = CardRegistry::from_chunks_and_tokens(&[data], &[])
+            .expect("controller-relative permanent departure condition");
+        assert!(matches!(
+            registry
+                .get("departure_probe")
+                .unwrap()
+                .primary_face()
+                .cast_conditions[0],
+            GameCondition::PermanentLeftBattlefieldThisTurn {
+                controllers: RelativePlayerSet::Controller
+            }
+        ));
+    }
+
+    #[test]
+    fn issue_189_departures_are_committed_controller_relative_and_reset_per_turn() {
+        let mut engine = GameEngine::new(
+            189_001,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with_cards(&["grizzly_bears", "serra_angel"], "forest"),
+                deck_with_cards(&[], "island"),
+            ]),
+            true,
+        )
+        .unwrap();
+        engine.state.players.push(PlayerState::new(2, 20));
+        let context = ConditionContext {
+            controller: 0,
+            source_object_id: 0,
+            source_zone_change: 0,
+            resolving_spell_id: None,
+            stack_item: None,
+        };
+        let holds = |engine: &GameEngine, controllers| {
+            engine.condition_holds(
+                &GameCondition::PermanentLeftBattlefieldThisTurn { controllers },
+                context,
+            )
+        };
+
+        assert!(!holds(&engine, RelativePlayerSet::All));
+        let land = move_to_battlefield(&mut engine, 0, "forest");
+        engine
+            .commit_observed_zone_move(land, Zone::Hand, None)
+            .unwrap();
+        assert!(holds(&engine, RelativePlayerSet::Controller));
+        assert!(!holds(&engine, RelativePlayerSet::Opponents));
+
+        engine.state.turn_history.finish_turn();
+        assert!(!holds(&engine, RelativePlayerSet::All));
+        assert!(
+            engine
+                .state
+                .turn_history
+                .previous
+                .player(0)
+                .permanent_left_battlefield
+        );
+
+        let token = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        let token_face = engine
+            .registry
+            .get("grizzly_bears")
+            .unwrap()
+            .primary_face()
+            .clone();
+        let token_object = engine.state.objects.get_mut(&token).unwrap();
+        token_object.base_controller = 1;
+        token_object.controller = 1;
+        token_object.token_origin = Some(CopiableValues {
+            source_card_id: "grizzly_bears".into(),
+            source_face_index: 0,
+            face: token_face,
+            room_faces: None,
+            display_name: "Grizzly Bears".into(),
+        });
+        engine
+            .state
+            .death_replacement_effects
+            .push(ActiveDeathReplacement {
+                object_id: token,
+                zone_change_generation: 0,
+            });
+        engine
+            .commit_observed_zone_move(token, Zone::Graveyard, None)
+            .unwrap();
+        assert_eq!(engine.state.objects[&token].zone, Zone::Exile);
+        assert!(!holds(&engine, RelativePlayerSet::Controller));
+        assert!(holds(&engine, RelativePlayerSet::Opponents));
+
+        let nontoken = move_to_battlefield(&mut engine, 0, "serra_angel");
+        let nontoken_object = engine.state.objects.get_mut(&nontoken).unwrap();
+        nontoken_object.base_controller = 2;
+        nontoken_object.controller = 2;
+        engine
+            .commit_observed_zone_move(nontoken, Zone::Graveyard, None)
+            .unwrap();
+        assert!(
+            engine
+                .state
+                .turn_history
+                .current
+                .player(2)
+                .permanent_left_battlefield
+        );
+        assert!(holds(&engine, RelativePlayerSet::Opponents));
+        assert!(holds(&engine, RelativePlayerSet::All));
+    }
 
     #[test]
     fn issue_168_celebration_excludes_land_entries() {

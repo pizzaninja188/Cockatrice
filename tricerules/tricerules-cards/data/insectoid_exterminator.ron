@@ -1,0 +1,18 @@
+// Oracle, 2026-01-27 ruling, and CR 400.7/603.4/603.10a checked 2026-09-01.
+(
+  id: "insectoid_exterminator",
+  name: "Insectoid Exterminator",
+  face_id: "insectoid_exterminator",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Insect", "Mutant"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfEndStep(player: Controller),
+    intervening_if: Some(GameCondition(PermanentLeftBattlefieldThisTurn(controllers: Controller))),
+    effect: [Scry(count: 1)],
+  )],
+)

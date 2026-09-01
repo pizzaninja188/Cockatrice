@@ -1,0 +1,23 @@
+// Oracle, 2026-01-27 ruling, and CR 400.7/603.6d/614 checked 2026-09-01.
+(
+  id: "putrid_pals",
+  name: "Putrid Pals",
+  face_id: "putrid_pals",
+  mana_cost: "{2}{B/G}{B/G}",
+  types: ["Creature", "Human", "Ooze", "Mutant"],
+  power: 3,
+  toughness: 3,
+  keywords: [Deathtouch],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: EntersWithCounters(
+      counter: PlusOnePlusOne,
+      amount: Conditional(
+        condition: PermanentLeftBattlefieldThisTurn(controllers: Controller),
+        when_true: 2,
+        otherwise: 0,
+      ),
+    ),
+  )],
+)

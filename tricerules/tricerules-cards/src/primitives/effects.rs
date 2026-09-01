@@ -28,6 +28,10 @@ pub enum GameCondition {
     /// Plasma Bolt and Temporal Intervention: a nonland permanent left the battlefield or
     /// a spell was cast for its Warp cost this turn, by any player.
     Void,
+    /// Disappear (Insectoid Exterminator, Putrid Pals, and West Wind Avatar): whether any
+    /// selected player controlled a permanent immediately before it left the battlefield this
+    /// turn. Lands and tokens count; controller is captured from the committed departure event.
+    PermanentLeftBattlefieldThisTurn { controllers: RelativePlayerSet },
     /// A face-authored condition captured after successful casting. Spell copies were not cast
     /// and have no result; ordinary live conditions elsewhere are unaffected.
     CastSnapshot { index: u32 },
@@ -218,7 +222,9 @@ impl GameCondition {
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            GameCondition::Void | GameCondition::CastSnapshot { .. } => Ok(()),
+            GameCondition::Void
+            | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
+            | GameCondition::CastSnapshot { .. } => Ok(()),
             GameCondition::ActivePlayer { .. } => Ok(()),
             GameCondition::LifeChangedThisTurn { .. } => Ok(()),
             GameCondition::PlayerLifeAggregate { min, max, .. } => {
@@ -348,6 +354,7 @@ impl GameCondition {
     pub fn matches_value(&self, value: u32) -> bool {
         match self {
             GameCondition::Void
+            | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
             | GameCondition::CastSnapshot { .. }
             | GameCondition::ActivePlayer { .. }
             | GameCondition::LifeChangedThisTurn { .. }

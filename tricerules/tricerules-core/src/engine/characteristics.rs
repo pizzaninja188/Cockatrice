@@ -423,6 +423,20 @@ impl CharacteristicsEvaluator<'_> {
             // Cast snapshots are internal to resolving spells, never continuous characteristics.
             GameCondition::CastSnapshot { .. } | GameCondition::ObjectMatches { .. } => false,
             GameCondition::Void => self.state.turn_history.current.void_holds(),
+            GameCondition::PermanentLeftBattlefieldThisTurn { controllers } => self
+                .state
+                .players
+                .iter()
+                .filter(|player| {
+                    relative_player_set_contains(self.state, *controllers, controller, player.id)
+                })
+                .any(|player| {
+                    self.state
+                        .turn_history
+                        .current
+                        .player(player.id)
+                        .permanent_left_battlefield
+                }),
             GameCondition::LifeChangedThisTurn {
                 players,
                 change,
