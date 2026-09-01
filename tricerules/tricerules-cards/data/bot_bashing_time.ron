@@ -1,0 +1,19 @@
+// Oracle and rulings verified 2026-09-01. Both effects remain bound to the same target.
+(
+  id: "bot_bashing_time",
+  name: "Bot Bashing Time",
+  face_id: "bot_bashing_time",
+  mana_cost: "{3}{R}",
+  types: ["Sorcery"],
+  spell_presentation: OracleLines([1]),
+  spell_effect: [
+    DamageTarget(amount: 6, target: (kind: Creature)),
+    ExileIfWouldDieThisTurn(target: (kind: Creature)),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0, 1],
+  )])),
+)

@@ -1,0 +1,25 @@
+// Oracle and rulings verified 2026-09-01. Attachment modifiers follow the equipped creature dynamically.
+(
+  id: "skateboard",
+  name: "Skateboard",
+  face_id: "skateboard",
+  mana_cost: "{1}",
+  types: ["Artifact", "Equipment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Tap(subject: Chosen((kind: AnyPermanent)))],
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AttachedModifier(delta_power: 1, keywords: [Haste]),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Mana("{1}")],
+    effect: [Equip(target: (kind: Creature, controller: You))],
+  )],
+)

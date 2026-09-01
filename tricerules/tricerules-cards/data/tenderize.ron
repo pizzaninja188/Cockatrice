@@ -1,0 +1,28 @@
+// Oracle and rulings verified 2026-09-01. Damage uses the source creature's power at resolution.
+(
+  id: "tenderize",
+  name: "Tenderize",
+  face_id: "tenderize",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_presentation: OracleLines([1]),
+  spell_effect: [CreatureDealsDamageEqualToPower(
+    source: (kind: Creature, controller: You),
+    target: (kind: Creature, controller: NotYou),
+  )],
+  targeting: Some((groups: [
+    (
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature you control",
+      effect_indices: [0],
+    ),
+    (
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature an opponent controls",
+      effect_indices: [0],
+      distinct_from: [0],
+    ),
+  ])),
+)

@@ -1,0 +1,29 @@
+// Oracle and rulings verified 2026-09-01. The static keyword tracks the controller's active turn.
+(
+  id: "null_group_biological_assets",
+  name: "Null Group Biological Assets",
+  face_id: "null_group_biological_assets",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Mutant", "Mercenary"],
+  power: 3,
+  toughness: 1,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: ConditionalSelfModifier(
+      condition: ActivePlayer(players: Controller),
+      keywords: [FirstStrike],
+    ),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [DrawDiscard(
+      draw_count: 1,
+      discard_count: 1,
+      order: DiscardThenDraw,
+      optional: true,
+    )],
+  )],
+)

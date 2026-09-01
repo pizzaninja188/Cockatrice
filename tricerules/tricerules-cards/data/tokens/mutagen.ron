@@ -1,0 +1,18 @@
+// CR 111.10v predefined Mutagen token, verified against the 2026-09-01 Comprehensive Rules.
+(
+  id: "mutagen",
+  name: "Mutagen",
+  face_id: "mutagen",
+  types: ["Artifact", "Mutagen"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    timing: SorcerySpeed,
+    costs: [Mana("{1}"), Tap, SacrificeSelf],
+    effect: [PutCounters(
+      counter: PlusOnePlusOne,
+      count: 1,
+      subject: Chosen((kind: Creature)),
+    )],
+  )],
+)

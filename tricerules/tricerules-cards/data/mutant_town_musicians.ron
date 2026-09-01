@@ -1,0 +1,20 @@
+// Oracle and rulings verified 2026-09-01. Alliance excludes the entering source itself.
+(
+  id: "mutant_town_musicians",
+  name: "Mutant Town Musicians",
+  face_id: "mutant_town_musicians",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Mutant", "Bard", "Performer"],
+  power: 2,
+  toughness: 4,
+  keywords: [Trample],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
+    ),
+    effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
+  )],
+)

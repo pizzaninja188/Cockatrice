@@ -1,0 +1,29 @@
+// Oracle and rulings verified 2026-09-01. Plainscycling uses the shared hand-zone search action.
+(
+  id: "jennika,_bad_apple_big_sister",
+  name: "Jennika, Bad Apple Big Sister",
+  face_id: "jennika_bad_apple_big_sister",
+  mana_cost: "{4}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Mutant", "Ninja", "Turtle"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "mutant_r_2_2", count: 1)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Hand,
+    costs: [Mana("{2}"), DiscardSelf],
+    effect: [SearchLibrary(
+      filter: Some((subtype: Some("Plains"))),
+      destination: Hand,
+      shuffle: true,
+      reveal: true,
+    )],
+  )],
+)

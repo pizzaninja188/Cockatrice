@@ -1,0 +1,10 @@
+// 2/2 red Mutant creature token.
+(
+  id: "mutant_r_2_2",
+  name: "Mutant",
+  face_id: "mutant",
+  types: ["Creature", "Mutant"],
+  colors: [Red],
+  power: 2,
+  toughness: 2,
+)

@@ -1,0 +1,13 @@
+// Oracle and rulings verified 2026-09-01. The token effect follows a successfully resolving counterspell.
+(
+  id: "ooze_spill",
+  name: "Ooze Spill",
+  face_id: "ooze_spill",
+  mana_cost: "{1}{U}{U}",
+  types: ["Instant"],
+  spell_presentation: OracleLines([1]),
+  spell_effect: [
+    CounterTargetSpell(spell_filter: None, unless_controller_pays: None),
+    CreateTokens(token: "mutagen", count: 1),
+  ],
+)

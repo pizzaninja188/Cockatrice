@@ -1,0 +1,20 @@
+// Oracle and rulings verified 2026-09-01. Both temporary modifiers share one target group.
+(
+  id: "hamato_guardian_stance",
+  name: "Hamato Guardian Stance",
+  face_id: "hamato_guardian_stance",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_presentation: OracleLines([1]),
+  spell_effect: [
+    PumpTarget(power: 1, toughness: 3, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Flying]),
+    Scry(count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0, 1],
+  )])),
+)

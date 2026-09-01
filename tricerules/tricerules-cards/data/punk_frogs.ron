@@ -1,0 +1,16 @@
+// Oracle and rulings verified 2026-09-01. Ward observes the offending stack object without targeting it.
+(
+  id: "punk_frogs",
+  name: "Punk Frogs",
+  face_id: "punk_frogs",
+  mana_cost: "{3}{G/U}{G/U}",
+  types: ["Creature", "Frog", "Mutant", "Rebel"],
+  power: 4,
+  toughness: 5,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+    effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{3}"))],
+  )],
+)

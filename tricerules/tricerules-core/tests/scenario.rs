@@ -163,6 +163,8 @@ mod issue_189_disappear;
 mod issue_190_restricted_mana_any_ability;
 #[path = "scenario/issue_191_repartee.rs"]
 mod issue_191_repartee;
+#[path = "scenario/issue_192_calibration_cards.rs"]
+mod issue_192_calibration_cards;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

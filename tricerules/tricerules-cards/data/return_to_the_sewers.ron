@@ -1,0 +1,16 @@
+// Oracle and rulings verified 2026-09-01. The targeted creature's owner makes the logged placement choice.
+(
+  id: "return_to_the_sewers",
+  name: "Return to the Sewers",
+  face_id: "return_to_the_sewers",
+  mana_cost: "{3}{U}",
+  types: ["Instant"],
+  spell_presentation: OracleLines([1]),
+  spell_effect: [
+    PutInOwnersLibrary(
+      subject: Chosen((kind: Creature)),
+      placement: OwnerChoiceTopOrBottom,
+    ),
+    CreateTokens(token: "mutagen", count: 1),
+  ],
+)

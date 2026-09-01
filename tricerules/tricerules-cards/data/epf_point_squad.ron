@@ -1,0 +1,19 @@
+// Oracle and rulings verified 2026-09-01. Alliance excludes the entering source itself.
+(
+  id: "epf_point_squad",
+  name: "EPF Point Squad",
+  face_id: "epf_point_squad",
+  mana_cost: "{1}{R/W}{R/W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

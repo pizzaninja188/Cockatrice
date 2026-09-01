@@ -1,0 +1,33 @@
+// Oracle and rulings verified 2026-09-01. Typecycling uses the shared hand-zone search action.
+(
+  id: "zog,_triceraton_castaway",
+  name: "Zog, Triceraton Castaway",
+  face_id: "zog_triceraton_castaway",
+  mana_cost: "{4}{R}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Dinosaur", "Soldier"],
+  power: 5,
+  toughness: 4,
+  keywords: [Reach, Trample],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ApplyCombatRestriction(
+      scope: Chosen((kind: Creature)),
+      restriction: (cant_block: true),
+    )],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    source_zone: Hand,
+    costs: [Mana("{2}"), DiscardSelf],
+    effect: [SearchLibrary(
+      filter: Some((subtype: Some("Mountain"))),
+      destination: Hand,
+      shuffle: true,
+      reveal: true,
+    )],
+  )],
+)

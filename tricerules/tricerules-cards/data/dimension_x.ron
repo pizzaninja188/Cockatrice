@@ -1,0 +1,25 @@
+// Oracle and rulings verified 2026-09-01. Entry tapped is a CR 614 replacement effect.
+(
+  id: "dimension_x",
+  name: "Dimension X",
+  face_id: "dimension_x",
+  mana_cost: "",
+  types: ["Land"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: EntersTapped(affected: Self_),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [GainLife(amount: 1)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Tap],
+    effect: [ProduceMana(options: [(r: 1), (w: 1)])],
+  )],
+)

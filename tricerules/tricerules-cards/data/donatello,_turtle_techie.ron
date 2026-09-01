@@ -1,0 +1,22 @@
+// Oracle and rulings verified 2026-09-01. CR 603.4 checks the artifact condition twice.
+(
+  id: "donatello,_turtle_techie",
+  name: "Donatello, Turtle Techie",
+  face_id: "donatello_turtle_techie",
+  mana_cost: "{3}{U}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Mutant", "Ninja", "Turtle"],
+  power: 3,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Draw(count: 1)],
+    intervening_if: Some(GameCondition(BattlefieldAggregate(
+      filter: (controllers: Controller, card_type: Some(Artifact)),
+      aggregate: Count,
+      min: Some(1),
+    ))),
+  )],
+)

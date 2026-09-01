@@ -1,0 +1,17 @@
+// Oracle and rulings verified 2026-09-01. The leaves trigger uses event-time source LKI.
+(
+  id: "featherbrained_filcher",
+  name: "Featherbrained Filcher",
+  face_id: "featherbrained_filcher",
+  mana_cost: "{W}",
+  types: ["Creature", "Bird", "Mutant"],
+  power: 0,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfLeavesBattlefield,
+    effect: [CreateTokens(token: "food", count: 1)],
+  )],
+)

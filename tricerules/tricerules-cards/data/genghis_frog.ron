@@ -1,0 +1,22 @@
+// Oracle and rulings verified 2026-09-01. The subtype trigger includes this source's own entry.
+(
+  id: "genghis_frog",
+  name: "Genghis Frog",
+  face_id: "genghis_frog",
+  mana_cost: "{G}{U}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Frog", "Mutant", "Rogue"],
+  power: 1,
+  toughness: 3,
+  keywords: [Trample],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature)),
+      creature_filter: Some((required_subtypes: ["Mutant"])),
+    ),
+    effect: [CreateTokens(token: "mutagen", count: 1)],
+  )],
+)
