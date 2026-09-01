@@ -478,11 +478,7 @@ fn sparktongue_payment_creates_a_separately_targeted_reflexive_trigger() {
             ..Default::default()
         },
     );
-    engine
-        .apply_command(
-            0,
-            &submit_resolution_decision(ResolutionChoiceDecision::PayMana),
-        )
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
         .expect("pay {2}{R}");
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine

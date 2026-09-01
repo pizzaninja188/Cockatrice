@@ -95,9 +95,6 @@ impl GameEngine {
             ),
             self.activated_generic_reduction(player, source, &ability),
         )?;
-        if prepared.waterbend_limit.is_none() {
-            return Err(EngineError::Illegal("ability has no Waterbend payment"));
-        }
         Ok(prepared)
     }
 
@@ -109,9 +106,6 @@ impl GameEngine {
         selection: Option<&rv1::PaymentSelection>,
     ) -> Result<CostTransactionPlan, EngineError> {
         if let Some(selection) = selection {
-            if prepared.waterbend_limit.is_none() {
-                return Err(EngineError::Illegal("unexpected explicit ability payment"));
-            }
             let life =
                 self.validate_explicit_payment(player, source, false, &prepared, selection)?;
             prepared.finish_explicit(&self.state, selection, life)

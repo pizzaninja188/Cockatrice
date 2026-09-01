@@ -115,11 +115,24 @@ fn controller_gets_generation_bound_turn_face_up_action_and_keeps_priority() {
                         w: 1,
                         ..Default::default()
                     }],
+                    payment: Some(tricerules_proto::ruled::v1::PaymentSelection {
+                        expected_state_revision: engine.state.command_index,
+                        source: Some(tricerules_proto::ruled::v1::CostObjectRef {
+                            object_id: angel,
+                            zone_change_generation: generation,
+                        }),
+                        mana: Some(tricerules_proto::ruled::v1::PaymentMana {
+                            w: 2,
+                            c: 3,
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
                 })),
             },
         )
         .expect_err("restricted mana is not eligible for this special action");
-    assert!(tampered.to_string().contains("restricted"));
+    assert!(tampered.to_string().contains("payment"));
     let pool_after = &engine.state.players[0].mana_pool;
     assert_eq!(
         (
@@ -140,21 +153,22 @@ fn controller_gets_generation_bound_turn_face_up_action_and_keeps_priority() {
         )
     );
     assert!(engine.state.objects[&angel].face_down);
-    let batch = engine
-        .apply_command(
-            0,
-            &RuledCommand {
-                cmd: Some(Cmd::ExecutePermanentAction(ExecutePermanentAction {
-                    kind: PermanentActionKind::TurnFaceUp as i32,
-                    object_id: angel,
-                    expected_zone_change_generation: generation,
-                    face_index: None,
-                    flex_payments: vec![],
-                    restricted_mana: vec![],
-                })),
-            },
-        )
-        .expect("turn face up");
+    let batch = execute_permanent_action_with_payment(
+        &mut engine,
+        0,
+        RuledCommand {
+            cmd: Some(Cmd::ExecutePermanentAction(ExecutePermanentAction {
+                kind: PermanentActionKind::TurnFaceUp as i32,
+                object_id: angel,
+                expected_zone_change_generation: generation,
+                face_index: None,
+                flex_payments: vec![],
+                restricted_mana: vec![],
+                payment: None,
+            })),
+        },
+    )
+    .expect("turn face up");
 
     assert!(!engine.state.objects[&angel].face_down);
     assert!(
@@ -321,6 +335,7 @@ fn stale_or_noncreature_turn_face_up_action_is_not_legal() {
                     face_index: None,
                     flex_payments: vec![],
                     restricted_mana: vec![],
+                    payment: None,
                 })),
             },
         )

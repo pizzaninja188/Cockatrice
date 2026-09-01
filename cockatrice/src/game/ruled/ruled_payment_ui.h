@@ -2,6 +2,7 @@
 #define RULED_PAYMENT_UI_H
 
 #include "ruled_pending_cast.h"
+#include "ruled_payment.h"
 
 #include <QPair>
 #include <QVector>
@@ -32,6 +33,14 @@ public:
     static void paint(CardItem *card, QPainter *painter);
 
 private:
+    enum class Context
+    {
+        None,
+        Spell,
+        Ability,
+        Resolution
+    };
+
     struct QueuedMana
     {
         QChar symbol;
@@ -39,12 +48,13 @@ private:
         int counterId = -1;
     };
 
-    enum class Context
+    struct SuspendedPayment
     {
-        None,
-        Spell,
-        Ability,
-        Resolution
+        std::optional<PendingRuledSpellCast> spell;
+        std::optional<PendingActivatedAbility> ability;
+        RuledPayment payment;
+        Context context = Context::None;
+        QVector<QueuedMana> queuedMana;
     };
     Context context() const;
     Context activeContext = Context::None;
@@ -58,8 +68,7 @@ private:
     bool queued = false;
     bool choosingLifePayment = false;
     QVector<QueuedMana> queuedMana;
-    std::optional<PendingRuledSpellCast> suspended;
-    std::optional<PendingActivatedAbility> suspendedAbility;
+    QVector<SuspendedPayment> suspendedPayments;
 };
 
 #endif

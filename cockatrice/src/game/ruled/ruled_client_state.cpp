@@ -393,7 +393,7 @@ void RuledClientState::teardownPendingChoice()
 
 void RuledClientState::setPendingChoice(RuledPendingChoice choice)
 {
-    if (!(isWaterbendResolutionPayment() && choice.kind == ChoiceKind::ResolutionPayment && choice.waterbend &&
+    if (!(isResolutionPaymentActive() && choice.kind == ChoiceKind::ResolutionPayment &&
           choice.paymentSourceOid == pendingChoice->paymentSourceOid))
         payment.clear();
     teardownPendingChoice();
@@ -488,7 +488,7 @@ void RuledClientState::submitResolutionPayment(ruled::v1::ResolutionChoiceDecisi
     const auto restorePayment = payment;
     ruled::v1::RuledCommand command;
     command.mutable_submit_resolution_choice()->set_decision(decision);
-    if (restore.waterbend && decision == ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA)
+    if (decision == ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA)
         payment.writePayment(command);
     clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
     emit resolutionPaymentUiChanged(false);
@@ -499,7 +499,7 @@ void RuledClientState::submitResolutionPayment(ruled::v1::ResolutionChoiceDecisi
         if (!accepted) {
             if (!pendingChoice.has_value())
                 setPendingChoice(restore);
-            if (restore.waterbend && isWaterbendResolutionPayment() &&
+            if (isResolutionPaymentActive() &&
                 pendingChoice->paymentSourceOid == restore.paymentSourceOid) {
                 payment = restorePayment;
                 payment.submitting = false;

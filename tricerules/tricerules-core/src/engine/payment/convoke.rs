@@ -198,6 +198,7 @@ impl GameEngine {
             request.cast_spell.is_some(),
             request.activate_ability.is_some(),
             request.resolution_choice.is_some(),
+            request.execute_permanent_action.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
@@ -213,9 +214,6 @@ impl GameEngine {
                 return Err(EngineError::Illegal("spell payment is not available now"));
             }
             let cast = self.prepare_spell_cast(player, command)?;
-            if !cast.convoke {
-                return Err(EngineError::Illegal("spell has no Convoke payment"));
-            }
             (
                 cast.payment,
                 self.payment_object_ref(cast.oid),
@@ -227,8 +225,7 @@ impl GameEngine {
                 self.payment_object_ref(command.source_object_id),
                 command.payment.clone().unwrap_or_default(),
             )
-        } else {
-            let command = request.resolution_choice.as_ref().unwrap();
+        } else if let Some(command) = &request.resolution_choice {
             let pending = self
                 .state
                 .pending_resolution
@@ -237,8 +234,7 @@ impl GameEngine {
             let payment = pending
                 .continuation
                 .mana_payment()
-                .filter(|p| p.waterbend)
-                .ok_or(EngineError::Illegal("no Waterbend resolution payment"))?;
+                .ok_or(EngineError::Illegal("no resolution payment"))?;
             if pending.deciding_player != player
                 || command.decision != rv1::ResolutionChoiceDecision::PayMana as i32
                 || !command.chosen_object_ids.is_empty()
@@ -250,6 +246,14 @@ impl GameEngine {
             (
                 self.prepare_resolution_payment_costs(player, payment, &command.restricted_mana)?,
                 self.payment_object_ref(pending.presentation.source_object_id),
+                command.payment.clone().unwrap_or_default(),
+            )
+        } else {
+            let command = request.execute_permanent_action.as_ref().unwrap();
+            let (prepared, source) = self.prepare_permanent_action_payment(player, command)?;
+            (
+                prepared,
+                source,
                 command.payment.clone().unwrap_or_default(),
             )
         };

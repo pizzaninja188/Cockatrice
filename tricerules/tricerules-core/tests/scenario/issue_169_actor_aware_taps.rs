@@ -141,12 +141,9 @@ fn icewrought_payment_precedes_reflexive_targeting_and_tap_precedes_pump() {
             },
         )
         .unwrap();
-    assert!(engine
-        .apply_command(
-            0,
-            &submit_resolution_decision(ResolutionChoiceDecision::PayMana)
-        )
-        .is_err());
+    assert!(
+        submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana).is_err()
+    );
     assert!(!engine.state.objects[&enemy].tapped);
     give_mana(
         &mut engine,
@@ -156,12 +153,7 @@ fn icewrought_payment_precedes_reflexive_targeting_and_tap_precedes_pump() {
             ..Default::default()
         },
     );
-    engine
-        .apply_command(
-            0,
-            &submit_resolution_decision(ResolutionChoiceDecision::PayMana),
-        )
-        .unwrap();
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana).unwrap();
     assert_eq!(engine.state.pending_triggers.len(), 1);
     engine.apply_command(0, &choose_target(enemy)).unwrap();
     assert!(
@@ -386,11 +378,7 @@ fn sentry_can_decline_payment_and_illegal_reflexive_targets_do_not_tap() {
                     ..Default::default()
                 },
             );
-            engine
-                .apply_command(
-                    0,
-                    &submit_resolution_decision(ResolutionChoiceDecision::PayMana),
-                )
+            submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
                 .unwrap();
             assert!(engine.apply_command(0, &choose_target(sentry)).is_err());
             engine.apply_command(0, &choose_target(enemy)).unwrap();

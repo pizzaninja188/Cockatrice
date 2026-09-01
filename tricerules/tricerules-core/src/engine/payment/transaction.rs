@@ -1837,6 +1837,38 @@ impl GameEngine {
             died: false,
         })
     }
+
+    pub(in crate::engine) fn prepare_special_action_payment_costs(
+        &self,
+        player: PlayerId,
+        cost: &ManaCost,
+        flex_payments: &[rv1::FlexPipPayment],
+        restricted_mana: &[rv1::ManaSpendSelection],
+        purpose: SpecialActionManaPurpose,
+    ) -> Result<PreparedPaymentCosts, EngineError> {
+        let player_idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        Ok(PreparedPaymentCosts {
+            waterbend_limit: None,
+            transaction: CostTransactionPlan {
+                purpose: CostPurpose::Ability,
+                player,
+                player_idx,
+                debits: Vec::new(),
+                cast_cost_receipts: Vec::new(),
+            },
+            mana: cost.clone(),
+            x_value: 0,
+            extra_generic: 0,
+            generic_reduction: 0,
+            flex_payments: flex_payments.to_vec(),
+            restricted_mana: restricted_mana.to_vec(),
+            eligible_restricted_mana: self
+                .eligible_restricted_mana_for_special_action(player_idx, purpose),
+        })
+    }
 }
 
 #[cfg(test)]

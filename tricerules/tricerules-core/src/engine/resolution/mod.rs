@@ -3567,7 +3567,7 @@ mod attached_subject_tests {
                 power
             );
             engine.state.objects.get_mut(&source).unwrap().power = Some(8);
-            let answer = rv1::SubmitResolutionChoice {
+            let mut answer = rv1::SubmitResolutionChoice {
                 decision: if decline {
                     rv1::ResolutionChoiceDecision::Decline
                 } else {
@@ -3622,6 +3622,28 @@ mod attached_subject_tests {
                 }
             } else {
                 engine.state.players[1].mana_pool.colorless = power;
+            }
+            if !decline {
+                let preview = engine.preview_payment(
+                    1,
+                    &rv1::PreviewPayment {
+                        transaction_id: 1,
+                        revision: 1,
+                        resolution_choice: Some(answer.clone()),
+                        ..Default::default()
+                    },
+                );
+                assert!(preview.valid, "{}", preview.error);
+                answer.payment = preview.selection;
+                let pool = engine.state.players[1].mana_pool;
+                answer.payment.as_mut().unwrap().mana = Some(rv1::PaymentMana {
+                    w: pool.white,
+                    u: pool.blue,
+                    b: pool.black,
+                    r: pool.red,
+                    g: pool.green,
+                    c: pool.colorless,
+                });
             }
             engine.submit_resolution_choice(1, &answer).unwrap();
             assert_eq!(engine.state.players[1].mana_pool.colorless, 0);

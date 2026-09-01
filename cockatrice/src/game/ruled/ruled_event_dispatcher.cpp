@@ -867,7 +867,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     // Retire the previous resolution UI before publishing its replacement. A repeated public
     // reveal marks its pending pick as shared, so this does not close the existing popup.
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPick);
-    if (!(isDecider && rcr.waterbend() && state->isWaterbendResolutionPayment() &&
+    if (!(isDecider && state->isResolutionPaymentActive() &&
           state->pendingChoice->paymentSourceOid == rcr.source_object_id()))
         state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionBranch);

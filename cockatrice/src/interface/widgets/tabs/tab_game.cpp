@@ -739,16 +739,11 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.text = localActions->pendingRuledAbilityCostPromptText();
     } else if (h->isResolutionPaymentActive()) {
         state.mode = PromptMode::ResolutionPayment;
-        const QString coloredCost = h->resolutionPaymentManaCost();
-        const int remaining =
-            localActions ? localActions->ruledResolutionPaymentRemaining() : h->resolutionPaymentGenericCost();
-        state.text =
-            coloredCost.isEmpty()
-                ? tr("Pay mana: {%1} remaining (click mana counters or activate mana abilities).").arg(remaining)
-                : tr("Pay %1 (click mana counters or activate mana abilities).").arg(coloredCost);
+        const QString remainingCost = h->resolutionPaymentRemainingCost();
+        state.text = tr("Pay %1 remaining (click mana counters or activate mana abilities).").arg(remainingCost);
         if (h->isWaterbendResolutionPayment() && localActions)
             state.text = localActions->pendingRuledSpellPromptText();
-        state.genericManaCost = remaining;
+        state.genericManaCost = h->resolutionPaymentGenericCost();
         state.paymentCurrentlyLegal = h->resolutionPaymentCurrentlyLegal();
     } else if (h->hasPendingZoneScopeChoice()) {
         state.mode = PromptMode::ZoneSelection;

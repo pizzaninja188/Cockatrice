@@ -1694,6 +1694,16 @@ public:
     {
         return isResolutionPaymentActive() ? pendingChoice->genericManaCost : 0;
     }
+    [[nodiscard]] QString resolutionPaymentRemainingCost() const
+    {
+        if (!isResolutionPaymentActive())
+            return {};
+        if (payment.active && payment.view.valid())
+            return QString::fromStdString(payment.view.remaining_cost());
+        if (!pendingChoice->manaCost.isEmpty())
+            return pendingChoice->manaCost;
+        return QStringLiteral("{%1}").arg(pendingChoice->genericManaCost);
+    }
     [[nodiscard]] bool resolutionPaymentCurrentlyLegal() const
     {
         return isResolutionPaymentActive() &&

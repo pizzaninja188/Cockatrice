@@ -76,12 +76,8 @@ fn setup_divert(seed: u64, payable: bool) -> (GameEngine, u32) {
 #[test]
 fn issue_159_divert_disaster_uses_the_committed_payment_receipt() {
     let (mut paid, bolt) = setup_divert(159_001, true);
-    let paid_result = paid
-        .apply_command(
-            0,
-            &submit_resolution_decision(ResolutionChoiceDecision::PayMana),
-        )
-        .unwrap();
+    let paid_result =
+        submit_mana_resolution_decision(&mut paid, 0, ResolutionChoiceDecision::PayMana).unwrap();
     let lander = token_created_events(&paid_result)
         .into_iter()
         .find(|created| created.card_id == "lander")
@@ -117,12 +113,7 @@ fn issue_159_divert_disaster_uses_the_committed_payment_receipt() {
 #[test]
 fn issue_159_lander_ability_stack_preserves_its_token_display_identity() {
     let (mut engine, _) = setup_divert(159_016, true);
-    engine
-        .apply_command(
-            0,
-            &submit_resolution_decision(ResolutionChoiceDecision::PayMana),
-        )
-        .unwrap();
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana).unwrap();
     let lander = battlefield_token_oids(&engine, 1, "lander")
         .into_iter()
         .next()
@@ -164,12 +155,9 @@ fn issue_159_lander_ability_stack_preserves_its_token_display_identity() {
 #[test]
 fn issue_159_divert_rejects_unpayable_and_stale_payment_submissions_without_double_resume() {
     let (mut engine, bolt) = setup_divert(159_013, false);
-    assert!(engine
-        .apply_command(
-            0,
-            &submit_resolution_decision(ResolutionChoiceDecision::PayMana),
-        )
-        .is_err());
+    assert!(
+        submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana).is_err()
+    );
     assert!(engine.state.pending_resolution.is_some());
     assert!(engine.state.stack.iter().any(|item| item.id == bolt));
 

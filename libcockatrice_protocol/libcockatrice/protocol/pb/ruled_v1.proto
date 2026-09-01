@@ -225,7 +225,7 @@ message SubmitResolutionChoice {
   // generation-bound option against the current prompt snapshot; clients must not reconstruct
   // defending-player ownership from battlefield display state.
   CombatDefenderOption chosen_combat_defender = 5;
-  // Exact, previewed mixed payment for the current parked Waterbend cost.
+  // Exact, previewed payment for the current parked mana cost.
   PaymentSelection payment = 6;
   repeated ManaSpendSelection restricted_mana = 7;
 }
@@ -327,7 +327,7 @@ message CastSpell {
   // hand slot or battlefield permanent.
   repeated CastCostGroupSelection cast_cost_group_selections = 11;
   CastMethod cast_method = 12;
-  // Present for engine-previewed payments (Convoke). Ordinary casts retain their existing path.
+  // Exact engine-previewed payment for this cast, including any object contributions.
   PaymentSelection payment = 13;
   // Required for casts authorized by an exile permission. The engine validates this opaque id
   // together with the exact object and zone-change generation before committing any costs.
@@ -375,6 +375,7 @@ message PreviewPayment {
   // Exactly one proposed action is required. Queries never execute these commands.
   ActivateAbility activate_ability = 4;
   SubmitResolutionChoice resolution_choice = 5;
+  ExecutePermanentAction execute_permanent_action = 6;
 }
 
 message ObjectPaymentCandidate {
@@ -1559,6 +1560,7 @@ message ExecutePermanentAction {
   optional uint32 face_index = 4;
   repeated FlexPipPayment flex_payments = 5;
   repeated ManaSpendSelection restricted_mana = 6;
+  PaymentSelection payment = 7;
 }
 
 message CostSelection {

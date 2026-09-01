@@ -13,12 +13,14 @@
 //! fixed deck-card population. This is the safety net that makes Phase 6's bulk
 //! vanilla/french-vanilla import trustworthy without a hand-written scenario per generated card.
 
+use tricerules_cards::mana::{ColorPip, ManaSymbol};
 use tricerules_cards::CardRegistry;
 use tricerules_core::{GameEngine, TurnStep, Zone};
 use tricerules_proto::ruled::v1::ruled_command::Cmd;
 use tricerules_proto::ruled::v1::{
-    ActivateAbility, CastSource, CastSpell, LandSource, PassPriority, PlayLand,
-    ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice, TargetRef,
+    ActivateAbility, CastSource, CastSpell, CostObjectRef, LandSource, PassPriority, PaymentMana,
+    PaymentSelection, PlayLand, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
+    TargetRef,
 };
 
 fn pass() -> RuledCommand {
@@ -155,6 +157,55 @@ fn grant_ample_mana(e: &mut GameEngine) {
     pool.colorless = 99;
 }
 
+fn exact_resolution_payment(
+    e: &GameEngine,
+    payment: &tricerules_core::state::PendingManaPayment,
+    source_object_id: u32,
+) -> PaymentSelection {
+    fn add_color(mana: &mut PaymentMana, color: ColorPip) {
+        match color {
+            ColorPip::W => mana.w += 1,
+            ColorPip::U => mana.u += 1,
+            ColorPip::B => mana.b += 1,
+            ColorPip::R => mana.r += 1,
+            ColorPip::G => mana.g += 1,
+        }
+    }
+    let mut mana = PaymentMana {
+        c: payment.generic_mana_cost,
+        ..Default::default()
+    };
+    for pip in &payment.mana_cost.pips {
+        match pip {
+            ManaSymbol::W => mana.w += 1,
+            ManaSymbol::U => mana.u += 1,
+            ManaSymbol::B => mana.b += 1,
+            ManaSymbol::R => mana.r += 1,
+            ManaSymbol::G => mana.g += 1,
+            ManaSymbol::C => mana.c += 1,
+            ManaSymbol::Generic(amount) | ManaSymbol::MonoHybrid(amount, _) => mana.c += *amount,
+            ManaSymbol::Hybrid(color, _) | ManaSymbol::Phyrexian(color) => {
+                add_color(&mut mana, *color)
+            }
+            ManaSymbol::X => {}
+        }
+    }
+    PaymentSelection {
+        expected_state_revision: e.state.command_index,
+        source: Some(CostObjectRef {
+            object_id: source_object_id,
+            zone_change_generation: e
+                .state
+                .zone_change_generation
+                .get(&source_object_id)
+                .copied()
+                .unwrap_or(0),
+        }),
+        mana: Some(mana),
+        ..Default::default()
+    }
+}
+
 /// Resolve whatever sits on the stack, bounded so a target-prompt stall can't hang the test.
 fn try_drain_stack(e: &mut GameEngine) {
     for _ in 0..40 {
@@ -174,6 +225,9 @@ fn try_drain_stack(e: &mut GameEngine) {
                 .copied()
                 .take(pick_count)
                 .collect();
+            let payment = pending.continuation.mana_payment().map(|payment| {
+                exact_resolution_payment(e, payment, pending.presentation.source_object_id)
+            });
             let answer = RuledCommand {
                 cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
                     chosen_object_ids,
@@ -192,7 +246,7 @@ fn try_drain_stack(e: &mut GameEngine) {
                     selected_branch_index: 0,
                     cast_spell: None,
                     chosen_combat_defender: None,
-                    payment: None,
+                    payment,
                     restricted_mana: vec![],
                 })),
             };

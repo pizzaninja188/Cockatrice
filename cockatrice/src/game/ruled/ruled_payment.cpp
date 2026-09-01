@@ -65,6 +65,9 @@ void RuledPayment::writePayment(ruled::v1::RuledCommand &command) const
     } else if (command.has_submit_resolution_choice()) {
         *command.mutable_submit_resolution_choice()->mutable_payment() = selection;
         *command.mutable_submit_resolution_choice()->mutable_restricted_mana() = restrictedMana;
+    } else if (command.has_execute_permanent_action()) {
+        *command.mutable_execute_permanent_action()->mutable_payment() = selection;
+        *command.mutable_execute_permanent_action()->mutable_restricted_mana() = restrictedMana;
     }
 }
 
@@ -80,6 +83,8 @@ ruled::v1::PreviewPayment RuledPayment::requestAction(ruled::v1::RuledCommand co
         *query.mutable_activate_ability() = command.activate_ability();
     else if (command.has_submit_resolution_choice())
         *query.mutable_resolution_choice() = command.submit_resolution_choice();
+    else if (command.has_execute_permanent_action())
+        *query.mutable_execute_permanent_action() = command.execute_permanent_action();
     pending = true;
     return query;
 }
@@ -206,6 +211,9 @@ bool RuledPayment::payMana(QChar symbol, quint32 groupId, int optimisticCounterI
 
 int RuledPayment::optimisticManaCounterSpendCount(int counterId) const
 {
+    if (submitting) {
+        return 0;
+    }
     return std::count_if(optimisticManaCounters.cbegin(), optimisticManaCounters.cend(),
                          [counterId](const auto &entry) { return entry.counterId == counterId; });
 }

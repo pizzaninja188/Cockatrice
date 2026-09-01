@@ -11,9 +11,13 @@ pub(super) mod transaction;
 pub(super) mod waterbend;
 
 #[cfg(test)]
+pub(in crate::engine) use mana::commit_mana_payment;
+pub(in crate::engine) use mana::plan_mana_payment;
+#[cfg(test)]
 pub(in crate::engine) use mana::plan_mana_payment_with_reduction;
-pub(in crate::engine) use mana::{commit_mana_payment, plan_mana_payment};
-pub(in crate::engine) use transaction::{card_result_entry, PaidCardCost, SacrificeSnapshot};
+pub(in crate::engine) use transaction::{
+    card_result_entry, PaidCardCost, PreparedPaymentCosts, SacrificeSnapshot,
+};
 
 use super::*;
 
@@ -152,28 +156,91 @@ impl GameEngine {
         reduced.to_string()
     }
 
-    pub(super) fn pay_permanent_action_mana(
-        &mut self,
-        player_idx: usize,
-        cost: &ManaCost,
-        flex_payments: &[rv1::FlexPipPayment],
-        restricted_mana: &[rv1::ManaSpendSelection],
-        purpose: SpecialActionManaPurpose,
-    ) -> Result<(), EngineError> {
-        let eligible = self.eligible_restricted_mana_for_special_action(player_idx, purpose);
-        let plan = mana::plan_mana_payment_with_restricted_reduction(
-            &self.state,
-            player_idx,
-            cost,
-            0,
-            0,
-            0,
-            flex_payments,
-            restricted_mana,
-            &eligible,
+    pub(super) fn prepare_permanent_action_payment(
+        &self,
+        player: PlayerId,
+        command: &rv1::ExecutePermanentAction,
+    ) -> Result<(PreparedPaymentCosts, rv1::CostObjectRef), EngineError> {
+        if self.state.priority_player_id() != player {
+            return Err(EngineError::Illegal("you do not have priority"));
+        }
+        let generation = self
+            .state
+            .zone_change_generation
+            .get(&command.object_id)
+            .copied()
+            .unwrap_or(0);
+        if generation != command.expected_zone_change_generation {
+            return Err(EngineError::Illegal("stale permanent action"));
+        }
+        let object = self
+            .state
+            .objects
+            .get(&command.object_id)
+            .ok_or(EngineError::Illegal("no such permanent"))?;
+        if object.zone != Zone::Battlefield || object.controller != player {
+            return Err(EngineError::Illegal("you do not control that permanent"));
+        }
+        let (cost, purpose) = match rv1::PermanentActionKind::try_from(command.kind).ok() {
+            Some(rv1::PermanentActionKind::TurnFaceUp) => {
+                if !object.face_down {
+                    return Err(EngineError::Illegal("permanent cannot be turned face up"));
+                }
+                if self.special_action_prohibited(command.object_id, SpecialActionKind::TurnFaceUp)
+                {
+                    return Err(EngineError::Illegal(
+                        "turning this permanent face up is prohibited",
+                    ));
+                }
+                let cost = self
+                    .registry
+                    .get(&object.card_id)
+                    .map(|definition| definition.primary_face())
+                    .filter(|face| face.is_creature && !face.mana_cost.pips.is_empty())
+                    .map(|face| face.mana_cost.clone())
+                    .ok_or(EngineError::Illegal(
+                        "manifested card is not a creature with a payable mana cost",
+                    ))?;
+                (cost, SpecialActionManaPurpose::TurnFaceUp)
+            }
+            Some(rv1::PermanentActionKind::UnlockRoomDoor) => {
+                if self.state.active_player_id() != player
+                    || !matches!(self.state.turn_step, TurnStep::Main1 | TurnStep::Main2)
+                    || !self.state.stack.is_empty()
+                {
+                    return Err(EngineError::Illegal(
+                        "a Room door may be unlocked only during your main phase with an empty stack",
+                    ));
+                }
+                let face_index = command
+                    .face_index
+                    .map(|index| index as usize)
+                    .ok_or(EngineError::Illegal("Room door action has no face index"))?;
+                let room = self
+                    .state
+                    .room_states
+                    .get(&command.object_id)
+                    .ok_or(EngineError::Illegal("permanent is not a Room"))?;
+                if room.unlocked.get(face_index).copied() != Some(false) {
+                    return Err(EngineError::Illegal("that Room door is already unlocked"));
+                }
+                let cost = self
+                    .room_faces(command.object_id)
+                    .and_then(|faces| faces.get(face_index))
+                    .map(|door| door.mana_cost.clone())
+                    .ok_or(EngineError::Illegal("invalid Room door face"))?;
+                (cost, SpecialActionManaPurpose::UnlockRoomDoor)
+            }
+            _ => return Err(EngineError::Illegal("unknown permanent action")),
+        };
+        let prepared = self.prepare_special_action_payment_costs(
+            player,
+            &cost,
+            &command.flex_payments,
+            &command.restricted_mana,
+            purpose,
         )?;
-        commit_mana_payment(&mut self.state, player_idx, plan);
-        Ok(())
+        Ok((prepared, self.payment_object_ref(command.object_id)))
     }
 
     pub(in crate::engine) fn targeting_cost_increase(
@@ -679,6 +746,7 @@ impl GameEngine {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn pay_generic_mana(
         &mut self,
         player: PlayerId,
@@ -704,20 +772,6 @@ impl GameEngine {
         self.state.player_idx(player).is_some_and(|player_idx| {
             plan_mana_payment(&self.state, player_idx, cost, 0, 0, &[]).is_ok()
         })
-    }
-
-    pub(super) fn pay_resolution_mana(
-        &mut self,
-        player: PlayerId,
-        cost: &ManaCost,
-    ) -> Result<(), EngineError> {
-        let player_idx = self
-            .state
-            .player_idx(player)
-            .ok_or(EngineError::UnknownPlayer(player))?;
-        let plan = plan_mana_payment(&self.state, player_idx, cost, 0, 0, &[])?;
-        commit_mana_payment(&mut self.state, player_idx, plan);
-        Ok(())
     }
 }
 

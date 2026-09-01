@@ -125,9 +125,9 @@ fn special_action_restricted_mana_is_published_and_spent_for_both_purposes() {
         );
         assert!(legal.legal_by_player[&1].permanent_actions.is_empty());
         let oid = action.object_id;
-        let batch = engine
-            .apply_command(0, &execute_special_action(action))
-            .expect("special action payment");
+        let batch =
+            execute_permanent_action_with_payment(&mut engine, 0, execute_special_action(action))
+                .expect("special action payment");
         assert!(engine.state.players[0].restricted_mana.is_empty());
         assert_eq!(engine.state.players[0].mana_pool, Default::default());
         assert_eq!(engine.state.priority_player_id(), 0);
@@ -220,8 +220,7 @@ fn special_action_restricted_mana_does_not_depend_on_the_mana_source_remaining()
         engine.state.objects[&peeper].zone,
         tricerules_core::Zone::Graveyard
     );
-    engine
-        .apply_command(0, &execute_special_action(action))
+    execute_permanent_action_with_payment(&mut engine, 0, execute_special_action(action))
         .expect("mana retains its permission");
 }
 
@@ -401,8 +400,7 @@ fn special_action_restricted_mana_supports_multiplayer_and_owner_controller_dive
             .apply_command(2_000_000, &execute_special_action(action.clone()))
             .is_err());
         assert_eq!(special_action_payment_snapshot(&engine), before);
-        engine
-            .apply_command(7, &execute_special_action(action))
+        execute_permanent_action_with_payment(&mut engine, 7, execute_special_action(action))
             .expect("controller pays with own mana");
         assert!(engine.state.players[0].restricted_mana.is_empty());
         assert_eq!(engine.state.priority_player_id(), 7);
@@ -428,9 +426,9 @@ fn special_action_restricted_mana_can_pay_the_entire_cost_and_replay_determinist
             1,
             "multiple contributions of the same group publish one eligibility id"
         );
-        let batch = engine
-            .apply_command(0, &execute_special_action(action))
-            .expect("restricted mana pays colored and generic pips");
+        let batch =
+            execute_permanent_action_with_payment(&mut engine, 0, execute_special_action(action))
+                .expect("restricted mana pays colored and generic pips");
         assert!(engine.state.players[0].restricted_mana.is_empty());
         (special_action_payment_snapshot(&engine), batch)
     };

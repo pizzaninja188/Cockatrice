@@ -1516,30 +1516,10 @@ bool PlayerActions::tryPayRuledResolutionWithCounter(const QString &counterName)
 
 void PlayerActions::syncRuledResolutionPayment(bool active, int genericCost)
 {
-    if (player->getGame()->getGameEventHandler()->ruled()->isWaterbendResolutionPayment()) {
-        resolutionPaymentActive = false;
-        ruledPayment->startOrRefresh();
-        return;
-    }
-    if (!active)
-        ruledPayment->startOrRefresh();
-    if (!active) {
-        resolutionPaymentActive = false;
-        return;
-    }
-    if (!resolutionPaymentActive && !resolutionPaymentSubmissionPending) {
-        resolutionPaymentRemaining = qMax(0, genericCost);
-        resolutionPaymentCounterIds.clear();
-        resolutionPaymentAutoAppliedGroups.clear();
-        resolutionPaymentAutoAppliedPendingGroup = 0;
-    }
-    resolutionPaymentActive = true;
-    emit ruledResolutionManaPromptChanged();
-}
-
-int PlayerActions::ruledResolutionPaymentRemaining() const
-{
-    return resolutionPaymentActive ? resolutionPaymentRemaining : 0;
+    Q_UNUSED(active);
+    Q_UNUSED(genericCost);
+    resolutionPaymentActive = false;
+    ruledPayment->startOrRefresh();
 }
 
 int PlayerActions::ruledManaCounterOptimisticSpendCount(int counterId) const
@@ -1612,7 +1592,7 @@ QSet<quint32> PlayerActions::eligibleRestrictedManaForPendingAbility() const
 
 void PlayerActions::declineRuledResolutionPayment()
 {
-    if (auto *state = player->getGame()->getGameEventHandler()->ruled(); state->isWaterbendResolutionPayment()) {
+    if (auto *state = player->getGame()->getGameEventHandler()->ruled(); state->isResolutionPaymentActive()) {
         if (!state->payment.submitting)
             state->declineResolutionMana();
         return;

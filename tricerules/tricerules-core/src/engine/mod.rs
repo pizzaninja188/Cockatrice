@@ -1289,6 +1289,13 @@ impl GameEngine {
         player: PlayerId,
         command: &rv1::ExecutePermanentAction,
     ) -> Result<RuledEventBatch, EngineError> {
+        let (prepared, _) = self.prepare_permanent_action_payment(player, command)?;
+        let selection = command.payment.as_ref().ok_or(EngineError::Illegal(
+            "permanent action payment was not previewed",
+        ))?;
+        let life =
+            self.validate_explicit_payment(player, command.object_id, false, &prepared, selection)?;
+        let plan = prepared.finish_explicit(&self.state, selection, life)?;
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("you do not have priority"));
         }
@@ -1314,7 +1321,7 @@ impl GameEngine {
                 "turning this permanent face up is prohibited",
             ));
         }
-        let face = self
+        let _face = self
             .registry
             .get(&object.card_id)
             .map(|definition| definition.primary_face())
@@ -1322,18 +1329,7 @@ impl GameEngine {
             .ok_or(EngineError::Illegal(
                 "manifested card is not a creature with a payable mana cost",
             ))?;
-        let cost = face.mana_cost.clone();
-        let player_idx = self
-            .state
-            .player_idx(player)
-            .ok_or(EngineError::Illegal("no such player"))?;
-        self.pay_permanent_action_mana(
-            player_idx,
-            &cost,
-            &command.flex_payments,
-            &command.restricted_mana,
-            SpecialActionManaPurpose::TurnFaceUp,
-        )?;
+        self.commit_cost_transaction(plan)?;
         self.state
             .objects
             .get_mut(&command.object_id)
@@ -1361,6 +1357,13 @@ impl GameEngine {
         player: PlayerId,
         command: &rv1::ExecutePermanentAction,
     ) -> Result<RuledEventBatch, EngineError> {
+        let (prepared, _) = self.prepare_permanent_action_payment(player, command)?;
+        let selection = command.payment.as_ref().ok_or(EngineError::Illegal(
+            "permanent action payment was not previewed",
+        ))?;
+        let life =
+            self.validate_explicit_payment(player, command.object_id, false, &prepared, selection)?;
+        let plan = prepared.finish_explicit(&self.state, selection, life)?;
         if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("you do not have priority"));
         }
@@ -1402,22 +1405,11 @@ impl GameEngine {
         if room.unlocked.get(face_index).copied() != Some(false) {
             return Err(EngineError::Illegal("that Room door is already unlocked"));
         }
-        let door = self
+        let _door = self
             .room_faces(command.object_id)
             .and_then(|faces| faces.get(face_index))
             .ok_or(EngineError::Illegal("invalid Room door face"))?;
-        let cost = door.mana_cost.clone();
-        let player_idx = self
-            .state
-            .player_idx(player)
-            .ok_or(EngineError::Illegal("no such player"))?;
-        self.pay_permanent_action_mana(
-            player_idx,
-            &cost,
-            &command.flex_payments,
-            &command.restricted_mana,
-            SpecialActionManaPurpose::UnlockRoomDoor,
-        )?;
+        self.commit_cost_transaction(plan)?;
 
         let unlock_event = self.transition_room_door(command.object_id, face_index)?;
         self.fire_triggers(&[unlock_event]);

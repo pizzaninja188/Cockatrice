@@ -101,11 +101,7 @@ fn paying_mana_preserves_the_exact_targeting_spell() {
             ..Default::default()
         },
     );
-    engine
-        .apply_command(
-            0,
-            &submit_resolution_decision(ResolutionChoiceDecision::PayMana),
-        )
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
         .expect("pay Ward");
     assert_eq!(
         engine
@@ -573,11 +569,7 @@ fn mana_abilities_remain_available_during_a_ward_payment() {
     engine
         .apply_command(0, &activate_ability(second_island, 0, Vec::new()))
         .expect("second mana ability during Ward");
-    engine
-        .apply_command(
-            0,
-            &submit_resolution_decision(ResolutionChoiceDecision::PayMana),
-        )
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
         .expect("pay Ward with mana produced during the prompt");
     assert!(engine.state.stack.iter().any(|item| item.id == spell_id));
 }

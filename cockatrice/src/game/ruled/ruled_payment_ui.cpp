@@ -26,7 +26,10 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
         if (actions->player->getPlayerInfo()->getLocal())
             startOrRefresh();
     });
-    QObject::connect(state, &RuledClientState::sessionReset, actions, [this] { clear(); });
+    QObject::connect(state, &RuledClientState::sessionReset, actions, [this] {
+        suspendedPayments.clear();
+        clear();
+    });
 }
 
 RuledPaymentUi::Context RuledPaymentUi::context() const
@@ -36,17 +39,12 @@ RuledPaymentUi::Context RuledPaymentUi::context() const
     const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     const auto &ability = actions->pendingActivatedAbility;
     if (ability.valid) {
-        const auto key =
-            (static_cast<quint64>(ability.permanentOid) << 32) | static_cast<quint64>(ability.abilityIndex);
-        return !ability.permanentAction && !ability.waitingForTarget && !ability.waitingForCost &&
-                       state->waterbendAbilities.contains(key)
-                   ? Context::Ability
-                   : Context::None;
+        return !ability.waitingForTarget && !ability.waitingForCost ? Context::Ability : Context::None;
     }
-    if (state->isWaterbendResolutionPayment())
+    if (state->isResolutionPaymentActive())
         return Context::Resolution;
     const auto &p = actions->pendingRuledSpellCast;
-    return p.valid && p.hasConvoke && !p.waitingForTarget && !p.waitingForCost && !p.waitingForCastCostObject &&
+    return p.valid && !p.waitingForTarget && !p.waitingForCost && !p.waitingForCastCostObject &&
                    p.nextCastCostGroup >= p.castCostGroups.size()
                ? Context::Spell
                : Context::None;
@@ -88,14 +86,13 @@ bool RuledPaymentUi::startOrRefresh()
 {
     const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     if (actions->player->getPlayerInfo()->getLocal() && actions->pendingRuledSpellCast.valid &&
-        actions->pendingRuledSpellCast.hasConvoke &&
         (state->pendingChoice || state->resolutionChoiceWaitingPlayerId >= 0)) {
         actions->cancelPendingRuledSpellCast();
         return true;
     }
     const auto nextContext = context();
     if (nextContext == Context::None) {
-        if (!suspended && !suspendedAbility && !state->isWaterbendResolutionPayment() && activeContext != Context::None)
+        if (suspendedPayments.isEmpty() && !state->isResolutionPaymentActive() && activeContext != Context::None)
             clear();
         return false;
     }
@@ -118,8 +115,10 @@ bool RuledPaymentUi::startOrRefresh()
         // Reuse the existing life-payment announcement. Hybrid mana remains flexible in the
         // authoritative preview; only Phyrexian life choices must be fixed before payment.
         QVector<RuledFlexPip> lifeChoices;
-        for (const auto &pip :
-             nextContext == Context::Spell ? actions->pendingRuledSpellCast.flexPips : QVector<RuledFlexPip>{})
+        const auto flexPips = nextContext == Context::Spell     ? actions->pendingRuledSpellCast.flexPips
+                              : nextContext == Context::Ability ? actions->pendingActivatedAbility.flexPips
+                                                                : QVector<RuledFlexPip>{};
+        for (const auto &pip : flexPips)
             if (pip.phyrexian)
                 lifeChoices.append(pip);
         if (!lifeChoices.isEmpty()) {
@@ -127,18 +126,29 @@ bool RuledPaymentUi::startOrRefresh()
             QScopedValueRollback<bool> guard(choosingLifePayment, true);
             QVector<bool> alternatives;
             const bool accepted = PlayerActions::promptFlexiblePipChoices(
-                PlayerActions::formatRemainingCost(actions->pendingRuledSpellCast.remainingCost,
-                                                   actions->pendingRuledSpellCast.flexPips),
-                actions->pendingRuledSpellCast.cardName, lifeChoices, alternatives);
+                nextContext == Context::Spell
+                    ? PlayerActions::formatRemainingCost(actions->pendingRuledSpellCast.remainingCost,
+                                                         actions->pendingRuledSpellCast.flexPips)
+                    : PlayerActions::formatRemainingCost(actions->pendingActivatedAbility.remainingCost,
+                                                         actions->pendingActivatedAbility.flexPips),
+                nextContext == Context::Spell ? actions->pendingRuledSpellCast.cardName
+                                              : actions->pendingActivatedAbility.cardName,
+                lifeChoices, alternatives);
             if (!applicable() || !model.active || model.transaction() != transaction)
                 return true;
             if (!accepted) {
-                actions->cancelPendingRuledSpellCast();
+                if (nextContext == Context::Spell)
+                    actions->cancelPendingRuledSpellCast();
+                else
+                    actions->cancelPendingActivatedAbility();
                 return true;
             }
             for (int i = 0; i < lifeChoices.size(); ++i)
-                if (alternatives.value(i))
-                    actions->pendingRuledSpellCast.lifePipIndices.append(lifeChoices.at(i).pipIndex);
+                if (alternatives.value(i)) {
+                    auto &indices = nextContext == Context::Spell ? actions->pendingRuledSpellCast.lifePipIndices
+                                                                 : actions->pendingActivatedAbility.lifePipIndices;
+                    indices.append(lifeChoices.at(i).pipIndex);
+                }
         }
     }
     if (!model.submitting) {
@@ -232,6 +242,7 @@ void RuledPaymentUi::received()
                         clear();
                         emit actions->ruledAbilityActivationPendingChanged(false);
                         emit actions->ruledAbilityCostPromptChanged();
+                        resumeAfterManaAbility();
                         changed();
                     }
                     actions->clearLandTapUndoStack();
@@ -388,11 +399,14 @@ QString RuledPaymentUi::prompt() const
     const bool spell = context() == Context::Spell;
     const auto name = spell                           ? actions->pendingRuledSpellCast.cardName
                       : context() == Context::Ability ? actions->pendingActivatedAbility.cardName
-                                                      : QObject::tr("Waterbend");
+                                                      : QObject::tr("resolution payment");
     QString text =
         QObject::tr("Pay for %1: %2 remaining. ").arg(name, QString::fromStdString(model.view.remaining_cost()));
-    text += spell ? QObject::tr("Click creatures to convoke or pay mana.")
-                  : QObject::tr("Click artifacts or creatures to waterbend, or pay mana.");
+    if (model.view.candidates_size() > 0)
+        text += spell ? QObject::tr("Click eligible creatures to contribute, or pay mana.")
+                      : QObject::tr("Click eligible permanents to contribute, or pay mana.");
+    else
+        text += QObject::tr("Click mana counters to choose the exact payment.");
     if (model.pending)
         text += QObject::tr(" Checking payment…");
     if (!model.view.error().empty())
@@ -411,8 +425,6 @@ void RuledPaymentUi::clear()
     if (!model.submitting)
         restoreOptimisticManaCounters(optimisticCounterIds);
     queuedMana.clear();
-    suspended.reset();
-    suspendedAbility.reset();
     activeContext = Context::None;
     if (!actions->player->getPlayerInfo()->getLocal())
         return;
@@ -427,27 +439,44 @@ void RuledPaymentUi::suspendForManaAbility(quint32 oid, int abilityIndex)
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     if (state->activatedAbilityManaProducedForOid(oid).value(abilityIndex).isEmpty())
         return;
+    SuspendedPayment frame;
+    frame.payment = state->payment;
+    frame.context = activeContext;
+    frame.queuedMana = queuedMana;
     if (context() == Context::Spell) {
-        suspended = actions->pendingRuledSpellCast;
+        frame.spell = actions->pendingRuledSpellCast;
         actions->pendingRuledSpellCast.valid = false;
     } else if (context() == Context::Ability) {
-        suspendedAbility = actions->pendingActivatedAbility;
+        frame.ability = actions->pendingActivatedAbility;
         actions->pendingActivatedAbility.valid = false;
+    } else if (context() != Context::Resolution) {
+        return;
     }
+    suspendedPayments.append(std::move(frame));
+    state->payment.clear();
+    queuedMana.clear();
+    activeContext = Context::None;
 }
 
 void RuledPaymentUi::resumeAfterManaAbility()
 {
-    if (suspended) {
-        actions->ruledPendingCast->spell = *suspended;
-        suspended.reset();
+    if (suspendedPayments.isEmpty())
+        return;
+    auto frame = suspendedPayments.takeLast();
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    state->payment = std::move(frame.payment);
+    state->payment.submitting = false;
+    queuedMana = std::move(frame.queuedMana);
+    activeContext = frame.context;
+    if (frame.spell) {
+        actions->ruledPendingCast->spell = *frame.spell;
         emit actions->ruledSpellCastPendingChanged(true);
     }
-    if (suspendedAbility) {
-        actions->ruledPendingCast->ability = *suspendedAbility;
-        suspendedAbility.reset();
+    if (frame.ability) {
+        actions->ruledPendingCast->ability = *frame.ability;
         emit actions->ruledAbilityActivationPendingChanged(true);
     }
+    state->payment.invalidate();
     startOrRefresh();
     changed();
 }

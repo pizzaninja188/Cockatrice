@@ -171,7 +171,6 @@ public:
     void declineRuledResolutionPayment();
     /// Ack completion for an optimistic resolution payment submission.
     void finishRuledResolutionPaymentSubmission(bool accepted);
-    [[nodiscard]] int ruledResolutionPaymentRemaining() const;
     /// Pips already staged locally from this engine-owned counter but not yet deducted by the
     /// authoritative game state.
     [[nodiscard]] int ruledManaCounterOptimisticSpendCount(int counterId) const;

@@ -180,6 +180,9 @@ public:
     quint64 nextCmdId = 1;
     int paymentPreviewCount = 0;
     ruled::v1::PaymentPreview paymentPreview;
+    bool softCounterPaymentPreviewPending = false;
+    std::optional<ruled::v1::RuledCommand> permanentActionPaymentCommit;
+    QString permanentActionPaymentLabel;
 
     // Session / pregame state
     int roomId = -1;
@@ -1059,6 +1062,31 @@ public:
             EXPECT_TRUE(batch.legal_by_player().empty());
             ++paymentPreviewCount;
             paymentPreview = batch.payment_preview();
+            if (softCounterPaymentPreviewPending && paymentPreview.transaction_id() == 8801) {
+                softCounterPaymentPreviewPending = false;
+                EXPECT_TRUE(paymentPreview.valid()) << paymentPreview.error();
+                EXPECT_TRUE(paymentPreview.complete());
+                ruled::v1::RuledCommand cmd;
+                auto *choice = cmd.mutable_submit_resolution_choice();
+                choice->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+                *choice->mutable_payment() = paymentPreview.selection();
+                pendingChoice.reset();
+                paidSoftCounter = true;
+                sendRuled(cmd, QStringLiteral("pay Convolute's exact resolution cost"));
+            }
+            if (permanentActionPaymentCommit &&
+                (paymentPreview.transaction_id() == 9801 || paymentPreview.transaction_id() == 9802)) {
+                EXPECT_TRUE(paymentPreview.valid()) << paymentPreview.error();
+                EXPECT_TRUE(paymentPreview.complete());
+                auto command = std::move(*permanentActionPaymentCommit);
+                permanentActionPaymentCommit.reset();
+                auto *action = command.mutable_execute_permanent_action();
+                *action->mutable_payment() = paymentPreview.selection();
+                action->clear_restricted_mana();
+                for (const auto &selection : paymentPreview.restricted_mana())
+                    *action->add_restricted_mana() = selection;
+                sendRuled(command, permanentActionPaymentLabel);
+            }
             return;
         }
         ++stateVersion;
@@ -2469,9 +2497,14 @@ public:
                     return;
                 }
                 ruled::v1::RuledCommand cmd;
-                cmd.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
-                paidSoftCounter = true;
-                sendRuled(cmd, QStringLiteral("pay Convolute's resolution cost"));
+                auto *preview = cmd.mutable_preview_payment();
+                preview->set_transaction_id(8801);
+                preview->set_revision(1);
+                auto *choice = preview->mutable_resolution_choice();
+                choice->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+                choice->mutable_payment()->mutable_mana()->set_u(4);
+                softCounterPaymentPreviewPending = true;
+                sendRuled(cmd, QStringLiteral("preview Convolute's exact resolution cost"));
                 return;
             }
             const bool isReplacement = rcr.choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT;
@@ -2732,17 +2765,31 @@ public:
                         if (action.eligible_restricted_mana_group_ids_size() != 1) {
                             return;
                         }
-                        ruled::v1::RuledCommand cmd;
-                        auto *turn = cmd.mutable_execute_permanent_action();
+                        ruled::v1::RuledCommand commit;
+                        auto *turn = commit.mutable_execute_permanent_action();
                         turn->set_kind(ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP);
                         turn->set_object_id(action.object_id());
                         turn->set_expected_zone_change_generation(action.zone_change_generation());
                         auto *payment = turn->add_restricted_mana();
                         payment->set_restriction_group_id(action.eligible_restricted_mana_group_ids(0));
                         payment->set_u(1);
+                        ruled::v1::RuledCommand cmd;
+                        auto *preview = cmd.mutable_preview_payment();
+                        preview->set_transaction_id(9801);
+                        preview->set_revision(1);
+                        *preview->mutable_execute_permanent_action() = *turn;
+                        auto *mana = preview->mutable_execute_permanent_action()->mutable_payment()->mutable_mana();
+                        mana->set_w(myPool.w);
+                        mana->set_u(myPool.u);
+                        mana->set_b(myPool.b);
+                        mana->set_r(myPool.r);
+                        mana->set_g(myPool.g);
+                        mana->set_c(myPool.c);
+                        permanentActionPaymentCommit = commit;
+                        permanentActionPaymentLabel = QStringLiteral("turn manifested Hill Giant face up");
                         ++specialActionRestrictedPayments;
                         turnManifestFaceUpSent = true;
-                        sendRuled(cmd, QStringLiteral("turn manifested Hill Giant face up"));
+                        sendRuled(cmd, QStringLiteral("preview turning manifested Hill Giant face up"));
                         return;
                     }
                 }
@@ -2801,8 +2848,8 @@ public:
                         if (action.eligible_restricted_mana_group_ids_size() != 1) {
                             return;
                         }
-                        ruled::v1::RuledCommand cmd;
-                        auto *unlock = cmd.mutable_execute_permanent_action();
+                        ruled::v1::RuledCommand commit;
+                        auto *unlock = commit.mutable_execute_permanent_action();
                         unlock->set_kind(action.kind());
                         unlock->set_object_id(action.object_id());
                         unlock->set_expected_zone_change_generation(action.zone_change_generation());
@@ -2810,9 +2857,23 @@ public:
                         auto *payment = unlock->add_restricted_mana();
                         payment->set_restriction_group_id(action.eligible_restricted_mana_group_ids(0));
                         payment->set_u(1);
+                        ruled::v1::RuledCommand cmd;
+                        auto *preview = cmd.mutable_preview_payment();
+                        preview->set_transaction_id(9802);
+                        preview->set_revision(1);
+                        *preview->mutable_execute_permanent_action() = *unlock;
+                        auto *mana = preview->mutable_execute_permanent_action()->mutable_payment()->mutable_mana();
+                        mana->set_w(myPool.w);
+                        mana->set_u(myPool.u);
+                        mana->set_b(myPool.b);
+                        mana->set_r(myPool.r);
+                        mana->set_g(myPool.g);
+                        mana->set_c(myPool.c);
+                        permanentActionPaymentCommit = commit;
+                        permanentActionPaymentLabel = QStringLiteral("unlock Derelict Attic door");
                         ++specialActionRestrictedPayments;
                         roomUnlockSent = true;
-                        sendRuled(cmd, QStringLiteral("unlock Derelict Attic door"));
+                        sendRuled(cmd, QStringLiteral("preview unlocking Derelict Attic door"));
                         return;
                     }
                 }

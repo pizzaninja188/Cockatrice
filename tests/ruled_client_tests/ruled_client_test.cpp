@@ -393,6 +393,63 @@ TEST_F(RuledClientTest, SharedPaymentTracksOptimisticPoolDebitsAndRetiresSanitiz
     EXPECT_EQ(payment.takeRetiredOptimisticManaCounterIds(), QVector<int>({17}));
 }
 
+TEST_F(RuledClientTest, SubmittedSharedPaymentStopsDebitingAuthoritativeSnapshots)
+{
+    auto &payment = state->payment;
+    payment.begin();
+    auto request = payment.request({});
+    ruled::v1::PaymentPreview response;
+    response.set_transaction_id(request.transaction_id());
+    response.set_revision(request.revision());
+    response.set_valid(true);
+    ASSERT_TRUE(payment.apply(response));
+    ASSERT_TRUE(payment.payMana('R', 0, 17));
+
+    request = payment.request({});
+    response.set_revision(request.revision());
+    response.set_complete(true);
+    *response.mutable_selection() = request.cast_spell().payment();
+    ASSERT_TRUE(payment.apply(response));
+    ASSERT_TRUE(payment.beginSubmission());
+
+    EXPECT_EQ(payment.optimisticManaCounterSpendCount(17), 0)
+        << "the accepted server snapshot already contains the submitted debit";
+    EXPECT_EQ(payment.takeAllOptimisticManaCounterIds(), QVector<int>({17}))
+        << "the identity remains available until acceptance or rejection is known";
+}
+
+TEST_F(RuledClientTest, SharedPaymentCarriesExactPermanentActionMana)
+{
+    auto &payment = state->payment;
+    payment.begin();
+    ruled::v1::RuledCommand action;
+    auto *permanent = action.mutable_execute_permanent_action();
+    permanent->set_kind(ruled::v1::PERMANENT_ACTION_KIND_UNLOCK_ROOM_DOOR);
+    permanent->set_object_id(81);
+    permanent->set_expected_zone_change_generation(9);
+
+    auto request = payment.requestAction(action);
+    ASSERT_TRUE(request.has_execute_permanent_action());
+    EXPECT_EQ(request.execute_permanent_action().object_id(), 81u);
+
+    ruled::v1::PaymentPreview response;
+    response.set_transaction_id(request.transaction_id());
+    response.set_revision(request.revision());
+    response.set_valid(true);
+    response.mutable_selection()->set_expected_state_revision(22);
+    response.mutable_selection()->mutable_source()->set_object_id(81);
+    response.mutable_selection()->mutable_source()->set_zone_change_generation(9);
+    ASSERT_TRUE(payment.apply(response));
+    ASSERT_TRUE(payment.payMana('R'));
+
+    request = payment.requestAction(action);
+    ASSERT_TRUE(request.has_execute_permanent_action());
+    EXPECT_EQ(request.execute_permanent_action().payment().mana().r(), 1u);
+    payment.writePayment(action);
+    EXPECT_EQ(action.execute_permanent_action().payment().source().object_id(), 81u);
+    EXPECT_EQ(action.execute_permanent_action().payment().mana().r(), 1u);
+}
+
 TEST_F(RuledClientTest, ConvokeCompletionSubmitsExactlyOnceAndStateRefreshInvalidatesReplies)
 {
     auto &payment = state->payment;
@@ -3397,9 +3454,24 @@ TEST_F(RuledClientTest, ManaPaymentChoiceCreatesRefreshesAndSerializesDecisions)
     EXPECT_TRUE(paymentUiSpy.at(0).at(0).toBool());
     ASSERT_TRUE(state->isResolutionPaymentActive());
     EXPECT_EQ(state->resolutionPaymentGenericCost(), 4);
+    EXPECT_EQ(state->resolutionPaymentRemainingCost(), QStringLiteral("{4}"));
     EXPECT_FALSE(state->resolutionPaymentCurrentlyLegal());
     state->payResolutionMana();
     EXPECT_TRUE(host.sentCommands.isEmpty());
+
+    state->payment.begin(true);
+    ruled::v1::RuledCommand paymentCommand;
+    paymentCommand.mutable_submit_resolution_choice()->set_decision(
+        ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    const auto previewRequest = state->payment.requestAction(paymentCommand);
+    ruled::v1::RuledEventBatch previewBatch;
+    auto *preview = previewBatch.mutable_payment_preview();
+    preview->set_transaction_id(previewRequest.transaction_id());
+    preview->set_revision(previewRequest.revision());
+    preview->set_valid(true);
+    preview->set_remaining_cost("{3}");
+    apply(previewBatch);
+    EXPECT_EQ(state->resolutionPaymentRemainingCost(), QStringLiteral("{3}"));
 
     apply(paymentBatch(true));
     ASSERT_EQ(paymentUiSpy.count(), 2);

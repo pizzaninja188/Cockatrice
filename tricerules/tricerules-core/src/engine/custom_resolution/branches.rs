@@ -64,62 +64,35 @@ impl GameEngine {
         .then_some(decision == rv1::ResolutionChoiceDecision::PayMana);
         match decision {
             rv1::ResolutionChoiceDecision::PayMana => {
-                if payment.waterbend {
-                    let result = (|| {
-                        let costs = self.prepare_resolution_payment_costs(
-                            player,
-                            &payment,
-                            &answer.restricted_mana,
-                        )?;
-                        let plan = if let Some(selection) = &answer.payment {
-                            let life = self.validate_explicit_payment(
-                                player,
-                                pending.presentation.source_object_id,
-                                false,
-                                &costs,
-                                selection,
-                            )?;
-                            costs.finish_explicit(&self.state, selection, life)?
-                        } else {
-                            costs.finish(&self.state)?
-                        };
-                        self.commit_cost_transaction(plan)
-                    })();
-                    let receipt = match result {
-                        Ok(receipt) => receipt,
-                        Err(error) => {
-                            self.state.pending_resolution = Some(pending);
-                            return Err(error);
-                        }
-                    };
-                    self.fire_triggers(&receipt.trigger_events);
-                    events.extend(receipt.move_events);
-                } else {
-                    if answer.payment.is_some() || !answer.restricted_mana.is_empty() {
-                        self.state.pending_resolution = Some(pending);
-                        return Err(EngineError::Illegal("unexpected mixed payment"));
-                    }
-                    let payable = if payment.mana_cost.pips.is_empty() {
-                        self.can_pay_generic_mana(player, payment.generic_mana_cost)
-                    } else {
-                        self.can_pay_resolution_mana(player, &payment.mana_cost)
-                    };
-                    if !payable {
-                        self.state.pending_resolution = Some(pending);
-                        return Err(EngineError::Illegal(
-                            "resolution mana payment is not affordable",
-                        ));
-                    }
-                    let paid = if payment.mana_cost.pips.is_empty() {
-                        self.pay_generic_mana(player, payment.generic_mana_cost)
-                    } else {
-                        self.pay_resolution_mana(player, &payment.mana_cost)
-                    };
-                    if let Err(error) = paid {
+                let result = (|| {
+                    let costs = self.prepare_resolution_payment_costs(
+                        player,
+                        &payment,
+                        &answer.restricted_mana,
+                    )?;
+                    let selection = answer
+                        .payment
+                        .as_ref()
+                        .ok_or(EngineError::Illegal("resolution payment was not previewed"))?;
+                    let life = self.validate_explicit_payment(
+                        player,
+                        pending.presentation.source_object_id,
+                        false,
+                        &costs,
+                        selection,
+                    )?;
+                    let plan = costs.finish_explicit(&self.state, selection, life)?;
+                    self.commit_cost_transaction(plan)
+                })();
+                let receipt = match result {
+                    Ok(receipt) => receipt,
+                    Err(error) => {
                         self.state.pending_resolution = Some(pending);
                         return Err(error);
                     }
-                }
+                };
+                self.fire_triggers(&receipt.trigger_events);
+                events.extend(receipt.move_events);
                 let cost_label = if payment.mana_cost.pips.is_empty() {
                     format!("{{{}}}", payment.generic_mana_cost)
                 } else {

@@ -35,6 +35,7 @@ fn execute_unlock(object_id: u32, generation: u64, face_index: u32) -> RuledComm
             face_index: Some(face_index),
             flex_payments: Vec::new(),
             restricted_mana: Vec::new(),
+            payment: None,
         })),
     }
 }
@@ -148,9 +149,9 @@ fn unlocking_is_atomic_retains_priority_and_refreshes_public_room_state() {
             ..Default::default()
         },
     );
-    let batch = engine
-        .apply_command(0, &execute_unlock(room, generation, 0))
-        .expect("unlock Glassworks");
+    let batch =
+        execute_permanent_action_with_payment(&mut engine, 0, execute_unlock(room, generation, 0))
+            .expect("unlock Glassworks");
     assert_eq!(engine.state.room_states[&room].unlocked, [true, false]);
     assert_eq!(engine.state.priority_player_id(), 0);
     assert!(
@@ -248,8 +249,7 @@ fn unlock_revalidates_controller_timing_stack_payment_and_door_state() {
             ..Default::default()
         },
     );
-    engine
-        .apply_command(0, &execute_unlock(room, generation, 0))
+    execute_permanent_action_with_payment(&mut engine, 0, execute_unlock(room, generation, 0))
         .expect("unlock Glassworks");
     assert!(engine
         .apply_command(0, &execute_unlock(room, generation, 0))
@@ -330,14 +330,12 @@ fn fully_unlock_edge_shares_trigger_ordering_and_updates_door_count_power() {
             ..Default::default()
         },
     );
-    engine
-        .apply_command(0, &execute_unlock(room, generation, 1))
+    execute_permanent_action_with_payment(&mut engine, 0, execute_unlock(room, generation, 1))
         .expect("unlock Tunnel first");
     assert_eq!(engine.effective_power(soulrager), Some(1));
     assert!(engine.state.stack.is_empty());
 
-    engine
-        .apply_command(0, &execute_unlock(room, generation, 0))
+    execute_permanent_action_with_payment(&mut engine, 0, execute_unlock(room, generation, 0))
         .expect("fully unlock with Ticket Booth");
     assert_eq!(engine.effective_power(soulrager), Some(4));
     let order = engine

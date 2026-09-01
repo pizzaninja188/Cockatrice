@@ -101,13 +101,37 @@ fn failed_payment_does_not_consume_the_activation() {
         &mut engine,
         0,
         ManaGift {
-            c: 1,
+            u: 1,
+            r: 1,
             ..Default::default()
         },
     );
+    let mut command = activate_ability(devotee, 0, vec![]);
+    let mut activation = match command.cmd.as_ref().unwrap() {
+        Cmd::ActivateAbility(activation) => activation.clone(),
+        _ => unreachable!(),
+    };
+    let preview = engine.preview_payment(
+        0,
+        &tricerules_proto::ruled::v1::PreviewPayment {
+            transaction_id: 1,
+            revision: 1,
+            activate_ability: Some(activation.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(preview.valid, "{}", preview.error);
+    activation.payment = preview.selection;
+    activation.payment.as_mut().unwrap().mana = Some(tricerules_proto::ruled::v1::PaymentMana {
+        r: 1,
+        ..Default::default()
+    });
+    command.cmd = Some(Cmd::ActivateAbility(activation));
     engine
-        .apply_command(0, &activate_ability(devotee, 0, vec![]))
+        .apply_command(0, &command)
         .expect("the unconsumed activation remains available");
+    assert_eq!(engine.state.players[0].mana_pool.blue, 1);
+    assert_eq!(engine.state.players[0].mana_pool.red, 0);
     assert_eq!(zone_view_ability_flags(&mut engine, 0, devotee), [false]);
 }
 

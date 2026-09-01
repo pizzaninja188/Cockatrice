@@ -229,11 +229,7 @@ fn issue_127_mentor_optional_payment_draws_exactly_one_card() {
         .expect("choose to pay {1}");
     let hand_before = engine.state.players[0].hand.len();
     let library_before = engine.state.players[0].library.len();
-    engine
-        .apply_command(
-            0,
-            &submit_resolution_decision(ResolutionChoiceDecision::PayMana),
-        )
+    submit_mana_resolution_decision(&mut engine, 0, ResolutionChoiceDecision::PayMana)
         .expect("pay {1}");
 
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);

@@ -75,6 +75,7 @@ fn preview(engine: &GameEngine, cast: &rv1::CastSpell) -> rv1::PaymentPreview {
             transaction_id: 13,
             revision: 2,
             cast_spell: Some(cast.clone()),
+            execute_permanent_action: None,
         },
     )
 }

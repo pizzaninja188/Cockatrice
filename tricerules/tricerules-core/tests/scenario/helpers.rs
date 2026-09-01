@@ -16,6 +16,7 @@ fn fixture_token_origin(card_id: &str) -> Option<tricerules_core::state::Copiabl
     })
 }
 
+use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 pub(crate) use tricerules_core::state::{
     HandCardAction, PendingLibraryLookStage, PendingLibraryPartitionKind,
     PendingLibraryPartitionStage, PendingResolutionBranchStage, ResolutionContinuation,
@@ -39,6 +40,182 @@ pub(crate) fn pass() -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::PassPriority(PassPriority {})),
     }
+}
+
+fn exact_mana_from_cost(
+    engine: &GameEngine,
+    player: i32,
+    cost: &ManaCost,
+    extra_generic: u32,
+) -> rv1::PaymentMana {
+    fn add_color(payment: &mut rv1::PaymentMana, color: ColorPip) {
+        match color {
+            ColorPip::W => payment.w += 1,
+            ColorPip::U => payment.u += 1,
+            ColorPip::B => payment.b += 1,
+            ColorPip::R => payment.r += 1,
+            ColorPip::G => payment.g += 1,
+        }
+    }
+    let pool = engine.state.players[engine.state.player_idx(player).unwrap()].mana_pool;
+    let mut payment = rv1::PaymentMana::default();
+    let mut generic = extra_generic;
+    for pip in &cost.pips {
+        match pip {
+            ManaSymbol::W => payment.w += 1,
+            ManaSymbol::U => payment.u += 1,
+            ManaSymbol::B => payment.b += 1,
+            ManaSymbol::R => payment.r += 1,
+            ManaSymbol::G => payment.g += 1,
+            ManaSymbol::C => payment.c += 1,
+            ManaSymbol::Generic(amount) | ManaSymbol::MonoHybrid(amount, _) => generic += *amount,
+            ManaSymbol::Hybrid(color, _) | ManaSymbol::Phyrexian(color) => {
+                add_color(&mut payment, *color)
+            }
+            ManaSymbol::X => {}
+        }
+    }
+    let available = [
+        pool.colorless.saturating_sub(payment.c),
+        pool.white.saturating_sub(payment.w),
+        pool.blue.saturating_sub(payment.u),
+        pool.black.saturating_sub(payment.b),
+        pool.red.saturating_sub(payment.r),
+        pool.green.saturating_sub(payment.g),
+    ];
+    for (index, available) in available.into_iter().enumerate() {
+        let amount = generic.min(available);
+        generic -= amount;
+        match index {
+            0 => payment.c += amount,
+            1 => payment.w += amount,
+            2 => payment.u += amount,
+            3 => payment.b += amount,
+            4 => payment.r += amount,
+            _ => payment.g += amount,
+        }
+    }
+    payment
+}
+
+pub(crate) fn submit_mana_resolution(
+    engine: &mut GameEngine,
+    player: i32,
+    mut answer: SubmitResolutionChoice,
+) -> Result<RuledEventBatch, tricerules_core::EngineError> {
+    if answer.decision == rv1::ResolutionChoiceDecision::PayMana as i32 && answer.payment.is_none()
+    {
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("pending resolution payment");
+        let pending_payment = pending
+            .continuation
+            .mana_payment()
+            .expect("pending mana payment");
+        let source_object_id = pending.presentation.source_object_id;
+        answer.payment = Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(rv1::CostObjectRef {
+                object_id: source_object_id,
+                zone_change_generation: engine
+                    .state
+                    .zone_change_generation
+                    .get(&source_object_id)
+                    .copied()
+                    .unwrap_or(0),
+            }),
+            mana: Some(exact_mana_from_cost(
+                engine,
+                player,
+                &pending_payment.mana_cost,
+                pending_payment.generic_mana_cost,
+            )),
+            ..Default::default()
+        });
+    }
+    engine.apply_command(
+        player,
+        &RuledCommand {
+            cmd: Some(Cmd::SubmitResolutionChoice(answer)),
+        },
+    )
+}
+
+pub(crate) fn submit_mana_resolution_decision(
+    engine: &mut GameEngine,
+    player: i32,
+    decision: rv1::ResolutionChoiceDecision,
+) -> Result<RuledEventBatch, tricerules_core::EngineError> {
+    submit_mana_resolution(
+        engine,
+        player,
+        SubmitResolutionChoice {
+            decision: decision as i32,
+            ..Default::default()
+        },
+    )
+}
+
+pub(crate) fn preview_permanent_action_payment(
+    engine: &GameEngine,
+    player: i32,
+    action: &mut ExecutePermanentAction,
+) -> rv1::PaymentPreview {
+    let mut preview = engine.preview_payment(
+        player,
+        &rv1::PreviewPayment {
+            transaction_id: 1,
+            revision: 1,
+            execute_permanent_action: Some(action.clone()),
+            ..Default::default()
+        },
+    );
+    if preview.valid && !preview.complete {
+        if let Ok(cost) = ManaCost::parse(&preview.remaining_cost) {
+            if let Some(selection) = preview.selection.as_mut() {
+                selection.mana = Some(exact_mana_from_cost(engine, player, &cost, 0));
+            }
+            action.payment = preview.selection.clone();
+            preview = engine.preview_payment(
+                player,
+                &rv1::PreviewPayment {
+                    transaction_id: 1,
+                    revision: 2,
+                    execute_permanent_action: Some(action.clone()),
+                    ..Default::default()
+                },
+            );
+        }
+    }
+    if preview.valid {
+        action.restricted_mana = preview.restricted_mana.clone();
+    }
+    action.payment = preview.selection.clone().or_else(|| {
+        Some(rv1::PaymentSelection {
+            expected_state_revision: engine.state.command_index,
+            source: Some(rv1::CostObjectRef {
+                object_id: action.object_id,
+                zone_change_generation: action.expected_zone_change_generation,
+            }),
+            mana: Some(Default::default()),
+            ..Default::default()
+        })
+    });
+    preview
+}
+
+pub(crate) fn execute_permanent_action_with_payment(
+    engine: &mut GameEngine,
+    player: i32,
+    mut command: RuledCommand,
+) -> Result<RuledEventBatch, tricerules_core::EngineError> {
+    let Some(Cmd::ExecutePermanentAction(action)) = command.cmd.as_mut() else {
+        panic!("expected permanent action command");
+    };
+    preview_permanent_action_payment(engine, player, action);
+    engine.apply_command(player, &command)
 }
 
 pub(crate) fn cast_modal_spell(

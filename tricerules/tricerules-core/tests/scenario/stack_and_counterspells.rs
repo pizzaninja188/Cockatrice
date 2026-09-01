@@ -119,24 +119,42 @@ fn setup_convolute_over_bolt() -> (GameEngine, u32, u32) {
         1,
         ManaGift {
             u: 1,
-            c: 2,
+            r: 2,
             ..Default::default()
         },
     );
     let convolute_idx = hand_index_for_card(&e, 1, "convolute");
-    e.apply_command(
+    let mut command = cast_spell(
+        convolute_idx,
+        vec![TargetRef {
+            object_id: bolt_oid,
+            damage_amount: 0,
+            group_index: 0,
+            kind: 0,
+        }],
+    );
+    let mut cast = match command.cmd.as_ref().unwrap() {
+        Cmd::CastSpell(cast) => cast.clone(),
+        _ => unreachable!(),
+    };
+    let preview = e.preview_payment(
         1,
-        &cast_spell(
-            convolute_idx,
-            vec![TargetRef {
-                object_id: bolt_oid,
-                damage_amount: 0,
-                group_index: 0,
-                kind: 0,
-            }],
-        ),
-    )
-    .expect("cast Convolute");
+        &tricerules_proto::ruled::v1::PreviewPayment {
+            transaction_id: 1,
+            revision: 1,
+            cast_spell: Some(cast.clone()),
+            ..Default::default()
+        },
+    );
+    assert!(preview.valid, "{}", preview.error);
+    cast.payment = preview.selection;
+    cast.payment.as_mut().unwrap().mana = Some(tricerules_proto::ruled::v1::PaymentMana {
+        u: 1,
+        r: 2,
+        ..Default::default()
+    });
+    command.cmd = Some(Cmd::CastSpell(cast));
+    e.apply_command(1, &command).expect("cast Convolute");
     let convolute_oid = e.state.stack.last().expect("Convolute on stack").id;
     (e, bolt_oid, convolute_oid)
 }
@@ -183,14 +201,63 @@ fn convolute_prefloated_payment_parks_resolution_and_preserves_target() {
         "StackResolved is deferred until the payment branch completes"
     );
 
-    e.apply_command(
+    submit_mana_resolution_decision(
+        &mut e,
         0,
-        &submit_resolution_decision(tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana),
+        tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana,
     )
     .expect("pay four");
     assert!(e.state.stack.iter().any(|item| item.id == bolt_oid));
     assert!(!e.state.stack.iter().any(|item| item.id == convolute_oid));
     assert_eq!(e.state.players[0].mana_pool.colorless, 0);
+}
+
+#[test]
+fn convolute_commits_the_exact_clicked_mana_colors() {
+    let (mut e, bolt_oid, convolute_oid) = setup_convolute_over_bolt();
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 4,
+            r: 4,
+            ..Default::default()
+        },
+    );
+
+    e.apply_command(1, &pass())
+        .expect("Convolute controller passes");
+    e.apply_command(0, &pass()).expect("park payment");
+    let source_generation = e
+        .state
+        .zone_change_generation
+        .get(&convolute_oid)
+        .copied()
+        .unwrap_or(0);
+    let answer = RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana as i32,
+            payment: Some(tricerules_proto::ruled::v1::PaymentSelection {
+                expected_state_revision: e.state.command_index,
+                source: Some(tricerules_proto::ruled::v1::CostObjectRef {
+                    object_id: convolute_oid,
+                    zone_change_generation: source_generation,
+                }),
+                mana: Some(tricerules_proto::ruled::v1::PaymentMana {
+                    r: 4,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })),
+    };
+
+    e.apply_command(0, &answer)
+        .expect("the selected four red mana pays Convolute");
+    assert_eq!(e.state.players[0].mana_pool.red, 0);
+    assert_eq!(e.state.players[0].mana_pool.blue, 4);
+    assert!(e.state.stack.iter().any(|item| item.id == bolt_oid));
 }
 
 #[test]
@@ -253,9 +320,10 @@ fn convolute_allows_mana_abilities_without_priority_and_refreshes_affordability(
         assert_eq!(choice.payment_currently_legal, index == 3);
     }
 
-    e.apply_command(
+    submit_mana_resolution_decision(
+        &mut e,
         0,
-        &submit_resolution_decision(tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana),
+        tricerules_proto::ruled::v1::ResolutionChoiceDecision::PayMana,
     )
     .expect("pay after fourth Island");
     assert!(e.state.stack.iter().any(|item| item.id == bolt_oid));

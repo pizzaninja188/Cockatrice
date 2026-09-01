@@ -59,11 +59,12 @@ Two writer groups, and they must not be confused:
 
 ### `ruled_payment.{h,cpp}` and `ruled_payment_ui.{h,cpp}`
 
-`RuledPayment` holds Convoke and Waterbend staging, correlates private preview replies, and
-allows one submission after an authoritative complete preview. `RuledPaymentUi` adapts that
-model to spell casts, activated abilities, and parked resolution payments. It owns object
-highlights, mana contribution clicks, and suspension around mana abilities. Rust supplies all
-candidates and remaining costs; previews never tap cards or spend mana. See
+`RuledPayment` holds exact mana and object-contribution staging, correlates private preview
+replies, and allows one submission after an authoritative complete preview. `RuledPaymentUi`
+adapts that model to spell casts, activated abilities, permanent actions, and parked resolution
+payments. It owns object highlights, mana contribution clicks, and nested suspension around mana
+abilities. Rust supplies all candidates and remaining costs; previews never tap cards or spend
+mana. See
 [Waterbend acceptance](../../../../docs/ISSUE-146-WATERBEND.md).
 
 ### `ruled_event_dispatcher.{h,cpp}` — `RuledEventDispatcher`
