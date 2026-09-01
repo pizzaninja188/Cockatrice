@@ -270,7 +270,7 @@ fn issue_163_uses_generic_target_modal_and_trigger_shapes() {
         modal.modes[1].effects.as_slice(),
         [SpellEffectKind::PutCounters {
             counter: CounterKind::PlusOnePlusOne,
-            count: 1,
+            count: tricerules_cards::Amount::Fixed(1),
             ..
         }]
     ));

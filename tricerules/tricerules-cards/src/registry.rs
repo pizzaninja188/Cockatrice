@@ -966,12 +966,12 @@ impl CardRegistry {
                 if let Some(InterveningIf::GameCondition(condition)) =
                     ability.intervening_if.as_ref()
                 {
-                    condition
-                        .validate_live()
-                        .map_err(|reason| RegistryError::InvalidCard {
+                    condition.validate_trigger_condition().map_err(|reason| {
+                        RegistryError::InvalidCard {
                             id: id.clone(),
                             reason,
-                        })?;
+                        }
+                    })?;
                 }
                 for effect in &ability.effect {
                     if effect.uses_trigger_object_reference()
@@ -1358,12 +1358,12 @@ impl CardRegistry {
                     if let Some(InterveningIf::GameCondition(condition)) =
                         ability.intervening_if.as_ref()
                     {
-                        condition
-                            .validate_live()
-                            .map_err(|reason| RegistryError::InvalidCard {
+                        condition.validate_trigger_condition().map_err(|reason| {
+                            RegistryError::InvalidCard {
                                 id: card.id.clone(),
                                 reason,
-                            })?;
+                            }
+                        })?;
                     }
                 }
                 // An ability's effect list gets the same two checks a spell's does: each effect
@@ -3747,7 +3747,7 @@ mod tests {
             [
                 SpellEffectKind::PutCounters {
                     counter: CounterKind::PlusOnePlusOne,
-                    count: 1,
+                    count: Amount::Fixed(1),
                     subject: EffectSubject::Source,
                 },
                 SpellEffectKind::Untap {

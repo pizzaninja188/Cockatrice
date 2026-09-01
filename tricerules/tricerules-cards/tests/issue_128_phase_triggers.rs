@@ -56,7 +56,7 @@ fn issue_128_cards_are_complete_registry_definitions() {
         survival.effect.as_slice(),
         [SpellEffectKind::PutCounters {
             counter: CounterKind::Keyword(Keyword::Flying),
-            count: 1,
+            count: tricerules_cards::Amount::Fixed(1),
             subject: EffectSubject::Source,
         }]
     ));

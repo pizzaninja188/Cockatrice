@@ -199,7 +199,7 @@ fn issue_156_attachment_leave_and_sacrifice_cards_use_shared_shapes() {
         matches!(activation.costs.as_slice(), [AbilityCost::Mana(cost), AbilityCost::SacrificeSelf] if cost.to_string() == "{1}{U}")
     );
     assert!(
-        matches!(activation.effect.as_slice(), [SpellEffectKind::PutCounters { counter: CounterKind::Stun, count: 1, subject: EffectSubject::Chosen(filter) }] if filter.tapped == Some(true))
+        matches!(activation.effect.as_slice(), [SpellEffectKind::PutCounters { counter: CounterKind::Stun, count: tricerules_cards::Amount::Fixed(1), subject: EffectSubject::Chosen(filter) }] if filter.tapped == Some(true))
     );
     let group = &activation.targeting.as_ref().unwrap().groups[0];
     assert_eq!((group.min, group.max), (0, 1));

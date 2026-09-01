@@ -1,0 +1,29 @@
+(
+  id: "tackle_artist",
+  name: "Tackle Artist",
+  face_id: "tackle_artist",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Orc", "Sorcerer"],
+  power: 4,
+  toughness: 3,
+  keywords: [Trample],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverPlayerCastsSpell(
+        caster: Controller,
+        filter: (card_type: Some(InstantOrSorcery)),
+      ),
+      effect: [PutCounters(
+        counter: PlusOnePlusOne,
+        count: Conditional(
+          condition: TriggeringSpellManaSpent(comparison: AtLeast(5)),
+          when_true: 2,
+          otherwise: 1,
+        ),
+        subject: Source,
+      )],
+    ),
+  ],
+)

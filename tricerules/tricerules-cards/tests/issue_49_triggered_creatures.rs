@@ -297,7 +297,7 @@ fn issue_49_cast_trigger_cards_use_existing_filters_and_source_effects() {
         spellgorger.effect,
         [SpellEffectKind::PutCounters {
             counter: CounterKind::PlusOnePlusOne,
-            count: 1,
+            count: Amount::Fixed(1),
             subject: EffectSubject::Source,
         }]
     );
@@ -473,7 +473,7 @@ fn issue_49_observer_and_dies_triggers_use_existing_subjects() {
         trigger("steadfast_sentry").effect,
         [SpellEffectKind::PutCounters {
             counter: CounterKind::PlusOnePlusOne,
-            count: 1,
+            count: Amount::Fixed(1),
             subject: EffectSubject::Chosen(Box::new(creature_target(TargetController::You))),
         }]
     );

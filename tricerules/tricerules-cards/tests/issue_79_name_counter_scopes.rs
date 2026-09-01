@@ -50,7 +50,7 @@ fn issue_79_cards_use_shared_name_and_counter_scope_predicates() {
         pride_face.triggered_abilities[0].effect.as_slice(),
         [SpellEffectKind::PutCounters {
             counter: CounterKind::PlusOnePlusOne,
-            count: 1,
+            count: tricerules_cards::Amount::Fixed(1),
             subject: EffectSubject::Chosen(target),
         }] if target.kind == TargetKind::Creature && target.controller == TargetController::You
     ));

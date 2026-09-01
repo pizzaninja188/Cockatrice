@@ -135,7 +135,15 @@ pub enum ActivationCondition {
 impl ActivationCondition {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
-            ActivationCondition::GameCondition(condition) => condition.validate_live(),
+            ActivationCondition::GameCondition(condition) => {
+                if condition.requires_triggering_spell_context() {
+                    return Err(
+                        "activation conditions cannot reference triggering-spell mana spending"
+                            .into(),
+                    );
+                }
+                condition.validate_live()
+            }
             ActivationCondition::BattlefieldCreatureCount { filter, min, max } => {
                 filter.validate()?;
                 if min.is_none() && max.is_none() {
@@ -226,6 +234,15 @@ impl ActivatedAbilityDef {
         self.presentation.validate()?;
         if self.effect.is_empty() {
             return Err("activated ability must contain at least one effect".into());
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::requires_triggering_spell_context)
+        {
+            return Err(
+                "activated abilities cannot reference triggering-spell mana spending".into(),
+            );
         }
         if self
             .costs
@@ -1113,6 +1130,21 @@ impl TriggeredAbilityDef {
                     .flat_map(|mode| &mode.effects),
             )
             .collect::<Vec<_>>();
+        let is_spell_cast_trigger = matches!(
+            self.trigger,
+            TriggerCondition::WheneverPlayerCastsSpell { .. }
+        );
+        let uses_spell_mana_context = matches!(
+            self.intervening_if.as_ref(),
+            Some(InterveningIf::GameCondition(condition))
+                if condition.requires_triggering_spell_context()
+        ) || effects
+            .iter()
+            .copied()
+            .any(SpellEffectKind::requires_triggering_spell_context);
+        if uses_spell_mana_context && !is_spell_cast_trigger {
+            return Err("triggering-spell mana spending requires WheneverPlayerCastsSpell".into());
+        }
         if effects
             .iter()
             .copied()
@@ -1145,7 +1177,7 @@ impl TriggeredAbilityDef {
             );
         }
         if let Some(InterveningIf::GameCondition(condition)) = self.intervening_if.as_ref() {
-            condition.validate_live()?;
+            condition.validate_trigger_condition()?;
         }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;
@@ -1188,6 +1220,16 @@ impl ReflexiveTriggeredAbilityDef {
         self.presentation.validate()?;
         if self.effect.is_empty() {
             return Err("reflexive triggered ability requires effects".into());
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::requires_triggering_spell_context)
+        {
+            return Err(
+                "reflexive triggered abilities cannot reference triggering-spell mana spending"
+                    .into(),
+            );
         }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;

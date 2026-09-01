@@ -959,9 +959,16 @@ impl GameEngine {
                     top.controller,
                     clause,
                     Some(top.source_zone_change),
+                    Some(&top.trigger_context),
                 )
             } else {
-                self.intervening_if_holds(source_id, top.controller, clause)
+                self.intervening_if_holds_at_generation(
+                    source_id,
+                    top.controller,
+                    clause,
+                    None,
+                    Some(&top.trigger_context),
+                )
             };
             if !holds {
                 events.push(ev_log(format!(
@@ -4108,7 +4115,7 @@ mod attached_subject_tests {
             vec![
                 SpellEffectKind::PutCounters {
                     counter: CounterKind::PlusOnePlusOne,
-                    count: 1,
+                    count: Amount::Fixed(1),
                     subject: EffectSubject::Source,
                 },
                 SpellEffectKind::GainLife {
@@ -4383,7 +4390,7 @@ mod attached_subject_tests {
                             tricerules_cards::primitives::ResolutionBranchRequirement::EffectsApplicable,
                         effects: vec![SpellEffectKind::PutCounters {
                             counter: CounterKind::PlusOnePlusOne,
-                            count: 1,
+                            count: Amount::Fixed(1),
                             subject: EffectSubject::Source,
                         }],
                     }],

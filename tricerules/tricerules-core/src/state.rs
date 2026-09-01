@@ -149,6 +149,9 @@ pub struct TriggerContext {
     /// effects such as Scorch Spitter name only a player or planeswalker.
     pub attacked_player: Option<PlayerId>,
     pub attacked_planeswalker: Option<TriggerObjectRef>,
+    /// Actual mana paid for the spell whose CR 601.2i cast event created this trigger.
+    /// `None` for every other trigger event and for spell copies that were not cast.
+    pub triggering_spell_mana_spent: Option<u64>,
 }
 
 /// The game entity an Aura or Equipment is attached to. Players are represented explicitly;
@@ -1670,6 +1673,8 @@ pub struct SpellCastFact {
     pub types: Vec<String>,
     pub all_creature_types: bool,
     pub mana_value: u32,
+    /// Actual mana paid across the completed cast's costs, independent of printed mana value.
+    pub mana_spent: u64,
     pub matched_card_types: Vec<CardTypeFilter>,
     /// Deduplicated derived types of generation-matching battlefield permanents targeted when the
     /// spell became cast. No target identities are retained in turn history.

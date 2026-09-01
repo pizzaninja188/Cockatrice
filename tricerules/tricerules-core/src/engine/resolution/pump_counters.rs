@@ -725,6 +725,11 @@ pub(super) fn put_counters(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let count = cx.engine.resolve_amount(
+        &count,
+        AmountContext::for_stack_item(cx.top, cx.controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;

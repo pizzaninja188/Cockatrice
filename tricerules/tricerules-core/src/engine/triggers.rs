@@ -361,6 +361,9 @@ impl GameEngine {
                     }
                     _ => trigger_player,
                 };
+                if let GameEvent::SpellCast { fact } = event {
+                    trigger.trigger_context.triggering_spell_mana_spent = Some(fact.mana_spent);
+                }
                 // Rampaging Ferocidon needs the entering creature's controller, and Aether
                 // Flash needs the creature itself. Reuse the generation-bound reference so
                 // either instruction follows current characteristics or the correct LKI.
@@ -374,6 +377,21 @@ impl GameEngine {
                     }
                 }
             }
+            event_triggers.retain(|trigger| {
+                let requires_event_context = matches!(
+                    trigger.ability.intervening_if.as_ref(),
+                    Some(InterveningIf::GameCondition(condition))
+                        if matches!(condition, GameCondition::TriggeringSpellManaSpent { .. })
+                );
+                !requires_event_context
+                    || self.intervening_if_holds_at_generation(
+                        trigger.source_id,
+                        trigger.controller,
+                        trigger.ability.intervening_if.as_ref(),
+                        Some(trigger.source_zone_change),
+                        Some(&trigger.trigger_context),
+                    )
+            });
             collected.extend(event_triggers);
         }
         collected
@@ -1756,7 +1774,13 @@ impl GameEngine {
             .iter()
             .filter(|(_, ability, _)| filter(&ability.trigger))
             .filter(|(_, ability, _)| {
+                let requires_event_context = matches!(
+                    ability.intervening_if.as_ref(),
+                    Some(InterveningIf::GameCondition(condition))
+                        if matches!(condition, GameCondition::TriggeringSpellManaSpent { .. })
+                );
                 source.event_conditions_checked
+                    || requires_event_context
                     || self.intervening_if_holds(
                         source.object_id,
                         source.controller,
@@ -1842,7 +1866,7 @@ impl GameEngine {
         controller: PlayerId,
         clause: Option<&InterveningIf>,
     ) -> bool {
-        self.intervening_if_holds_at_generation(source_id, controller, clause, None)
+        self.intervening_if_holds_at_generation(source_id, controller, clause, None, None)
     }
 
     pub(super) fn intervening_if_holds_at_generation(
@@ -1851,6 +1875,7 @@ impl GameEngine {
         controller: PlayerId,
         clause: Option<&InterveningIf>,
         source_generation: Option<u64>,
+        trigger_context: Option<&TriggerContext>,
     ) -> bool {
         match clause {
             None => true,
@@ -1890,22 +1915,24 @@ impl GameEngine {
                 min.is_none_or(|minimum| count >= minimum)
                     && max.is_none_or(|maximum| count <= maximum)
             }
-            Some(InterveningIf::GameCondition(condition)) => self.condition_holds(
-                condition,
-                ConditionContext {
-                    controller,
-                    source_object_id: source_id,
-                    source_zone_change: source_generation.unwrap_or_else(|| {
-                        self.state
-                            .zone_change_generation
-                            .get(&source_id)
-                            .copied()
-                            .unwrap_or(0)
-                    }),
-                    resolving_spell_id: None,
-                    stack_item: None,
-                },
-            ),
+            Some(InterveningIf::GameCondition(condition)) => self
+                .condition_holds_with_trigger_context(
+                    condition,
+                    ConditionContext {
+                        controller,
+                        source_object_id: source_id,
+                        source_zone_change: source_generation.unwrap_or_else(|| {
+                            self.state
+                                .zone_change_generation
+                                .get(&source_id)
+                                .copied()
+                                .unwrap_or(0)
+                        }),
+                        resolving_spell_id: None,
+                        stack_item: None,
+                    },
+                    trigger_context,
+                ),
         }
     }
 

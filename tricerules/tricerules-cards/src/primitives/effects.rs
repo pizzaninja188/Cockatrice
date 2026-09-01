@@ -35,6 +35,12 @@ pub enum GameCondition {
     /// A face-authored condition captured after successful casting. Spell copies were not cast
     /// and have no result; ordinary live conditions elsewhere are unaffected.
     CastSnapshot { index: u32 },
+    /// Compare the actual mana paid for the spell whose cast event created this triggered
+    /// ability. The value is frozen at CR 601.2i and follows the trigger through resolution;
+    /// printed mana value and aggregate Expend history are deliberately unrelated.
+    TriggeringSpellManaSpent {
+        comparison: SpellManaSpentComparison,
+    },
     /// Whether the active player belongs to a player set relative to the condition's controller.
     /// `Controller` is "during your turn" (Daggersail Aeronaut); `Opponents` supports the inverse
     /// without assuming a two-player game.
@@ -201,11 +207,26 @@ pub enum GameCondition {
 }
 
 impl GameCondition {
+    pub(crate) fn requires_triggering_spell_context(&self) -> bool {
+        matches!(self, Self::TriggeringSpellManaSpent { .. })
+    }
+
     /// Validate a condition in a context without a completed spell cast (costs, abilities,
     /// continuous effects, and the snapshot declarations themselves).
     pub(crate) fn validate_live(&self) -> Result<(), String> {
+        if self.requires_triggering_spell_context() {
+            return Err("triggering-spell mana spending requires a spell-cast trigger".into());
+        }
         self.validate_cast_snapshot_reference(0)?;
         self.validate()
+    }
+
+    pub(crate) fn validate_trigger_condition(&self) -> Result<(), String> {
+        if self.requires_triggering_spell_context() {
+            self.validate()
+        } else {
+            self.validate_live()
+        }
     }
 
     pub(crate) fn validate_cast_snapshot_reference(&self, count: usize) -> Result<(), String> {
@@ -224,7 +245,8 @@ impl GameCondition {
         match self {
             GameCondition::Void
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
-            | GameCondition::CastSnapshot { .. } => Ok(()),
+            | GameCondition::CastSnapshot { .. }
+            | GameCondition::TriggeringSpellManaSpent { .. } => Ok(()),
             GameCondition::ActivePlayer { .. } => Ok(()),
             GameCondition::LifeChangedThisTurn { .. } => Ok(()),
             GameCondition::PlayerLifeAggregate { min, max, .. } => {
@@ -356,6 +378,7 @@ impl GameCondition {
             GameCondition::Void
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
             | GameCondition::CastSnapshot { .. }
+            | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ActivePlayer { .. }
             | GameCondition::LifeChangedThisTurn { .. }
             | GameCondition::PlayerLifeAggregate { .. }
@@ -390,6 +413,14 @@ impl GameCondition {
             _ => false,
         }
     }
+}
+
+/// Event-scoped comparisons shared by fixed-threshold Opus abilities and source-relative
+/// Increment abilities. These are intentionally narrower than a general expression language.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SpellManaSpentComparison {
+    AtLeast(u64),
+    GreaterThanSourcePowerOrToughness,
 }
 
 /// How selected players' public life totals collapse to one condition value.
@@ -811,6 +842,14 @@ pub enum Amount {
 }
 
 impl Amount {
+    pub(crate) fn requires_triggering_spell_context(&self) -> bool {
+        matches!(
+            self,
+            Self::Conditional { condition, .. }
+                if condition.requires_triggering_spell_context()
+        )
+    }
+
     pub(crate) fn validate_source_context(&self, has_source: bool) -> Result<(), String> {
         if !has_source
             && matches!(self, Self::Count(expression) if expression.requires_source_power())
@@ -833,6 +872,9 @@ impl Amount {
         self.validate()?;
         if context == EffectContext::Ability && matches!(self, Self::CastCost(_)) {
             return Err("cast-cost amount requires a spell's cast receipt".into());
+        }
+        if context == EffectContext::Spell && self.requires_triggering_spell_context() {
+            return Err("spells cannot reference triggering-spell mana spending".into());
         }
         self.validate_source_context(context == EffectContext::Ability)
     }
@@ -2322,7 +2364,7 @@ pub enum SpellEffectKind {
     },
     PutCounters {
         counter: CounterKind,
-        count: u32,
+        count: Amount,
         #[serde(default)]
         subject: EffectSubject,
     },
@@ -3205,6 +3247,7 @@ impl SpellEffectKind {
             | Self::Draw { count: amount, .. }
             | Self::GainLife { amount }
             | Self::Mill { count: amount, .. }
+            | Self::PutCounters { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
             | Self::CreateAttackingTokens { count: amount, .. } => {
@@ -3401,6 +3444,9 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if context == EffectContext::Spell && self.requires_triggering_spell_context() {
+            return Err("spells cannot reference triggering-spell mana spending".into());
+        }
         if context == EffectContext::Ability {
             self.validate_cast_snapshot_references(0)?;
         }
@@ -3474,6 +3520,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Draw { count: amount, .. }
             | SpellEffectKind::GainLife { amount }
             | SpellEffectKind::Mill { count: amount, .. }
+            | SpellEffectKind::PutCounters { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. }
             | SpellEffectKind::CreateTokenCopies { count: amount, .. }
             | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => {
@@ -4526,6 +4573,57 @@ impl SpellEffectKind {
                 }
             }
             _ => Ok(()),
+        }
+    }
+
+    pub(crate) fn requires_triggering_spell_context(&self) -> bool {
+        match self {
+            Self::DamageTarget { amount, .. }
+            | Self::DamageAll { amount, .. }
+            | Self::Scry { count: amount }
+            | Self::Earthbend { count: amount }
+            | Self::CounterTargetSpell {
+                unless_controller_pays: Some(amount),
+                ..
+            }
+            | Self::DamageTargets { amount, .. }
+            | Self::DamagePlayer { amount, .. }
+            | Self::DamageAttackedPlayerOrPlaneswalker { amount }
+            | Self::Draw { count: amount, .. }
+            | Self::GainLife { amount }
+            | Self::Mill { count: amount, .. }
+            | Self::PutCounters { count: amount, .. }
+            | Self::CreateTokens { count: amount, .. }
+            | Self::CreateTokenCopies { count: amount, .. }
+            | Self::CreateAttackingTokens { count: amount, .. } => {
+                amount.requires_triggering_spell_context()
+            }
+            Self::PumpTarget {
+                scale: Some(scale), ..
+            } => scale.amount.requires_triggering_spell_context(),
+            Self::ChooseResolutionBranch { branches, .. } => branches.iter().any(|branch| {
+                matches!(
+                    &branch.requirement,
+                    ResolutionBranchRequirement::GameCondition(condition)
+                        if condition.requires_triggering_spell_context()
+                ) || branch
+                    .effects
+                    .iter()
+                    .any(Self::requires_triggering_spell_context)
+            }),
+            Self::Conditional { condition, effect } => {
+                condition.requires_triggering_spell_context()
+                    || effect.requires_triggering_spell_context()
+            }
+            Self::SearchLibrary {
+                conditional_destination: Some(conditional),
+                ..
+            } => conditional.condition.requires_triggering_spell_context(),
+            Self::ProduceMana {
+                conditional: Some(conditional),
+                ..
+            } => conditional.condition.requires_triggering_spell_context(),
+            _ => false,
         }
     }
 }

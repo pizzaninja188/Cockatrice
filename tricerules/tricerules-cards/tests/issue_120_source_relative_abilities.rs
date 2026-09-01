@@ -25,7 +25,7 @@ fn issue_120_creatures_use_source_excluding_sacrifice_costs() {
             ability.effect.as_slice(),
             [SpellEffectKind::PutCounters {
                 counter: CounterKind::PlusOnePlusOne,
-                count: 1,
+                count: tricerules_cards::Amount::Fixed(1),
                 subject: EffectSubject::Source,
             }]
         ));

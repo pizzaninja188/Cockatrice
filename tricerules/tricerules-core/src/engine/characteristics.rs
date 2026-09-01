@@ -421,7 +421,9 @@ impl CharacteristicsEvaluator<'_> {
         let controller = self.layer_2_controller(source_oid, &mut Vec::new());
         match condition {
             // Cast snapshots are internal to resolving spells, never continuous characteristics.
-            GameCondition::CastSnapshot { .. } | GameCondition::ObjectMatches { .. } => false,
+            GameCondition::CastSnapshot { .. }
+            | GameCondition::TriggeringSpellManaSpent { .. }
+            | GameCondition::ObjectMatches { .. } => false,
             GameCondition::Void => self.state.turn_history.current.void_holds(),
             GameCondition::PermanentLeftBattlefieldThisTurn { controllers } => self
                 .state

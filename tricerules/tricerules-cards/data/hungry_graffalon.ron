@@ -1,0 +1,21 @@
+(
+  id: "hungry_graffalon",
+  name: "Hungry Graffalon",
+  face_id: "hungry_graffalon",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Giraffe"],
+  power: 3,
+  toughness: 4,
+  keywords: [Reach],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverPlayerCastsSpell(caster: Controller),
+      intervening_if: Some(GameCondition(TriggeringSpellManaSpent(
+        comparison: GreaterThanSourcePowerOrToughness,
+      ))),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    ),
+  ],
+)

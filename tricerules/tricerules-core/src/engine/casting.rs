@@ -278,8 +278,13 @@ impl GameEngine {
                 chosen_cast_cost_presentations: stack_presentation.chosen_cast_costs,
             })),
         });
-        let fact =
-            self.record_spell_cast(player, source_oid, Zone::Exile, face.mana_cost.mana_value());
+        let fact = self.record_spell_cast(
+            player,
+            source_oid,
+            Zone::Exile,
+            face.mana_cost.mana_value(),
+            0,
+        );
         self.record_committed_events(&crime_events);
         triggers.extend(self.collect_event_triggers(&crime_events));
         self.snapshot_completed_cast(source_oid);
@@ -856,6 +861,7 @@ impl GameEngine {
         let cast_departure = (origin == Zone::Graveyard).then(|| self.snapshot_zone_event());
         let payment = self.commit_cost_transaction(payment_plan)?;
         let life_paid = payment.life_paid;
+        let mana_spent = payment.mana_spent;
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
         let payment_result = CardResultCohort {
             cards: payment
@@ -1004,7 +1010,7 @@ impl GameEngine {
                 chosen_cast_cost_presentations: stack_presentation.chosen_cast_costs,
             })),
         });
-        let fact = self.record_spell_cast(player, oid, origin, mana_value);
+        let fact = self.record_spell_cast(player, oid, origin, mana_value, mana_spent);
         self.record_committed_events(&crime_events);
         target_triggers.extend(self.collect_event_triggers(&crime_events));
         target_triggers.extend(
@@ -2753,7 +2759,7 @@ mod cast_snapshot_tests {
         e.state.stack.push(copy);
         assert_eq!(e.state.turn_history.current.spell_casts.len(), 1);
         // Exercise the commit seam, not a new cast-copy permission or gameplay flow.
-        let fact = e.record_spell_cast(7, copy_id, Zone::Exile, 1);
+        let fact = e.record_spell_cast(7, copy_id, Zone::Exile, 1, 0);
         assert_eq!(fact.occurrence.zone_change_generation, None);
         assert_eq!(
             e.state.stack.last().unwrap().cast_occurrence,

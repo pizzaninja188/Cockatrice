@@ -24,7 +24,7 @@ fn second_event_cards_use_shared_ordinal_triggers() {
     assert!(matches!(
         erudite.triggered_abilities[0].effect.as_slice(),
         [SpellEffectKind::PutCounters {
-            count: 1,
+            count: tricerules_cards::Amount::Fixed(1),
             subject: EffectSubject::Source,
             ..
         }]

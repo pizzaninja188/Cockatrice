@@ -83,7 +83,7 @@ fn issue_85_cards_share_the_grouped_creature_damage_primitive() {
         [
             SpellEffectKind::PutCounters {
                 counter: CounterKind::PlusOnePlusOne,
-                count: 1,
+                count: tricerules_cards::Amount::Fixed(1),
                 subject: EffectSubject::Chosen(source_for_counter),
             },
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target },

@@ -724,6 +724,7 @@ impl GameEngine {
         object_id: ObjectId,
         origin: Zone,
         mana_value: u32,
+        mana_spent: u64,
     ) -> crate::state::SpellCastFact {
         let item_index = self
             .state
@@ -806,6 +807,7 @@ impl GameEngine {
                         == tricerules_cards::CharacteristicDefiningAbility::Changeling
                 }),
             mana_value,
+            mana_spent,
             matched_card_types: CardTypeFilter::ALL
                 .into_iter()
                 .filter(|filter| face.matches_card_type(*filter))
@@ -859,6 +861,15 @@ impl GameEngine {
         condition: &GameCondition,
         context: ConditionContext,
     ) -> bool {
+        self.condition_holds_with_trigger_context(condition, context, None)
+    }
+
+    pub(super) fn condition_holds_with_trigger_context(
+        &self,
+        condition: &GameCondition,
+        context: ConditionContext,
+        trigger_context: Option<&TriggerContext>,
+    ) -> bool {
         match condition {
             GameCondition::Void => self.state.turn_history.current.void_holds(),
             GameCondition::PermanentLeftBattlefieldThisTurn { controllers } => self
@@ -886,6 +897,41 @@ impl GameEngine {
                 .and_then(|item| item.cast_condition_results.get(*index as usize))
                 .copied()
                 .unwrap_or(false),
+            GameCondition::TriggeringSpellManaSpent { comparison } => {
+                let spent = trigger_context
+                    .or_else(|| context.stack_item.map(|item| &item.trigger_context))
+                    .and_then(|trigger| trigger.triggering_spell_mana_spent);
+                match (spent, comparison) {
+                    (Some(spent), SpellManaSpentComparison::AtLeast(minimum)) => spent >= *minimum,
+                    (Some(spent), SpellManaSpentComparison::GreaterThanSourcePowerOrToughness) => {
+                        let source_is_current_creature = self
+                            .state
+                            .objects
+                            .get(&context.source_object_id)
+                            .is_some_and(|object| object.zone == Zone::Battlefield)
+                            && self
+                                .state
+                                .zone_change_generation
+                                .get(&context.source_object_id)
+                                .copied()
+                                .unwrap_or(0)
+                                == context.source_zone_change;
+                        source_is_current_creature
+                            && self
+                                .characteristics(context.source_object_id)
+                                .filter(|characteristics| characteristics.is_creature())
+                                .is_some_and(|characteristics| {
+                                    let spent = i128::from(spent);
+                                    spent > i128::from(characteristics.signed_power.unwrap_or(0))
+                                        || spent
+                                            > i128::from(
+                                                characteristics.signed_toughness.unwrap_or(0),
+                                            )
+                                })
+                    }
+                    (None, _) => false,
+                }
+            }
             GameCondition::LifeChangedThisTurn {
                 players,
                 change,
