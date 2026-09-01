@@ -137,6 +137,7 @@ fn final_showdown_chooses_during_resolution_and_applies_modes_in_printed_order()
     let resolving = e.apply_command(second, &pass()).expect("second pass");
     let choice = find_resolution_choice(&resolving).expect("resolution-time permanent choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::PermanentObjects);
+    assert_eq!(choice.prompt_text, "Choose a creature you control.");
     assert_eq!((choice.min, choice.max), (1, 1));
     assert!(choice.candidate_object_ids.contains(&survivor));
     assert!(choice.candidate_object_ids.contains(&own_other));

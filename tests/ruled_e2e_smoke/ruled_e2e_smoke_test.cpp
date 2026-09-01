@@ -4694,6 +4694,8 @@ TEST_F(RuledE2ESmokeTest, FinalShowdownLinksEveryModeToItsCostAndPublishesItsPer
 
     ASSERT_TRUE(p1.pendingChoice.has_value());
     EXPECT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+    EXPECT_EQ(QString::fromStdString(p1.pendingChoice->prompt_text()),
+              QStringLiteral("Choose a creature you control."));
     EXPECT_EQ(p1.pendingChoice->candidate_object_ids_size(), 2);
     ASSERT_TRUE(p2.lastResolutionChoice.has_value());
     EXPECT_EQ(p2.lastResolutionChoice->choice_kind(), ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);

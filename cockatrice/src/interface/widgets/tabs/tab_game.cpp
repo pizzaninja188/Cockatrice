@@ -822,8 +822,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
                      tr("\nClick a target, or click the original target to keep it.");
     } else if (h->hasPendingChoiceOfKind(ChoiceKind::PermanentChoice)) {
         state.mode = PromptMode::ClickChoice;
-        state.text = h->pendingChoicePromptText(ChoiceKind::PermanentChoice) +
-                     tr("\nClick a legal permanent on the battlefield.");
+        state.text = formatRuledPermanentChoicePrompt(h->pendingChoicePromptText(ChoiceKind::PermanentChoice));
     } else if (h->hasPendingChoiceOfKind(ChoiceKind::CopySource)) {
         state.mode = PromptMode::ClickChoice;
         state.canDecline = h->pendingClickChoiceMayDecline();

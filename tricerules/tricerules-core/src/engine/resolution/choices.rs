@@ -9,8 +9,34 @@ use crate::state::{
 };
 use tricerules_cards::primitives::{
     PlayerRecipient, ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection,
-    ResolutionCost, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    ResolutionCost, SpellEffectKind, TargetController, TargetFilter, TargetKind, TriggerCondition,
+    TriggeredAbilityDef,
 };
+
+fn permanent_choice_prompt(filter: &TargetFilter, min: u32, max: u32) -> String {
+    let (singular, plural) = if filter.any_of.is_none() && filter.kind == TargetKind::Creature {
+        ("creature", "creatures")
+    } else {
+        ("permanent", "permanents")
+    };
+    let controller = if filter.any_of.is_some() {
+        ""
+    } else {
+        match filter.controller {
+            TargetController::Any => "",
+            TargetController::You => " you control",
+            TargetController::Opponent => " an opponent controls",
+            TargetController::NotYou => " you don't control",
+            TargetController::DefendingPlayer => " the defending player controls",
+        }
+    };
+
+    if min == 1 && max == 1 {
+        format!("Choose a {singular}{controller}.")
+    } else {
+        format!("Choose {min}–{max} {plural}{controller}.")
+    }
+}
 
 pub(super) fn choose_resolution_branch(
     cx: &mut EffectCx<'_>,
@@ -173,11 +199,7 @@ pub(super) fn choose_permanents(
                 .unwrap_or_else(|| format!("[object {oid}]"))
         })
         .collect::<Vec<_>>();
-    let prompt = if min == 1 && max == 1 {
-        "Choose a permanent.".to_string()
-    } else {
-        format!("Choose {min}–{max} permanents.")
-    };
+    let prompt = permanent_choice_prompt(&filter, min, max);
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {

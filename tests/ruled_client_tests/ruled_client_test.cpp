@@ -1148,6 +1148,12 @@ TEST(RuledPendingTargetTest, BoundedCastCostGroupStaysOpenUntilItsSelectionCount
     EXPECT_TRUE(ruledCastCostGroupsComplete(spell));
 }
 
+TEST(RuledPendingTargetTest, PermanentChoicePromptKeepsEngineSpecificityAndAddsClickGuidance)
+{
+    EXPECT_EQ(formatRuledPermanentChoicePrompt(QStringLiteral("Choose a creature you control.")),
+              QStringLiteral("Choose a creature you control.\nClick a highlighted permanent on the battlefield."));
+}
+
 TEST(RuledPendingTargetTest, ReconcileDropsTargetsMissingFromLatestLegalSnapshot)
 {
     FakeHost host;

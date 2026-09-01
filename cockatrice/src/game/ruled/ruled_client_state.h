@@ -106,6 +106,9 @@ struct RuledTargetGroupData
                                               int groupPosition,
                                               int groupCount);
 
+/// Keeps the engine-authored permanent-choice constraint and adds the client interaction hint.
+[[nodiscard]] QString formatRuledPermanentChoicePrompt(const QString &enginePrompt);
+
 struct RuledTargetingCostCandidate
 {
     ruled::v1::TargetRefKind kind = ruled::v1::TARGET_REF_KIND_UNSPECIFIED;

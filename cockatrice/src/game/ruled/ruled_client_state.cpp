@@ -46,6 +46,14 @@ QString formatRuledTargetPrompt(const QString &sourceContext,
     return sourceLine + QLatin1Char('\n') + guidance;
 }
 
+QString formatRuledPermanentChoicePrompt(const QString &enginePrompt)
+{
+    const QString prompt = enginePrompt.trimmed();
+    const QString guidance = QCoreApplication::translate(
+        "RuledPermanentChoicePrompt", "Click a highlighted permanent on the battlefield.");
+    return prompt.isEmpty() ? guidance : prompt + QLatin1Char('\n') + guidance;
+}
+
 RuledClientState::RuledClientState(RuledClientHost *_host, QObject *parent) : QObject(parent), host(_host)
 {
 }
