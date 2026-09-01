@@ -464,7 +464,7 @@ fn bonecrusher_giant_casts_normally_from_hand() {
 }
 
 #[test]
-fn temporarily_sole_hand_cast_face_has_no_annotation() {
+fn temporarily_sole_hand_adventure_face_identifies_combined_display() {
     let decks = Some(vec![
         deck_with("mountain", &["bonecrusher_giant_stomp"]),
         vec!["forest".into(); 20],
@@ -509,7 +509,7 @@ fn temporarily_sole_hand_cast_face_has_no_annotation() {
             _ => None,
         })
         .expect("stack push");
-    assert!(stack_push.ability_annotation.is_empty());
+    assert_eq!(stack_push.ability_annotation, "Stomp");
 }
 
 /// CR 715.3d: the same object may be cast from exile only as its permanent face, and moving it to
@@ -569,9 +569,9 @@ fn bonecrusher_giant_casts_once_from_adventure_exile() {
             _ => None,
         })
         .expect("stack push");
-    assert!(
-        stack_push.ability_annotation.is_empty(),
-        "the sole legal exile cast needs no face annotation"
+    assert_eq!(
+        stack_push.ability_annotation, "Bonecrusher Giant",
+        "the chosen face must disambiguate the combined Adventure display identity"
     );
     assert_eq!(e.state.objects[&oid].zone, tricerules_core::Zone::Stack);
     assert!(!e

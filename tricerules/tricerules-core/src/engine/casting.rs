@@ -67,7 +67,7 @@ pub(in crate::engine) struct PreparedSpellCast {
     face_name: String,
     has_x: bool,
     chosen_x: u32,
-    has_multiple_cast_faces: bool,
+    needs_face_annotation: bool,
     cast_method: SpellCastMethod,
     public_targets: Vec<rv1::TargetRef>,
     chosen_modes: Vec<ChosenMode>,
@@ -426,8 +426,6 @@ impl GameEngine {
                 )
             }
         };
-        let has_multiple_cast_faces =
-            super::legal_actions::cast_face_count_for_source(self, player, source) > 1;
         if !from_hand
             && command
                 .source
@@ -454,6 +452,11 @@ impl GameEngine {
         let face = def
             .face(face_index)
             .ok_or(EngineError::Illegal("bad face index"))?;
+        let needs_face_annotation =
+            super::legal_actions::cast_face_count_for_source(self, player, source) > 1
+                || def
+                    .face_display_name(face_index)
+                    .is_some_and(|display_name| display_name != face.name.as_str());
         if from_hand && !def.face_available_from_hand(face_index) {
             return Err(EngineError::Illegal("face cannot be cast from hand"));
         }
@@ -772,7 +775,7 @@ impl GameEngine {
             face_name,
             has_x,
             chosen_x,
-            has_multiple_cast_faces,
+            needs_face_annotation,
             cast_method,
             public_targets,
             chosen_modes,
@@ -804,7 +807,7 @@ impl GameEngine {
             face_name,
             has_x,
             chosen_x,
-            has_multiple_cast_faces,
+            needs_face_annotation,
             cast_method,
             public_targets,
             chosen_modes,
@@ -941,7 +944,7 @@ impl GameEngine {
             "P{} casts {}{}{}{}{}",
             player, face_name, modes_line, x_line, paid_costs_line, tgt_line
         )));
-        let mut stack_annotation = match (has_multiple_cast_faces, has_x) {
+        let mut stack_annotation = match (needs_face_annotation, has_x) {
             (true, true) => format!("{face_name} (X = {chosen_x})"),
             (true, false) => face_name.clone(),
             (false, true) => format!("X = {chosen_x}"),

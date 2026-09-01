@@ -79,7 +79,11 @@ QString resolvedStackAnnotation(const ruled::v1::StackPushed &event,
                                 const RuledPresentationResolver &resolver)
 {
     QStringList parts;
-    if (event.has_primary_presentation()) {
+    // Physical spells already render their card face. Their primary presentation describes that
+    // spell for prompts and nested presentation paths; it is not an additional stack annotation.
+    // Card-less stack objects are activated or triggered abilities, whose primary presentation is
+    // the ability text that the synthetic stack card must display.
+    if (event.card_id().empty() && event.has_primary_presentation()) {
         parts.append(resolver.resolve(event.primary_presentation()));
     }
     for (const auto &presentation : event.chosen_mode_presentations()) {

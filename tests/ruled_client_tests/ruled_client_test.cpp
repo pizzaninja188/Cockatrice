@@ -1402,6 +1402,67 @@ TEST_F(RuledClientTest, OmenFacesOptionalTargetAndStackAnnotationStayEngineAutho
     EXPECT_TRUE(state->stackAnnotation(700u).isEmpty());
 }
 
+TEST_F(RuledClientTest, PhysicalSpellPrimaryPresentationDoesNotBecomeStackAnnotation)
+{
+    ruled::v1::RuledEventBatch ordinaryBatch;
+    auto *ordinary = ordinaryBatch.add_events()->mutable_stack_pushed();
+    ordinary->set_object_id(701u);
+    ordinary->set_card_id("serra_angel");
+    ordinary->set_description("Serra Angel");
+    ordinary->mutable_primary_presentation()->set_fallback_text("Serra Angel");
+    apply(ordinaryBatch);
+
+    EXPECT_TRUE(state->stackAnnotation(701u).isEmpty());
+
+    ruled::v1::RuledEventBatch multiFaceBatch;
+    auto *multiFace = multiFaceBatch.add_events()->mutable_stack_pushed();
+    multiFace->set_object_id(702u);
+    multiFace->set_card_id("fire_ice");
+    multiFace->set_description("Fire");
+    multiFace->set_ability_annotation("Fire");
+    multiFace->mutable_primary_presentation()->set_fallback_text("Fire deals 2 damage.");
+    apply(multiFaceBatch);
+
+    EXPECT_EQ(state->stackAnnotation(702u), QStringLiteral("Fire"));
+}
+
+TEST_F(RuledClientTest, StackAnnotationKeepsAbilityAndStructuredChoicePresentation)
+{
+    ruled::v1::RuledEventBatch abilityBatch;
+    auto *ability = abilityBatch.add_events()->mutable_stack_pushed();
+    ability->set_object_id(703u);
+    ability->set_description("Triggered ability");
+    ability->set_ability_annotation("Engine fallback ability");
+    ability->mutable_primary_presentation()->set_fallback_text("Resolved ability text");
+    apply(abilityBatch);
+
+    EXPECT_EQ(state->stackAnnotation(703u), QStringLiteral("Resolved ability text"));
+
+    ruled::v1::RuledEventBatch choicesBatch;
+    auto *choices = choicesBatch.add_events()->mutable_stack_pushed();
+    choices->set_object_id(704u);
+    choices->set_card_id("boros_charm");
+    choices->set_description("Boros Charm");
+    choices->set_ability_annotation("Fallback mode\nFallback cost");
+    choices->mutable_primary_presentation()->set_fallback_text("Boros Charm");
+    choices->add_chosen_mode_presentations()->set_fallback_text("Resolved mode text");
+    choices->add_chosen_cast_cost_presentations()->set_fallback_text("Resolved cost text");
+    apply(choicesBatch);
+
+    EXPECT_EQ(state->stackAnnotation(704u), QStringLiteral("Resolved mode text\nResolved cost text"));
+
+    ruled::v1::RuledEventBatch markerBatch;
+    auto *marker = markerBatch.add_events()->mutable_stack_pushed();
+    marker->set_object_id(705u);
+    marker->set_card_id("fireball");
+    marker->set_description("Fireball");
+    marker->set_ability_annotation("X = 4");
+    marker->mutable_primary_presentation()->set_fallback_text("Fireball");
+    apply(markerBatch);
+
+    EXPECT_EQ(state->stackAnnotation(705u), QStringLiteral("X = 4"));
+}
+
 TEST_F(RuledClientTest, AppliesAuthoritativeModalModeDataPerFace)
 {
     ruled::v1::RuledEventBatch batch;
