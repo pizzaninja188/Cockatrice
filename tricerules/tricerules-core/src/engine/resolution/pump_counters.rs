@@ -742,6 +742,7 @@ pub(super) fn put_counters(
             .into_iter()
             .collect(),
     };
+    let mut counter_events = Vec::new();
     for tid in subjects {
         let is_on_battlefield = engine
             .state
@@ -753,10 +754,11 @@ pub(super) fn put_counters(
         }
 
         let tgt = object_display_name(&engine.state, engine.registry, tid);
-        let placed = engine.place_counters(tid, counter, count);
-        if placed == 0 {
+        let Some(counter_event) = engine.place_counters_with_event(tid, counter, count, false)
+        else {
             continue;
-        }
+        };
+        counter_events.push(counter_event);
         events.push(ev_log(format!(
             "{spell_label} puts {count} {} counter{} on {tgt}",
             counter_label(counter),
@@ -765,6 +767,7 @@ pub(super) fn put_counters(
         // Annihilation / toughness-0 death are checked by the SBA pass that
         // runs after this resolution (CR 122.3, CR 704.5f).
     }
+    engine.fire_triggers(&counter_events);
 
     Ok(EffectOutcome::Continue)
 }

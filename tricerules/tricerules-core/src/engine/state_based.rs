@@ -1,5 +1,7 @@
 use super::events::ev_log;
-use super::resolution::{consume_regen_shield, destroy_permanent, permanent_moved_event};
+use super::resolution::{
+    consume_regen_shield, destroy_permanent, permanent_moved_event, sacrifice_permanent,
+};
 use super::*;
 
 impl GameEngine {
@@ -85,6 +87,9 @@ impl GameEngine {
         let mut to_destroy_t0 = Vec::new();
         // CR 704.5g/704.5h: lethal-damage deaths — regeneration shields apply here.
         let mut to_destroy_lethal = Vec::new();
+        // CR 704.5s: a Saga is sacrificed only after all chapter abilities from its current
+        // generation have left every staging, choice, and stack container.
+        let mut sagas_to_sacrifice = Vec::new();
         for id in candidate_ids {
             let Some(characteristics) = self.characteristics(id) else {
                 continue;
@@ -109,6 +114,20 @@ impl GameEngine {
                     to_destroy_t0.push(id);
                 }
                 continue;
+            }
+            if self
+                .saga_final_chapter(id)
+                .is_some_and(|final_chapter| o.counter_count(CounterKind::Lore) >= final_chapter)
+            {
+                let generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&id)
+                    .copied()
+                    .unwrap_or(0);
+                if !self.saga_chapter_trigger_active(id, generation) {
+                    sagas_to_sacrifice.push(id);
+                }
             }
             let Some(eff_t) = characteristics.toughness else {
                 continue;
@@ -208,11 +227,44 @@ impl GameEngine {
             }
         }
 
-        if !leaves.is_empty() || !tap_events.is_empty() {
+        let mut saga_leaves = Vec::new();
+        for id in sagas_to_sacrifice {
+            let Some(object) = self.state.objects.get(&id) else {
+                continue;
+            };
+            if object.zone != Zone::Battlefield {
+                continue;
+            }
+            let owner = object.owner;
+            let controller = object.controller;
+            let was_creature = self
+                .characteristics(id)
+                .is_some_and(|value| value.is_creature());
+            let Some(source) = self.trigger_source_snapshot(id) else {
+                continue;
+            };
+            if let Ok(died) = sacrifice_permanent(&mut self.state, self.registry, id) {
+                changed = true;
+                out.push(permanent_moved_event(
+                    &self.state,
+                    id,
+                    owner,
+                    rv1::permanent_moved::Destination::Graveyard,
+                ));
+                saga_leaves.push((source, was_creature, controller, died));
+            }
+        }
+
+        if !leaves.is_empty() || !saga_leaves.is_empty() || !tap_events.is_empty() {
             let mut trigger_events = tap_events;
             trigger_events.extend(leaves.into_iter().flat_map(|(source, was_creature, died)| {
                 leaves_and_dies_events(source, was_creature, died)
             }));
+            trigger_events.extend(saga_leaves.into_iter().flat_map(
+                |(source, was_creature, controller, died)| {
+                    sacrifice_events(source, was_creature, controller, died)
+                },
+            ));
             self.fire_zone_triggers(zone_snapshot, trigger_events);
         }
 

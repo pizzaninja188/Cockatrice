@@ -1,0 +1,44 @@
+// Oracle and rulings verified 2026-09-02. CR 714 governs lore and chapter lifecycle.
+(
+  id: "burn,_burn,_tree_and_fern",
+  name: "Burn, Burn, Tree and Fern",
+  face_id: "burn_burn_tree_and_fern",
+  mana_cost: "{3}{R}",
+  types: ["Enchantment", "Saga"],
+  triggered_abilities: [
+    (
+      ability_id: "chapter_i",
+      presentation: OracleLines([2]),
+      trigger: SagaChapter(chapters: [1]),
+      effect: [DamageTarget(amount: 6, target: (kind: Creature, controller: Opponent))],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature an opponent controls",
+        effect_indices: [0],
+      )])),
+    ),
+    (
+      ability_id: "chapter_ii",
+      presentation: OracleLines([3]),
+      trigger: SagaChapter(chapters: [2]),
+      effect: [Destroy(subject: Chosen((
+        kind: AnyPermanent,
+        controller: Opponent,
+        permanent_types: [Artifact],
+      )))],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target artifact an opponent controls",
+        effect_indices: [0],
+      )])),
+    ),
+    (
+      ability_id: "chapter_iii_iv",
+      presentation: OracleLines([4]),
+      trigger: SagaChapter(chapters: [3, 4]),
+      effect: [AddMana(amount: (r: 1), retention: EndOfStep)],
+    ),
+  ],
+)

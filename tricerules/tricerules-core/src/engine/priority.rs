@@ -246,7 +246,12 @@ impl GameEngine {
                 }
                 self.state.passes_since_stack_change = 0;
                 ev.push(ev_phase(self, rv1::PhaseId::Main1));
-                ev.push(ev_priority_changed(self));
+                self.perform_precombat_saga_lore_action();
+                self.apply_sbas(ev)?;
+                self.flush_staged_triggers(ev);
+                if self.state.blocking_choice().is_none() {
+                    ev.push(ev_priority_changed(self));
+                }
             }
             Main1 => {
                 self.clear_all_mana_pools();

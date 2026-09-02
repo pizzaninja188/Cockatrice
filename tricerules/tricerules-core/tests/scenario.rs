@@ -155,6 +155,8 @@ mod issue_178_aggregate_object_payments;
 mod issue_181_spell_mana_spent;
 #[path = "scenario/issue_183_power_up.rs"]
 mod issue_183_power_up;
+#[path = "scenario/issue_185_sagas.rs"]
+mod issue_185_sagas;
 #[path = "scenario/issue_186_amass.rs"]
 mod issue_186_amass;
 #[path = "scenario/issue_187_base_pt.rs"]

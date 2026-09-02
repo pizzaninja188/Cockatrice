@@ -95,6 +95,12 @@ impl GameEngine {
         };
         if matches!(
             pending.continuation,
+            ResolutionContinuation::SagaReadAhead { .. }
+        ) {
+            return self.finish_saga_read_ahead_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::SearchZoneScope { .. }
         ) {
             return self.finish_search_zone_scope(pending, answer, decision);
@@ -260,6 +266,9 @@ impl GameEngine {
             }
             ResolutionContinuation::EntryReplacement { .. } => {
                 return self.finish_battlefield_entry_replacement_choice(pending, chosen[0]);
+            }
+            ResolutionContinuation::SagaReadAhead { .. } => {
+                unreachable!("read-ahead branch handled before object-choice validation")
             }
             ResolutionContinuation::DamageReplacement { .. } => {
                 return self.finish_damage_prevention_choice(pending, chosen[0]);

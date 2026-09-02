@@ -82,6 +82,37 @@ impl GameEngine {
         count
     }
 
+    pub(super) fn place_counters_with_event(
+        &mut self,
+        target: ObjectId,
+        kind: CounterKind,
+        count: u32,
+        read_ahead_entry: bool,
+    ) -> Option<GameEvent> {
+        let before = self.state.objects.get(&target)?.counter_count(kind);
+        let placed = self.place_counters(target, kind, count);
+        if placed == 0 {
+            return None;
+        }
+        let after = self.state.objects.get(&target)?.counter_count(kind);
+        Some(GameEvent::CountersPlaced {
+            object: TriggerObjectRef {
+                object_id: target,
+                zone_change_generation: self
+                    .state
+                    .zone_change_generation
+                    .get(&target)
+                    .copied()
+                    .unwrap_or(0),
+                controller_at_event: self.controller_of(target)?,
+            },
+            kind,
+            before,
+            after,
+            read_ahead_entry,
+        })
+    }
+
     /// CR 119.7 / 614.17: query the prohibition before committing a life-gain event.
     /// Printed and copied abilities are live only on the battlefield and while not blanked
     /// in layer 6. There is no historical source binding to retain after a zone change.

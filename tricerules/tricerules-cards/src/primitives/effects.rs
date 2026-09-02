@@ -5,7 +5,7 @@ use super::{
     CreatureScopeFilter, EventZone, GraveyardDestination, GraveyardFilter, Keyword,
     PermanentTypeFilter, PowerComparison, ProtectionQuality, ReflexiveTriggeredAbilityDef,
     SpecialActionKind, SpellCastFilter, TargetController, TargetFilter, TargetKind, TargetRole,
-    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
+    TriggerCondition, TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
 };
 use crate::{choice_fallback, AbilityPresentation, ChoiceId, ManaCost};
 use serde::de::{EnumAccess, MapAccess, SeqAccess, VariantAccess};
@@ -1148,6 +1148,8 @@ pub enum CounterKind {
     Loyalty,
     /// CR 310.4: defense counters on battles.
     Defense,
+    /// CR 714: lore counters advance Saga chapter abilities.
+    Lore,
 }
 
 impl CounterKind {
@@ -1161,6 +1163,7 @@ impl CounterKind {
             CounterKind::Stun => "stun".into(),
             CounterKind::Loyalty => "loyalty".into(),
             CounterKind::Defense => "defense".into(),
+            CounterKind::Lore => "lore".into(),
         }
     }
 
@@ -4318,6 +4321,11 @@ impl SpellEffectKind {
                 if ability.trigger.is_delayed_only() {
                     return Err(
                         "GrantTriggeredAbility cannot use a delayed trigger condition".into(),
+                    );
+                }
+                if matches!(ability.trigger, TriggerCondition::SagaChapter { .. }) {
+                    return Err(
+                        "Saga chapter triggers must be printed on an Enchantment Saga face".into(),
                     );
                 }
                 ability.validate_shape()

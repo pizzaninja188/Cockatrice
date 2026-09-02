@@ -276,6 +276,58 @@ mod tests {
     }
 
     #[test]
+    fn issue_185_saga_vocabulary_and_validation_are_typed() {
+        let card = r#"(
+            id: "test_saga",
+            name: "Test Saga",
+            face_id: "test_saga",
+            mana_cost: "{1}{R}",
+            types: ["Enchantment", "Saga"],
+            keywords: [ReadAhead],
+            triggered_abilities: [(
+                ability_id: "chapter_i_ii",
+                presentation: Fallback,
+                trigger: SagaChapter(chapters: [1, 2]),
+                effect: [GainLife(amount: 1)],
+            )],
+        )"#;
+        assert!(crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_ok());
+
+        for chapters in ["[]", "[0]", "[2, 1]", "[1, 1]"] {
+            let trigger: super::TriggerCondition =
+                ron::from_str(&format!("SagaChapter(chapters: {chapters})"))
+                    .expect("Saga chapter syntax must deserialize");
+            assert!(trigger.validate().is_err(), "{chapters}");
+        }
+
+        let non_saga = card.replace("[\"Enchantment\", \"Saga\"]", "[\"Enchantment\"]");
+        assert!(crate::CardRegistry::from_chunks_and_tokens(&[&non_saga], &[]).is_err());
+
+        let no_chapters = r#"(
+            id: "chapterless_saga",
+            name: "Chapterless Saga",
+            face_id: "chapterless_saga",
+            types: ["Enchantment", "Saga"],
+            keywords: [ReadAhead],
+        )"#;
+        assert!(crate::CardRegistry::from_chunks_and_tokens(&[no_chapters], &[]).is_err());
+
+        let granted: super::SpellEffectKind = ron::from_str(
+            r#"GrantTriggeredAbility(
+                subject: Source,
+                ability: (
+                    ability_id: "chapter_i",
+                    presentation: Fallback,
+                    trigger: SagaChapter(chapters: [1]),
+                    effect: [GainLife(amount: 1)],
+                ),
+            )"#,
+        )
+        .expect("nested chapter syntax deserializes before shape validation");
+        assert!(granted.validate(super::EffectContext::Ability).is_err());
+    }
+
+    #[test]
     fn issue_165_dynamic_consumers_reject_unavailable_result_contexts() {
         for template in [
             "Scry(count: AMOUNT)",

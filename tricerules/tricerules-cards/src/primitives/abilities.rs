@@ -350,6 +350,9 @@ impl ActivatedAbilityDef {
 pub enum TriggerCondition {
     /// When this permanent enters the battlefield.
     WhenSelfEntersBattlefield,
+    /// CR 714.2b: a printed Saga chapter triggers whenever lore counters cross one of these
+    /// chapter numerals. A single definition may carry multiple numerals for "III, IV" text.
+    SagaChapter { chapters: Vec<u32> },
     /// Whenever this permanent changes from untapped to tapped. Entering the battlefield tapped
     /// is an entry status, not this event (CR 603.6d / 701.26).
     WheneverSelfBecomesTapped,
@@ -664,6 +667,18 @@ impl TriggerCondition {
 
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::SagaChapter { chapters } => {
+                if chapters.is_empty() {
+                    return Err("Saga chapter trigger requires at least one chapter".into());
+                }
+                if chapters.contains(&0) {
+                    return Err("Saga chapter numerals must be positive".into());
+                }
+                if chapters.windows(2).any(|pair| pair[0] >= pair[1]) {
+                    return Err("Saga chapter numerals must be strictly increasing".into());
+                }
+                Ok(())
+            }
             Self::WheneverSelfBlocksCreature { attacker } => attacker.validate(),
             Self::WheneverSelfBecomesBlockedByCreature { blocker } => blocker.validate(),
             Self::WheneverPermanentEntersBattlefield {

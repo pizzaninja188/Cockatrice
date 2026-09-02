@@ -626,12 +626,15 @@ impl CardFace {
         self.is_legendary = has(&self.supertypes, "Legendary");
         self.is_aura = has(&self.types, "Aura");
 
-        // Printed loyalty and defense are intrinsic entry replacements. Materializing them in
+        // Printed loyalty, defense, and ordinary Saga lore are intrinsic entry replacements. Materializing them in
         // the shared static-ability vocabulary makes copy effects and replacement ordering use
         // the same pipeline as every authored enters-with-counters ability (CR 122.6/614.12).
+        let saga_lore =
+            (has(&self.types, "Saga") && !self.keywords.contains(&Keyword::ReadAhead)).then_some(1);
         for (counter, amount) in [
             (CounterKind::Loyalty, self.loyalty),
             (CounterKind::Defense, self.defense),
+            (CounterKind::Lore, saga_lore),
         ] {
             let Some(amount) = amount else {
                 continue;
@@ -652,6 +655,7 @@ impl CardFace {
                     ability_id: AbilityId::new(match counter {
                         CounterKind::Loyalty => "intrinsic_loyalty",
                         CounterKind::Defense => "intrinsic_defense",
+                        CounterKind::Lore => "intrinsic_saga_lore",
                         _ => unreachable!("only printed entry counters are materialized here"),
                     })
                     .expect("intrinsic identity is canonical"),

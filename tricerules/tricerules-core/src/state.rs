@@ -910,6 +910,10 @@ pub enum ResolutionContinuation {
     EntryReplacement {
         stack: ParkedStackResolution,
     },
+    SagaReadAhead {
+        stack: ParkedStackResolution,
+        effect_id: EntryReplacementEffectId,
+    },
     DamageReplacement {
         stack: ParkedStackResolution,
         effect_ids: Vec<u32>,
@@ -961,6 +965,7 @@ impl ResolutionContinuation {
             | Self::Populate { stack, .. }
             | Self::Blight { stack, .. }
             | Self::EntryReplacement { stack }
+            | Self::SagaReadAhead { stack, .. }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
@@ -993,6 +998,7 @@ impl ResolutionContinuation {
             | Self::Populate { stack, .. }
             | Self::Blight { stack, .. }
             | Self::EntryReplacement { stack }
+            | Self::SagaReadAhead { stack, .. }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
@@ -1088,6 +1094,10 @@ pub enum EntryReplacementEffectId {
         source_id: ObjectId,
         source_generation: u64,
         ability_index: usize,
+    },
+    ReadAhead {
+        object_id: ObjectId,
+        copy_revision: u64,
     },
 }
 

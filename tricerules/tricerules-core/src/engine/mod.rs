@@ -170,6 +170,7 @@ mod presentation;
 mod priority;
 pub(crate) mod replacement;
 mod resolution;
+mod sagas;
 mod state_based;
 mod targeting;
 mod triggers;
@@ -453,6 +454,15 @@ enum GameEvent {
     ZoneChanges(zone_events::ZoneEventBatch),
     EntersBattlefield {
         object_id: ObjectId,
+    },
+    /// CR 714.2b: one atomic counter-placement edge. Chapter triggers inspect the exact
+    /// generation and before/after lore counts rather than reconstructing an event from state.
+    CountersPlaced {
+        object: TriggerObjectRef,
+        kind: CounterKind,
+        before: u32,
+        after: u32,
+        read_ahead_entry: bool,
     },
     /// One actual untapped-to-tapped status edge. The generation and controller are captured at
     /// the event boundary so attached-object triggers never rebind after a zone change.

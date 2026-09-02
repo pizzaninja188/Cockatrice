@@ -12,6 +12,7 @@ use super::*;
 ///
 /// The complete ability definition is captured when it triggers. This is required for abilities
 /// granted by continuous effects, which can disappear before the trigger reaches the stack.
+#[derive(Clone)]
 pub(super) struct CollectedTrigger {
     pub source_id: ObjectId,
     pub card_id: String,
@@ -92,31 +93,59 @@ impl GameEngine {
             .map(|source| GameEvent::LeavesBattlefield { source })
     }
 
+    fn source_trigger_active(
+        &self,
+        source_id: ObjectId,
+        source_generation: u64,
+        predicate: impl Fn(&TriggeredAbilityDef) -> bool,
+    ) -> bool {
+        self.state.stack.iter().any(|item| {
+            item.source_permanent_id == Some(source_id)
+                && item.source_zone_change == source_generation
+                && item.triggered_ability.as_ref().is_some_and(&predicate)
+        }) || self.state.pending_triggers.iter().any(|trigger| {
+            trigger.source_permanent_id == source_id
+                && trigger.source_zone_change == source_generation
+                && predicate(&trigger.ability)
+        }) || self.state.staged_trigger_groups.iter().any(|group| {
+            group.triggers.iter().any(|trigger| {
+                trigger.source_permanent_id == source_id
+                    && trigger.source_zone_change == source_generation
+                    && predicate(&trigger.ability)
+            })
+        }) || self
+            .state
+            .pending_trigger_order
+            .as_ref()
+            .is_some_and(|pending| {
+                pending.candidates.iter().any(|trigger| {
+                    trigger.source_permanent_id == source_id
+                        && trigger.source_zone_change == source_generation
+                        && predicate(&trigger.ability)
+                })
+            })
+    }
+
     pub(super) fn siege_defeat_trigger_active(
         &self,
         source_id: ObjectId,
         source_generation: u64,
     ) -> bool {
-        let is_siege = |ability: &TriggeredAbilityDef| {
+        self.source_trigger_active(source_id, source_generation, |ability| {
             ability
                 .effect
                 .iter()
                 .any(|effect| matches!(effect, SpellEffectKind::SiegeDefeat))
-        };
-        self.state.stack.iter().any(|item| {
-            item.source_permanent_id == Some(source_id)
-                && item.source_zone_change == source_generation
-                && item.triggered_ability.as_ref().is_some_and(&is_siege)
-        }) || self.state.pending_triggers.iter().any(|trigger| {
-            trigger.source_permanent_id == source_id
-                && trigger.source_zone_change == source_generation
-                && is_siege(&trigger.ability)
-        }) || self.state.staged_trigger_groups.iter().any(|group| {
-            group.triggers.iter().any(|trigger| {
-                trigger.source_permanent_id == source_id
-                    && trigger.source_zone_change == source_generation
-                    && is_siege(&trigger.ability)
-            })
+        })
+    }
+
+    pub(super) fn saga_chapter_trigger_active(
+        &self,
+        source_id: ObjectId,
+        source_generation: u64,
+    ) -> bool {
+        self.source_trigger_active(source_id, source_generation, |ability| {
+            matches!(ability.trigger, TriggerCondition::SagaChapter { .. })
         })
     }
 
@@ -688,6 +717,61 @@ impl GameEngine {
                 }
                 out
             }
+            GameEvent::CountersPlaced {
+                object,
+                kind: CounterKind::Lore,
+                before,
+                after,
+                read_ahead_entry,
+            } => {
+                if self
+                    .state
+                    .zone_change_generation
+                    .get(&object.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    != object.zone_change_generation
+                {
+                    return vec![];
+                }
+                let Some(characteristics) = self.characteristics(object.object_id) else {
+                    return vec![];
+                };
+                if !characteristics.has_type("Enchantment") || !characteristics.has_type("Saga") {
+                    return vec![];
+                }
+                let Some((card_id, face_index)) = self.effective_card_identity(object.object_id)
+                else {
+                    return vec![];
+                };
+                let triggers = self.matching_triggered_abilities(
+                    card_id,
+                    object.object_id,
+                    object.controller_at_event,
+                    face_index,
+                    |condition| matches!(condition, TriggerCondition::SagaChapter { .. }),
+                );
+                let mut out = Vec::new();
+                for trigger in triggers {
+                    let TriggerCondition::SagaChapter { chapters } = &trigger.ability.trigger
+                    else {
+                        continue;
+                    };
+                    let occurrences = chapters
+                        .iter()
+                        .filter(|chapter| {
+                            if *read_ahead_entry {
+                                **chapter == *after
+                            } else {
+                                *before < **chapter && **chapter <= *after
+                            }
+                        })
+                        .count();
+                    out.extend(std::iter::repeat_n(trigger, occurrences));
+                }
+                out
+            }
+            GameEvent::CountersPlaced { .. } => vec![],
             GameEvent::RoomDoorUnlocked {
                 object_id,
                 face_index,
@@ -1676,7 +1760,7 @@ impl GameEngine {
         }
     }
 
-    fn effective_triggered_abilities(
+    pub(super) fn effective_triggered_abilities(
         &self,
         source_id: ObjectId,
         _card_id: &str,
@@ -2187,6 +2271,40 @@ impl TriggerSourceSnapshot {
 mod tests {
     use super::*;
     use tricerules_cards::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility};
+
+    #[test]
+    fn issue_185_multiple_lore_counters_create_one_occurrence_per_crossed_numeral() {
+        let (mut engine, source) = trigger_limit_source();
+        let face = engine
+            .registry
+            .get("burn,_burn,_tree_and_fern")
+            .expect("Burn")
+            .primary_face()
+            .clone();
+        let object = engine.state.objects.get_mut(&source).expect("source");
+        object.card_id = "burn,_burn,_tree_and_fern".into();
+        object.copiable_values = Some(CopiableValues {
+            source_card_id: "burn,_burn,_tree_and_fern".into(),
+            source_face_index: 0,
+            display_name: "Burn, Burn, Tree and Fern".into(),
+            room_faces: None,
+            face,
+        });
+
+        let event = engine
+            .place_counters_with_event(source, CounterKind::Lore, 4, false)
+            .expect("place lore");
+        let triggers = engine.collect_event_triggers(&[event]);
+        assert_eq!(triggers.len(), 4);
+        assert_eq!(
+            triggers
+                .iter()
+                .filter(|trigger| trigger.ability.ability_id.as_str() == "chapter_iii_iv")
+                .count(),
+            2,
+            "the combined III, IV ability triggers once for each crossed numeral"
+        );
+    }
 
     #[test]
     fn issue_168_entry_observer_uses_shared_subtype_filter() {

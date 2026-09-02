@@ -9,6 +9,7 @@ pub(super) fn counter_option_id(kind: CounterKind) -> u32 {
         CounterKind::Stun => 3,
         CounterKind::Loyalty => 4,
         CounterKind::Defense => 5,
+        CounterKind::Lore => 6,
         CounterKind::Keyword(keyword) => 256 + keyword as u32,
     }
 }

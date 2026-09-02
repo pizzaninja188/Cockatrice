@@ -24,6 +24,31 @@ fn accumulate_entry_counters(
     *total = total.saturating_add(count);
 }
 
+fn saga_chapter_label(mut chapter: u32) -> String {
+    let mut label = String::new();
+    for (value, numeral) in [
+        (1000, "M"),
+        (900, "CM"),
+        (500, "D"),
+        (400, "CD"),
+        (100, "C"),
+        (90, "XC"),
+        (50, "L"),
+        (40, "XL"),
+        (10, "X"),
+        (9, "IX"),
+        (5, "V"),
+        (4, "IV"),
+        (1, "I"),
+    ] {
+        while chapter >= value {
+            chapter -= value;
+            label.push_str(numeral);
+        }
+    }
+    label
+}
+
 /// The event domain currently parked behind the one shared CR 616 choice channel.
 #[derive(Debug, Clone)]
 pub(crate) enum PendingReplacementEvent {
@@ -197,6 +222,19 @@ impl GameEngine {
                         candidates.push((effect_id, priority, label));
                     }
                 }
+                if face.keywords.contains(&Keyword::ReadAhead) {
+                    let effect_id = EntryReplacementEffectId::ReadAhead {
+                        object_id: event.object_id,
+                        copy_revision: entering.copy_revision,
+                    };
+                    if !event.applied_effects.contains(&effect_id) {
+                        candidates.push((
+                            effect_id,
+                            ReplacementPriority::Other,
+                            format!("{} — read ahead", face.name),
+                        ));
+                    }
+                }
             }
         }
 
@@ -296,6 +334,114 @@ impl GameEngine {
             StaticAbilityDef::EntersAsCopy { filter } => Some(filter.clone()),
             _ => None,
         }
+    }
+
+    fn entry_read_ahead_final_chapter(
+        &self,
+        event: &BattlefieldEntryEvent,
+        effect_id: &EntryReplacementEffectId,
+    ) -> Option<u32> {
+        let EntryReplacementEffectId::ReadAhead {
+            object_id,
+            copy_revision,
+        } = effect_id
+        else {
+            return None;
+        };
+        let object = self.state.objects.get(object_id)?;
+        if *object_id != event.object_id || object.copy_revision != *copy_revision {
+            return None;
+        }
+        let face = self.battlefield_entry_face(event)?;
+        if !face.keywords.contains(&Keyword::ReadAhead) {
+            return None;
+        }
+        face.triggered_abilities
+            .iter()
+            .filter_map(|ability| match &ability.trigger {
+                TriggerCondition::SagaChapter { chapters } => chapters.iter().copied().max(),
+                _ => None,
+            })
+            .max()
+    }
+
+    fn park_read_ahead_choice(
+        &mut self,
+        item: StackItem,
+        event: BattlefieldEntryEvent,
+        completion: BattlefieldEntryCompletion,
+        effect_id: EntryReplacementEffectId,
+        final_chapter: u32,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let options = (1..=final_chapter)
+            .map(|chapter| rv1::ResolutionBranchOption {
+                branch_index: chapter - 1,
+                label: saga_chapter_label(chapter),
+                cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                cost_text: String::new(),
+                selectable: true,
+                search_zones: Vec::new(),
+                presentation: None,
+            })
+            .collect();
+        let prompt = "Choose this Saga's starting chapter (read ahead).".to_string();
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: event.deciding_player,
+                    source_object_id: event.object_id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    candidate_object_ids: Vec::new(),
+                    candidate_card_ids: Vec::new(),
+                    min: 1,
+                    max: 1,
+                    ordered: false,
+                    candidate_names: Vec::new(),
+                    candidate_server_card_ids: Vec::new(),
+                    candidate_selectable: Vec::new(),
+                    unique_names: false,
+                    generic_mana_cost: 0,
+                    payment_currently_legal: false,
+                    resolution_branches: options,
+                    mana_cost: String::new(),
+                    reveal_audience: 0,
+                    revealed_zone_owner_player_id: None,
+                    candidate_source_zones: Vec::new(),
+                    combat_defender_options: Vec::new(),
+                    waterbend: false,
+                    selection_slots: Vec::new(),
+                },
+            )),
+        });
+        events.push(ev_log(prompt.clone()));
+        let deciding_player = event.deciding_player;
+        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
+            Box::new(PendingBattlefieldEntry {
+                event,
+                applications: Vec::new(),
+                copy_source_effect: None,
+                completion,
+            }),
+        ));
+        self.state.pending_resolution = Some(PendingResolution {
+            deciding_player,
+            presentation: PendingResolutionPresentation {
+                source_object_id: item.id,
+                candidates: Vec::new(),
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: rv1::ChoiceKind::ResolutionBranch,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::SagaReadAhead {
+                stack: ParkedStackResolution::new(item),
+                effect_id,
+            },
+        });
     }
 
     fn copy_source_candidates(
@@ -509,6 +655,9 @@ impl GameEngine {
                     _ => debug_assert!(false, "stale battlefield entry replacement"),
                 }
             }
+            EntryReplacementEffectId::ReadAhead { .. } => {
+                debug_assert!(false, "read-ahead choice must be completed before apply")
+            }
         }
         event.applied_effects.push(effect_id);
     }
@@ -638,6 +787,19 @@ impl GameEngine {
                         );
                         return BattlefieldEntryProgress::Parked;
                     }
+                    if let Some(final_chapter) =
+                        self.entry_read_ahead_final_chapter(&event, effect_id)
+                    {
+                        self.park_read_ahead_choice(
+                            item,
+                            event,
+                            completion,
+                            effect_id.clone(),
+                            final_chapter,
+                            events,
+                        );
+                        return BattlefieldEntryProgress::Parked;
+                    }
                     self.apply_entry_replacement(&mut event, effect_id.clone());
                 }
                 _ => {
@@ -762,6 +924,10 @@ impl GameEngine {
             ));
         }
         let battle_protector = event.battle_protector;
+        let read_ahead_entry = event
+            .applied_effects
+            .iter()
+            .any(|effect| matches!(effect, EntryReplacementEffectId::ReadAhead { .. }));
         let (is_room, enters_as_copy) = self
             .state
             .objects
@@ -795,15 +961,23 @@ impl GameEngine {
             object.counter_timestamps.clear();
             object.attached_to = attached_to;
         }
+        let mut trigger_events = Vec::new();
         for (counter, count) in event.entry_counters {
-            self.place_counters(event.object_id, counter, count);
+            if let Some(placed) = self.place_counters_with_event(
+                event.object_id,
+                counter,
+                count,
+                read_ahead_entry && counter == CounterKind::Lore,
+            ) {
+                trigger_events.push(placed);
+            }
         }
         if let Some(protector) = battle_protector {
             self.state
                 .battle_protectors
                 .insert(event.object_id, protector);
         }
-        let mut trigger_events = vec![self.finish_zone_event(zone_snapshot)];
+        trigger_events.insert(0, self.finish_zone_event(zone_snapshot));
         if !is_room {
             return Ok(trigger_events);
         }
@@ -1394,6 +1568,18 @@ impl GameEngine {
                 return Ok(finish_with_events(self, events));
             }
             entry.event.applied_effects.push(application.effect_id);
+        } else if let Some(final_chapter) =
+            self.entry_read_ahead_final_chapter(&entry.event, &application.effect_id)
+        {
+            self.park_read_ahead_choice(
+                stack.item,
+                entry.event,
+                entry.completion,
+                application.effect_id,
+                final_chapter,
+                &mut events,
+            );
+            return Ok(finish_with_events(self, events));
         } else {
             self.apply_entry_replacement(&mut entry.event, application.effect_id);
         }
@@ -1407,6 +1593,81 @@ impl GameEngine {
             BattlefieldEntryProgress::Ready(event) => event,
         };
 
+        self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
+    }
+
+    pub(super) fn finish_saga_read_ahead_choice(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, effect_id) = match &pending.continuation {
+            ResolutionContinuation::SagaReadAhead { stack, effect_id } => {
+                (stack.clone(), effect_id.clone())
+            }
+            _ => return Err(EngineError::Illegal("read-ahead continuation missing")),
+        };
+        let Some(pending_event) = self.state.pending_replacement_event.take() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("read-ahead choice is stale"));
+        };
+        let mut entry = match pending_event {
+            PendingReplacementEvent::BattlefieldEntry(entry) => *entry,
+            other => {
+                self.state.pending_replacement_event = Some(other);
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("read-ahead choice is stale"));
+            }
+        };
+        let restore = |engine: &mut Self,
+                       pending: PendingResolution,
+                       entry: PendingBattlefieldEntry,
+                       message| {
+            engine.state.pending_replacement_event =
+                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+            engine.state.pending_resolution = Some(pending);
+            Err(EngineError::Illegal(message))
+        };
+        if decision != rv1::ResolutionChoiceDecision::SelectBranch
+            || !answer.chosen_object_ids.is_empty()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.cast_spell.is_some()
+            || answer.chosen_combat_defender.is_some()
+        {
+            return restore(
+                self,
+                pending,
+                entry,
+                "read ahead requires one chapter branch",
+            );
+        }
+        let Some(final_chapter) = self.entry_read_ahead_final_chapter(&entry.event, &effect_id)
+        else {
+            return restore(self, pending, entry, "read-ahead choice is stale");
+        };
+        let chapter = answer.selected_branch_index.saturating_add(1);
+        if chapter == 0 || chapter > final_chapter {
+            return restore(self, pending, entry, "read-ahead chapter is out of range");
+        }
+        accumulate_entry_counters(&mut entry.event.entry_counters, CounterKind::Lore, chapter);
+        entry.event.applied_effects.push(effect_id);
+
+        let mut events = vec![ev_log(format!(
+            "P{} chooses chapter {} for read ahead.",
+            pending.deciding_player,
+            saga_chapter_label(chapter)
+        ))];
+        let event = match self.advance_or_park_battlefield_entry(
+            stack.item,
+            entry.event,
+            entry.completion.clone(),
+            &mut events,
+        ) {
+            BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
+            BattlefieldEntryProgress::Ready(event) => event,
+        };
         self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
     }
 }

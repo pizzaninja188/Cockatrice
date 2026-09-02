@@ -157,6 +157,8 @@ pub enum Keyword {
     /// CR 702.8: this card may be cast any time its controller could cast an instant
     /// (CR 601 + 702.8b), overriding the normal sorcery-speed restriction on permanents.
     Flash,
+    /// CR 702.155: as this Saga enters, its controller chooses its starting chapter.
+    ReadAhead,
 }
 
 impl Keyword {
@@ -204,6 +206,7 @@ impl Keyword {
             Keyword::Defender => "Defender",
             Keyword::Flash => "Flash",
             Keyword::Convoke => "Convoke",
+            Keyword::ReadAhead => "Read ahead",
         }
     }
 }

@@ -63,6 +63,36 @@ fn face_can_reference_attached_object(face: &CardFace) -> bool {
         })
 }
 
+fn validate_saga_face(card: &CardDefinition, face: &CardFace) -> Result<(), RegistryError> {
+    let is_saga = face
+        .types
+        .iter()
+        .any(|card_type| card_type == "Enchantment")
+        && face.types.iter().any(|card_type| card_type == "Saga");
+    let chapter_abilities: Vec<_> = face
+        .triggered_abilities
+        .iter()
+        .filter(|ability| matches!(ability.trigger, TriggerCondition::SagaChapter { .. }))
+        .collect();
+    if !chapter_abilities.is_empty() && !is_saga {
+        return Err(RegistryError::InvalidCard {
+            id: card.id.clone(),
+            reason: "Saga chapter triggers require an Enchantment Saga face".into(),
+        });
+    }
+    if face
+        .keywords
+        .contains(&crate::primitives::Keyword::ReadAhead)
+        && (!is_saga || chapter_abilities.is_empty())
+    {
+        return Err(RegistryError::InvalidCard {
+            id: card.id.clone(),
+            reason: "Read ahead requires an Enchantment Saga face with chapter abilities".into(),
+        });
+    }
+    Ok(())
+}
+
 fn face_can_reference_attached_player(face: &CardFace) -> bool {
     face.is_aura
         && face.spell_effect.iter().any(
@@ -950,6 +980,7 @@ impl CardRegistry {
                 reason,
             })?;
             validate_static_abilities(token, face)?;
+            validate_saga_face(token, face)?;
             let can_reference_attached_object = face_can_reference_attached_object(face);
             let can_reference_attached_player = face_can_reference_attached_player(face);
             for ability in &face.activated_abilities {
@@ -1350,6 +1381,7 @@ impl CardRegistry {
                     });
                 }
                 validate_static_abilities(&card, face)?;
+                validate_saga_face(&card, face)?;
                 for ability in &face.triggered_abilities {
                     if ability.trigger.is_delayed_only() {
                         return Err(RegistryError::InvalidCard {

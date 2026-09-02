@@ -105,6 +105,16 @@ For Rust engine behavior, reject illegal input with `EngineError::Illegal` rathe
 Keep steps, priority, event-time facts, new-object identity, hidden information, and player roles
 explicit. Use player-set-generic logic rather than two-player arithmetic.
 
+### Saga definitions
+
+Author a Saga face with both `"Enchantment"` and `"Saga"` types and one
+`SagaChapter(chapters: [...])` trigger per printed chapter ability. Chapter numbers must be
+positive and strictly increasing; a combined ability such as “III, IV” uses one trigger with
+`chapters: [3, 4]`. Do not author the ordinary one-lore-counter entry ability: the registry
+materializes it from the Saga type. For read ahead, add `ReadAhead` to `keywords`; the engine then
+uses the existing replacement-order and resolution-branch choice contracts to choose the entry
+lore count and trigger only the resulting chapter.
+
 ## 5. Author presentation metadata
 
 Ruled card data contains stable presentation references but no copied Oracle prose. Cockatrice
