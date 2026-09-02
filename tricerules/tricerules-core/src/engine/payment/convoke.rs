@@ -209,7 +209,9 @@ impl GameEngine {
                 "payment preview requires exactly one action",
             ));
         }
-        let (mut prepared, source, mut selection) = if let Some(command) = &request.cast_spell {
+        let (mut prepared, source, mut selection, allows_convoke) = if let Some(command) =
+            &request.cast_spell
+        {
             if self.state.priority_player_id() != player || self.state.blocking_choice().is_some() {
                 return Err(EngineError::Illegal("spell payment is not available now"));
             }
@@ -218,12 +220,14 @@ impl GameEngine {
                 cast.payment,
                 self.payment_object_ref(cast.oid),
                 command.payment.clone().unwrap_or_default(),
+                cast.convoke,
             )
         } else if let Some(command) = &request.activate_ability {
             (
                 self.prepare_activation_payment(player, command)?,
                 self.payment_object_ref(command.source_object_id),
                 command.payment.clone().unwrap_or_default(),
+                false,
             )
         } else if let Some(command) = &request.resolution_choice {
             let pending = self
@@ -247,6 +251,7 @@ impl GameEngine {
                 self.prepare_resolution_payment_costs(player, payment, &command.restricted_mana)?,
                 self.payment_object_ref(pending.presentation.source_object_id),
                 command.payment.clone().unwrap_or_default(),
+                false,
             )
         } else {
             let command = request.execute_permanent_action.as_ref().unwrap();
@@ -255,6 +260,7 @@ impl GameEngine {
                 prepared,
                 source,
                 command.payment.clone().unwrap_or_default(),
+                false,
             )
         };
         if selection.source.as_ref().is_some_and(|old| *old != source) {
@@ -285,7 +291,8 @@ impl GameEngine {
         let old_waterbend = std::mem::take(&mut selection.waterbend);
         let mut seen = HashSet::new();
         for c in old_creatures {
-            let valid = prepared.waterbend_limit.is_none()
+            let valid = allows_convoke
+                && prepared.waterbend_limit.is_none()
                 && self.convoke_candidate(player, &prepared, &c)
                 && seen.insert(c.object.as_ref().map(|o| o.object_id));
             if valid {
@@ -431,6 +438,9 @@ impl GameEngine {
                         });
                     }
                 }
+                continue;
+            }
+            if !allows_convoke {
                 continue;
             }
             let mut options = Vec::new();

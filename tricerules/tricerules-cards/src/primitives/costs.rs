@@ -1,6 +1,6 @@
 //! Costs paid to activate abilities.
 
-use super::{BattlefieldPermanentFilter, GameCondition, TargetFilter, ZoneCardFilter};
+use super::{BattlefieldPermanentFilter, GameCondition, TargetFilter, TargetKind, ZoneCardFilter};
 use crate::mana::ManaCost;
 use crate::{choice_fallback, AbilityPresentation, ChoiceId};
 use serde::{Deserialize, Serialize};
@@ -58,6 +58,34 @@ impl ObjectPaymentConstraint {
     }
 }
 
+/// Which battlefield object supplies counters for an activated-ability cost. Source preserves
+/// the historical Walking Ballista/Brambleback Brute shape; selected permanents are an
+/// engine-authored, non-targeting choice such as Ray Fillet or Sage of Fables.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum CounterRemovalPaymentSource {
+    #[default]
+    Source,
+    SelectedPermanent(Box<TargetFilter>),
+}
+
+fn counter_payment_filter_is_permanent(filter: &TargetFilter) -> bool {
+    filter.any_of.as_ref().map_or_else(
+        || matches!(filter.kind, TargetKind::Creature | TargetKind::AnyPermanent),
+        |branches| branches.iter().all(counter_payment_filter_is_permanent),
+    )
+}
+
+fn counter_payment_filter_has_context_free_controller(filter: &TargetFilter) -> bool {
+    filter.any_of.as_ref().map_or_else(
+        || !matches!(filter.controller, super::TargetController::DefendingPlayer),
+        |branches| {
+            branches
+                .iter()
+                .all(counter_payment_filter_has_context_free_controller)
+        },
+    )
+}
+
 /// Cost to activate an activated ability (CR 602). Shared by every activated ability,
 /// including mana abilities: an ability is classified as a mana ability (CR 605.1a) by its
 /// *effect* being [`SpellEffectKind::ProduceMana`], not by its cost — so a `{T}` land, a
@@ -65,10 +93,12 @@ impl ObjectPaymentConstraint {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AbilityCost {
     /// Brambleback Brute removes any one kind; Walking Ballista removes fixed +1/+1 counters.
-    /// None permits exactly one counter of any present kind. Always paid by the source.
+    /// None permits exactly one counter of any present kind and is valid only for source payment.
     RemoveCounters {
         counter: Option<super::CounterKind>,
         count: u32,
+        #[serde(default)]
+        payment_source: CounterRemovalPaymentSource,
     },
     /// CR 701.68: Gristle Glutton and Spiral into Solitude put all counters on one creature.
     Blight { count: u32 },
@@ -122,11 +152,35 @@ impl AbilityCost {
             {
                 Err("Waterbend activation cost cannot contain unbound X".into())
             }
-            Self::RemoveCounters { counter, count } => {
+            Self::RemoveCounters {
+                counter,
+                count,
+                payment_source,
+            } => {
                 if *count == 0 || (counter.is_none() && *count != 1) {
                     return Err(
                         "counter cost requires a positive fixed count or any one counter".into(),
                     );
+                }
+                if let CounterRemovalPaymentSource::SelectedPermanent(filter) = payment_source {
+                    if counter.is_none() {
+                        return Err(
+                            "selected-permanent counter removal requires a fixed counter kind"
+                                .into(),
+                        );
+                    }
+                    if !counter_payment_filter_is_permanent(filter) {
+                        return Err(
+                            "selected counter payment requires Creature or AnyPermanent filters"
+                                .into(),
+                        );
+                    }
+                    if !counter_payment_filter_has_context_free_controller(filter) {
+                        return Err(
+                            "selected counter payment cannot use defending-player context".into(),
+                        );
+                    }
+                    filter.validate_characteristic_constraints()?;
                 }
                 if let Some(counter) = counter {
                     counter.validate()?;

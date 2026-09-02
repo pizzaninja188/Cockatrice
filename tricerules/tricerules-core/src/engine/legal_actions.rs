@@ -336,7 +336,7 @@ fn activated_ability_info(
         .costs
         .iter()
         .map(|cost| match cost {
-            AbilityCost::RemoveCounters { counter, count } => format!(
+            AbilityCost::RemoveCounters { counter, count, .. } => format!(
                 "Remove {count} {}counter(s)",
                 counter
                     .map(|k| format!("{} ", k.label()))
@@ -734,8 +734,29 @@ fn legal_ability_cost_choices(
 
     for (cost_index, cost) in ability.costs.iter().enumerate() {
         match cost {
-            AbilityCost::RemoveCounters { counter, count } => {
-                choices.push(eng.counter_removal_choice(source, cost_index, *counter, *count));
+            AbilityCost::RemoveCounters {
+                counter,
+                count,
+                payment_source,
+            } => {
+                let choice = match payment_source {
+                    CounterRemovalPaymentSource::Source => {
+                        eng.counter_removal_choice(source, cost_index, *counter, *count)
+                    }
+                    CounterRemovalPaymentSource::SelectedPermanent(filter) => {
+                        let Some(counter) = counter else {
+                            structurally_payable = false;
+                            continue;
+                        };
+                        eng.selected_counter_removal_choice(
+                            player, source, cost_index, *counter, *count, filter,
+                        )
+                    }
+                };
+                structurally_payable &=
+                    matches!(payment_source, CounterRemovalPaymentSource::Source)
+                        || !choice.candidate_objects.is_empty();
+                choices.push(choice);
             }
             AbilityCost::Blight { count } => {
                 let choice = eng.blight_cost_choice(player, cost_index, *count);

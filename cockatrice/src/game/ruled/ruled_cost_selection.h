@@ -13,7 +13,8 @@ inline bool ruledCostUsesObjectRefs(RuledCostChoiceKind kind)
 
 inline bool ruledCostUsesObjectRefs(const RuledCostChoice &choice)
 {
-    return choice.zone == RuledCostChoiceZone::Graveyard || ruledCostUsesObjectRefs(choice.kind);
+    return choice.zone == RuledCostChoiceZone::Graveyard || ruledCostUsesObjectRefs(choice.kind) ||
+           (choice.kind == RuledCostChoiceKind::RemoveCounters && choice.counterSourceId == 0);
 }
 
 inline bool ruledCostNeedsConfirmation(const RuledCostChoice &choice)
@@ -41,6 +42,13 @@ inline QString ruledCostSelectionPrompt(const RuledCostChoice &choice, const QSt
         return tr("Choose %1 card(s) from your graveyard for %2.").arg(choice.min).arg(name);
     if (choice.kind == RuledCostChoiceKind::Blight)
         return tr("Blight %1: choose one creature you control for %2.").arg(choice.blightCount).arg(name);
+    if (choice.kind == RuledCostChoiceKind::RemoveCounters && choice.counterSourceId == 0) {
+        const QString counter = choice.counterOptions.isEmpty() ? tr("specified") : choice.counterOptions.front().label;
+        return tr("Choose a permanent to remove %1 %2 counter(s) from for %3.")
+            .arg(choice.counterCount)
+            .arg(counter)
+            .arg(name);
+    }
     if (choice.kind == RuledCostChoiceKind::Tap)
         if (choice.aggregateMinimum > 0)
             return tr("Choose untapped permanents with total power %1 or greater to tap for %2.")

@@ -20,6 +20,7 @@ enum CostDebit {
         object: rv1::CostObjectRef,
         kind: CounterKind,
         count: u32,
+        payment_source: CounterDebitSource,
     },
     Blight {
         object: rv1::CostObjectRef,
@@ -74,6 +75,14 @@ enum CostDebit {
         object_id: ObjectId,
         generation: u64,
         controller: PlayerId,
+    },
+}
+
+enum CounterDebitSource {
+    Source,
+    SelectedPermanent {
+        ability_source: rv1::CostObjectRef,
+        filter: Box<TargetFilter>,
     },
 }
 
@@ -936,7 +945,11 @@ impl GameEngine {
         let eligible_restricted_mana = self.eligible_restricted_mana_for_ability(idx, permanent_id);
         for (cost_index, cost) in costs.iter().enumerate() {
             match cost {
-                AbilityCost::RemoveCounters { counter, count } => {
+                AbilityCost::RemoveCounters {
+                    counter,
+                    count,
+                    payment_source,
+                } => {
                     expected_selections += 1;
                     let Some(Selection::CounterRemoval(selected)) =
                         by_index.get(&cost_index).and_then(|s| s.selection.as_ref())
@@ -947,22 +960,65 @@ impl GameEngine {
                         .source
                         .as_ref()
                         .ok_or(EngineError::Illegal("missing counter source"))?;
-                    if reference.object_id != permanent_id {
-                        return Err(EngineError::Illegal("counter cost must use its source"));
-                    }
-                    let kind = self.state.objects[&permanent_id]
-                        .counters
-                        .keys()
-                        .copied()
-                        .find(|kind| {
-                            crate::engine::counters::counter_option_id(*kind) == selected.option_id
-                        })
-                        .filter(|kind| counter.is_none_or(|expected| expected == *kind))
-                        .ok_or(EngineError::Illegal("invalid counter kind"))?;
+                    let ability_source = rv1::CostObjectRef {
+                        object_id: permanent_id,
+                        zone_change_generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&permanent_id)
+                            .copied()
+                            .unwrap_or(0),
+                    };
+                    let (kind, debit_source) = match payment_source {
+                        CounterRemovalPaymentSource::Source => {
+                            if reference.object_id != permanent_id {
+                                return Err(EngineError::Illegal(
+                                    "counter cost must use its source",
+                                ));
+                            }
+                            let kind = self.state.objects[&permanent_id]
+                                .counters
+                                .keys()
+                                .copied()
+                                .find(|kind| {
+                                    crate::engine::counters::counter_option_id(*kind)
+                                        == selected.option_id
+                                })
+                                .filter(|kind| counter.is_none_or(|expected| expected == *kind))
+                                .ok_or(EngineError::Illegal("invalid counter kind"))?;
+                            (kind, CounterDebitSource::Source)
+                        }
+                        CounterRemovalPaymentSource::SelectedPermanent(filter) => {
+                            let kind = counter.ok_or(EngineError::Illegal(
+                                "selected counter cost requires a fixed counter kind",
+                            ))?;
+                            if selected.option_id
+                                != crate::engine::counters::counter_option_id(kind)
+                                || !self.counter_payment_permanent_matches(
+                                    player,
+                                    permanent_id,
+                                    reference.object_id,
+                                    filter,
+                                )
+                            {
+                                return Err(EngineError::Illegal(
+                                    "illegal selected counter source",
+                                ));
+                            }
+                            (
+                                kind,
+                                CounterDebitSource::SelectedPermanent {
+                                    ability_source,
+                                    filter: filter.clone(),
+                                },
+                            )
+                        }
+                    };
                     debits.push(CostDebit::RemoveCounters {
                         object: *reference,
                         kind,
                         count: *count,
+                        payment_source: debit_source,
                     });
                 }
                 AbilityCost::Blight { count } => {
@@ -1340,6 +1396,7 @@ impl GameEngine {
                     object,
                     kind,
                     count,
+                    ..
                 } => {
                     self.remove_counters(object.object_id, kind, count);
                 }
@@ -1555,13 +1612,35 @@ impl GameEngine {
                     object,
                     kind,
                     count,
+                    payment_source,
                 } => {
                     *counter_debits.entry((object.object_id, *kind)).or_default() +=
                         u64::from(*count);
-                    self.state
-                        .objects
-                        .get(&object.object_id)
-                        .is_some_and(|o| o.zone == Zone::Battlefield && o.controller == plan.player)
+                    let source_valid = match payment_source {
+                        CounterDebitSource::Source => {
+                            self.state.objects.get(&object.object_id).is_some_and(|o| {
+                                o.zone == Zone::Battlefield && o.controller == plan.player
+                            })
+                        }
+                        CounterDebitSource::SelectedPermanent {
+                            ability_source,
+                            filter,
+                        } => {
+                            self.state
+                                .zone_change_generation
+                                .get(&ability_source.object_id)
+                                .copied()
+                                .unwrap_or(0)
+                                == ability_source.zone_change_generation
+                                && self.counter_payment_permanent_matches(
+                                    plan.player,
+                                    ability_source.object_id,
+                                    object.object_id,
+                                    filter,
+                                )
+                        }
+                    };
+                    source_valid
                         && self
                             .state
                             .zone_change_generation
@@ -1822,6 +1901,53 @@ impl GameEngine {
             _ => false,
         };
         kind_matches && crate::engine::targeting::filter_characteristics_match(self, filter, oid)
+    }
+
+    pub(in crate::engine) fn counter_payment_permanent_matches(
+        &self,
+        player: PlayerId,
+        source: ObjectId,
+        oid: ObjectId,
+        filter: &TargetFilter,
+    ) -> bool {
+        if let Some(branches) = &filter.any_of {
+            return branches
+                .iter()
+                .any(|branch| self.counter_payment_permanent_matches(player, source, oid, branch));
+        }
+        if super::super::targeting::object_is_excluded(
+            &self.state,
+            &filter.excluded_objects,
+            oid,
+            super::super::targeting::TargetSourceIdentity::current(self, source),
+            TriggerContext::default(),
+        ) {
+            return false;
+        }
+        let Some(object) = self.state.objects.get(&oid) else {
+            return false;
+        };
+        if object.zone != Zone::Battlefield {
+            return false;
+        }
+        let controller_matches = match filter.controller {
+            TargetController::Any => true,
+            TargetController::You => object.controller == player,
+            TargetController::Opponent => self.state.are_opponents(object.controller, player),
+            TargetController::NotYou => object.controller != player,
+            TargetController::DefendingPlayer => false,
+        };
+        let Some(characteristics) = self.characteristics(oid) else {
+            return false;
+        };
+        let kind_matches = match filter.kind {
+            TargetKind::Creature => characteristics.is_creature(),
+            TargetKind::AnyPermanent => true,
+            _ => false,
+        };
+        controller_matches
+            && kind_matches
+            && crate::engine::targeting::filter_characteristics_match(self, filter, oid)
     }
 
     /// Snapshot a permanent about to be sacrificed as an activation cost. Taken *before* the cost
@@ -2151,6 +2277,7 @@ mod convoke_transaction_tests {
             },
             kind: CounterKind::PlusOnePlusOne,
             count: 1,
+            payment_source: CounterDebitSource::Source,
         };
         let plan = |debits| CostTransactionPlan {
             purpose: CostPurpose::Ability,
@@ -2171,11 +2298,13 @@ mod convoke_transaction_tests {
             &[
                 AbilityCost::RemoveCounters {
                     counter: Some(CounterKind::PlusOnePlusOne),
-                    count: 1
+                    count: 1,
+                    payment_source: Default::default(),
                 },
                 AbilityCost::RemoveCounters {
                     counter: None,
-                    count: 1
+                    count: 1,
+                    payment_source: Default::default(),
                 },
             ]
         ));
@@ -2189,6 +2318,92 @@ mod convoke_transaction_tests {
         assert!(receipt.sacrificed[0].source.counters.is_empty());
         assert!(engine.state.last_known_counters_by_generation[&(oid, generation)].is_empty());
         assert_eq!(engine.state.objects[&oid].zone, Zone::Graveyard);
+    }
+
+    #[test]
+    fn issue_193_selected_counter_payment_revalidates_control_before_any_debit() {
+        let mut engine = GameEngine::new(19307, &[0, 1], 20, None, true).unwrap();
+        let source = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&source).unwrap().card_id = "brambleback_brute".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        let bearer = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&bearer).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            bearer,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        engine.state.objects.get_mut(&bearer).unwrap().add_counters(
+            CounterKind::PlusOnePlusOne,
+            1,
+            0,
+        );
+        let generation = engine.state.zone_change_generation[&bearer];
+        let costs = [
+            AbilityCost::RemoveCounters {
+                counter: Some(CounterKind::PlusOnePlusOne),
+                count: 1,
+                payment_source: CounterRemovalPaymentSource::SelectedPermanent(Box::new(
+                    TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..Default::default()
+                    },
+                )),
+            },
+            AbilityCost::SacrificeSelf,
+        ];
+        let selections = [rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::CounterRemoval(
+                rv1::CounterRemovalSelection {
+                    source: Some(rv1::CostObjectRef {
+                        object_id: bearer,
+                        zone_change_generation: generation,
+                    }),
+                    option_id: crate::engine::counters::counter_option_id(
+                        CounterKind::PlusOnePlusOne,
+                    ),
+                },
+            )),
+        }];
+
+        let plan = engine
+            .plan_ability_costs(0, 0, source, &costs, &[], &selections, &[], 0, 0)
+            .expect("current controlled bearer validates");
+        engine.state.objects.get_mut(&bearer).unwrap().controller = 1;
+        assert!(
+            engine.commit_cost_transaction(plan).is_err(),
+            "control change must reject the whole transaction"
+        );
+        assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+        assert_eq!(
+            engine.state.objects[&bearer].counter_count(CounterKind::PlusOnePlusOne),
+            1
+        );
+
+        engine.state.objects.get_mut(&bearer).unwrap().controller = 0;
+        let plan = engine
+            .plan_ability_costs(0, 0, source, &costs, &[], &selections, &[], 0, 0)
+            .expect("restored controller validates");
+        engine
+            .commit_cost_transaction(plan)
+            .expect("counter removal and sacrifice commit atomically");
+        assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+        assert_eq!(
+            engine.state.objects[&bearer].counter_count(CounterKind::PlusOnePlusOne),
+            0
+        );
     }
 
     #[test]

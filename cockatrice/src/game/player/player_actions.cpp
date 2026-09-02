@@ -5649,9 +5649,14 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
                                              return entry.costIndex == choice.costIndex;
                                          });
             if (existing == pendingRuledSpellCast.costSelections.end()) {
+                const quint32 counterOptionId =
+                    choice.kind == RuledCostChoiceKind::RemoveCounters && choice.counterSourceId == 0 &&
+                            choice.counterOptions.size() == 1
+                        ? choice.counterOptions.front().optionId
+                        : 0;
                 pendingRuledSpellCast.costSelections.append(
                     {choice.costIndex, choice.zone, {stableId},
-                     {choice.candidateGenerations.value(stableId)}});
+                     {choice.candidateGenerations.value(stableId)}, counterOptionId});
             } else if (const int index = existing->selectedIds.indexOf(stableId); index >= 0) {
                 existing->selectedIds.removeAt(index);
                 existing->selectedGenerations.removeAt(index);
@@ -5732,13 +5737,19 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
                                          });
             int selectedCount = 0;
             if (existing == pendingActivatedAbility.costSelections.end()) {
+                const quint32 counterOptionId =
+                    choice.kind == RuledCostChoiceKind::RemoveCounters && choice.counterSourceId == 0 &&
+                            choice.counterOptions.size() == 1
+                        ? choice.counterOptions.front().optionId
+                        : 0;
                 pendingActivatedAbility.costSelections.append(
                     {choice.costIndex,
                      choice.zone,
                      {stableId},
                      ruledCostUsesObjectRefs(choice)
                          ? QVector<quint64>{choice.candidateGenerations.value(stableId)}
-                         : QVector<quint64>{}});
+                         : QVector<quint64>{},
+                     counterOptionId});
                 selectedCount = 1;
             } else if (existing->selectedIds.contains(stableId)) {
                 const int selectedIndex = existing->selectedIds.indexOf(stableId);

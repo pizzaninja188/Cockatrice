@@ -7281,7 +7281,7 @@ TEST_F(RuledE2ESmokeTest, ConvokeAndWaterbendPreviewsArePrivateReadOnlyAndCommit
     EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[thopter->oid]));
 }
 
-TEST_F(RuledE2ESmokeTest, SelectableTapAndBlightPaymentsPreservePrivacyAndExactCardsForBothClients)
+TEST_F(RuledE2ESmokeTest, SelectableTapCounterAndBlightPaymentsPreservePrivacyAndExactCardsForBothClients)
 {
     const auto started = startServers();
     if (!started) {
@@ -7411,6 +7411,72 @@ TEST_F(RuledE2ESmokeTest, SelectableTapAndBlightPaymentsPreservePrivacyAndExactC
     EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[gene->oid]));
     EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[bear->oid]));
     EXPECT_EQ(p1.myPool.total(), 1);
+
+    // Sage of Fables proves that a source-absent counter choice crosses Rust, relay, and both
+    // physical battlefield views without exposing the activating player's private legal cohort.
+    ASSERT_TRUE(putPermanent("Sage of Fables", true));
+    ASSERT_TRUE(putPermanent("Fugitive Wizard", false));
+    const auto sage = findPermanent(p1, p1.myId, QStringLiteral("sage_of_fables"));
+    const auto wizard = findPermanent(p1, p1.myId, QStringLiteral("fugitive_wizard"));
+    ASSERT_TRUE(sage && wizard);
+    EXPECT_EQ(wizard->power, 2);
+    EXPECT_EQ(wizard->toughness, 2);
+    const quint64 sageAbilityKey = static_cast<quint64>(sage->oid) << 32;
+    const auto sageCosts = p1.latestLegal.cost_choices_by_ability().find(sageAbilityKey);
+    ASSERT_NE(sageCosts, p1.latestLegal.cost_choices_by_ability().end());
+    ASSERT_EQ(sageCosts->second.choices_size(), 1);
+    const auto counterCost = sageCosts->second.choices(0);
+    ASSERT_EQ(counterCost.kind(), ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS);
+    ASSERT_TRUE(counterCost.has_counter_removal());
+    EXPECT_FALSE(counterCost.counter_removal().has_source());
+    ASSERT_EQ(counterCost.counter_removal().options_size(), 1);
+    EXPECT_EQ(counterCost.counter_removal().options(0).option_id(), 1u);
+    ASSERT_EQ(counterCost.candidate_objects_size(), 1);
+    EXPECT_EQ(counterCost.candidate_objects(0).object().object_id(), wizard->oid);
+    EXPECT_EQ(counterCost.candidate_objects(0).object().zone_change_generation(), wizard->generation);
+    EXPECT_EQ(counterCost.candidate_objects(0).contribution(), 1);
+    EXPECT_EQ(p2.latestLegal.cost_choices_by_ability().count(sageAbilityKey), 0u);
+
+    ruled::v1::RuledCommand sageActivation;
+    auto *sageAbility = sageActivation.mutable_activate_ability();
+    p1.setBattlefieldAbilitySource(sageAbility, sage->oid);
+    sageAbility->set_ability_index(0);
+    auto *counterSelection = sageAbility->add_cost_selections();
+    counterSelection->set_cost_index(counterCost.cost_index());
+    auto *counterRemoval = counterSelection->mutable_counter_removal();
+    counterRemoval->set_option_id(counterCost.counter_removal().options(0).option_id());
+    counterRemoval->mutable_source()->set_object_id(wizard->oid);
+    counterRemoval->mutable_source()->set_zone_change_generation(wizard->generation);
+
+    ruled::v1::RuledCommand sagePreviewQuery;
+    auto *sagePreview = sagePreviewQuery.mutable_preview_payment();
+    sagePreview->set_transaction_id(193);
+    sagePreview->set_revision(1);
+    *sagePreview->mutable_activate_ability() = *sageAbility;
+    const int sagePreviewCount = p1.paymentPreviewCount;
+    const auto sagePreviewVersion = p1.stateVersion;
+    p1.sendRuled(sagePreviewQuery, QStringLiteral("issue 193 preview Sage activation payment"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.paymentPreviewCount == sagePreviewCount + 1; }, 10000,
+                             "Sage activation preview"));
+    p2.pump(100);
+    ASSERT_TRUE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+    EXPECT_TRUE(p1.paymentPreview.candidates().empty());
+    EXPECT_TRUE(p1.paymentPreview.selection().convoke().empty());
+    EXPECT_EQ(p1.stateVersion, sagePreviewVersion);
+
+    ruled::v1::RuledCommand addCounterAbilityMana;
+    addCounterAbilityMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addCounterAbilityMana.mutable_dev_command()->mutable_add_mana()->set_c(1);
+    ASSERT_TRUE(send(p1, addCounterAbilityMana, QStringLiteral("issue 193 add Sage activation mana")));
+    const int sageHandBefore = p1.handSizeByPlayer[p1.myId];
+    ASSERT_TRUE(send(p1, sageActivation, QStringLiteral("issue 193 activate Sage of Fables")));
+    EXPECT_EQ(findPermanent(p1, p1.myId, QStringLiteral("fugitive_wizard"))->power, 1);
+    EXPECT_EQ(findPermanent(p2, p1.myId, QStringLiteral("fugitive_wizard"))->power, 1);
+    ruled::v1::RuledCommand passSage;
+    passSage.mutable_pass_priority();
+    ASSERT_TRUE(send(p1, passSage, QStringLiteral("issue 193 pass Sage ability")));
+    ASSERT_TRUE(send(p2, passSage, QStringLiteral("issue 193 resolve Sage ability")));
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], sageHandBefore + 1);
 
     // Blight reuses the same physical picker, but accepts the already tapped, summoning-sick bear.
     ASSERT_TRUE(putPermanent("Gristle Glutton", true));

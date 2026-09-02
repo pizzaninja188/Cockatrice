@@ -1,0 +1,31 @@
+// Oracle and rulings verified 2026-09-01. Removing a counter is a non-targeting activation cost.
+(
+  id: "ray_fillet,_man_ray",
+  name: "Ray Fillet, Man Ray",
+  face_id: "ray_fillet_man_ray",
+  mana_cost: "{3}{U}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Fish", "Mutant"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "mutagen", count: 1)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [
+      Mana("{2}"),
+      RemoveCounters(
+        counter: Some(PlusOnePlusOne),
+        count: 1,
+        payment_source: SelectedPermanent((kind: Creature, controller: You)),
+      ),
+    ],
+    effect: [Draw(count: 1)],
+  )],
+)

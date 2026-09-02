@@ -821,7 +821,7 @@ message LegalCostChoice {
   AggregateMinimumConstraint aggregate_minimum = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
-// Brambleback Brute / Walking Ballista. IDs denote engine counter kinds, never list positions.
+// Counter-removal costs. IDs denote engine counter kinds, never list positions.
 message CounterRemovalOption {
   uint32 option_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   string label = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -829,12 +829,15 @@ message CounterRemovalOption {
 }
 
 message CounterRemovalChoices {
+  // Present for source-only costs such as Walking Ballista. When absent, LegalCostChoice's
+  // generation-bound candidate_objects are the selectable counter sources (Ray Fillet).
   CostObjectRef source = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 count = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   repeated CounterRemovalOption options = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message CounterRemovalSelection {
+  // The source-only ability object or the selected candidate permanent, with physical identity.
   CostObjectRef source = 1;
   uint32 option_id = 2;
 }

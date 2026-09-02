@@ -622,6 +622,17 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     counterRemoval->mutable_source()->set_zone_change_generation(4);
     counterRemoval->set_count(1);
     counterRemoval->add_options()->set_option_id(3);
+    auto *selectedCounterChoice = (*p1Legal.mutable_cost_choices_by_ability())[193].add_choices();
+    selectedCounterChoice->set_kind(ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS);
+    selectedCounterChoice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
+    selectedCounterChoice->add_candidate_ids(102);
+    auto *selectedCounterCandidate = selectedCounterChoice->add_candidate_objects();
+    selectedCounterCandidate->mutable_object()->set_object_id(102);
+    selectedCounterCandidate->mutable_object()->set_zone_change_generation(6);
+    selectedCounterCandidate->set_contribution(2);
+    auto *selectedCounterRemoval = selectedCounterChoice->mutable_counter_removal();
+    selectedCounterRemoval->set_count(1);
+    selectedCounterRemoval->add_options()->set_option_id(1);
     auto *aggregateChoice = (*p1Legal.mutable_cost_choices_by_ability())[178].add_choices();
     aggregateChoice->set_kind(ruled::v1::COST_CHOICE_KIND_EXILE);
     aggregateChoice->set_zone(ruled::v1::COST_CHOICE_ZONE_GRAVEYARD);
@@ -701,6 +712,13 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     EXPECT_EQ(privateCounters.source().zone_change_generation(), 4u);
     ASSERT_EQ(privateCounters.options_size(), 1);
     EXPECT_EQ(privateCounters.options(0).option_id(), 3u);
+    const auto &privateSelectedCounters =
+        forP1.legal_by_player().at(1).cost_choices_by_ability().at(193).choices(0);
+    EXPECT_FALSE(privateSelectedCounters.counter_removal().has_source());
+    ASSERT_EQ(privateSelectedCounters.candidate_objects_size(), 1);
+    EXPECT_EQ(privateSelectedCounters.candidate_objects(0).object().object_id(), 102u);
+    EXPECT_EQ(privateSelectedCounters.candidate_objects(0).object().zone_change_generation(), 6u);
+    EXPECT_EQ(privateSelectedCounters.candidate_objects(0).contribution(), 2);
     const auto &privateAggregate =
         forP1.legal_by_player().at(1).cost_choices_by_ability().at(178).choices(0);
     EXPECT_EQ(privateAggregate.aggregate_minimum().minimum(), 3u);

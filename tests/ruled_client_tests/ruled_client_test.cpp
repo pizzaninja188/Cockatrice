@@ -4317,6 +4317,69 @@ TEST_F(RuledClientTest, CounterRemovalCostsAreRecognized)
     EXPECT_FALSE(ruledCounterSelectionStillLegal(pending.costSelections.front(), stale));
 }
 
+TEST_F(RuledClientTest, SelectedCounterRemovalUsesAnAuthoritativePermanentPicker)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &costs = (*(*batch.mutable_legal_by_player())[kLocalPlayer].mutable_cost_choices_by_ability())[193];
+    costs.set_non_mana_costs_payable(true);
+    auto *choice = costs.add_choices();
+    choice->set_kind(ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS);
+    choice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
+    choice->set_cost_index(1);
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->add_candidate_ids(901);
+    auto *candidate = choice->add_candidate_objects();
+    candidate->mutable_object()->set_object_id(901);
+    candidate->mutable_object()->set_zone_change_generation(13);
+    candidate->set_contribution(2);
+    auto *removal = choice->mutable_counter_removal();
+    removal->set_count(1);
+    auto *option = removal->add_options();
+    option->set_option_id(1);
+    option->set_label("+1/+1");
+    option->set_available_count(1);
+    apply(batch);
+
+    const auto parsed = state->abilityCostChoices(0, 193);
+    ASSERT_EQ(parsed.size(), 1);
+    const auto &selected = parsed.front();
+    EXPECT_EQ(selected.kind, RuledCostChoiceKind::RemoveCounters);
+    EXPECT_EQ(selected.counterSourceId, 0u);
+    EXPECT_EQ(selected.counterCount, 1u);
+    ASSERT_EQ(selected.counterOptions.size(), 1);
+    EXPECT_EQ(selected.candidateIds, QSet<quint32>{901});
+    EXPECT_EQ(selected.candidateGenerations.value(901), 13u);
+    EXPECT_EQ(selected.candidateContributions.value(901), 2);
+    EXPECT_TRUE(ruledCostUsesObjectRefs(selected));
+    EXPECT_TRUE(ruledCostSelectionPrompt(selected, QStringLiteral("Ray Fillet, Man Ray"))
+                    .contains(QStringLiteral("counter"), Qt::CaseInsensitive));
+
+    PendingActivatedAbility pending;
+    pending.valid = true;
+    pending.permanentOid = 900;
+    pending.expectedZoneChangeGeneration = 12;
+    pending.costChoices = parsed;
+    EXPECT_TRUE(RuledPendingCast::chooseCounterCosts(nullptr, pending));
+    EXPECT_TRUE(pending.costSelections.isEmpty());
+    EXPECT_EQ(pending.nextCostChoice, 0);
+
+    RuledPendingCostSelection payment{1, RuledCostChoiceZone::Battlefield, {901}, {13}, 1};
+    EXPECT_TRUE(ruledCounterSelectionStillLegal(payment, selected));
+    ruled::v1::CostSelection command;
+    ruledWriteCounterRemoval(payment, command);
+    EXPECT_EQ(command.counter_removal().option_id(), 1u);
+    EXPECT_EQ(command.counter_removal().source().object_id(), 901u);
+    EXPECT_EQ(command.counter_removal().source().zone_change_generation(), 13u);
+
+    auto stale = selected;
+    stale.candidateGenerations[901] = 14;
+    EXPECT_FALSE(ruledCounterSelectionStillLegal(payment, stale));
+    stale = selected;
+    stale.candidateIds.clear();
+    EXPECT_FALSE(ruledCounterSelectionStillLegal(payment, stale));
+}
+
 TEST_F(RuledClientTest, BlightCostsUseAnAuthoritativeCreaturePicker)
 {
     ruled::v1::RuledEventBatch batch;

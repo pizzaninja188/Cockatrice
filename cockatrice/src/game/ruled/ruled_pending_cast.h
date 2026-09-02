@@ -73,9 +73,18 @@ struct RuledPendingCostSelection
 
 inline bool ruledCounterSelectionStillLegal(const RuledPendingCostSelection &selection, const RuledCostChoice &choice)
 {
-    return choice.kind == RuledCostChoiceKind::RemoveCounters && choice.counterCount > 0 &&
-           selection.selectedIds == QVector<quint32>{choice.counterSourceId} &&
-           selection.selectedGenerations == QVector<quint64>{choice.counterSourceGeneration} &&
+    if (choice.kind != RuledCostChoiceKind::RemoveCounters || choice.counterCount == 0 ||
+        selection.selectedIds.size() != 1 || selection.selectedGenerations.size() != 1) {
+        return false;
+    }
+    const quint32 objectId = selection.selectedIds.front();
+    const quint64 generation = selection.selectedGenerations.front();
+    const bool sourceCurrent = choice.counterSourceId != 0
+                                   ? objectId == choice.counterSourceId && generation == choice.counterSourceGeneration
+                                   : choice.candidateIds.contains(objectId) &&
+                                         choice.candidateGenerations.contains(objectId) &&
+                                         generation == choice.candidateGenerations.value(objectId);
+    return sourceCurrent &&
            std::any_of(choice.counterOptions.cbegin(), choice.counterOptions.cend(), [&](const auto &option) {
                return option.optionId == selection.counterOptionId && option.availableCount >= choice.counterCount;
            });
@@ -113,7 +122,9 @@ inline bool ruledCostSelectionConflicts(const RuledCostChoice &choice,
                                        [&already](const auto &entry) { return entry.costIndex == already.costIndex; });
     if (previous == choices.cend())
         return true;
-    if (choice.kind == RuledCostChoiceKind::Blight || previous->kind == RuledCostChoiceKind::Blight)
+    if (choice.kind == RuledCostChoiceKind::Blight || previous->kind == RuledCostChoiceKind::Blight ||
+        choice.kind == RuledCostChoiceKind::RemoveCounters ||
+        previous->kind == RuledCostChoiceKind::RemoveCounters)
         return false;
     if ((choice.kind == RuledCostChoiceKind::Tap && previous->kind == RuledCostChoiceKind::Sacrifice) ||
         (choice.kind == RuledCostChoiceKind::Sacrifice && previous->kind == RuledCostChoiceKind::Tap))

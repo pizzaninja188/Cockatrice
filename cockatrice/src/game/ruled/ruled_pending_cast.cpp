@@ -17,8 +17,11 @@ bool RuledPendingCast::chooseCounterCosts(QWidget *parent, PendingActivatedAbili
         const auto choice = pending.costChoices.at(pending.nextCostChoice);
         if (choice.kind != RuledCostChoiceKind::RemoveCounters)
             break;
-        if (choice.counterOptions.isEmpty() || choice.counterCount == 0 ||
-            choice.counterSourceId != pending.permanentOid ||
+        if (choice.counterOptions.isEmpty() || choice.counterCount == 0)
+            return false;
+        if (choice.counterSourceId == 0)
+            break;
+        if (choice.counterSourceId != pending.permanentOid ||
             choice.counterSourceGeneration != pending.expectedZoneChangeGeneration)
             return false;
         quint32 optionId = choice.counterOptions.front().optionId;
