@@ -137,6 +137,7 @@ fn validate_effect_cast_cost_conditions(
         | SpellEffectKind::Draw { count: amount, .. }
         | SpellEffectKind::GainLife { amount }
         | SpellEffectKind::Mill { count: amount, .. }
+        | SpellEffectKind::PutCounters { count: amount, .. }
         | SpellEffectKind::Amass { count: amount, .. }
         | SpellEffectKind::CreateTokens { count: amount, .. }
         | SpellEffectKind::CreateTokenCopies { count: amount, .. }
@@ -204,6 +205,7 @@ fn validate_effect_payment_results(
         | SpellEffectKind::Draw { count: amount, .. }
         | SpellEffectKind::GainLife { amount }
         | SpellEffectKind::Mill { count: amount, .. }
+        | SpellEffectKind::PutCounters { count: amount, .. }
         | SpellEffectKind::Amass { count: amount, .. }
         | SpellEffectKind::CreateTokens { count: amount, .. }
         | SpellEffectKind::CreateTokenCopies { count: amount, .. }
@@ -376,9 +378,13 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
         }
         if let StaticAbilityDef::ConditionalSelfModifier {
             condition,
+            add_types,
+            base_power,
+            base_toughness,
             delta_power,
             delta_toughness,
             keywords,
+            activated_abilities,
             triggered_abilities,
             can_attack_as_though_without_defender,
         } = ability
@@ -391,7 +397,11 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 })?;
             if *delta_power == 0
                 && *delta_toughness == 0
+                && add_types.is_empty()
+                && base_power.is_none()
+                && base_toughness.is_none()
                 && keywords.is_empty()
+                && activated_abilities.is_empty()
                 && triggered_abilities.is_empty()
                 && !can_attack_as_though_without_defender
             {
@@ -399,6 +409,39 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     id: card.id.clone(),
                     reason: "ConditionalSelfModifier must modify at least one value".into(),
                 });
+            }
+            if base_power.is_some() != base_toughness.is_some() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason:
+                        "ConditionalSelfModifier base power and toughness must be provided together"
+                            .into(),
+                });
+            }
+            if !add_types.is_empty() {
+                add_types
+                    .validate()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            for ability in activated_abilities {
+                ability
+                    .validate_shape()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+                let allowed = ability_cost_result_actions(&ability.costs);
+                for effect in &ability.effect {
+                    validate_effect_payment_results(&allowed, effect).map_err(|reason| {
+                        RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason,
+                        }
+                    })?;
+                }
             }
             for ability in triggered_abilities {
                 ability
@@ -408,7 +451,12 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                         reason,
                     })?;
             }
-            if (*delta_power != 0 || *delta_toughness != 0 || !keywords.is_empty())
+            if (*delta_power != 0
+                || *delta_toughness != 0
+                || !add_types.is_empty()
+                || base_power.is_some()
+                || !keywords.is_empty()
+                || !activated_abilities.is_empty())
                 && matches!(
                     condition,
                     crate::primitives::GameCondition::BattlefieldAggregate {
@@ -878,9 +926,15 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
                 }
             }
             StaticAbilityDef::ConditionalSelfModifier {
+                activated_abilities,
                 triggered_abilities,
                 ..
             } => {
+                for nested_ability in activated_abilities {
+                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
+                    nested_ability.validate_shape()?;
+                    validate_effect_list_metadata(&nested_ability.effect)?;
+                }
                 for nested_ability in triggered_abilities {
                     insert_ability_id(&mut nested, &nested_ability.ability_id)?;
                     nested_ability.validate_shape()?;
@@ -4557,6 +4611,49 @@ mod tests {
             );
             assert!(CardRegistry::from_chunks(&[&data]).is_err(), "{obsolete}");
         }
+    }
+
+    #[test]
+    fn issue_147_rejects_partial_conditional_base_pt_and_unbacked_payment_results() {
+        let partial_pt = r#"(
+            id: "bad_station_pt", name: "Bad Station PT", face_id: "bad_station_pt",
+            types: ["Artifact", "Spacecraft"],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+                condition: SourceCounterCount(counter: Charge, min: Some(4)),
+                base_power: Some(2),
+            ))],
+        )"#;
+        let error = CardRegistry::from_chunks(&[partial_pt]).unwrap_err();
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("base power and toughness must be provided together")
+        ));
+
+        let unbacked_payment = r#"(
+            id: "bad_station_payment", name: "Bad Station Payment", face_id: "bad_station_payment",
+            types: ["Artifact", "Spacecraft"],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+                condition: SourceCounterCount(counter: Charge, min: Some(4)),
+                activated_abilities: [(
+                    ability_id: "activated_01", presentation: Fallback, costs: [],
+                    effect: [PutCounters(
+                        counter: Charge,
+                        count: Count(CardResultCharacteristicSum(
+                            filter: (source: Payment, action: Tap, players: Controller, card_type: Some(Creature)),
+                            characteristic: Power,
+                        )),
+                        subject: Source,
+                    )],
+                )],
+            ))],
+        )"#;
+        let error = CardRegistry::from_chunks(&[unbacked_payment]).unwrap_err();
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("Payment card result requires a compatible card cost")
+        ));
     }
 
     #[test]

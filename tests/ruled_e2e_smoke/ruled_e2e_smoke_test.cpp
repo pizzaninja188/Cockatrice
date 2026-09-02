@@ -7412,6 +7412,112 @@ TEST_F(RuledE2ESmokeTest, SelectableTapCounterAndBlightPaymentsPreservePrivacyAn
     EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[bear->oid]));
     EXPECT_EQ(p1.myPool.total(), 1);
 
+    // Station reuses the same private, generation-bound tap picker, while its counters and
+    // threshold-derived public characteristics must synchronize to both physical clients.
+    ASSERT_TRUE(putPermanent("Wurmwall Sweeper", true));
+    if (p1.pendingTriggerOrder) {
+        ASSERT_GT(p1.pendingTriggerOrder->candidates_size(), 0);
+        ruled::v1::RuledCommand order;
+        order.mutable_submit_trigger_order()->set_trigger_object_id(
+            p1.pendingTriggerOrder->candidates(0).trigger_object_id());
+        p1.pendingTriggerOrder.reset();
+        ASSERT_TRUE(send(p1, order, QStringLiteral("issue 147 order Wurmwall surveil trigger")));
+    }
+    ASSERT_EQ(p1.stackDepth, 1);
+    ruled::v1::RuledCommand stationPass;
+    stationPass.mutable_pass_priority();
+    ASSERT_TRUE(send(p1, stationPass, QStringLiteral("issue 147 pass Wurmwall surveil")));
+    ASSERT_TRUE(send(p2, stationPass, QStringLiteral("issue 147 resolve Wurmwall surveil")));
+    ASSERT_TRUE(p1.pendingChoice.has_value());
+    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    ASSERT_GE(p1.pendingChoice->candidate_object_ids_size(), 1);
+    ruled::v1::RuledCommand surveil;
+    surveil.mutable_submit_resolution_choice()->add_chosen_object_ids(
+        p1.pendingChoice->candidate_object_ids(0));
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, surveil, QStringLiteral("issue 147 finish Wurmwall surveil")));
+    ASSERT_EQ(p1.stackDepth, 0);
+
+    ASSERT_TRUE(putPermanent("Hill Giant", false));
+    const auto station = findPermanent(p1, p1.myId, QStringLiteral("wurmwall_sweeper"));
+    const auto crew = findPermanent(p1, p1.myId, QStringLiteral("hill_giant"));
+    ASSERT_TRUE(station && crew);
+    EXPECT_FALSE(station->creature);
+    EXPECT_TRUE(crew->sick);
+    const int stationPhysicalId = p1.serverCardByEngineOid.at(station->oid);
+    EXPECT_EQ(p2.serverCardByEngineOid.at(station->oid), stationPhysicalId);
+
+    const quint64 stationAbilityKey = static_cast<quint64>(station->oid) << 32;
+    const auto stationCosts = p1.latestLegal.cost_choices_by_ability().find(stationAbilityKey);
+    ASSERT_NE(stationCosts, p1.latestLegal.cost_choices_by_ability().end());
+    ASSERT_EQ(stationCosts->second.choices_size(), 1);
+    const auto &stationTap = stationCosts->second.choices(0);
+    ASSERT_EQ(stationTap.kind(), ruled::v1::COST_CHOICE_KIND_TAP);
+    const auto stationCrew = std::find_if(
+        stationTap.candidate_objects().begin(), stationTap.candidate_objects().end(),
+        [&](const auto &candidate) { return candidate.object().object_id() == crew->oid; });
+    ASSERT_NE(stationCrew, stationTap.candidate_objects().end());
+    EXPECT_EQ(stationCrew->object().zone_change_generation(), crew->generation);
+    EXPECT_EQ(p2.latestLegal.cost_choices_by_ability().count(stationAbilityKey), 0u);
+
+    ruled::v1::RuledCommand stationActivation;
+    auto *stationAbility = stationActivation.mutable_activate_ability();
+    p1.setBattlefieldAbilitySource(stationAbility, station->oid);
+    stationAbility->set_ability_index(0);
+    auto *stationSelection = stationAbility->add_cost_selections();
+    stationSelection->set_cost_index(stationTap.cost_index());
+    auto *stationCrewRef = stationSelection->mutable_battlefield_objects()->add_objects();
+    stationCrewRef->set_object_id(crew->oid);
+    stationCrewRef->set_zone_change_generation(crew->generation);
+    ASSERT_TRUE(send(p1, stationActivation, QStringLiteral("issue 147 activate Station")));
+    EXPECT_TRUE(findPermanent(p1, p1.myId, QStringLiteral("hill_giant"))->tapped);
+    EXPECT_TRUE(findPermanent(p2, p1.myId, QStringLiteral("hill_giant"))->tapped);
+    EXPECT_FALSE(findPermanent(p1, p1.myId, QStringLiteral("wurmwall_sweeper"))->tapped);
+    ASSERT_TRUE(send(p1, stationPass, QStringLiteral("issue 147 pass Station")));
+    ASSERT_TRUE(send(p2, stationPass, QStringLiteral("issue 147 resolve Station")));
+    const auto stationAfterCrew = findPermanent(p1, p1.myId, QStringLiteral("wurmwall_sweeper"));
+    ASSERT_TRUE(stationAfterCrew);
+    EXPECT_FALSE(stationAfterCrew->creature);
+    ASSERT_TRUE(p1.annotationByServerCardId.count(stationPhysicalId));
+    EXPECT_TRUE(p1.annotationByServerCardId.at(stationPhysicalId).contains(QStringLiteral("3 charge counter(s)")));
+
+    ruled::v1::RuledCommand putDrill;
+    putDrill.mutable_dev_command()->set_target_player_id(p1.myId);
+    putDrill.mutable_dev_command()->mutable_put_card_in_zone()->set_card_name("Drill Too Deep");
+    putDrill.mutable_dev_command()->mutable_put_card_in_zone()->set_zone(ruled::v1::DEV_ZONE_HAND);
+    ASSERT_TRUE(send(p1, putDrill, QStringLiteral("issue 147 put Drill Too Deep")));
+    ruled::v1::RuledCommand drillMana;
+    drillMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    drillMana.mutable_dev_command()->mutable_add_mana()->set_r(1);
+    drillMana.mutable_dev_command()->mutable_add_mana()->set_c(1);
+    ASSERT_TRUE(send(p1, drillMana, QStringLiteral("issue 147 add Drill mana")));
+    const auto *drill = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Drill Too Deep"));
+    ASSERT_NE(drill, nullptr);
+    ruled::v1::RuledCommand castDrill;
+    auto *drillCast = castDrill.mutable_cast_spell();
+    drillCast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    drillCast->mutable_source()->set_hand_index(drill->hand_index());
+    auto *drillMode = drillCast->add_selected_modes();
+    drillMode->set_mode_index(0);
+    auto *drillTarget = drillMode->add_targets();
+    drillTarget->set_object_id(station->oid);
+    drillTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    ASSERT_TRUE(send(p1, castDrill, QStringLiteral("issue 147 cast Drill Too Deep")));
+    ASSERT_TRUE(send(p1, stationPass, QStringLiteral("issue 147 pass Drill")));
+    ASSERT_TRUE(send(p2, stationPass, QStringLiteral("issue 147 resolve Drill")));
+
+    for (SmokeClient *client : {&p1, &p2}) {
+        const auto animated = findPermanent(*client, p1.myId, QStringLiteral("wurmwall_sweeper"));
+        ASSERT_TRUE(animated);
+        EXPECT_TRUE(animated->creature && animated->flying);
+        EXPECT_EQ(animated->power, 2);
+        EXPECT_EQ(animated->toughness, 2);
+        EXPECT_EQ(client->serverCardByEngineOid.at(station->oid), stationPhysicalId);
+        ASSERT_TRUE(client->annotationByServerCardId.count(stationPhysicalId));
+        EXPECT_TRUE(client->annotationByServerCardId.at(stationPhysicalId)
+                        .contains(QStringLiteral("8 charge counter(s)")));
+    }
+
     // Sage of Fables proves that a source-absent counter choice crosses Rust, relay, and both
     // physical battlefield views without exposing the activating player's private legal cohort.
     ASSERT_TRUE(putPermanent("Sage of Fables", true));

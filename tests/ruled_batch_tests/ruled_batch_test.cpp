@@ -1424,6 +1424,45 @@ TEST_F(RuledBatchTest, EarthbendUpdatesBadgeAndRowOnAnExistingLand)
     EXPECT_EQ(findCardByEngineOid(p1, 101u), land);
 }
 
+TEST_F(RuledBatchTest, StationThresholdUpdatesExistingPhysicalCardWithoutChangingIdentity)
+{
+    seedCardCatalog({"Wurmwall Sweeper"});
+    Server_Card *spacecraft = addCardToTable(p1, "Wurmwall Sweeper");
+    spacecraft->setAnnotation(QStringLiteral("User note"));
+    const int physicalId = spacecraft->getId();
+
+    auto view = buildPerPlayerView(p1, {147u}, {false});
+    auto *object = view.mutable_battlefield_objects(0);
+    object->set_is_creature(false);
+    object->set_counters_annotation("3 charge counter(s)");
+    GameEventStorage events;
+    applyZoneView(p1, view, &events);
+    EXPECT_FALSE(bindingFor(p1).isEngineOidCreature(147u));
+    EXPECT_TRUE(spacecraft->getPT().isEmpty());
+    EXPECT_EQ(spacecraft->getAnnotation(), QStringLiteral("User note\n3 charge counter(s)"));
+
+    object->set_is_creature(true);
+    object->set_power(2);
+    object->set_toughness(2);
+    object->add_keywords("Flying");
+    object->set_counters_annotation("4 charge counter(s)");
+    EXPECT_TRUE(applyZoneView(p1, view, &events).battlefieldOrderChanged);
+    EXPECT_TRUE(bindingFor(p1).isEngineOidCreature(147u));
+    EXPECT_EQ(spacecraft->getPT(), QStringLiteral("2/2"));
+    EXPECT_EQ(spacecraft->getAnnotation(), QStringLiteral("User note\n4 charge counter(s)"));
+
+    object->set_is_creature(false);
+    object->set_power(0);
+    object->set_toughness(0);
+    object->clear_keywords();
+    object->set_counters_annotation("3 charge counter(s)");
+    EXPECT_TRUE(applyZoneView(p1, view, &events).battlefieldOrderChanged);
+    EXPECT_FALSE(bindingFor(p1).isEngineOidCreature(147u));
+    EXPECT_TRUE(spacecraft->getPT().isEmpty());
+    EXPECT_EQ(spacecraft->getId(), physicalId);
+    EXPECT_EQ(findCardByEngineOid(p1, 147u), spacecraft);
+}
+
 TEST_F(RuledBatchTest, ZoneViewPlacesPermanentsByAuthoritativeEffectiveType)
 {
     seedCardCatalog({"Forest", "Sol Ring"});

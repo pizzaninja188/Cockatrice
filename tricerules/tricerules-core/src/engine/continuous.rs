@@ -620,13 +620,39 @@ impl GameEngine {
                 }
                 StaticAbilityDef::ConditionalSelfModifier {
                     condition,
+                    add_types,
+                    base_power,
+                    base_toughness,
                     delta_power,
                     delta_toughness,
                     keywords,
+                    activated_abilities,
                     triggered_abilities,
                     can_attack_as_though_without_defender,
                 } => {
                     let affected = AffectedScope::Single(object_id);
+                    if !add_types.is_empty() {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer4AddTypes(add_types),
+                            condition: Some(condition.clone()),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    if let (Some(power), Some(toughness)) = (base_power, base_toughness) {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer7bSetPt { power, toughness },
+                            condition: Some(condition.clone()),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
                     if delta_power != 0 || delta_toughness != 0 {
                         self.state.continuous_effects.push(ContinuousEffect {
                             trigger_grant_origin: None,
@@ -647,6 +673,25 @@ impl GameEngine {
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                            condition: Some(condition.clone()),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    for ability in activated_abilities {
+                        let mut granted_definition = definition.clone();
+                        granted_definition
+                            .ability_path
+                            .push(ability.ability_id.clone());
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: Some(TriggerAbilityOrigin::StaticGrant {
+                                source_id: object_id,
+                                source_zone_change,
+                                definition: granted_definition,
+                            }),
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::GrantActivatedAbility(Box::new(ability)),
                             condition: Some(condition.clone()),
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,

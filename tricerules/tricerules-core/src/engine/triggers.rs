@@ -2631,9 +2631,13 @@ mod tests {
                 condition: GameCondition::ActivePlayer {
                     players: RelativePlayerSet::Controller,
                 },
+                add_types: tricerules_cards::primitives::TypeLineAddition::default(),
+                base_power: None,
+                base_toughness: None,
                 delta_power: 0,
                 delta_toughness: 0,
                 keywords: vec![],
+                activated_abilities: vec![],
                 triggered_abilities: vec![ability, second_ability],
                 can_attack_as_though_without_defender: false,
             },

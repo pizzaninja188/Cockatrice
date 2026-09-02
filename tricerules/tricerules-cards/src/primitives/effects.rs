@@ -722,6 +722,14 @@ pub enum CountExpression {
     /// Count cards in an engine-owned payment or immediately preceding effect cohort. Gerrard's
     /// Verdict and Gorging Vulture share this without re-examining an object's current zone.
     CardsMatchingResult { filter: CardResultFilter },
+    /// Sum one derived P/T characteristic across distinct, generation-bound objects in an
+    /// engine-owned result cohort. Station on Wurmwall Sweeper and Tapestry Warden reads the
+    /// tapped creature's power on resolution; the typed characteristic keeps the evaluator
+    /// reusable for corresponding toughness-based effects.
+    CardResultCharacteristicSum {
+        filter: CardResultFilter,
+        characteristic: PowerToughnessCharacteristic,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -782,7 +790,9 @@ impl CountExpression {
                     if term.coefficient == 0
                         || matches!(
                             term.quantity,
-                            Self::Affine { .. } | Self::CardsMatchingResult { .. }
+                            Self::Affine { .. }
+                                | Self::CardsMatchingResult { .. }
+                                | Self::CardResultCharacteristicSum { .. }
                         )
                     {
                         return Err("affine quantity requires nonzero coefficients and public, non-affine leaves".into());
@@ -797,13 +807,15 @@ impl CountExpression {
             }
             CountExpression::GraveyardCardsNamed { .. }
             | CountExpression::CreatureDeathsThisTurn
-            | CountExpression::CardsMatchingResult { .. } => Ok(()),
+            | CountExpression::CardsMatchingResult { .. }
+            | CountExpression::CardResultCharacteristicSum { .. } => Ok(()),
         }
     }
 
     fn card_result_filter(&self) -> Option<&CardResultFilter> {
         match self {
-            Self::CardsMatchingResult { filter } => Some(filter),
+            Self::CardsMatchingResult { filter }
+            | Self::CardResultCharacteristicSum { filter, .. } => Some(filter),
             Self::Affine { terms, .. } => terms
                 .iter()
                 .find_map(|term| term.quantity.card_result_filter()),
@@ -1150,6 +1162,8 @@ pub enum CounterKind {
     Defense,
     /// CR 714: lore counters advance Saga chapter abilities.
     Lore,
+    /// CR 702.184: charge counters track Station progress on Spacecraft.
+    Charge,
 }
 
 impl CounterKind {
@@ -1164,6 +1178,7 @@ impl CounterKind {
             CounterKind::Loyalty => "loyalty".into(),
             CounterKind::Defense => "defense".into(),
             CounterKind::Lore => "lore".into(),
+            CounterKind::Charge => "charge".into(),
         }
     }
 
@@ -3446,6 +3461,7 @@ impl SpellEffectKind {
                 | SpellEffectKind::Draw { count: amount, .. }
                 | SpellEffectKind::GainLife { amount }
                 | SpellEffectKind::Mill { count: amount, .. }
+                | SpellEffectKind::PutCounters { count: amount, .. }
                 | SpellEffectKind::Amass { count: amount, .. }
                 | SpellEffectKind::CreateTokens { count: amount, .. }
                 | SpellEffectKind::CreateTokenCopies { count: amount, .. }

@@ -16,8 +16,8 @@ use super::*;
 use tricerules_cards::primitives::{ManaRetention, TargetRole, TargetingDef};
 
 mod choices;
-pub(in crate::engine) use choices::card_result_count;
 pub(super) use choices::resolution_branch_is_live;
+pub(in crate::engine) use choices::{card_result_characteristic_sum, card_result_count};
 mod amass;
 mod blight;
 mod damage;

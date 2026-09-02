@@ -1,0 +1,35 @@
+// Oracle verified against Scryfall on 2026-09-02; there are no card-specific rulings.
+(
+  id: "drill_too_deep",
+  name: "Drill Too Deep",
+  face_id: "drill_too_deep",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
+        effects: [PutCounters(
+          counter: Charge,
+          count: 5,
+          subject: Chosen((
+            any_of: Some([
+              (kind: AnyPermanent, controller: You, required_subtypes: ["Spacecraft"]),
+              (kind: AnyPermanent, controller: You, required_subtypes: ["Planet"]),
+            ]),
+          )),
+        )],
+      ),
+      (
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
+        effects: [Destroy(
+          subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])),
+        )],
+      ),
+    ],
+  ),
+)

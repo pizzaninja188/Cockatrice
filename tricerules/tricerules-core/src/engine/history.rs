@@ -1494,13 +1494,31 @@ impl GameEngine {
                 .map_or(0, |(previous, top)| {
                     super::resolution::card_result_count(self, top, previous, filter)
                 }) as i64,
+            CountExpression::CardResultCharacteristicSum {
+                filter,
+                characteristic,
+            } => context
+                .previous_effect_result
+                .zip(context.stack_item)
+                .map_or(0, |(previous, top)| {
+                    super::resolution::card_result_characteristic_sum(
+                        self,
+                        top,
+                        previous,
+                        filter,
+                        *characteristic,
+                    )
+                }),
         }
     }
 
-    /// CR 608.2h: read the exact source incarnation's current public characteristics, or its
-    /// generation-keyed LKI after it leaves. Missing numerical information is 0 under CR 107.2.
-    pub(super) fn source_power_toughness(&self, context: AmountContext<'_>) -> (i64, i64) {
-        let oid = context.source_object_id;
+    /// Read one exact object's current public characteristics, or generation-keyed LKI after it
+    /// leaves the battlefield. Missing numerical information is 0 under CR 107.2.
+    pub(super) fn object_power_toughness(
+        &self,
+        oid: u32,
+        zone_change_generation: u64,
+    ) -> (i64, i64) {
         if self
             .state
             .objects
@@ -1512,7 +1530,7 @@ impl GameEngine {
                 .get(&oid)
                 .copied()
                 .unwrap_or(0)
-                == context.source_zone_change
+                == zone_change_generation
         {
             return self
                 .characteristics(oid)
@@ -1521,9 +1539,15 @@ impl GameEngine {
         }
         self.state
             .last_known_pt_by_generation
-            .get(&(oid, context.source_zone_change))
+            .get(&(oid, zone_change_generation))
             .map(|(power, toughness)| (power.unwrap_or(0), toughness.unwrap_or(0)))
             .unwrap_or((0, 0))
+    }
+
+    /// CR 608.2h: read the exact source incarnation's current public characteristics, or its
+    /// generation-keyed LKI after it leaves. Missing numerical information is 0 under CR 107.2.
+    pub(super) fn source_power_toughness(&self, context: AmountContext<'_>) -> (i64, i64) {
+        self.object_power_toughness(context.source_object_id, context.source_zone_change)
     }
 }
 

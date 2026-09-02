@@ -1,0 +1,49 @@
+// Oracle and release notes verified 2026-09-02. Station uses the tapped creature's
+// generation-bound power on resolution and remains activatable above the printed threshold.
+(
+  id: "wurmwall_sweeper",
+  name: "Wurmwall Sweeper",
+  face_id: "wurmwall_sweeper",
+  mana_cost: "{2}",
+  types: ["Artifact", "Spacecraft"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [TapPermanents(
+      constraint: ExactCount(1),
+      filter: (kind: Creature, controller: You),
+      exclude_source: true,
+    )],
+    effect: [PutCounters(
+      counter: Charge,
+      count: Count(CardResultCharacteristicSum(
+        filter: (
+          source: Payment,
+          action: Tap,
+          players: Controller,
+          card_type: Some(Creature),
+        ),
+        characteristic: Power,
+      )),
+      subject: Source,
+    )],
+    timing: SorcerySpeed,
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([3]),
+    definition: ConditionalSelfModifier(
+      condition: SourceCounterCount(counter: Charge, min: Some(4)),
+      add_types: (card_types: [Creature]),
+      base_power: Some(2),
+      base_toughness: Some(2),
+      keywords: [Flying],
+    ),
+  )],
+)

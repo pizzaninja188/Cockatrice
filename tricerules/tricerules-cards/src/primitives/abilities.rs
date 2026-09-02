@@ -1624,15 +1624,28 @@ pub enum StaticAbilityDef {
     },
     /// A self-scoped static effect whose condition is continuously reevaluated. Characteristic
     /// changes apply in their normal layers; the defender exception changes only attack legality.
-    /// Daggersail Aeronaut, Drowsing Tyrannodon, Gearsmith Guardian, and Gearsmith Prodigy.
+    /// Daggersail Aeronaut and Gearsmith Guardian exercise modifiers, while Wurmwall Sweeper and
+    /// Tapestry Warden exercise threshold types, base P/T, keywords, and granted abilities.
     ConditionalSelfModifier {
         condition: GameCondition,
+        /// CR 721.2a: some threshold abilities add a card type while their condition holds.
+        #[serde(default)]
+        add_types: TypeLineAddition,
+        /// CR 721.2a: threshold P/T is a layer-7b base characteristic, not a modifier.
+        #[serde(default)]
+        base_power: Option<i64>,
+        #[serde(default)]
+        base_toughness: Option<i64>,
         #[serde(default)]
         delta_power: i32,
         #[serde(default)]
         delta_toughness: i32,
         #[serde(default)]
         keywords: Vec<Keyword>,
+        /// Activated abilities granted while `condition` holds. Tapestry Warden is the Station
+        /// characteristic-replacement example; this field also supports non-Station grants.
+        #[serde(default)]
+        activated_abilities: Vec<ActivatedAbilityDef>,
         /// Triggered abilities granted while `condition` holds. This uses the same continuous
         /// grant path as copy and attachment effects, so attack-trigger collection sees the live
         /// ability set without card-specific logic.

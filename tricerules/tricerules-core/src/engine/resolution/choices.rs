@@ -349,6 +349,31 @@ pub(in crate::engine) fn card_result_count(
     )
 }
 
+pub(in crate::engine) fn card_result_characteristic_sum(
+    engine: &crate::engine::GameEngine,
+    top: &StackItem,
+    previous_result: &crate::state::EffectResult,
+    filter: &tricerules_cards::primitives::CardResultFilter,
+    characteristic: tricerules_cards::primitives::PowerToughnessCharacteristic,
+) -> i64 {
+    matching_card_result_entries(
+        &engine.state,
+        top.controller,
+        &top.payment_result,
+        previous_result,
+        filter,
+    )
+    .fold(0_i64, |sum, entry| {
+        let (power, toughness) =
+            engine.object_power_toughness(entry.object_id, entry.zone_change_generation);
+        let value = match characteristic {
+            tricerules_cards::primitives::PowerToughnessCharacteristic::Power => power,
+            tricerules_cards::primitives::PowerToughnessCharacteristic::Toughness => toughness,
+        };
+        sum.saturating_add(value)
+    })
+}
+
 fn card_result_count_from_cohorts(
     state: &crate::state::GameState,
     controller: i32,
@@ -356,6 +381,18 @@ fn card_result_count_from_cohorts(
     previous_result: &crate::state::EffectResult,
     filter: &tricerules_cards::primitives::CardResultFilter,
 ) -> u32 {
+    matching_card_result_entries(state, controller, payment_result, previous_result, filter)
+        .count()
+        .min(u32::MAX as usize) as u32
+}
+
+fn matching_card_result_entries<'a>(
+    state: &'a crate::state::GameState,
+    controller: i32,
+    payment_result: &'a crate::state::CardResultCohort,
+    previous_result: &'a crate::state::EffectResult,
+    filter: &'a tricerules_cards::primitives::CardResultFilter,
+) -> impl Iterator<Item = &'a crate::state::CardResultEntry> + 'a {
     let cards = match filter.source {
         tricerules_cards::primitives::CardResultSource::Payment => &payment_result.cards,
         tricerules_cards::primitives::CardResultSource::PreviousEffect => &previous_result.cards,
@@ -363,9 +400,9 @@ fn card_result_count_from_cohorts(
     let mut seen = std::collections::BTreeSet::new();
     cards
         .iter()
-        .filter(|entry| seen.insert((entry.object_id, entry.zone_change_generation)))
-        .filter(|entry| entry.action == filter.action)
-        .filter(|entry| {
+        .filter(move |entry| seen.insert((entry.object_id, entry.zone_change_generation)))
+        .filter(move |entry| entry.action == filter.action)
+        .filter(move |entry| {
             crate::engine::history::relative_player_set_contains(
                 state,
                 filter.players,
@@ -373,13 +410,11 @@ fn card_result_count_from_cohorts(
                 entry.affected_player,
             )
         })
-        .filter(|entry| {
+        .filter(move |entry| {
             filter
                 .card_type
                 .is_none_or(|card_type| entry.matched_card_types.contains(&card_type))
         })
-        .count()
-        .min(u32::MAX as usize) as u32
 }
 
 pub(super) fn park_resolution_branches(
