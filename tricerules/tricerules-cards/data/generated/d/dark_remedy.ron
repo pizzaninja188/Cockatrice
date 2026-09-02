@@ -5,6 +5,5 @@
   face_id: "dark_remedy",
   mana_cost: "{1}{B}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 1, toughness: 3)],
 )

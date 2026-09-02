@@ -15,7 +15,7 @@
     options: [Mana(option_id: "option_01", presentation: OracleLines([1]), kind: Kicker, cost: "{2}{G}")],
   )],
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: EntersWithCounters(
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: EntersWithCounters(
       counter: PlusOnePlusOne,
       amount: 2,
       cast_cost_condition: Some((
@@ -24,7 +24,7 @@
         expected_selected: true,
       )),
     )),
-    (ability_id: "static_02", presentation: Fallback, definition: AnthemKeyword(
+    (ability_id: "static_02", presentation: OracleLines([3]), definition: AnthemKeyword(
       filter: (controller: YouControl, required_counter: PlusOnePlusOne),
       keyword: Trample,
     )),

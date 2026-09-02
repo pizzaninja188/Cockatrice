@@ -684,6 +684,7 @@ enum HandActionKind {
 }
 
 message LegalHandAction {
+  reserved 15;
   HandActionKind kind = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 hand_index = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   string card_name = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -705,7 +706,6 @@ message LegalHandAction {
   uint32 generic_cost_reduction = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool has_convoke = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   CastMethod cast_method = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  PresentationRef spell_presentation = 15 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // CR 702.34: a spell the player may cast from their own graveyard using flashback.
@@ -717,6 +717,7 @@ enum CastSourceZone {
 // A spell the player may cast from a public zone. Flashback and Adventure share this shape while
 // retaining mechanic-specific validation and costs in the engine.
 message LegalZoneCastAction {
+  reserved 16;
   CastSourceZone source_zone = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   string card_name = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -732,7 +733,6 @@ message LegalZoneCastAction {
   CastMethod cast_method = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool has_convoke = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint64 zone_change_generation = 15 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  PresentationRef spell_presentation = 16 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   optional uint64 casting_permission_id = 17 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 

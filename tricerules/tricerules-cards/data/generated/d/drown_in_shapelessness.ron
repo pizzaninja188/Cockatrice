@@ -5,6 +5,5 @@
   face_id: "drown_in_shapelessness",
   mana_cost: "{1}{U}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [ReturnToOwnersHand(subject: Chosen((kind: Creature)))],
 )

@@ -5,7 +5,6 @@
   face_id: "tenderize",
   mana_cost: "{1}{G}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [CreatureDealsDamageEqualToPower(
     source: (kind: Creature, controller: You),
     target: (kind: Creature, controller: NotYou),

@@ -63,6 +63,60 @@ pub(super) fn child_presentation_ref(
     }
 }
 
+/// Builds presentation for a node owned by a stack item. Activated and triggered abilities
+/// already carry a primary presentation to extend. Physical spells intentionally do not, so their
+/// children start directly at the stable spell path without manufacturing a displayable root.
+#[derive(Clone, Copy)]
+pub(super) enum StackPresentationSource<'a> {
+    Parent(&'a rv1::PresentationRef),
+    PhysicalSpell,
+    Missing,
+}
+
+impl<'a> StackPresentationSource<'a> {
+    pub(super) fn for_stack(
+        parent: Option<&'a rv1::PresentationRef>,
+        physical_spell: bool,
+    ) -> Self {
+        match (parent, physical_spell) {
+            (Some(parent), _) => Self::Parent(parent),
+            (None, true) => Self::PhysicalSpell,
+            (None, false) => Self::Missing,
+        }
+    }
+}
+
+pub(super) fn stack_child_presentation_ref<'a>(
+    registry: &CardRegistry,
+    card_id: &str,
+    face_index: usize,
+    source: StackPresentationSource<'a>,
+    child: PresentationPath<'a>,
+    presentation: &AbilityPresentation,
+    fallback_text: String,
+) -> Option<rv1::PresentationRef> {
+    if let StackPresentationSource::Parent(parent) = source {
+        return Some(child_presentation_ref(
+            parent,
+            child,
+            presentation,
+            fallback_text,
+        ));
+    }
+    if matches!(source, StackPresentationSource::Missing) {
+        return None;
+    }
+    let face = registry.get(card_id)?.face(face_index)?;
+    Some(presentation_ref(
+        registry,
+        card_id,
+        &face.face_id,
+        [PresentationPath::Spell, child],
+        presentation,
+        fallback_text,
+    ))
+}
+
 pub(super) fn presentation_ref<'a>(
     registry: &CardRegistry,
     card_id: &str,
@@ -109,17 +163,6 @@ pub(super) fn spell_stack_presentation(
     let Some(face) = registry.get(card_id).and_then(|card| card.face(face_index)) else {
         return StackPresentation::default();
     };
-    let fallback_mapping = AbilityPresentation::Fallback;
-    let primary = Some(presentation_ref(
-        registry,
-        card_id,
-        &face.face_id,
-        [PresentationPath::Spell],
-        face.spell_presentation
-            .as_ref()
-            .unwrap_or(&fallback_mapping),
-        face.name.clone(),
-    ));
     let chosen_modes = chosen_modes
         .iter()
         .filter_map(|chosen| {
@@ -174,7 +217,7 @@ pub(super) fn spell_stack_presentation(
         })
         .collect();
     StackPresentation {
-        primary,
+        primary: None,
         chosen_modes,
         chosen_cast_costs,
     }
@@ -268,14 +311,43 @@ mod tests {
     }
 
     #[test]
-    fn fallback_only_spell_keeps_a_root_for_nested_presentation_paths() {
+    fn physical_spell_has_no_root_presentation() {
         let presentation =
             spell_stack_presentation(CardRegistry::global(), "aangs_journey", 0, &[], &[]);
-        let primary = presentation.primary.expect("fallback spell root");
-        assert_eq!(primary.card_id, "aangs_journey");
-        assert_eq!(primary.face_id, "aang_s_journey");
-        assert!(primary.oracle_line_indices.is_empty());
-        assert_eq!(primary.fallback_text, "Aang's Journey");
+        assert!(presentation.primary.is_none());
+    }
+
+    #[test]
+    fn physical_spell_child_keeps_its_stable_path_without_a_root() {
+        let ability_id = tricerules_cards::AbilityId::new("delayed_test").unwrap();
+        let reference = stack_child_presentation_ref(
+            CardRegistry::global(),
+            "aangs_journey",
+            0,
+            StackPresentationSource::PhysicalSpell,
+            PresentationPath::Ability(&ability_id),
+            &AbilityPresentation::Fallback,
+            "Delayed test".into(),
+        )
+        .expect("physical spell child presentation");
+        assert_eq!(
+            reference
+                .path
+                .iter()
+                .map(|component| component.id.as_str())
+                .collect::<Vec<_>>(),
+            ["spell", "delayed_test"]
+        );
+        assert!(stack_child_presentation_ref(
+            CardRegistry::global(),
+            "aangs_journey",
+            0,
+            StackPresentationSource::Missing,
+            PresentationPath::Ability(&ability_id),
+            &AbilityPresentation::Fallback,
+            "Delayed test".into(),
+        )
+        .is_none());
     }
 
     #[test]

@@ -5,6 +5,5 @@
   face_id: "might_of_oaks",
   mana_cost: "{3}{G}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 7, toughness: 7)],
 )

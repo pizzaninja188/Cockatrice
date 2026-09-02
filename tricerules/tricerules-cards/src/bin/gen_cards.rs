@@ -432,7 +432,6 @@ struct ParsedRules {
     spell_effect: Vec<SpellEffectKind>,
     activated_abilities: Vec<ActivatedAbilityDef>,
     triggered_abilities: Vec<TriggeredAbilityDef>,
-    spell_presentation: Option<AbilityPresentation>,
     recipe_labels: Vec<&'static str>,
 }
 
@@ -636,7 +635,6 @@ fn parse_rules_text(oracle_text: &str, is_spell: bool) -> Option<ParsedRules> {
                 return None;
             }
             parsed.spell_effect.push(effect);
-            parsed.spell_presentation = Some(presentation);
             parsed.recipe_labels.push(label);
             continue;
         }
@@ -737,7 +735,6 @@ struct GenFace {
     color_indicator: Option<Vec<Color>>,
     keywords: Vec<Keyword>,
     spell_effect: Vec<SpellEffectKind>,
-    spell_presentation: Option<AbilityPresentation>,
     activated_abilities: Vec<ActivatedAbilityDef>,
     triggered_abilities: Vec<TriggeredAbilityDef>,
     recipe_labels: Vec<&'static str>,
@@ -797,12 +794,6 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
         s.push_str(&format!("{indent}keywords: [{}],\n", keywords));
     }
     if !face.spell_effect.is_empty() {
-        if let Some(presentation) = &face.spell_presentation {
-            s.push_str(&format!(
-                "{indent}spell_presentation: {},\n",
-                render_presentation(presentation)
-            ));
-        }
         s.push_str(&format!(
             "{indent}spell_effect: [{}],\n",
             face.spell_effect
@@ -1257,7 +1248,6 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, Skip> {
         color_indicator,
         keywords: rules.keywords,
         spell_effect: rules.spell_effect,
-        spell_presentation: rules.spell_presentation,
         activated_abilities: rules.activated_abilities,
         triggered_abilities: rules.triggered_abilities,
         recipe_labels: rules.recipe_labels,
@@ -1310,7 +1300,6 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, Skip> {
             color_indicator: None,
             keywords: rules.keywords,
             spell_effect: rules.spell_effect,
-            spell_presentation: rules.spell_presentation,
             activated_abilities: rules.activated_abilities,
             triggered_abilities: rules.triggered_abilities,
             recipe_labels: rules.recipe_labels,

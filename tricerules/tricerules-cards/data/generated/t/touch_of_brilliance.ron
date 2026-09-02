@@ -5,6 +5,5 @@
   face_id: "touch_of_brilliance",
   mana_cost: "{3}{U}",
   types: ["Sorcery"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [Draw(count: 2)],
 )

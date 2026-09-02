@@ -5,7 +5,6 @@
   face_id: "airbending_lesson",
   mana_cost: "{2}{W}",
   types: ["Instant", "Lesson"],
-  spell_presentation: OracleLines([1, 2]),
   spell_effect: [
     ExileWithOwnerCastPermission(
       subject: Chosen((kind: AnyPermanent, not_land: true)),

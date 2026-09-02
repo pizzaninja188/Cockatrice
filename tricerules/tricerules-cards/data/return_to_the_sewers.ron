@@ -5,7 +5,6 @@
   face_id: "return_to_the_sewers",
   mana_cost: "{3}{U}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [
     PutInOwnersLibrary(
       subject: Chosen((kind: Creature)),

@@ -2260,7 +2260,6 @@ bool PlayerActions::beginRuledSpellCast(CardItem *,
             face.castingPermissionId == castingPermissionId) {
             pendingRuledSpellCast.hasConvoke = face.hasConvoke;
             pendingRuledSpellCast.sourceZoneChangeGeneration = face.zoneChangeGeneration;
-            pendingRuledSpellCast.presentationText = face.presentationText;
         }
 
     pendingRuledSpellCast.selectedTargetOids.clear();

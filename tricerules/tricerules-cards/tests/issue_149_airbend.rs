@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{Amount, EffectSubject, SpellEffectKind, TargetKind};
-use tricerules_cards::{AbilityPresentation, CardRegistry, ManaCost};
+use tricerules_cards::{CardRegistry, ManaCost};
 
 #[test]
 fn airbending_lesson_uses_the_reusable_owner_cast_permission() {
@@ -7,10 +7,6 @@ fn airbending_lesson_uses_the_reusable_owner_cast_permission() {
         .get("airbending_lesson")
         .expect("Airbending Lesson");
     let face = card.primary_face();
-    assert_eq!(
-        face.spell_presentation,
-        Some(AbilityPresentation::OracleLines(vec![1, 2]))
-    );
     assert!(matches!(
         face.spell_effect.as_slice(),
         [

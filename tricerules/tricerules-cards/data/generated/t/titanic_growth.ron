@@ -5,6 +5,5 @@
   face_id: "titanic_growth",
   mana_cost: "{1}{G}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 4, toughness: 4)],
 )

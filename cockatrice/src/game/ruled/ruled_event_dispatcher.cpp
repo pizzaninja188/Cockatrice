@@ -327,8 +327,7 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         set.faceOptionsByIndex[handIndex].append(
             {faceIndex, cardName, QString::fromStdString(action.cost()),
              static_cast<int>(action.generic_cost_reduction()), method, action.has_convoke(), 0,
-             0, QString{},
-             action.has_spell_presentation() ? resolver.resolve(action.spell_presentation()) : QString{}});
+             0, QString{}});
         if (action.has_cost_choices()) {
             set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices(), resolver));
         }
@@ -1662,9 +1661,7 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
             {faceIndex, displayName, QString::fromStdString(action.cost()),
              static_cast<int>(action.generic_cost_reduction()), castMethod, action.has_convoke(),
              action.zone_change_generation(), castingPermissionId,
-             permissionGroups.value(castingPermissionId).sourceLabel,
-             action.has_spell_presentation() ? presentationResolver.resolve(action.spell_presentation())
-                                             : QString{}});
+             permissionGroups.value(castingPermissionId).sourceLabel});
         state->zoneCastSourceByOid.insert(objectId, source);
         if (action.needs_target()) {
             state->zoneCastActions.needsTargetIndices.insert(objectId);

@@ -5,6 +5,5 @@
   face_id: "counsel_of_the_soratami",
   mana_cost: "{2}{U}",
   types: ["Sorcery"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [Draw(count: 2)],
 )

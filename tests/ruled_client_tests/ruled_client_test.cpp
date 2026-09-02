@@ -1000,7 +1000,7 @@ TEST(RuledPresentationResolverTest, AtomicCacheRefreshRetainsProvenanceAndWorksO
     EXPECT_EQ(QDir(directory.path()).entryList({QStringLiteral("cards.ruled-oracle.json*")}, QDir::Files).size(), 1);
 }
 
-TEST(RuledPendingTargetTest, SpellPromptComposesResolvedOrFallbackWordingWithEngineGuidance)
+TEST(RuledPendingTargetTest, SpellPromptUsesCardNameWithEngineGuidance)
 {
     FakeHost host;
     RuledClientState state(&host);
@@ -1010,7 +1010,6 @@ TEST(RuledPendingTargetTest, SpellPromptComposesResolvedOrFallbackWordingWithEng
     spell.handIndex = 4;
     spell.faceIndex = 0;
     spell.cardName = QStringLiteral("Deterministic spell fallback");
-    spell.presentationText = QStringLiteral("Resolved exact Oracle wording");
     spell.activeTargetGroupPosition = 0;
     RuledSpellTargetData targets;
     RuledTargetGroupData group;
@@ -1018,10 +1017,6 @@ TEST(RuledPendingTargetTest, SpellPromptComposesResolvedOrFallbackWordingWithEng
     targets.groups.append(group);
     state.validTargetsByHandSlot.insert(RuledClientState::spellTargetKey(4, 0), targets);
 
-    EXPECT_EQ(ruledPendingSpellTargetPrompt(spell, state),
-              QString::fromUtf8("Choose a target for “Resolved exact Oracle wording”.\n"
-                                "Choose a target controlled by an opponent."));
-    spell.presentationText.clear();
     EXPECT_EQ(ruledPendingSpellTargetPrompt(spell, state),
               QString::fromUtf8("Choose a target for “Deterministic spell fallback”.\n"
                                 "Choose a target controlled by an opponent."));

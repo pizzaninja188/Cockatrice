@@ -112,9 +112,11 @@ resolves those references against external Oracle data for prompts, context menu
 and synthetic ability cards. If external data is missing or incompatible, the engine's
 deterministic fallback remains usable.
 
-Older migrated RON is not necessarily a complete template. In particular, `spell_presentation`
-is optional in the deserializer so legacy cards can load, but new rules-bearing spell faces must
-make an explicit presentation decision.
+Physical spells use their engine-authored face name as prompt and stack identity. They do not carry
+a face-level Oracle presentation mapping: the rendered physical card already supplies its printed
+text, and repeating the complete rules text inside `Choose a target for ...` obscures the action.
+Nested spell choices still use stable paths beginning with the spell node, but that path component
+does not require its own presentation mapping.
 
 ### Presentation-bearing surfaces
 
@@ -123,7 +125,6 @@ decision.
 
 | Surface | Presentation field | Primary consumers |
 |---|---|---|
-| Card face | `spell_presentation` | Spell source context in cast/target prompts and the root for nested spell choices |
 | Identified ability | `presentation` | Context-menu labels, ability target prompts, trigger choices, and synthetic stack cards |
 | Modal option | `presentation` | Mode picker, mode target prompt, and chosen-mode annotation |
 | Cast-cost group | `presentation` | Cast-cost prompt |
@@ -132,16 +133,9 @@ decision.
 | Heterogeneous search slot | `presentation` | Search-choice label |
 | Restricted-mana rule | `presentation` | Mana restriction explanation |
 
-For newly hand-authored cards, add `spell_presentation` to:
-
-- every instant or sorcery with rules text;
-- every castable nonland face whose spell-time instruction needs prompt context; and
-- every face that owns modal, cast-cost, or other nested spell presentation.
-
-For a modal spell, map the root instruction such as `Choose one —` or `Spree ...`, then map each
-mode separately. For a nonmodal targeted spell, the root normally maps the complete Oracle line or
-lines describing the spell. A permanent's battlefield abilities are mapped on their identified
-ability entries, not by treating all printed text as spell presentation.
+For a modal spell, map each mode separately. Map cast-cost groups and options independently as
+well. A permanent's battlefield abilities are mapped on their identified ability entries, not by
+treating all printed text as spell presentation.
 
 ### Map Oracle lines
 
@@ -166,7 +160,7 @@ Example normalized text:
 ```
 
 - The kicker group and option may both use `OracleLines([1])`.
-- The spell root may use `OracleLines([2, 3])` when both lines describe the resolving spell.
+- The physical spell itself needs no mapping; its face name remains the source identity.
 - Reusing one Oracle line for multiple mechanical nodes is valid when one printed ability is
   implemented by multiple typed nodes.
 
@@ -192,9 +186,11 @@ implementation gap belongs in `partial-cards.tsv`; `Fallback` does not record pa
 
 `TargetGroupDef.prompt` is the narrow exception to the no-prose rule. It provides short,
 effect-specific click guidance such as `Choose target creature you control`. It is combined with
-the spell or ability presentation and does not replace it.
+the spell's face name, the selected mode's presentation, or the ability presentation and does not
+replace that source context.
 
-- `spell_presentation` describes the spell; it is not an extra physical-spell stack overlay.
+- Physical-spell target prompts use the engine-authored face name; a selected mode can replace that
+  source context with its own presentation.
 - Ability presentation supplies context-menu and target-prompt wording for activated and triggered
   abilities. Clients must not reconstruct it from mechanics or card names.
 - Mode, cast-cost, branch, search-slot, and restriction presentations label their own choices.
@@ -212,7 +208,6 @@ Targeted spell:
   face_id: "example_spell",
   mana_cost: "{1}{U}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [Tap(subject: Chosen((kind: Creature)))],
   targeting: Some((groups: [(
     min: 1,
@@ -223,8 +218,8 @@ Targeted spell:
 )
 ```
 
-Without `spell_presentation`, this card can still deserialize, but its target prompt falls back to
-the card name instead of resolved rules context.
+This prompt starts with `Choose a target for “Example Spell”` and appends the authored click
+guidance.
 
 Identified ability:
 
@@ -243,7 +238,6 @@ metadata. Their IDs are scoped within their owning path but must remain stable.
 Modal spell with cast-cost choices:
 
 ```ron
-spell_presentation: OracleLines([1]),
 cast_cost_groups: [(
   group_id: "spree",
   presentation: OracleLines([1]),
@@ -373,7 +367,6 @@ that presentation transport, visibility, physical identity, and client behavior 
 - [ ] Whole-card, face, ability, mode, and choice identities are correct and stable.
 - [ ] Mana cost, type line, faces, and printed numeric characteristics match the source.
 - [ ] Mechanics are typed and engine-authoritative; no legality is encoded in presentation.
-- [ ] Every rules-bearing spell face makes an explicit `spell_presentation` decision.
 - [ ] Every ability and choice-bearing child has stable identity and presentation.
 - [ ] Every `OracleLines` mapping matches the correct face's normalized current lines.
 - [ ] Every non-obvious `Fallback` has a deliberate reason.

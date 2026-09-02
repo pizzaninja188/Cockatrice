@@ -566,8 +566,9 @@ TEST_F(RuledBatchTest, PresentationReferencesFollowTheirOwningPublicAndPerPlayer
     auto &privateLegal = (*batch.mutable_legal_by_player())[p1->getPlayerId()];
     auto *handAction = privateLegal.add_hand_actions();
     handAction->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
-    handAction->mutable_spell_presentation()->set_card_id("private_hand_card");
-    handAction->mutable_spell_presentation()->set_fallback_text("private fallback");
+    auto *privatePresentation = handAction->add_modes()->mutable_presentation();
+    privatePresentation->set_card_id("private_hand_card");
+    privatePresentation->set_fallback_text("private fallback");
 
     const auto forController = redactFor(batch, p1);
     ASSERT_EQ(forController.events_size(), 1);
@@ -575,7 +576,7 @@ TEST_F(RuledBatchTest, PresentationReferencesFollowTheirOwningPublicAndPerPlayer
     EXPECT_EQ(forController.events(0).stack_pushed().primary_presentation().card_id(), "public_card");
     ASSERT_TRUE(forController.legal_by_player().contains(p1->getPlayerId()));
     ASSERT_EQ(forController.legal_by_player().at(p1->getPlayerId()).hand_actions_size(), 1);
-    EXPECT_EQ(forController.legal_by_player().at(p1->getPlayerId()).hand_actions(0).spell_presentation().card_id(),
+    EXPECT_EQ(forController.legal_by_player().at(p1->getPlayerId()).hand_actions(0).modes(0).presentation().card_id(),
               "private_hand_card");
 
     const auto forOpponent = redactFor(batch, p2);

@@ -5,6 +5,5 @@
   face_id: "sacred_nectar",
   mana_cost: "{1}{W}",
   types: ["Sorcery"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [GainLife(amount: 4)],
 )

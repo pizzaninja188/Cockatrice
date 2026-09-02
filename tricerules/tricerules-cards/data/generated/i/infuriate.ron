@@ -5,6 +5,5 @@
   face_id: "infuriate",
   mana_cost: "{R}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 3, toughness: 2)],
 )

@@ -765,9 +765,6 @@ fn validate_effect_list_metadata(effects: &[SpellEffectKind]) -> Result<(), Stri
 
 fn validate_face_identity(face: &CardFace) -> Result<(), String> {
     face.face_id.validate()?;
-    if let Some(presentation) = &face.spell_presentation {
-        presentation.validate()?;
-    }
     let mut siblings = HashSet::new();
     for ability in &face.activated_abilities {
         insert_ability_id(&mut siblings, &ability.ability_id)?;

@@ -305,7 +305,6 @@ struct PendingRuledSpellCast
     bool damageDividedEvenly = false;
     int faceIndex = 0;
     QString cardName;
-    QString presentationText;
     QMap<QChar, int> remainingCost;
     QVector<quint32> selectedTargetOids;
     QVector<quint32> selectedTargetDamages;
@@ -642,7 +641,7 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
 {
     const auto data = currentRuledSpellTargetData(spell, state);
     const auto group = currentRuledSpellTargetGroup(spell, state);
-    QString sourceContext = spell.presentationText.isEmpty() ? spell.cardName : spell.presentationText;
+    QString sourceContext = spell.cardName;
     if (spell.activeModePosition >= 0 && spell.activeModePosition < spell.selectedModes.size()) {
         sourceContext = spell.selectedModes.at(spell.activeModePosition).label;
     }

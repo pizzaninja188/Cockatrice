@@ -5,6 +5,5 @@
   face_id: "antagonize",
   mana_cost: "{1}{R}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 4, toughness: 3)],
 )

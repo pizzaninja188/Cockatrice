@@ -483,9 +483,6 @@ pub fn is_creature_type(subtype: &str) -> bool {
 pub struct CardFace {
     pub face_id: CardFaceId,
     pub name: String,
-    /// Optional non-mechanical presentation mapping for the castable face on the stack.
-    #[serde(default)]
-    pub spell_presentation: Option<AbilityPresentation>,
     /// Scryfall brace syntax, copied verbatim from this face's `card_faces[i].mana_cost`.
     #[serde(default)]
     pub mana_cost: ManaCost,
@@ -759,8 +756,6 @@ pub struct RawCardDefinition {
     /// Stable identity for the flat face of a normal-layout card.
     #[serde(default)]
     pub face_id: CardFaceId,
-    #[serde(default)]
-    pub spell_presentation: Option<AbilityPresentation>,
     /// Physical layout (CR 709/710/712/715). `Normal` (default) is authored flat; every other
     /// layout authors [`Self::faces`].
     #[serde(default)]
@@ -863,7 +858,6 @@ impl RawCardDefinition {
             vec![CardFace {
                 face_id: self.face_id,
                 name: self.name.clone(),
-                spell_presentation: self.spell_presentation,
                 mana_cost: self.mana_cost,
                 flashback_cost: self.flashback_cost,
                 harmonize_cost: self.harmonize_cost,

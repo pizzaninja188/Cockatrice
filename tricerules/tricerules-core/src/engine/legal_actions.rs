@@ -1515,7 +1515,6 @@ fn hand_action(
         generic_cost_reduction: 0,
         has_convoke: false,
         cast_method: rv1::CastMethod::Normal as i32,
-        spell_presentation: None,
     }
 }
 
@@ -1674,16 +1673,6 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     face_index,
                     target_schema(&face.spell_effect, face.targeting.as_ref()).has_targets(),
                 );
-                action.spell_presentation = face.spell_presentation.as_ref().map(|mapping| {
-                    presentation_ref(
-                        eng.registry,
-                        card_id,
-                        &face.face_id,
-                        [PresentationPath::Spell],
-                        mapping,
-                        face.name.clone(),
-                    )
-                });
                 action.eligible_restricted_mana_group_ids =
                     eng.eligible_restricted_mana_for_spell(player_index, face);
                 action.cost = face.mana_cost.to_string();
@@ -1851,16 +1840,6 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     ),
                     cast_method: cast_method as i32,
                     has_convoke: face.keywords.contains(&Keyword::Convoke),
-                    spell_presentation: face.spell_presentation.as_ref().map(|mapping| {
-                        presentation_ref(
-                            eng.registry,
-                            card_id,
-                            &face.face_id,
-                            [PresentationPath::Spell],
-                            mapping,
-                            face.name.clone(),
-                        )
-                    }),
                     casting_permission_id: None,
                 };
                 if !cost_choices.non_mana_costs_payable {
@@ -2010,16 +1989,6 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 ),
                 cast_method: cast_method as i32,
                 has_convoke: face.keywords.contains(&Keyword::Convoke),
-                spell_presentation: face.spell_presentation.as_ref().map(|mapping| {
-                    presentation_ref(
-                        eng.registry,
-                        &object.card_id,
-                        &face.face_id,
-                        [PresentationPath::Spell],
-                        mapping,
-                        face.name.clone(),
-                    )
-                }),
                 casting_permission_id: Some(permission.group_id),
             };
             if !cost_choices.non_mana_costs_payable {

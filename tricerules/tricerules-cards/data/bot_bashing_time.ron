@@ -5,7 +5,6 @@
   face_id: "bot_bashing_time",
   mana_cost: "{3}{R}",
   types: ["Sorcery"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [
     DamageTarget(amount: 6, target: (kind: Creature)),
     ExileIfWouldDieThisTurn(target: (kind: Creature)),

@@ -5,6 +5,5 @@
   face_id: "whitesun_s_passage",
   mana_cost: "{1}{W}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [GainLife(amount: 5)],
 )

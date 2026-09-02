@@ -5,6 +5,5 @@
   face_id: "fell",
   mana_cost: "{1}{B}",
   types: ["Sorcery"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [Destroy()],
 )

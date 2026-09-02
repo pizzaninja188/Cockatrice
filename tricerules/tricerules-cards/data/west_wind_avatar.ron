@@ -17,7 +17,7 @@
         optional: true,
         branches: [(
           branch_id: "sacrifice_a_token_or_land",
-          presentation: Fallback,
+          presentation: OracleLines([2]),
           cost: SacrificePermanent(filter: (any_of: Some([
             (kind: AnyPermanent, controller: You, token: Some(true)),
             (kind: AnyPermanent, controller: You, permanent_types: [Land]),
@@ -34,7 +34,7 @@
         optional: true,
         branches: [(
           branch_id: "sacrifice_a_token_or_land",
-          presentation: Fallback,
+          presentation: OracleLines([2]),
           cost: SacrificePermanent(filter: (any_of: Some([
             (kind: AnyPermanent, controller: You, token: Some(true)),
             (kind: AnyPermanent, controller: You, permanent_types: [Land]),

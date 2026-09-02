@@ -1,5 +1,7 @@
 use super::super::events::ev_log_private;
-use super::super::presentation::{child_presentation_ref, PresentationPath};
+use super::super::presentation::{
+    stack_child_presentation_ref, PresentationPath, StackPresentationSource,
+};
 use super::candidate_identities;
 use super::*;
 
@@ -2398,19 +2400,22 @@ pub(in crate::engine) fn park_zone_search_choice(
                     .then_some(index as u32)
                 })
                 .collect(),
-            presentation: engine
-                .state
-                .stack_presentations
-                .get(&top.id)
-                .and_then(|stack| stack.primary.as_ref())
-                .map(|parent| {
-                    child_presentation_ref(
-                        parent,
-                        PresentationPath::SearchSlot(&slot.slot_id),
-                        &slot.presentation,
-                        slot.fallback_label(),
-                    )
-                }),
+            presentation: stack_child_presentation_ref(
+                engine.registry,
+                &top.card_id,
+                top.face_index,
+                StackPresentationSource::for_stack(
+                    engine
+                        .state
+                        .stack_presentations
+                        .get(&top.id)
+                        .and_then(|stack| stack.primary.as_ref()),
+                    top.ability_text.is_none(),
+                ),
+                PresentationPath::SearchSlot(&slot.slot_id),
+                &slot.presentation,
+                slot.fallback_label(),
+            ),
         })
         .collect();
     let selection_slot_candidates = selection_slots

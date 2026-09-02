@@ -6,7 +6,6 @@
   face_id: "mind_transfer_protocol",
   mana_cost: "{2}{U}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1, 2]),
   spell_effect: [
     AddTypes(
       subject: Chosen((any_of: Some([

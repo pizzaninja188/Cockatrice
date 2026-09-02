@@ -357,7 +357,6 @@ struct RuledFaceOption
     quint64 zoneChangeGeneration = 0;
     quint64 castingPermissionId = 0;
     QString permissionSourceLabel;
-    QString presentationText;
 };
 
 struct RuledExilePlayPermissionGroup

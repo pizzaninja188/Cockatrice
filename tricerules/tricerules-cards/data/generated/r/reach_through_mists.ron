@@ -5,6 +5,5 @@
   face_id: "reach_through_mists",
   mana_cost: "{U}",
   types: ["Instant", "Arcane"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [Draw(count: 1)],
 )

@@ -5,6 +5,5 @@
   face_id: "feral_ferocity",
   mana_cost: "{1}{G}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 4, toughness: 4)],
 )

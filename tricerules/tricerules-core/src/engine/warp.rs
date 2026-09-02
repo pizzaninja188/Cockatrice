@@ -1,7 +1,9 @@
 //! CR 702.185: Warp's cast receipt, delayed exile, and owner casting permission.
 //! Shared by Knight Luminary, Weftblade Enhancer, and Perigee Beckoner.
 
-use super::presentation::{child_presentation_ref, PresentationPath};
+use super::presentation::{
+    stack_child_presentation_ref, PresentationPath, StackPresentationSource,
+};
 use super::*;
 
 impl GameEngine {
@@ -30,11 +32,11 @@ impl GameEngine {
         self.state
             .warped_permanent_incarnations
             .insert((object_id, watched.zone_change_generation));
-        let card_name = self
+        let face = self
             .registry
             .get(&item.card_id)
-            .map(|c| c.name.clone())
-            .unwrap_or_default();
+            .and_then(|card| card.face(item.face_index));
+        let card_name = face.map(|face| face.name.clone()).unwrap_or_default();
         let ability = TriggeredAbilityDef {
             ability_id: tricerules_cards::AbilityId::new("warp_exile")
                 .expect("intrinsic ability id"),
@@ -49,19 +51,15 @@ impl GameEngine {
             max_triggers_per_turn: None,
         };
         let ability_text = ability.fallback_text(&card_name);
-        let presentation = self
-            .state
-            .stack_presentations
-            .get(&item.id)
-            .and_then(|stack| stack.primary.as_ref())
-            .map(|parent| {
-                child_presentation_ref(
-                    parent,
-                    PresentationPath::Ability(&ability.ability_id),
-                    &ability.presentation,
-                    ability_text,
-                )
-            });
+        let presentation = stack_child_presentation_ref(
+            self.registry,
+            &item.card_id,
+            item.face_index,
+            StackPresentationSource::PhysicalSpell,
+            PresentationPath::Ability(&ability.ability_id),
+            &ability.presentation,
+            ability_text,
+        );
         self.state.active_event_observers.push(ActiveEventObserver {
             watched,
             matcher: EventObserverMatcher::AtBeginningOfNextEndStep,

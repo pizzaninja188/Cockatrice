@@ -1,6 +1,8 @@
 use super::{EffectCx, EffectOutcome};
 use crate::engine::events::ev_log;
-use crate::engine::presentation::{ability_presentation, child_presentation_ref, PresentationPath};
+use crate::engine::presentation::{
+    ability_presentation, stack_child_presentation_ref, PresentationPath, StackPresentationSource,
+};
 use crate::engine::{rv1, ConditionContext, EngineError};
 use crate::state::{
     ParkedStackResolution, PendingResolution, PendingResolutionBranch,
@@ -452,20 +454,22 @@ fn park_resolution_branches_for(
                 cost_text,
                 selectable: true,
                 search_zones: Vec::new(),
-                presentation: cx
-                    .engine
-                    .state
-                    .stack_presentations
-                    .get(&cx.top.id)
-                    .and_then(|stack| stack.primary.as_ref())
-                    .map(|parent| {
-                        child_presentation_ref(
-                            parent,
-                            PresentationPath::ResolutionBranch(&branch.branch_id),
-                            &branch.presentation,
-                            branch.fallback_label(),
-                        )
-                    }),
+                presentation: stack_child_presentation_ref(
+                    cx.engine.registry,
+                    &cx.top.card_id,
+                    cx.top.face_index,
+                    StackPresentationSource::for_stack(
+                        cx.engine
+                            .state
+                            .stack_presentations
+                            .get(&cx.top.id)
+                            .and_then(|stack| stack.primary.as_ref()),
+                        cx.top.ability_text.is_none(),
+                    ),
+                    PresentationPath::ResolutionBranch(&branch.branch_id),
+                    &branch.presentation,
+                    branch.fallback_label(),
+                ),
             }
         })
         .collect();

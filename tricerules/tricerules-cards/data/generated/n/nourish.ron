@@ -5,6 +5,5 @@
   face_id: "nourish",
   mana_cost: "{G}{G}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [GainLife(amount: 6)],
 )

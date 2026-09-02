@@ -5,6 +5,5 @@
   face_id: "show_of_valor",
   mana_cost: "{1}{W}",
   types: ["Instant"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 2, toughness: 4)],
 )

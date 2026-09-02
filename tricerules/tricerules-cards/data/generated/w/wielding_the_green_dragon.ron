@@ -5,6 +5,5 @@
   face_id: "wielding_the_green_dragon",
   mana_cost: "{1}{G}",
   types: ["Sorcery"],
-  spell_presentation: OracleLines([1]),
   spell_effect: [PumpTarget(power: 4, toughness: 4)],
 )
