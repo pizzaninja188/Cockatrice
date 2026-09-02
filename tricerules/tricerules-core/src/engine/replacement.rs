@@ -821,8 +821,7 @@ impl GameEngine {
         item: StackItem,
         mut entries: Vec<TokenBattlefieldEntry>,
         logs: Vec<String>,
-        attacking: Option<AttackingTokenBatch>,
-        delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
+        options: TokenEntryBatchOptions,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         // CR 616.1: when one simultaneous event requires choices from multiple players, those
@@ -837,8 +836,7 @@ impl GameEngine {
                     ready: ready.clone(),
                     remaining: entries.clone(),
                     logs: logs.clone(),
-                    attacking: attacking.clone(),
-                    delayed_sacrifice,
+                    options: options.clone(),
                 }));
             match self.advance_or_park_battlefield_entry(
                 item.clone(),
@@ -853,7 +851,14 @@ impl GameEngine {
                 }),
             }
         }
-        self.commit_token_entry_batch(&item, ready, logs, attacking, delayed_sacrifice, events)?;
+        self.commit_token_entry_batch(
+            &item,
+            ready,
+            logs,
+            options.attacking,
+            options.delayed_sacrifice,
+            events,
+        )?;
         Ok(false)
     }
 
@@ -873,8 +878,7 @@ impl GameEngine {
                     ready: batch.ready.clone(),
                     remaining: batch.remaining.clone(),
                     logs: batch.logs.clone(),
-                    attacking: batch.attacking.clone(),
-                    delayed_sacrifice: batch.delayed_sacrifice,
+                    options: batch.options.clone(),
                 }));
             match self.advance_or_park_battlefield_entry(
                 item.clone(),
@@ -893,8 +897,8 @@ impl GameEngine {
             &item,
             batch.ready,
             batch.logs,
-            batch.attacking,
-            batch.delayed_sacrifice,
+            batch.options.attacking,
+            batch.options.delayed_sacrifice,
             events,
         )?;
         Ok(false)
@@ -1207,6 +1211,7 @@ impl GameEngine {
                 self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
             }
             BattlefieldEntryCompletion::TokenBatch(batch) => {
+                let amass = batch.options.amass;
                 let current = TokenBattlefieldEntry {
                     event,
                     created: batch.current_created.clone(),
@@ -1218,6 +1223,9 @@ impl GameEngine {
                     &mut events,
                 )? {
                     return Ok(finish_with_events(self, events));
+                }
+                if let Some(amass) = amass {
+                    return self.finish_amass_after_token_entry(stack, amass, events);
                 }
                 self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
             }

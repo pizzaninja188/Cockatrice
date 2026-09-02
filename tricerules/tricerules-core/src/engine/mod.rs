@@ -11,16 +11,17 @@ use crate::state::{
     DelayedTriggerPayload, EffectResult, EntryReplacementApplication, EntryReplacementEffectId,
     EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState,
     HandCardAction, ImmediateObserverAction, ObjectId, ObservedGameEvent, OpeningSequence,
-    ParkedStackResolution, PendingBattlefieldEntry, PendingHandChoice, PendingLibraryLookStage,
-    PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
-    PendingPlayerDiscardChoice, PendingPlayerSetDiscard, PendingResolution,
+    ParkedStackResolution, PendingAmass, PendingBattlefieldEntry, PendingHandChoice,
+    PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
+    PendingManaPayment, PendingPlayerDiscardChoice, PendingPlayerSetDiscard, PendingResolution,
     PendingResolutionBranch, PendingResolutionBranchStage, PendingResolutionPresentation,
     PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
     PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
     ReplacementPriority, ResolutionContinuation, ResolutionReceipt, RoomState, SpellCastMethod,
     StackItem, StackObjectRef, StackPresentation, StackTarget, StagedTrigger, StagedTriggerGroup,
-    TokenBattlefieldEntry, TriggerAbilityOrigin, TriggerContext, TriggerObjectRef, TriggerUseKey,
-    TurnHistory, TurnObjectFact, TurnStep, UndoableManaAbility, Zone,
+    TokenBattlefieldEntry, TokenEntryBatchOptions, TriggerAbilityOrigin, TriggerContext,
+    TriggerObjectRef, TriggerUseKey, TurnHistory, TurnObjectFact, TurnStep, UndoableManaAbility,
+    Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;

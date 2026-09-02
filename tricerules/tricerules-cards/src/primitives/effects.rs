@@ -1736,6 +1736,38 @@ pub enum DelayedTokenSacrificeTiming {
     ControllerNextTurnEndStep,
 }
 
+/// The creature subtype named by an Amass instruction (CR 701.47). A closed enum keeps the
+/// authored action aligned with a canonical token definition instead of accepting arbitrary
+/// strings that might not have a matching 0/0 Army token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ArmySubtype {
+    Goblin,
+    Zombie,
+}
+
+impl ArmySubtype {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Goblin => "Goblin",
+            Self::Zombie => "Zombie",
+        }
+    }
+
+    pub fn plural(self) -> &'static str {
+        match self {
+            Self::Goblin => "Goblins",
+            Self::Zombie => "Zombies",
+        }
+    }
+
+    pub fn token_id(self) -> &'static str {
+        match self {
+            Self::Goblin => "goblin_army_b_0_0",
+            Self::Zombie => "zombie_army_b_0_0",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
     /// Apply one ordinary non-suspending instruction only when a current engine-side condition
@@ -2340,6 +2372,14 @@ pub enum SpellEffectKind {
     /// CR 701.36: choose a creature token you control during resolution, then copy it.
     /// Untargeted (Wake the Reflections, Rootborn Defenses).
     Populate,
+    /// CR 701.47: if necessary create a black 0/0 Army creature token of `subtype`, choose an
+    /// Army creature you control, put `count` +1/+1 counters on it, then add `subtype` if needed.
+    /// Goblin-town Flunkies / Misty Mountains Raider and the established Zombie form share this
+    /// non-targeting, resumable action.
+    Amass {
+        subtype: ArmySubtype,
+        count: Amount,
+    },
     /// CR 111: create `count` token permanents of the registry-defined [`token`](crate::token_def)
     /// under the chosen controller. Untargeted — the characteristics come from the
     /// [`TokenDefinition`](crate::token_def::TokenDefinition); only `count` and `who` vary per
@@ -3229,6 +3269,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DestroyAll { .. }
             | SpellEffectKind::DamageAll { .. }
             | SpellEffectKind::CreateTokens { .. }
+            | SpellEffectKind::Amass { .. }
             | SpellEffectKind::Populate
             | SpellEffectKind::CreateAttackingTokens { .. }
             | SpellEffectKind::ProduceMana { .. }
@@ -3281,6 +3322,7 @@ impl SpellEffectKind {
             | Self::GainLife { amount }
             | Self::Mill { count: amount, .. }
             | Self::PutCounters { count: amount, .. }
+            | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
             | Self::CreateAttackingTokens { count: amount, .. } => {
@@ -3401,6 +3443,7 @@ impl SpellEffectKind {
                 | SpellEffectKind::Draw { count: amount, .. }
                 | SpellEffectKind::GainLife { amount }
                 | SpellEffectKind::Mill { count: amount, .. }
+                | SpellEffectKind::Amass { count: amount, .. }
                 | SpellEffectKind::CreateTokens { count: amount, .. }
                 | SpellEffectKind::CreateTokenCopies { count: amount, .. }
                 | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
@@ -3578,6 +3621,7 @@ impl SpellEffectKind {
             | SpellEffectKind::GainLife { amount }
             | SpellEffectKind::Mill { count: amount, .. }
             | SpellEffectKind::PutCounters { count: amount, .. }
+            | SpellEffectKind::Amass { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. }
             | SpellEffectKind::CreateTokenCopies { count: amount, .. }
             | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => {
@@ -4704,6 +4748,7 @@ impl SpellEffectKind {
             | Self::GainLife { amount }
             | Self::Mill { count: amount, .. }
             | Self::PutCounters { count: amount, .. }
+            | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
             | Self::CreateAttackingTokens { count: amount, .. } => {

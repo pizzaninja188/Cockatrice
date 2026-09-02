@@ -1,0 +1,10 @@
+// CR 701.47a Zombie Army token created by Amass Zombies.
+(
+    id: "zombie_army_b_0_0",
+    name: "Zombie Army",
+    face_id: "zombie_army",
+    types: ["Creature", "Zombie", "Army"],
+    colors: [Black],
+    power: 0,
+    toughness: 0,
+)

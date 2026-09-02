@@ -153,6 +153,8 @@ mod issue_177_multi_option_cast_costs;
 mod issue_178_aggregate_object_payments;
 #[path = "scenario/issue_181_spell_mana_spent.rs"]
 mod issue_181_spell_mana_spent;
+#[path = "scenario/issue_186_amass.rs"]
+mod issue_186_amass;
 #[path = "scenario/issue_187_base_pt.rs"]
 mod issue_187_base_pt;
 #[path = "scenario/issue_188_chosen_equipment_attachment.rs"]

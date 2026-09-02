@@ -1439,6 +1439,7 @@ fn validate_effect_targets(
         | SpellEffectKind::RemoveAbilitiesAll { .. }
         | SpellEffectKind::GrantKeywordsAllPermanents { .. }
         | SpellEffectKind::CreateTokens { .. }
+        | SpellEffectKind::Amass { .. }
         | SpellEffectKind::Populate
         | SpellEffectKind::CreateAttackingTokens { .. }
         | SpellEffectKind::SacrificeObservedObjects

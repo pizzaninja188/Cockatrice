@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use tricerules_cards::primitives::{
-    ActivatedAbilityDef, CardResultAction, CardSearchZone, CardTypeFilter,
+    ActivatedAbilityDef, ArmySubtype, CardResultAction, CardSearchZone, CardTypeFilter,
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, Keyword, LibraryBottomOrder,
@@ -822,6 +822,12 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         candidate_generations: Vec<(ObjectId, u64)>,
     },
+    AmassChoice {
+        stack: ParkedStackResolution,
+        subtype: ArmySubtype,
+        count: u32,
+        candidate_generations: Vec<(ObjectId, u64)>,
+    },
     WardPayment {
         stack: ParkedStackResolution,
         ward: PendingWardPayment,
@@ -938,6 +944,7 @@ impl ResolutionContinuation {
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
             | Self::PermanentChoice { stack, .. }
+            | Self::AmassChoice { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
             | Self::PlayerSetDiscard { stack, .. }
@@ -969,6 +976,7 @@ impl ResolutionContinuation {
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
             | Self::PermanentChoice { stack, .. }
+            | Self::AmassChoice { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
             | Self::PlayerSetDiscard { stack, .. }
@@ -1125,14 +1133,26 @@ pub(crate) struct AttackingTokenBatch {
     pub defenders: Vec<tricerules_proto::ruled::v1::CombatDefenderOption>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PendingAmass {
+    pub subtype: ArmySubtype,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct TokenEntryBatchOptions {
+    pub attacking: Option<AttackingTokenBatch>,
+    pub delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
+    pub amass: Option<PendingAmass>,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct PendingTokenEntryBatch {
     pub current_created: TokenCreated,
     pub ready: Vec<TokenBattlefieldEntry>,
     pub remaining: Vec<TokenBattlefieldEntry>,
     pub logs: Vec<String>,
-    pub attacking: Option<AttackingTokenBatch>,
-    pub delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
+    pub options: TokenEntryBatchOptions,
 }
 
 /// One simultaneous reanimation instruction, prepared fully before any member moves.

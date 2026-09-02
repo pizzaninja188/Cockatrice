@@ -106,6 +106,7 @@ fn validate_effect_cast_cost_conditions(
         | SpellEffectKind::Draw { count: amount, .. }
         | SpellEffectKind::GainLife { amount }
         | SpellEffectKind::Mill { count: amount, .. }
+        | SpellEffectKind::Amass { count: amount, .. }
         | SpellEffectKind::CreateTokens { count: amount, .. }
         | SpellEffectKind::CreateTokenCopies { count: amount, .. }
         | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
@@ -172,6 +173,7 @@ fn validate_effect_payment_results(
         | SpellEffectKind::Draw { count: amount, .. }
         | SpellEffectKind::GainLife { amount }
         | SpellEffectKind::Mill { count: amount, .. }
+        | SpellEffectKind::Amass { count: amount, .. }
         | SpellEffectKind::CreateTokens { count: amount, .. }
         | SpellEffectKind::CreateTokenCopies { count: amount, .. }
         | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),

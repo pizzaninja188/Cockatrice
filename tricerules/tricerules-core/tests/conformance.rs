@@ -236,6 +236,7 @@ fn try_drain_stack(e: &mut GameEngine) {
                     } else if matches!(
                         pending.continuation,
                         tricerules_core::state::ResolutionContinuation::AuthoredBranch { .. }
+                            | tricerules_core::state::ResolutionContinuation::AmassChoice { .. }
                             | tricerules_core::state::ResolutionContinuation::OwnerLibraryPlacement { .. }
                             | tricerules_core::state::ResolutionContinuation::SearchZoneScope { .. }
                     ) {

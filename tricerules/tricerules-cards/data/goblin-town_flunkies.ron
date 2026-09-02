@@ -1,0 +1,17 @@
+// Oracle and rulings checked against Scryfall on 2026-09-02. CR 701.47.
+(
+  id: "goblin-town_flunkies",
+  name: "Goblin-town Flunkies",
+  face_id: "goblin_town_flunkies",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Goblin", "Soldier"],
+  power: 1,
+  toughness: 1,
+  keywords: [Haste],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Amass(subtype: Goblin, count: 1)],
+  )],
+)

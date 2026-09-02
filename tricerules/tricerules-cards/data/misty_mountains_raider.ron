@@ -1,0 +1,16 @@
+// Oracle and rulings checked against Scryfall on 2026-09-02. CR 701.47.
+(
+  id: "misty_mountains_raider",
+  name: "Misty Mountains Raider",
+  face_id: "misty_mountains_raider",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Goblin", "Soldier"],
+  power: 4,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverControllerAttacks(),
+    effect: [Amass(subtype: Goblin, count: 2)],
+  )],
+)

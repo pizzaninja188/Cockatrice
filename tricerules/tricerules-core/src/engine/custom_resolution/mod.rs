@@ -243,6 +243,9 @@ impl GameEngine {
             ResolutionContinuation::PermanentChoice { .. } => {
                 return self.finish_permanent_choice(pending, chosen);
             }
+            ResolutionContinuation::AmassChoice { .. } => {
+                return self.finish_amass_choice(pending, chosen[0]);
+            }
             ResolutionContinuation::WardPayment { .. } => {
                 return self.finish_ward_discard(pending, chosen);
             }

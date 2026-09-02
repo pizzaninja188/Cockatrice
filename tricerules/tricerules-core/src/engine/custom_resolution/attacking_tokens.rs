@@ -152,10 +152,13 @@ impl GameEngine {
             stack.item.clone(),
             entries,
             logs,
-            Some(AttackingTokenBatch {
-                defenders: chosen_defenders,
-            }),
-            delayed_sacrifice,
+            TokenEntryBatchOptions {
+                attacking: Some(AttackingTokenBatch {
+                    defenders: chosen_defenders,
+                }),
+                delayed_sacrifice,
+                ..Default::default()
+            },
             &mut events,
         )? {
             return Ok(finish_with_events(self, events));

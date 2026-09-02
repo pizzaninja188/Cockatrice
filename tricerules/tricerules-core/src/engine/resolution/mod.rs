@@ -18,6 +18,7 @@ use tricerules_cards::primitives::{ManaRetention, TargetRole, TargetingDef};
 mod choices;
 pub(in crate::engine) use choices::card_result_count;
 pub(super) use choices::resolution_branch_is_live;
+mod amass;
 mod blight;
 mod damage;
 /// `pub(super)` so the combat damage step can reach `life::apply_life_gain` — lifelink is the one
@@ -1519,6 +1520,7 @@ impl GameEngine {
                         tokens::create_token_copies(&mut cx, effect)?
                     }
                     SpellEffectKind::Populate => tokens::populate(&mut cx)?,
+                    effect @ SpellEffectKind::Amass { .. } => amass::amass(&mut cx, effect)?,
                     effect @ SpellEffectKind::CreateAttackingTokens { .. } => {
                         tokens::create_attacking_tokens(&mut cx, effect)?
                     }
@@ -1946,7 +1948,16 @@ impl GameEngine {
         let (entries, logs) = self.prepare_token_entries(request, enters_tapped)?;
         // CR 603.6: one token-making instruction puts all of its tokens onto the battlefield
         // simultaneously, so every entrant exists before their ETB triggers are collected.
-        self.begin_token_entry_batch(item, entries, logs, None, delayed_sacrifice, events)
+        self.begin_token_entry_batch(
+            item,
+            entries,
+            logs,
+            TokenEntryBatchOptions {
+                delayed_sacrifice,
+                ..Default::default()
+            },
+            events,
+        )
     }
 
     pub(super) fn prepare_token_entries(

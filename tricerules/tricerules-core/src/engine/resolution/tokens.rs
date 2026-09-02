@@ -300,8 +300,11 @@ pub(super) fn create_attacking_tokens(
             item,
             entries,
             logs,
-            Some(AttackingTokenBatch { defenders }),
-            sacrifice_timing,
+            TokenEntryBatchOptions {
+                attacking: Some(AttackingTokenBatch { defenders }),
+                delayed_sacrifice: sacrifice_timing,
+                ..Default::default()
+            },
             cx.events,
         )? {
             return Ok(EffectOutcome::Suspended);

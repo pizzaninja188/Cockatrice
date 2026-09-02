@@ -1,0 +1,10 @@
+// CR 701.47a Goblin Army token created by Amass Goblins.
+(
+    id: "goblin_army_b_0_0",
+    name: "Goblin Army",
+    face_id: "goblin_army",
+    types: ["Creature", "Goblin", "Army"],
+    colors: [Black],
+    power: 0,
+    toughness: 0,
+)
