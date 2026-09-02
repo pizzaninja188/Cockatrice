@@ -545,6 +545,20 @@ impl GameEngine {
                         timestamp,
                     });
                 }
+                StaticAbilityDef::CreatureScopeCombatRestriction {
+                    filter,
+                    restriction,
+                } => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
+                        source_id: Some(object_id),
+                        affected: resolve_creature_scope(&filter, controller, object_id),
+                        kind: ContinuousEffectKind::CombatRestriction(restriction),
+                        condition: None,
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
                 StaticAbilityDef::ControlsAttached => {
                     self.state.continuous_effects.push(ContinuousEffect {
                         trigger_grant_origin: None,

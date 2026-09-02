@@ -165,6 +165,8 @@ mod issue_190_restricted_mana_any_ability;
 mod issue_191_repartee;
 #[path = "scenario/issue_192_calibration_cards.rs"]
 mod issue_192_calibration_cards;
+#[path = "scenario/issue_194_dynamic_scope_combat_restrictions.rs"]
+mod issue_194_dynamic_scope_combat_restrictions;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

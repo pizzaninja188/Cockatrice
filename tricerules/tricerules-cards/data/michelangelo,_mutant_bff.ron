@@ -1,0 +1,34 @@
+// Oracle and rulings verified 2026-09-01.
+// CR 509.1b: matching creatures impose a blocker-count restriction during declaration.
+(
+  id: "michelangelo,_mutant_bff",
+  name: "Michelangelo, Mutant BFF",
+  face_id: "michelangelo_mutant_bff",
+  mana_cost: "{2}{G}{G}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Mutant", "Ninja", "Turtle"],
+  power: 4,
+  toughness: 4,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: CreatureScopeCombatRestriction(
+      filter: (controller: YouControl, requires_any_counter: true),
+      restriction: (maximum_blockers: Some(1)),
+    ),
+  )],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "mutagen", count: 1)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+      effect: [CreateTokens(token: "mutagen", count: 1)],
+    ),
+  ],
+)

@@ -704,6 +704,19 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     reason,
                 })?;
         }
+        if let StaticAbilityDef::CreatureScopeCombatRestriction {
+            filter,
+            restriction,
+        } = ability
+        {
+            filter
+                .validate()
+                .and_then(|()| restriction.validate())
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+        }
         if matches!(ability, StaticAbilityDef::ControlsAttached) && !face.is_aura {
             return Err(RegistryError::InvalidCard {
                 id: card.id.clone(),

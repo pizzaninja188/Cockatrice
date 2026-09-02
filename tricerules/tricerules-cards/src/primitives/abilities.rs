@@ -1285,6 +1285,11 @@ pub struct CreatureScopeFilter {
     /// Falconer, Ainok Bond-Kin, and Tuskguard Captain share this static-scope predicate.
     #[serde(default)]
     pub required_counter: Option<CounterKind>,
+    /// If true, only creatures with at least one counter of any kind. Michelangelo, Mutant BFF
+    /// uses this physical-object predicate; it is mutually exclusive with `required_counter` so
+    /// authored scopes state either an any-counter or named-counter requirement unambiguously.
+    #[serde(default)]
+    pub requires_any_counter: bool,
     /// CR "other ... creatures": exclude the effect's physical source permanent when it is on
     /// the battlefield. A resolving instant or sorcery source cannot itself match this filter.
     #[serde(default)]
@@ -1304,6 +1309,12 @@ impl CreatureScopeFilter {
             .is_some_and(|name| name.trim().is_empty())
         {
             return Err("creature scope name cannot be empty".into());
+        }
+        if self.requires_any_counter && self.required_counter.is_some() {
+            return Err(
+                "creature scope cannot combine any-counter and specific-counter requirements"
+                    .into(),
+            );
         }
         Ok(())
     }
@@ -1565,6 +1576,16 @@ pub enum StaticAbilityDef {
         restriction: super::CombatRestriction,
         #[serde(default)]
         condition: Option<GameCondition>,
+    },
+    /// CR 509.1b / 611.3: every creature in a dynamically reevaluated scope receives the
+    /// cumulative combat restriction while this source remains on the battlefield. Michelangelo,
+    /// Mutant BFF uses an any-counter scope with a maximum blocker count; Herald of Secret
+    /// Streams uses a named-counter scope with an absolute blocking prohibition.
+    CreatureScopeCombatRestriction {
+        #[serde(default)]
+        filter: CreatureScopeFilter,
+        #[serde(default)]
+        restriction: super::CombatRestriction,
     },
     /// CR 502.3: this permanent untaps during every other player's untap step, at the same
     /// turn-based boundary as that player's permanents. Bender's Waterskin supplies the printed

@@ -1048,6 +1048,7 @@ pub(super) fn creature_matches_scope(
             .color
             .is_none_or(|value| characteristics.colors.contains(&value))
         && name_matches
+        && (!filter.requires_any_counter || object.has_any_counter())
         && filter
             .required_counter
             .is_none_or(|counter| object.counter_count(counter) > 0)
