@@ -1,0 +1,34 @@
+// Oracle and rulings checked 2026-09-02. Sneak: CR 702.190. A permanent put onto the
+// battlefield attacking did not attack, so only the enters-the-battlefield trigger fires.
+(
+  id: "shredder,_unrelenting",
+  name: "Shredder, Unrelenting",
+  face_id: "shredder_unrelenting",
+  mana_cost: "{4}{B}",
+  sneak_cost: Some("{3}{B}"),
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Ninja"],
+  power: 6,
+  toughness: 4,
+  keywords: [Deathtouch],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([3]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [GrantKeywords(
+        subject: Chosen((kind: Creature, controller: You, excluded_objects: [Source])),
+        keywords: [Deathtouch],
+      )],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+      effect: [GrantKeywords(
+        subject: Chosen((kind: Creature, controller: You, excluded_objects: [Source])),
+        keywords: [Deathtouch],
+      )],
+    ),
+  ],
+)

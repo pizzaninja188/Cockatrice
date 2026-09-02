@@ -1677,6 +1677,10 @@ pub enum CardResultSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CardResultAction {
     Discard,
+    /// A permanent that was actually destroyed, even when a replacement effect changes the
+    /// destination. Indestructible and regeneration prevent this result (CR 701.7). Shredder's
+    /// Technique and Make Yourself Useful consume this generic "destroyed this way" receipt.
+    Destroy,
     Exile,
     Sacrifice,
     Mill,
@@ -3411,6 +3415,7 @@ impl SpellEffectKind {
                         | SpellEffectKind::DiscardCards { .. }
                         | SpellEffectKind::DrawDiscard { .. }
                 ),
+                CardResultAction::Destroy => matches!(effect, SpellEffectKind::Destroy { .. }),
                 CardResultAction::Exile => matches!(
                     effect,
                     SpellEffectKind::ExileCardsFromHand { .. }

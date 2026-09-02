@@ -1004,14 +1004,15 @@ fn legal_spell_cost_choices(
     source: ObjectId,
     card_id: &str,
     face: &CardFace,
-    costs: &[AdditionalCost],
-    cast_cost_groups: &[CastCostGroupDef],
+    sneak_candidates: Option<&[ObjectId]>,
 ) -> rv1::LegalCostChoices {
     let Some(player_idx) = eng.state.player_idx(player) else {
         return rv1::LegalCostChoices::default();
     };
     let mut choices = vec![];
     let mut requirements = vec![];
+    let costs = &face.additional_costs;
+    let cast_cost_groups = &face.cast_cost_groups;
     for (cost_index, cost) in costs.iter().enumerate() {
         match cost {
             AdditionalCost::Blight { count } => {
@@ -1201,6 +1202,27 @@ fn legal_spell_cost_choices(
                 });
             }
         }
+    }
+    if let Some(candidates) = sneak_candidates {
+        requirements.push(ObjectPaymentRequirement::Exact {
+            candidates: candidates.to_vec(),
+            count: 1,
+        });
+        choices.push(rv1::LegalCostChoice {
+            cost_index: costs.len() as u32,
+            zone: rv1::CostChoiceZone::Battlefield as i32,
+            candidate_ids: candidates.to_vec(),
+            min: 1,
+            max: 1,
+            blight_count: 0,
+            counter_removal: None,
+            kind: rv1::CostChoiceKind::ReturnUnblockedAttacker as i32,
+            candidate_objects: candidates
+                .iter()
+                .map(|oid| cost_object_candidate(eng, *oid, 0))
+                .collect(),
+            aggregate_minimum: None,
+        });
     }
     let mut non_mana_costs_payable =
         payment_assignment_exists(&requirements, 0, &mut HashSet::new(), &mut HashMap::new())
@@ -1905,17 +1927,16 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
             if combat_decl_lock {
                 continue;
             }
-            let cost_choices = legal_spell_cost_choices(
-                eng,
-                pid,
-                oid,
-                card_id,
-                face,
-                &face.additional_costs,
-                &face.cast_cost_groups,
-            );
+            let cost_choices = legal_spell_cost_choices(eng, pid, oid, card_id, face, None);
             let cast_ok = face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
-            if cast_ok {
+            let sneak_candidates = eng.sneak_return_candidates(pid);
+            let sneak_cost_choices = face.sneak_cost.as_ref().map(|_| {
+                legal_spell_cost_choices(eng, pid, oid, card_id, face, Some(&sneak_candidates))
+            });
+            let sneak_ok = sneak_cost_choices
+                .as_ref()
+                .is_some_and(|choices| choices.non_mana_costs_payable);
+            if cast_ok || sneak_ok {
                 let mut action = hand_action(
                     rv1::HandActionKind::HandActionCastSpell,
                     hand_index,
@@ -2006,8 +2027,20 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                     warp.cost = cost.to_string();
                     warp
                 });
-                actions.push(action);
-                actions.extend(warp);
+                let sneak = face.sneak_cost.as_ref().and_then(|cost| {
+                    let choices =
+                        sneak_cost_choices.filter(|choices| choices.non_mana_costs_payable)?;
+                    let mut sneak = action.clone();
+                    sneak.cast_method = rv1::CastMethod::Sneak as i32;
+                    sneak.cost = cost.to_string();
+                    sneak.cost_choices = Some(choices);
+                    Some(sneak)
+                });
+                if cast_ok {
+                    actions.push(action);
+                    actions.extend(warp);
+                }
+                actions.extend(sneak);
             }
         }
     }
@@ -2053,15 +2086,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 let Some(method_cost) = method_cost else {
                     continue;
                 };
-                let mut cost_choices = legal_spell_cost_choices(
-                    eng,
-                    pid,
-                    oid,
-                    card_id,
-                    face,
-                    &face.additional_costs,
-                    &face.cast_cost_groups,
-                );
+                let mut cost_choices = legal_spell_cost_choices(eng, pid, oid, card_id, face, None);
                 if cast_method == rv1::CastMethod::Harmonize {
                     cost_choices
                         .cast_cost_groups
@@ -2223,15 +2248,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             if face.is_land {
                 continue;
             }
-            let cost_choices = legal_spell_cost_choices(
-                eng,
-                pid,
-                object.id,
-                &object.card_id,
-                face,
-                &face.additional_costs,
-                &face.cast_cost_groups,
-            );
+            let cost_choices =
+                legal_spell_cost_choices(eng, pid, object.id, &object.card_id, face, None);
             let cast_ok = face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
             if !cast_ok {
                 continue;
@@ -2577,15 +2595,7 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
                         }
                     }
                 } else if !combat_decl_lock {
-                    let costs = legal_spell_cost_choices(
-                        eng,
-                        pid,
-                        oid,
-                        cid,
-                        face,
-                        &face.additional_costs,
-                        &face.cast_cost_groups,
-                    );
+                    let costs = legal_spell_cost_choices(eng, pid, oid, cid, face, None);
                     let cast_ok = face_cast_timing_available(face, &costs, instant_ok, sorcery_ok);
                     if cast_ok {
                         let needs_target =

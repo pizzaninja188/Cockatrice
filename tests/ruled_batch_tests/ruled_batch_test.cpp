@@ -614,8 +614,13 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     faceUp->add_eligible_restricted_mana_group_ids(7u);
     auto *p1Cast = p1Legal.add_hand_actions();
     p1Cast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
-    p1Cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
-    p1Cast->mutable_cost_choices()->add_choices()->add_candidate_ids(7);
+    p1Cast->set_cast_method(ruled::v1::CAST_METHOD_SNEAK);
+    auto *sneakChoice = p1Cast->mutable_cost_choices()->add_choices();
+    sneakChoice->set_kind(ruled::v1::COST_CHOICE_KIND_RETURN_UNBLOCKED_ATTACKER);
+    sneakChoice->add_candidate_ids(7);
+    auto *sneakCandidate = sneakChoice->add_candidate_objects()->mutable_object();
+    sneakCandidate->set_object_id(7);
+    sneakCandidate->set_zone_change_generation(9);
     auto *counterChoice = (*p1Legal.mutable_cost_choices_by_ability())[101].add_choices();
     counterChoice->set_kind(ruled::v1::COST_CHOICE_KIND_REMOVE_COUNTERS);
     auto *counterRemoval = counterChoice->mutable_counter_removal();
@@ -707,7 +712,12 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     EXPECT_EQ(privateAction.mana_cost(), "{1}{U}");
     ASSERT_EQ(privateAction.eligible_restricted_mana_group_ids_size(), 1);
     EXPECT_EQ(privateAction.eligible_restricted_mana_group_ids(0), 7u);
-    EXPECT_EQ(forP1.legal_by_player().at(1).hand_actions(0).cost_choices().choices(0).candidate_ids(0), 7u);
+    const auto &privateSneak = forP1.legal_by_player().at(1).hand_actions(0);
+    EXPECT_EQ(privateSneak.cast_method(), ruled::v1::CAST_METHOD_SNEAK);
+    EXPECT_EQ(privateSneak.cost_choices().choices(0).kind(),
+              ruled::v1::COST_CHOICE_KIND_RETURN_UNBLOCKED_ATTACKER);
+    EXPECT_EQ(privateSneak.cost_choices().choices(0).candidate_ids(0), 7u);
+    EXPECT_EQ(privateSneak.cost_choices().choices(0).candidate_objects(0).object().zone_change_generation(), 9u);
     const auto &privateCounters =
         forP1.legal_by_player().at(1).cost_choices_by_ability().at(101).choices(0).counter_removal();
     EXPECT_EQ(privateCounters.source().zone_change_generation(), 4u);

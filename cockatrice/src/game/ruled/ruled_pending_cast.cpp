@@ -94,8 +94,14 @@ RuledPendingCast::InteractionKind RuledPendingCast::activeInteraction() const
 
 static QString ruledCastOptionLabel(const RuledFaceOption &face)
 {
-    QString label = face.castMethod == ruled::v1::CAST_METHOD_WARP ? QObject::tr("Warp %1").arg(face.faceName)
-                                                                   : QObject::tr("Cast %1").arg(face.faceName);
+    QString label;
+    if (face.castMethod == ruled::v1::CAST_METHOD_WARP) {
+        label = QObject::tr("Warp %1").arg(face.faceName);
+    } else if (face.castMethod == ruled::v1::CAST_METHOD_SNEAK) {
+        label = QObject::tr("Sneak %1").arg(face.faceName);
+    } else {
+        label = QObject::tr("Cast %1").arg(face.faceName);
+    }
     if (!face.permissionSourceLabel.isEmpty()) {
         label += QObject::tr(" — %1").arg(face.permissionSourceLabel);
     }

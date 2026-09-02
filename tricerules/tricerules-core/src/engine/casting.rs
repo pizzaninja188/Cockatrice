@@ -276,6 +276,7 @@ impl GameEngine {
             is_copy: false,
             face_index: expected_face_index,
             cast_method: SpellCastMethod::SiegeDefeat,
+            sneak_attack: None,
             chosen_x: 0,
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
@@ -355,6 +356,7 @@ impl GameEngine {
             Ok(rv1::CastMethod::Harmonize) => SpellCastMethod::Harmonize,
             Ok(rv1::CastMethod::Warp) => SpellCastMethod::Warp,
             Ok(rv1::CastMethod::Permission) => SpellCastMethod::Permission,
+            Ok(rv1::CastMethod::Sneak) => SpellCastMethod::Sneak,
             Ok(rv1::CastMethod::SiegeDefeat) => {
                 return Err(EngineError::Illegal(
                     "Siege defeat casts require an active engine offer",
@@ -384,7 +386,10 @@ impl GameEngine {
                         "hand casts cannot name an exile permission",
                     ));
                 }
-                if !matches!(cast_method, SpellCastMethod::Normal | SpellCastMethod::Warp) {
+                if !matches!(
+                    cast_method,
+                    SpellCastMethod::Normal | SpellCastMethod::Warp | SpellCastMethod::Sneak
+                ) {
                     return Err(EngineError::Illegal("invalid hand cast method"));
                 }
                 (
@@ -538,6 +543,10 @@ impl GameEngine {
                 .warp_cost
                 .clone()
                 .ok_or(EngineError::Illegal("card has no Warp cost"))?,
+            SpellCastMethod::Sneak => face
+                .sneak_cost
+                .clone()
+                .ok_or(EngineError::Illegal("card has no Sneak cost"))?,
             SpellCastMethod::Flashback => face
                 .flashback_cost
                 .clone()
@@ -582,7 +591,11 @@ impl GameEngine {
                     condition,
                 )
             });
-        if face_is_sorcery {
+        if cast_method == SpellCastMethod::Sneak {
+            if !instant_ok || self.state.active_player_id() != player {
+                return Err(EngineError::Illegal("Sneak is not available now"));
+            }
+        } else if face_is_sorcery {
             if !(sorcery_ok || instant_ok && conditional_instant) {
                 return Err(EngineError::Illegal("sorcery speed only"));
             }
@@ -938,9 +951,18 @@ impl GameEngine {
         let origin = self.state.objects[&oid].zone;
         let cast_departure = (origin == Zone::Graveyard).then(|| self.snapshot_zone_event());
         let payment = self.commit_cost_transaction(payment_plan)?;
+        let sneak_attack = payment.sneak_attack;
         let life_paid = payment.life_paid;
         let mana_spent = payment.mana_spent;
-        let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
+        let mut paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
+        if let Some(returned_name) = &payment.sneak_returned_name {
+            let returned = format!("returning {returned_name}");
+            paid_costs_line = if paid_costs_line.is_empty() {
+                format!(" {returned}")
+            } else {
+                format!("{paid_costs_line} and {returned}")
+            };
+        }
         let payment_result = CardResultCohort {
             cards: payment
                 .paid_card_costs
@@ -996,6 +1018,7 @@ impl GameEngine {
             // A spell's effects always act on its controller.
             trigger_context: TriggerContext::default(),
             cast_method,
+            sneak_attack,
         });
         super::resolution::move_object_to_zone(
             &mut self.state,
@@ -1462,6 +1485,7 @@ impl GameEngine {
             // An activated ability's effects act on the player who activated it.
             trigger_context: TriggerContext::default(),
             cast_method: SpellCastMethod::Normal,
+            sneak_attack: None,
         });
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;
@@ -2167,6 +2191,7 @@ impl GameEngine {
             is_copy: false,
             face_index,
             cast_method: SpellCastMethod::Normal,
+            sneak_attack: None,
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),

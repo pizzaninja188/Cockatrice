@@ -231,6 +231,9 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
                     }
                 }
                 break;
+            case ruled::v1::COST_CHOICE_KIND_RETURN_UNBLOCKED_ATTACKER:
+                parsed.kind = RuledCostChoiceKind::ReturnUnblockedAttacker;
+                break;
             default:
                 parsed.kind = RuledCostChoiceKind::Unspecified;
                 break;
@@ -358,7 +361,8 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         const int faceIndex = static_cast<int>(action.face_index());
         const auto method =
             action.kind() == ruled::v1::HAND_ACTION_CAST_SPELL ? action.cast_method() : ruled::v1::CAST_METHOD_NORMAL;
-        if (method != ruled::v1::CAST_METHOD_NORMAL && method != ruled::v1::CAST_METHOD_WARP)
+        if (method != ruled::v1::CAST_METHOD_NORMAL && method != ruled::v1::CAST_METHOD_WARP &&
+            method != ruled::v1::CAST_METHOD_SNEAK)
             continue;
         const auto castKey = RuledClientState::handCastActionKey(handIndex, faceIndex, method);
         RuledHandActionSet &set = parsed[action.kind()];

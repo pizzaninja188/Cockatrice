@@ -50,6 +50,7 @@ pub(super) fn destroy(
     };
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
+    let effect_result = &mut *cx.effect_result;
     let spell_label = cx.spell_label;
 
     let zone_snapshot = engine.snapshot_zone_event();
@@ -76,6 +77,16 @@ pub(super) fn destroy(
                 .is_some_and(|value| value.is_creature());
             let died = destroy_permanent(&mut engine.state, engine.registry, tid)?;
             if let Some(owner_id) = owner {
+                // "Destroyed this way" observes the successful destroy action, not the final
+                // destination. A replacement may move the permanent elsewhere; indestructible
+                // and regeneration were handled above and therefore never produce this receipt.
+                effect_result.cards.push(payment::card_result_entry(
+                    &engine.state,
+                    engine.registry,
+                    CardResultAction::Destroy,
+                    owner_id,
+                    tid,
+                ));
                 events.push(permanent_moved_event(
                     &engine.state,
                     tid,

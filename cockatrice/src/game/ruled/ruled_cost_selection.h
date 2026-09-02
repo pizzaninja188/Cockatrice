@@ -8,7 +8,8 @@
 /// Wire shape and presentation only. Rust publishes candidates and decides payment legality.
 inline bool ruledCostUsesObjectRefs(RuledCostChoiceKind kind)
 {
-    return kind == RuledCostChoiceKind::Tap || kind == RuledCostChoiceKind::Blight;
+    return kind == RuledCostChoiceKind::Tap || kind == RuledCostChoiceKind::Blight ||
+           kind == RuledCostChoiceKind::ReturnUnblockedAttacker;
 }
 
 inline bool ruledCostUsesObjectRefs(const RuledCostChoice &choice)
@@ -50,6 +51,8 @@ inline QString ruledCostSelectionPrompt(const RuledCostChoice &choice, const QSt
         return tr("Choose %1 card(s) from your graveyard for %2.").arg(choice.min).arg(name);
     if (choice.kind == RuledCostChoiceKind::Blight)
         return tr("Blight %1: choose one creature you control for %2.").arg(choice.blightCount).arg(name);
+    if (choice.kind == RuledCostChoiceKind::ReturnUnblockedAttacker)
+        return tr("Choose an unblocked attacker to return for %1.").arg(name);
     if (choice.kind == RuledCostChoiceKind::RemoveCounters && choice.counterSourceId == 0) {
         const QString counter = choice.counterOptions.isEmpty() ? tr("specified") : choice.counterOptions.front().label;
         return tr("Choose a permanent to remove %1 %2 counter(s) from for %3.")

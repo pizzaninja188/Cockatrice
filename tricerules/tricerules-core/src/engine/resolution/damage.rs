@@ -448,6 +448,7 @@ mod damage_source_tests {
             is_copy: false,
             face_index: 0,
             cast_method: SpellCastMethod::Normal,
+            sneak_attack: None,
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),

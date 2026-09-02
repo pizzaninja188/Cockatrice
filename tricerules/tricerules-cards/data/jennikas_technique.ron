@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-09-02. Sneak: CR 702.190.
+(
+  id: "jennikas_technique",
+  name: "Jennika's Technique",
+  face_id: "jennikas_technique",
+  mana_cost: "{2}{R}",
+  sneak_cost: Some("{R}"),
+  types: ["Instant"],
+  spell_effect: [DamageAll(amount: 2, kind: (kind: Creature))],
+)

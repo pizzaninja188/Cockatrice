@@ -7,6 +7,146 @@ use super::legal_actions::fill_legal;
 use super::*;
 
 impl GameEngine {
+    /// CR 702.190a: the object returned for Sneak must still be an unblocked attacking creature
+    /// controlled by the caster in that caster's declare-blockers step. The blocker map retains
+    /// an attacker key after its last blocker leaves, so key absence is the authoritative
+    /// "unblocked" test rather than an empty current blocker list.
+    pub(super) fn sneak_return_assignment(
+        &self,
+        player: PlayerId,
+        object: &rv1::CostObjectRef,
+    ) -> Option<CombatAttackAssignment> {
+        if self.state.active_player_id() != player
+            || self.state.priority_player_id() != player
+            || self.state.turn_step != TurnStep::DeclareBlockers
+        {
+            return None;
+        }
+        let combat = self.state.combat.as_ref()?;
+        if !combat.blockers_declared
+            || !combat.attacking.contains(&object.object_id)
+            || combat.blockers.contains_key(&object.object_id)
+        {
+            return None;
+        }
+        let assignment = *combat.attack_assignments.get(&object.object_id)?;
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&object.object_id)
+            .copied()
+            .unwrap_or(0);
+        let permanent = self.state.objects.get(&object.object_id)?;
+        (current_generation == object.zone_change_generation
+            && assignment.attacker.zone_change_generation == current_generation
+            && permanent.zone == Zone::Battlefield
+            && permanent.controller == player
+            && self
+                .characteristics(object.object_id)
+                .is_some_and(|characteristics| characteristics.is_creature()))
+        .then_some(assignment)
+    }
+
+    pub(super) fn sneak_return_candidates(&self, player: PlayerId) -> Vec<ObjectId> {
+        self.state
+            .combat
+            .as_ref()
+            .map(|combat| combat.attacking.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|object_id| {
+                self.sneak_return_assignment(
+                    player,
+                    &rv1::CostObjectRef {
+                        object_id: *object_id,
+                        zone_change_generation: self
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0),
+                    },
+                )
+                .is_some()
+            })
+            .collect()
+    }
+
+    /// CR 702.190b / 506.3: a resolving Sneak permanent inherits the paid creature's recipient,
+    /// but it was never declared as an attacker. Only the current entrant and captured recipient
+    /// are revalidated; declaration restrictions are intentionally not applied.
+    pub(super) fn add_sneak_attacker(
+        &mut self,
+        object_id: ObjectId,
+        paid_assignment: CombatAttackAssignment,
+    ) -> Option<rv1::AttackAssignment> {
+        let object = self.state.objects.get(&object_id)?;
+        if object.zone != Zone::Battlefield
+            || object.controller != self.state.active_player_id()
+            || !self
+                .characteristics(object_id)
+                .is_some_and(|characteristics| characteristics.is_creature())
+        {
+            return None;
+        }
+        let defending_player_valid = self
+            .state
+            .players
+            .iter()
+            .any(|player| player.id == paid_assignment.defending_player && !player.has_lost);
+        let defender_valid = match paid_assignment.defender {
+            CombatDefenderTarget::Player(player) => self
+                .state
+                .players
+                .iter()
+                .any(|candidate| candidate.id == player && !candidate.has_lost),
+            CombatDefenderTarget::Permanent(defender) => self
+                .state
+                .objects
+                .get(&defender.object_id)
+                .is_some_and(|permanent| {
+                    permanent.zone == Zone::Battlefield
+                        && self
+                            .state
+                            .zone_change_generation
+                            .get(&defender.object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == defender.zone_change_generation
+                        && self
+                            .characteristics(defender.object_id)
+                            .is_some_and(|values| {
+                                values.has_type("Planeswalker") || values.has_type("Battle")
+                            })
+                }),
+        };
+        if !defending_player_valid
+            || !defender_valid
+            || self
+                .state
+                .combat
+                .as_ref()
+                .is_none_or(|combat| !combat.attackers_declared)
+        {
+            return None;
+        }
+        let attacker = self.trigger_object_ref(object_id)?;
+        let assignment = CombatAttackAssignment {
+            attacker,
+            defender: paid_assignment.defender,
+            defending_player: paid_assignment.defending_player,
+        };
+        let wire = self.wire_attack_assignment(
+            object_id,
+            assignment.defender,
+            assignment.defending_player,
+        );
+        let combat = self.state.combat.as_mut()?;
+        combat.attacking.push(object_id);
+        combat.attack_assignments.insert(object_id, assignment);
+        Some(wire)
+    }
+
     pub(super) fn combat_defender_recipient(
         &self,
         combat: &CombatState,

@@ -294,6 +294,7 @@ enum CastMethod {
   CAST_METHOD_WARP = 5;
   // An effect-created permission supplies the alternative mana cost and exact permission id.
   CAST_METHOD_PERMISSION = 6;
+  CAST_METHOD_SNEAK = 7;
 }
 
 message CastSpell {
@@ -773,6 +774,7 @@ enum CostChoiceKind {
   COST_CHOICE_KIND_TAP = 4;
   COST_CHOICE_KIND_BLIGHT = 5;
   COST_CHOICE_KIND_REMOVE_COUNTERS = 6;
+  COST_CHOICE_KIND_RETURN_UNBLOCKED_ATTACKER = 7;
 }
 
 // A public-zone object choice bound to the exact zone-change generation that was published.

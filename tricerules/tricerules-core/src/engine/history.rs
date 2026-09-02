@@ -2612,6 +2612,7 @@ mod tests {
             is_copy: false,
             face_index: 0,
             cast_method: SpellCastMethod::Normal,
+            sneak_attack: None,
             chosen_x: 0,
             chosen_modes: vec![],
             cast_cost_receipts: vec![],

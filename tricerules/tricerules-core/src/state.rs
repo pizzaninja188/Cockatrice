@@ -1288,6 +1288,7 @@ pub enum SpellCastMethod {
     SiegeDefeat,
     Warp,
     Permission,
+    Sneak,
 }
 
 impl SpellCastMethod {
@@ -1305,6 +1306,7 @@ impl SpellCastMethod {
             Self::SiegeDefeat => Some("Siege defeat"),
             Self::Warp => Some("Warp"),
             Self::Permission => Some("Alternative cost"),
+            Self::Sneak => Some("Sneak"),
         }
     }
 }
@@ -1346,6 +1348,9 @@ pub struct StackItem {
     pub face_index: usize,
     /// CR 601.2b: the announced cast method, retained for method-specific stack-exit rules.
     pub cast_method: SpellCastMethod,
+    /// CR 702.190b: the generation-bound attack assignment of the creature returned to pay
+    /// Sneak. Spell copies retain this cost fact under CR 707.10.
+    pub sneak_attack: Option<CombatAttackAssignment>,
     /// CR 107.3b: the value chosen for `{X}` as this spell was cast. `0` for spells without an
     /// `{X}` pip (and for abilities). On the stack the spell's mana value is `fixed_mv + chosen_x`;
     /// at resolution this feeds [`Amount::X`](tricerules_cards::Amount) effect amounts.

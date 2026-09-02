@@ -1,0 +1,43 @@
+// Oracle and rulings checked 2026-09-02. Sneak: CR 702.190. "Destroyed this way"
+// records a successful destroy action even when a replacement changes the destination.
+(
+  id: "shredders_technique",
+  name: "Shredder's Technique",
+  face_id: "shredders_technique",
+  mana_cost: "{2}{B}",
+  sneak_cost: Some("{B}"),
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((any_of: Some([
+      (kind: Creature),
+      (kind: AnyPermanent, permanent_types: [Enchantment]),
+    ])))),
+    ChooseResolutionBranch(
+      selection: FirstApplicable,
+      branches: [
+        (
+          branch_id: "lose_life",
+          presentation: OracleLines([2]),
+          cost: None,
+          requirement: CardResultCount(
+            filter: (
+              source: PreviousEffect,
+              action: Destroy,
+              players: All,
+              card_type: Some(Enchantment),
+            ),
+            min: Some(1),
+          ),
+          effects: [LoseLife(amount: Fixed(2))],
+        ),
+        (
+          branch_id: "no_life_loss",
+          presentation: Fallback,
+          cost: None,
+          requirement: Always,
+          effects: [],
+        ),
+      ],
+    ),
+  ],
+)

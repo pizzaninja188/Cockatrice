@@ -153,6 +153,8 @@ mod issue_169_actor_aware_taps;
 mod issue_177_multi_option_cast_costs;
 #[path = "scenario/issue_178_aggregate_object_payments.rs"]
 mod issue_178_aggregate_object_payments;
+#[path = "scenario/issue_179_sneak.rs"]
+mod issue_179_sneak;
 #[path = "scenario/issue_181_spell_mana_spent.rs"]
 mod issue_181_spell_mana_spent;
 #[path = "scenario/issue_182_teamwork.rs"]

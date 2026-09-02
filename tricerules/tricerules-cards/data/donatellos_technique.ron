@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-09-02. Sneak: CR 702.190.
+(
+  id: "donatellos_technique",
+  name: "Donatello's Technique",
+  face_id: "donatellos_technique",
+  mana_cost: "{2}{U}",
+  sneak_cost: Some("{U}"),
+  types: ["Sorcery"],
+  spell_effect: [Draw(count: 2)],
+)

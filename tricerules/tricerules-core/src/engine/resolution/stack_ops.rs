@@ -518,11 +518,15 @@ pub(super) fn copy_target_spell(
                     trigger_context: src.trigger_context,
                     // CR 707.10 copies the Warp choice; Flashback/Harmonize stack-exit
                     // replacements still belong only to the spell actually cast that way.
-                    cast_method: if src.cast_method == SpellCastMethod::Warp {
-                        SpellCastMethod::Warp
+                    cast_method: if matches!(
+                        src.cast_method,
+                        SpellCastMethod::Warp | SpellCastMethod::Sneak
+                    ) {
+                        src.cast_method
                     } else {
                         SpellCastMethod::Normal
                     },
+                    sneak_attack: src.sneak_attack,
                 };
                 // CR 707.10c: prompt for new targets on the first copy; push any
                 // additional copies immediately with the original targets.

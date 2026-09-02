@@ -1,0 +1,25 @@
+// Oracle and rulings checked 2026-09-02. Sneak: CR 702.190.
+(
+  id: "karais_technique",
+  name: "Karai's Technique",
+  face_id: "karais_technique",
+  mana_cost: "{1}{W}{B}",
+  sneak_cost: Some("{W}{B}"),
+  types: ["Sorcery"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 2,
+    modes: [
+      (
+        mode_id: "mode_01",
+        presentation: OracleLines([3]),
+        effects: [PumpTarget(power: 3, toughness: 3)],
+      ),
+      (
+        mode_id: "mode_02",
+        presentation: OracleLines([4]),
+        effects: [PumpTarget(power: -3, toughness: -3)],
+      ),
+    ],
+  ),
+)

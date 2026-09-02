@@ -68,6 +68,11 @@ enum CostDebit {
         snapshot: SacrificeSnapshot,
         owner: PlayerId,
     },
+    ReturnUnblockedAttacker {
+        object: rv1::CostObjectRef,
+        owner: PlayerId,
+        assignment: CombatAttackAssignment,
+    },
     ObserveHand {
         object_id: ObjectId,
         generation: u64,
@@ -99,6 +104,8 @@ pub(in crate::engine) struct CostPaymentReceipt {
     pub(in crate::engine) expend_triggers: Vec<crate::engine::triggers::CollectedTrigger>,
     pub(in crate::engine) restricted_mana_spent: Vec<(u32, ManaAmount)>,
     pub(in crate::engine) cast_cost_receipts: Vec<CastCostReceipt>,
+    pub(in crate::engine) sneak_attack: Option<CombatAttackAssignment>,
+    pub(in crate::engine) sneak_returned_name: Option<String>,
 }
 
 pub(in crate::engine) enum PaidCardCost {
@@ -429,7 +436,8 @@ impl GameEngine {
         let mut by_index = HashMap::new();
         for selection in selections {
             let cost_index = selection.cost_index as usize;
-            if cost_index >= costs.len() || by_index.insert(cost_index, selection).is_some() {
+            let selection_count = costs.len() + usize::from(cast_method == SpellCastMethod::Sneak);
+            if cost_index >= selection_count || by_index.insert(cost_index, selection).is_some() {
                 return Err(EngineError::Illegal("invalid or duplicate cost selection"));
             }
         }
@@ -979,7 +987,37 @@ impl GameEngine {
                 }
             }
         }
-        if selections.len() != costs.len() {
+        if cast_method == SpellCastMethod::Sneak {
+            let selection = by_index
+                .get(&costs.len())
+                .ok_or(EngineError::Illegal("missing Sneak return selection"))?;
+            let Some(Selection::BattlefieldObjects(selected)) = selection.selection.as_ref() else {
+                return Err(EngineError::Illegal(
+                    "Sneak requires a generation-bound battlefield object",
+                ));
+            };
+            let [object] = selected.objects.as_slice() else {
+                return Err(EngineError::Illegal(
+                    "Sneak requires exactly one unblocked attacker",
+                ));
+            };
+            let assignment =
+                self.sneak_return_assignment(player, object)
+                    .ok_or(EngineError::Illegal(
+                        "illegal or stale Sneak return selection",
+                    ))?;
+            if !consumed.insert(object.object_id) {
+                return Err(EngineError::Illegal("one object cannot pay two costs"));
+            }
+            let owner = self.state.objects[&object.object_id].owner;
+            debits.push(CostDebit::ReturnUnblockedAttacker {
+                object: *object,
+                owner,
+                assignment,
+            });
+        }
+        let expected_selections = costs.len() + usize::from(cast_method == SpellCastMethod::Sneak);
+        if selections.len() != expected_selections {
             return Err(EngineError::Illegal("unexpected cost selection"));
         }
 
@@ -1513,6 +1551,8 @@ impl GameEngine {
             expend_triggers: vec![],
             restricted_mana_spent: vec![],
             cast_cost_receipts: plan.cast_cost_receipts,
+            sneak_attack: None,
+            sneak_returned_name: None,
         };
         for debit in plan.debits {
             let zones = matches!(
@@ -1520,6 +1560,7 @@ impl GameEngine {
                 CostDebit::Exile { .. }
                     | CostDebit::ExileGroup { .. }
                     | CostDebit::Sacrifice { .. }
+                    | CostDebit::ReturnUnblockedAttacker { .. }
             )
             .then(|| self.snapshot_zone_event());
             match debit {
@@ -1674,6 +1715,36 @@ impl GameEngine {
                     };
                     debug_assert_eq!(paid_cost.object_id(), oid);
                     payment.paid_card_costs.push(paid_cost);
+                }
+                CostDebit::ReturnUnblockedAttacker {
+                    object,
+                    owner,
+                    assignment,
+                } => {
+                    let oid = object.object_id;
+                    let returned_name = object_display_name(&self.state, self.registry, oid);
+                    move_object_to_zone(&mut self.state, self.registry, oid, Zone::Hand, None)
+                        .expect("prevalidated Sneak return must commit");
+                    if let Some(combat) = self.state.combat.as_mut() {
+                        combat.attacking.retain(|candidate| *candidate != oid);
+                        combat.attack_assignments.remove(&oid);
+                        combat.blockers.remove(&oid);
+                    }
+                    payment.move_events.push(permanent_moved_event(
+                        &self.state,
+                        oid,
+                        owner,
+                        rv1::permanent_moved::Destination::Hand,
+                    ));
+                    payment.move_events.push(rv1::RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::RemovedFromCombat(
+                            rv1::CreaturesRemovedFromCombat {
+                                object_ids: vec![oid],
+                            },
+                        )),
+                    });
+                    payment.sneak_attack = Some(assignment);
+                    payment.sneak_returned_name = Some(returned_name);
                 }
                 CostDebit::ObserveHand { .. } | CostDebit::ObservePermanent { .. } => {}
             }
@@ -1952,6 +2023,20 @@ impl GameEngine {
                         .unwrap_or(0)
                         == snapshot.source.zone_change_generation
                 }
+                CostDebit::ReturnUnblockedAttacker {
+                    object,
+                    owner,
+                    assignment,
+                } => self
+                    .state
+                    .objects
+                    .get(&object.object_id)
+                    .is_some_and(|permanent| {
+                        permanent.owner == *owner
+                            && self.state.player_idx(*owner).is_some()
+                            && self.sneak_return_assignment(plan.player, object)
+                                == Some(*assignment)
+                    }),
                 CostDebit::ObserveHand {
                     object_id,
                     generation,

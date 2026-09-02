@@ -1,0 +1,17 @@
+// Oracle and rulings checked 2026-09-02. Sneak: CR 702.190.
+(
+  id: "foot_ninjas",
+  name: "Foot Ninjas",
+  face_id: "foot_ninjas",
+  mana_cost: "{4}{W/B}{W/B}",
+  sneak_cost: Some("{3}{W/B}"),
+  types: ["Creature", "Human", "Ninja"],
+  power: 5,
+  toughness: 5,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [GainLife(amount: 3)],
+  )],
+)

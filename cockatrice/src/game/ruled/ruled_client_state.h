@@ -192,6 +192,7 @@ enum class RuledCostChoiceKind : int
     Tap,
     Blight,
     RemoveCounters,
+    ReturnUnblockedAttacker,
 };
 
 enum class RuledObjectContributionKind : int

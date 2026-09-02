@@ -4117,34 +4117,71 @@ TEST_F(RuledClientTest, ParsesMethodAwareHarmonizeActionAndAuthoritativeCreature
     EXPECT_EQ(costs.castCostGroups[0].options[0].validPermanentGenericReductions.value(900), 4);
 }
 
-TEST_F(RuledClientTest, WarpAndNormalHandOffersKeepDistinctMethodsAndCostChoices)
+TEST_F(RuledClientTest, NormalWarpAndSneakHandOffersKeepDistinctMethodsAndCostChoices)
 {
     ruled::v1::RuledEventBatch batch;
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-    for (const auto method : {ruled::v1::CAST_METHOD_NORMAL, ruled::v1::CAST_METHOD_WARP}) {
+    for (const auto method :
+         {ruled::v1::CAST_METHOD_NORMAL, ruled::v1::CAST_METHOD_WARP, ruled::v1::CAST_METHOD_SNEAK}) {
         auto *action = actions.add_hand_actions();
         action->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
         action->set_hand_index(3);
         action->set_card_name("Knight Luminary");
         action->set_cast_method(method);
-        action->set_cost(method == ruled::v1::CAST_METHOD_WARP ? "{1}{W}" : "{3}{W}");
+        action->set_cost(method == ruled::v1::CAST_METHOD_WARP   ? "{1}{W}"
+                         : method == ruled::v1::CAST_METHOD_SNEAK ? "{2}{W}"
+                                                                  : "{3}{W}");
         action->add_eligible_restricted_mana_group_ids(static_cast<quint32>(method));
+        if (method == ruled::v1::CAST_METHOD_SNEAK) {
+            auto *choice = action->mutable_cost_choices()->add_choices();
+            choice->set_cost_index(0);
+            choice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
+            choice->set_kind(ruled::v1::COST_CHOICE_KIND_RETURN_UNBLOCKED_ATTACKER);
+            auto *candidate = choice->add_candidate_objects()->mutable_object();
+            candidate->set_object_id(900);
+            candidate->set_zone_change_generation(12);
+        }
     }
     apply(batch);
     const auto options = state->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, 3);
-    ASSERT_EQ(options.size(), 2);
+    ASSERT_EQ(options.size(), 3);
     EXPECT_EQ(options[0].castMethod, ruled::v1::CAST_METHOD_NORMAL);
     EXPECT_EQ(options[1].castMethod, ruled::v1::CAST_METHOD_WARP);
+    EXPECT_EQ(options[2].castMethod, ruled::v1::CAST_METHOD_SNEAK);
     EXPECT_EQ(options[1].manaCost, QStringLiteral("{1}{W}"));
     const auto menu = RuledPendingCast::cardActionMenuOptions(options, {}, {}, {});
     EXPECT_EQ(menu[1].label, QStringLiteral("Warp Knight Luminary ({1}{W})"));
     EXPECT_EQ(menu[1].castMethod, ruled::v1::CAST_METHOD_WARP);
+    EXPECT_EQ(menu[2].label, QStringLiteral("Sneak Knight Luminary ({2}{W})"));
+    EXPECT_EQ(menu[2].castMethod, ruled::v1::CAST_METHOD_SNEAK);
+    const auto sneakCosts = state->spellCostData(3, 0, RuledCastSource::Hand, ruled::v1::CAST_METHOD_SNEAK);
+    ASSERT_EQ(sneakCosts.choices.size(), 1);
+    EXPECT_EQ(sneakCosts.choices[0].kind, RuledCostChoiceKind::ReturnUnblockedAttacker);
+    EXPECT_EQ(sneakCosts.choices[0].candidateGenerations.value(900), 12u);
     EXPECT_EQ(state->eligibleRestrictedManaForCast(3, 0, RuledCastSource::Hand, ruled::v1::CAST_METHOD_NORMAL),
               QSet<quint32>{static_cast<quint32>(ruled::v1::CAST_METHOD_NORMAL)});
     EXPECT_EQ(state->eligibleRestrictedManaForCast(3, 0, RuledCastSource::Hand, ruled::v1::CAST_METHOD_WARP),
               QSet<quint32>{static_cast<quint32>(ruled::v1::CAST_METHOD_WARP)});
     EXPECT_NE(RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_NORMAL),
               RuledClientState::handCastActionKey(4, 0, ruled::v1::CAST_METHOD_NORMAL));
+}
+
+TEST(RuledPendingCostSelectionTest, SneakReturnIsGenerationBoundAndExclusive)
+{
+    RuledCostChoice returned;
+    returned.costIndex = 0;
+    returned.kind = RuledCostChoiceKind::ReturnUnblockedAttacker;
+    returned.zone = RuledCostChoiceZone::Battlefield;
+    EXPECT_TRUE(ruledCostUsesObjectRefs(returned));
+    EXPECT_EQ(ruledCostSelectionPrompt(returned, QStringLiteral("Foot Ninjas")),
+              QStringLiteral("Choose an unblocked attacker to return for Foot Ninjas."));
+
+    RuledCostChoice sacrifice;
+    sacrifice.costIndex = 1;
+    sacrifice.kind = RuledCostChoiceKind::Sacrifice;
+    const QVector<RuledCostChoice> choices{returned, sacrifice};
+    EXPECT_TRUE(
+        ruledCostSelectionConflicts(sacrifice, choices, {0, RuledCostChoiceZone::Battlefield, {900}, {12}}, 900));
 }
 
 TEST_F(RuledClientTest, ExilePermissionOffersKeepOpaqueIdentityCostAndSourceLabel)

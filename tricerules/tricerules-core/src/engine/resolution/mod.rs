@@ -93,25 +93,33 @@ impl GameEngine {
         events: &mut Vec<RuledEvent>,
     ) {
         self.register_warp_entry(item, item.id);
-        if !item.is_copy {
-            return;
+        if item.is_copy {
+            if let Some(object) = self
+                .state
+                .objects
+                .get(&item.id)
+                .filter(|o| o.zone == Zone::Battlefield && o.is_token())
+            {
+                if let Some(values) = self.copiable_values_for(item.id) {
+                    events.push(RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::TokenCreated(rv1::TokenCreated {
+                            object_id: item.id,
+                            controller_player_id: object.controller,
+                            card_id: item.card_id.clone(),
+                            identity: Some(token_identity(&values)),
+                            enters_tapped: object.tapped,
+                        })),
+                    });
+                }
+            }
         }
-        let Some(object) = self
-            .state
-            .objects
-            .get(&item.id)
-            .filter(|o| o.zone == Zone::Battlefield && o.is_token())
-        else {
-            return;
-        };
-        if let Some(values) = self.copiable_values_for(item.id) {
+        if let Some(assignment) = item
+            .sneak_attack
+            .and_then(|assignment| self.add_sneak_attacker(item.id, assignment))
+        {
             events.push(RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::TokenCreated(rv1::TokenCreated {
-                    object_id: item.id,
-                    controller_player_id: object.controller,
-                    card_id: item.card_id.clone(),
-                    identity: Some(token_identity(&values)),
-                    enters_tapped: object.tapped,
+                ev: Some(rv1::ruled_event::Ev::AttackersAdded(rv1::AttackersAdded {
+                    assignments: vec![assignment],
                 })),
             });
         }
@@ -835,7 +843,7 @@ impl GameEngine {
                         chosen_x: top.chosen_x,
                         cast_cost_receipts: top.cast_cost_receipts.clone(),
                         player_life_snapshot: self.player_life_snapshot(),
-                        tapped: false,
+                        tapped: top.cast_method == SpellCastMethod::Sneak,
                         entry_counters: BTreeMap::new(),
                         applied_effects: Vec::new(),
                     },
@@ -1941,6 +1949,7 @@ impl GameEngine {
             is_copy: true,
             face_index: 0,
             cast_method: SpellCastMethod::Normal,
+            sneak_attack: None,
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),
@@ -3030,6 +3039,7 @@ mod attached_subject_tests {
             is_copy: false,
             face_index: 0,
             cast_method: SpellCastMethod::Normal,
+            sneak_attack: None,
             chosen_x: 0,
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
@@ -4636,6 +4646,7 @@ mod source_keyword_tests {
             is_copy: false,
             face_index: 0,
             cast_method: SpellCastMethod::Normal,
+            sneak_attack: None,
             chosen_x: 0,
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
@@ -4665,6 +4676,7 @@ mod source_keyword_tests {
             is_copy: false,
             face_index: 0,
             cast_method: SpellCastMethod::Normal,
+            sneak_attack: None,
             chosen_x,
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),

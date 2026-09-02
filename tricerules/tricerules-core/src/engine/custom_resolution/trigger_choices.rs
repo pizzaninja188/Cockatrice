@@ -200,6 +200,7 @@ impl GameEngine {
             blight_receipts: Vec::new(),
             trigger_context,
             cast_method: SpellCastMethod::Normal,
+            sneak_attack: None,
         });
         self.state.passes_since_stack_change = 0;
 

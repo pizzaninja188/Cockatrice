@@ -122,6 +122,11 @@ inline bool ruledCostSelectionConflicts(const RuledCostChoice &choice,
                                        [&already](const auto &entry) { return entry.costIndex == already.costIndex; });
     if (previous == choices.cend())
         return true;
+    // Returning a Sneak attacker changes zones and must be exclusive with every other use of
+    // that physical permanent. The engine remains authoritative and revalidates generation.
+    if (choice.kind == RuledCostChoiceKind::ReturnUnblockedAttacker ||
+        previous->kind == RuledCostChoiceKind::ReturnUnblockedAttacker)
+        return true;
     if (choice.kind == RuledCostChoiceKind::Blight || previous->kind == RuledCostChoiceKind::Blight ||
         choice.kind == RuledCostChoiceKind::RemoveCounters ||
         previous->kind == RuledCostChoiceKind::RemoveCounters)

@@ -1,0 +1,16 @@
+// Oracle and rulings checked 2026-09-02. Sneak: CR 702.190.
+(
+  id: "new_generations_technique",
+  name: "New Generation's Technique",
+  face_id: "new_generations_technique",
+  mana_cost: "{3}{G}",
+  sneak_cost: Some("{2}{G}"),
+  types: ["Sorcery"],
+  spell_effect: [SearchLibrary(
+    count: 2,
+    filter: Some((card_type: Some(BasicLand))),
+    destination: Battlefield(tapped: true),
+    shuffle: true,
+    reveal: true,
+  )],
+)

@@ -497,6 +497,9 @@ pub struct CardFace {
     /// CR 702.185: hand-only alternative cost (Knight Luminary, Weftblade Enhancer).
     #[serde(default)]
     pub warp_cost: Option<ManaCost>,
+    /// CR 702.190: hand-only alternative cost during the controller's declare-blockers step.
+    #[serde(default)]
+    pub sneak_cost: Option<ManaCost>,
     /// Mandatory nonmana costs paid in addition to this face's mana cost (CR 118.8).
     #[serde(default)]
     pub additional_costs: Vec<AdditionalCost>,
@@ -783,6 +786,8 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub warp_cost: Option<ManaCost>,
     #[serde(default)]
+    pub sneak_cost: Option<ManaCost>,
+    #[serde(default)]
     pub additional_costs: Vec<AdditionalCost>,
     #[serde(default)]
     pub cast_cost_groups: Vec<CastCostGroupDef>,
@@ -868,6 +873,7 @@ impl RawCardDefinition {
                 flashback_cost: self.flashback_cost,
                 harmonize_cost: self.harmonize_cost,
                 warp_cost: self.warp_cost,
+                sneak_cost: self.sneak_cost,
                 additional_costs: self.additional_costs,
                 cast_cost_groups: self.cast_cost_groups,
                 cast_conditions: self.cast_conditions,
