@@ -35,7 +35,8 @@ Load only the guidance relevant to the task:
 | Work area | Required guidance |
 |---|---|
 | Any build, test, lint, or pre-commit verification | [docs/AGENT-VERIFICATION.md](docs/AGENT-VERIFICATION.md) |
-| Rust rules, card data, card generation, or custom effects | [tricerules/AGENTS.md](tricerules/AGENTS.md) |
+| Card authoring, generation, or card-specific custom effects | [tricerules/AGENTS.md](tricerules/AGENTS.md) and [tricerules/tricerules-cards/authoring/CARD-AUTHORING.md](tricerules/tricerules-cards/authoring/CARD-AUTHORING.md) |
+| Rust rules engine or shared primitives outside a card-authoring task | [tricerules/AGENTS.md](tricerules/AGENTS.md) |
 | Game UI, ruled client state, prompts, or manual two-client checks | [cockatrice/src/game/AGENTS.md](cockatrice/src/game/AGENTS.md) |
 | Structural or cross-component work | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/REFACTOR-ROADMAP.md](docs/REFACTOR-ROADMAP.md), and [docs/RULES-INTERACTION-CHECKLIST.md](docs/RULES-INTERACTION-CHECKLIST.md) |
 | Current work selection and dependency status | [GitHub Issues](https://github.com/pizzaninja188/Cockatrice/issues); query the live issue, then re-check current code before trusting historical plans |

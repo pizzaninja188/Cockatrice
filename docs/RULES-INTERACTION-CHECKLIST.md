@@ -2,6 +2,10 @@
 
 Complete this checklist before finalizing the plan for a substantive engine, card primitive, protobuf, relay, or ruled-client change. Record N/A with a short reason when a section genuinely does not apply. The goal is to expose missing interactions before implementation, not to force every change across every component.
 
+For the card-specific implementation workflow, use the canonical
+[card authoring guide](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md). This checklist
+remains the separate interaction audit for substantive ruled changes.
+
 ## 1. Rules authority and intended behavior
 
 - Record the current Oracle text and relevant rulings for card-specific behavior.

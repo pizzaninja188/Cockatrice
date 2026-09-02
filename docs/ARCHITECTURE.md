@@ -354,22 +354,18 @@ the one-line `RULED_PAYLOAD` case, and implements `RuledClientHost`.
 
 ## 9. Extension recipes
 
-Each is a checklist of the exact files. Build and test per AGENTS.md after every one.
+These recipes summarize ownership and affected files. Card-specific procedure lives in the
+canonical card authoring guide; build and test every change according to `AGENTS.md` and
+`docs/AGENT-VERIFICATION.md`.
 
 ### Add a data-tier card
 
-1. Fetch Oracle data — `https://api.scryfall.com/cards/named?exact=<Card+Name>`. Never code from
-   memory; if the fetch fails or the name is ambiguous, say so before writing anything.
-2. Drop a `.ron` anywhere under `tricerules-cards/data/` (`build.rs` walks it; no `registry.rs`
-   edit). Copy `mana_cost` verbatim from Scryfall; exact `power`/`toughness`/`type_line`.
-   Add `partial: "<what's missing>"` if anything is unmodeled.
-3. Scenario coverage in `tricerules-core/tests/scenario/<best-fit>.rs` — happy **and** illegal path.
-4. `cargo test` + `clippy -- -D warnings` + `fmt --check`.
-5. Regenerate `tricerules/CARDS.md` (`scripts/gen-card-checklist.ps1`, `--check` before commit) and
-   commit it with the card.
-
-No C++ build needed. Batch vanilla/french-vanilla creatures with `scripts/gen-cards.ps1` instead of
-hand-authoring.
+Use the canonical [card authoring guide](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md)
+for source research, tier selection, RON identity and presentation, generation, partial tracking,
+scenario coverage, and completion gates. Architecturally, data-tier cards live anywhere under
+`tricerules-cards/data/`; `build.rs` discovers them without a registry-list edit. Rust-only card
+data needs no C++ build only when no protocol, relay, client, presentation-transport, or physical
+identity contract changed.
 
 ### Add a primitive (`SpellEffectKind`, `TriggerCondition`, `AbilityCost`, …)
 
@@ -414,23 +410,12 @@ errors stay orthogonal inputs — they legitimately coexist with the modes.
 
 ### Add a tier-3 (custom Rust) card
 
-Only when the *resolution algorithm itself* is unique — a mid-resolution choice over live objects,
-or interdependent choices over one revealed set. A reviewer must agree no
-`(effect_kind, parameters)` description exists; prefer widening a primitive every time it is close.
-
-1. `custom_effect: "<card_id>"` in the RON (mutually exclusive with `spell_effect`). The value
-   must equal the card definition's `id`.
-2. Create `tricerules-core/src/custom/<card_id>.rs` (subdirectories are allowed; `support/` is
-   skipped) and export `pub(crate) static EFFECT: &dyn CardEffect = &YourType;`. The file stem is
-   the lookup key and must match both the RON `custom_effect` and card definition id; `build.rs`
-   registers it automatically, so no shared Rust file is edited. Its generated private module
-   name is prefixed, allowing registry-valid ids that begin with a digit or match a Rust keyword.
-   Keep effects 1:1 with card ids; a shared algorithm belongs in a widened primitive instead.
-3. Cite Oracle text + CR in the implementation's header comment. `begin`/`resume` drive the
-   capability-narrowed `ResolutionCtx`; custom code never touches `&mut GameState`.
-4. **No new proto.** Reuse `resolution_choice_required` / `SubmitResolutionChoice`; pick the right
-   existing `ChoiceKind` (and check whether it is private — §5).
-5. Scenario coverage in `tests/scenario/custom_resolution.rs`: happy + illegal.
+Use tier 3 only when the resolution algorithm itself is unique: a live mid-resolution choice or
+interdependent choices over one revealed set that static `(effect_kind, parameters)` data cannot
+describe. The [card authoring guide](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md)
+owns the registration and coverage workflow. Custom code stays capability-narrowed, reuses generic
+resolution-choice protocol, and remains one-to-one with a card ID; shared algorithms belong in a
+widened primitive.
 
 ---
 
