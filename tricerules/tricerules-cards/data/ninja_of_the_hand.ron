@@ -1,0 +1,27 @@
+// Oracle and Marvel Super Heroes rulings verified 2026-09-02. Power-up uses the source's
+// exact battlefield generation and retains its once-per-object activation allowance.
+(
+  id: "ninja_of_the_hand",
+  name: "Ninja of the Hand",
+  face_id: "ninja_of_the_hand",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Human", "Ninja", "Villain"],
+  power: 2,
+  toughness: 2,
+  keywords: [Deathtouch],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{4}{B}")],
+    cost_modifiers: [ConditionalSourceManaCostReduction(condition: PermanentsEnteredThisTurn(
+      controllers: All,
+      filter: (source_only: true),
+      min: Some(1),
+    ))],
+    effect: [
+      Discard(who: EachOpponent, count: 1),
+      PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source),
+    ],
+    activation_limit: Some(PerObject(max_activations: 1)),
+  )],
+)

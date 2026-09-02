@@ -1,12 +1,13 @@
 use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
-    AbilityCost, AdditionalCost, Amount, BattlefieldAggregate, CardResultAction, CardResultSource,
-    CastCostGroupDef, CastCostReceiptCondition, EffectContext, FaceChangeAction, GameCondition,
-    InterveningIf, ObjectContributionKind, ResolutionBranchRequirement, SpecialActionAffected,
-    SpellEffectKind, StaticAbilityDef, TargetController, TargetKind, TargetingDef,
-    TriggerCondition, ZoneCardFilter,
+    AbilityCost, ActivatedCostModifier, AdditionalCost, Amount, BattlefieldAggregate,
+    CardResultAction, CardResultSource, CastCostGroupDef, CastCostReceiptCondition, EffectContext,
+    FaceChangeAction, GameCondition, InterveningIf, ObjectContributionKind,
+    ResolutionBranchRequirement, SpecialActionAffected, SpellEffectKind, StaticAbilityDef,
+    TargetController, TargetKind, TargetingDef, TriggerCondition, ZoneCardFilter,
 };
 use crate::token_def::TokenDefinition;
+use crate::ManaSymbol;
 use crate::PresentationFaceMetadata;
 use once_cell::sync::Lazy;
 use ron::extensions::Extensions;
@@ -765,12 +766,59 @@ fn validate_effect_list_metadata(effects: &[SpellEffectKind]) -> Result<(), Stri
     Ok(())
 }
 
+fn fixed_source_reduction_cost(cost: &crate::ManaCost) -> bool {
+    cost.pips.iter().all(|symbol| {
+        matches!(
+            symbol,
+            ManaSymbol::W
+                | ManaSymbol::U
+                | ManaSymbol::B
+                | ManaSymbol::R
+                | ManaSymbol::G
+                | ManaSymbol::C
+                | ManaSymbol::Generic(_)
+        )
+    })
+}
+
+fn validate_source_mana_cost_reduction(
+    face: &CardFace,
+    ability: &crate::primitives::ActivatedAbilityDef,
+) -> Result<(), String> {
+    if !ability.cost_modifiers.iter().any(|modifier| {
+        matches!(
+            modifier,
+            ActivatedCostModifier::ConditionalSourceManaCostReduction { .. }
+        )
+    }) {
+        return Ok(());
+    }
+    if !fixed_source_reduction_cost(&face.mana_cost) {
+        return Err(
+            "source mana cost reduction requires a source cost containing only fixed mana symbols"
+                .into(),
+        );
+    }
+    let ability_mana_cost = ability.costs.iter().find_map(|cost| match cost {
+        AbilityCost::Mana(cost) | AbilityCost::Waterbend(cost) => Some(cost),
+        _ => None,
+    });
+    if ability_mana_cost.is_none_or(|cost| !fixed_source_reduction_cost(cost)) {
+        return Err(
+            "source mana cost reduction requires an ability cost containing only fixed mana symbols"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
 fn validate_face_identity(face: &CardFace) -> Result<(), String> {
     face.face_id.validate()?;
     let mut siblings = HashSet::new();
     for ability in &face.activated_abilities {
         insert_ability_id(&mut siblings, &ability.ability_id)?;
         ability.validate_shape()?;
+        validate_source_mana_cost_reduction(face, ability)?;
         validate_effect_list_metadata(&ability.effect)?;
     }
     for ability in &face.triggered_abilities {
@@ -4143,6 +4191,91 @@ mod tests {
                 "expected malformed type addition to be rejected"
             );
         }
+    }
+
+    #[test]
+    fn source_mana_cost_reduction_rejects_flexible_source_and_ability_symbols() {
+        let template = r#"(
+            id: "power_up_validation",
+            name: "Power Up Validation",
+            face_id: "power_up_validation",
+            mana_cost: "SOURCE_COST",
+            types: ["Creature", "Robot"],
+            power: 2,
+            toughness: 2,
+            activated_abilities: [(
+                ability_id: "activated_01",
+                presentation: Fallback,
+                costs: [Mana("ABILITY_COST")],
+                cost_modifiers: [ConditionalSourceManaCostReduction(condition: PermanentsEnteredThisTurn(
+                    controllers: All,
+                    filter: (source_only: true),
+                    min: Some(1),
+                ))],
+                effect: [GainLife(amount: 1)],
+            )],
+        )"#;
+        for (source, ability) in [("{W/U}", "{3}"), ("{2}", "{2/W}"), ("{X}", "{3}")] {
+            let card = template
+                .replace("SOURCE_COST", source)
+                .replace("ABILITY_COST", ability);
+            assert!(
+                matches!(
+                    CardRegistry::from_chunks(&[&card]),
+                    Err(RegistryError::InvalidCard { ref reason, .. })
+                        if reason.contains("source mana cost reduction")
+                ),
+                "must reject source {source} with ability {ability}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_183_power_up_cards_and_tokens_have_complete_registry_shapes() {
+        let registry = CardRegistry::global();
+        for (id, source_cost, activation_cost) in [
+            ("ninja_of_the_hand", "{2}{B}", "{4}{B}"),
+            ("ultron_drone", "{3}", "{6}"),
+            ("hercules,_prince_of_power", "{2}{G}", "{4}{G}"),
+            ("white_tiger,_ava_ayala", "{1}{G}", "{5}{G}"),
+            ("viv_vision,_teen_synthezoid", "{3}", "{7}"),
+        ] {
+            let face = registry
+                .get(id)
+                .unwrap_or_else(|| panic!("missing {id}"))
+                .primary_face();
+            assert_eq!(face.mana_cost.to_string(), source_cost, "{id}");
+            let [ability] = face.activated_abilities.as_slice() else {
+                panic!("{id} must have one power-up ability")
+            };
+            assert!(matches!(
+                ability.costs.as_slice(),
+                [AbilityCost::Mana(cost)] if cost.to_string() == activation_cost
+            ));
+            assert!(matches!(
+                ability.cost_modifiers.as_slice(),
+                [ActivatedCostModifier::ConditionalSourceManaCostReduction { .. }]
+            ));
+            assert!(matches!(
+                ability.activation_limit,
+                Some(crate::primitives::ActivationLimit::PerObject { max_activations: 1 })
+            ));
+        }
+
+        let robot = registry
+            .get("robot_villain_c_2_2")
+            .expect("Robot Villain token");
+        assert!(robot.primary_face().has_subtype("Robot"));
+        assert!(robot.primary_face().has_subtype("Villain"));
+        let tiger = registry.get("the_tiger_god").expect("The Tiger God token");
+        assert!(tiger.primary_face().is_legendary);
+        assert!(tiger.primary_face().has_subtype("Cat"));
+        assert!(tiger.primary_face().has_subtype("God"));
+
+        assert!(
+            registry.get("loki,_god_of_stories").is_none(),
+            "Loki remains unregistered until its delayed copy-next-spell ability is supported"
+        );
     }
 
     #[test]

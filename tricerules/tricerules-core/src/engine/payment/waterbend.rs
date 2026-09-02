@@ -93,7 +93,7 @@ impl GameEngine {
                 TargetingCostAction::ActivatedAbilities,
                 &command.targets,
             ),
-            self.activated_generic_reduction(player, source, &ability),
+            self.activated_mana_reduction(player, source, &ability)?,
         )?;
         Ok(prepared)
     }

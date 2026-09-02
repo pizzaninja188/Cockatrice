@@ -22,6 +22,92 @@ pub(in crate::engine) use transaction::{
 use super::*;
 use tricerules_cards::ManaSpendingRestriction;
 
+/// CR 118.7 / 702.193: automatic reductions used while determining an activated ability's
+/// total mana cost. The six fixed slots are W, U, B, R, G, and C; generic reductions are
+/// accumulated separately so they compose with existing conditional reductions.
+#[derive(Clone, Copy, Debug, Default)]
+pub(in crate::engine) struct ActivatedManaReduction {
+    generic: u32,
+    fixed: [u32; 6],
+    source_cost_applied: bool,
+}
+
+fn fixed_mana_slot(symbol: &ManaSymbol) -> Option<usize> {
+    match symbol {
+        ManaSymbol::W => Some(0),
+        ManaSymbol::U => Some(1),
+        ManaSymbol::B => Some(2),
+        ManaSymbol::R => Some(3),
+        ManaSymbol::G => Some(4),
+        ManaSymbol::C => Some(5),
+        _ => None,
+    }
+}
+
+pub(in crate::engine) fn apply_activated_mana_reduction(
+    cost: &ManaCost,
+    extra_generic: u32,
+    reduction: ActivatedManaReduction,
+) -> Result<(ManaCost, u32), EngineError> {
+    if !reduction.source_cost_applied {
+        let mut cost = cost.clone();
+        let mut remaining = reduction.generic;
+        for symbol in &mut cost.pips {
+            if let ManaSymbol::Generic(amount) = symbol {
+                let applied = (*amount).min(remaining);
+                *amount -= applied;
+                remaining -= applied;
+            }
+        }
+        return Ok((cost, extra_generic.saturating_sub(remaining)));
+    }
+
+    let mut fixed = [0u32; 6];
+    let mut generic = extra_generic;
+    for symbol in &cost.pips {
+        if let Some(slot) = fixed_mana_slot(symbol) {
+            fixed[slot] = fixed[slot]
+                .checked_add(1)
+                .ok_or(EngineError::Illegal("ability mana cost overflow"))?;
+        } else if let ManaSymbol::Generic(amount) = symbol {
+            generic = generic
+                .checked_add(*amount)
+                .ok_or(EngineError::Illegal("ability mana cost overflow"))?;
+        } else {
+            return Err(EngineError::Illegal(
+                "source mana cost reduction does not support flexible or variable ability symbols",
+            ));
+        }
+    }
+
+    let mut overflow = 0u32;
+    for (need, available) in fixed.iter_mut().zip(reduction.fixed) {
+        let applied = (*need).min(available);
+        *need -= applied;
+        overflow = overflow
+            .checked_add(available - applied)
+            .ok_or(EngineError::Illegal("mana cost reduction overflow"))?;
+    }
+    generic = generic.saturating_sub(reduction.generic.saturating_add(overflow));
+
+    let mut pips = Vec::new();
+    if generic > 0 {
+        pips.push(ManaSymbol::Generic(generic));
+    }
+    for (slot, amount) in fixed.into_iter().enumerate() {
+        let symbol = match slot {
+            0 => ManaSymbol::W,
+            1 => ManaSymbol::U,
+            2 => ManaSymbol::B,
+            3 => ManaSymbol::R,
+            4 => ManaSymbol::G,
+            _ => ManaSymbol::C,
+        };
+        pips.extend(std::iter::repeat_n(symbol, amount as usize));
+    }
+    Ok((ManaCost { pips }, 0))
+}
+
 fn mana_filter_matches_face(filter: &ManaSpendFilter, face: &CardFace) -> bool {
     filter
         .card_type
@@ -153,12 +239,12 @@ impl GameEngine {
         ids
     }
 
-    pub(in crate::engine) fn activated_generic_reduction(
+    pub(in crate::engine) fn activated_mana_reduction(
         &self,
         controller: PlayerId,
         source_id: ObjectId,
         ability: &ActivatedAbilityDef,
-    ) -> u32 {
+    ) -> Result<ActivatedManaReduction, EngineError> {
         let context = ConditionContext {
             controller,
             source_object_id: source_id,
@@ -171,17 +257,40 @@ impl GameEngine {
             resolving_spell_id: None,
             stack_item: None,
         };
-        ability
-            .cost_modifiers
-            .iter()
-            .fold(0u32, |total, modifier| match modifier {
+        let mut reduction = ActivatedManaReduction::default();
+        for modifier in &ability.cost_modifiers {
+            match modifier {
                 ActivatedCostModifier::ConditionalGenericReduction { amount, condition }
                     if self.condition_holds(condition, context) =>
                 {
-                    total.saturating_add(*amount)
+                    reduction.generic = reduction.generic.saturating_add(*amount);
                 }
-                ActivatedCostModifier::ConditionalGenericReduction { .. } => total,
-            })
+                ActivatedCostModifier::ConditionalSourceManaCostReduction { condition }
+                    if self.condition_holds(condition, context) =>
+                {
+                    reduction.source_cost_applied = true;
+                    let face = self
+                        .effective_face(source_id)
+                        .ok_or(EngineError::Illegal("activation source face missing"))?;
+                    for symbol in &face.mana_cost.pips {
+                        if let Some(slot) = fixed_mana_slot(symbol) {
+                            reduction.fixed[slot] = reduction.fixed[slot]
+                                .checked_add(1)
+                                .ok_or(EngineError::Illegal("mana cost reduction overflow"))?;
+                        } else if let ManaSymbol::Generic(amount) = symbol {
+                            reduction.generic = reduction.generic.saturating_add(*amount);
+                        } else {
+                            return Err(EngineError::Illegal(
+                                "source mana cost reduction does not support flexible or variable source symbols",
+                            ));
+                        }
+                    }
+                }
+                ActivatedCostModifier::ConditionalGenericReduction { .. }
+                | ActivatedCostModifier::ConditionalSourceManaCostReduction { .. } => {}
+            }
+        }
+        Ok(reduction)
     }
 
     pub(in crate::engine) fn effective_ability_mana_cost(
@@ -190,25 +299,22 @@ impl GameEngine {
         source_id: ObjectId,
         ability: &ActivatedAbilityDef,
     ) -> String {
-        let reduction = self.activated_generic_reduction(controller, source_id, ability);
+        let reduction = self
+            .activated_mana_reduction(controller, source_id, ability)
+            .unwrap_or_default();
         let mut reduced = ManaCost::default();
         for cost in &ability.costs {
             if let AbilityCost::Mana(cost) | AbilityCost::Waterbend(cost) = cost {
                 reduced.pips.extend(cost.pips.iter().cloned());
             }
         }
-        let mut remaining = reduction;
-        for pip in &mut reduced.pips {
-            if let ManaSymbol::Generic(amount) = pip {
-                let applied = (*amount).min(remaining);
-                *amount -= applied;
-                remaining -= applied;
-            }
-        }
-        reduced
-            .pips
-            .retain(|pip| !matches!(pip, ManaSymbol::Generic(0)));
-        reduced.to_string()
+        apply_activated_mana_reduction(&reduced, 0, reduction)
+            .map(|(mut cost, _)| {
+                cost.pips
+                    .retain(|symbol| !matches!(symbol, ManaSymbol::Generic(0)));
+                cost.to_string()
+            })
+            .unwrap_or_else(|_| reduced.to_string())
     }
 
     pub(super) fn prepare_permanent_action_payment(
@@ -790,6 +896,27 @@ impl GameEngine {
         self.state.player_idx(player).is_some_and(|player_idx| {
             plan_mana_payment(&self.state, player_idx, cost, 0, 0, &[]).is_ok()
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn source_cost_reduction_applies_after_increases_and_composes_with_generic_reductions() {
+        // Ability {3}{W}{U}{C} plus a two-mana tax, reduced by source {2}{W}{R} and one
+        // additional generic reduction: W matches W, R overflows to generic, and U/C remain.
+        let reduction = ActivatedManaReduction {
+            generic: 3,
+            fixed: [1, 0, 0, 1, 0, 0],
+            source_cost_applied: true,
+        };
+        let (cost, increase) =
+            apply_activated_mana_reduction(&ManaCost::parse("{3}{W}{U}{C}").unwrap(), 2, reduction)
+                .unwrap();
+        assert_eq!(cost.to_string(), "{1}{U}{C}");
+        assert_eq!(increase, 0);
     }
 }
 

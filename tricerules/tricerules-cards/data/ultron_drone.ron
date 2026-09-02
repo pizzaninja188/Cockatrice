@@ -1,0 +1,26 @@
+// Oracle and Marvel Super Heroes rulings verified 2026-09-02. The Robot Villain token is
+// created even if Ultron Drone is no longer on the battlefield when the ability resolves.
+(
+  id: "ultron_drone",
+  name: "Ultron Drone",
+  face_id: "ultron_drone",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Robot", "Villain"],
+  power: 2,
+  toughness: 3,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{6}")],
+    cost_modifiers: [ConditionalSourceManaCostReduction(condition: PermanentsEnteredThisTurn(
+      controllers: All,
+      filter: (source_only: true),
+      min: Some(1),
+    ))],
+    effect: [
+      PutCounters(counter: PlusOnePlusOne, count: 2, subject: Source),
+      CreateTokens(token: "robot_villain_c_2_2", count: 1),
+    ],
+    activation_limit: Some(PerObject(max_activations: 1)),
+  )],
+)

@@ -1345,6 +1345,9 @@ impl GameEngine {
                                 effect @ SpellEffectKind::ChoosePermanents { .. } => {
                                     choices::choose_permanents(&mut cx, effect)?
                                 }
+                                effect @ SpellEffectKind::Draw { .. } => {
+                                    zones::draw(&mut cx, effect)?
+                                }
                                 _ => {
                                     return Err(EngineError::Illegal(
                                         "unsupported conditional inner effect",

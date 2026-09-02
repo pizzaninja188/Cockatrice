@@ -7,6 +7,7 @@ use super::mana::{
     commit_mana_payment, mana_payment_still_valid, plan_mana_payment_with_restricted_reduction,
     ManaPaymentPlan,
 };
+use super::ActivatedManaReduction;
 #[derive(Debug, Clone)]
 pub(in crate::engine) struct SacrificeSnapshot {
     pub(in crate::engine) source: TriggerSourceSnapshot,
@@ -901,7 +902,10 @@ impl GameEngine {
             selections,
             restricted_mana,
             extra_generic,
-            generic_reduction,
+            ActivatedManaReduction {
+                generic: generic_reduction,
+                ..Default::default()
+            },
         )?
         .finish(&self.state)
     }
@@ -917,7 +921,7 @@ impl GameEngine {
         selections: &[rv1::CostSelection],
         restricted_mana: &[rv1::ManaSpendSelection],
         extra_generic: u32,
-        generic_reduction: u32,
+        mana_reduction: ActivatedManaReduction,
     ) -> Result<PreparedPaymentCosts, EngineError> {
         use rv1::cost_selection::Selection;
 
@@ -1324,6 +1328,12 @@ impl GameEngine {
             ));
         }
 
+        let (mana_cost, extra_generic) =
+            super::apply_activated_mana_reduction(&mana_cost, extra_generic, mana_reduction)?;
+        if waterbend_limit.is_some() {
+            waterbend_limit = Some(super::waterbend::generic_component(&mana_cost)?);
+        }
+
         Ok(PreparedPaymentCosts {
             transaction: CostTransactionPlan {
                 purpose: CostPurpose::Ability,
@@ -1336,7 +1346,7 @@ impl GameEngine {
             mana: mana_cost,
             x_value: 0,
             extra_generic,
-            generic_reduction,
+            generic_reduction: 0,
             flex_payments: flex_payments.to_vec(),
             restricted_mana: restricted_mana.to_vec(),
             eligible_restricted_mana,
@@ -2168,7 +2178,20 @@ mod convoke_transaction_tests {
             )];
             let prepare = |engine: &GameEngine| {
                 engine
-                    .prepare_ability_costs(0, 0, source, &costs, &[], &[], &[], increase, reduction)
+                    .prepare_ability_costs(
+                        0,
+                        0,
+                        source,
+                        &costs,
+                        &[],
+                        &[],
+                        &[],
+                        increase,
+                        ActivatedManaReduction {
+                            generic: reduction,
+                            ..Default::default()
+                        },
+                    )
                     .unwrap()
             };
             let prepared = prepare(&engine);
@@ -2214,7 +2237,10 @@ mod convoke_transaction_tests {
                         &[],
                         &[],
                         increase,
-                        reduction,
+                        ActivatedManaReduction {
+                            generic: reduction,
+                            ..Default::default()
+                        },
                     )
                     .unwrap();
                 assert!(

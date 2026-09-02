@@ -1,0 +1,9 @@
+// 2/2 colorless Robot Villain artifact creature token (Ultron Drone).
+(
+  id: "robot_villain_c_2_2",
+  name: "Robot",
+  face_id: "robot_villain",
+  types: ["Artifact", "Creature", "Robot", "Villain"],
+  power: 2,
+  toughness: 2,
+)

@@ -1,0 +1,14 @@
+// Legendary 4/4 green Cat God creature token (White Tiger, Ava Ayala).
+(
+  id: "the_tiger_god",
+  name: "The Tiger God",
+  face_id: "the_tiger_god",
+  types: ["Creature", "Cat", "God"],
+  supertypes: ["Legendary"],
+  colors: [Green],
+  power: 4,
+  toughness: 4,
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SelfCombatRestriction(
+    restriction: (maximum_blockers: Some(1)),
+  ))],
+)

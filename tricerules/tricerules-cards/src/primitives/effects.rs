@@ -3600,9 +3600,10 @@ impl SpellEffectKind {
                     SpellEffectKind::Destroy { .. }
                         | SpellEffectKind::GrantKeywords { .. }
                         | SpellEffectKind::ChoosePermanents { .. }
+                        | SpellEffectKind::Draw { .. }
                 ) {
                     return Err(
-                        "Conditional currently supports Destroy, GrantKeywords, and ChoosePermanents effects"
+                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, and Draw effects"
                             .into(),
                     );
                 }

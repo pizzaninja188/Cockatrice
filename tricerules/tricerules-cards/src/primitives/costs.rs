@@ -454,6 +454,11 @@ pub enum ActivatedCostModifier {
         amount: u32,
         condition: GameCondition,
     },
+    /// Power-up (Ninja of the Hand, Ultron Drone): while the condition holds, reduce the
+    /// ability's mana cost by the source permanent's fixed generic, colored, and colorless
+    /// mana symbols. Flexible source symbols remain unsupported until the payment contract can
+    /// publish the reduction choices required by CR 118.7e-f.
+    ConditionalSourceManaCostReduction { condition: GameCondition },
 }
 
 impl ActivatedCostModifier {
@@ -465,6 +470,7 @@ impl ActivatedCostModifier {
                 }
                 condition.validate_live()
             }
+            Self::ConditionalSourceManaCostReduction { condition } => condition.validate_live(),
         }
     }
 }

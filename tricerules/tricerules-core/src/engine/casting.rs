@@ -1301,7 +1301,7 @@ impl GameEngine {
             .unwrap_or(0);
         let targeting_cost =
             self.targeting_cost_increase(player, TargetingCostAction::ActivatedAbilities, targets);
-        let generic_reduction = self.activated_generic_reduction(player, permanent_id, &ability);
+        let mana_reduction = self.activated_mana_reduction(player, permanent_id, &ability)?;
         let activation_uses = self.limited_activation_uses(permanent_id, ability_index, &ability);
         let prepared_payment = self.prepare_ability_costs(
             player,
@@ -1312,7 +1312,7 @@ impl GameEngine {
             cost_selections,
             restricted_mana,
             targeting_cost,
-            generic_reduction,
+            mana_reduction,
         )?;
         let cost_plan = self.finish_ability_payment(
             player,
@@ -1783,7 +1783,7 @@ impl GameEngine {
             cost_selections,
             restricted_mana,
             0,
-            self.activated_generic_reduction(player, permanent_id, ability),
+            self.activated_mana_reduction(player, permanent_id, ability)?,
         )?;
         let cost_plan = self.finish_ability_payment(player, permanent_id, prepared, selection)?;
         let payment = self.commit_cost_transaction(cost_plan)?;
