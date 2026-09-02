@@ -24,6 +24,7 @@ fn token_copy_requires_one_permanent_source() {
             effect_indices: vec![0],
             distinct_from: vec![],
             same_graveyard: false,
+            cast_cost_expansion: None,
         }],
     };
     assert!(TargetSchema::compile(&[effect], Some(&targeting)).is_err());

@@ -5,7 +5,7 @@ use super::presentation::{presentation_ref, PresentationPath};
 use super::priority::{instant_timing_step_allowed, sorcery_speed_available};
 use super::targeting::{
     compute_ability_targets, compute_ability_targets_with_context, compute_spell_targets,
-    target_schema, TargetSourceIdentity,
+    target_filter_legal_at_resolution, target_schema, TargetSourceIdentity,
 };
 use super::*;
 
@@ -24,20 +24,26 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             .iter()
             .filter(|item| !item.is_copy)
             .flat_map(|item| {
-                item.cast_cost_receipts.iter().filter_map(|receipt| {
-                    let CastCostObjectReceipt::RevealedHand {
-                        card_id, card_name, ..
-                    } = receipt.object.as_ref()?
-                    else {
-                        return None;
-                    };
-                    Some(rv1::ActivePublicReveal {
-                        source_stack_object_id: item.id,
-                        group_index: receipt.group_index,
-                        revealing_player_id: item.controller,
-                        source_description: object_display_name(&eng.state, eng.registry, item.id),
-                        card_id: card_id.clone(),
-                        card_name: card_name.clone(),
+                item.cast_cost_receipts.iter().flat_map(|receipt| {
+                    receipt.objects.iter().filter_map(|object| {
+                        let CastCostObjectReceipt::RevealedHand {
+                            card_id, card_name, ..
+                        } = object
+                        else {
+                            return None;
+                        };
+                        Some(rv1::ActivePublicReveal {
+                            source_stack_object_id: item.id,
+                            group_index: receipt.group_index,
+                            revealing_player_id: item.controller,
+                            source_description: object_display_name(
+                                &eng.state,
+                                eng.registry,
+                                item.id,
+                            ),
+                            card_id: card_id.clone(),
+                            card_name: card_name.clone(),
+                        })
                     })
                 })
             })
@@ -81,7 +87,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                     {
                         continue;
                     }
-                    let t = compute_spell_targets(
+                    let mut t = compute_spell_targets(
                         eng,
                         p.id,
                         TargetSourceIdentity::spell_face(eng, oid, face_index),
@@ -89,6 +95,25 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         face.targeting.as_ref(),
                         &face.cost_modifiers,
                     );
+                    if let Some(costs) = hand_actions
+                        .iter()
+                        .find(|action| {
+                            action.kind == rv1::HandActionKind::HandActionCastSpell as i32
+                                && action.hand_index == slot as u32
+                                && action.face_index == face_index as u32
+                        })
+                        .and_then(|action| action.cost_choices.as_ref())
+                    {
+                        apply_cast_cost_target_requirements(
+                            eng,
+                            p.id,
+                            TargetSourceIdentity::spell_face(eng, oid, face_index),
+                            face,
+                            costs,
+                            face.targeting.as_ref(),
+                            &mut t,
+                        );
+                    }
                     let key = (slot as u32) << 8 | face_index as u32;
                     valid_targets_by_hand_slot.insert(key, t);
                 }
@@ -191,9 +216,16 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             else {
                 continue;
             };
-            valid_targets_by_zone_object.insert(
-                (u64::from(action.object_id) << 8) | u64::from(action.face_index),
-                compute_spell_targets(
+            let mut targets = compute_spell_targets(
+                eng,
+                p.id,
+                TargetSourceIdentity::spell_face(eng, action.object_id, action.face_index as usize),
+                &face.spell_effect,
+                face.targeting.as_ref(),
+                &face.cost_modifiers,
+            );
+            if let Some(costs) = action.cost_choices.as_ref() {
+                apply_cast_cost_target_requirements(
                     eng,
                     p.id,
                     TargetSourceIdentity::spell_face(
@@ -201,10 +233,15 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                         action.object_id,
                         action.face_index as usize,
                     ),
-                    &face.spell_effect,
+                    face,
+                    costs,
                     face.targeting.as_ref(),
-                    &face.cost_modifiers,
-                ),
+                    &mut targets,
+                );
+            }
+            valid_targets_by_zone_object.insert(
+                (u64::from(action.object_id) << 8) | u64::from(action.face_index),
+                targets,
             );
         }
 
@@ -1314,6 +1351,126 @@ fn legal_spell_cost_choices(
                             ..Default::default()
                         }
                     }
+                    CastCostOptionDef::TapPermanents {
+                        option_id,
+                        presentation,
+                        constraint,
+                        filter,
+                        ..
+                    } => {
+                        let candidates = eng
+                            .state
+                            .players
+                            .iter()
+                            .flat_map(|state| state.battlefield.iter().copied())
+                            .filter(|oid| {
+                                eng.ability_cost_permanent_matches(player, None, *oid, filter)
+                                    && eng
+                                        .state
+                                        .objects
+                                        .get(oid)
+                                        .is_some_and(|object| !object.tapped)
+                            })
+                            .collect::<Vec<_>>();
+                        let selectable = match constraint {
+                            ObjectPaymentConstraint::ExactCount(count) => {
+                                candidates.len() >= *count as usize
+                            }
+                            ObjectPaymentConstraint::AggregateMinimum { minimum, .. } => {
+                                candidates
+                                    .iter()
+                                    .filter_map(|oid| {
+                                        eng.object_payment_contribution(
+                                            *oid,
+                                            ObjectContributionKind::CurrentPower,
+                                        )
+                                    })
+                                    .filter(|value| *value > 0)
+                                    .sum::<i64>()
+                                    >= i64::from(*minimum)
+                            }
+                        };
+                        let (object_min, object_max) = constraint
+                            .exact_count()
+                            .map_or((1, candidates.len() as u32), |count| (count, count));
+                        rv1::LegalCastCostOption {
+                            option_index: option_index as u32,
+                            label: option.fallback_label(),
+                            kind: rv1::CastCostOptionKind::TapPermanents as i32,
+                            selectable,
+                            candidate_objects: candidates
+                                .iter()
+                                .map(|oid| {
+                                    cost_object_candidate(
+                                        eng,
+                                        *oid,
+                                        eng.object_payment_contribution(
+                                            *oid,
+                                            ObjectContributionKind::CurrentPower,
+                                        )
+                                        .unwrap_or(0),
+                                    )
+                                })
+                                .collect(),
+                            object_min,
+                            object_max,
+                            aggregate_minimum: aggregate_constraint_proto(*constraint),
+                            presentation: Some(presentation_ref(
+                                eng.registry,
+                                card_id,
+                                &face.face_id,
+                                [
+                                    PresentationPath::Spell,
+                                    PresentationPath::CastCostGroup(&group.group_id),
+                                    PresentationPath::CastCostOption(option_id),
+                                ],
+                                presentation,
+                                option.fallback_label(),
+                            )),
+                            ..Default::default()
+                        }
+                    }
+                    CastCostOptionDef::SacrificePermanent {
+                        option_id,
+                        presentation,
+                        filter,
+                        ..
+                    } => {
+                        let candidates = eng
+                            .state
+                            .players
+                            .iter()
+                            .flat_map(|state| state.battlefield.iter().copied())
+                            .filter(|oid| {
+                                eng.ability_cost_permanent_matches(player, None, *oid, filter)
+                            })
+                            .collect::<Vec<_>>();
+                        rv1::LegalCastCostOption {
+                            option_index: option_index as u32,
+                            label: option.fallback_label(),
+                            kind: rv1::CastCostOptionKind::SacrificePermanent as i32,
+                            selectable: !candidates.is_empty(),
+                            candidate_objects: candidates
+                                .iter()
+                                .map(|oid| cost_object_candidate(eng, *oid, 0))
+                                .collect(),
+                            object_min: 1,
+                            object_max: 1,
+                            presentation: Some(presentation_ref(
+                                eng.registry,
+                                card_id,
+                                &face.face_id,
+                                [
+                                    PresentationPath::Spell,
+                                    PresentationPath::CastCostGroup(&group.group_id),
+                                    PresentationPath::CastCostOption(option_id),
+                                ],
+                                presentation,
+                                option.fallback_label(),
+                            )),
+                            ..Default::default()
+                        }
+                    }
                 })
                 .collect::<Vec<_>>();
             if options.iter().filter(|option| option.selectable).count() < group.min as usize {
@@ -1407,7 +1564,14 @@ fn legal_mode_cast_cost_link(
     costs: &rv1::LegalCostChoices,
     mode: &tricerules_cards::ModeDef,
 ) -> Option<(rv1::LinkedCastCostOption, bool)> {
-    let link = mode.linked_cast_cost.as_ref()?;
+    legal_cast_cost_link(face, costs, mode.linked_cast_cost.as_ref()?)
+}
+
+fn legal_cast_cost_link(
+    face: &CardFace,
+    costs: &rv1::LegalCostChoices,
+    link: &CastCostOptionRef,
+) -> Option<(rv1::LinkedCastCostOption, bool)> {
     let group_index = face
         .cast_cost_groups
         .iter()
@@ -1431,6 +1595,91 @@ fn legal_mode_cast_cost_link(
         },
         selectable,
     ))
+}
+
+fn legal_all_modes_cast_cost(
+    face: &CardFace,
+    costs: &rv1::LegalCostChoices,
+    modal: &ModalDef,
+) -> (u32, Option<rv1::LinkedCastCostOption>) {
+    let Some(link) = &modal.all_modes_cast_cost else {
+        return (modal.max_modes, None);
+    };
+    match legal_cast_cost_link(face, costs, link) {
+        Some((link, true)) => (modal.max_modes, Some(link)),
+        _ => (
+            modal
+                .max_modes
+                .min(modal.modes.len().saturating_sub(1) as u32),
+            None,
+        ),
+    }
+}
+
+fn apply_cast_cost_target_requirements(
+    eng: &GameEngine,
+    player: PlayerId,
+    source: TargetSourceIdentity,
+    face: &CardFace,
+    costs: &rv1::LegalCostChoices,
+    targeting: Option<&TargetingDef>,
+    targets: &mut rv1::SpellTargets,
+) {
+    let Some(targeting) = targeting else {
+        return;
+    };
+    for (group_index, authored_group) in targeting.groups.iter().enumerate() {
+        let Some(expansion) = &authored_group.cast_cost_expansion else {
+            continue;
+        };
+        let link = CastCostOptionRef {
+            group_id: expansion.condition.group_id.clone(),
+            option_id: expansion.condition.option_id.clone(),
+        };
+        let linked = legal_cast_cost_link(face, costs, &link);
+        let Some(group) = targets
+            .groups
+            .iter_mut()
+            .find(|group| group.group_index == group_index as u32)
+        else {
+            continue;
+        };
+        let affected = group
+            .valid_permanent_ids
+            .iter()
+            .copied()
+            .filter(|oid| {
+                !target_filter_legal_at_resolution(
+                    eng,
+                    &expansion.without_cost,
+                    *oid,
+                    player,
+                    source,
+                    TriggerContext::default(),
+                )
+            })
+            .collect::<Vec<_>>();
+        match linked {
+            Some((required_cost, true)) if !affected.is_empty() => {
+                targets
+                    .cast_cost_requirements
+                    .push(rv1::TargetCastCostRequirement {
+                        group_index: group_index as u32,
+                        required_cost: Some(required_cost),
+                        affected_targets: affected
+                            .into_iter()
+                            .map(|object_id| rv1::TargetCandidateRef {
+                                kind: rv1::TargetRefKind::Permanent as i32,
+                                object_id,
+                            })
+                            .collect(),
+                    });
+            }
+            _ => group
+                .valid_permanent_ids
+                .retain(|oid| !affected.contains(oid)),
+        }
+    }
 }
 
 fn cast_cost_timing_condition_available(
@@ -1515,6 +1764,7 @@ fn hand_action(
         generic_cost_reduction: 0,
         has_convoke: false,
         cast_method: rv1::CastMethod::Normal as i32,
+        all_modes_cast_cost: None,
     }
 }
 
@@ -1685,8 +1935,11 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 let mode_cost_choices = cost_choices.clone();
                 action.cost_choices = Some(cost_choices);
                 if let Some(modal) = &face.modal_spell {
+                    let (max_modes, all_modes_cost) =
+                        legal_all_modes_cast_cost(face, &mode_cost_choices, modal);
+                    action.all_modes_cast_cost = all_modes_cost;
                     action.min_modes = modal.min_modes;
-                    action.max_modes = modal.max_modes;
+                    action.max_modes = max_modes;
                     action.modes = modal
                         .modes
                         .iter()
@@ -1694,13 +1947,22 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                         .map(|(mode_index, mode)| {
                             let needs_target =
                                 target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
-                            let targets = compute_spell_targets(
+                            let mut targets = compute_spell_targets(
                                 eng,
                                 pid,
                                 TargetSourceIdentity::spell_face(eng, oid, face_index),
                                 &mode.effects,
                                 mode.targeting.as_ref(),
                                 &face.cost_modifiers,
+                            );
+                            apply_cast_cost_target_requirements(
+                                eng,
+                                pid,
+                                TargetSourceIdentity::spell_face(eng, oid, face_index),
+                                face,
+                                &mode_cost_choices,
+                                mode.targeting.as_ref(),
+                                &mut targets,
                             );
                             let linked_cost =
                                 legal_mode_cast_cost_link(face, &mode_cost_choices, mode);
@@ -1732,7 +1994,9 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                         .collect();
                     let selectable_count =
                         action.modes.iter().filter(|mode| mode.selectable).count();
-                    if selectable_count < modal.min_modes as usize {
+                    if selectable_count < modal.min_modes as usize
+                        || action.max_modes < action.min_modes
+                    {
                         continue;
                     }
                 }
@@ -1841,6 +2105,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     cast_method: cast_method as i32,
                     has_convoke: face.keywords.contains(&Keyword::Convoke),
                     casting_permission_id: None,
+                    all_modes_cast_cost: None,
                 };
                 if !cost_choices.non_mana_costs_payable {
                     continue;
@@ -1848,8 +2113,11 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 let mode_cost_choices = cost_choices.clone();
                 action.cost_choices = Some(cost_choices);
                 if let Some(modal) = &face.modal_spell {
+                    let (max_modes, all_modes_cost) =
+                        legal_all_modes_cast_cost(face, &mode_cost_choices, modal);
+                    action.all_modes_cast_cost = all_modes_cost;
                     action.min_modes = modal.min_modes;
-                    action.max_modes = modal.max_modes;
+                    action.max_modes = max_modes;
                     action.modes = modal
                         .modes
                         .iter()
@@ -1857,13 +2125,22 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                         .map(|(mode_index, mode)| {
                             let needs_target =
                                 target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
-                            let targets = compute_spell_targets(
+                            let mut targets = compute_spell_targets(
                                 eng,
                                 pid,
                                 TargetSourceIdentity::spell_face(eng, oid, face_index),
                                 &mode.effects,
                                 mode.targeting.as_ref(),
                                 &face.cost_modifiers,
+                            );
+                            apply_cast_cost_target_requirements(
+                                eng,
+                                pid,
+                                TargetSourceIdentity::spell_face(eng, oid, face_index),
+                                face,
+                                &mode_cost_choices,
+                                mode.targeting.as_ref(),
+                                &mut targets,
                             );
                             let linked_cost =
                                 legal_mode_cast_cost_link(face, &mode_cost_choices, mode);
@@ -1895,6 +2172,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                         .collect();
                     if action.modes.iter().filter(|mode| mode.selectable).count()
                         < modal.min_modes as usize
+                        || action.max_modes < action.min_modes
                     {
                         continue;
                     }
@@ -1990,6 +2268,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 cast_method: cast_method as i32,
                 has_convoke: face.keywords.contains(&Keyword::Convoke),
                 casting_permission_id: Some(permission.group_id),
+                all_modes_cast_cost: None,
             };
             if !cost_choices.non_mana_costs_payable {
                 continue;
@@ -1997,8 +2276,11 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             let mode_cost_choices = cost_choices.clone();
             action.cost_choices = Some(cost_choices);
             if let Some(modal) = &face.modal_spell {
+                let (max_modes, all_modes_cost) =
+                    legal_all_modes_cast_cost(face, &mode_cost_choices, modal);
+                action.all_modes_cast_cost = all_modes_cost;
                 action.min_modes = modal.min_modes;
-                action.max_modes = modal.max_modes;
+                action.max_modes = max_modes;
                 action.modes = modal
                     .modes
                     .iter()
@@ -2006,13 +2288,22 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     .map(|(mode_index, mode)| {
                         let needs_target =
                             target_schema(&mode.effects, mode.targeting.as_ref()).has_targets();
-                        let targets = compute_spell_targets(
+                        let mut targets = compute_spell_targets(
                             eng,
                             pid,
                             TargetSourceIdentity::current(eng, object.id),
                             &mode.effects,
                             mode.targeting.as_ref(),
                             &face.cost_modifiers,
+                        );
+                        apply_cast_cost_target_requirements(
+                            eng,
+                            pid,
+                            TargetSourceIdentity::current(eng, object.id),
+                            face,
+                            &mode_cost_choices,
+                            mode.targeting.as_ref(),
+                            &mut targets,
                         );
                         let linked_cost = legal_mode_cast_cost_link(face, &mode_cost_choices, mode);
                         rv1::LegalSpellMode {
@@ -2041,6 +2332,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     .collect();
                 if action.modes.iter().filter(|mode| mode.selectable).count()
                     < modal.min_modes as usize
+                    || action.max_modes < action.min_modes
                 {
                     continue;
                 }

@@ -43,6 +43,7 @@ enum CostDebit {
         filter: Option<TargetFilter>,
         source: Option<ObjectId>,
         exclude_source: bool,
+        cast_cost_kind: Option<ObjectCastCostKind>,
     },
     Mana(ManaPaymentPlan),
     Discard {
@@ -251,6 +252,7 @@ impl PreparedPaymentCosts {
                     filter: None,
                     source: None,
                     exclude_source: false,
+                    cast_cost_kind: None,
                 },
             );
         }
@@ -477,7 +479,7 @@ impl GameEngine {
                     .options
                     .get(selection.option_index as usize)
                     .ok_or(EngineError::Illegal("invalid cast cost option"))?;
-                let object = match option {
+                let objects = match option {
                     CastCostOptionDef::Blight { count, .. } => {
                         let Some(rv1::cast_cost_group_selection::SelectedObject::PermanentId(
                             object_id,
@@ -496,12 +498,12 @@ impl GameEngine {
                             object: reference,
                             count: *count,
                         });
-                        Some(CastCostObjectReceipt::ChosenPermanent {
+                        vec![CastCostObjectReceipt::ChosenPermanent {
                             object_id,
                             zone_change_generation: selection.expected_zone_change_generation,
                             card_id: self.state.objects[&object_id].card_id.clone(),
                             card_name: object_display_name(&self.state, self.registry, object_id),
-                        })
+                        }]
                     }
                     CastCostOptionDef::Mana { cost, .. } => {
                         if selection.selected_object.is_some() {
@@ -510,7 +512,7 @@ impl GameEngine {
                             ));
                         }
                         combined_mana.pips.extend(cost.pips.iter().cloned());
-                        None
+                        vec![]
                     }
                     CastCostOptionDef::Behold {
                         hand_filter,
@@ -549,7 +551,7 @@ impl GameEngine {
                                     generation,
                                     owner: object.owner,
                                 });
-                                Some(CastCostObjectReceipt::RevealedHand {
+                                vec![CastCostObjectReceipt::RevealedHand {
                                     object_id,
                                     zone_change_generation: generation,
                                     card_id: object.card_id.clone(),
@@ -558,7 +560,7 @@ impl GameEngine {
                                         self.registry,
                                         object_id,
                                     ),
-                                })
+                                }]
                             }
                             Some(SelectedObject::PermanentId(object_id)) => {
                                 if !self.ability_cost_permanent_matches(
@@ -588,7 +590,7 @@ impl GameEngine {
                                     generation,
                                     controller: player,
                                 });
-                                Some(CastCostObjectReceipt::ChosenPermanent {
+                                vec![CastCostObjectReceipt::ChosenPermanent {
                                     object_id,
                                     zone_change_generation: generation,
                                     card_id: object.card_id.clone(),
@@ -597,7 +599,7 @@ impl GameEngine {
                                         self.registry,
                                         object_id,
                                     ),
-                                })
+                                }]
                             }
                             None => {
                                 return Err(EngineError::Illegal(
@@ -605,6 +607,126 @@ impl GameEngine {
                                 ))
                             }
                         }
+                    }
+                    CastCostOptionDef::TapPermanents {
+                        kind,
+                        constraint,
+                        filter,
+                        ..
+                    } => {
+                        if selection.selected_object.is_some() {
+                            return Err(EngineError::Illegal(
+                                "multi-object cast cost cannot use a singular object",
+                            ));
+                        }
+                        let selected =
+                            selection
+                                .battlefield_objects
+                                .as_ref()
+                                .ok_or(EngineError::Illegal(
+                                    "tap cast cost requires battlefield object references",
+                                ))?;
+                        if !self.object_payment_selection_satisfies(*constraint, &selected.objects)
+                        {
+                            return Err(EngineError::Illegal(
+                                "tap cast cost selection does not satisfy its constraint",
+                            ));
+                        }
+                        let mut taps = Vec::with_capacity(selected.objects.len());
+                        let mut receipts = Vec::with_capacity(selected.objects.len());
+                        let mut distinct = HashSet::new();
+                        for selected in &selected.objects {
+                            let oid = selected.object_id;
+                            if !distinct.insert(oid)
+                                || !self.ability_cost_permanent_matches(player, None, oid, filter)
+                                || self
+                                    .state
+                                    .objects
+                                    .get(&oid)
+                                    .is_none_or(|object| object.tapped)
+                            {
+                                return Err(EngineError::Illegal(
+                                    "illegal tap cast cost selection",
+                                ));
+                            }
+                            let generation = self
+                                .state
+                                .zone_change_generation
+                                .get(&oid)
+                                .copied()
+                                .unwrap_or(0);
+                            if generation != selected.zone_change_generation {
+                                return Err(EngineError::Illegal("stale tap cast cost selection"));
+                            }
+                            let object = &self.state.objects[&oid];
+                            taps.push((oid, generation));
+                            receipts.push(CastCostObjectReceipt::ChosenPermanent {
+                                object_id: oid,
+                                zone_change_generation: generation,
+                                card_id: object.card_id.clone(),
+                                card_name: object_display_name(&self.state, self.registry, oid),
+                            });
+                        }
+                        debits.push(CostDebit::TapGroup {
+                            objects: taps,
+                            constraint: Some(*constraint),
+                            filter: Some((**filter).clone()),
+                            source: None,
+                            exclude_source: false,
+                            cast_cost_kind: Some(*kind),
+                        });
+                        receipts
+                    }
+                    CastCostOptionDef::SacrificePermanent { filter, .. } => {
+                        if selection.selected_object.is_some() {
+                            return Err(EngineError::Illegal(
+                                "sacrifice cast cost cannot use a singular object",
+                            ));
+                        }
+                        let selected =
+                            selection
+                                .battlefield_objects
+                                .as_ref()
+                                .ok_or(EngineError::Illegal(
+                                    "sacrifice cast cost requires a battlefield object reference",
+                                ))?;
+                        let [selected] = selected.objects.as_slice() else {
+                            return Err(EngineError::Illegal(
+                                "sacrifice cast cost requires exactly one permanent",
+                            ));
+                        };
+                        let oid = selected.object_id;
+                        if !self.ability_cost_permanent_matches(player, None, oid, filter) {
+                            return Err(EngineError::Illegal(
+                                "illegal sacrifice cast cost selection",
+                            ));
+                        }
+                        let generation = self
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0);
+                        if generation != selected.zone_change_generation {
+                            return Err(EngineError::Illegal(
+                                "stale sacrifice cast cost selection",
+                            ));
+                        }
+                        let object = &self.state.objects[&oid];
+                        let receipt = CastCostObjectReceipt::ChosenPermanent {
+                            object_id: oid,
+                            zone_change_generation: generation,
+                            card_id: object.card_id.clone(),
+                            card_name: object_display_name(&self.state, self.registry, oid),
+                        };
+                        let snapshot = self
+                            .sacrifice_snapshot(oid)
+                            .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
+                        debits.push(CostDebit::Sacrifice {
+                            snapshot,
+                            owner: object.owner,
+                        });
+                        vec![receipt]
                     }
                 };
                 let label = option.fallback_label();
@@ -614,7 +736,7 @@ impl GameEngine {
                     group_id: Some(group.group_id.clone()),
                     option_id: Some(option.option_id().clone()),
                     label,
-                    object,
+                    objects,
                 });
             }
         }
@@ -676,12 +798,12 @@ impl GameEngine {
                         "Harmonize — tap {} (reduce {{{harmonize_reduction}}})",
                         object_display_name(&self.state, self.registry, object_id)
                     ),
-                    object: Some(CastCostObjectReceipt::ChosenPermanent {
+                    objects: vec![CastCostObjectReceipt::ChosenPermanent {
                         object_id,
                         zone_change_generation: generation,
                         card_id: object.card_id.clone(),
                         card_name: object_display_name(&self.state, self.registry, object_id),
-                    }),
+                    }],
                 });
             }
         }
@@ -796,6 +918,7 @@ impl GameEngine {
                         filter: Some(filter.clone()),
                         source: None,
                         exclude_source: *exclude_source,
+                        cast_cost_kind: None,
                     });
                 }
                 AdditionalCost::ExileGraveyardCards {
@@ -1140,6 +1263,7 @@ impl GameEngine {
                         filter: Some(filter.clone()),
                         source: Some(permanent_id),
                         exclude_source: *exclude_source,
+                        cast_cost_kind: None,
                     });
                 }
                 AbilityCost::Mana(cost) | AbilityCost::Waterbend(cost) => {
@@ -1443,6 +1567,7 @@ impl GameEngine {
                 CostDebit::TapGroup {
                     objects,
                     constraint,
+                    cast_cost_kind,
                     ..
                 } => {
                     let ids = objects.into_iter().map(|(oid, _)| oid).collect::<Vec<_>>();
@@ -1463,7 +1588,11 @@ impl GameEngine {
                     }
                     payment
                         .trigger_events
-                        .extend(self.tap_permanents(plan.player, &ids));
+                        .extend(self.tap_permanents_for_cast_cost(
+                            plan.player,
+                            &ids,
+                            cast_cost_kind,
+                        ));
                 }
                 CostDebit::Mana(mana) => {
                     let spent = mana.mana_spent();
@@ -1716,6 +1845,7 @@ impl GameEngine {
                     filter,
                     source,
                     exclude_source,
+                    ..
                 } => {
                     let refs = objects
                         .iter()
@@ -2016,6 +2146,77 @@ mod convoke_transaction_tests {
             object_id,
             zone_change_generation: engine.state.zone_change_generation[&object_id],
         }
+    }
+
+    #[test]
+    fn issue_182_teamwork_taps_a_generation_bound_power_cohort_and_records_every_object() {
+        let mut engine = GameEngine::new(182_001, &[0, 1], 20, None, true).unwrap();
+        let source = engine.state.players[0].hand[0];
+        let creatures = engine.state.players[0].hand[1..3].to_vec();
+        for oid in &creatures {
+            engine.state.objects.get_mut(oid).unwrap().card_id = "grizzly_bears".into();
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                *oid,
+                Zone::Battlefield,
+                Some(0),
+            )
+            .unwrap();
+        }
+        let group = CastCostGroupDef {
+            group_id: tricerules_cards::ChoiceId::new("teamwork").unwrap(),
+            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            min: 0,
+            max: 1,
+            options: vec![CastCostOptionDef::TapPermanents {
+                option_id: tricerules_cards::ChoiceId::new("teamwork_4").unwrap(),
+                presentation: tricerules_cards::AbilityPresentation::Fallback,
+                kind: tricerules_cards::ObjectCastCostKind::Teamwork,
+                constraint: ObjectPaymentConstraint::AggregateMinimum {
+                    minimum: 4,
+                    contribution: ObjectContributionKind::CurrentPower,
+                },
+                filter: Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..Default::default()
+                }),
+            }],
+        };
+        let selection = rv1::CastCostGroupSelection {
+            group_index: 0,
+            option_index: 0,
+            battlefield_objects: Some(rv1::CostObjectRefs {
+                objects: creatures
+                    .iter()
+                    .map(|oid| object_ref(&engine, *oid))
+                    .collect(),
+            }),
+            ..Default::default()
+        };
+        let plan = engine
+            .plan_spell_costs(
+                0,
+                0,
+                source,
+                &ManaCost::default(),
+                0,
+                0,
+                0,
+                &[],
+                &[],
+                &[],
+                &[group],
+                &[selection],
+                &[],
+                &[],
+                SpellCastMethod::Normal,
+            )
+            .unwrap();
+        let receipt = engine.commit_cost_transaction(plan).unwrap();
+        assert!(creatures.iter().all(|oid| engine.state.objects[oid].tapped));
+        assert_eq!(receipt.cast_cost_receipts[0].objects.len(), 2);
     }
 
     #[test]
@@ -2589,6 +2790,7 @@ mod convoke_transaction_tests {
                     filter: None,
                     source: None,
                     exclude_source: false,
+                    cast_cost_kind: None,
                 },
             ],
         };

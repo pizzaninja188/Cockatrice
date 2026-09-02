@@ -4485,6 +4485,76 @@ TEST_F(RuledClientTest, ParsesEngineAuthoredOptionalCastCostGroups)
     EXPECT_EQ(costs.castCostGroups.first().options.at(1).validPermanentGenerations.value(900), 12u);
 }
 
+TEST_F(RuledClientTest, ParsesTeamworkCohortsTargetRequirementsAndAllModesCost)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *hand = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
+    hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    hand->set_hand_index(4);
+    hand->set_min_modes(1);
+    hand->set_max_modes(2);
+    hand->add_modes()->set_selectable(true);
+    hand->mutable_all_modes_cast_cost()->set_group_index(3);
+    hand->mutable_all_modes_cast_cost()->set_option_index(7);
+
+    auto *group = hand->mutable_cost_choices()->add_cast_cost_groups();
+    group->set_group_index(3);
+    group->set_min(0);
+    group->set_max(1);
+    auto *teamwork = group->add_options();
+    teamwork->set_option_index(7);
+    teamwork->set_kind(ruled::v1::CAST_COST_OPTION_KIND_TAP_PERMANENTS);
+    teamwork->set_label("Teamwork 4");
+    teamwork->set_selectable(true);
+    teamwork->set_object_min(1);
+    teamwork->set_object_max(2);
+    teamwork->mutable_aggregate_minimum()->set_contribution_kind(
+        ruled::v1::OBJECT_CONTRIBUTION_KIND_CURRENT_POWER);
+    teamwork->mutable_aggregate_minimum()->set_minimum(4);
+    auto *candidate = teamwork->add_candidate_objects();
+    candidate->mutable_object()->set_object_id(900);
+    candidate->mutable_object()->set_zone_change_generation(12);
+    candidate->set_contribution(4);
+
+    auto *targets = &(*(*batch.mutable_legal_by_player())[kLocalPlayer]
+                          .mutable_valid_targets_by_hand_slot())[4u << 8];
+    auto *requirement = targets->add_cast_cost_requirements();
+    requirement->set_group_index(0);
+    requirement->mutable_required_cost()->set_group_index(3);
+    requirement->mutable_required_cost()->set_option_index(7);
+    auto *affected = requirement->add_affected_targets();
+    affected->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    affected->set_object_id(901);
+    apply(batch);
+
+    const auto costs = state->spellCostData(4, 0, RuledCastSource::Hand);
+    ASSERT_EQ(costs.castCostGroups.size(), 1);
+    const auto &parsed = costs.castCostGroups.first().options.first();
+    EXPECT_EQ(parsed.kind, RuledCastCostOptionKind::TapPermanents);
+    EXPECT_EQ(parsed.objectMin, 1);
+    EXPECT_EQ(parsed.objectMax, 2);
+    EXPECT_EQ(parsed.aggregateMinimum, 4);
+    EXPECT_EQ(parsed.contributionKind, RuledObjectContributionKind::CurrentPower);
+    EXPECT_EQ(parsed.validPermanentGenerations.value(900), 12u);
+    EXPECT_EQ(parsed.candidateContributions.value(900), 4);
+
+    const auto targetData = state->spellTargetData(4, 0, RuledCastSource::Hand);
+    ASSERT_EQ(targetData.castCostRequirements.size(), 1);
+    EXPECT_EQ(targetData.castCostRequirements.first().groupIndex, 0);
+    EXPECT_EQ(targetData.castCostRequirements.first().costGroupIndex, 3);
+    EXPECT_EQ(targetData.castCostRequirements.first().costOptionIndex, 7);
+    ASSERT_EQ(targetData.castCostRequirements.first().affectedTargets.size(), 1);
+    EXPECT_EQ(targetData.castCostRequirements.first().affectedTargets.first().kind,
+              ruled::v1::TARGET_REF_KIND_PERMANENT);
+    EXPECT_EQ(targetData.castCostRequirements.first().affectedTargets.first().oid, 901u);
+
+    const RuledCastActionKey key{4, 0, RuledCastSource::Hand, ruled::v1::CAST_METHOD_NORMAL, 0};
+    const QPair<int, int> expectedAllModesCost{3, 7};
+    EXPECT_EQ(state->handActions.value(ruled::v1::HAND_ACTION_CAST_SPELL).allModesCastCostByCastKey.value(key),
+              expectedAllModesCost);
+}
+
 TEST_F(RuledClientTest, ParsesModeLinkedCastCostCoordinates)
 {
     ruled::v1::RuledEventBatch batch;

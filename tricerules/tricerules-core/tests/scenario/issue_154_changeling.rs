@@ -119,13 +119,14 @@ fn issue_154_changeling_can_be_beheld_as_a_dragon_from_hand() {
                     option_index: 0,
                     selected_object: Some(SelectedObject::HandIndex(changeling_slot as u32)),
                     expected_zone_change_generation: 0,
+                    battlefield_objects: None,
                 }],
             ),
         )
         .expect("behold the Changeling as a Dragon");
     assert!(matches!(
-        engine.state.stack.last().unwrap().cast_cost_receipts[0].object,
-        Some(CastCostObjectReceipt::RevealedHand { ref card_id, .. })
+        engine.state.stack.last().unwrap().cast_cost_receipts[0].objects.as_slice(),
+        [CastCostObjectReceipt::RevealedHand { card_id, .. }]
             if card_id == "chitinous_graspling"
     ));
 }

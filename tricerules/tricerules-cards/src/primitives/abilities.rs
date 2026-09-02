@@ -3,8 +3,8 @@
 use super::{
     AbilityCost, ActivatedCostModifier, Amount, BattlefieldCreatureCountFilter, CardTypeFilter,
     CastCostReceiptCondition, Color, CounterKind, EffectContext, GameCondition, Keyword,
-    PowerComparison, RelativePlayerSet, SpellEffectKind, TargetController, TargetFilter,
-    TargetKind, TargetingDef,
+    ObjectCastCostKind, PowerComparison, RelativePlayerSet, SpellEffectKind, TargetController,
+    TargetFilter, TargetKind, TargetingDef,
 };
 use crate::{AbilityId, AbilityPresentation, ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
@@ -356,6 +356,8 @@ pub enum TriggerCondition {
     /// Whenever this permanent changes from untapped to tapped. Entering the battlefield tapped
     /// is an entry status, not this event (CR 603.6d / 701.26).
     WheneverSelfBecomesTapped,
+    /// This permanent was one of the objects tapped while paying the named cast-cost kind.
+    WheneverSelfTappedForCastCost { kind: ObjectCastCostKind },
     /// Whenever the object this Aura or Equipment is attached to changes from untapped to
     /// tapped. The attached object's event-time identity is supplied as `TriggerObject`.
     WheneverAttachedObjectBecomesTapped,

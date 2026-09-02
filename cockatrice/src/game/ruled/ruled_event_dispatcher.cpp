@@ -162,6 +162,18 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
         }
         data.targetedCostReductionApplications.append(parsed);
     }
+    for (const auto &requirement : src.cast_cost_requirements()) {
+        if (!requirement.has_required_cost())
+            continue;
+        RuledTargetCastCostRequirement parsed;
+        parsed.groupIndex = static_cast<int>(requirement.group_index());
+        parsed.costGroupIndex = static_cast<int>(requirement.required_cost().group_index());
+        parsed.costOptionIndex = static_cast<int>(requirement.required_cost().option_index());
+        for (const auto &candidate : requirement.affected_targets()) {
+            parsed.affectedTargets.append({candidate.kind(), static_cast<quint32>(candidate.object_id())});
+        }
+        data.castCostRequirements.append(parsed);
+    }
     return data;
 }
 
@@ -276,6 +288,12 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
                 case ruled::v1::CAST_COST_OPTION_KIND_MANA:
                     parsedOption.kind = RuledCastCostOptionKind::Mana;
                     break;
+                case ruled::v1::CAST_COST_OPTION_KIND_TAP_PERMANENTS:
+                    parsedOption.kind = RuledCastCostOptionKind::TapPermanents;
+                    break;
+                case ruled::v1::CAST_COST_OPTION_KIND_SACRIFICE_PERMANENT:
+                    parsedOption.kind = RuledCastCostOptionKind::SacrificePermanent;
+                    break;
                 default:
                     parsedOption.kind = RuledCastCostOptionKind::Unspecified;
                     break;
@@ -299,6 +317,29 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
             for (int i = 0; i < reductionCount; ++i) {
                 parsedOption.validPermanentGenericReductions.insert(
                     option.valid_permanent_ids(i), static_cast<int>(option.valid_permanent_generic_reductions(i)));
+            }
+            for (const auto &candidate : option.candidate_objects()) {
+                if (!candidate.has_object())
+                    continue;
+                const quint32 oid = candidate.object().object_id();
+                parsedOption.validPermanentIds.insert(oid);
+                parsedOption.validPermanentGenerations.insert(oid, candidate.object().zone_change_generation());
+                parsedOption.candidateContributions.insert(oid, candidate.contribution());
+            }
+            parsedOption.objectMin = static_cast<int>(option.object_min());
+            parsedOption.objectMax = static_cast<int>(option.object_max());
+            if (option.has_aggregate_minimum()) {
+                parsedOption.aggregateMinimum = option.aggregate_minimum().minimum();
+                switch (option.aggregate_minimum().contribution_kind()) {
+                    case ruled::v1::OBJECT_CONTRIBUTION_KIND_CURRENT_POWER:
+                        parsedOption.contributionKind = RuledObjectContributionKind::CurrentPower;
+                        break;
+                    case ruled::v1::OBJECT_CONTRIBUTION_KIND_MANA_VALUE:
+                        parsedOption.contributionKind = RuledObjectContributionKind::ManaValue;
+                        break;
+                    default:
+                        break;
+                }
             }
             parsedGroup.options.append(parsedOption);
         }
@@ -356,6 +397,12 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
                      mode.has_linked_cast_cost() ? static_cast<int>(mode.linked_cast_cost().option_index()) : -1});
             }
             set.modalOptionsByCastKey.insert(castKey, modes);
+            if (action.has_all_modes_cast_cost()) {
+                set.allModesCastCostByCastKey.insert(
+                    castKey,
+                    {static_cast<int>(action.all_modes_cast_cost().group_index()),
+                     static_cast<int>(action.all_modes_cast_cost().option_index())});
+            }
         }
     }
     return parsed;
@@ -1692,6 +1739,12 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
                      mode.has_linked_cast_cost() ? static_cast<int>(mode.linked_cast_cost().option_index()) : -1});
             }
             state->zoneCastActions.modalOptionsByCastKey.insert(castKey, modes);
+            if (action.has_all_modes_cast_cost()) {
+                state->zoneCastActions.allModesCastCostByCastKey.insert(
+                    castKey,
+                    {static_cast<int>(action.all_modes_cast_cost().group_index()),
+                     static_cast<int>(action.all_modes_cast_cost().option_index())});
+            }
         }
     }
 

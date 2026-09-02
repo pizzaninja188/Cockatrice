@@ -431,6 +431,7 @@ TEST_F(GamePromptWidgetTest, CastCostOptionsUseTheirOwnButtonRouteAndSuppressPri
     QSignalSpy resolutionSpy(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);
     QSignalSpy cancelSpy(widget.get(), &GamePromptWidget::cancelTargetingRequested);
     QSignalSpy backSpy(widget.get(), &GamePromptWidget::ruledCastCostBackRequested);
+    QSignalSpy confirmSpy(widget.get(), &GamePromptWidget::ruledCastCostConfirmRequested);
     GamePromptWidget::RuledPromptState state;
     state.mode = PromptMode::CastCostOptions;
     state.text = "Behold a Dragon or pay {1}.";
@@ -456,6 +457,19 @@ TEST_F(GamePromptWidgetTest, CastCostOptionsUseTheirOwnButtonRouteAndSuppressPri
     EXPECT_FALSE(btn("cancelTargetingButton")->isHidden());
     EXPECT_FALSE(btn("declineClickChoiceButton")->isHidden());
     EXPECT_EQ(btn("declineClickChoiceButton")->text(), "Back");
+    state.required = 1;
+    state.selected = 1;
+    state.max = 3;
+    state.castCostSelectionConfirmable = false;
+    widget->setRuledPromptState(state);
+    EXPECT_FALSE(btn("confirmTargetsButton")->isHidden());
+    EXPECT_FALSE(btn("confirmTargetsButton")->isEnabled());
+    EXPECT_EQ(btn("confirmTargetsButton")->text(), "Confirm Costs");
+    state.castCostSelectionConfirmable = true;
+    widget->setRuledPromptState(state);
+    EXPECT_TRUE(btn("confirmTargetsButton")->isEnabled());
+    btn("confirmTargetsButton")->click();
+    EXPECT_EQ(confirmSpy.count(), 1);
     btn("declineClickChoiceButton")->click();
     EXPECT_EQ(backSpy.count(), 1);
     EXPECT_EQ(resolutionSpy.count(), 0);

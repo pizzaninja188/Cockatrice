@@ -1,0 +1,20 @@
+// Oracle and rulings checked 2026-09-02. The trigger observes the committed Teamwork tap action,
+// not a generic tapped status or a client-side label.
+(
+  id: "agent_maria_hill",
+  name: "Agent Maria Hill",
+  face_id: "agent_maria_hill",
+  mana_cost: "{W}",
+  types: ["Legendary", "Creature", "Human", "Spy", "Hero"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfTappedForCastCost(kind: Teamwork),
+    effect: [
+      PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source),
+      Draw(count: 1),
+    ],
+  )],
+)

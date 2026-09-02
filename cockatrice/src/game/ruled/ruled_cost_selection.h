@@ -25,7 +25,15 @@ inline bool ruledCostNeedsConfirmation(const RuledCostChoice &choice)
 inline bool ruledCastCostUsesPermanent(RuledCastCostOptionKind kind)
 {
     return kind == RuledCastCostOptionKind::Behold ||
-           kind == RuledCastCostOptionKind::TapPermanentForGenericReduction || kind == RuledCastCostOptionKind::Blight;
+           kind == RuledCastCostOptionKind::TapPermanentForGenericReduction ||
+           kind == RuledCastCostOptionKind::Blight || kind == RuledCastCostOptionKind::TapPermanents ||
+           kind == RuledCastCostOptionKind::SacrificePermanent;
+}
+
+inline bool ruledCastCostUsesPermanentCohort(RuledCastCostOptionKind kind)
+{
+    return kind == RuledCastCostOptionKind::TapPermanents ||
+           kind == RuledCastCostOptionKind::SacrificePermanent;
 }
 
 inline QString ruledCostSelectionPrompt(const RuledCostChoice &choice, const QString &name)
@@ -66,6 +74,14 @@ inline QString ruledCastCostSelectionPrompt(const RuledCastCostOption &option)
         return tr("%1: click one creature you control.").arg(option.label);
     if (option.kind == RuledCastCostOptionKind::TapPermanentForGenericReduction)
         return tr("%1: click an untapped creature you control.").arg(option.label);
+    if (option.kind == RuledCastCostOptionKind::TapPermanents)
+        return option.aggregateMinimum > 0
+                   ? tr("%1: choose untapped permanents with total power %2 or greater, then confirm.")
+                         .arg(option.label)
+                         .arg(option.aggregateMinimum)
+                   : tr("%1: choose %2 permanent(s), then confirm.").arg(option.label).arg(option.objectMin);
+    if (option.kind == RuledCastCostOptionKind::SacrificePermanent)
+        return tr("%1: choose one permanent to sacrifice, then confirm.").arg(option.label);
     return tr("%1: click an authorized card in your hand or permanent you control.").arg(option.label);
 }
 

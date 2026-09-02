@@ -264,7 +264,7 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     confirmTargetsButton = new QPushButton(this);
     confirmTargetsButton->setObjectName("confirmTargetsButton");
     connect(confirmTargetsButton, &QPushButton::clicked, this, [this]() {
-        if (effectiveMode() == PromptMode::CastCostOptions) {
+        if (effectiveMode() == PromptMode::CastCostOptions || effectiveMode() == PromptMode::CastCostObject) {
             emit ruledCastCostConfirmRequested();
         } else {
             emit confirmTargetsRequested();
@@ -777,12 +777,16 @@ void GamePromptWidget::updateCombatButtonsVisibility()
             ((mode == PromptMode::ClickChoice || mode == PromptMode::ChoiceOptions) && promptState.canDecline));
         resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment);
         undoLandTapButton->setVisible(mode == PromptMode::ResolutionPayment && landTapUndoAvailable);
-        confirmTargetsButton->setText(mode == PromptMode::CastCostOptions ? tr("Confirm Costs")
-                                                                          : tr("Confirm Targets"));
+        confirmTargetsButton->setText(
+            mode == PromptMode::CastCostOptions || mode == PromptMode::CastCostObject ? tr("Confirm Costs")
+                                                                                       : tr("Confirm Targets"));
         confirmTargetsButton->setVisible((mode == PromptMode::ClickChoice && promptState.max >= 0) ||
-                                         mode == PromptMode::CastCostOptions);
-        confirmTargetsButton->setEnabled(promptState.selected >= promptState.required &&
-                                         promptState.selected <= promptState.max);
+                                         mode == PromptMode::CastCostOptions ||
+                                         (mode == PromptMode::CastCostObject && promptState.max > 0));
+        confirmTargetsButton->setEnabled(
+            mode == PromptMode::CastCostObject
+                ? promptState.castCostSelectionConfirmable
+                : promptState.selected >= promptState.required && promptState.selected <= promptState.max);
         return;
     }
 

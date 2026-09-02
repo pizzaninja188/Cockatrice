@@ -1271,7 +1271,7 @@ pub struct CastCostReceipt {
     pub group_id: Option<ChoiceId>,
     pub option_id: Option<ChoiceId>,
     pub label: String,
-    pub object: Option<CastCostObjectReceipt>,
+    pub objects: Vec<CastCostObjectReceipt>,
 }
 
 /// The announced procedure used to cast a spell. This is distinct from its source zone: more

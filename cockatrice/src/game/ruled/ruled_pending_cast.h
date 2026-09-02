@@ -147,6 +147,9 @@ struct RuledPendingCastCostSelection
     quint32 selectedId = 0;
     quint64 expectedZoneChangeGeneration = 0;
     int genericCostReduction = 0;
+    QVector<quint32> selectedObjectIds;
+    QHash<quint32, quint64> selectedObjectGenerations;
+    QHash<quint32, qint64> selectedObjectContributions;
 };
 
 struct PendingActivatedAbility

@@ -151,6 +151,10 @@ fn validate_effect_cast_cost_conditions(
         validate_cast_cost_condition(groups, &value.condition)?;
     }
     match effect {
+        SpellEffectKind::ConditionalCastCost { condition, effect } => {
+            validate_cast_cost_condition(groups, condition)?;
+            validate_effect_cast_cost_conditions(groups, effect)
+        }
         SpellEffectKind::CounterTargetSpell {
             unless_controller_pays_by_cast_cost: Some(conditional),
             ..
@@ -957,6 +961,18 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
     }
     let mut linked_costs = HashSet::new();
     if let Some(modal) = &face.modal_spell {
+        if let Some(link) = &modal.all_modes_cast_cost {
+            link.validate()?;
+            validate_cast_cost_condition(
+                &face.cast_cost_groups,
+                &CastCostReceiptCondition {
+                    group_id: link.group_id.clone(),
+                    option_id: link.option_id.clone(),
+                    expected_selected: true,
+                },
+            )?;
+            linked_costs.insert((link.group_id.as_str(), link.option_id.as_str()));
+        }
         for mode in &modal.modes {
             let Some(link) = &mode.linked_cast_cost else {
                 continue;
@@ -970,10 +986,32 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
             validate_cast_cost_condition(&face.cast_cost_groups, &condition)?;
             if !linked_costs.insert((link.group_id.as_str(), link.option_id.as_str())) {
                 return Err(format!(
-                    "cast-cost option '{}.{}' is linked to more than one mode",
+                    "cast-cost option '{}.{}' is linked more than once by modal rules",
                     link.group_id, link.option_id
                 ));
             }
+        }
+    }
+    for targeting in std::iter::once(face.targeting.as_ref())
+        .chain(
+            face.modal_spell
+                .iter()
+                .flat_map(|modal| modal.modes.iter().map(|mode| mode.targeting.as_ref())),
+        )
+        .flatten()
+    {
+        for expansion in targeting
+            .groups
+            .iter()
+            .filter_map(|group| group.cast_cost_expansion.as_ref())
+        {
+            if !expansion.condition.expected_selected {
+                return Err(
+                    "cast-cost target expansion must require its linked option to be selected"
+                        .into(),
+                );
+            }
+            validate_cast_cost_condition(&face.cast_cost_groups, &expansion.condition)?;
         }
     }
     validate_effect_list_metadata(&face.spell_effect)?;

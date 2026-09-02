@@ -885,6 +885,11 @@ impl GameEngine {
                     {
                         out.extend(self.matching_snapshot_abilities(source, |condition| {
                             *condition == TriggerCondition::WheneverSelfBecomesTapped
+                                || matches!(
+                                    condition,
+                                    TriggerCondition::WheneverSelfTappedForCastCost { kind }
+                                        if action.cast_cost_kind == Some(*kind)
+                                )
                         }));
                     }
                     if source.attached_to

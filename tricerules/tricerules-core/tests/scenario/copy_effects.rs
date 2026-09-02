@@ -151,6 +151,7 @@ fn token_copy_inline_ability_preserves_explicit_target_groups() {
                 effect_indices: vec![index],
                 distinct_from: vec![],
                 same_graveyard: false,
+                cast_cost_expansion: None,
             })
             .collect(),
     });

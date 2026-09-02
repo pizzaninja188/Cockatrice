@@ -200,6 +200,16 @@ pub(super) fn spell_stack_presentation(
                     option_id,
                     presentation,
                     ..
+                }
+                | tricerules_cards::CastCostOptionDef::TapPermanents {
+                    option_id,
+                    presentation,
+                    ..
+                }
+                | tricerules_cards::CastCostOptionDef::SacrificePermanent {
+                    option_id,
+                    presentation,
+                    ..
                 } => (option_id, presentation),
             };
             Some(presentation_ref(
@@ -261,7 +271,7 @@ mod tests {
                 group_id: Some(tricerules_cards::ChoiceId::new("cast_cost_01").unwrap()),
                 option_id: Some(tricerules_cards::ChoiceId::new("option_01").unwrap()),
                 label: "Kicker {2}".into(),
-                object: None,
+                objects: vec![],
             }],
         );
         let option = presentation

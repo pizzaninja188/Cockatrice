@@ -1,0 +1,39 @@
+// Oracle and rulings checked 2026-09-02. The broader creature target is legal only when the
+// Teamwork receipt is announced; resolution uses the broad creature filter under CR 608.2b.
+(
+  id: "cruel_alliance",
+  name: "Cruel Alliance",
+  face_id: "cruel_alliance",
+  mana_cost: "{2}{B}",
+  types: ["Sorcery"],
+  cast_cost_groups: [(
+    group_id: "teamwork",
+    presentation: OracleLines([1]),
+    min: 0,
+    max: 1,
+    options: [TapPermanents(
+      option_id: "teamwork_2",
+      presentation: OracleLines([1]),
+      kind: Teamwork,
+      constraint: AggregateMinimum(minimum: 2, contribution: CurrentPower),
+      filter: (kind: Creature, controller: You),
+    )],
+  )],
+  spell_effect: [
+    Exile(subject: Chosen((kind: Creature))),
+    ConditionalCastCost(
+      condition: (group_id: "teamwork", option_id: "teamwork_2", expected_selected: true),
+      effect: GainLife(amount: 3),
+    ),
+  ],
+  targeting: (groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose a creature",
+    effect_indices: [0],
+    cast_cost_expansion: Some((
+      condition: (group_id: "teamwork", option_id: "teamwork_2", expected_selected: true),
+      without_cost: (kind: Creature, max_mana_value: Some(3)),
+    )),
+  )]),
+)

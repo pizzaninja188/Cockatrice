@@ -48,6 +48,7 @@ fn harmonize_cast(engine: &GameEngine, whisper: u32, bear: Option<(u32, u64)>) -
                         option_index: 0,
                         selected_object: Some(SelectedObject::PermanentId(object_id)),
                         expected_zone_change_generation: generation,
+                        battlefield_objects: None,
                     }]
                 })
                 .unwrap_or_default(),

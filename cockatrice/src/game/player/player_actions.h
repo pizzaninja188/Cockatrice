@@ -125,6 +125,7 @@ public:
     [[nodiscard]] int pendingRuledCastCostSelectedCount() const;
     [[nodiscard]] int pendingRuledCastCostMinimum() const;
     [[nodiscard]] int pendingRuledCastCostMaximum() const;
+    [[nodiscard]] bool pendingRuledCastCostObjectCanConfirm() const;
     void selectPendingRuledCastCostOption(int optionIndex);
     void confirmPendingRuledCastCostGroup();
     void backPendingRuledCastCostObject();

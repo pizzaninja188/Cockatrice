@@ -1,6 +1,9 @@
 //! Target kinds and composable target filters.
 
-use super::{Color, ConditionObjectRef, Keyword, PermanentChoiceConstraint, SpellEffectKind};
+use super::{
+    CastCostReceiptCondition, Color, ConditionObjectRef, Keyword, PermanentChoiceConstraint,
+    SpellEffectKind,
+};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
@@ -26,6 +29,15 @@ pub struct TargetGroupDef {
     /// All chosen cards must currently belong to the same player's graveyard.
     #[serde(default)]
     pub same_graveyard: bool,
+    #[serde(default)]
+    pub cast_cost_expansion: Option<CastCostTargetExpansion>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CastCostTargetExpansion {
+    pub condition: CastCostReceiptCondition,
+    pub without_cost: TargetFilter,
 }
 
 /// One semantic target role declared by an effect. Runtime legality consumes this vocabulary for
@@ -118,6 +130,15 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                 }
                 if group.prompt.trim().is_empty() {
                     return Err("target group prompt must not be empty".into());
+                }
+                if let Some(expansion) = &group.cast_cost_expansion {
+                    if group.effect_indices.len() != 1 {
+                        return Err(
+                            "cast-cost target expansion requires exactly one referenced effect"
+                                .into(),
+                        );
+                    }
+                    expansion.without_cost.validate_target_constraints()?;
                 }
                 if group.effect_indices.is_empty() {
                     return Err("target group must reference at least one effect".into());
@@ -1114,6 +1135,7 @@ mod tests {
                     effect_indices: vec![0],
                     distinct_from: Vec::new(),
                     same_graveyard: false,
+                    cast_cost_expansion: None,
                 }],
             };
             assert!(TargetingDef::validate_optional(Some(&targeting), &effects).is_err());
@@ -1280,6 +1302,7 @@ mod tests {
                     effect_indices: vec![0],
                     distinct_from: vec![1],
                     same_graveyard: false,
+                    cast_cost_expansion: None,
                 },
                 TargetGroupDef {
                     min: 1,
@@ -1288,6 +1311,7 @@ mod tests {
                     effect_indices: vec![0],
                     distinct_from: vec![0],
                     same_graveyard: false,
+                    cast_cost_expansion: None,
                 },
             ],
         };
@@ -1354,6 +1378,7 @@ mod tests {
                 effect_indices: vec![0],
                 distinct_from: Vec::new(),
                 same_graveyard: true,
+                cast_cost_expansion: None,
             }],
         };
         assert!(TargetSchema::compile(&graveyard_effects, Some(&same_graveyard)).is_ok());

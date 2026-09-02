@@ -99,6 +99,8 @@ public:
         QVector<ChoiceOption> choiceOptions;
         /// ClickChoice only: nonnegative for a staged target range that uses Confirm Targets.
         int max = -1;
+        /// CastCostObject only: authoritative candidate data satisfies count and aggregate bounds.
+        bool castCostSelectionConfirmable = false;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into

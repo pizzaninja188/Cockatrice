@@ -343,6 +343,7 @@ fn cast_blight(object_id: u32, generation: u64) -> CastCostGroupSelection {
             ),
         ),
         expected_zone_change_generation: generation,
+        battlefield_objects: None,
     }
 }
 
@@ -478,6 +479,7 @@ fn kicker_option() -> CastCostGroupSelection {
         option_index: 0,
         selected_object: None,
         expected_zone_change_generation: 0,
+        battlefield_objects: None,
     }
 }
 

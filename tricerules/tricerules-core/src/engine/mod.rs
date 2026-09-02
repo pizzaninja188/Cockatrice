@@ -36,29 +36,30 @@ use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivatedCostModifier, AdditionalCost,
     Amount, AttachmentFilter, AttachmentKind, BasePowerToughnessValue, BattlefieldAggregate,
     BattlefieldPermanentFilter, CardResultAction, CardSearchZone, CardTypeFilter, CastCostGroupDef,
-    CastCostOptionDef, CastCostReceiptCondition, CastOrdinalScope, CastTriggerPlayer, Color,
-    CombatRestriction, CombatRestrictionScope, ConditionObjectRef, ConditionPlayerSet,
-    ConditionalSearchDestination, ContinuousEffectKind, ControllerReference, CountExpression,
-    CounterKind, CounterRemovalPaymentSource, CreatureEventFilter, CreatureScopeController,
-    CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect, DamagePreventionSubject,
-    DelayedTokenSacrificeTiming, DiscardChooser, DrawDiscardOrder, EffectDuration, EffectSubject,
-    EntersTappedAffected, EntersWithCountersAffected, Evasion, FaceChangeAction, GameCondition,
-    GraveyardAggregate, HandChoiceVisibility, InterveningIf, Keyword, LibraryBottomOrder,
-    LibraryPartitionKind, LibraryPlacement, LifeAmount, LifeChangeKind, ManaAmount,
-    ManaSpendFilter, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
-    PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
-    PowerToughnessCharacteristic, PreventionAmountBasis, ProtectionCardType, ProtectionGrant,
-    ProtectionQuality, RelativePlayerSet, ResolutionBranchDef, ResolutionCost, ReturnController,
-    SearchDestination, SearchSelectionSlot, SearchZoneSelection, SpecialActionAffected,
-    SpecialActionKind, SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin,
-    SpellCostModifier, SpellEffectKind, SpellManaSpentComparison, StaticAbilityDef,
-    StaticDamagePreventionAmount, TapTriggerCardinality, TargetController, TargetFilter,
-    TargetKind, TargetingCostAction, TargetingCostProtected, TargetingSourceFilter,
-    TriggerCondition, TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
+    CastCostOptionDef, CastCostOptionRef, CastCostReceiptCondition, CastOrdinalScope,
+    CastTriggerPlayer, Color, CombatRestriction, CombatRestrictionScope, ConditionObjectRef,
+    ConditionPlayerSet, ConditionalSearchDestination, ContinuousEffectKind, ControllerReference,
+    CountExpression, CounterKind, CounterRemovalPaymentSource, CreatureEventFilter,
+    CreatureScopeController, CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect,
+    DamagePreventionSubject, DelayedTokenSacrificeTiming, DiscardChooser, DrawDiscardOrder,
+    EffectDuration, EffectSubject, EntersTappedAffected, EntersWithCountersAffected, Evasion,
+    FaceChangeAction, GameCondition, GraveyardAggregate, HandChoiceVisibility, InterveningIf,
+    Keyword, LibraryBottomOrder, LibraryPartitionKind, LibraryPlacement, LifeAmount,
+    LifeChangeKind, ManaAmount, ManaSpendFilter, ObjectCastCostKind, ObjectContributionKind,
+    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
+    PlayerQuantifier, PlayerRecipient, PowerComparison, PowerToughnessCharacteristic,
+    PreventionAmountBasis, ProtectionCardType, ProtectionGrant, ProtectionQuality,
+    RelativePlayerSet, ResolutionBranchDef, ResolutionCost, ReturnController, SearchDestination,
+    SearchSelectionSlot, SearchZoneSelection, SpecialActionAffected, SpecialActionKind,
+    SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin, SpellCostModifier, SpellEffectKind,
+    SpellManaSpentComparison, StaticAbilityDef, StaticDamagePreventionAmount,
+    TapTriggerCardinality, TargetController, TargetFilter, TargetKind, TargetingCostAction,
+    TargetingCostProtected, TargetingDef, TargetingSourceFilter, TriggerCondition,
+    TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
 };
 use tricerules_cards::{
     is_creature_type, mode_fallback, CardDefinition, CardFace, CardRegistry,
-    CharacteristicDefiningAbility, FaceRef, Layout,
+    CharacteristicDefiningAbility, FaceRef, Layout, ModalDef,
 };
 use tricerules_proto::ruled::v1 as rv1;
 use tricerules_proto::ruled::v1::{
@@ -407,6 +408,7 @@ struct TriggerSourceSnapshot {
 struct TapActionSnapshot {
     id: u64,
     actor: PlayerId,
+    cast_cost_kind: Option<ObjectCastCostKind>,
     sources: Vec<TriggerSourceSnapshot>,
 }
 
@@ -736,6 +738,15 @@ impl GameEngine {
     /// Callers supply the instructed player explicitly (not the source spell's controller).
     /// Entry state and rollback restoration deliberately bypass this helper.
     fn tap_permanents(&mut self, actor: PlayerId, objects: &[ObjectId]) -> Vec<GameEvent> {
+        self.tap_permanents_for_cast_cost(actor, objects, None)
+    }
+
+    fn tap_permanents_for_cast_cost(
+        &mut self,
+        actor: PlayerId,
+        objects: &[ObjectId],
+        cast_cost_kind: Option<ObjectCastCostKind>,
+    ) -> Vec<GameEvent> {
         let mut changed = Vec::new();
         for &oid in objects {
             if self
@@ -765,6 +776,7 @@ impl GameEngine {
         let action = Arc::new(TapActionSnapshot {
             id: self.state.next_tap_action_id,
             actor,
+            cast_cost_kind,
             sources,
         });
         self.state.next_tap_action_id += 1;

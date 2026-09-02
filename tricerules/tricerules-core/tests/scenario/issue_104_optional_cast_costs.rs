@@ -13,6 +13,7 @@ fn mana_option(group_index: u32, option_index: u32) -> CastCostGroupSelection {
         option_index,
         selected_object: None,
         expected_zone_change_generation: 0,
+        battlefield_objects: None,
     }
 }
 
@@ -76,7 +77,7 @@ fn grow_from_the_ashes_publishes_and_records_kicker_as_part_of_total_cost() {
     );
     let receipt = &e.state.stack.last().unwrap().cast_cost_receipts[0];
     assert_eq!(receipt.label, "Kicker {2}");
-    assert!(receipt.object.is_none());
+    assert!(receipt.objects.is_empty());
     let pushed = batch
         .events
         .iter()
@@ -149,13 +150,14 @@ fn behold_reveals_only_the_selected_dragon_until_the_spell_leaves_the_stack() {
                     option_index: 0,
                     selected_object: Some(SelectedObject::HandIndex(dragon_slot as u32)),
                     expected_zone_change_generation: 0,
+                    battlefield_objects: None,
                 }],
             ),
         )
         .expect("behold Dragon from hand");
     assert!(matches!(
-        e.state.stack.last().unwrap().cast_cost_receipts[0].object,
-        Some(CastCostObjectReceipt::RevealedHand { ref card_id, .. }) if card_id == "adult_gold_dragon"
+        e.state.stack.last().unwrap().cast_cost_receipts[0].objects.as_slice(),
+        [CastCostObjectReceipt::RevealedHand { card_id, .. }] if card_id == "adult_gold_dragon"
     ));
     let snapshot = batch
         .events
@@ -220,6 +222,7 @@ fn stale_behold_permanent_rejects_the_atomic_cast_without_spending_mana() {
                     option_index: 0,
                     selected_object: Some(SelectedObject::PermanentId(dragon)),
                     expected_zone_change_generation: published_generation,
+                    battlefield_objects: None,
                 }],
             ),
         )
@@ -286,6 +289,7 @@ fn osseous_exhale_uses_the_behold_receipt_after_the_revealed_card_is_unrelated_t
                 option_index: 0,
                 selected_object: Some(SelectedObject::HandIndex(dragon as u32)),
                 expected_zone_change_generation: 0,
+                battlefield_objects: None,
             }],
         ),
     )
@@ -324,6 +328,7 @@ fn dispelling_exhale_payment_cost(behold: bool, seed: u64) -> u32 {
             option_index: 0,
             selected_object: Some(SelectedObject::HandIndex(dragon as u32)),
             expected_zone_change_generation: 0,
+            battlefield_objects: None,
         }]
     } else {
         vec![]

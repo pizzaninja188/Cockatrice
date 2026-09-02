@@ -1046,7 +1046,8 @@ fn validate_effect_targets(
     trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
     match effect {
-        SpellEffectKind::Conditional { effect, .. } => {
+        SpellEffectKind::Conditional { effect, .. }
+        | SpellEffectKind::ConditionalCastCost { effect, .. } => {
             return validate_effect_targets(
                 engine,
                 caster,
@@ -2160,6 +2161,7 @@ fn compute_targets_with_context(
         groups,
         targeting_cost_applications,
         targeted_cost_reduction_applications: Vec::new(),
+        cast_cost_requirements: Vec::new(),
     }
 }
 
@@ -2548,6 +2550,7 @@ mod tests {
                     effect_indices: vec![0],
                     distinct_from: vec![],
                     same_graveyard: false,
+                    cast_cost_expansion: None,
                 },
                 TargetGroupDef {
                     min: 1,
@@ -2556,6 +2559,7 @@ mod tests {
                     effect_indices: vec![1],
                     distinct_from: vec![0],
                     same_graveyard: false,
+                    cast_cost_expansion: None,
                 },
             ],
         };

@@ -1356,6 +1356,25 @@ impl GameEngine {
                             }
                         }
                     }
+                    SpellEffectKind::ConditionalCastCost { condition, effect } => {
+                        if !cx.top.cast_cost_condition_matches(&condition) {
+                            EffectOutcome::Continue
+                        } else {
+                            match *effect {
+                                effect @ SpellEffectKind::PumpTarget { .. } => {
+                                    pump_counters::pump_target(&mut cx, effect)?
+                                }
+                                effect @ SpellEffectKind::GainLife { .. } => {
+                                    life::gain_life(&mut cx, effect)?
+                                }
+                                _ => {
+                                    return Err(EngineError::Illegal(
+                                        "unsupported cast-cost conditional inner effect",
+                                    ));
+                                }
+                            }
+                        }
+                    }
                     effect @ SpellEffectKind::DamageTarget { .. } => {
                         damage::damage_target(&mut cx, effect)?
                     }

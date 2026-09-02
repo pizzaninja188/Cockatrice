@@ -1,0 +1,37 @@
+// Oracle and rulings checked 2026-09-02. Kicker's sacrifice is one announced cast-cost option;
+// both P/T instructions share the spell's single target.
+(
+  id: "stomped_by_the_foot",
+  name: "Stomped by the Foot",
+  face_id: "stomped_by_the_foot",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "kicker",
+    presentation: OracleLines([1]),
+    min: 0,
+    max: 1,
+    options: [SacrificePermanent(
+      option_id: "sacrifice_kicker",
+      presentation: OracleLines([1]),
+      kind: Kicker,
+      filter: (any_of: Some([
+        (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
+        (kind: Creature, controller: You),
+      ])),
+    )],
+  )],
+  spell_effect: [
+    PumpTarget(power: -2, toughness: -2, subject: Chosen((kind: Creature))),
+    ConditionalCastCost(
+      condition: (group_id: "kicker", option_id: "sacrifice_kicker", expected_selected: true),
+      effect: PumpTarget(power: -3, toughness: -3, subject: Chosen((kind: Creature))),
+    ),
+  ],
+  targeting: (groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose a creature",
+    effect_indices: [0, 1],
+  )]),
+)

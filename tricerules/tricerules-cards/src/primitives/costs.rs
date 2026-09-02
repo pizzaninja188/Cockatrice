@@ -278,6 +278,15 @@ pub enum ManaCostChoiceKind {
     Kicker,
 }
 
+/// Rules identity of an object paid as an announced optional or additional cast cost. The
+/// distinction is observable by cards such as Agent Maria Hill and by kicker-conditioned text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ObjectCastCostKind {
+    AdditionalPayment,
+    Kicker,
+    Teamwork,
+}
+
 /// One mutually distinguishable option in a cast-cost group.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -303,6 +312,22 @@ pub enum CastCostOptionDef {
         presentation: AbilityPresentation,
         hand_filter: ZoneCardFilter,
         permanent_filter: Box<TargetFilter>,
+    },
+    /// Tap a generation-bound cohort of untapped permanents as an announced cast cost. Teamwork
+    /// uses an aggregate CurrentPower constraint; exact-count variants support future mechanics.
+    TapPermanents {
+        option_id: ChoiceId,
+        presentation: AbilityPresentation,
+        kind: ObjectCastCostKind,
+        constraint: ObjectPaymentConstraint,
+        filter: Box<TargetFilter>,
+    },
+    /// Sacrifice one matching permanent as an announced cost, including kicker costs.
+    SacrificePermanent {
+        option_id: ChoiceId,
+        presentation: AbilityPresentation,
+        kind: ObjectCastCostKind,
+        filter: Box<TargetFilter>,
     },
 }
 
@@ -346,6 +371,15 @@ impl CastCostGroupDef {
                     hand_filter.validate()?;
                     permanent_filter.validate_target_constraints()?;
                 }
+                CastCostOptionDef::TapPermanents {
+                    constraint, filter, ..
+                } => {
+                    constraint.validate_for(ObjectContributionKind::CurrentPower, "cast tap")?;
+                    filter.validate_target_constraints()?;
+                }
+                CastCostOptionDef::SacrificePermanent { filter, .. } => {
+                    filter.validate_target_constraints()?;
+                }
             }
         }
         Ok(())
@@ -361,7 +395,9 @@ impl CastCostOptionDef {
         match self {
             Self::Blight { option_id, .. }
             | Self::Mana { option_id, .. }
-            | Self::Behold { option_id, .. } => option_id,
+            | Self::Behold { option_id, .. }
+            | Self::TapPermanents { option_id, .. }
+            | Self::SacrificePermanent { option_id, .. } => option_id,
         }
     }
 
@@ -369,7 +405,9 @@ impl CastCostOptionDef {
         match self {
             Self::Blight { presentation, .. }
             | Self::Mana { presentation, .. }
-            | Self::Behold { presentation, .. } => presentation,
+            | Self::Behold { presentation, .. }
+            | Self::TapPermanents { presentation, .. }
+            | Self::SacrificePermanent { presentation, .. } => presentation,
         }
     }
 
@@ -381,6 +419,16 @@ impl CastCostOptionDef {
                 ManaCostChoiceKind::Kicker => format!("Kicker {cost}"),
             },
             Self::Behold { option_id, .. } => choice_fallback("Behold", option_id),
+            Self::TapPermanents { kind, .. } => match kind {
+                ObjectCastCostKind::Teamwork => "Pay teamwork cost".into(),
+                ObjectCastCostKind::Kicker => "Pay tap kicker cost".into(),
+                ObjectCastCostKind::AdditionalPayment => "Tap permanents".into(),
+            },
+            Self::SacrificePermanent { kind, .. } => match kind {
+                ObjectCastCostKind::Kicker => "Kicker - sacrifice a permanent".into(),
+                ObjectCastCostKind::Teamwork => "Pay teamwork cost".into(),
+                ObjectCastCostKind::AdditionalPayment => "Sacrifice a permanent".into(),
+            },
         }
     }
 }

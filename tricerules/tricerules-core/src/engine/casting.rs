@@ -8,7 +8,8 @@ use super::presentation::{
     ability_presentation, child_presentation_ref, spell_stack_presentation, PresentationPath,
 };
 use super::targeting::{
-    capture_stack_target, validate_ability_targets, validate_spell_targets, TargetSourceIdentity,
+    capture_stack_target, target_filter_legal_at_resolution, validate_ability_targets,
+    validate_spell_targets, TargetSourceIdentity,
 };
 use super::*;
 
@@ -58,6 +59,48 @@ fn command_satisfies_cast_cost_condition(
             })
         });
     selected == condition.expected_selected
+}
+
+fn validate_cast_cost_target_expansions(
+    engine: &GameEngine,
+    caster: PlayerId,
+    source: TargetSourceIdentity,
+    targeting: Option<&TargetingDef>,
+    targets: &[rv1::TargetRef],
+    selections: &[rv1::CastCostGroupSelection],
+    groups: &[CastCostGroupDef],
+) -> Result<(), EngineError> {
+    let Some(targeting) = targeting else {
+        return Ok(());
+    };
+    for (group_index, group) in targeting.groups.iter().enumerate() {
+        let Some(expansion) = &group.cast_cost_expansion else {
+            continue;
+        };
+        if command_satisfies_cast_cost_condition(selections, groups, &expansion.condition) {
+            continue;
+        }
+        for target in targets
+            .iter()
+            .filter(|target| target.group_index == group_index as u32)
+        {
+            if rv1::TargetRefKind::try_from(target.kind) != Ok(rv1::TargetRefKind::Permanent)
+                || !target_filter_legal_at_resolution(
+                    engine,
+                    &expansion.without_cost,
+                    target.object_id,
+                    caster,
+                    source,
+                    TriggerContext::default(),
+                )
+            {
+                return Err(EngineError::Illegal(
+                    "target requires its linked cast cost option",
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub(in crate::engine) struct PreparedSpellCast {
@@ -601,6 +644,23 @@ impl GameEngine {
                 .iter()
                 .map(|selection| selection.mode_index as usize)
                 .collect::<HashSet<_>>();
+            if let Some(link) = &modal.all_modes_cast_cost {
+                let condition = CastCostReceiptCondition {
+                    group_id: link.group_id.clone(),
+                    option_id: link.option_id.clone(),
+                    expected_selected: true,
+                };
+                let submitted = command_satisfies_cast_cost_condition(
+                    cast_cost_group_selections,
+                    &cast_cost_groups,
+                    &condition,
+                );
+                if submitted != (selected_mode_indices.len() == modal.modes.len()) {
+                    return Err(EngineError::Illegal(
+                        "selecting every mode and the all-modes cast cost must match exactly",
+                    ));
+                }
+            }
             for (mode_index, mode) in modal.modes.iter().enumerate() {
                 let Some(link) = &mode.linked_cast_cost else {
                     continue;
@@ -646,6 +706,15 @@ impl GameEngine {
                     &mode.effects,
                     mode.targeting.as_ref(),
                     &selection.targets,
+                )?;
+                validate_cast_cost_target_expansions(
+                    self,
+                    player,
+                    target_source,
+                    mode.targeting.as_ref(),
+                    &selection.targets,
+                    cast_cost_group_selections,
+                    &cast_cost_groups,
                 )?;
                 for effect in &mode.effects {
                     if let SpellEffectKind::DamageTargets {
@@ -708,6 +777,15 @@ impl GameEngine {
                 &face_effects,
                 face_targeting.as_ref(),
                 targets,
+            )?;
+            validate_cast_cost_target_expansions(
+                self,
+                player,
+                target_source,
+                face_targeting.as_ref(),
+                targets,
+                cast_cost_group_selections,
+                &cast_cost_groups,
             )?;
             for effect in &face_effects {
                 if let SpellEffectKind::DamageTargets {
@@ -3154,6 +3232,7 @@ mod mana_payment_tests {
                 option_index: 1,
                 selected_object: None,
                 expected_zone_change_generation: 0,
+                battlefield_objects: None,
             }],
             &groups,
             &condition,
@@ -3164,6 +3243,7 @@ mod mana_payment_tests {
                 option_index: 0,
                 selected_object: None,
                 expected_zone_change_generation: 0,
+                battlefield_objects: None,
             }],
             &groups,
             &condition,

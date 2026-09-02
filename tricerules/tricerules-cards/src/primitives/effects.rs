@@ -1794,6 +1794,11 @@ pub enum SpellEffectKind {
         condition: GameCondition,
         effect: Box<SpellEffectKind>,
     },
+    /// Resolve one ordinary instruction only when the announced cast-cost receipt matches.
+    ConditionalCastCost {
+        condition: CastCostReceiptCondition,
+        effect: Box<SpellEffectKind>,
+    },
     /// CR 701.66: persistent land animation followed by a generation-bound delayed return.
     /// Rebellious Captives, Dai Li Indoctrination, and Badgermole share this action.
     Earthbend {
@@ -3160,7 +3165,8 @@ impl SpellEffectKind {
     /// them). Group cardinality and role binding are compiled by [`super::TargetSchema`].
     pub fn target_roles(&self) -> Vec<TargetRole<'_>> {
         match self {
-            SpellEffectKind::Conditional { effect, .. } => effect.target_roles(),
+            SpellEffectKind::Conditional { effect, .. }
+            | SpellEffectKind::ConditionalCastCost { effect, .. } => effect.target_roles(),
             SpellEffectKind::Earthbend { .. } => {
                 vec![TargetRole::Filtered(earthbend_target_filter())]
             }
@@ -3365,6 +3371,9 @@ impl SpellEffectKind {
             }
             Self::Conditional { condition, effect } => {
                 condition.validate_cast_snapshot_reference(count)?;
+                effect.validate_cast_snapshot_references(count)?;
+            }
+            Self::ConditionalCastCost { effect, .. } => {
                 effect.validate_cast_snapshot_references(count)?;
             }
             Self::SearchLibrary {
@@ -3623,6 +3632,21 @@ impl SpellEffectKind {
                 ) {
                     return Err(
                         "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, and Draw effects"
+                            .into(),
+                    );
+                }
+                effect.validate(context)?;
+            }
+            SpellEffectKind::ConditionalCastCost { effect, .. } => {
+                if matches!(effect.as_ref(), SpellEffectKind::ConditionalCastCost { .. }) {
+                    return Err("ConditionalCastCost effects cannot be nested".into());
+                }
+                if !matches!(
+                    effect.as_ref(),
+                    SpellEffectKind::PumpTarget { .. } | SpellEffectKind::GainLife { .. }
+                ) {
+                    return Err(
+                        "ConditionalCastCost currently supports PumpTarget and GainLife effects"
                             .into(),
                     );
                 }

@@ -129,6 +129,14 @@ struct RuledTargetedCostReductionApplication
     QVector<RuledTargetingCostCandidate> qualifyingTargets;
 };
 
+struct RuledTargetCastCostRequirement
+{
+    int groupIndex = -1;
+    int costGroupIndex = -1;
+    int costOptionIndex = -1;
+    QVector<RuledTargetingCostCandidate> affectedTargets;
+};
+
 /// Engine-authoritative targeting data for one spell, mode, activated ability, or trigger.
 struct RuledSpellTargetData : RuledTargetGroupData
 {
@@ -142,6 +150,7 @@ struct RuledSpellTargetData : RuledTargetGroupData
     bool damageDividedEvenly = false;
     QVector<RuledTargetingCostApplication> targetingCostApplications;
     QVector<RuledTargetedCostReductionApplication> targetedCostReductionApplications;
+    QVector<RuledTargetCastCostRequirement> castCostRequirements;
 };
 
 struct RuledChoiceOption
@@ -225,6 +234,8 @@ enum class RuledCastCostOptionKind : int
     Behold,
     TapPermanentForGenericReduction,
     Blight,
+    TapPermanents,
+    SacrificePermanent,
 };
 
 struct RuledCastCostOption
@@ -237,6 +248,11 @@ struct RuledCastCostOption
     QSet<quint32> validPermanentIds;
     QHash<quint32, quint64> validPermanentGenerations;
     QHash<quint32, int> validPermanentGenericReductions;
+    QHash<quint32, qint64> candidateContributions;
+    int objectMin = 0;
+    int objectMax = 0;
+    qint64 aggregateMinimum = 0;
+    RuledObjectContributionKind contributionKind = RuledObjectContributionKind::Unspecified;
     bool selectable = false;
 };
 
@@ -391,6 +407,7 @@ struct RuledHandActionSet
     QMap<RuledCastActionKey, QVector<RuledModalSpellOption>> modalOptionsByCastKey;
     QMap<RuledCastActionKey, int> modalMinModesByCastKey;
     QMap<RuledCastActionKey, int> modalMaxModesByCastKey;
+    QMap<RuledCastActionKey, QPair<int, int>> allModesCastCostByCastKey;
     /// Mandatory nonmana costs keyed by (source slot/object << 8 | face index).
     QMap<RuledCastActionKey, RuledCostData> costDataByCastKey;
     QMap<RuledCastActionKey, QSet<quint32>> eligibleRestrictedManaByCastKey;

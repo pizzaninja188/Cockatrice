@@ -407,6 +407,9 @@ message CastCostGroupSelection {
   }
   // Required with permanent_id; rejects a leave-and-return between publication and submission.
   uint64 expected_zone_change_generation = 5;
+  // Generation-bound battlefield cohort for authored cast costs such as Teamwork. Singular
+  // permanent_id remains the compatibility shape for Behold, Blight, and Harmonize.
+  CostObjectRefs battlefield_objects = 6;
 }
 
 message ManaSpendSelection {
@@ -608,6 +611,14 @@ message SpellTargets {
   // by application_id across target groups and selected modes. The engine recomputes payment.
   repeated TargetedCostReductionApplication targeted_cost_reduction_applications = 13
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated TargetCastCostRequirement cast_cost_requirements = 14
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message TargetCastCostRequirement {
+  uint32 group_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  LinkedCastCostOption required_cost = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated TargetCandidateRef affected_targets = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message TargetCandidateRef {
@@ -706,6 +717,7 @@ message LegalHandAction {
   uint32 generic_cost_reduction = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool has_convoke = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   CastMethod cast_method = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  LinkedCastCostOption all_modes_cast_cost = 16 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // CR 702.34: a spell the player may cast from their own graveyard using flashback.
@@ -734,6 +746,7 @@ message LegalZoneCastAction {
   bool has_convoke = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint64 zone_change_generation = 15 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   optional uint64 casting_permission_id = 17 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  LinkedCastCostOption all_modes_cast_cost = 18 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message ManaPaymentEligibility {
@@ -856,6 +869,8 @@ enum CastCostOptionKind {
   CAST_COST_OPTION_KIND_BEHOLD = 2;
   CAST_COST_OPTION_KIND_TAP_PERMANENT_FOR_GENERIC_REDUCTION = 3;
   CAST_COST_OPTION_KIND_BLIGHT = 4;
+  CAST_COST_OPTION_KIND_TAP_PERMANENTS = 5;
+  CAST_COST_OPTION_KIND_SACRIFICE_PERMANENT = 6;
 }
 
 message LegalCastCostOption {
@@ -872,6 +887,10 @@ message LegalCastCostOption {
   // Parallel to valid_permanent_ids; the engine-authored generic reduction for each candidate.
   repeated uint32 valid_permanent_generic_reductions = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   PresentationRef presentation = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated CostObjectCandidate candidate_objects = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 object_min = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 object_max = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  AggregateMinimumConstraint aggregate_minimum = 14 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalCastCostGroup {

@@ -268,6 +268,52 @@ modal_spell: (
 ),
 ```
 
+Object-paid cast costs use the same group/option identity. `TapPermanents` accepts a
+generation-bound cohort and may impose an aggregate current-power minimum; `SacrificePermanent`
+accepts exactly one matching permanent. The semantic `kind` is recorded on the committed cast-cost
+receipt so triggers can distinguish Teamwork, Kicker, and ordinary additional payments without
+matching labels. Copies retain the announced receipt but never pay the object cost or emit its tap
+or sacrifice actions again.
+
+```ron
+options: [
+  TapPermanents(
+    option_id: "teamwork_4",
+    presentation: OracleLines([1]),
+    kind: Teamwork,
+    constraint: AggregateMinimum(minimum: 4, contribution: CurrentPower),
+    filter: (kind: Creature, controller: You),
+  ),
+  SacrificePermanent(
+    option_id: "sacrifice_kicker",
+    presentation: OracleLines([2]),
+    kind: Kicker,
+    filter: (kind: Creature, controller: You),
+  ),
+],
+```
+
+Use `ConditionalCastCost` for a resolution instruction that applies only when a named cast-cost
+option was announced. A target whose legal set expands under that option also needs
+`cast_cost_expansion`: the target group's normal filter remains on the effect, while
+`without_cost` is the narrower filter legal without paying. For modal spells that allow every
+mode only after paying one option, set `all_modes_cast_cost` on `modal_spell`. These links are
+validated by stable authored IDs and published to the client as engine-authored legality.
+
+```ron
+ConditionalCastCost(
+  condition: (group_id: "teamwork", option_id: "teamwork_2", expected_selected: true),
+  effect: GainLife(amount: 3),
+)
+
+cast_cost_expansion: Some((
+  condition: (group_id: "teamwork", option_id: "teamwork_2", expected_selected: true),
+  without_cost: (kind: Creature, max_mana_value: Some(3)),
+))
+
+all_modes_cast_cost: Some((group_id: "teamwork", option_id: "teamwork_4")),
+```
+
 Resolution branch:
 
 ```ron

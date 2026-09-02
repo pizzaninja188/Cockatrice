@@ -632,8 +632,17 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerAction
             }
             castSelection->set_hand_index(static_cast<quint32>(handSlot));
         } else if (selection.objectKind == RuledPendingCastCostSelection::ObjectKind::Permanent) {
-            castSelection->set_permanent_id(selection.selectedId);
-            castSelection->set_expected_zone_change_generation(selection.expectedZoneChangeGeneration);
+            if (!selection.selectedObjectIds.isEmpty()) {
+                auto *objects = castSelection->mutable_battlefield_objects();
+                for (const quint32 oid : selection.selectedObjectIds) {
+                    auto *object = objects->add_objects();
+                    object->set_object_id(oid);
+                    object->set_zone_change_generation(selection.selectedObjectGenerations.value(oid));
+                }
+            } else {
+                castSelection->set_permanent_id(selection.selectedId);
+                castSelection->set_expected_zone_change_generation(selection.expectedZoneChangeGeneration);
+            }
         }
     }
     for (auto groupIt = restrictedManaPaymentSelections.constBegin();

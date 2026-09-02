@@ -1,0 +1,33 @@
+// Oracle and rulings checked 2026-09-02. The spell has a required additional-cost choice:
+// sacrifice an artifact or creature, or pay {4}.
+(
+  id: "stir_up_trouble",
+  name: "Stir Up Trouble",
+  face_id: "stir_up_trouble",
+  mana_cost: "{B}",
+  types: ["Sorcery"],
+  cast_cost_groups: [(
+    group_id: "additional_cost",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 1,
+    options: [
+      SacrificePermanent(
+        option_id: "sacrifice_artifact_or_creature",
+        presentation: OracleLines([1]),
+        kind: AdditionalPayment,
+        filter: (any_of: Some([
+          (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
+          (kind: Creature, controller: You),
+        ])),
+      ),
+      Mana(
+        option_id: "pay_four",
+        presentation: OracleLines([1]),
+        kind: AdditionalPayment,
+        cost: "{4}",
+      ),
+    ],
+  )],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature)))],
+)

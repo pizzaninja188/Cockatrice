@@ -846,6 +846,10 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
     } else if (localActions && localActions->isAwaitingRuledCastCostObject()) {
         state.mode = PromptMode::CastCostObject;
         state.text = localActions->pendingRuledSpellPromptText();
+        state.required = localActions->pendingRuledCastCostMinimum();
+        state.selected = localActions->pendingRuledCastCostSelectedCount();
+        state.max = localActions->pendingRuledCastCostMaximum();
+        state.castCostSelectionConfirmable = localActions->pendingRuledCastCostObjectCanConfirm();
     } else if (localActions && localActions->isAwaitingRuledCastCostOption()) {
         state.mode = PromptMode::CastCostOptions;
         state.text = localActions->pendingRuledSpellPromptText();

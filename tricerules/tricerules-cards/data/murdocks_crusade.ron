@@ -1,0 +1,39 @@
+// Oracle and rulings checked 2026-09-02. Teamwork is announced once during CR 601.2b and its
+// tapped cohort is paid atomically during CR 601.2h.
+(
+  id: "murdocks_crusade",
+  name: "Murdock's Crusade",
+  face_id: "murdocks_crusade",
+  mana_cost: "{1}{W}",
+  types: ["Sorcery"],
+  cast_cost_groups: [(
+    group_id: "teamwork",
+    presentation: OracleLines([1]),
+    min: 0,
+    max: 1,
+    options: [TapPermanents(
+      option_id: "teamwork_4",
+      presentation: OracleLines([1]),
+      kind: Teamwork,
+      constraint: AggregateMinimum(minimum: 4, contribution: CurrentPower),
+      filter: (kind: Creature, controller: You),
+    )],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 2,
+    all_modes_cast_cost: Some((group_id: "teamwork", option_id: "teamwork_4")),
+    modes: [
+      (
+        mode_id: "exile_creature",
+        presentation: OracleLines([3]),
+        effects: [Exile(subject: Chosen((kind: Creature, min_toughness: Some(4))))],
+      ),
+      (
+        mode_id: "exile_enchantment",
+        presentation: OracleLines([4]),
+        effects: [Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Enchantment], min_mana_value: Some(4))))],
+      ),
+    ],
+  ),
+)

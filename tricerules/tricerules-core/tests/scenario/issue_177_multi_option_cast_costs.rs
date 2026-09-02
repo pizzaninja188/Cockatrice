@@ -12,6 +12,7 @@ fn mana_option(option_index: u32) -> CastCostGroupSelection {
         option_index,
         selected_object: None,
         expected_zone_change_generation: 0,
+        battlefield_objects: None,
     }
 }
 

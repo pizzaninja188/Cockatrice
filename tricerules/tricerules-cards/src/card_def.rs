@@ -50,6 +50,8 @@ pub struct ModeDef {
 pub struct ModalDef {
     pub min_modes: u32,
     pub max_modes: u32,
+    #[serde(default)]
+    pub all_modes_cast_cost: Option<CastCostOptionRef>,
     /// Modes in printed order. A mode may be selected at most once in the initial implementation.
     #[serde(default)]
     pub modes: Vec<ModeDef>,

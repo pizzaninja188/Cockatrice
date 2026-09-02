@@ -307,6 +307,7 @@ fn cast_blight(
             ),
         ),
         expected_zone_change_generation: generation,
+        battlefield_objects: None,
     }
 }
 
@@ -358,6 +359,7 @@ fn issue_153_copied_cinder_inherits_payment_without_blighting_again() {
         .unwrap();
     let copy = engine.state.stack.iter().find(|item| item.is_copy).unwrap();
     assert_eq!(copy.blight_receipts, original.blight_receipts);
+    assert_eq!(copy.cast_cost_receipts, original.cast_cost_receipts);
     assert_eq!(
         engine.state.objects[&bear].counter_count(CounterKind::MinusOneMinusOne),
         1
