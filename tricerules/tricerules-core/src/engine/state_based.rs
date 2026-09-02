@@ -67,6 +67,7 @@ impl GameEngine {
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         let mut changed = self.reindex_battlefield_control(out);
+        changed |= self.refresh_enduring_story_designations();
         if self.state.pending_resolution.is_some() {
             return Ok(changed);
         }

@@ -3,8 +3,8 @@
 use super::{
     AbilityCost, ActivatedCostModifier, Amount, BattlefieldCreatureCountFilter, CardTypeFilter,
     CastCostReceiptCondition, Color, CounterKind, EffectContext, GameCondition, Keyword,
-    ObjectCastCostKind, PowerComparison, RelativePlayerSet, SpellEffectKind, TargetController,
-    TargetFilter, TargetKind, TargetingDef,
+    ObjectCastCostKind, PermanentEventFilter, PowerComparison, RelativePlayerSet, SpellEffectKind,
+    TargetController, TargetFilter, TargetKind, TargetingDef,
 };
 use crate::{AbilityId, AbilityPresentation, ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
@@ -1443,6 +1443,22 @@ pub enum CounterPlacementAffected {
 /// do not use the stack, unlike triggered and activated abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// CR 702.195: continuously watches this permanent's controller and irreversibly grants the
+    /// enduring-story designation when three qualifying permanents are controlled.
+    Storied,
+    /// CR 603.2c / 603.2d: matching triggered abilities controlled by the selected players
+    /// trigger additional times. The source filter is evaluated from the ability source's
+    /// event-time characteristics so leaves-the-battlefield abilities retain correct LKI.
+    /// Bifur, Melodic Rider doubles Dwarf abilities; Roaming Throne is the broader chosen-type
+    /// precedent for this reusable trigger-instance operation.
+    AdditionalTriggeredAbilityInstances {
+        controllers: RelativePlayerSet,
+        #[serde(default)]
+        source_filter: PermanentEventFilter,
+        #[serde(default)]
+        condition: Option<GameCondition>,
+        additional_count: u32,
+    },
     /// CR 122: a prohibition, not a replacement; existing counters are unaffected.
     ProhibitCounters {
         #[serde(default)]
@@ -1609,6 +1625,10 @@ pub enum StaticAbilityDef {
     /// use, while Clone/Phyrexian Metamorph-style copy effects preserve it through copiable
     /// values; layer-6 ability removal suppresses either form.
     UntapsDuringOtherPlayersUntapSteps,
+    /// CR 502.3: exclude this permanent from the ordinary untap-step action while `condition`
+    /// is false. Bombur, Gentle Dreamer and Deep-Slumber Titan exercise conditional exceptions
+    /// to the same turn-based untap restriction.
+    SelfDoesntUntapDuringUntapStepUnless { condition: GameCondition },
     /// CR 613.1b: the controller of this Aura controls the permanent it is attached to.
     /// Mind Control and Confiscate share this source-relative layer-2 ability.
     ControlsAttached,
@@ -1623,6 +1643,16 @@ pub enum StaticAbilityDef {
         #[serde(default)]
         condition: Option<GameCondition>,
         keyword: Keyword,
+    },
+    /// CR 113.10 / 613.1f: permanents matching `filter` have the listed triggered abilities
+    /// while this static ability and its optional condition apply. Thorin Oakenshield grants
+    /// ward to artifacts and creatures; Infernal Scarring supplies the attached-object version
+    /// of the same triggered-ability grant.
+    GrantTriggeredAbilityToPermanents {
+        filter: TargetFilter,
+        #[serde(default)]
+        condition: Option<GameCondition>,
+        triggered_abilities: Vec<TriggeredAbilityDef>,
     },
     /// A self-scoped static effect whose condition is continuously reevaluated. Characteristic
     /// changes apply in their normal layers; the defender exception changes only attack legality.

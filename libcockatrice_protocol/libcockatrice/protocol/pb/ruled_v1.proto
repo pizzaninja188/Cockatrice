@@ -1753,6 +1753,8 @@ message RuledPerPlayerView {
   // Top of library first. Object identity, card identity, and order are server-only so the relay
   // can preserve exact physical cards through shuffles without revealing the hidden zone.
   repeated LibraryCard library_cards = 35 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  // CR 702.195: public, irreversible player designation established by Storied.
+  bool has_enduring_story = 36 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ZoneViewSync {

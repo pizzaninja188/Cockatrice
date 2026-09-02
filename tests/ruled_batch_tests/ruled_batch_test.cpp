@@ -1383,6 +1383,36 @@ TEST_F(RuledBatchTest, ZoneViewBuildsOidMapAndPropagatesTapState)
     EXPECT_EQ(findCardByEngineOid(p1, 999u), nullptr);
 }
 
+TEST_F(RuledBatchTest, EnduringStoryViewCreatesOneOrdinaryUnboundBattlefieldToken)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *zoneView = response.mutable_batch()->add_events()->mutable_zone_view();
+    auto storyView = buildPerPlayerView(p1, {184u}, {false});
+    storyView.set_has_enduring_story(true);
+    *zoneView->add_per_player() = storyView;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    EXPECT_TRUE(callBatchApply(response).zoneViewApplied);
+    const auto &tableCards = p1->getZones().value(ZoneNames::TABLE)->getCards();
+    ASSERT_EQ(tableCards.size(), 2);
+    const auto story = std::find_if(tableCards.begin(), tableCards.end(), [](const Server_Card *card) {
+        return card && card->getName() == QStringLiteral("Enduring Story");
+    });
+    ASSERT_NE(story, tableCards.end());
+    EXPECT_EQ((*story)->getAnnotation(), QStringLiteral("Token"));
+    EXPECT_EQ((*story)->getY(), ruledBattlefieldGridY(false, false));
+    EXPECT_EQ(findCardByEngineOid(p1, 184u), bear);
+    EXPECT_EQ(bindingFor(p1).engineOidToServerCardId.size(), 1)
+        << "the presentation-only story token must not acquire an engine ObjectId";
+
+    EXPECT_TRUE(callBatchApply(response).zoneViewApplied);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards().size(), 2)
+        << "repeated snapshots must not duplicate the helper token";
+    EXPECT_EQ(findCardByEngineOid(p1, 184u), bear) << "the helper token must stay outside battlefield reconciliation";
+}
+
 TEST_F(RuledBatchTest, EarthbendUpdatesBadgeAndRowOnAnExistingLand)
 {
     seedCardCatalog({"Forest"});

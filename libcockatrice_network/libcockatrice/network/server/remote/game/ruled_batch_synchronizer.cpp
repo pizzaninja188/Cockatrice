@@ -1066,6 +1066,28 @@ void RuledBatchSynchronizer::applyPhaseStackAndZoneViews(const ruled::v1::RuledE
                                                          BatchApplyResult &result)
 {
     GameEventStorage tapSyncGes;
+    GameEventStorage storyTokenGes;
+    bool storyTokenGesHasEvents = false;
+    for (const auto &event : batch.events()) {
+        if (!event.has_zone_view()) {
+            continue;
+        }
+        for (const auto &view : event.zone_view().per_player()) {
+            if (!view.has_enduring_story()) {
+                continue;
+            }
+            if (Server_AbstractPlayer *abstractPlayer = game->getPlayer(view.player_id())) {
+                storyTokenGesHasEvents =
+                    playerBinding(view.player_id())
+                        .ensureEnduringStoryToken(static_cast<Server_Player *>(abstractPlayer),
+                                                  ruledBattlefieldGridY(false, false), &storyTokenGes) ||
+                    storyTokenGesHasEvents;
+            }
+        }
+    }
+    if (storyTokenGesHasEvents) {
+        storyTokenGes.sendToGame(game);
+    }
     bool batchHasUntapPhase = false;
     // CR 701.20: permanents the engine reported as genuinely becoming untapped in this batch —
     // an untap effect, the untap step, or the CR 605 mana-ability undo. The binding applies these
@@ -1768,6 +1790,11 @@ void RuledBatchSynchronizer::applyStartupBatch(const ruled::v1::IpcResponse &res
             applyBattlefieldControllerTransfers(physicalView, startupResult);
             for (const auto &p : physicalView.per_player()) {
                 if (Server_AbstractPlayer *ab = game->getPlayer(p.player_id())) {
+                    if (p.has_enduring_story()) {
+                        playerBinding(p.player_id())
+                            .ensureEnduringStoryToken(static_cast<Server_Player *>(ab),
+                                                      ruledBattlefieldGridY(false, false), nullptr);
+                    }
                     playerBinding(p.player_id())
                         .applyRuledEngineZoneView(static_cast<Server_Player *>(ab), p, nullptr, true, nullptr,
                                                   e.zone_view().battlefields_unchanged());

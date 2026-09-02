@@ -7,6 +7,87 @@ use super::resolution::resolve_creature_scope;
 use super::*;
 
 impl GameEngine {
+    /// CR 702.195: Storied is a static ability that establishes an irreversible player
+    /// designation. This check runs at every state-stabilization seam that can precede trigger
+    /// matching or state-based actions.
+    pub(super) fn refresh_enduring_story_designations(&mut self) -> bool {
+        let mut newly_designated = Vec::new();
+        for (player_index, player) in self.state.players.iter().enumerate() {
+            if player.has_enduring_story {
+                continue;
+            }
+            let battlefield = player.battlefield.clone();
+            let has_storied = battlefield
+                .iter()
+                .copied()
+                .any(|oid| self.permanent_has_active_storied(oid));
+            if !has_storied {
+                continue;
+            }
+            let qualifying = battlefield
+                .iter()
+                .copied()
+                .filter(|oid| {
+                    self.characteristics(*oid).is_some_and(|characteristics| {
+                        characteristics.is_artifact()
+                            || characteristics.has_type("Saga")
+                            || characteristics.is_legendary()
+                    })
+                })
+                .count();
+            if qualifying >= 3 {
+                newly_designated.push(player_index);
+            }
+        }
+        for player_index in &newly_designated {
+            self.state.players[*player_index].has_enduring_story = true;
+        }
+        !newly_designated.is_empty()
+    }
+
+    pub(super) fn active_static_ability_definitions(&self, oid: ObjectId) -> Vec<StaticAbilityDef> {
+        let Some(object) = self.state.objects.get(&oid) else {
+            return Vec::new();
+        };
+        if object.zone != Zone::Battlefield
+            || object.face_down
+            || super::characteristics::latest_remove_all_abilities_timestamp(&self.state, oid)
+                .is_some()
+        {
+            return Vec::new();
+        }
+        if let Some(faces) = self.room_faces(oid) {
+            return self
+                .state
+                .room_states
+                .get(&oid)
+                .copied()
+                .unwrap_or_default()
+                .unlocked_indices()
+                .flat_map(|door| {
+                    faces[door]
+                        .static_abilities
+                        .iter()
+                        .map(|ability| ability.definition.clone())
+                })
+                .collect();
+        }
+        self.effective_face(oid)
+            .map(|face| {
+                face.static_abilities
+                    .iter()
+                    .map(|ability| ability.definition.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn permanent_has_active_storied(&self, oid: ObjectId) -> bool {
+        self.active_static_ability_definitions(oid)
+            .iter()
+            .any(|ability| matches!(ability, StaticAbilityDef::Storied))
+    }
+
     /// Heirloom Auntie / Brambleback Brute: effects saturate; costs preflight the full debit.
     pub(super) fn remove_counters(
         &mut self,
@@ -265,7 +346,9 @@ impl GameEngine {
 
         for (definition, static_ability) in statics {
             match static_ability.definition {
-                StaticAbilityDef::ProhibitLifeGain { .. }
+                StaticAbilityDef::Storied
+                | StaticAbilityDef::AdditionalTriggeredAbilityInstances { .. }
+                | StaticAbilityDef::ProhibitLifeGain { .. }
                 | StaticAbilityDef::ProhibitCounters { .. } => {
                     // Queried at each life-gain event; no independent effect record is needed.
                 }
@@ -284,6 +367,19 @@ impl GameEngine {
                 StaticAbilityDef::UntapsDuringOtherPlayersUntapSteps => {
                     // CR 502.3 turn-based hook, queried at the untap boundary. It emits no
                     // independent continuous-effect record.
+                }
+                StaticAbilityDef::SelfDoesntUntapDuringUntapStepUnless { condition } => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
+                        source_id: Some(object_id),
+                        affected: AffectedScope::Single(object_id),
+                        kind: ContinuousEffectKind::DoesntUntapDuringUntapStepUnless(Box::new(
+                            condition,
+                        )),
+                        condition: None,
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
                 }
                 StaticAbilityDef::PreventDamage {
                     subject,
@@ -618,6 +714,36 @@ impl GameEngine {
                         timestamp,
                     });
                 }
+                StaticAbilityDef::GrantTriggeredAbilityToPermanents {
+                    filter,
+                    condition,
+                    triggered_abilities,
+                } => {
+                    let affected = AffectedScope::PermanentsMatching {
+                        reference_player: controller,
+                        filter,
+                        exclude: None,
+                    };
+                    for ability in triggered_abilities {
+                        let mut granted_definition = definition.clone();
+                        granted_definition
+                            .ability_path
+                            .push(ability.ability_id.clone());
+                        self.state.add_triggered_ability_grant(ContinuousEffect {
+                            trigger_grant_origin: Some(TriggerAbilityOrigin::StaticGrant {
+                                source_id: object_id,
+                                source_zone_change,
+                                definition: granted_definition,
+                            }),
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
+                            condition: condition.clone(),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                }
                 StaticAbilityDef::ConditionalSelfModifier {
                     condition,
                     add_types,
@@ -916,16 +1042,41 @@ impl GameEngine {
             return false;
         };
         self.state.continuous_effects.iter().any(|effect| {
-            matches!(
-                effect.kind,
-                ContinuousEffectKind::DoesntUntapDuringUntapStep
-            ) && super::characteristics::effect_affects(
-                &self.state,
-                self.registry,
-                effect,
-                oid,
-                &characteristics,
-            )
+            let restricted = match &effect.kind {
+                ContinuousEffectKind::DoesntUntapDuringUntapStep => true,
+                ContinuousEffectKind::DoesntUntapDuringUntapStepUnless(condition) => {
+                    let Some(source_id) = effect.source_id else {
+                        return false;
+                    };
+                    let Some(controller) = self.controller_of(source_id) else {
+                        return false;
+                    };
+                    !self.condition_holds(
+                        condition,
+                        ConditionContext {
+                            controller,
+                            source_object_id: source_id,
+                            source_zone_change: self
+                                .state
+                                .zone_change_generation
+                                .get(&source_id)
+                                .copied()
+                                .unwrap_or(0),
+                            resolving_spell_id: None,
+                            stack_item: None,
+                        },
+                    )
+                }
+                _ => false,
+            };
+            restricted
+                && super::characteristics::effect_affects(
+                    &self.state,
+                    self.registry,
+                    effect,
+                    oid,
+                    &characteristics,
+                )
         })
     }
 

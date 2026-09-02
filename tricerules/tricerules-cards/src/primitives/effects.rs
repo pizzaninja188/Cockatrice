@@ -25,6 +25,8 @@ use std::fmt;
 /// the identities of the cards that moved through a graveyard.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameCondition {
+    /// CR 702.195: whether any selected player has the enduring-story designation.
+    HasEnduringStory { players: RelativePlayerSet },
     /// Plasma Bolt and Temporal Intervention: a nonland permanent left the battlefield or
     /// a spell was cast for its Warp cost this turn, by any player.
     Void,
@@ -243,7 +245,8 @@ impl GameCondition {
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            GameCondition::Void
+            GameCondition::HasEnduringStory { .. }
+            | GameCondition::Void
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
             | GameCondition::CastSnapshot { .. }
             | GameCondition::TriggeringSpellManaSpent { .. } => Ok(()),
@@ -375,7 +378,8 @@ impl GameCondition {
 
     pub fn matches_value(&self, value: u32) -> bool {
         match self {
-            GameCondition::Void
+            GameCondition::HasEnduringStory { .. }
+            | GameCondition::Void
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
             | GameCondition::CastSnapshot { .. }
             | GameCondition::TriggeringSpellManaSpent { .. }
@@ -4955,6 +4959,9 @@ pub enum ContinuousEffectKind {
     /// CR 502.3: the affected permanent is excluded from its controller's normal untap-step
     /// turn-based action. This does not prohibit other spells or abilities from untapping it.
     DoesntUntapDuringUntapStep,
+    /// CR 502.3: the affected permanent is excluded from its controller's normal untap-step
+    /// action unless the source-relative live condition holds.
+    DoesntUntapDuringUntapStepUnless(Box<GameCondition>),
     /// Absolute prohibition shared by Blossombind and Frozen in Ice.
     ProhibitUntap,
     /// CR 613.11 / 702.3: ignore only Defender while checking whether this creature may attack.

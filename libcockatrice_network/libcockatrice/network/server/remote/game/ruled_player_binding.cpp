@@ -430,10 +430,17 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         // Build an engine_oid -> Server_Card id map and (when permitted) sync tap state.
         // The map is rebuilt whenever the engine reports a battlefield, even if the caller
         // doesn't ask for tap propagation, so combat translation in the driver can rely on it.
-        if (v.battlefield_objects_size() == tableZone->getCards().size()) {
+        QList<Server_Card *> engineTableCards;
+        engineTableCards.reserve(tableZone->getCards().size());
+        for (Server_Card *card : tableZone->getCards()) {
+            if (card && card->getId() != enduringStoryServerCardId) {
+                engineTableCards.append(card);
+            }
+        }
+        if (v.battlefield_objects_size() == engineTableCards.size()) {
             QList<Server_Card *> tablePool;
-            tablePool.reserve(tableZone->getCards().size());
-            for (Server_Card *c : tableZone->getCards()) {
+            tablePool.reserve(engineTableCards.size());
+            for (Server_Card *c : engineTableCards) {
                 tablePool.append(c);
             }
             QList<Server_Card *> ordered;
@@ -481,7 +488,7 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                     expectedY.append(ruledBattlefieldGridY(object.is_creature(), object.is_land()));
                 }
 
-                const QList<Server_Card *> &zoneOrderBefore = tableZone->getCards();
+                const QList<Server_Card *> &zoneOrderBefore = engineTableCards;
                 bool orderMismatch = false;
                 if (zoneOrderBefore.size() == ordered.size()) {
                     for (int i = 0; i < ordered.size(); ++i) {
@@ -921,6 +928,35 @@ void RuledPlayerBinding::createRuledToken(Server_Player *player,
     // than failing to find a physical card and aborting the reconcile).
     engineOidToServerCardId.insert(engineOid, card->getId());
     serverCardIdToEngineOid.insert(card->getId(), engineOid);
+}
+
+bool RuledPlayerBinding::ensureEnduringStoryToken(Server_Player *player, int battlefieldGridY, GameEventStorage *ges)
+{
+    Server_CardZone *table = player ? player->getZones().value(ZoneNames::TABLE) : nullptr;
+    if (!table) {
+        return false;
+    }
+    for (Server_Card *card : table->getCards()) {
+        if (card && card->getId() == enduringStoryServerCardId) {
+            return false;
+        }
+    }
+
+    const QString name = QStringLiteral("Enduring Story");
+    int x = table->hasCoords() ? table->getFreeGridColumn(-1, battlefieldGridY, name, true) : 0;
+    if (x < 0) {
+        x = 0;
+    }
+    auto *card = new Server_Card({name, QString()}, player->newCardId(), x, battlefieldGridY);
+    card->moveToThread(player->thread());
+    card->setAnnotation(QStringLiteral("Token"));
+    card->setDestroyOnZoneChange(true);
+    table->insertCard(card, x, battlefieldGridY);
+    enduringStoryServerCardId = card->getId();
+    if (ges) {
+        player->sendCreateTokenEvents(table, card, x, battlefieldGridY, *ges);
+    }
+    return true;
 }
 
 bool RuledPlayerBinding::createRuledDevCard(Server_Player *player,

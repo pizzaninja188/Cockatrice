@@ -1,0 +1,26 @@
+// Oracle and rulings fetched 2026-09-02. CR 702.195: Storied establishes an irreversible
+// player designation before trigger checks and state-based actions.
+(
+  id: "oin_the_brave",
+  name: "Óin the Brave",
+  face_id: "oin_the_brave",
+  mana_cost: "{1}{R}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Dwarf", "Warrior"],
+  power: 1,
+  toughness: 3,
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([1]), definition: Storied),
+    (ability_id: "static_02", presentation: OracleLines([2]), definition: ConditionalSelfModifier(
+      condition: HasEnduringStory(players: Controller),
+      delta_power: 1,
+      keywords: [Haste],
+    )),
+  ],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Mana("{1}"), Tap, Discard],
+    effect: [Draw(count: 1)],
+  )],
+)

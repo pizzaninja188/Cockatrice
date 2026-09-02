@@ -159,6 +159,8 @@ mod issue_181_spell_mana_spent;
 mod issue_182_teamwork;
 #[path = "scenario/issue_183_power_up.rs"]
 mod issue_183_power_up;
+#[path = "scenario/issue_184_storied.rs"]
+mod issue_184_storied;
 #[path = "scenario/issue_185_sagas.rs"]
 mod issue_185_sagas;
 #[path = "scenario/issue_186_amass.rs"]

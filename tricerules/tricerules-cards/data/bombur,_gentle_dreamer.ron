@@ -1,0 +1,18 @@
+// Oracle and rulings fetched 2026-09-02. The untap-step restriction is continuously lifted once
+// its controller has the irreversible enduring-story designation.
+(
+  id: "bombur,_gentle_dreamer",
+  name: "Bombur, Gentle Dreamer",
+  face_id: "bombur_gentle_dreamer",
+  mana_cost: "{2}{R}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Dwarf", "Bard"],
+  power: 5,
+  toughness: 3,
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([1]), definition: Storied),
+    (ability_id: "static_02", presentation: OracleLines([2]), definition: SelfDoesntUntapDuringUntapStepUnless(
+      condition: HasEnduringStory(players: Controller),
+    )),
+  ],
+)

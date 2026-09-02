@@ -420,6 +420,12 @@ impl CharacteristicsEvaluator<'_> {
         };
         let controller = self.layer_2_controller(source_oid, &mut Vec::new());
         match condition {
+            GameCondition::HasEnduringStory { players } => {
+                self.state.players.iter().any(|player| {
+                    relative_player_set_contains(self.state, *players, controller, player.id)
+                        && player.has_enduring_story
+                })
+            }
             // Cast snapshots are internal to resolving spells, never continuous characteristics.
             GameCondition::CastSnapshot { .. }
             | GameCondition::TriggeringSpellManaSpent { .. }
@@ -795,14 +801,27 @@ pub(super) fn effect_affects(
             reference_player,
             filter,
             exclude,
-        } => permanent_matches_target_scope(
-            state,
-            filter,
-            *reference_player,
-            *exclude,
-            oid,
-            characteristics,
-        ),
+        } => {
+            let current_reference = if effect.duration == EffectDuration::WhileSourceOnBattlefield {
+                effect
+                    .source_id
+                    .map(|source| {
+                        CharacteristicsEvaluator { state, registry }
+                            .layer_2_controller(source, &mut Vec::new())
+                    })
+                    .unwrap_or(*reference_player)
+            } else {
+                *reference_player
+            };
+            permanent_matches_target_scope(
+                state,
+                filter,
+                current_reference,
+                *exclude,
+                oid,
+                characteristics,
+            )
+        }
         AffectedScope::Player(_) => false,
     }
 }

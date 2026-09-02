@@ -1617,6 +1617,7 @@ impl GameEngine {
             if let EffectOutcome::Blighted(receipt) = outcome {
                 completed_item.blight_receipts.push(receipt);
             }
+            self.refresh_enduring_story_designations();
             let mut observer_stack = ParkedStackResolution::new(completed_item.clone());
             observer_stack.resume_effect_index = Some(index as u32 + 1);
             observer_stack.previous_result = effect_result.clone();

@@ -373,6 +373,7 @@ impl GameEngine {
         let p = &self.state.players[idx];
         rv1::RuledPerPlayerView {
             player_id: p.id,
+            has_enduring_story: p.has_enduring_story,
             private_zones_unchanged: false,
             hand_cards: if include_private {
                 p.hand

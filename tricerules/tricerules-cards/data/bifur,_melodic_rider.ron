@@ -1,0 +1,47 @@
+// Oracle and rulings fetched 2026-09-02. The two printed trigger definitions represent the
+// single "enters or attacks" ability at the event boundaries that can make it trigger.
+(
+  id: "bifur,_melodic_rider",
+  name: "Bifur, Melodic Rider",
+  face_id: "bifur_melodic_rider",
+  mana_cost: "{4}{R/W}{R/W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Dwarf", "Bard"],
+  power: 4,
+  toughness: 5,
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([1]), definition: Storied),
+    (ability_id: "static_02", presentation: OracleLines([3]), definition: AdditionalTriggeredAbilityInstances(
+      controllers: Controller,
+      source_filter: (required_subtypes: ["Dwarf"]),
+      condition: Some(HasEnduringStory(players: Controller)),
+      additional_count: 1,
+    )),
+  ],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature",
+        effect_indices: [0],
+      )])),
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

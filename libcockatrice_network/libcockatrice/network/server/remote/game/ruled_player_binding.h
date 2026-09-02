@@ -69,6 +69,9 @@ struct RuledPlayerBinding
     // Whether at least one complete battlefield replacement has been applied successfully.
     // `ZoneViewSync::battlefields_unchanged` is meaningful only after this seed exists.
     bool battlefieldSynced = false;
+    // Presentation-only helper token for CR 702.195. It deliberately has no engine ObjectId and
+    // is excluded from battlefield reconciliation; the engine stores only the player designation.
+    int enduringStoryServerCardId = -1;
 
     bool isEngineOidSummoningSick(quint32 engineOid) const
     {
@@ -149,6 +152,10 @@ struct RuledPlayerBinding
                           int battlefieldGridY,
                           bool entersTapped,
                           GameEventStorage &ges);
+    /// Materialize the public enduring-story designation as an ordinary battlefield token.
+    /// Returns true only when a new token was created. `ges` may be null during startup
+    /// restoration, when inserting the card before the full-state sync is enough.
+    bool ensureEnduringStoryToken(Server_Player *player, int battlefieldGridY, GameEventStorage *ges);
     // Mint a physical Server_Card for a dev-conjured card (see DevCardConjured) into the hand or
     // the table, binding it to `engineOid` the same way createRuledToken does — the zone-view sync
     // later in this batch must find a physical card for the engine's new slot, or it abandons the

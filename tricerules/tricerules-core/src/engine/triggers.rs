@@ -19,6 +19,12 @@ pub(super) struct CollectedTrigger {
     pub face_index: usize,
     pub source_zone_change: u64,
     pub source_face_change: u64,
+    /// Event-time/LKI characteristics of the permanent whose ability triggered. Synthetic
+    /// delayed triggers are not abilities of their historical source and therefore omit this.
+    pub source_fact: Option<TurnObjectFact>,
+    /// Extra trigger instances fixed at the event boundary. Trigger placement can be delayed by
+    /// cost payment and must not re-evaluate a modifier that appeared or disappeared meanwhile.
+    pub additional_instances: u32,
     /// CR 603.3d: the ability's controller — the controller of its source permanent.
     pub controller: PlayerId,
     pub ability_index: usize,
@@ -187,12 +193,14 @@ impl GameEngine {
             .get(&source_id)
             .copied()
             .unwrap_or(0);
-        self.stage_triggers(vec![CollectedTrigger {
+        let mut trigger = CollectedTrigger {
             source_id,
             card_id: card_id.clone(),
             face_index,
             source_zone_change: source_generation,
             source_face_change,
+            source_fact: self.event_object_fact(source_id),
+            additional_instances: 0,
             controller,
             ability_index: usize::MAX,
             ability_origin: None,
@@ -206,7 +214,9 @@ impl GameEngine {
                     .unwrap_or(&card_id),
             ),
             trigger_context: TriggerContext::default(),
-        }]);
+        };
+        trigger.additional_instances = self.additional_trigger_instances(&trigger);
+        self.stage_triggers(vec![trigger]);
     }
 
     /// Collect one simultaneous event set and enqueue all matching triggered abilities as one
@@ -226,6 +236,10 @@ impl GameEngine {
                 }
             }
         }
+
+        // CR 702.195c: designation-dependent continuous effects are reapplied before checking
+        // whether the event set matched any trigger conditions.
+        self.refresh_enduring_story_designations();
 
         self.record_committed_events(events);
 
@@ -295,6 +309,8 @@ impl GameEngine {
                 face_index: delayed.source_face_index,
                 source_zone_change: delayed.source.zone_change_generation,
                 source_face_change: 0,
+                source_fact: None,
+                additional_instances: 0,
                 controller: delayed.controller,
                 ability_index: 0,
                 ability_origin: None,
@@ -423,6 +439,9 @@ impl GameEngine {
             });
             collected.extend(event_triggers);
         }
+        for trigger in &mut collected {
+            trigger.additional_instances = self.additional_trigger_instances(trigger);
+        }
         collected
     }
 
@@ -438,6 +457,13 @@ impl GameEngine {
     /// because this is called from inside resolution and from the SBA fixed point, neither of which
     /// can stop to ask a player a question.
     pub(super) fn stage_triggers(&mut self, mut collected: Vec<CollectedTrigger>) {
+        collected = collected
+            .into_iter()
+            .flat_map(|trigger| {
+                let count = trigger.additional_instances.saturating_add(1) as usize;
+                std::iter::repeat_n(trigger, count)
+            })
+            .collect();
         if collected.is_empty() {
             return;
         }
@@ -545,6 +571,65 @@ impl GameEngine {
         self.state
             .staged_trigger_groups
             .push_back(StagedTriggerGroup { triggers });
+    }
+
+    /// CR 603.2c / 603.2d: determine how many extra instances a just-triggered ability creates.
+    /// Each modifier sees the source permanent's event-time/LKI fact, while the modifier's own
+    /// controller and condition remain live at the trigger-check boundary.
+    fn additional_trigger_instances(&self, trigger: &CollectedTrigger) -> u32 {
+        let Some(source_fact) = trigger.source_fact.as_ref() else {
+            return 0;
+        };
+        self.state
+            .players
+            .iter()
+            .flat_map(|player| player.battlefield.iter().copied())
+            .flat_map(|modifier_id| {
+                let controller = self.controller_of(modifier_id);
+                self.active_static_ability_definitions(modifier_id)
+                    .into_iter()
+                    .filter_map(move |ability| {
+                        controller.map(|controller| (modifier_id, controller, ability))
+                    })
+            })
+            .filter_map(|(modifier_id, controller, ability)| {
+                let StaticAbilityDef::AdditionalTriggeredAbilityInstances {
+                    controllers,
+                    source_filter,
+                    condition,
+                    additional_count,
+                } = ability
+                else {
+                    return None;
+                };
+                let context = ConditionContext {
+                    controller,
+                    source_object_id: modifier_id,
+                    source_zone_change: self
+                        .state
+                        .zone_change_generation
+                        .get(&modifier_id)
+                        .copied()
+                        .unwrap_or(0),
+                    resolving_spell_id: None,
+                    stack_item: None,
+                };
+                (super::history::relative_player_set_contains(
+                    &self.state,
+                    controllers,
+                    controller,
+                    trigger.controller,
+                ) && super::history::permanent_event_fact_matches(
+                    &self.state,
+                    &source_filter,
+                    source_fact,
+                    context,
+                ) && condition
+                    .as_ref()
+                    .is_none_or(|condition| self.condition_holds(condition, context)))
+                .then_some(additional_count)
+            })
+            .fold(0, u32::saturating_add)
     }
 
     /// Put staged triggers on the stack, stopping at the first player decision (CR 603.3b/603.3d).
@@ -811,6 +896,8 @@ impl GameEngine {
                                     face_index: *face_index,
                                     source_zone_change: source.zone_change_generation,
                                     source_face_change: source.face_change_generation,
+                                    source_fact: Some(source.event_fact()),
+                                    additional_instances: 0,
                                     controller: source.controller,
                                     ability_index: prior_abilities + ability_index,
                                     ability_origin: Some(TriggerAbilityOrigin::Printed(
@@ -1632,6 +1719,8 @@ impl GameEngine {
                     .get(&source_id)
                     .copied()
                     .unwrap_or(0),
+                source_fact: self.event_object_fact(source_id),
+                additional_instances: 0,
                 controller,
                 ability_index: idx,
                 ability_origin: Some(origin.clone()),
@@ -1882,6 +1971,8 @@ impl GameEngine {
                 face_index: source.face_index,
                 source_zone_change: source.zone_change_generation,
                 source_face_change: source.face_change_generation,
+                source_fact: Some(source.event_fact()),
+                additional_instances: 0,
                 controller: source.controller,
                 ability_index: *ability_index,
                 ability_origin: Some(origin.clone()),

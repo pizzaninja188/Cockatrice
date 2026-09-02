@@ -1,0 +1,29 @@
+// Oracle and rulings fetched 2026-09-02. Ward is granted through a dynamic artifact-or-creature
+// scope so future permanents and control changes are reflected without client inference.
+(
+  id: "thorin_oakenshield",
+  name: "Thorin Oakenshield",
+  face_id: "thorin_oakenshield",
+  mana_cost: "{R}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Dwarf", "Noble"],
+  power: 3,
+  toughness: 2,
+  keywords: [Trample],
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: Storied),
+    (ability_id: "static_02", presentation: OracleLines([3]), definition: GrantTriggeredAbilityToPermanents(
+      filter: (any_of: Some([
+        (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
+        (kind: Creature, controller: You),
+      ])),
+      condition: Some(HasEnduringStory(players: Controller)),
+      triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: Fallback,
+        trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+        effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{1}"))],
+      )],
+    )),
+  ],
+)

@@ -499,6 +499,8 @@ pub struct PlayerState {
     pub life: i32,
     /// Out of game: lost
     pub has_lost: bool,
+    /// CR 702.195: an irreversible public player designation established by Storied.
+    pub has_enduring_story: bool,
     pub library: VecDeque<ObjectId>,
     pub hand: Vec<ObjectId>,
     pub battlefield: Vec<ObjectId>,
@@ -521,6 +523,7 @@ impl PlayerState {
             id,
             life,
             has_lost: false,
+            has_enduring_story: false,
             library: VecDeque::new(),
             hand: Vec::new(),
             battlefield: Vec::new(),

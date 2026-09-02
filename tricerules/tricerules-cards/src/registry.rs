@@ -288,6 +288,95 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 reason,
             })?;
         let ability = &identified.definition;
+        if let StaticAbilityDef::AdditionalTriggeredAbilityInstances {
+            source_filter,
+            condition,
+            additional_count,
+            ..
+        } = ability
+        {
+            if *additional_count == 0 {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "AdditionalTriggeredAbilityInstances additional_count must be nonzero"
+                        .into(),
+                });
+            }
+            source_filter
+                .validate()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+            if let Some(condition) = condition {
+                condition
+                    .validate_live()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+        }
+        if let StaticAbilityDef::SelfDoesntUntapDuringUntapStepUnless { condition } = ability {
+            condition
+                .validate_live()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+        }
+        if let StaticAbilityDef::GrantTriggeredAbilityToPermanents {
+            filter,
+            condition,
+            triggered_abilities,
+        } = ability
+        {
+            filter
+                .validate_characteristic_constraints()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+            if !filter.is_permanent_only() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "GrantTriggeredAbilityToPermanents requires a permanent-only filter"
+                        .into(),
+                });
+            }
+            if triggered_abilities.is_empty() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "GrantTriggeredAbilityToPermanents requires at least one ability"
+                        .into(),
+                });
+            }
+            if let Some(condition) = condition {
+                condition
+                    .validate_live()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            for granted in triggered_abilities {
+                if granted.trigger.is_delayed_only()
+                    || matches!(granted.trigger, TriggerCondition::SagaChapter { .. })
+                {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "GrantTriggeredAbilityToPermanents requires an ordinary non-Saga trigger"
+                            .into(),
+                    });
+                }
+                granted
+                    .validate_shape()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+        }
         if let StaticAbilityDef::EntersTapped {
             condition: Some(condition),
             ..
@@ -939,6 +1028,16 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
                     nested_ability.validate_shape()?;
                     validate_effect_list_metadata(&nested_ability.effect)?;
                 }
+                for nested_ability in triggered_abilities {
+                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
+                    nested_ability.validate_shape()?;
+                    validate_effect_list_metadata(&nested_ability.effect)?;
+                }
+            }
+            StaticAbilityDef::GrantTriggeredAbilityToPermanents {
+                triggered_abilities,
+                ..
+            } => {
                 for nested_ability in triggered_abilities {
                     insert_ability_id(&mut nested, &nested_ability.ability_id)?;
                     nested_ability.validate_shape()?;

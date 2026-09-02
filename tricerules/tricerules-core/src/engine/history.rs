@@ -871,6 +871,16 @@ impl GameEngine {
         trigger_context: Option<&TriggerContext>,
     ) -> bool {
         match condition {
+            GameCondition::HasEnduringStory { players } => {
+                self.state.players.iter().any(|player| {
+                    relative_player_set_contains(
+                        &self.state,
+                        *players,
+                        context.controller,
+                        player.id,
+                    ) && player.has_enduring_story
+                })
+            }
             GameCondition::Void => self.state.turn_history.current.void_holds(),
             GameCondition::PermanentLeftBattlefieldThisTurn { controllers } => self
                 .state
