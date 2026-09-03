@@ -48,6 +48,16 @@ pub(crate) struct EffectResult {
     pub cards: Vec<CardResultEntry>,
     pub selected_objects: Vec<TriggerObjectRef>,
     pub receipt: Option<ResolutionReceipt>,
+    pub counter_placements: Vec<CounterPlacementReceipt>,
+}
+
+/// Private generation-bound proof that one counter instruction actually changed its recipient.
+/// It is consumed only by the immediately following instruction and never crosses protobuf.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CounterPlacementReceipt {
+    pub object: TriggerObjectRef,
+    pub counter: CounterKind,
+    pub count: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,6 +71,7 @@ impl From<CardResultCohort> for EffectResult {
             cards: cohort.cards,
             selected_objects: Vec::new(),
             receipt: None,
+            counter_placements: Vec::new(),
         }
     }
 }

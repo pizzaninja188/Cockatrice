@@ -1153,6 +1153,10 @@ pub struct ReflexiveTriggeredAbilityDef {
     pub effect: Vec<SpellEffectKind>,
     #[serde(default)]
     pub targeting: Option<TargetingDef>,
+    /// CR 603.4 condition checked when the reflexive ability would trigger and again when it
+    /// resolves. Earthbender Ascension and Sigil of Myrkul use this shape.
+    #[serde(default)]
+    pub intervening_if: Option<GameCondition>,
 }
 
 impl ReflexiveTriggeredAbilityDef {
@@ -1178,6 +1182,9 @@ impl ReflexiveTriggeredAbilityDef {
                 "reflexive triggered abilities cannot reference triggering-spell mana spending"
                     .into(),
             );
+        }
+        if let Some(condition) = self.intervening_if.as_ref() {
+            condition.validate_trigger_condition()?;
         }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;

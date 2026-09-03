@@ -610,6 +610,7 @@ pub(super) fn put_counters(
     let subjects = cx.resolve_battlefield_subjects(&subject);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
+    let receipts = &mut cx.effect_result.counter_placements;
     let spell_label = cx.spell_label;
     let mut counter_events = Vec::new();
     for tid in subjects {
@@ -627,6 +628,21 @@ pub(super) fn put_counters(
         else {
             continue;
         };
+        let GameEvent::CountersPlaced {
+            object,
+            kind,
+            before,
+            after,
+            ..
+        } = &counter_event
+        else {
+            unreachable!("counter placement funnel returned a different event");
+        };
+        receipts.push(crate::state::CounterPlacementReceipt {
+            object: *object,
+            counter: *kind,
+            count: after.saturating_sub(*before),
+        });
         counter_events.push(counter_event);
         events.push(ev_log(format!(
             "{spell_label} puts {count} {} counter{} on {tgt}",

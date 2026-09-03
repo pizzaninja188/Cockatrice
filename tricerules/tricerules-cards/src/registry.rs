@@ -926,7 +926,7 @@ fn insert_ability_id(ids: &mut HashSet<String>, id: &crate::AbilityId) -> Result
 
 fn validate_nested_effect_metadata(effect: &SpellEffectKind) -> Result<(), String> {
     match effect {
-        SpellEffectKind::CreateReflexiveTrigger { ability } => {
+        SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
             ability.validate_shape()?;
             validate_effect_list_metadata(&ability.effect)
         }

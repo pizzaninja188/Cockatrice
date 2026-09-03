@@ -302,15 +302,7 @@ pub(in crate::engine) fn resolution_branch_is_live(
             top.cast_cost_condition_matches(condition)
         }
         ResolutionBranchRequirement::PreviousResultReceipt(condition) => {
-            match (condition, previous_result.receipt) {
-                (
-                    tricerules_cards::primitives::ResolutionReceiptCondition::CounterUnlessPaid {
-                        paid: expected,
-                    },
-                    Some(crate::state::ResolutionReceipt::CounterUnlessPaid { paid }),
-                ) => paid == *expected,
-                _ => false,
-            }
+            previous_result_receipt_matches(engine, top, previous_result, condition)
         }
         ResolutionBranchRequirement::CardResultCount { filter, min, max } => {
             let count = card_result_count(engine, top, previous_result, filter);
@@ -332,6 +324,35 @@ pub(in crate::engine) fn resolution_branch_is_live(
             )
             .len()
             >= required_candidates
+}
+
+fn previous_result_receipt_matches(
+    engine: &crate::engine::GameEngine,
+    top: &StackItem,
+    previous_result: &crate::state::EffectResult,
+    condition: &tricerules_cards::primitives::ResolutionReceiptCondition,
+) -> bool {
+    use tricerules_cards::primitives::ResolutionReceiptCondition;
+
+    match condition {
+        ResolutionReceiptCondition::CounterUnlessPaid { paid: expected } => matches!(
+            previous_result.receipt,
+            Some(crate::state::ResolutionReceipt::CounterUnlessPaid { paid }) if paid == *expected
+        ),
+        ResolutionReceiptCondition::CountersPlaced { counter, object } => {
+            let Some((object_id, zone_change_generation)) =
+                engine.condition_object_identity(*object, ConditionContext::for_stack_item(top))
+            else {
+                return false;
+            };
+            previous_result.counter_placements.iter().any(|receipt| {
+                receipt.counter == *counter
+                    && receipt.count > 0
+                    && receipt.object.object_id == object_id
+                    && receipt.object.zone_change_generation == zone_change_generation
+            })
+        }
+    }
 }
 
 pub(in crate::engine) fn card_result_count(
@@ -574,13 +595,27 @@ pub(super) fn create_reflexive_trigger(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::CreateReflexiveTrigger { ability } = effect else {
+    let SpellEffectKind::CreateReflexiveTrigger { when, ability } = effect else {
         unreachable!();
     };
     let source_id = cx
         .top
         .source_permanent_id
         .ok_or(EngineError::Illegal("reflexive trigger source missing"))?;
+    if when.as_ref().is_some_and(|condition| {
+        !previous_result_receipt_matches(cx.engine, cx.top, cx.previous_effect_result, condition)
+    }) {
+        return Ok(EffectOutcome::Continue);
+    }
+    if !cx.engine.intervening_if_holds_at_generation(
+        source_id,
+        cx.controller,
+        ability.intervening_if.as_ref(),
+        Some(cx.top.source_zone_change),
+        Some(&cx.top.trigger_context),
+    ) {
+        return Ok(EffectOutcome::Continue);
+    }
     let object_id = cx.engine.state.next_object_id;
     cx.engine.state.next_object_id += 1;
     let card_name = cx
@@ -624,7 +659,7 @@ pub(super) fn create_reflexive_trigger(
                     modal: None,
                     targeting: ability.targeting,
                     may: false,
-                    intervening_if: None,
+                    intervening_if: ability.intervening_if,
                     max_triggers_per_turn: None,
                     triggers_only_once: false,
                 },

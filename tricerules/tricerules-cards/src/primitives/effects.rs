@@ -39,6 +39,9 @@ pub enum CounterKind {
     Lore,
     /// CR 702.184: charge counters track Station progress on Spacecraft.
     Charge,
+    /// Quest counters are ordinary named counters used by quest-style threshold cards such as
+    /// Earthbender Ascension and Overseer of Vault 76.
+    Quest,
 }
 
 impl CounterKind {
@@ -54,6 +57,7 @@ impl CounterKind {
             CounterKind::Defense => "defense".into(),
             CounterKind::Lore => "lore".into(),
             CounterKind::Charge => "charge".into(),
+            CounterKind::Quest => "quest".into(),
         }
     }
 
@@ -625,7 +629,15 @@ pub enum ResolutionBranchRequirement {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResolutionReceiptCondition {
-    CounterUnlessPaid { paid: bool },
+    CounterUnlessPaid {
+        paid: bool,
+    },
+    /// The immediately preceding counter instruction successfully placed this kind of counter on
+    /// the exact generation-bound object selected by `object`.
+    CountersPlaced {
+        counter: CounterKind,
+        object: ConditionObjectRef,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -845,9 +857,12 @@ pub enum SpellEffectKind {
         #[serde(default)]
         constraints: Vec<PermanentChoiceConstraint>,
     },
-    /// Stage a reflexive triggered ability created by the immediately preceding paid branch.
-    /// Sparktongue Dragon and Heart-Piercer Manticore share this CR 603.12 primitive.
+    /// Stage a reflexive triggered ability created by an action taken during this resolution.
+    /// Paid branches may create it unconditionally; `when` binds "when you do" to the private
+    /// typed result of the immediately preceding instruction.
     CreateReflexiveTrigger {
+        #[serde(default)]
+        when: Option<ResolutionReceiptCondition>,
         ability: Box<ReflexiveTriggeredAbilityDef>,
     },
     /// CR 701.18: look at the top `count` cards of your library, put any number of them on the
@@ -2467,6 +2482,24 @@ impl SpellEffectKind {
                     }
                 }
             }
+            if let SpellEffectKind::CreateReflexiveTrigger {
+                when: Some(ResolutionReceiptCondition::CountersPlaced { counter, object: _ }),
+                ..
+            } = effect
+            {
+                if !matches!(
+                    previous,
+                    Some(SpellEffectKind::PutCounters {
+                        counter: produced,
+                        ..
+                    }) if produced == counter
+                ) {
+                    return Err(
+                        "counter-placement reflexive trigger requires an immediately preceding PutCounters effect with the same counter kind"
+                            .into(),
+                    );
+                }
+            }
             if let SpellEffectKind::ChooseGraveyardCard {
                 from_result: Some(filter),
                 ..
@@ -2921,7 +2954,10 @@ impl SpellEffectKind {
                     }
                 }
             }
-            SpellEffectKind::CreateReflexiveTrigger { ability } => {
+            SpellEffectKind::CreateReflexiveTrigger { when, ability } => {
+                if let Some(ResolutionReceiptCondition::CountersPlaced { counter, .. }) = when {
+                    counter.validate()?;
+                }
                 ability.validate_shape()?;
             }
             _ => {}

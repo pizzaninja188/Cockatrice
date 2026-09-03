@@ -173,6 +173,48 @@ fn issue_159_typed_receipts_and_current_target_conditions_deserialize() {
 }
 
 #[test]
+fn issue_211_counter_reflexive_receipts_require_an_adjacent_matching_producer() {
+    let valid = r#"(
+        id: "test", name: "Test", face_id: "test", types: ["Enchantment"],
+        triggered_abilities: [(
+            ability_id: "triggered_01", presentation: Fallback,
+            trigger: WheneverPermanentEntersBattlefield(
+                controller: Controller,
+                filter: (permanent_type: Some(Land)),
+            ),
+            effect: [
+                PutCounters(counter: Quest, count: 1, subject: Source),
+                CreateReflexiveTrigger(
+                    when: Some(CountersPlaced(counter: Quest, object: Source)),
+                    ability: (
+                        ability_id: "reflexive_01", presentation: Fallback,
+                        intervening_if: Some(SourceCounterCount(counter: Quest, min: Some(4))),
+                        effect: [GainLife(amount: 1)],
+                    ),
+                ),
+            ],
+        )],
+    )"#;
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[valid], &[]).is_ok());
+
+    let missing_producer = valid.replace(
+        "PutCounters(counter: Quest, count: 1, subject: Source)",
+        "Draw(count: 1)",
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&missing_producer], &[])
+        .expect_err("a receipt cannot inspect a nonadjacent or absent counter result");
+    assert!(error
+        .to_string()
+        .contains("immediately preceding PutCounters effect with the same counter kind"));
+
+    let mismatched_counter = valid.replace(
+        "PutCounters(counter: Quest, count: 1, subject: Source)",
+        "PutCounters(counter: Charge, count: 1, subject: Source)",
+    );
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[&mismatched_counter], &[]).is_err());
+}
+
+#[test]
 fn issue_159_exact_cohorts_grouped_permissions_and_second_from_top_deserialize() {
     let graveyard: super::SpellEffectKind = ron::from_str(
         "ChooseGraveyardCard(filter: (card_type: Some(NonlandPermanent)), destination: Hand, optional: true, from_result: Some((source: PreviousEffect, action: Mill, players: Controller)))",

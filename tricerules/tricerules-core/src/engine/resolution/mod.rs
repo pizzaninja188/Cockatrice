@@ -4353,6 +4353,53 @@ mod attached_subject_tests {
     }
 
     #[test]
+    fn issue_211_failed_counter_placement_does_not_create_reflexive_trigger() {
+        let mut engine = GameEngine::new_with_default_decks(211_001, &[0, 1], 20).unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "tatterkite");
+        let item = quantity_item(
+            source,
+            vec![
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                },
+                SpellEffectKind::CreateReflexiveTrigger {
+                    when: Some(
+                        tricerules_cards::primitives::ResolutionReceiptCondition::CountersPlaced {
+                            counter: CounterKind::PlusOnePlusOne,
+                            object: tricerules_cards::primitives::ConditionObjectRef::Source,
+                        },
+                    ),
+                    ability: Box::new(tricerules_cards::primitives::ReflexiveTriggeredAbilityDef {
+                        ability_id: tricerules_cards::AbilityId::new("reflexive_01").unwrap(),
+                        presentation: tricerules_cards::AbilityPresentation::Fallback,
+                        effect: vec![SpellEffectKind::GainLife {
+                            amount: Amount::Fixed(1),
+                        }],
+                        targeting: None,
+                        intervening_if: None,
+                    }),
+                },
+            ],
+        );
+        let (effects, label) = engine.build_resolution_effects(&item);
+
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+
+        assert_eq!(
+            engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
+            0
+        );
+        assert!(
+            engine.state.staged_trigger_groups.is_empty(),
+            "the reflexive trigger requires a successful counter-placement receipt"
+        );
+    }
+
+    #[test]
     fn forced_resolution_branch_runs_its_tail_exactly_once() {
         let mut engine = GameEngine::new_with_default_decks(142_102, &[0, 1], 20).expect("engine");
         let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");

@@ -1,0 +1,60 @@
+// Oracle and rulings checked 2026-09-03. CR 603.3d, 603.4, 603.12, 701.66, and 122.
+(
+  id: "earthbender_ascension",
+  name: "Earthbender Ascension",
+  face_id: "earthbender_ascension",
+  mana_cost: "{2}{G}",
+  types: ["Enchantment"],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [
+        Earthbend(count: 2),
+        SearchLibrary(
+          filter: Some((card_type: Some(BasicLand))),
+          destination: Battlefield(tapped: true),
+          shuffle: true,
+          reveal: false,
+        ),
+      ],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WheneverPermanentEntersBattlefield(
+        controller: Controller,
+        filter: (permanent_type: Some(Land)),
+      ),
+      effect: [
+        PutCounters(counter: Quest, count: 1, subject: Source),
+        CreateReflexiveTrigger(
+          when: Some(CountersPlaced(counter: Quest, object: Source)),
+          ability: (
+            ability_id: "reflexive_01",
+            presentation: OracleLines([2]),
+            intervening_if: Some(SourceCounterCount(counter: Quest, min: Some(4))),
+            effect: [
+              PutCounters(
+                counter: PlusOnePlusOne,
+                count: 1,
+                subject: Chosen((kind: Creature, controller: You)),
+              ),
+              GrantKeywords(
+                subject: Chosen((kind: Creature, controller: You)),
+                keywords: [Trample],
+              ),
+            ],
+            targeting: Some((groups: [(
+              min: 1,
+              max: 1,
+              prompt: "Choose target creature you control",
+              effect_indices: [0, 1],
+            )])),
+          ),
+        ),
+      ],
+    ),
+  ],
+)

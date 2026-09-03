@@ -336,6 +336,32 @@ ChooseResolutionBranch(
 If line 2 describes only the parent ability and would be misleading as the branch label, use
 `Fallback` with a comment explaining the deliberate split.
 
+### Bind "when you do" to a successful counter placement
+
+Use a receipt-gated reflexive trigger when the printed trigger depends on the immediately
+preceding counter instruction actually placing a counter. The receipt is private engine state,
+matches the exact object generation, and is unavailable after any intervening instruction.
+
+```ron
+effect: [
+  PutCounters(counter: Quest, count: 1, subject: Source),
+  CreateReflexiveTrigger(
+    when: Some(CountersPlaced(counter: Quest, object: Source)),
+    ability: (
+      ability_id: "reflexive_01",
+      presentation: OracleLines([2]),
+      intervening_if: Some(SourceCounterCount(counter: Quest, min: Some(4))),
+      effect: [GainLife(amount: 1)],
+    ),
+  ),
+],
+```
+
+The registry requires the same counter kind on an immediately preceding `PutCounters`. Omit
+`when` for a reflexive trigger created unconditionally by a successful paid branch. Put an
+`intervening_if` condition on the nested ability only for an actual CR 603.4 clause; the engine
+checks it both before staging the reflexive trigger and again when that trigger resolves.
+
 ## 6. Add a generic primitive or keyword
 
 Only add vocabulary after confirming existing data cannot express the behavior.
