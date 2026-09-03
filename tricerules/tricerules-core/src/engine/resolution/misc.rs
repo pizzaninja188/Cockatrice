@@ -552,25 +552,6 @@ fn attach_equipment_source(
     Ok(EffectOutcome::Continue)
 }
 
-fn previous_effect_object(cx: &EffectCx<'_>) -> Option<ObjectId> {
-    let selected = cx.previous_effect_result.selected_objects.first()?;
-    let generation = cx
-        .engine
-        .state
-        .zone_change_generation
-        .get(&selected.object_id)
-        .copied()
-        .unwrap_or(0);
-    (generation == selected.zone_change_generation
-        && cx
-            .engine
-            .state
-            .objects
-            .get(&selected.object_id)
-            .is_some_and(|object| object.zone == Zone::Battlefield))
-    .then_some(selected.object_id)
-}
-
 fn attach_equipment_subject(
     cx: &EffectCx<'_>,
     subject: &EffectSubject,
@@ -582,7 +563,7 @@ fn attach_equipment_subject(
             *chosen_role += 1;
             object
         }
-        EffectSubject::PreviousEffectObject => previous_effect_object(cx),
+        EffectSubject::PreviousEffectObject => cx.previous_battlefield_object(),
         EffectSubject::Source | EffectSubject::AttachedObject | EffectSubject::TriggerObject => {
             None
         }

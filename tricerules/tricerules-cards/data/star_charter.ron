@@ -13,9 +13,9 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: AtBeginningOfEndStep(player: Controller),
-    intervening_if: Some(GameCondition(LifeChangedThisTurn(
+    intervening_if: Some(LifeChangedThisTurn(
       players: Relative(Controller), change: Either, quantifier: Any,
-    ))),
+    )),
     effect: [LookChooseToHand(
       count: 4,
       filter: (card_type: Some(Creature), printed_power: Some(AtMost(3))),

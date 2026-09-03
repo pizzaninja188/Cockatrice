@@ -12,7 +12,7 @@
       presentation: OracleLines([1]),
       costs: [Mana("{1}{B}"), Tap],
       effect: [LoseLife(amount: Fixed(2), who: EachOpponent)],
-      conditions: [GameCondition(CreatureDeathsThisTurn(min: Some(1), max: None))],
+      conditions: [CreatureDeathsThisTurn(min: Some(1), max: None)],
     ),
   ],
 )

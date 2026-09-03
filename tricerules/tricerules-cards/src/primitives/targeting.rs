@@ -647,7 +647,7 @@ fn default_creature_filter() -> TargetFilter {
 ///
 /// Example RON:
 /// - `(kind: AnyTarget)` — any creature or player
-/// - `(kind: Creature, not_artifact: true)` — non-artifact creature
+/// - `(kind: Creature, excluded_permanent_types: [Artifact])` — non-artifact creature
 /// - `(kind: Creature, tapped: true)` — tapped creature (for future use)
 /// - `(kind: Creature, not_color: Black)` — nonblack creature (Doom Blade, Terror)
 /// - `(kind: Creature, is_color: Green)` — green creature (Perish, Virtue's Ruin)
@@ -665,12 +665,6 @@ pub struct TargetFilter {
     pub any_of: Option<Vec<Self>>,
     #[serde(default)]
     pub kind: TargetKind,
-    /// If true, the target must not be an artifact.
-    #[serde(default)]
-    pub not_artifact: bool,
-    /// If true, the target must not be a land. Totally Lost uses this with `AnyPermanent`.
-    #[serde(default)]
-    pub not_land: bool,
     /// If Some(true), target must be tapped; Some(false) must be untapped; None = either.
     #[serde(default)]
     pub tapped: Option<bool>,
@@ -679,7 +673,7 @@ pub struct TargetFilter {
     #[serde(default)]
     pub combat_role: Option<CombatRole>,
     /// CR 105/202.2: if `Some`, the target must NOT be of this color (derived from its mana cost).
-    /// Doom Blade ("nonblack creature"), Terror ("nonblack" — paired with `not_artifact`).
+    /// Doom Blade ("nonblack creature"), Terror ("nonblack" plus an Artifact exclusion).
     #[serde(default)]
     pub not_color: Option<Color>,
     /// CR 105/202.2: if `Some`, the object must BE of this color — the inclusive mirror of
@@ -858,20 +852,6 @@ impl TargetFilter {
         if has_duplicates(&self.permanent_types) {
             return Err("target filter cannot repeat a required permanent type".into());
         }
-        if self.not_artifact
-            && self
-                .permanent_types
-                .contains(&super::PermanentTypeFilter::Artifact)
-        {
-            return Err("target filter cannot both require and exclude Artifact".into());
-        }
-        if self.not_land
-            && self
-                .permanent_types
-                .contains(&super::PermanentTypeFilter::Land)
-        {
-            return Err("target filter cannot both require and exclude Land".into());
-        }
         if has_duplicates(&self.required_keywords) {
             return Err("target filter cannot repeat a required keyword".into());
         }
@@ -921,8 +901,6 @@ impl TargetFilter {
             || self.min_mana_value.is_some()
             || self.max_mana_value.is_some()
             || self.was_dealt_damage_this_turn.is_some()
-            || self.not_artifact
-            || self.not_land
             || self.tapped.is_some()
             || self.combat_role.is_some()
             || self.not_color.is_some()
@@ -1206,12 +1184,12 @@ mod tests {
             },
             TargetFilter {
                 permanent_types: vec![PermanentTypeFilter::Artifact],
-                not_artifact: true,
+                excluded_permanent_types: vec![PermanentTypeFilter::Artifact],
                 ..Default::default()
             },
             TargetFilter {
                 permanent_types: vec![PermanentTypeFilter::Land],
-                not_land: true,
+                excluded_permanent_types: vec![PermanentTypeFilter::Land],
                 ..Default::default()
             },
             TargetFilter {

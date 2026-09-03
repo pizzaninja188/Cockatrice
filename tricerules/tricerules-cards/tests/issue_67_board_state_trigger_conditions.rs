@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, GameCondition, InterveningIf,
+    BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, GameCondition,
     PlayerRecipient, RelativePlayerSet, SpellEffectKind, TriggerCondition,
 };
 use tricerules_cards::{CardRegistry, Keyword};
@@ -13,7 +13,7 @@ fn face(card_id: &str) -> &'static tricerules_cards::CardFace {
 
 fn battlefield_condition(card_id: &str) -> &GameCondition {
     let ability = &face(card_id).triggered_abilities[0];
-    let Some(InterveningIf::GameCondition(condition)) = ability.intervening_if.as_ref() else {
+    let Some(condition) = ability.intervening_if.as_ref() else {
         panic!("{card_id} must use the shared game condition")
     };
     condition

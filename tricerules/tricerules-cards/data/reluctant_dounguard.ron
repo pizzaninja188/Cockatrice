@@ -12,7 +12,7 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WheneverPermanentEntersBattlefield(controller: Controller, filter: (permanent_type: Some(Creature), exclude_source: true)),
-    intervening_if: Some(GameCondition(SourceCounterCount(counter: MinusOneMinusOne, min: Some(1)))),
+    intervening_if: Some(SourceCounterCount(counter: MinusOneMinusOne, min: Some(1))),
     effect: [RemoveCounters(counter: MinusOneMinusOne, count: 1, subject: Source)],
   )],
 )

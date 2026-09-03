@@ -1,6 +1,5 @@
 use tricerules_cards::primitives::{
-    Amount, EffectContext, EffectSubject, GameCondition, InterveningIf, SpellEffectKind,
-    SpellManaSpentComparison,
+    Amount, EffectContext, EffectSubject, GameCondition, SpellEffectKind, SpellManaSpentComparison,
 };
 use tricerules_cards::{CardRegistry, CounterKind};
 
@@ -37,11 +36,9 @@ fn issue_181_cards_use_the_shared_spell_spending_context() {
     };
     assert!(matches!(
         increment.intervening_if,
-        Some(InterveningIf::GameCondition(
-            GameCondition::TriggeringSpellManaSpent {
-                comparison: SpellManaSpentComparison::GreaterThanSourcePowerOrToughness,
-            }
-        ))
+        Some(GameCondition::TriggeringSpellManaSpent {
+            comparison: SpellManaSpentComparison::GreaterThanSourcePowerOrToughness,
+        })
     ));
 }
 

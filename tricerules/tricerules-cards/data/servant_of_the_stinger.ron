@@ -13,7 +13,7 @@
     ability_id: "triggered_01",
     presentation: Fallback,
     trigger: WheneverSelfDealsCombatDamageToPlayer,
-    intervening_if: Some(GameCondition(CrimesCommittedThisTurn(players: Controller, min: Some(1)))),
+    intervening_if: Some(CrimesCommittedThisTurn(players: Controller, min: Some(1))),
     effect: [ChooseResolutionBranch(
       optional: true,
       branches: [(

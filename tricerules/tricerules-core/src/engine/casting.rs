@@ -1791,32 +1791,22 @@ impl GameEngine {
         }) else {
             return false;
         };
-        ability.conditions.iter().all(|condition| match condition {
-            tricerules_cards::ActivationCondition::GameCondition(condition) => self
-                .condition_holds(
-                    condition,
-                    ConditionContext {
-                        controller,
-                        source_object_id: permanent_id,
-                        source_zone_change: self
-                            .state
-                            .zone_change_generation
-                            .get(&permanent_id)
-                            .copied()
-                            .unwrap_or(0),
-                        resolving_spell_id: None,
-                        stack_item: None,
-                    },
-                ),
-            tricerules_cards::ActivationCondition::BattlefieldCreatureCount {
-                filter,
-                min,
-                max,
-            } => {
-                let count = self.battlefield_creature_count(filter, controller, permanent_id);
-                min.is_none_or(|minimum| count >= minimum)
-                    && max.is_none_or(|maximum| count <= maximum)
-            }
+        ability.conditions.iter().all(|condition| {
+            self.condition_holds(
+                condition,
+                ConditionContext {
+                    controller,
+                    source_object_id: permanent_id,
+                    source_zone_change: self
+                        .state
+                        .zone_change_generation
+                        .get(&permanent_id)
+                        .copied()
+                        .unwrap_or(0),
+                    resolving_spell_id: None,
+                    stack_item: None,
+                },
+            )
         })
     }
 

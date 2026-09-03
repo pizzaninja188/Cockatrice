@@ -2,7 +2,7 @@ use tricerules_cards::primitives::{
     EffectSubject, GameCondition, LifeAmount, PlayerRecipient, RelativePlayerSet, SpellEffectKind,
     TargetKind,
 };
-use tricerules_cards::{AbilityCost, ActivationCondition, ActivationTiming, CardRegistry, Keyword};
+use tricerules_cards::{AbilityCost, ActivationTiming, CardRegistry, Keyword};
 
 fn face(card_id: &str) -> &'static tricerules_cards::CardFace {
     let definition = CardRegistry::global()
@@ -23,7 +23,7 @@ fn celestial_enforcer_requires_a_controlled_flying_creature() {
     assert_eq!(ability.timing, ActivationTiming::Normal);
     assert!(matches!(
         ability.conditions.as_slice(),
-        [ActivationCondition::BattlefieldCreatureCount { filter, min: Some(1), max: None }]
+        [GameCondition::BattlefieldCreatureCount { filter, min: Some(1), max: None }]
             if filter.controllers == RelativePlayerSet::Controller
                 && filter.required_keywords == [Keyword::Flying]
     ));
@@ -45,7 +45,7 @@ fn goblin_bird_grabber_grants_flying_to_itself_without_a_target() {
     ));
     assert!(matches!(
         ability.conditions.as_slice(),
-        [ActivationCondition::BattlefieldCreatureCount { filter, min: Some(1), max: None }]
+        [GameCondition::BattlefieldCreatureCount { filter, min: Some(1), max: None }]
             if filter.controllers == RelativePlayerSet::Controller
                 && filter.required_keywords == [Keyword::Flying]
     ));
@@ -64,12 +64,10 @@ fn caged_zombie_uses_the_committed_turn_death_fact() {
     let ability = &face.activated_abilities[0];
     assert!(matches!(
         ability.conditions.as_slice(),
-        [ActivationCondition::GameCondition(
-            GameCondition::CreatureDeathsThisTurn {
-                min: Some(1),
-                max: None,
-            }
-        )]
+        [GameCondition::CreatureDeathsThisTurn {
+            min: Some(1),
+            max: None,
+        }]
     ));
     assert_eq!(
         ability.effect,

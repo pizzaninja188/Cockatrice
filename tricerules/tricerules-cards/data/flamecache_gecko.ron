@@ -12,9 +12,9 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
-    intervening_if: Some(GameCondition(LifeChangedThisTurn(
+    intervening_if: Some(LifeChangedThisTurn(
       players: Relative(Opponents), change: Loss, quantifier: Any,
-    ))),
+    )),
     effect: [AddMana(amount: (b: 1, r: 1), retention: EndOfStep)],
   )],
   activated_abilities: [(

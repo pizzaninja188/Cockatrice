@@ -443,7 +443,7 @@ fn go_for_the_throat_fizzles_when_creature_target_left_battlefield() {
 
 #[test]
 fn go_for_the_throat_rejects_artifact_creature_target() {
-    // Go for the Throat can't target artifact creatures (not_artifact: true filter).
+    // Go for the Throat can't target artifact creatures through its Artifact exclusion.
     let decks = Some(vec![
         vec![
             "swamp".into(),

@@ -13,7 +13,7 @@ fn issue_89_cards_share_the_owner_library_placement_primitive() {
         &totally_lost.primary_face().spell_effect[..],
         [SpellEffectKind::PutInOwnersLibrary { subject: EffectSubject::Chosen(target), placement }]
             if target.kind == TargetKind::AnyPermanent
-                && target.not_land
+                && target.excluded_permanent_types == [tricerules_cards::PermanentTypeFilter::Land]
                 && *placement == LibraryPlacement::Top
     ));
 

@@ -1,5 +1,4 @@
 use super::legal_actions::fill_legal;
-use super::presentation::{presentation_ref, PresentationPath};
 use super::*;
 
 impl GameEngine {
@@ -441,90 +440,14 @@ impl GameEngine {
                             .effective_activated_abilities(oid)
                             .into_iter()
                             .map(|(ability_index, ability, _, path)| {
-                                let mana_cost = self.effective_ability_mana_cost(
-                                    object.controller,
-                                    oid,
-                                    &ability,
-                                );
-                                let mana_produced = self
-                                    .active_mana_options(oid, &ability)
-                                    .map(|options| {
-                                        options
-                                            .iter()
-                                            .map(mana_amount_symbols)
-                                            .collect::<Vec<_>>()
-                                            .join("/")
-                                    })
-                                    .unwrap_or_default();
-                                let cost_label = ability
-                                    .costs
-                                    .iter()
-                                    .map(|cost| match cost {
-                                        AbilityCost::RemoveCounters { counter, count, .. } => format!(
-                                            "Remove {count} {}counter(s)",
-                                            counter
-                                                .map(|k| format!("{} ", k.label()))
-                                                .unwrap_or_default()
-                                        ),
-                                        AbilityCost::Tap => "{T}".to_string(),
-                                        AbilityCost::Blight { count } => format!("Blight {count}"),
-                                        AbilityCost::TapPermanents { constraint, .. } => match constraint {
-                                            ObjectPaymentConstraint::ExactCount(count) => format!("Tap {count} permanents"),
-                                            ObjectPaymentConstraint::AggregateMinimum { minimum, .. } => format!("Tap permanents with total power {minimum} or greater"),
-                                        },
-                                        AbilityCost::Loyalty(delta) if *delta >= 0 => {
-                                            format!("+{delta}")
-                                        }
-                                        AbilityCost::Loyalty(delta) => delta.to_string(),
-                                        AbilityCost::Mana(cost) => cost.to_string(),
-                                        AbilityCost::Waterbend(cost) => format!("Waterbend {cost}"),
-                                        AbilityCost::Discard => "Discard a card".to_string(),
-                                        AbilityCost::DiscardSelf => "Discard this card".to_string(),
-                                        AbilityCost::ExileSelf => "Exile this card".to_string(),
-                                        AbilityCost::SacrificeSelf => "Sacrifice this".to_string(),
-                                        AbilityCost::SacrificePermanent { .. } => {
-                                            "Sacrifice a permanent".to_string()
-                                        }
-                                        AbilityCost::ExileGraveyardCards { constraint, .. } => match constraint {
-                                            ObjectPaymentConstraint::ExactCount(count) => format!("Exile {count} graveyard cards"),
-                                            ObjectPaymentConstraint::AggregateMinimum { minimum, .. } => format!("Collect evidence {minimum}"),
-                                        },
-                                    })
-                                    .collect::<Vec<_>>()
-                                    .join(", ");
-                                let fallback = ability.fallback_text_with_path(
-                                    face.as_deref()
-                                        .map(|face| face.name.as_str())
-                                        .unwrap_or(&object.card_id),
-                                    &path,
-                                );
-                                let definition = self.ability_definition(
+                                super::legal_actions::activated_ability_info(
+                                    self,
                                     oid,
                                     object.face_up_index,
-                                    path.clone(),
-                                );
-                                rv1::AbilityInfo {
-                                    text: fallback.clone(),
-                                    mana_cost,
-                                    mana_produced,
-                                    cost_label,
-                                    activatable: self.ability_activatable(
-                                        oid,
-                                        ability_index,
-                                        &ability,
-                                    ),
-                                    presentation: Some(presentation_ref(
-                                        self.registry,
-                                        &definition.card_id,
-                                        &definition.face_id,
-                                        definition
-                                            .ability_path
-                                            .iter()
-                                            .map(PresentationPath::Ability),
-                                        &ability.presentation,
-                                        fallback,
-                                    )),
-                                }
+                                    ability_index,
+                                    &path,
+                                    &ability,
+                                )
                             })
                             .collect();
                         let keywords = [

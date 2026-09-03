@@ -1733,7 +1733,7 @@ fn spell_target_legality_error_with_context(
             ));
         }
         // Filter-based targeted effects share one legality path; the filter carries any
-        // characteristic restriction (creature/player, `tapped`, `not_artifact`, hexproof/shroud).
+        // characteristic restriction (creature/player, `tapped`, type exclusions, hexproof/shroud).
         SpellEffectKind::Destroy {
             subject: EffectSubject::Chosen(_),
         }

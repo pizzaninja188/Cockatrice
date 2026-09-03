@@ -11,7 +11,7 @@
     ability_id: "activated_01",
     presentation: OracleLines([3]),
     costs: [Mana("{5}"), SacrificeSelf],
-    conditions: [GameCondition(ActivePlayer(players: Controller))],
+    conditions: [ActivePlayer(players: Controller)],
     effect: [
       Exile(subject: AttachedObject),
       CreateTokens(token: "ally_w_1_1", count: 1),

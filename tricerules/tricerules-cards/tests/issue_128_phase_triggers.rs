@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    EffectSubject, InterveningIf, SpellEffectKind, TargetController,
+    ConditionObjectRef, EffectSubject, GameCondition, SpellEffectKind, TargetController,
 };
 use tricerules_cards::{CardRegistry, CastTriggerPlayer, CounterKind, Keyword, TriggerCondition};
 
@@ -50,7 +50,13 @@ fn issue_128_cards_are_complete_registry_definitions() {
             player: CastTriggerPlayer::Controller
         }
     );
-    assert_eq!(survival.intervening_if, Some(InterveningIf::SourceTapped));
+    assert_eq!(
+        survival.intervening_if,
+        Some(GameCondition::ObjectTapped {
+            object: ConditionObjectRef::Source,
+            tapped: true,
+        })
+    );
     assert!(survival.triggers_only_once);
     assert!(matches!(
         survival.effect.as_slice(),

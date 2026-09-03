@@ -11,7 +11,7 @@
             ability_id: "triggered_01",
             presentation: OracleLines([1]),
             trigger: AtBeginningOfDrawStep(player: AnyPlayer),
-            intervening_if: Some(SourceUntapped),
+            intervening_if: Some(ObjectTapped(object: Source, tapped: false)),
             effect: [Draw(who: AffectedPlayer, count: 1)],
         ),
     ],

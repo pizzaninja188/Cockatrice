@@ -56,6 +56,82 @@ struct EffectCx<'a> {
     effect_index: u32,
 }
 
+impl EffectCx<'_> {
+    fn previous_battlefield_object(&self) -> Option<ObjectId> {
+        let selected = self.previous_effect_result.selected_objects.first()?;
+        let generation = self
+            .engine
+            .state
+            .zone_change_generation
+            .get(&selected.object_id)
+            .copied()
+            .unwrap_or(0);
+        (generation == selected.zone_change_generation
+            && self
+                .engine
+                .state
+                .objects
+                .get(&selected.object_id)
+                .is_some_and(|object| object.zone == Zone::Battlefield))
+        .then_some(selected.object_id)
+    }
+
+    fn resolve_battlefield_subject(&self, subject: &EffectSubject) -> Option<ObjectId> {
+        match subject {
+            EffectSubject::PreviousEffectObject => self.previous_battlefield_object(),
+            EffectSubject::Chosen(filter) => self.targets.first().copied().filter(|object_id| {
+                target_filter_legal_at_resolution(
+                    self.engine,
+                    filter,
+                    *object_id,
+                    self.controller,
+                    TargetSourceIdentity::for_stack_item(self.engine, self.top),
+                    self.top.trigger_context,
+                )
+            }),
+            _ => resolve_effect_subject(self.engine, self.top, self.targets, subject),
+        }
+    }
+
+    fn resolve_battlefield_subjects(&self, subject: &EffectSubject) -> Vec<ObjectId> {
+        match subject {
+            EffectSubject::Chosen(filter) => self
+                .targets
+                .iter()
+                .copied()
+                .filter(|object_id| {
+                    target_filter_legal_at_resolution(
+                        self.engine,
+                        filter,
+                        *object_id,
+                        self.controller,
+                        TargetSourceIdentity::for_stack_item(self.engine, self.top),
+                        self.top.trigger_context,
+                    )
+                })
+                .collect(),
+            _ => self
+                .resolve_battlefield_subject(subject)
+                .into_iter()
+                .collect(),
+        }
+    }
+
+    fn resolve_continuous_subject(
+        &self,
+        subject: &EffectSubject,
+    ) -> Option<(ObjectId, Option<ObjectId>)> {
+        let object_id = self.resolve_battlefield_subject(subject)?;
+        let source_id = match subject {
+            EffectSubject::Source | EffectSubject::AttachedObject => self.top.source_permanent_id,
+            EffectSubject::Chosen(_)
+            | EffectSubject::TriggerObject
+            | EffectSubject::PreviousEffectObject => Some(self.top.id),
+        };
+        Some((object_id, source_id))
+    }
+}
+
 impl GameEngine {
     /// CR 707.10f / 608.3f: a resolving permanent spell copy becomes a token. This is
     /// not a token-creation instruction: use normal entry replacements, never creation multipliers.

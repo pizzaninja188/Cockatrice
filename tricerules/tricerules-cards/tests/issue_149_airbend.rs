@@ -16,7 +16,7 @@ fn airbending_lesson_uses_the_reusable_owner_cast_permission() {
             },
             SpellEffectKind::Draw { count: Amount::Fixed(1), .. },
         ] if target.kind == TargetKind::AnyPermanent
-            && target.not_land
+            && target.excluded_permanent_types == [tricerules_cards::PermanentTypeFilter::Land]
             && *alternative_cost == ManaCost::parse("{2}").expect("cost")
     ));
 }

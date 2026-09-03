@@ -19,7 +19,7 @@ fn grant(
     engine: &mut GameEngine,
     source: ObjectId,
     cardinality: TapTriggerCardinality,
-    condition: Option<InterveningIf>,
+    condition: Option<GameCondition>,
 ) {
     let mut ability = engine
         .registry
@@ -145,7 +145,10 @@ fn later_status_changes_do_not_change_the_trigger_time_intervening_if() {
         &mut engine,
         source,
         TapTriggerCardinality::EachObject,
-        Some(InterveningIf::SourceUntapped),
+        Some(GameCondition::ObjectTapped {
+            object: ConditionObjectRef::Source,
+            tapped: false,
+        }),
     );
     let events = engine.tap_permanents(7, &[first]);
     set_tapped(&mut engine.state, source, true);
@@ -250,7 +253,10 @@ fn false_event_conditions_do_not_revive_or_spend_allowances_later() {
         &mut engine,
         source,
         TapTriggerCardinality::EachObject,
-        Some(InterveningIf::SourceTapped),
+        Some(GameCondition::ObjectTapped {
+            object: ConditionObjectRef::Source,
+            tapped: true,
+        }),
     );
     let events = engine.tap_permanents(7, &[first]);
     set_tapped(&mut engine.state, source, true);

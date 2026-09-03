@@ -1,4 +1,5 @@
 use super::*;
+use crate::state::TurnRecord;
 
 /// Shared public-cohort matcher. The caller supplies the characteristic layer appropriate to
 /// its consumer, so layer-7 static counts never recursively evaluate layer 7.
@@ -248,6 +249,26 @@ pub(super) fn spell_cast_count(
     item: Option<&StackItem>,
     exclude_source: bool,
 ) -> u32 {
+    spell_cast_count_in_record(
+        state,
+        &state.turn_history.current,
+        players,
+        filter,
+        controller,
+        item,
+        exclude_source,
+    )
+}
+
+pub(super) fn spell_cast_count_in_record(
+    state: &GameState,
+    record: &TurnRecord,
+    players: ConditionPlayerSet,
+    filter: &SpellCastFilter,
+    controller: PlayerId,
+    item: Option<&StackItem>,
+    exclude_source: bool,
+) -> u32 {
     let chosen = selected_condition_player(
         players,
         item.map(|item| item.targets.as_slice()),
@@ -257,9 +278,7 @@ pub(super) fn spell_cast_count(
         .then(|| item.and_then(|item| item.cast_occurrence))
         .flatten();
     clamp_public_count(
-        state
-            .turn_history
-            .current
+        record
             .spell_casts
             .iter()
             .filter(|fact| {
@@ -1018,6 +1037,26 @@ impl GameEngine {
                 None,
                 false,
             )),
+            GameCondition::SpellsCastLastTurn {
+                players, filter, ..
+            } => {
+                let count = if *players == RelativePlayerSet::All
+                    && *filter == SpellCastFilter::default()
+                {
+                    self.state.turn_history.previous.spells_cast
+                } else {
+                    spell_cast_count_in_record(
+                        &self.state,
+                        &self.state.turn_history.previous,
+                        ConditionPlayerSet::Relative(*players),
+                        filter,
+                        context.controller,
+                        None,
+                        false,
+                    )
+                };
+                condition.matches_value(count)
+            }
             GameCondition::CrimesCommittedThisTurn { players, .. } => {
                 let count = self
                     .state
@@ -1148,6 +1187,39 @@ impl GameEngine {
                         .damaged_objects
                         .contains(&identity)
                 }),
+            GameCondition::ObjectTapped { object, tapped } => {
+                let Some((object_id, expected_generation)) =
+                    self.condition_object_identity(*object, context)
+                else {
+                    return false;
+                };
+                let live_tapped = self
+                    .state
+                    .objects
+                    .get(&object_id)
+                    .filter(|candidate| candidate.zone == Zone::Battlefield)
+                    .filter(|_| {
+                        self.state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == expected_generation
+                    })
+                    .map(|candidate| candidate.tapped);
+                let observed_tapped = live_tapped.or_else(|| {
+                    matches!(object, ConditionObjectRef::Source)
+                        .then(|| {
+                            self.state
+                                .last_known_tapped_by_generation
+                                .get(&(object_id, expected_generation))
+                                .copied()
+                                .or_else(|| self.state.last_known_tapped.get(&object_id).copied())
+                        })
+                        .flatten()
+                });
+                observed_tapped == Some(*tapped)
+            }
             GameCondition::ObjectMatches { object, filter } => self
                 .condition_object_identity(*object, context)
                 .is_some_and(|(object_id, expected_generation)| {

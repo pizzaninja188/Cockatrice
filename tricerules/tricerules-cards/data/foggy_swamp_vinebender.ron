@@ -13,7 +13,7 @@
     ability_id: "activated_01",
     presentation: Fallback,
     costs: [Waterbend("{5}")],
-    conditions: [GameCondition(ActivePlayer(players: Controller))],
+    conditions: [ActivePlayer(players: Controller)],
     effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
   )],
 )

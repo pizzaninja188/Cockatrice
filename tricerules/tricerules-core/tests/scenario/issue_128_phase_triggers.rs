@@ -1,5 +1,7 @@
 use crate::helpers::*;
-use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration, InterveningIf};
+use tricerules_cards::primitives::{
+    ConditionObjectRef, ContinuousEffectKind, EffectDuration, GameCondition,
+};
 use tricerules_cards::{Amount, SpellEffectKind, TriggeredAbilityDef};
 use tricerules_cards::{CardRegistry, CastTriggerPlayer, CounterKind, Keyword, TriggerCondition};
 use tricerules_core::state::PlayerState;
@@ -446,7 +448,10 @@ fn issue_164_intervening_if_and_real_turn_rollover_preserve_trigger_caps() {
     ability.effect = vec![SpellEffectKind::GainLife {
         amount: Amount::Fixed(1),
     }];
-    ability.intervening_if = Some(InterveningIf::SourceTapped);
+    ability.intervening_if = Some(GameCondition::ObjectTapped {
+        object: ConditionObjectRef::Source,
+        tapped: true,
+    });
     let source = capped_phase_source(&mut engine, ability);
     refire_begin_combat(&mut engine);
     assert!(engine.state.stack.is_empty());

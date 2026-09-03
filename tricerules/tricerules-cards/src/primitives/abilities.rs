@@ -1,10 +1,10 @@
 //! Activated, triggered, and static ability definitions.
 
 use super::{
-    AbilityCost, ActivatedCostModifier, Amount, BattlefieldCreatureCountFilter, CardTypeFilter,
-    CastCostReceiptCondition, Color, CounterKind, EffectContext, GameCondition, Keyword,
-    ObjectCastCostKind, PermanentEventFilter, PowerComparison, RelativePlayerSet, SpellEffectKind,
-    TargetController, TargetFilter, TargetKind, TargetingDef,
+    AbilityCost, ActivatedCostModifier, Amount, CardTypeFilter, CastCostReceiptCondition, Color,
+    CounterKind, EffectContext, GameCondition, Keyword, ObjectCastCostKind, PermanentEventFilter,
+    PowerComparison, RelativePlayerSet, SpellEffectKind, TargetController, TargetFilter,
+    TargetKind, TargetingDef,
 };
 use crate::{AbilityId, AbilityPresentation, ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
@@ -73,7 +73,7 @@ pub struct ActivatedAbilityDef {
     /// Public conditions that must all hold when activation begins. They are activation
     /// instructions, not intervening-if clauses, and are not checked again on resolution.
     #[serde(default)]
-    pub conditions: Vec<ActivationCondition>,
+    pub conditions: Vec<GameCondition>,
     /// Maximum successful activations allowed for this object identity in a turn.
     #[serde(default)]
     pub activation_limit: Option<ActivationLimit>,
@@ -114,58 +114,6 @@ pub enum ActivationTiming {
     Normal,
     /// CR 307.5 / 602.5d: controller's main phase, with priority and an empty stack.
     SorcerySpeed,
-}
-
-/// A public predicate checked exactly when an activated ability begins activation (CR 602.1b).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ActivationCondition {
-    /// Reuse an engine-owned public turn-history fact such as "a creature died this turn."
-    GameCondition(GameCondition),
-    /// Require the bounded number of battlefield creatures matching the shared derived filter.
-    /// Celestial Enforcer and Goblin Bird-Grabber use `min: Some(1)` plus Flying.
-    BattlefieldCreatureCount {
-        filter: BattlefieldCreatureCountFilter,
-        #[serde(default)]
-        min: Option<u32>,
-        #[serde(default)]
-        max: Option<u32>,
-    },
-}
-
-impl ActivationCondition {
-    pub(crate) fn validate(&self) -> Result<(), String> {
-        match self {
-            ActivationCondition::GameCondition(condition) => {
-                if condition.requires_triggering_spell_context() {
-                    return Err(
-                        "activation conditions cannot reference triggering-spell mana spending"
-                            .into(),
-                    );
-                }
-                condition.validate_live()
-            }
-            ActivationCondition::BattlefieldCreatureCount { filter, min, max } => {
-                filter.validate()?;
-                if min.is_none() && max.is_none() {
-                    return Err(
-                        "BattlefieldCreatureCount activation condition requires at least one of min or max"
-                            .into(),
-                    );
-                }
-                if min
-                    .as_ref()
-                    .zip(max.as_ref())
-                    .is_some_and(|(minimum, maximum)| minimum > maximum)
-                {
-                    return Err(
-                        "BattlefieldCreatureCount activation condition min cannot exceed max"
-                            .into(),
-                    );
-                }
-                Ok(())
-            }
-        }
-    }
 }
 
 impl ActivatedAbilityDef {
@@ -271,7 +219,7 @@ impl ActivatedAbilityDef {
             return Err("activated abilities cannot reference a trigger's defending player".into());
         }
         for condition in &self.conditions {
-            condition.validate()?;
+            condition.validate_live()?;
         }
         for modifier in &self.cost_modifiers {
             modifier.validate()?;
@@ -1041,32 +989,6 @@ pub enum TargetingSourceFilter {
     SpellOrAbility,
 }
 
-/// CR 603.4 intervening-"if" clause — the `if …` between the trigger event and the effect
-/// ("at the beginning of each player's draw step, **if this artifact is untapped**, …"). Unlike
-/// an ordinary condition it is checked *twice*: when the ability would go on the stack, and
-/// again as it resolves; failing either check means the ability does nothing.
-///
-/// This is the general CR 603.4 slot on [`TriggeredAbilityDef`] — a new condition is a variant
-/// here, never a per-card bool on the def.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum InterveningIf {
-    /// "if {this} is untapped" — Howling Mine.
-    SourceUntapped,
-    /// "if this creature is tapped" — Acrobatic Cheerleader and Cautious Survivor.
-    SourceTapped,
-    /// Total spells successfully cast during the immediately preceding turn, inclusive bounds.
-    /// `None` is an open bound. Covers both faces of the original Innistrad werewolves.
-    SpellsCastLastTurn {
-        #[serde(default)]
-        min: Option<u32>,
-        #[serde(default)]
-        max: Option<u32>,
-    },
-    /// A reusable public game-state predicate. The nested condition is validated at registry load
-    /// and evaluated through the engine's canonical condition funnel for both CR 603.4 checks.
-    GameCondition(GameCondition),
-}
-
 /// One triggered ability on a permanent (RON data tier). The effects are plain
 /// [`SpellEffectKind`]s — the same effect type spells and activated abilities use. A
 /// self-referencing effect (e.g. an upkeep self-pump) uses [`EffectSubject::Source`] rather than
@@ -1095,7 +1017,7 @@ pub struct TriggeredAbilityDef {
     /// CR 603.4: optional intervening-"if" clause, checked both when the trigger would be put
     /// on the stack and again on resolution. `None` for the overwhelming majority of triggers.
     #[serde(default)]
-    pub intervening_if: Option<InterveningIf>,
+    pub intervening_if: Option<GameCondition>,
     /// Printed "This ability triggers only once." Persistent for this ability on this exact
     /// battlefield object, not merely once per turn. Acrobatic Cheerleader and Sleuth Instructor
     /// establish reuse across phase and event triggers. A CR 400.7 zone change creates a new
@@ -1153,8 +1075,7 @@ impl TriggeredAbilityDef {
         );
         let uses_spell_mana_context = matches!(
             self.intervening_if.as_ref(),
-            Some(InterveningIf::GameCondition(condition))
-                if condition.requires_triggering_spell_context()
+            Some(condition) if condition.requires_triggering_spell_context()
         ) || effects
             .iter()
             .copied()
@@ -1193,7 +1114,7 @@ impl TriggeredAbilityDef {
                 "counter-triggering-stack-object effect requires a becomes-target trigger".into(),
             );
         }
-        if let Some(InterveningIf::GameCondition(condition)) = self.intervening_if.as_ref() {
+        if let Some(condition) = self.intervening_if.as_ref() {
             condition.validate_trigger_condition()?;
         }
         for effect in &self.effect {

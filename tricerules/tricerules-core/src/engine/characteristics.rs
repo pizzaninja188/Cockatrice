@@ -519,6 +519,26 @@ impl CharacteristicsEvaluator<'_> {
                 None,
                 false,
             )),
+            GameCondition::SpellsCastLastTurn {
+                players, filter, ..
+            } => {
+                let count = if *players == RelativePlayerSet::All
+                    && *filter == SpellCastFilter::default()
+                {
+                    self.state.turn_history.previous.spells_cast
+                } else {
+                    super::history::spell_cast_count_in_record(
+                        self.state,
+                        &self.state.turn_history.previous,
+                        ConditionPlayerSet::Relative(*players),
+                        filter,
+                        controller,
+                        None,
+                        false,
+                    )
+                };
+                condition.matches_value(count)
+            }
             GameCondition::CardsDrawnThisTurn { players, .. } => {
                 let count = self
                     .state
@@ -633,6 +653,17 @@ impl CharacteristicsEvaluator<'_> {
                 condition.matches_value(count)
             }
             GameCondition::ObjectWasDealtDamageThisTurn { .. } => false,
+            GameCondition::ObjectTapped { object, tapped } => {
+                if !matches!(object, ConditionObjectRef::Source) {
+                    return false;
+                }
+                self.state
+                    .objects
+                    .get(&source_oid)
+                    .filter(|candidate| candidate.zone == Zone::Battlefield)
+                    .map(|candidate| candidate.tapped)
+                    == Some(*tapped)
+            }
             // Registry validation rejects this dependency-sensitive condition for the only
             // current producer of conditional characteristic effects. Normal condition users
             // evaluate it through `GameEngine::condition_holds` instead.
@@ -952,9 +983,6 @@ pub(super) fn permanent_matches_filter_characteristics(
     {
         return false;
     }
-    if filter.not_land && characteristics.has_type("Land") {
-        return false;
-    }
     if !filter
         .required_subtypes
         .iter()
@@ -994,9 +1022,6 @@ pub(super) fn permanent_matches_filter_characteristics(
         if !matches {
             return false;
         }
-    }
-    if filter.not_artifact && characteristics.is_artifact() {
-        return false;
     }
     if filter
         .tapped

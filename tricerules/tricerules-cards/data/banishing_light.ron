@@ -9,6 +9,6 @@
     ability_id: "triggered_01",
     presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
-    effect: [ExileUntilSourceLeaves(target: (kind: AnyPermanent, controller: Opponent, not_land: true))],
+    effect: [ExileUntilSourceLeaves(target: (kind: AnyPermanent, controller: Opponent, excluded_permanent_types: [Land]))],
   )],
 )

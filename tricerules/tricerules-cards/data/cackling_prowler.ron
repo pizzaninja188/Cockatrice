@@ -20,7 +20,7 @@
       ability_id: "triggered_02",
       presentation: Fallback,
       trigger: AtBeginningOfEndStep(player: Controller),
-      intervening_if: Some(GameCondition(CreatureDeathsThisTurn(min: Some(1), max: None))),
+      intervening_if: Some(CreatureDeathsThisTurn(min: Some(1), max: None)),
       effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
     ),
   ],

@@ -2,9 +2,9 @@ use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
     AbilityCost, ActivatedCostModifier, AdditionalCost, Amount, BattlefieldAggregate,
     CardResultAction, CardResultSource, CastCostGroupDef, CastCostReceiptCondition, EffectContext,
-    FaceChangeAction, GameCondition, InterveningIf, ObjectContributionKind,
-    ResolutionBranchRequirement, SpecialActionAffected, SpellEffectKind, StaticAbilityDef,
-    TargetController, TargetKind, TargetingDef, TriggerCondition, ZoneCardFilter,
+    FaceChangeAction, GameCondition, ObjectContributionKind, ResolutionBranchRequirement,
+    SpecialActionAffected, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
+    TargetingDef, TriggerCondition, ZoneCardFilter,
 };
 use crate::token_def::TokenDefinition;
 use crate::ManaSymbol;
@@ -1245,9 +1245,7 @@ impl CardRegistry {
                         reason: "token triggered ability must contain at least one effect".into(),
                     });
                 }
-                if let Some(InterveningIf::GameCondition(condition)) =
-                    ability.intervening_if.as_ref()
-                {
+                if let Some(condition) = ability.intervening_if.as_ref() {
                     condition.validate_trigger_condition().map_err(|reason| {
                         RegistryError::InvalidCard {
                             id: id.clone(),
@@ -1638,9 +1636,7 @@ impl CardRegistry {
                                 .into(),
                         });
                     }
-                    if let Some(InterveningIf::GameCondition(condition)) =
-                        ability.intervening_if.as_ref()
-                    {
+                    if let Some(condition) = ability.intervening_if.as_ref() {
                         condition.validate_trigger_condition().map_err(|reason| {
                             RegistryError::InvalidCard {
                                 id: card.id.clone(),
@@ -1944,10 +1940,10 @@ mod tests {
     use crate::primitives::{
         Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer, CombatRole, CountExpression,
         CounterKind, CreatureEventFilter, CreatureScopeController, CreatureScopeFilter,
-        EffectSubject, EntersTappedAffected, EntersWithCountersAffected, GameCondition,
-        InterveningIf, ManaAmount, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
-        PowerComparison, RelativePlayerSet, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
-        TargetFilter, TargetKind, TriggerCondition,
+        EffectSubject, EntersTappedAffected, EntersWithCountersAffected, GameCondition, ManaAmount,
+        PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
+        RelativePlayerSet, SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetFilter,
+        TargetKind, TriggerCondition,
     };
 
     #[test]
@@ -1986,7 +1982,7 @@ mod tests {
             let card = format!(
                 r#"(id: "crime_test", name: "Crime Test", face_id: "crime_test", types: ["Creature"], power: 1, toughness: 1,
                 triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 1)],
-                    intervening_if: Some(GameCondition(CrimesCommittedThisTurn(players: Controller, {bounds}))) )])"#
+                    intervening_if: Some(CrimesCommittedThisTurn(players: Controller, {bounds})) )])"#
             );
             assert_eq!(
                 CardRegistry::from_chunks(&[&card]).is_ok(),
@@ -2954,7 +2950,7 @@ mod tests {
                 ability_id: "triggered_01",
                 presentation: Fallback,
                 trigger: AtBeginningOfEndStep(player: Controller),
-                intervening_if: Some(GameCondition(CreatureDeathsThisTurn(min: None, max: None))),
+                intervening_if: Some(CreatureDeathsThisTurn(min: None, max: None)),
                 effect: [Draw(count: 1)],
             )],
         )"#;
@@ -4006,12 +4002,10 @@ mod tests {
     #[test]
     fn issue_60_end_step_cards_share_the_trigger_and_condition_shape() {
         let registry = CardRegistry::from_embedded().unwrap();
-        let death_condition = Some(InterveningIf::GameCondition(
-            GameCondition::CreatureDeathsThisTurn {
-                min: Some(1),
-                max: None,
-            },
-        ));
+        let death_condition = Some(GameCondition::CreatureDeathsThisTurn {
+            min: Some(1),
+            max: None,
+        });
 
         let mauler = &registry
             .get("sabertooth_mauler")
@@ -4579,9 +4573,9 @@ mod tests {
             "static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: ConditionalSelfModifier(condition: CastSnapshot(index: 0), delta_power: 1))]",
             "static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: EntersWithCounters(counter: PlusOnePlusOne, amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2)))]",
             "activated_abilities: [(ability_id: \"activated_01\", presentation: Fallback, costs: [], effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))])]",
-            "activated_abilities: [(ability_id: \"activated_01\", presentation: Fallback, costs: [], conditions: [GameCondition(CastSnapshot(index: 0))], effect: [GainLife(amount: 1)])]",
+            "activated_abilities: [(ability_id: \"activated_01\", presentation: Fallback, costs: [], conditions: [CastSnapshot(index: 0)], effect: [GainLife(amount: 1)])]",
             "triggered_abilities: [(ability_id: \"triggered_01\", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))])]",
-            "triggered_abilities: [(ability_id: \"triggered_01\", presentation: Fallback, trigger: WhenSelfEntersBattlefield, intervening_if: GameCondition(CastSnapshot(index: 0)), effect: [GainLife(amount: 1)])]",
+            "triggered_abilities: [(ability_id: \"triggered_01\", presentation: Fallback, trigger: WhenSelfEntersBattlefield, intervening_if: Some(CastSnapshot(index: 0)), effect: [GainLife(amount: 1)])]",
             "triggered_abilities: [(ability_id: \"triggered_01\", presentation: Fallback, trigger: WheneverSelfAttacks(minimum_other_attackers: 0), effect: [DamageAttackedPlayerOrPlaneswalker(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))])]",
             "spell_effect: [GrantTriggeredAbility(subject: Chosen((kind: Creature)), ability: (ability_id: \"triggered_01\", presentation: Fallback, trigger: WhenSelfDies, effect: [GainLife(amount: Conditional(condition: CastSnapshot(index: 0), when_true: 4, otherwise: 2))]))]",
         ] {

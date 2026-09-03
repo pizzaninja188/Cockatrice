@@ -425,8 +425,7 @@ impl GameEngine {
             event_triggers.retain(|trigger| {
                 let requires_event_context = matches!(
                     trigger.ability.intervening_if.as_ref(),
-                    Some(InterveningIf::GameCondition(condition))
-                        if matches!(condition, GameCondition::TriggeringSpellManaSpent { .. })
+                    Some(GameCondition::TriggeringSpellManaSpent { .. })
                 );
                 !requires_event_context
                     || self.intervening_if_holds_at_generation(
@@ -1954,8 +1953,7 @@ impl GameEngine {
             .filter(|(_, ability, _)| {
                 let requires_event_context = matches!(
                     ability.intervening_if.as_ref(),
-                    Some(InterveningIf::GameCondition(condition))
-                        if matches!(condition, GameCondition::TriggeringSpellManaSpent { .. })
+                    Some(GameCondition::TriggeringSpellManaSpent { .. })
                 );
                 source.event_conditions_checked
                     || requires_event_context
@@ -2044,7 +2042,7 @@ impl GameEngine {
         &self,
         source_id: ObjectId,
         controller: PlayerId,
-        clause: Option<&InterveningIf>,
+        clause: Option<&GameCondition>,
     ) -> bool {
         self.intervening_if_holds_at_generation(source_id, controller, clause, None, None)
     }
@@ -2053,67 +2051,29 @@ impl GameEngine {
         &self,
         source_id: ObjectId,
         controller: PlayerId,
-        clause: Option<&InterveningIf>,
+        clause: Option<&GameCondition>,
         source_generation: Option<u64>,
         trigger_context: Option<&TriggerContext>,
     ) -> bool {
-        match clause {
-            None => true,
-            Some(InterveningIf::SourceUntapped) | Some(InterveningIf::SourceTapped) => {
-                let requires_tapped = matches!(clause, Some(InterveningIf::SourceTapped));
-                let source_is_tapped = match self.state.objects.get(&source_id) {
-                    Some(o)
-                        if o.zone == Zone::Battlefield
-                            && source_generation.is_none_or(|generation| {
-                                self.state
-                                    .zone_change_generation
-                                    .get(&source_id)
-                                    .copied()
-                                    .unwrap_or(0)
-                                    == generation
-                            }) =>
-                    {
-                        o.tapped
-                    }
-                    // CR 608.2h / 113.7a: if the source left after triggering, evaluate the
-                    // intervening condition from generation-scoped last known tap status. Reading
-                    // the live object would confuse a returned object and CR 400.7's tap reset.
-                    _ => source_generation
-                        .and_then(|generation| {
-                            self.state
-                                .last_known_tapped_by_generation
-                                .get(&(source_id, generation))
-                                .copied()
-                        })
-                        .or_else(|| self.state.last_known_tapped.get(&source_id).copied())
-                        .unwrap_or(false),
-                };
-                source_is_tapped == requires_tapped
-            }
-            Some(InterveningIf::SpellsCastLastTurn { min, max }) => {
-                let count = self.state.turn_history.previous.spells_cast;
-                min.is_none_or(|minimum| count >= minimum)
-                    && max.is_none_or(|maximum| count <= maximum)
-            }
-            Some(InterveningIf::GameCondition(condition)) => self
-                .condition_holds_with_trigger_context(
-                    condition,
-                    ConditionContext {
-                        controller,
-                        source_object_id: source_id,
-                        source_zone_change: source_generation.unwrap_or_else(|| {
-                            self.state
-                                .zone_change_generation
-                                .get(&source_id)
-                                .copied()
-                                .unwrap_or(0)
-                        }),
-                        resolving_spell_id: None,
-                        stack_item: None,
-                    },
-                    trigger_context,
-                ),
-        }
+        clause.is_none_or(|condition| {
+            self.condition_holds_with_trigger_context(
+                condition,
+                ConditionContext {
+                    controller,
+                    source_object_id: source_id,
+                    source_zone_change: source_generation.unwrap_or_else(|| {
+                        self.state
+                            .zone_change_generation
+                            .get(&source_id)
+                            .copied()
+                            .unwrap_or(0)
+                    }),
+                    resolving_spell_id: None,
+                    stack_item: None,
+                },
+                trigger_context,
+            )
+        })
     }
 
     /// The player a trigger's effects act on when the trigger names a player other than its
@@ -3339,13 +3299,11 @@ mod tests {
                 .triggered_abilities[0]
                 .clone();
             ability.trigger = condition.clone();
-            ability.intervening_if = Some(InterveningIf::GameCondition(
-                GameCondition::SourceCounterCount {
-                    counter: CounterKind::PlusOnePlusOne,
-                    min: Some(1),
-                    max: None,
-                },
-            ));
+            ability.intervening_if = Some(GameCondition::SourceCounterCount {
+                counter: CounterKind::PlusOnePlusOne,
+                min: Some(1),
+                max: None,
+            });
             engine.state.add_triggered_ability_grant(ContinuousEffect {
                 trigger_grant_origin: None,
                 source_id: None,

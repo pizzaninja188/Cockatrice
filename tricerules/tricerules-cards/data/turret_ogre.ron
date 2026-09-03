@@ -15,7 +15,7 @@
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
       effect: [DamagePlayer(amount: 2, who: EachOpponent)],
-      intervening_if: Some(GameCondition(BattlefieldAggregate(
+      intervening_if: Some(BattlefieldAggregate(
         filter: (
           controllers: Controller,
           card_type: Some(Creature),
@@ -23,7 +23,7 @@
         ),
         aggregate: MaximumPower,
         min: Some(4),
-      ))),
+      )),
     ),
   ],
 )

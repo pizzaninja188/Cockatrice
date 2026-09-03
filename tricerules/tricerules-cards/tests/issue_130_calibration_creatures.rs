@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
-    CombatRestrictionScope, EffectSubject, GameCondition, InterveningIf, LifeAmount,
-    PlayerRecipient, PowerComparison, SpellEffectKind, TargetController, TargetKind,
+    CombatRestrictionScope, EffectSubject, GameCondition, LifeAmount, PlayerRecipient,
+    PowerComparison, SpellEffectKind, TargetController, TargetKind,
 };
 use tricerules_cards::{AbilityCost, CardRegistry, Color, Keyword, TriggerCondition};
 
@@ -353,9 +353,7 @@ fn issue_130_target_choice_and_condition_shapes_use_generic_vocabulary() {
         assert!(
             matches!(
                 face(id).triggered_abilities[0].intervening_if,
-                Some(InterveningIf::GameCondition(
-                    GameCondition::BattlefieldCreatureCount { min: Some(1), .. }
-                ))
+                Some(GameCondition::BattlefieldCreatureCount { min: Some(1), .. })
             ),
             "{id}"
         );

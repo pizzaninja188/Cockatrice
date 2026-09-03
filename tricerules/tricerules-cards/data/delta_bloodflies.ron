@@ -12,9 +12,9 @@
     presentation: OracleLines([2]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
     effect: [LoseLife(amount: Fixed(1), who: EachOpponent)],
-    intervening_if: Some(GameCondition(BattlefieldCreatureCount(
+    intervening_if: Some(BattlefieldCreatureCount(
       filter: (controllers: Controller, requires_any_counter: true),
       min: Some(1),
-    ))),
+    )),
   )],
 )

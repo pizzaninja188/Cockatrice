@@ -12,9 +12,9 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WheneverPlayerCastsSpell(caster: Controller),
-      intervening_if: Some(GameCondition(TriggeringSpellManaSpent(
+      intervening_if: Some(TriggeringSpellManaSpent(
         comparison: GreaterThanSourcePowerOrToughness,
-      ))),
+      )),
       effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
     ),
   ],

@@ -7,7 +7,7 @@
   types: ["Instant", "Lesson"],
   spell_effect: [
     ExileWithOwnerCastPermission(
-      subject: Chosen((kind: AnyPermanent, not_land: true)),
+      subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land])),
       alternative_cost: "{2}",
     ),
     Draw(count: 1),

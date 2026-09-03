@@ -13,9 +13,9 @@
     presentation: OracleLines([1]),
     trigger: AtBeginningOfEndStep(player: Controller),
     effect: [GainLife(amount: 2)],
-    intervening_if: Some(GameCondition(BattlefieldCreatureCount(
+    intervening_if: Some(BattlefieldCreatureCount(
       filter: (controllers: Controller, tapped: Some(true)),
       min: Some(2),
-    ))),
+    )),
   )],
 )

@@ -14,6 +14,6 @@
     presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [LibraryPartition(count: 3, top_min: 0, top_max: Some(1), kind: Look)],
-    intervening_if: Some(GameCondition(AttackedThisTurn(players: Controller))),
+    intervening_if: Some(AttackedThisTurn(players: Controller)),
   )],
 )

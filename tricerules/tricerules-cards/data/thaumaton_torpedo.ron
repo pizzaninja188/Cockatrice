@@ -17,6 +17,6 @@
         min: Some(1),
       ),
     )],
-    effect: [Destroy(subject: Chosen((kind: AnyPermanent, not_land: true)))],
+    effect: [Destroy(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land])))],
   )],
 )

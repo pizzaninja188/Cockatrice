@@ -11,9 +11,9 @@
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [CreateTokens(token: "elf_warrior_g_1_1", count: 1, who: SourceController)],
-    intervening_if: Some(GameCondition(BattlefieldCreatureCount(
+    intervening_if: Some(BattlefieldCreatureCount(
       filter: (controllers: Controller, subtype: Some("Elf"), exclude_source: true),
       min: Some(1),
-    ))),
+    )),
   )],
 )

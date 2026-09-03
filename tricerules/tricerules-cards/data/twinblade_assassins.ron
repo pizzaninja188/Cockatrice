@@ -13,7 +13,7 @@
       ability_id: "triggered_01",
       presentation: OracleLines([1]),
       trigger: AtBeginningOfEndStep(player: Controller),
-      intervening_if: Some(GameCondition(CreatureDeathsThisTurn(min: Some(1), max: None))),
+      intervening_if: Some(CreatureDeathsThisTurn(min: Some(1), max: None)),
       effect: [Draw(count: 1)],
     ),
   ],

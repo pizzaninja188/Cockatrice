@@ -345,11 +345,12 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
     }
 }
 
-fn activated_ability_info(
+pub(super) fn activated_ability_info(
     eng: &GameEngine,
     source_id: ObjectId,
     face_index: usize,
     ability_index: usize,
+    ability_path: &[tricerules_cards::AbilityId],
     ability: &ActivatedAbilityDef,
 ) -> rv1::AbilityInfo {
     let controller = eng
@@ -407,13 +408,13 @@ fn activated_ability_info(
         })
         .collect::<Vec<_>>()
         .join(", ");
-    let fallback = ability.fallback_text(
+    let fallback = ability.fallback_text_with_path(
         &eng.effective_face(source_id)
             .map(|face| face.name.clone())
             .unwrap_or_else(|| "Unknown card".into()),
+        ability_path,
     );
-    let definition =
-        eng.ability_definition(source_id, face_index, vec![ability.ability_id.clone()]);
+    let definition = eng.ability_definition(source_id, face_index, ability_path.to_vec());
     rv1::AbilityInfo {
         text: fallback.clone(),
         mana_cost,
@@ -487,6 +488,7 @@ fn legal_zone_ability_actions(
                         object_id,
                         face_index,
                         ability_index,
+                        std::slice::from_ref(&ability.ability_id),
                         &ability,
                     )),
                 });

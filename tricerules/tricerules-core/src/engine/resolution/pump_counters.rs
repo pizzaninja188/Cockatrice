@@ -1,24 +1,5 @@
 use super::*;
 
-fn previous_effect_object(cx: &EffectCx<'_>) -> Option<ObjectId> {
-    let selected = cx.previous_effect_result.selected_objects.first()?;
-    let generation = cx
-        .engine
-        .state
-        .zone_change_generation
-        .get(&selected.object_id)
-        .copied()
-        .unwrap_or(0);
-    (generation == selected.zone_change_generation
-        && cx
-            .engine
-            .state
-            .objects
-            .get(&selected.object_id)
-            .is_some_and(|object| object.zone == Zone::Battlefield))
-    .then_some(selected.object_id)
-}
-
 pub(super) fn pump_target(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -32,16 +13,10 @@ pub(super) fn pump_target(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let engine = &mut *cx.engine;
-    let events = &mut *cx.events;
-    let targets = cx.targets;
-    let top = cx.top;
-    let spell_label = cx.spell_label;
-
     if let Some(scale) = scale {
-        let units = engine.resolve_amount(
+        let units = cx.engine.resolve_amount(
             &scale.amount,
-            AmountContext::for_stack_item(top, cx.controller)
+            AmountContext::for_stack_item(cx.top, cx.controller)
                 .with_previous_effect_result(cx.previous_effect_result),
         );
         let units = i32::try_from(units).unwrap_or(i32::MAX);
@@ -51,13 +26,11 @@ pub(super) fn pump_target(
 
     // Appeal to Eirdu and the one-target Giant Growth share this effect. A grouped Chosen
     // subject applies to every surviving target; Source/Triggered subjects still bind once.
-    let affected = if matches!(subject, EffectSubject::Chosen(_)) {
-        targets.to_vec()
-    } else {
-        resolve_effect_subject(engine, top, targets, &subject)
-            .into_iter()
-            .collect()
-    };
+    let affected = cx.resolve_battlefield_subjects(&subject);
+    let engine = &mut *cx.engine;
+    let events = &mut *cx.events;
+    let top = cx.top;
+    let spell_label = cx.spell_label;
     for tid in affected {
         let is_valid_target = engine
             .state
@@ -208,37 +181,7 @@ pub(super) fn grant_keywords(
     let SpellEffectKind::GrantKeywords { subject, keywords } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let (tid, effect_source_id) = match &subject {
-        EffectSubject::Source => (
-            cx.top
-                .source_permanent_id
-                .filter(|_| cx.engine.source_is_current_object(cx.top)),
-            cx.top.source_permanent_id,
-        ),
-        EffectSubject::AttachedObject | EffectSubject::TriggerObject => (
-            resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject),
-            if matches!(subject, EffectSubject::AttachedObject) {
-                cx.top.source_permanent_id
-            } else {
-                Some(cx.top.id)
-            },
-        ),
-        EffectSubject::Chosen(target) => {
-            let tid = cx.targets.first().copied().filter(|tid| {
-                target_filter_legal_at_resolution(
-                    cx.engine,
-                    target,
-                    *tid,
-                    cx.controller,
-                    TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
-                    cx.top.trigger_context,
-                )
-            });
-            (tid, Some(cx.top.id))
-        }
-        EffectSubject::PreviousEffectObject => (previous_effect_object(cx), Some(cx.top.id)),
-    };
-    let Some(tid) = tid else {
+    let Some((tid, effect_source_id)) = cx.resolve_continuous_subject(&subject) else {
         return Ok(EffectOutcome::Continue);
     };
 
@@ -355,37 +298,7 @@ pub(super) fn grant_protection(
         }
     };
 
-    let (tid, effect_source_id) = match &subject {
-        EffectSubject::Source => (
-            cx.top
-                .source_permanent_id
-                .filter(|_| cx.engine.source_is_current_object(cx.top)),
-            cx.top.source_permanent_id,
-        ),
-        EffectSubject::AttachedObject | EffectSubject::TriggerObject => (
-            resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject),
-            if matches!(subject, EffectSubject::AttachedObject) {
-                cx.top.source_permanent_id
-            } else {
-                Some(cx.top.id)
-            },
-        ),
-        EffectSubject::Chosen(target) => {
-            let tid = cx.targets.first().copied().filter(|tid| {
-                target_filter_legal_at_resolution(
-                    cx.engine,
-                    target,
-                    *tid,
-                    cx.controller,
-                    TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
-                    cx.top.trigger_context,
-                )
-            });
-            (tid, Some(cx.top.id))
-        }
-        EffectSubject::PreviousEffectObject => (previous_effect_object(cx), Some(cx.top.id)),
-    };
-    let Some(tid) = tid else {
+    let Some((tid, effect_source_id)) = cx.resolve_continuous_subject(&subject) else {
         return Ok(EffectOutcome::Continue);
     };
     let target_name = object_display_name(&cx.engine.state, cx.engine.registry, tid);
@@ -413,37 +326,7 @@ pub(super) fn grant_triggered_ability(
     let SpellEffectKind::GrantTriggeredAbility { subject, ability } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let (tid, effect_source_id) = match &subject {
-        EffectSubject::Source => (
-            cx.top
-                .source_permanent_id
-                .filter(|_| cx.engine.source_is_current_object(cx.top)),
-            cx.top.source_permanent_id,
-        ),
-        EffectSubject::AttachedObject | EffectSubject::TriggerObject => (
-            resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject),
-            if matches!(subject, EffectSubject::AttachedObject) {
-                cx.top.source_permanent_id
-            } else {
-                Some(cx.top.id)
-            },
-        ),
-        EffectSubject::Chosen(target) => {
-            let tid = cx.targets.first().copied().filter(|tid| {
-                target_filter_legal_at_resolution(
-                    cx.engine,
-                    target,
-                    *tid,
-                    cx.controller,
-                    TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
-                    cx.top.trigger_context,
-                )
-            });
-            (tid, Some(cx.top.id))
-        }
-        EffectSubject::PreviousEffectObject => (previous_effect_object(cx), Some(cx.top.id)),
-    };
-    let Some(tid) = tid else {
+    let Some((tid, effect_source_id)) = cx.resolve_continuous_subject(&subject) else {
         return Ok(EffectOutcome::Continue);
     };
 
@@ -563,37 +446,7 @@ pub(super) fn add_types(
     let SpellEffectKind::AddTypes { subject, addition } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let (tid, effect_source_id) = match &subject {
-        EffectSubject::Source => (
-            cx.top
-                .source_permanent_id
-                .filter(|_| cx.engine.source_is_current_object(cx.top)),
-            cx.top.source_permanent_id,
-        ),
-        EffectSubject::AttachedObject | EffectSubject::TriggerObject => (
-            resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject),
-            if matches!(subject, EffectSubject::AttachedObject) {
-                cx.top.source_permanent_id
-            } else {
-                Some(cx.top.id)
-            },
-        ),
-        EffectSubject::Chosen(target) => {
-            let tid = cx.targets.first().copied().filter(|tid| {
-                target_filter_legal_at_resolution(
-                    cx.engine,
-                    target,
-                    *tid,
-                    cx.controller,
-                    TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
-                    cx.top.trigger_context,
-                )
-            });
-            (tid, Some(cx.top.id))
-        }
-        EffectSubject::PreviousEffectObject => (previous_effect_object(cx), Some(cx.top.id)),
-    };
-    let Some(tid) = tid else {
+    let Some((tid, effect_source_id)) = cx.resolve_continuous_subject(&subject) else {
         return Ok(EffectOutcome::Continue);
     };
 
@@ -730,18 +583,10 @@ pub(super) fn put_counters(
         AmountContext::for_stack_item(cx.top, cx.controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
+    let subjects = cx.resolve_battlefield_subjects(&subject);
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
-    let top = cx.top;
     let spell_label = cx.spell_label;
-
-    let subjects = match subject {
-        EffectSubject::Chosen(_) => targets.to_vec(),
-        _ => resolve_effect_subject(engine, top, targets, &subject)
-            .into_iter()
-            .collect(),
-    };
     let mut counter_events = Vec::new();
     for tid in subjects {
         let is_on_battlefield = engine
@@ -813,13 +658,7 @@ pub(super) fn change_counters(
         }
         _ => return Err(EngineError::Illegal("counter dispatch mismatch")),
     };
-    let subjects = if matches!(subject, EffectSubject::Chosen(_)) {
-        cx.targets.to_vec()
-    } else {
-        resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
-            .into_iter()
-            .collect()
-    };
+    let subjects = cx.resolve_battlefield_subjects(&subject);
     for oid in subjects {
         for (&kind, &count) in &counters {
             let changed = if removing {

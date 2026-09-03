@@ -15,11 +15,11 @@
       presentation: OracleLines([2]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [PumpTarget(power: 2, toughness: 2, subject: Source)],
-      intervening_if: Some(GameCondition(BattlefieldAggregate(
+      intervening_if: Some(BattlefieldAggregate(
         filter: (controllers: Controller, card_type: Some(Creature)),
         aggregate: MaximumPower,
         min: Some(4),
-      ))),
+      )),
     ),
   ],
 )

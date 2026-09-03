@@ -13,10 +13,10 @@
     presentation: Fallback,
     trigger: AtBeginningOfEndStep(player: Controller),
     effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
-    intervening_if: Some(GameCondition(PermanentsEnteredThisTurn(
+    intervening_if: Some(PermanentsEnteredThisTurn(
       controllers: Controller,
       filter: (permanent_type: Some(Creature), exclude_source: true),
       min: Some(1),
-    ))),
+    )),
   )],
 )
