@@ -299,6 +299,7 @@ impl CharacteristicsEvaluator<'_> {
                     ContinuousEffectKind::Layer4AddTypes(_)
                         | ContinuousEffectKind::Layer4SetTypeLine(_)
                         | ContinuousEffectKind::Layer4SetCreatureTypes(_)
+                        | ContinuousEffectKind::Layer4SetAllCreatureTypes
                 )
             })
             .filter(|(_, effect)| effect_affects(self.state, self.registry, effect, oid, result))
@@ -346,6 +347,10 @@ impl CharacteristicsEvaluator<'_> {
                             }
                         }
                     }
+                }
+                ContinuousEffectKind::Layer4SetAllCreatureTypes => {
+                    result.all_creature_types = true;
+                    result.types.retain(|value| !is_creature_type(value));
                 }
                 _ => unreachable!("filtered to layer-4 type effects"),
             }

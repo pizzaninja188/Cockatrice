@@ -1,0 +1,27 @@
+(
+  id: "soulstone_sanctuary",
+  name: "Soulstone Sanctuary",
+  face_id: "soulstone_sanctuary",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{4}")],
+      effect: [AnimateSelf(
+        base_power: 3,
+        base_toughness: 3,
+        creature_types: All,
+        keywords: [Vigilance],
+        duration: Indefinite,
+      )],
+    ),
+  ],
+)

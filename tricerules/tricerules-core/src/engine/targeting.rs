@@ -1456,6 +1456,7 @@ fn validate_effect_targets(
         | SpellEffectKind::CreateAttackingTokens { .. }
         | SpellEffectKind::SacrificeObservedObjects
         | SpellEffectKind::ExileWarpedObject
+        | SpellEffectKind::AnimateSelf { .. }
         | SpellEffectKind::PreventAllCombatDamageTurn
         | SpellEffectKind::DamageCantBePreventedThisTurn
         // CR 605.1a: a mana ability is untargeted by definition.

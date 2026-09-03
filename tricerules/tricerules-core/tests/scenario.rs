@@ -185,6 +185,8 @@ mod issue_193_selected_counter_removal;
 mod issue_194_dynamic_scope_combat_restrictions;
 #[path = "scenario/issue_202_hidden_lair.rs"]
 mod issue_202_hidden_lair;
+#[path = "scenario/issue_204_land_animation.rs"]
+mod issue_204_land_animation;
 #[path = "scenario/issue_205_stack_spell_filters.rs"]
 mod issue_205_stack_spell_filters;
 #[path = "scenario/issue_208_library_search.rs"]

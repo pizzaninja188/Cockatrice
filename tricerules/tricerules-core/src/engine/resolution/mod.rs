@@ -1665,6 +1665,9 @@ impl GameEngine {
                     SpellEffectKind::Earthbend { count } => {
                         pump_counters::earthbend(&mut cx, count)?
                     }
+                    effect @ SpellEffectKind::AnimateSelf { .. } => {
+                        pump_counters::animate_self(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::ReturnTriggeredCard { .. } => {
                         zones::return_triggered_card(&mut cx, effect)?
                     }

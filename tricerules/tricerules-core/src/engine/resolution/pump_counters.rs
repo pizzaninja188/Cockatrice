@@ -463,6 +463,81 @@ pub(super) fn earthbend(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn animate_self(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    use tricerules_cards::primitives::{CreatureTypeChange, PermanentTypeFilter, TypeLineAddition};
+
+    let SpellEffectKind::AnimateSelf {
+        base_power,
+        base_toughness,
+        colors,
+        creature_types,
+        keywords,
+        duration,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    if duration == EffectDuration::WhileSourceOnBattlefield {
+        return Err(EngineError::Illegal(
+            "AnimateSelf requires a resolving-effect duration",
+        ));
+    }
+    let Some((oid, source_id)) = cx.resolve_continuous_subject(&EffectSubject::Source) else {
+        return Ok(EffectOutcome::Continue);
+    };
+
+    let mut kinds = vec![ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+        card_types: vec![PermanentTypeFilter::Creature],
+        creature_types: Vec::new(),
+    })];
+    match creature_types {
+        CreatureTypeChange::Preserve => {}
+        CreatureTypeChange::Replace(creature_types) => {
+            kinds.push(ContinuousEffectKind::Layer4SetCreatureTypes(creature_types));
+        }
+        CreatureTypeChange::All => {
+            kinds.push(ContinuousEffectKind::Layer4SetAllCreatureTypes);
+        }
+    }
+    if let Some(colors) = colors {
+        kinds.push(ContinuousEffectKind::Layer5SetColors(colors));
+    }
+    kinds.extend(
+        keywords
+            .into_iter()
+            .map(ContinuousEffectKind::Layer6AddKeyword),
+    );
+    kinds.push(ContinuousEffectKind::Layer7bSetPt {
+        power: base_power,
+        toughness: base_toughness,
+    });
+
+    for kind in kinds {
+        cx.engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id,
+            affected: AffectedScope::Single(oid),
+            kind,
+            condition: None,
+            duration: duration.clone(),
+            timestamp: cx.engine.state.command_index,
+        });
+    }
+    let duration_label = match duration {
+        EffectDuration::UntilEndOfTurn => " until end of turn",
+        EffectDuration::Indefinite => "",
+        EffectDuration::WhileSourceOnBattlefield => unreachable!("rejected above"),
+    };
+    cx.events.push(ev_log(format!(
+        "{} animates {oid} as a {base_power}/{base_toughness} creature{duration_label}",
+        cx.spell_label
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn add_types(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

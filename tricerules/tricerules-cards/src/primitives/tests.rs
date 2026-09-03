@@ -117,6 +117,65 @@ fn earthbend_nonland_permanent_discard_filter_is_shared() {
         );
     }
 }
+
+#[test]
+fn issue_204_self_animation_schema_is_source_bound_and_fail_closed() {
+    let ability_card = |effect: &str| {
+        format!(
+            r#"(
+                id: "test_land", name: "Test Land", face_id: "test_land", types: ["Land"],
+                activated_abilities: [(
+                    ability_id: "activated_01", presentation: Fallback,
+                    costs: [Mana("{{1}}")], effect: [{effect}],
+                )],
+            )"#
+        )
+    };
+    let valid =
+        ability_card("AnimateSelf(base_power: 2, base_toughness: 2, duration: UntilEndOfTurn)");
+    crate::CardRegistry::from_chunks_and_tokens(&[&valid], &[])
+        .expect("subtype-preserving animation is reusable for Crew");
+
+    for (effect, expected_reason) in [
+        (
+            "AnimateSelf(base_power: 2, base_toughness: 2, duration: WhileSourceOnBattlefield)",
+            "duration",
+        ),
+        (
+            "AnimateSelf(base_power: 2, base_toughness: 2, colors: Some([Blue, Blue]), duration: Indefinite)",
+            "colors must be distinct",
+        ),
+        (
+            "AnimateSelf(base_power: 2, base_toughness: 2, creature_types: Replace([\"Shark\", \"Shark\"]), duration: Indefinite)",
+            "creature types must be distinct",
+        ),
+        (
+            "AnimateSelf(base_power: 2, base_toughness: 2, creature_types: Replace([\" \"]), duration: Indefinite)",
+            "cannot be empty",
+        ),
+        (
+            "AnimateSelf(base_power: 2, base_toughness: 2, keywords: [Vigilance, Vigilance], duration: Indefinite)",
+            "keywords must be distinct",
+        ),
+    ] {
+        let invalid = ability_card(effect);
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[])
+            .expect_err("invalid animation schema must fail closed");
+        assert!(
+            error.to_string().contains(expected_reason),
+            "expected {expected_reason:?} in {error}"
+        );
+    }
+
+    let spell = r#"(
+        id: "test_spell", name: "Test Spell", face_id: "test_spell", types: ["Sorcery"],
+        spell_effect: [AnimateSelf(base_power: 2, base_toughness: 2, duration: UntilEndOfTurn)],
+    )"#;
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[spell], &[])
+        .expect_err("AnimateSelf requires a source permanent");
+    assert!(error.to_string().contains("source-bound"));
+}
+
 #[test]
 fn issue_176_graveyard_cost_reduction_is_a_typed_target_filter() {
     let card = r#"(id: "test", name: "Test", face_id: "test", mana_cost: "{4}{B}", types: ["Sorcery"], cost_modifiers: [TargetMatchGenericReduction(amount: 3, filter: Graveyard((card_type: Some(Creature), max_mana_value: Some(3))))], spell_effect: [MoveGraveyardCards(filter: (card_type: Some(Creature)), destination: Battlefield())])"#;

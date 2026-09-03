@@ -716,6 +716,39 @@ impl ArmySubtype {
     }
 }
 
+/// How a self-animation effect treats the permanent's creature subtypes in CR 613 layer 4.
+/// `Preserve` covers type-less animations such as Crew, `Replace` covers named forms such as
+/// Restless Reef's Shark, and `All` covers Soulstone Sanctuary without expanding the complete
+/// CR 205.3m vocabulary into every characteristic snapshot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum CreatureTypeChange {
+    #[default]
+    Preserve,
+    Replace(Vec<String>),
+    All,
+}
+
+impl CreatureTypeChange {
+    fn validate(&self) -> Result<(), String> {
+        let Self::Replace(creature_types) = self else {
+            return Ok(());
+        };
+        if creature_types
+            .iter()
+            .any(|creature_type| creature_type.trim().is_empty())
+        {
+            return Err("animation creature type cannot be empty or whitespace".into());
+        }
+        let unique = creature_types
+            .iter()
+            .collect::<std::collections::HashSet<_>>();
+        if unique.len() != creature_types.len() {
+            return Err("animation creature types must be distinct".into());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
     /// Apply one ordinary non-suspending instruction only when a current engine-side condition
@@ -733,6 +766,20 @@ pub enum SpellEffectKind {
     /// Rebellious Captives, Dai Li Indoctrination, and Badgermole share this action.
     Earthbend {
         count: Amount,
+    },
+    /// CR 205.1b / 611.2a / 613: turn the exact source permanent into a creature while retaining
+    /// its existing card types. Restless Reef and Soulstone Sanctuary exercise temporary and
+    /// indefinite duration respectively; the subtype-preserving shape is reusable for Crew.
+    AnimateSelf {
+        base_power: i64,
+        base_toughness: i64,
+        #[serde(default)]
+        colors: Option<Vec<Color>>,
+        #[serde(default)]
+        creature_types: CreatureTypeChange,
+        #[serde(default)]
+        keywords: Vec<Keyword>,
+        duration: EffectDuration,
     },
     DamageTarget {
         amount: Amount,
@@ -2102,6 +2149,7 @@ impl SpellEffectKind {
         match self {
             SpellEffectKind::Conditional { effect, .. }
             | SpellEffectKind::ConditionalCastCost { effect, .. } => effect.target_roles(),
+            SpellEffectKind::AnimateSelf { .. } => Vec::new(),
             SpellEffectKind::Earthbend { .. } => {
                 vec![TargetRole::Filtered(earthbend_target_filter())]
             }
@@ -2575,6 +2623,38 @@ impl SpellEffectKind {
                 return Err("AttachSource requires a permanent target".into());
             }
         }
+        if let SpellEffectKind::AnimateSelf {
+            colors,
+            creature_types,
+            keywords,
+            duration,
+            ..
+        } = self
+        {
+            if *duration == EffectDuration::WhileSourceOnBattlefield {
+                return Err("AnimateSelf duration must be UntilEndOfTurn or Indefinite".into());
+            }
+            if colors.as_ref().is_some_and(|colors| {
+                colors
+                    .iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<_>>()
+                    .len()
+                    != colors.len()
+            }) {
+                return Err("AnimateSelf colors must be distinct".into());
+            }
+            if keywords
+                .iter()
+                .copied()
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                != keywords.len()
+            {
+                return Err("AnimateSelf keywords must be distinct".into());
+            }
+            creature_types.validate()?;
+        }
 
         match self {
             SpellEffectKind::Conditional { condition, effect } => {
@@ -2996,6 +3076,7 @@ impl SpellEffectKind {
 
         // CR 115: a source-bound ability effect is not targeting and only exists where there is
         // a source permanent — never in a spell's effect list.
+        let animate_self = matches!(self, SpellEffectKind::AnimateSelf { .. });
         let source_bound = matches!(
             self,
             SpellEffectKind::PumpTarget {
@@ -3106,7 +3187,7 @@ impl SpellEffectKind {
                     ..
                 }
         );
-        if context == EffectContext::Spell && source_bound {
+        if context == EffectContext::Spell && (animate_self || source_bound) {
             return Err(
                 "source-bound effects are only valid on an activated or triggered ability, not a spell"
                     .into(),
@@ -3880,6 +3961,9 @@ pub enum ContinuousEffectKind {
     /// unrelated subtypes. An empty list means the object loses all creature types. Frogify and
     /// Witness Protection exercise the nonempty form; Amoeboid Changeling exercises empty.
     Layer4SetCreatureTypes(Vec<String>),
+    /// CR 205.3m / 613.1d — replace every creature subtype with the complete current creature-type
+    /// set without materializing that list. Soulstone Sanctuary exercises this layer operation.
+    Layer4SetAllCreatureTypes,
     /// CR 613.1e layer 5 — replace every color of the affected object.
     Layer5SetColors(Vec<Color>),
     /// CR 613 layer 6 — remove every ability with timestamp precedence. Unable to Scream,

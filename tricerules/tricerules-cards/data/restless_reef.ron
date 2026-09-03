@@ -1,0 +1,39 @@
+(
+  id: "restless_reef",
+  name: "Restless Reef",
+  face_id: "restless_reef",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(u: 1), (b: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Mana("{2}{U}{B}")],
+      effect: [AnimateSelf(
+        base_power: 4,
+        base_toughness: 4,
+        colors: Some([Blue, Black]),
+        creature_types: Replace(["Shark"]),
+        keywords: [Deathtouch],
+        duration: UntilEndOfTurn,
+      )],
+    ),
+  ],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([4]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [MillTargetPlayer(count: 4, target: (kind: AnyPlayer))],
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)
