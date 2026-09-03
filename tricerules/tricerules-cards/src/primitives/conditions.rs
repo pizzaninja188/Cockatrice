@@ -11,6 +11,10 @@ use serde::{Deserialize, Serialize};
 /// the identities of the cards that moved through a graveyard.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameCondition {
+    /// Boolean disjunction across otherwise independent public game-state predicates. Every
+    /// branch is evaluated against the same consumer context; this is the shared condition shape
+    /// for Hidden Lair and the rest of its basic-land-enabled cycle.
+    AnyOf(Vec<GameCondition>),
     /// CR 702.195: whether any selected player has the enduring-story designation.
     HasEnduringStory { players: RelativePlayerSet },
     /// Plasma Bolt and Temporal Intervention: a nonland permanent left the battlefield or
@@ -214,7 +218,11 @@ pub enum GameCondition {
 
 impl GameCondition {
     pub(crate) fn requires_triggering_spell_context(&self) -> bool {
-        matches!(self, Self::TriggeringSpellManaSpent { .. })
+        match self {
+            Self::TriggeringSpellManaSpent { .. } => true,
+            Self::AnyOf(branches) => branches.iter().any(Self::requires_triggering_spell_context),
+            _ => false,
+        }
     }
 
     /// Validate a condition in a context without a completed spell cast (costs, abilities,
@@ -228,27 +236,57 @@ impl GameCondition {
     }
 
     pub(crate) fn validate_trigger_condition(&self) -> Result<(), String> {
-        if self.requires_triggering_spell_context() {
-            self.validate()
-        } else {
-            self.validate_live()
-        }
+        self.validate_cast_snapshot_reference(0)?;
+        self.validate()
+    }
+
+    /// Return whether this condition or any nested disjunct satisfies a structural predicate.
+    /// Registry consumers use this to keep context-specific authoring restrictions recursive.
+    pub(crate) fn any_node_matches(
+        &self,
+        predicate: impl Copy + Fn(&GameCondition) -> bool,
+    ) -> bool {
+        predicate(self)
+            || match self {
+                Self::AnyOf(branches) => branches
+                    .iter()
+                    .any(|branch| branch.any_node_matches(predicate)),
+                _ => false,
+            }
     }
 
     pub(crate) fn validate_cast_snapshot_reference(&self, count: usize) -> Result<(), String> {
-        if let Self::CastSnapshot { index } = self {
-            if *index as usize >= count {
+        match self {
+            Self::CastSnapshot { index } if *index as usize >= count => {
                 return Err(
                     "CastSnapshot requires an existing condition on the resolving spell face"
                         .into(),
                 );
             }
+            Self::AnyOf(branches) => {
+                for branch in branches {
+                    branch.validate_cast_snapshot_reference(count)?;
+                }
+            }
+            _ => {}
         }
         Ok(())
     }
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
+            GameCondition::AnyOf(branches) => {
+                if branches.len() < 2 {
+                    return Err("condition AnyOf requires at least two branches".into());
+                }
+                for (index, branch) in branches.iter().enumerate() {
+                    branch.validate()?;
+                    if branches[..index].contains(branch) {
+                        return Err("condition AnyOf cannot contain duplicate branches".into());
+                    }
+                }
+                Ok(())
+            }
             GameCondition::HasEnduringStory { .. }
             | GameCondition::Void
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
@@ -315,7 +353,8 @@ impl GameCondition {
 
     pub fn matches_value(&self, value: u32) -> bool {
         match self {
-            GameCondition::HasEnduringStory { .. }
+            GameCondition::AnyOf(_)
+            | GameCondition::HasEnduringStory { .. }
             | GameCondition::Void
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
             | GameCondition::CastSnapshot { .. }

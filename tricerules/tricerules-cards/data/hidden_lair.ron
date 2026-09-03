@@ -1,0 +1,36 @@
+// Oracle and rulings checked against Scryfall on 2026-09-03; no card-specific rulings.
+// CR 400.7, 602.1, 602.5, 605.1a, and 605.3: the colored mana ability checks the
+// exact source generation's entry this turn or a basic land controlled at activation.
+(
+  id: "hidden_lair",
+  name: "Hidden Lair",
+  face_id: "hidden_lair",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(u: 1), (b: 1)])],
+      conditions: [AnyOf([
+        PermanentsEnteredThisTurn(
+          controllers: All,
+          filter: (source_only: true),
+          min: Some(1),
+        ),
+        BattlefieldAggregate(
+          filter: (controllers: Controller, card_type: Some(BasicLand)),
+          aggregate: Count,
+          min: Some(1),
+        ),
+      ])],
+    ),
+  ],
+)

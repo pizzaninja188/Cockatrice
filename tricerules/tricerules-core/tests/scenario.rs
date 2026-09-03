@@ -183,6 +183,8 @@ mod issue_192_calibration_cards;
 mod issue_193_selected_counter_removal;
 #[path = "scenario/issue_194_dynamic_scope_combat_restrictions.rs"]
 mod issue_194_dynamic_scope_combat_restrictions;
+#[path = "scenario/issue_202_hidden_lair.rs"]
+mod issue_202_hidden_lair;
 #[path = "scenario/issue_205_stack_spell_filters.rs"]
 mod issue_205_stack_spell_filters;
 #[path = "scenario/issue_216_attachment_scoped_blocking_restrictions.rs"]

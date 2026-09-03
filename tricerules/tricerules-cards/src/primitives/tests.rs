@@ -802,6 +802,64 @@ fn turn_history_condition_requires_a_valid_bound() {
 }
 
 #[test]
+fn game_condition_any_of_deserializes_and_round_trips() {
+    let condition: GameCondition = ron::from_str(
+        "AnyOf([ActivePlayer(players: Controller), CreatureDeathsThisTurn(min: Some(1))])",
+    )
+    .expect("condition disjunction should deserialize");
+    condition.validate().expect("valid condition disjunction");
+
+    let serialized = ron::to_string(&condition).expect("serialize condition disjunction");
+    let decoded: GameCondition =
+        ron::from_str(&serialized).expect("deserialize condition disjunction");
+    assert_eq!(decoded, condition);
+}
+
+#[test]
+fn game_condition_any_of_rejects_malformed_and_invalid_branches() {
+    let active = GameCondition::ActivePlayer {
+        players: RelativePlayerSet::Controller,
+    };
+    assert!(GameCondition::AnyOf(vec![active.clone()])
+        .validate()
+        .is_err());
+    assert!(GameCondition::AnyOf(vec![active.clone(), active.clone()])
+        .validate()
+        .is_err());
+    assert!(GameCondition::AnyOf(vec![
+        active.clone(),
+        GameCondition::CreatureDeathsThisTurn {
+            min: None,
+            max: None,
+        },
+    ])
+    .validate()
+    .is_err());
+
+    let triggering_spell = GameCondition::AnyOf(vec![
+        active.clone(),
+        GameCondition::TriggeringSpellManaSpent {
+            comparison: SpellManaSpentComparison::AtLeast(1),
+        },
+    ]);
+    assert!(triggering_spell.validate_live().is_err());
+
+    let cast_snapshot =
+        GameCondition::AnyOf(vec![active, GameCondition::CastSnapshot { index: 1 }]);
+    assert!(cast_snapshot.validate_cast_snapshot_reference(1).is_err());
+
+    let trigger_with_cast_snapshot = GameCondition::AnyOf(vec![
+        GameCondition::TriggeringSpellManaSpent {
+            comparison: SpellManaSpentComparison::AtLeast(1),
+        },
+        GameCondition::CastSnapshot { index: 0 },
+    ]);
+    assert!(trigger_with_cast_snapshot
+        .validate_trigger_condition()
+        .is_err());
+}
+
+#[test]
 fn first_applicable_resolution_branches_require_a_costless_final_fallback() {
     let conditional = ResolutionBranchDef {
         branch_id: crate::ChoiceId::new("branch_01").unwrap(),

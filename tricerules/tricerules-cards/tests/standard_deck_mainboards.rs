@@ -37,6 +37,15 @@ const COHORT: &[ExpectedCard] = &[
         keywords: &[],
     },
     ExpectedCard {
+        id: "hidden_lair",
+        name: "Hidden Lair",
+        mana_cost: "",
+        supertypes: &[],
+        types: &["Land"],
+        stats: (None, None),
+        keywords: &[],
+    },
+    ExpectedCard {
         id: "requiting_hex",
         name: "Requiting Hex",
         mana_cost: "{B}",
@@ -192,6 +201,30 @@ fn dimir_cohort_uses_authoritative_cost_target_and_trigger_shapes() {
     assert!(matches!(
         verge.activated_abilities[1].conditions.as_slice(),
         [GameCondition::BattlefieldAggregate { min: Some(1), .. }]
+    ));
+
+    let lair = registry.get("hidden_lair").unwrap().primary_face();
+    let [GameCondition::AnyOf(branches)] = lair.activated_abilities[1].conditions.as_slice() else {
+        panic!("Hidden Lair colored mana must use one condition disjunction");
+    };
+    assert!(matches!(
+        branches.as_slice(),
+        [
+            GameCondition::PermanentsEnteredThisTurn {
+                controllers: tricerules_cards::RelativePlayerSet::All,
+                filter,
+                min: Some(1),
+                max: None,
+            },
+            GameCondition::BattlefieldAggregate {
+                filter: basic_filter,
+                min: Some(1),
+                max: None,
+                ..
+            },
+        ] if filter.source_only
+            && basic_filter.controllers == tricerules_cards::RelativePlayerSet::Controller
+            && basic_filter.card_type == Some(CardTypeFilter::BasicLand)
     ));
 
     let hex = registry.get("requiting_hex").unwrap().primary_face();

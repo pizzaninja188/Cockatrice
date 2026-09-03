@@ -419,7 +419,33 @@ impl CharacteristicsEvaluator<'_> {
             return false;
         };
         let controller = self.layer_2_controller(source_oid, &mut Vec::new());
+        self.characteristic_condition_holds(
+            condition,
+            source_oid,
+            controller,
+            queried_oid,
+            queried_pre_layer_6,
+        )
+    }
+
+    fn characteristic_condition_holds(
+        &self,
+        condition: &GameCondition,
+        source_oid: ObjectId,
+        controller: PlayerId,
+        queried_oid: ObjectId,
+        queried_pre_layer_6: &Characteristics,
+    ) -> bool {
         match condition {
+            GameCondition::AnyOf(branches) => branches.iter().any(|branch| {
+                self.characteristic_condition_holds(
+                    branch,
+                    source_oid,
+                    controller,
+                    queried_oid,
+                    queried_pre_layer_6,
+                )
+            }),
             GameCondition::HasEnduringStory { players } => {
                 self.state.players.iter().any(|player| {
                     relative_player_set_contains(self.state, *players, controller, player.id)

@@ -428,21 +428,25 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                         id: card.id.clone(),
                         reason,
                     })?;
-                if matches!(
-                    condition,
-                    GameCondition::BattlefieldAggregate {
-                        aggregate: BattlefieldAggregate::DistinctNames
-                            | BattlefieldAggregate::TotalPower
-                            | BattlefieldAggregate::MaximumPower,
-                        ..
-                    }
-                ) {
+                if condition.any_node_matches(|node| {
+                    matches!(
+                        node,
+                        GameCondition::BattlefieldAggregate {
+                            aggregate: BattlefieldAggregate::DistinctNames
+                                | BattlefieldAggregate::TotalPower
+                                | BattlefieldAggregate::MaximumPower,
+                            ..
+                        }
+                    )
+                }) {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
                         reason: "conditional layer-6/7 anthems support only simple battlefield counts until CR 613.8 dependency ordering is implemented".into(),
                     });
                 }
-                if matches!(condition, GameCondition::BattlefieldCreatureCount { .. }) {
+                if condition.any_node_matches(|node| {
+                    matches!(node, GameCondition::BattlefieldCreatureCount { .. })
+                }) {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
                         reason: "conditional layer-6/7 anthems cannot depend on derived creature counts until CR 613.8 dependency ordering is implemented".into(),
@@ -550,22 +554,26 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 || base_power.is_some()
                 || !keywords.is_empty()
                 || !activated_abilities.is_empty())
-                && matches!(
-                    condition,
-                    crate::primitives::GameCondition::BattlefieldAggregate {
-                        aggregate: BattlefieldAggregate::DistinctNames
-                            | BattlefieldAggregate::TotalPower
-                            | BattlefieldAggregate::MaximumPower,
-                        ..
-                    }
-                )
+                && condition.any_node_matches(|node| {
+                    matches!(
+                        node,
+                        crate::primitives::GameCondition::BattlefieldAggregate {
+                            aggregate: BattlefieldAggregate::DistinctNames
+                                | BattlefieldAggregate::TotalPower
+                                | BattlefieldAggregate::MaximumPower,
+                            ..
+                        }
+                    )
+                })
             {
                 return Err(RegistryError::InvalidCard {
                     id: card.id.clone(),
                     reason: "conditional layer-6/7 modifiers support only simple battlefield counts until CR 613.8 dependency ordering is implemented".into(),
                 });
             }
-            if matches!(condition, GameCondition::BattlefieldCreatureCount { .. }) {
+            if condition.any_node_matches(|node| {
+                matches!(node, GameCondition::BattlefieldCreatureCount { .. })
+            }) {
                 return Err(RegistryError::InvalidCard {
                     id: card.id.clone(),
                     reason: "conditional self modifiers cannot depend on derived creature counts until CR 613.8 dependency ordering is implemented".into(),
@@ -782,14 +790,16 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     || set_power.is_some()
                     || *remove_all_abilities
                     || !keywords.is_empty())
-                    && matches!(
-                        condition,
-                        crate::primitives::GameCondition::BattlefieldAggregate {
-                            aggregate: BattlefieldAggregate::TotalPower
-                                | BattlefieldAggregate::MaximumPower,
-                            ..
-                        }
-                    )
+                    && condition.any_node_matches(|node| {
+                        matches!(
+                            node,
+                            crate::primitives::GameCondition::BattlefieldAggregate {
+                                aggregate: BattlefieldAggregate::TotalPower
+                                    | BattlefieldAggregate::MaximumPower,
+                                ..
+                            }
+                        )
+                    })
                 {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
@@ -2667,6 +2677,33 @@ mod tests {
             ))],
         )"#;
         let err = CardRegistry::from_chunks_and_tokens(&[recursive], &[]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("CR 613.8 dependency ordering")
+        ));
+
+        let nested_recursive = r#"(
+            id: "bad_nested_recursive_conditional",
+            name: "Bad Nested Recursive Conditional",
+            face_id: "bad_nested_recursive_conditional",
+            mana_cost: "{G}",
+            types: ["Creature", "Test"],
+            power: 1,
+            toughness: 1,
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+                condition: AnyOf([
+                    ActivePlayer(players: Controller),
+                    BattlefieldAggregate(
+                        filter: (controllers: Controller, card_type: Some(Creature)),
+                        aggregate: MaximumPower,
+                        min: Some(4),
+                    ),
+                ]),
+                delta_power: 1,
+            ))],
+        )"#;
+        let err = CardRegistry::from_chunks_and_tokens(&[nested_recursive], &[]).unwrap_err();
         assert!(matches!(
             err,
             RegistryError::InvalidCard { reason, .. }

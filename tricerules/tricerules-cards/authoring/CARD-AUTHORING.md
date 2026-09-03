@@ -90,6 +90,11 @@ For a hand-authored card:
 Stable IDs use canonical snake_case, remain stable when definitions are reordered, and are not
 renumbered after release. Use the specific ID field for each surface:
 
+Condition lists are conjunctive. Use `AnyOf([branch_a, branch_b, ...])` when Oracle gives
+alternative conditions for the same effect, as on Hidden Lair and Gathering Place. `AnyOf`
+requires at least two distinct, independently valid branches; do not duplicate the surrounding
+ability to represent each branch.
+
 | Surface | Stable ID |
 |---|---|
 | Card face | `face_id` |

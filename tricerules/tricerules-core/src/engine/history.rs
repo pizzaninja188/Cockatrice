@@ -890,6 +890,9 @@ impl GameEngine {
         trigger_context: Option<&TriggerContext>,
     ) -> bool {
         match condition {
+            GameCondition::AnyOf(branches) => branches.iter().any(|branch| {
+                self.condition_holds_with_trigger_context(branch, context, trigger_context)
+            }),
             GameCondition::HasEnduringStory { players } => {
                 self.state.players.iter().any(|player| {
                     relative_player_set_contains(
