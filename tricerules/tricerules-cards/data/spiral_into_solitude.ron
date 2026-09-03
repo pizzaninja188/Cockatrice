@@ -7,7 +7,7 @@
   mana_cost: "{1}{W}",
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(cant_attack: true, cant_block: true))],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(restriction: (cant_attack: true, cant_block: true)))],
   activated_abilities: [(
     ability_id: "activated_01",
     presentation: Fallback,

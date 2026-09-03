@@ -6,5 +6,5 @@
   // CR 303.4 (Auras); CR 508/509 (attack and block restrictions).
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(cant_attack: true, cant_block: true))],
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(restriction: (cant_attack: true, cant_block: true)))],
 )

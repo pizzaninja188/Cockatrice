@@ -1,0 +1,32 @@
+// Oracle and rulings verified 2026-09-03. CR 303.4, 509.1b, 611.3b, and 701.12.
+(
+  id: "meltstriders_resolve",
+  name: "Meltstrider's Resolve",
+  face_id: "meltstrider_s_resolve",
+  mana_cost: "{G}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature, controller: You))],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Fight(
+      first: AttachedObject,
+      second: Chosen((kind: Creature, controller: Opponent)),
+    )],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 1,
+      prompt: "Choose up to one target creature an opponent controls",
+      effect_indices: [0],
+    )])),
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([3]),
+    definition: AttachedModifier(
+      delta_toughness: 2,
+      restriction: (maximum_blockers: Some(1)),
+    ),
+  )],
+)

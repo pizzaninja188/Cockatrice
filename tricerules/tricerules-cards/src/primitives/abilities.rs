@@ -1510,10 +1510,10 @@ pub enum StaticAbilityDef {
         /// Gift of Paradise and Hermetic Study exercise mana and targeted nonmana abilities.
         #[serde(default)]
         activated_abilities: Vec<ActivatedAbilityDef>,
+        /// Combat restrictions contributed to the attached permanent. Meltstrider's Resolve
+        /// supplies a maximum blocker count; Pacifism-style Auras use the attack/block flags.
         #[serde(default)]
-        cant_attack: bool,
-        #[serde(default)]
-        cant_block: bool,
+        restriction: super::CombatRestriction,
         /// The attached permanent does not untap during its controller's untap step. Other
         /// untap effects remain legal.
         #[serde(default)]

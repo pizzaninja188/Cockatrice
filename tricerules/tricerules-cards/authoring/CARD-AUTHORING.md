@@ -346,6 +346,19 @@ keywords already cross the wire as strings; do not add protobuf solely to publis
 If a primitive changes protocol, relay, or UI contracts for a separate reason, follow the full
 cross-component workflow and rules interaction checklist.
 
+Attachment-scoped combat rules belong in the typed `restriction` field of `AttachedModifier`, so
+they share validation, legality, and public rules annotations with self- and creature-scope
+restrictions. Pacifism and Meltstrider's Resolve are representative forms:
+
+```ron
+AttachedModifier(restriction: (cant_attack: true, cant_block: true))
+AttachedModifier(delta_toughness: 2, restriction: (maximum_blockers: Some(1)))
+```
+
+Do not put combat restrictions on a conditioned `AttachedModifier`; conditions there are limited
+to characteristic modifiers. Add a separate typed restriction primitive if a future mechanic
+needs a conditional combat rule.
+
 ## 7. Add a custom Rust card
 
 Use custom Rust only when the resolution algorithm itself is unique and cannot be described as

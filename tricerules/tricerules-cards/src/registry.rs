@@ -682,8 +682,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             keywords,
             triggered_abilities,
             activated_abilities,
-            cant_attack,
-            cant_block,
+            restriction,
             doesnt_untap_during_untap_step,
             cant_untap,
         } = ability
@@ -706,8 +705,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 && keywords.is_empty()
                 && triggered_abilities.is_empty()
                 && activated_abilities.is_empty()
-                && !cant_attack
-                && !cant_block
+                && restriction.is_empty()
                 && !doesnt_untap_during_untap_step
                 && !cant_untap
             {
@@ -768,8 +766,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     })?;
                 if !triggered_abilities.is_empty()
                     || !activated_abilities.is_empty()
-                    || *cant_attack
-                    || *cant_block
+                    || !restriction.is_empty()
                     || *doesnt_untap_during_untap_step
                     || *cant_untap
                 {
@@ -800,6 +797,14 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                             .into(),
                     });
                 }
+            }
+            if !restriction.is_empty() {
+                restriction
+                    .validate()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
             }
             for granted in triggered_abilities {
                 if granted.trigger.is_delayed_only() {
@@ -4289,6 +4294,59 @@ mod tests {
                     Err(RegistryError::InvalidCard { .. })
                 ),
                 "expected malformed attachment definition to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_216_accepts_typed_attached_combat_restrictions() {
+        let card = r#"(
+            id: "attached_blocking_restriction",
+            name: "Attached Blocking Restriction",
+            face_id: "attached_blocking_restriction",
+            mana_cost: "{G}",
+            types: ["Enchantment", "Aura"],
+            spell_effect: [AuraAttach(target: (kind: Creature))],
+            static_abilities: [(
+                ability_id: "static_01",
+                presentation: Fallback,
+                definition: AttachedModifier(
+                    restriction: (maximum_blockers: Some(1)),
+                ),
+            )],
+        )"#;
+
+        let registry = CardRegistry::from_chunks(&[card])
+            .expect("a typed combat restriction is valid on an attached modifier");
+        let restriction = match &registry
+            .get("attached_blocking_restriction")
+            .expect("test card")
+            .primary_face()
+            .static_abilities[0]
+            .definition
+        {
+            StaticAbilityDef::AttachedModifier { restriction, .. } => restriction,
+            other => panic!("expected attached modifier, got {other:?}"),
+        };
+        assert_eq!(restriction.maximum_blockers, Some(1));
+
+        for invalid in [
+            card.replace(
+                "restriction: (maximum_blockers: Some(1)),",
+                "restriction: (minimum_blockers: Some(2), maximum_blockers: Some(1)),",
+            ),
+            card.replace(
+                "restriction: (maximum_blockers: Some(1)),",
+                "condition: Some(ActivePlayer(players: Controller)), restriction: (maximum_blockers: Some(1)),",
+            ),
+            card.replace(
+                "restriction: (maximum_blockers: Some(1)),",
+                "cant_attack: true,",
+            ),
+        ] {
+            assert!(
+                CardRegistry::from_chunks(&[&invalid]).is_err(),
+                "malformed attached combat restriction must fail closed"
             );
         }
     }

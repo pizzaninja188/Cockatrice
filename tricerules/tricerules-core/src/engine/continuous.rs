@@ -482,8 +482,7 @@ impl GameEngine {
                     keywords,
                     activated_abilities,
                     triggered_abilities,
-                    cant_attack,
-                    cant_block,
+                    restriction,
                     doesnt_untap_during_untap_step,
                     cant_untap,
                 } => {
@@ -620,16 +619,12 @@ impl GameEngine {
                             timestamp,
                         });
                     }
-                    if cant_attack || cant_block {
+                    if !restriction.is_empty() {
                         self.state.continuous_effects.push(ContinuousEffect {
                             trigger_grant_origin: None,
                             source_id: Some(object_id),
                             affected: affected.clone(),
-                            kind: ContinuousEffectKind::CombatRestriction(CombatRestriction {
-                                cant_attack,
-                                cant_block,
-                                ..Default::default()
-                            }),
+                            kind: ContinuousEffectKind::CombatRestriction(restriction),
                             condition: None,
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
