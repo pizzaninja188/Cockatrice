@@ -1,0 +1,70 @@
+// Oracle verified 2026-09-03. CR 208.2a, 301.7, 604.3, 613.4a, and 702.122.
+// Crew composes the generic generation-bound aggregate tap payment with a layer-4 type addition.
+(
+  id: "lumbering_worldwagon",
+  name: "Lumbering Worldwagon",
+  face_id: "lumbering_worldwagon",
+  mana_cost: "{2}{G}",
+  types: ["Artifact", "Vehicle"],
+  power: 0,
+  toughness: 4,
+  characteristic_defining_abilities: [(
+    ability_id: "characteristic_01",
+    presentation: OracleLines([1]),
+    definition: CountScaledPowerToughness(
+      count: BattlefieldPermanents(filter: (controllers: Controller, card_type: Some(Land))),
+      power_per_match: 1,
+      toughness_per_match: 0,
+    ),
+  )],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ChooseResolutionBranch(
+        optional: true,
+        branches: [(
+          branch_id: "search_for_a_basic_land",
+          presentation: Fallback,
+          cost: None,
+          effects: [SearchLibrary(
+            filter: Some((card_type: Some(BasicLand))),
+            destination: Battlefield(tapped: true),
+            shuffle: true,
+            reveal: false,
+          )],
+        )],
+      )],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+      effect: [ChooseResolutionBranch(
+        optional: true,
+        branches: [(
+          branch_id: "search_for_a_basic_land",
+          presentation: Fallback,
+          cost: None,
+          effects: [SearchLibrary(
+            filter: Some((card_type: Some(BasicLand))),
+            destination: Battlefield(tapped: true),
+            shuffle: true,
+            reveal: false,
+          )],
+        )],
+      )],
+    ),
+  ],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [TapPermanents(
+      constraint: AggregateMinimum(minimum: 4, contribution: CurrentPower),
+      filter: (kind: Creature, controller: You),
+      exclude_source: true,
+    )],
+    effect: [AddTypes(subject: Source, addition: (card_types: [Creature]))],
+  )],
+)

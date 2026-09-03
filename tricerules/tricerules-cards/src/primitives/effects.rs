@@ -768,8 +768,9 @@ pub enum SpellEffectKind {
         count: Amount,
     },
     /// CR 205.1b / 611.2a / 613: turn the exact source permanent into a creature while retaining
-    /// its existing card types. Restless Reef and Soulstone Sanctuary exercise temporary and
-    /// indefinite duration respectively; the subtype-preserving shape is reusable for Crew.
+    /// its existing card types while explicitly setting base P/T. Restless Reef and Soulstone
+    /// Sanctuary exercise temporary and indefinite duration respectively. Effects such as Crew
+    /// that retain printed or characteristic-defined P/T use `AddTypes` instead.
     AnimateSelf {
         base_power: i64,
         base_toughness: i64,

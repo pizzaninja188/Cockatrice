@@ -16,10 +16,10 @@
 use crate::mana::ManaCost;
 use crate::primitives::{
     ActivatedAbilityDef, AdditionalCost, Amount, CardTypeFilter, CastCostGroupDef,
-    CastCostOptionRef, CastCostReceiptCondition, Color, CounterKind, EffectContext,
-    EntersWithCountersAffected, Evasion, GameCondition, Keyword, PermanentTypeFilter,
-    ProtectionQuality, SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetingDef,
-    TriggeredAbilityDef,
+    CastCostOptionRef, CastCostReceiptCondition, Color, CountExpression, CounterKind,
+    EffectContext, EntersWithCountersAffected, Evasion, GameCondition, Keyword,
+    PermanentTypeFilter, ProtectionQuality, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
+    TargetingDef, TriggeredAbilityDef,
 };
 use crate::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility, ModeId};
 use serde::{Deserialize, Serialize};
@@ -132,10 +132,38 @@ pub enum Layout {
 /// the authored value, while the characteristics evaluator applies its effect in the appropriate
 /// layer. Chitinous Graspling and Firdoch Core exercise Changeling on creature and noncreature
 /// Kindred faces respectively.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CharacteristicDefiningAbility {
     /// CR 702.73: this object is every creature type in every zone.
     Changeling,
+    /// CR 208.2a / 604.3 / 613.4a: define one or both P/T components from a live public
+    /// battlefield count in every zone. Lumbering Worldwagon defines only power; Zendikar
+    /// Incarnate defines both power and toughness.
+    CountScaledPowerToughness {
+        count: CountExpression,
+        power_per_match: i32,
+        toughness_per_match: i32,
+    },
+}
+
+impl CharacteristicDefiningAbility {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::Changeling => Ok(()),
+            Self::CountScaledPowerToughness {
+                count,
+                power_per_match,
+                toughness_per_match,
+            } => {
+                if *power_per_match == 0 && *toughness_per_match == 0 {
+                    return Err(
+                        "count-defined P/T requires a nonzero power or toughness multiplier".into(),
+                    );
+                }
+                count.validate_static_count()
+            }
+        }
+    }
 }
 
 pub type IdentifiedStaticAbility = IdentifiedAbility<StaticAbilityDef>;
@@ -741,7 +769,12 @@ impl CardFace {
                 && self
                     .characteristic_defining_abilities
                     .iter()
-                    .any(|ability| ability.definition == CharacteristicDefiningAbility::Changeling))
+                    .any(|ability| {
+                        matches!(
+                            &ability.definition,
+                            CharacteristicDefiningAbility::Changeling
+                        )
+                    }))
     }
 }
 
@@ -1301,5 +1334,42 @@ mod tests {
 
         assert!(card.has_subtype_outside_stack("Goblin"));
         assert!(!card.has_subtype_outside_stack("Island"));
+    }
+
+    #[test]
+    fn count_defined_pt_requires_a_supported_count_and_nonzero_axis() {
+        let lands = CountExpression::BattlefieldPermanents {
+            filter: crate::primitives::BattlefieldPermanentFilter {
+                token: None,
+                any_of: None,
+                controllers: crate::primitives::RelativePlayerSet::Controller,
+                card_type: Some(CardTypeFilter::Land),
+                color: None,
+                name: None,
+                required_subtypes: vec![],
+                exclude_source: false,
+            },
+        };
+        assert!(CharacteristicDefiningAbility::CountScaledPowerToughness {
+            count: lands.clone(),
+            power_per_match: 1,
+            toughness_per_match: 0,
+        }
+        .validate()
+        .is_ok());
+        assert!(CharacteristicDefiningAbility::CountScaledPowerToughness {
+            count: lands,
+            power_per_match: 0,
+            toughness_per_match: 0,
+        }
+        .validate()
+        .is_err());
+        assert!(CharacteristicDefiningAbility::CountScaledPowerToughness {
+            count: CountExpression::SourcePower,
+            power_per_match: 1,
+            toughness_per_match: 1,
+        }
+        .validate()
+        .is_err());
     }
 }

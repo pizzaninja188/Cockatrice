@@ -195,6 +195,8 @@ mod issue_208_library_search;
 mod issue_211_reflexive_counter_placement;
 #[path = "scenario/issue_214_graveyard_land_play.rs"]
 mod issue_214_graveyard_land_play;
+#[path = "scenario/issue_215_crew.rs"]
+mod issue_215_crew;
 #[path = "scenario/issue_216_attachment_scoped_blocking_restrictions.rs"]
 mod issue_216_attachment_scoped_blocking_restrictions;
 #[path = "scenario/issue_217_target_power_scale.rs"]

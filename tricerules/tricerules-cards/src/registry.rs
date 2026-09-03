@@ -1065,6 +1065,7 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
     for ability in &face.characteristic_defining_abilities {
         insert_ability_id(&mut siblings, &ability.ability_id)?;
         ability.validate_metadata()?;
+        ability.definition.validate()?;
     }
     let mut cast_cost_group_ids = HashSet::new();
     for group in &face.cast_cost_groups {

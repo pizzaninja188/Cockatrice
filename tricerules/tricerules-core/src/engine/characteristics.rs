@@ -105,7 +105,7 @@ impl CharacteristicsEvaluator<'_> {
 
         let ordered_effects = self.ordered_effects(oid, &result);
         self.apply_layer_6_abilities(object, &mut result, &ordered_effects);
-        self.apply_layer_7_power_toughness(object, &mut result, &ordered_effects);
+        self.apply_layer_7_power_toughness(oid, object, &mut result, &ordered_effects);
         Some(result)
     }
 
@@ -146,7 +146,12 @@ impl CharacteristicsEvaluator<'_> {
             all_creature_types: face
                 .characteristic_defining_abilities
                 .iter()
-                .any(|ability| ability.definition == CharacteristicDefiningAbility::Changeling),
+                .any(|ability| {
+                    matches!(
+                        &ability.definition,
+                        CharacteristicDefiningAbility::Changeling
+                    )
+                }),
             supertypes: face.supertypes.to_vec(),
             colors: if copied.is_none()
                 && definition.is_some_and(|definition| definition.layout == Layout::Flip)
@@ -1173,14 +1178,58 @@ impl CharacteristicsEvaluator<'_> {
 
     fn apply_layer_7_power_toughness(
         &self,
+        oid: ObjectId,
         object: &GameObject,
         result: &mut Characteristics,
         effects: &[&ContinuousEffect],
     ) {
-        // CR 613.4a/613.3: characteristic-defining abilities. None modeled yet.
+        // CR 613.4a/613.3: characteristic-defining abilities apply before setters. A layer-6
+        // remove-all effect suppresses a P/T CDA, while a face-down object uses its layer-1b 2/2.
+        let abilities_removed = effects
+            .iter()
+            .any(|effect| matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities));
         // CR 613.4b: apply setters in timestamp order; the last one wins.
         let mut power = result.power.map(i64::from);
         let mut toughness = result.toughness.map(i64::from);
+        if !object.face_down && !abilities_removed {
+            if let Some(face) = effective_face_from(self.state, self.registry, oid) {
+                for ability in &face.characteristic_defining_abilities {
+                    let CharacteristicDefiningAbility::CountScaledPowerToughness {
+                        count,
+                        power_per_match,
+                        toughness_per_match,
+                    } = &ability.definition
+                    else {
+                        continue;
+                    };
+                    let context = ConditionContext {
+                        controller: result.controller,
+                        source_object_id: oid,
+                        source_zone_change: self
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0),
+                        resolving_spell_id: None,
+                        stack_item: None,
+                    };
+                    let matches = super::history::battlefield_quantity_value(
+                        self.state,
+                        count,
+                        context,
+                        |candidate| self.characteristics_through_layer_5(candidate),
+                    )
+                    .unwrap_or(0);
+                    if *power_per_match != 0 {
+                        power = Some(i64::from(*power_per_match).saturating_mul(matches));
+                    }
+                    if *toughness_per_match != 0 {
+                        toughness = Some(i64::from(*toughness_per_match).saturating_mul(matches));
+                    }
+                }
+            }
+        }
         for effect in effects {
             if let ContinuousEffectKind::Layer7bSetPt {
                 power: set_power,
@@ -1254,6 +1303,12 @@ impl CharacteristicsEvaluator<'_> {
         }
         // CR 613.4d: P/T-switching effects. None modeled yet.
 
+        // CR 208.3: a noncreature permanent has no power or toughness. Printed/CDA values remain
+        // available in other zones and reappear if a layer-4 effect makes the permanent a creature.
+        if object.zone == Zone::Battlefield && !result.is_creature() {
+            power = None;
+            toughness = None;
+        }
         result.signed_power = power;
         result.signed_toughness = toughness;
         result.power = power.map(|value| value.clamp(0, u32::MAX as i64) as u32);
