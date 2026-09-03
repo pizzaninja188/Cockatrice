@@ -1483,66 +1483,120 @@ impl GameEngine {
             } => {
                 // CR 603.2/115.9: becoming a target is observed after the complete legal target
                 // set is chosen. A single object named multiple times by that object produces one
-                // trigger per matching ability, while distinct watched permanents each produce
-                // their own trigger and retain their own event identity.
+                // trigger per matching ability, while distinct watched permanents or spells each
+                // produce their own trigger and retain their generation-bound event identity.
                 let mut seen = HashSet::new();
-                let distinct_targets: Vec<ObjectId> = targets
+                let distinct_targets: Vec<StackTarget> = targets
                     .iter()
                     .copied()
-                    .filter(|target| seen.insert(*target))
+                    .filter(|target| seen.insert((target.object_id, target.zone_change_generation)))
                     .collect();
                 let mut out = Vec::new();
                 for source in sources {
-                    for target_id in &distinct_targets {
-                        if !self
-                            .state
-                            .objects
-                            .get(target_id)
-                            .is_some_and(|object| object.zone == Zone::Battlefield)
+                    for target in &distinct_targets {
+                        let target_kind = rv1::TargetRefKind::try_from(target.kind)
+                            .unwrap_or(rv1::TargetRefKind::Unspecified);
+                        if matches!(
+                            target_kind,
+                            rv1::TargetRefKind::Unspecified | rv1::TargetRefKind::Permanent
+                        ) && targeting::stack_target_identity_is_current(self, target)
+                            && self
+                                .state
+                                .objects
+                                .get(&target.object_id)
+                                .is_some_and(|object| object.zone == Zone::Battlefield)
+                        {
+                            let Some(target_characteristics) =
+                                self.characteristics(target.object_id)
+                            else {
+                                continue;
+                            };
+                            let target_controller = target_characteristics.controller;
+                            let mut matching =
+                                self.matching_snapshot_abilities(source, |condition| {
+                                    let Some(permanent_type) = self
+                                        .target_trigger_permanent_filter(
+                                            condition,
+                                            *targeting_source,
+                                            *targeting_controller,
+                                            source.object_id,
+                                            source.controller,
+                                            target.object_id,
+                                            target_controller,
+                                        )
+                                    else {
+                                        return false;
+                                    };
+                                    match permanent_type {
+                                        Some(PermanentTypeFilter::Creature) => {
+                                            target_characteristics.is_creature()
+                                        }
+                                        Some(PermanentTypeFilter::Artifact) => {
+                                            target_characteristics.is_artifact()
+                                        }
+                                        Some(PermanentTypeFilter::Enchantment) => {
+                                            target_characteristics.has_type("Enchantment")
+                                        }
+                                        Some(PermanentTypeFilter::Land) => {
+                                            target_characteristics.has_type("Land")
+                                        }
+                                        Some(PermanentTypeFilter::Planeswalker) => {
+                                            target_characteristics.has_type("Planeswalker")
+                                        }
+                                        Some(PermanentTypeFilter::Battle) => {
+                                            target_characteristics.has_type("Battle")
+                                        }
+                                        None => true,
+                                    }
+                                });
+                            for trigger in &mut matching {
+                                trigger.trigger_context.observed_object =
+                                    self.trigger_object_ref(target.object_id);
+                                trigger.trigger_context.targeting_stack_object =
+                                    Some(*stack_object);
+                            }
+                            out.extend(matching);
+                        }
+
+                        if !matches!(
+                            target_kind,
+                            rv1::TargetRefKind::Unspecified | rv1::TargetRefKind::Stack
+                        ) || !targeting::stack_target_identity_is_current(self, target)
                         {
                             continue;
                         }
-                        let Some(target_characteristics) = self.characteristics(*target_id) else {
+                        let Some(target_stack_item) = self.state.stack.iter().find(|item| {
+                            item.id == target.object_id && item.ability_text.is_none()
+                        }) else {
                             continue;
                         };
-                        let target_controller = target_characteristics.controller;
+                        let target_controller = target_stack_item.controller;
                         let mut matching = self.matching_snapshot_abilities(source, |condition| {
-                            let Some(permanent_type) = self.target_trigger_permanent_filter(
+                            let Some(spell_filter) = self.target_trigger_spell_filter(
                                 condition,
                                 *targeting_source,
                                 *targeting_controller,
-                                source.object_id,
                                 source.controller,
-                                *target_id,
                                 target_controller,
                             ) else {
                                 return false;
                             };
-                            match permanent_type {
-                                Some(PermanentTypeFilter::Creature) => {
-                                    target_characteristics.is_creature()
-                                }
-                                Some(PermanentTypeFilter::Artifact) => {
-                                    target_characteristics.is_artifact()
-                                }
-                                Some(PermanentTypeFilter::Enchantment) => {
-                                    target_characteristics.has_type("Enchantment")
-                                }
-                                Some(PermanentTypeFilter::Land) => {
-                                    target_characteristics.has_type("Land")
-                                }
-                                Some(PermanentTypeFilter::Planeswalker) => {
-                                    target_characteristics.has_type("Planeswalker")
-                                }
-                                Some(PermanentTypeFilter::Battle) => {
-                                    target_characteristics.has_type("Battle")
-                                }
-                                None => true,
-                            }
+                            targeting::stack_spell_target_legal(
+                                &self.state,
+                                self.registry,
+                                target.object_id,
+                                spell_filter,
+                            )
                         });
                         for trigger in &mut matching {
-                            trigger.trigger_context.observed_object =
-                                self.trigger_object_ref(*target_id);
+                            trigger.trigger_context.observed_stack_object =
+                                Some(TriggerStackObjectRef {
+                                    stack_object: StackObjectRef {
+                                        object_id: target.object_id,
+                                        zone_change_generation: target.zone_change_generation,
+                                    },
+                                    controller_at_event: target_controller,
+                                });
                             trigger.trigger_context.targeting_stack_object = Some(*stack_object);
                         }
                         out.extend(matching);
@@ -1688,6 +1742,37 @@ impl GameEngine {
             .then_some(*permanent_type),
             _ => None,
         }
+    }
+
+    fn target_trigger_spell_filter<'a>(
+        &self,
+        condition: &'a TriggerCondition,
+        targeting_source: TargetingSourceKind,
+        targeting_controller: PlayerId,
+        source_controller: PlayerId,
+        target_controller: PlayerId,
+    ) -> Option<&'a StackSpellFilter> {
+        let TriggerCondition::WheneverSpellBecomesTarget {
+            source,
+            source_controller: source_controller_filter,
+            target_controller: target_controller_filter,
+            spell_filter,
+        } = condition
+        else {
+            return None;
+        };
+        (Self::targeting_source_matches(*source, targeting_source)
+            && self.relative_player_matches(
+                *source_controller_filter,
+                targeting_controller,
+                source_controller,
+            )
+            && self.relative_player_matches(
+                *target_controller_filter,
+                target_controller,
+                source_controller,
+            ))
+        .then_some(spell_filter)
     }
 
     pub(super) fn relative_player_matches(
@@ -3110,6 +3195,186 @@ mod tests {
     }
 
     #[test]
+    fn spell_target_filter_accepts_opponent_abilities_only_for_controlled_spells() {
+        let engine = GameEngine::new(219_007, &[0, 1], 20, None, true).expect("new");
+        let condition = TriggerCondition::WheneverSpellBecomesTarget {
+            source: TargetingSourceFilter::SpellOrAbility,
+            source_controller: CastTriggerPlayer::Opponent,
+            target_controller: CastTriggerPlayer::Controller,
+            spell_filter: StackSpellFilter {
+                card_type: Some(CardTypeFilter::Creature),
+                ..Default::default()
+            },
+        };
+        assert!(engine
+            .target_trigger_spell_filter(&condition, TargetingSourceKind::Ability, 1, 0, 0)
+            .is_some());
+        assert!(engine
+            .target_trigger_spell_filter(&condition, TargetingSourceKind::SpellCast, 1, 0, 0)
+            .is_some());
+        assert!(engine
+            .target_trigger_spell_filter(&condition, TargetingSourceKind::Ability, 0, 0, 0)
+            .is_none());
+        assert!(engine
+            .target_trigger_spell_filter(&condition, TargetingSourceKind::Ability, 1, 0, 1)
+            .is_none());
+    }
+
+    fn issue_219_creature_spell_item(
+        id: ObjectId,
+        controller: PlayerId,
+        is_copy: bool,
+    ) -> StackItem {
+        StackItem {
+            id,
+            controller,
+            card_id: "grizzly_bears".into(),
+            targets: Vec::new(),
+            ability_text: None,
+            source_permanent_id: None,
+            source_zone_change: 0,
+            source_face_change: 0,
+            ability_index: None,
+            activated_ability: None,
+            triggered_ability: None,
+            is_triggered: false,
+            is_copy,
+            face_index: 0,
+            cast_method: SpellCastMethod::Normal,
+            sneak_attack: None,
+            chosen_x: 0,
+            chosen_modes: Vec::new(),
+            cast_condition_results: Vec::new(),
+            cast_occurrence: None,
+            cast_cost_receipts: Vec::new(),
+            payment_result: CardResultCohort::default(),
+            resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
+            trigger_context: TriggerContext::default(),
+        }
+    }
+
+    #[test]
+    fn issue_219_spell_target_collection_deduplicates_and_preserves_stack_identity() {
+        let decks = Some(vec![
+            vec![
+                "surrak,_elusive_hunter".into(),
+                "grizzly_bears".into(),
+                "grizzly_bears".into(),
+                "forest".into(),
+                "forest".into(),
+                "forest".into(),
+                "forest".into(),
+            ],
+            vec!["island".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(219_009, &[0, 1], 20, decks, true).expect("new");
+        let surrak = engine
+            .state
+            .objects
+            .values()
+            .find(|object| object.card_id == "surrak,_elusive_hunter")
+            .expect("Surrak")
+            .id;
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            surrak,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("put Surrak onto battlefield");
+        let mut bears: Vec<_> = engine
+            .state
+            .objects
+            .values()
+            .filter(|object| object.card_id == "grizzly_bears")
+            .map(|object| object.id)
+            .collect();
+        bears.sort_unstable();
+        for bear in &bears {
+            move_object_to_zone(&mut engine.state, engine.registry, *bear, Zone::Stack, None)
+                .expect("put Bear spell onto stack");
+            engine
+                .state
+                .stack
+                .push(issue_219_creature_spell_item(*bear, 0, false));
+        }
+        let copy_id = u32::MAX - 1;
+        engine
+            .state
+            .stack
+            .push(issue_219_creature_spell_item(copy_id, 0, true));
+        let physical_target = |object_id| StackTarget {
+            object_id,
+            group_index: 0,
+            damage_amount: 0,
+            kind: rv1::TargetRefKind::Stack as i32,
+            zone_change_generation: engine.state.zone_change_generation.get(&object_id).copied(),
+        };
+        let bear_one = physical_target(bears[0]);
+        let bear_two = physical_target(bears[1]);
+        let copy = StackTarget {
+            object_id: copy_id,
+            zone_change_generation: None,
+            ..bear_one
+        };
+        let triggers = engine.collect_event_triggers(&[GameEvent::TargetsChosen {
+            controller: 1,
+            source: TargetingSourceKind::Ability,
+            stack_object: StackObjectRef {
+                object_id: 999_219,
+                zone_change_generation: None,
+            },
+            targets: vec![bear_one, bear_one, bear_two, copy],
+        }]);
+        assert_eq!(triggers.len(), 3);
+        assert_eq!(
+            triggers
+                .iter()
+                .filter_map(|trigger| trigger.trigger_context.observed_stack_object)
+                .map(|observed| {
+                    (
+                        observed.stack_object.object_id,
+                        observed.stack_object.zone_change_generation,
+                    )
+                })
+                .collect::<BTreeSet<_>>(),
+            [
+                (bears[0], bear_one.zone_change_generation),
+                (bears[1], bear_two.zone_change_generation),
+                (copy_id, None),
+            ]
+            .into_iter()
+            .collect()
+        );
+        assert!(triggers.iter().all(|trigger| {
+            trigger.trigger_context.targeting_stack_object
+                == Some(StackObjectRef {
+                    object_id: 999_219,
+                    zone_change_generation: None,
+                })
+        }));
+
+        *engine
+            .state
+            .zone_change_generation
+            .entry(bears[0])
+            .or_default() += 1;
+        assert!(engine
+            .collect_event_triggers(&[GameEvent::TargetsChosen {
+                controller: 1,
+                source: TargetingSourceKind::Ability,
+                stack_object: StackObjectRef {
+                    object_id: 999_220,
+                    zone_change_generation: None,
+                },
+                targets: vec![bear_one],
+            }])
+            .is_empty());
+    }
+
+    #[test]
     fn target_collection_deduplicates_permanent_and_keeps_each_event_identity() {
         let decks = Some(vec![
             vec![
@@ -3153,7 +3418,20 @@ mod tests {
                 object_id: 999_001,
                 zone_change_generation: None,
             },
-            targets: vec![giants[0], giants[0], giants[1]],
+            targets: vec![giants[0], giants[0], giants[1]]
+                .into_iter()
+                .map(|object_id| StackTarget {
+                    object_id,
+                    group_index: 0,
+                    damage_amount: 0,
+                    kind: rv1::TargetRefKind::Permanent as i32,
+                    zone_change_generation: engine
+                        .state
+                        .zone_change_generation
+                        .get(&object_id)
+                        .copied(),
+                })
+                .collect(),
         }]);
 
         let group = engine

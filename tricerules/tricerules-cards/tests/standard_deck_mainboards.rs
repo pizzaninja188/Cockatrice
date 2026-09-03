@@ -1,10 +1,10 @@
 use tricerules_cards::primitives::{
     CardTypeFilter, CombatRestrictionScope, EffectSubject, GameCondition, ObjectCastCostKind,
-    SpellEffectKind, StackSpellFilter, StaticAbilityDef, TargetKind,
+    SpellEffectKind, StackSpellFilter, StaticAbilityDef, TargetKind, TargetingSourceFilter,
 };
 use tricerules_cards::{
-    Amount, CardRegistry, CastCostOptionDef, CounterKind, Keyword, SearchDestination,
-    TriggerCondition,
+    Amount, CardRegistry, CastCostOptionDef, CastTriggerPlayer, CounterKind, Keyword,
+    PermanentTypeFilter, SearchDestination, TriggerCondition,
 };
 
 struct ExpectedCard {
@@ -135,6 +135,15 @@ const COHORT: &[ExpectedCard] = &[
         stats: (Some(0), Some(1)),
         keywords: &[],
     },
+    ExpectedCard {
+        id: "surrak,_elusive_hunter",
+        name: "Surrak, Elusive Hunter",
+        mana_cost: "{2}{G}",
+        supertypes: &["Legendary"],
+        types: &["Creature", "Human", "Warrior"],
+        stats: (Some(4), Some(3)),
+        keywords: &[Keyword::Trample],
+    },
 ];
 
 #[test]
@@ -149,6 +158,7 @@ fn current_standard_mainboard_cohort_has_exact_oracle_characteristics() {
         let face = definition.primary_face();
         let expected_face_id = match expected.id {
             "wan_shi_tong,_librarian" => "wan_shi_tong_librarian",
+            "surrak,_elusive_hunter" => "surrak_elusive_hunter",
             id => id.trim_end_matches('!'),
         };
         assert_eq!(
@@ -188,6 +198,48 @@ fn current_standard_mainboard_cohort_has_exact_oracle_characteristics() {
             expected.id
         );
     }
+}
+
+#[test]
+fn surrak_uses_stack_counter_prohibition_and_parallel_target_watchers() {
+    let face = CardRegistry::global()
+        .get("surrak,_elusive_hunter")
+        .unwrap()
+        .primary_face();
+    assert!(matches!(
+        face.static_abilities.as_slice(),
+        [ability] if ability.ability_id.as_str() == "static_01"
+            && matches!(ability.definition, StaticAbilityDef::SpellCannotBeCountered)
+    ));
+    assert!(matches!(
+        &face.triggered_abilities[0].trigger,
+        TriggerCondition::WheneverPermanentBecomesTarget {
+            source: TargetingSourceFilter::SpellOrAbility,
+            source_controller: CastTriggerPlayer::Opponent,
+            target_controller: CastTriggerPlayer::Controller,
+            permanent_type: Some(PermanentTypeFilter::Creature),
+            exclude_self: false,
+        }
+    ));
+    assert!(matches!(
+        &face.triggered_abilities[1].trigger,
+        TriggerCondition::WheneverSpellBecomesTarget {
+            source: TargetingSourceFilter::SpellOrAbility,
+            source_controller: CastTriggerPlayer::Opponent,
+            target_controller: CastTriggerPlayer::Controller,
+            spell_filter: StackSpellFilter {
+                card_type: Some(CardTypeFilter::Creature),
+                ..
+            },
+        }
+    ));
+    assert!(face.triggered_abilities.iter().all(|ability| matches!(
+        ability.effect.as_slice(),
+        [SpellEffectKind::Draw {
+            count: Amount::Fixed(1),
+            ..
+        }]
+    )));
 }
 
 #[test]

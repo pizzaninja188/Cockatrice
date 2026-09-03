@@ -241,6 +241,10 @@ impl GameEngine {
             .iter()
             .map(|target| target.object_id)
             .collect();
+        let stack_targets: Vec<_> = public_targets
+            .iter()
+            .map(|target| capture_stack_target(self, target))
+            .collect();
         let stack_generation = generation.saturating_add(1);
         let mut triggers = self.collect_event_triggers(&[GameEvent::TargetsChosen {
             controller: player,
@@ -249,12 +253,8 @@ impl GameEngine {
                 object_id: source_oid,
                 zone_change_generation: Some(stack_generation),
             },
-            targets: trefs.clone(),
+            targets: stack_targets.clone(),
         }]);
-        let stack_targets = public_targets
-            .iter()
-            .map(|target| capture_stack_target(self, target))
-            .collect();
         let stack_presentation =
             spell_stack_presentation(self.registry, &card_id, expected_face_index, &[], &[]);
         self.state
@@ -917,6 +917,10 @@ impl GameEngine {
             .iter()
             .map(|target| target.object_id)
             .collect();
+        let stack_targets: Vec<_> = public_targets
+            .iter()
+            .map(|target| capture_stack_target(self, target))
+            .collect();
         let stack_generation = self
             .state
             .zone_change_generation
@@ -934,7 +938,7 @@ impl GameEngine {
                 object_id: oid,
                 zone_change_generation: Some(stack_generation),
             },
-            targets: trefs.clone(),
+            targets: stack_targets.clone(),
         }]);
         let crime_events: Vec<_> = self
             .crime_event(player, &public_targets)
@@ -968,10 +972,6 @@ impl GameEngine {
             .map(|receipt| receipt.label.clone())
             .collect::<Vec<_>>();
 
-        let stack_targets = public_targets
-            .iter()
-            .map(|target| capture_stack_target(self, target))
-            .collect();
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
 
         let stack_presentation = spell_stack_presentation(
@@ -1370,6 +1370,10 @@ impl GameEngine {
         )?;
 
         let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
+        let stack_targets: Vec<_> = targets
+            .iter()
+            .map(|target| capture_stack_target(self, target))
+            .collect();
         // Reserve without consuming: a failed payment must not advance the deterministic id
         // stream, while target triggers still need the eventual ability's exact identity.
         let virtual_id = self.state.next_object_id;
@@ -1383,7 +1387,7 @@ impl GameEngine {
                 object_id: virtual_id,
                 zone_change_generation: None,
             },
-            targets: trefs.clone(),
+            targets: stack_targets.clone(),
         }]);
 
         let source_face_change = self
@@ -1446,10 +1450,7 @@ impl GameEngine {
             id: virtual_id,
             controller: player,
             card_id: card_id.clone(),
-            targets: targets
-                .iter()
-                .map(|target| capture_stack_target(self, target))
-                .collect(),
+            targets: stack_targets,
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(permanent_id),
             source_zone_change,

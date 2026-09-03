@@ -153,7 +153,7 @@ impl GameEngine {
             .map(|f| f.name.to_string())
             .unwrap_or_else(|| card_id.clone());
 
-        let published_targets = copy_item
+        let published_targets: Vec<_> = copy_item
             .targets
             .iter()
             .map(|target| rv1::TargetRef {
@@ -163,6 +163,11 @@ impl GameEngine {
                 kind: target.kind,
             })
             .collect();
+        let event_targets: Vec<_> = published_targets
+            .iter()
+            .map(|target| capture_stack_target(self, target))
+            .collect();
+        copy_item.targets = event_targets.clone();
         let chosen_cast_cost_labels = copy_item
             .cast_cost_receipts
             .iter()
@@ -184,7 +189,7 @@ impl GameEngine {
                 object_id: copy_id,
                 zone_change_generation: None,
             },
-            targets: chosen.to_vec(),
+            targets: event_targets,
         }]);
 
         let tgt_log = format_spell_targets_log(&self.state, self.registry, chosen);

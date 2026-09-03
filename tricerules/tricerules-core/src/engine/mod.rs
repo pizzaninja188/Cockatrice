@@ -20,8 +20,8 @@ use crate::state::{
     ReplacementPriority, ResolutionContinuation, ResolutionReceipt, RoomState, SpellCastMethod,
     StackItem, StackObjectRef, StackPresentation, StackTarget, StagedTrigger, StagedTriggerGroup,
     TokenBattlefieldEntry, TokenEntryBatchOptions, TriggerAbilityOrigin, TriggerContext,
-    TriggerObjectRef, TriggerUseKey, TurnHistory, TurnObjectFact, TurnStep, UndoableManaAbility,
-    Zone,
+    TriggerObjectRef, TriggerStackObjectRef, TriggerUseKey, TurnHistory, TurnObjectFact, TurnStep,
+    UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -566,12 +566,12 @@ enum GameEvent {
     },
     /// A spell or ability has legally acquired its final targets. `targets` intentionally keeps
     /// duplicates for the stack object's own semantics; trigger collection deduplicates watched
-    /// permanents so one object becoming a target multiple times fires each watcher only once.
+    /// objects so one object becoming a target multiple times fires each watcher only once.
     TargetsChosen {
         controller: PlayerId,
         source: TargetingSourceKind,
         stack_object: StackObjectRef,
-        targets: Vec<ObjectId>,
+        targets: Vec<StackTarget>,
     },
 }
 

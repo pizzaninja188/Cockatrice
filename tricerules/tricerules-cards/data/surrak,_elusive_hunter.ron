@@ -1,0 +1,42 @@
+// Oracle and rulings fetched 2026-09-03. CR 113.6g, 115.9, 603.2, and 701.6.
+(
+  id: "surrak,_elusive_hunter",
+  name: "Surrak, Elusive Hunter",
+  face_id: "surrak_elusive_hunter",
+  mana_cost: "{2}{G}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Warrior"],
+  power: 4,
+  toughness: 3,
+  keywords: [Trample],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SpellCannotBeCountered,
+  )],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([3]),
+      trigger: WheneverPermanentBecomesTarget(
+        source: SpellOrAbility,
+        source_controller: Opponent,
+        target_controller: Controller,
+        permanent_type: Some(Creature),
+        exclude_self: false,
+      ),
+      effect: [Draw(count: 1)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
+      trigger: WheneverSpellBecomesTarget(
+        source: SpellOrAbility,
+        source_controller: Opponent,
+        target_controller: Controller,
+        spell_filter: (card_type: Some(Creature)),
+      ),
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

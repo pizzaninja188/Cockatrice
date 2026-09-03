@@ -199,6 +199,8 @@ mod issue_216_attachment_scoped_blocking_restrictions;
 mod issue_217_target_power_scale;
 #[path = "scenario/issue_218_battlefield_exile_cost.rs"]
 mod issue_218_battlefield_exile_cost;
+#[path = "scenario/issue_219_surrak.rs"]
+mod issue_219_surrak;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

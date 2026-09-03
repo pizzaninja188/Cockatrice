@@ -371,11 +371,12 @@ impl GameEngine {
 
         for (definition, static_ability) in statics {
             match static_ability.definition {
-                StaticAbilityDef::Storied
+                StaticAbilityDef::SpellCannotBeCountered
+                | StaticAbilityDef::Storied
                 | StaticAbilityDef::AdditionalTriggeredAbilityInstances { .. }
                 | StaticAbilityDef::ProhibitLifeGain { .. }
                 | StaticAbilityDef::ProhibitCounters { .. } => {
-                    // Queried at each life-gain event; no independent effect record is needed.
+                    // Queried at the relevant event; no independent effect record is needed.
                 }
                 StaticAbilityDef::EntersAsCopy { .. } => {
                     // CR 614.12 / 707.5 entry replacement, handled before zone commitment in

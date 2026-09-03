@@ -162,6 +162,10 @@ impl GameEngine {
             .iter()
             .map(|target| target.object_id)
             .collect::<Vec<_>>();
+        let stack_targets: Vec<_> = public_targets
+            .iter()
+            .map(|target| capture_stack_target(self, target))
+            .collect();
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
 
         self.state.stack_presentations.insert(
@@ -176,10 +180,7 @@ impl GameEngine {
             id: virtual_id,
             controller,
             card_id: card_id.clone(),
-            targets: public_targets
-                .iter()
-                .map(|target| capture_stack_target(self, target))
-                .collect(),
+            targets: stack_targets.clone(),
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(source_id),
             source_zone_change,
@@ -237,7 +238,7 @@ impl GameEngine {
                 object_id: virtual_id,
                 zone_change_generation: None,
             },
-            targets: trefs,
+            targets: stack_targets,
         }];
         committed_events.extend(self.crime_event(controller, &public_targets));
         self.fire_triggers(&committed_events);

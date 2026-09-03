@@ -143,6 +143,14 @@ pub struct StackObjectRef {
     pub zone_change_generation: Option<u64>,
 }
 
+/// Event-time identity and controller of the spell observed as a target. This is distinct from
+/// `targeting_stack_object`, which identifies the spell or ability that chose the target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TriggerStackObjectRef {
+    pub stack_object: StackObjectRef,
+    pub controller_at_event: PlayerId,
+}
+
 /// Event-time facts carried by a triggered ability from collection through resolution. Keeping
 /// these together prevents target publication, target validation, and effect resolution from
 /// reconstructing relationships after objects detach, change controller, or leave a zone.
@@ -153,6 +161,7 @@ pub struct TriggerContext {
     pub source_after_zone_change: Option<TriggerObjectRef>,
     pub affected_player: Option<PlayerId>,
     pub observed_object: Option<TriggerObjectRef>,
+    pub observed_stack_object: Option<TriggerStackObjectRef>,
     pub targeting_stack_object: Option<StackObjectRef>,
     pub attacking_player: Option<PlayerId>,
     pub defending_player: Option<PlayerId>,

@@ -1502,15 +1502,18 @@ impl CardRegistry {
                         }
                     })?;
                 }
-                // CR 604.2: static abilities exist only on permanents (they generate continuous
-                // effects while the source is on the battlefield). An instant/sorcery with one is
-                // invalid data — its "anthem" belongs in `spell_effect` as a one-shot `PumpAll`.
-                if !face.static_abilities.is_empty() && (face.is_instant || face.is_sorcery) {
+                // CR 113.6g is the stack-active exception to CR 604.2. Every other static ability
+                // here requires a permanent source on the battlefield; an instant/sorcery anthem,
+                // for example, belongs in `spell_effect` as a one-shot `PumpAll`.
+                if (face.is_instant || face.is_sorcery)
+                    && face.static_abilities.iter().any(|ability| {
+                        !matches!(ability.definition, StaticAbilityDef::SpellCannotBeCountered)
+                    })
+                {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
-                        reason:
-                            "static_abilities are only valid on permanents (not instant/sorcery)"
-                                .into(),
+                        reason: "only stack-active static abilities are valid on instant/sorcery"
+                            .into(),
                     });
                 }
                 let spell_aura_attach_count = face
@@ -4880,6 +4883,29 @@ mod tests {
             RegistryError::InvalidCard { reason, .. }
                 if reason.contains("Payment card result requires a compatible card cost")
         ));
+    }
+
+    #[test]
+    fn issue_219_allows_only_stack_active_static_abilities_on_instants_and_sorceries() {
+        let uncounterable = r#"(
+            id: "uncounterable_instant", name: "Uncounterable Instant",
+            face_id: "uncounterable_instant", types: ["Instant"],
+            static_abilities: [(
+                ability_id: "static_01", presentation: Fallback,
+                definition: SpellCannotBeCountered,
+            )],
+        )"#;
+        CardRegistry::from_chunks_and_tokens(&[uncounterable], &[])
+            .expect("CR 113.6g static ability functions on the stack");
+
+        let battlefield_only = r#"(
+            id: "invalid_instant_static", name: "Invalid Instant Static",
+            face_id: "invalid_instant_static", types: ["Instant"],
+            static_abilities: [(
+                ability_id: "static_01", presentation: Fallback, definition: Storied,
+            )],
+        )"#;
+        assert!(CardRegistry::from_chunks_and_tokens(&[battlefield_only], &[]).is_err());
     }
 
     #[test]

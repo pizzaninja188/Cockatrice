@@ -3,8 +3,8 @@
 use super::{
     AbilityCost, ActivatedCostModifier, Amount, CardTypeFilter, CastCostReceiptCondition, Color,
     CounterKind, EffectContext, GameCondition, Keyword, ObjectCastCostKind, PermanentEventFilter,
-    PowerComparison, RelativePlayerSet, SpellEffectKind, TargetController, TargetFilter,
-    TargetKind, TargetingDef,
+    PowerComparison, RelativePlayerSet, SpellEffectKind, StackSpellFilter, TargetController,
+    TargetFilter, TargetKind, TargetingDef,
 };
 use crate::{AbilityId, AbilityPresentation, ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
@@ -522,6 +522,21 @@ pub enum TriggerCondition {
         #[serde(default)]
         exclude_self: bool,
     },
+    /// Whenever a qualifying spell on the stack becomes the target of a selected kind of stack
+    /// object. One trigger is created for each distinct matching spell. Physical spells retain
+    /// their zone-change generation while spell copies use their globally unique stack ID.
+    /// Covers Surrak, Elusive Hunter and future spell-watcher permanents.
+    WheneverSpellBecomesTarget {
+        /// Whether casts, all spells (including copies), abilities, or either kind qualify.
+        source: TargetingSourceFilter,
+        /// Who controls the targeting spell or ability, relative to this permanent's controller.
+        source_controller: CastTriggerPlayer,
+        /// Who controls the targeted spell, relative to this permanent's controller.
+        target_controller: CastTriggerPlayer,
+        /// Which spells on the stack qualify.
+        #[serde(default)]
+        spell_filter: StackSpellFilter,
+    },
     /// Whenever a permanent enters the battlefield (CR 603.6). The ETB-watcher analog of
     /// [`Self::WheneverPlayerCastsSpell`]: parameters control whose permanents and which type
     /// qualify. Covers Soul Warden (`controller: AnyPlayer`, `Creature`, `exclude_self`),
@@ -689,6 +704,7 @@ impl TriggerCondition {
                 Err("turn-history trigger ordinal must be at least one".into())
             }
             Self::WheneverPlayerCastsSpell { filter, .. } => filter.validate(),
+            Self::WheneverSpellBecomesTarget { spell_filter, .. } => spell_filter.validate(),
             _ => Ok(()),
         }
     }
@@ -746,7 +762,9 @@ impl TriggerCondition {
     pub(crate) fn supplies_targeting_stack_object(&self) -> bool {
         matches!(
             self,
-            Self::WheneverSelfBecomesTarget { .. } | Self::WheneverPermanentBecomesTarget { .. }
+            Self::WheneverSelfBecomesTarget { .. }
+                | Self::WheneverPermanentBecomesTarget { .. }
+                | Self::WheneverSpellBecomesTarget { .. }
         )
     }
 }
@@ -1381,6 +1399,10 @@ pub enum CounterPlacementAffected {
 /// do not use the stack, unlike triggered and activated abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// CR 113.6g / 701.6: this spell cannot be countered while it is on the stack. Countering
+    /// spells and abilities can still legally target it and any optional payment still occurs.
+    /// Surrak, Elusive Hunter and Abrupt Decay share this intrinsic stack-active prohibition.
+    SpellCannotBeCountered,
     /// CR 702.195: continuously watches this permanent's controller and irreversibly grants the
     /// enduring-story designation when three qualifying permanents are controlled.
     Storied,

@@ -366,6 +366,28 @@ pub(crate) fn counter_stack_spell(
     else {
         return Ok(());
     };
+    let target = &engine.state.stack[pos];
+    let target_name = engine
+        .registry
+        .get(&target.card_id)
+        .map(|definition| definition.name.as_str())
+        .unwrap_or("spell");
+    let cannot_be_countered = target.ability_text.is_none()
+        && engine
+            .registry
+            .get(&target.card_id)
+            .and_then(|definition| definition.face(target.face_index))
+            .is_some_and(|face| {
+                face.static_abilities.iter().any(|ability| {
+                    matches!(ability.definition, StaticAbilityDef::SpellCannotBeCountered)
+                })
+            });
+    if cannot_be_countered {
+        events.push(ev_log(format!(
+            "{counter_label} cannot counter {target_name}"
+        )));
+        return Ok(());
+    }
     let st = engine.state.stack.remove(pos);
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::StackObjectCountered(
@@ -374,11 +396,6 @@ pub(crate) fn counter_stack_spell(
             },
         )),
     });
-    let tgt = engine
-        .registry
-        .get(&st.card_id)
-        .map(|definition| definition.name.as_str())
-        .unwrap_or("spell");
     if st.ability_text.is_none() && !st.is_copy {
         let owner = engine.state.objects.get(&st.id).map(|object| object.owner);
         let destination = if st.cast_method.exiles_on_leave_stack() {
@@ -400,7 +417,7 @@ pub(crate) fn counter_stack_spell(
             ));
         }
     }
-    events.push(ev_log(format!("{counter_label} counters {tgt}")));
+    events.push(ev_log(format!("{counter_label} counters {target_name}")));
     Ok(())
 }
 
@@ -703,7 +720,7 @@ pub(super) fn copy_target_spell(
                             object_id: copy_id,
                             zone_change_generation: None,
                         },
-                        targets: src.targets.iter().map(|target| target.object_id).collect(),
+                        targets: src.targets.clone(),
                     }]);
                 }
             }

@@ -101,7 +101,7 @@ pub(super) fn capture_stack_target(engine: &GameEngine, target: &rv1::TargetRef)
         rv1::TargetRefKind::Player => false,
         rv1::TargetRefKind::Permanent
         | rv1::TargetRefKind::Stack
-        | rv1::TargetRefKind::Graveyard => true,
+        | rv1::TargetRefKind::Graveyard => engine.state.objects.contains_key(&target.object_id),
         rv1::TargetRefKind::Unspecified => engine.state.objects.contains_key(&target.object_id),
     };
     StackTarget {
@@ -984,7 +984,7 @@ fn target_filter_legal_with_context(
 /// CR 701.6/707.10: legality of `tid` as the target of a counter/copy spell. The object must be a
 /// spell on the stack (not an activated/triggered ability). Type and mana-value restrictions are
 /// evaluated against the selected face and its announced X value. The default accepts any spell.
-fn stack_spell_target_legal(
+pub(super) fn stack_spell_target_legal(
     state: &GameState,
     registry: &CardRegistry,
     tid: ObjectId,
@@ -3159,5 +3159,49 @@ mod tests {
             u32::MAX,
             0,
         ));
+    }
+
+    #[test]
+    fn issue_219_stack_target_identity_tracks_physical_generations_but_not_copy_ids() {
+        let mut engine = GameEngine::new(219_008, &[0, 1], 20, None, true).expect("new");
+        let physical = engine.state.players[0].hand[0];
+        let physical_target = capture_stack_target(
+            &engine,
+            &rv1::TargetRef {
+                object_id: physical,
+                kind: rv1::TargetRefKind::Stack as i32,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            physical_target.zone_change_generation,
+            Some(
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&physical)
+                    .copied()
+                    .unwrap_or(0)
+            )
+        );
+        assert!(stack_target_identity_is_current(&engine, &physical_target));
+        *engine
+            .state
+            .zone_change_generation
+            .entry(physical)
+            .or_default() += 1;
+        assert!(!stack_target_identity_is_current(&engine, &physical_target));
+
+        let copy_id = u32::MAX;
+        let copy_target = capture_stack_target(
+            &engine,
+            &rv1::TargetRef {
+                object_id: copy_id,
+                kind: rv1::TargetRefKind::Stack as i32,
+                ..Default::default()
+            },
+        );
+        assert_eq!(copy_target.zone_change_generation, None);
+        assert!(stack_target_identity_is_current(&engine, &copy_target));
     }
 }
