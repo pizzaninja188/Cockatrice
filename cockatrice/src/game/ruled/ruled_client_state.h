@@ -607,6 +607,7 @@ public:
     QHash<int, RuledCastSource> zoneCastSourceByOid;
     QMap<RuledCastActionKey, QString> zoneCastCostsByCastKey;
     QHash<quint32, QVector<RuledFaceOption>> zoneLandFacesByOid;
+    QHash<quint32, RuledCastSource> zoneLandSourceByOid;
     QHash<quint64, RuledExilePlayPermissionGroup> exilePlayPermissionGroups;
     QSet<int> cleanupDiscardSelectedIndices;
     QList<int> openingBottomSelectedIndices;
@@ -1638,12 +1639,15 @@ public:
     {
         return isResolutionHandPickActive() ? pendingChoice->candidateNames : QStringList{};
     }
-    [[nodiscard]] bool isZoneLandActionLegal(quint32 objectId) const
+    [[nodiscard]] bool isZoneLandActionLegal(quint32 objectId, RuledCastSource source) const
     {
-        return zoneLandFacesByOid.contains(objectId);
+        return zoneLandFacesByOid.contains(objectId) && zoneLandSourceByOid.value(objectId) == source;
     }
-    [[nodiscard]] QVector<RuledFaceOption> zoneLandFaceOptions(quint32 objectId) const
+    [[nodiscard]] QVector<RuledFaceOption> zoneLandFaceOptions(quint32 objectId, RuledCastSource source) const
     {
+        if (!isZoneLandActionLegal(objectId, source)) {
+            return {};
+        }
         QVector<RuledFaceOption> options = zoneLandFacesByOid.value(objectId);
         std::sort(options.begin(), options.end(),
                   [](const RuledFaceOption &a, const RuledFaceOption &b) { return a.faceIndex < b.faceIndex; });

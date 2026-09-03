@@ -291,6 +291,19 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId, const rul
                         break;
                     }
                 }
+            } else if (source.location_case() == ruled::v1::LandSource::kGraveyardObjectId) {
+                const quint32 oid = static_cast<quint32>(source.graveyard_object_id());
+                for (Server_AbstractPlayer *candidate : game->getPlayers()) {
+                    auto *owner = dynamic_cast<Server_Player *>(candidate);
+                    if (!owner) {
+                        continue;
+                    }
+                    card = playerBinding(owner->getPlayerId()).findGraveyardCardByEngineOid(owner, oid);
+                    if (card) {
+                        sourceZone = owner->getZones().value(ZoneNames::GRAVE);
+                        break;
+                    }
+                }
             }
             if (sourceZone && tableZone && card) {
                 // CR 712: an MDFC land (a pathway) enters as the chosen face. Rename the physical

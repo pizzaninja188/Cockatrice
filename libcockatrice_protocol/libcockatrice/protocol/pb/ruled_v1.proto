@@ -461,7 +461,10 @@ message LandSource {
   oneof location {
     uint32 hand_index = 1;
     uint32 exile_object_id = 2;
+    uint32 graveyard_object_id = 3;
   }
+  // Required for public-zone sources and omitted for concealed hand slots.
+  optional uint64 expected_zone_change_generation = 4;
 }
 
 // One CR 508.1b attacker/defender designation. Both permanent endpoints carry their current
@@ -721,7 +724,7 @@ message LegalHandAction {
   LinkedCastCostOption all_modes_cast_cost = 16 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
-// CR 702.34: a spell the player may cast from their own graveyard using flashback.
+// A public source zone for engine-authored cast and land-play actions.
 enum CastSourceZone {
   CAST_SOURCE_ZONE_GRAVEYARD = 0;
   CAST_SOURCE_ZONE_EXILE = 1;
@@ -812,6 +815,7 @@ message LegalZoneLandAction {
   uint32 object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   string card_name = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   uint32 face_index = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 zone_change_generation = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Persistent presentation snapshot for one effect-created permission cohort. Legal cast/land

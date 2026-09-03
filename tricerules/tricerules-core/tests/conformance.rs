@@ -40,6 +40,7 @@ fn play_land_face(hand_card_index: u32, face_index: u32) -> RuledCommand {
                 location: Some(
                     tricerules_proto::ruled::v1::land_source::Location::HandIndex(hand_card_index),
                 ),
+                ..Default::default()
             }),
             face_index,
         })),

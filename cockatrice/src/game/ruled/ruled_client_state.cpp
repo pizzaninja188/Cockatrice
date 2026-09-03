@@ -1870,6 +1870,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
         zoneCastSourceByOid.clear();
         zoneCastCostsByCastKey.clear();
         zoneLandFacesByOid.clear();
+        zoneLandSourceByOid.clear();
         exilePlayPermissionGroups.clear();
         validTargetsByHandSlot.clear();
         validTargetsByZoneObject.clear();

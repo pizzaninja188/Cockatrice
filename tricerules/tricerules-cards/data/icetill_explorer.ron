@@ -1,0 +1,24 @@
+// Oracle and rulings checked against Wizards' Edge of Eternities release notes on 2026-09-03.
+// CR 116.2a, 305.1-.3, 404.2, 611.3, 701.18, 712.8a, 712.12.
+(
+  id: "icetill_explorer",
+  name: "Icetill Explorer",
+  face_id: "icetill_explorer",
+  mana_cost: "{2}{G}{G}",
+  types: ["Creature", "Insect", "Scout"],
+  power: 2,
+  toughness: 4,
+  static_abilities: [
+    (ability_id: "static_01", presentation: OracleLines([1]), definition: ExtraLandPlays(count: 1)),
+    (ability_id: "static_02", presentation: OracleLines([2]), definition: PlayLandsFromOwnGraveyard),
+  ],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [Mill(count: 1, who: Controller)],
+  )],
+)

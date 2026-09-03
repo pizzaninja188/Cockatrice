@@ -259,31 +259,56 @@ impl GameEngine {
         )
     }
 
+    fn player_rule_effect_applies(&self, effect: &ContinuousEffect, pid: PlayerId) -> bool {
+        let AffectedScope::Player(mut affected_player) = effect.affected else {
+            return false;
+        };
+        if effect.duration == EffectDuration::WhileSourceOnBattlefield {
+            let Some(source) = effect.source_id else {
+                return false;
+            };
+            let source_still_has_rule_ability = self
+                .active_static_ability_definitions(source)
+                .iter()
+                .any(|ability| match (&effect.kind, ability) {
+                    (
+                        ContinuousEffectKind::ExtraLandPlays(effect_count),
+                        StaticAbilityDef::ExtraLandPlays {
+                            count: ability_count,
+                        },
+                    ) => effect_count == ability_count,
+                    (
+                        ContinuousEffectKind::PlayLandsFromOwnGraveyard,
+                        StaticAbilityDef::PlayLandsFromOwnGraveyard,
+                    ) => true,
+                    _ => false,
+                });
+            if !source_still_has_rule_ability {
+                return false;
+            }
+            affected_player = self.controller_of(source).unwrap_or(affected_player);
+        }
+        affected_player == pid
+    }
+
     /// Sum of extra land plays granted to `pid` by active `ExtraLandPlays` continuous effects.
     pub(super) fn extra_land_plays_for(&self, pid: PlayerId) -> u32 {
         self.state
             .continuous_effects
             .iter()
-            .filter_map(|effect| {
-                if let AffectedScope::Player(affected_player) = effect.affected {
-                    let affected_player =
-                        if effect.duration == EffectDuration::WhileSourceOnBattlefield {
-                            effect
-                                .source_id
-                                .and_then(|source| self.controller_of(source))
-                                .unwrap_or(affected_player)
-                        } else {
-                            affected_player
-                        };
-                    if affected_player == pid {
-                        if let ContinuousEffectKind::ExtraLandPlays(count) = effect.kind {
-                            return Some(count);
-                        }
-                    }
-                }
-                None
+            .filter(|effect| self.player_rule_effect_applies(effect, pid))
+            .filter_map(|effect| match effect.kind {
+                ContinuousEffectKind::ExtraLandPlays(count) => Some(count),
+                _ => None,
             })
             .sum()
+    }
+
+    pub(super) fn can_play_lands_from_own_graveyard(&self, pid: PlayerId) -> bool {
+        self.state.continuous_effects.iter().any(|effect| {
+            self.player_rule_effect_applies(effect, pid)
+                && effect.kind == ContinuousEffectKind::PlayLandsFromOwnGraveyard
+        })
     }
 
     /// CR 604.3 / 611.3: when a permanent with static anthem abilities enters the battlefield,
@@ -874,6 +899,17 @@ impl GameEngine {
                         source_id: Some(object_id),
                         affected: AffectedScope::Player(controller),
                         kind: ContinuousEffectKind::ExtraLandPlays(count),
+                        condition: None,
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
+                StaticAbilityDef::PlayLandsFromOwnGraveyard => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
+                        source_id: Some(object_id),
+                        affected: AffectedScope::Player(controller),
+                        kind: ContinuousEffectKind::PlayLandsFromOwnGraveyard,
                         condition: None,
                         duration: EffectDuration::WhileSourceOnBattlefield,
                         timestamp,

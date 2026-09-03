@@ -294,6 +294,7 @@ pub(crate) fn play_land_face(hand_card_index: usize, face_index: usize) -> Ruled
                 location: Some(rv1::land_source::Location::HandIndex(
                     hand_card_index as u32,
                 )),
+                ..Default::default()
             }),
             face_index: face_index as u32,
         })),

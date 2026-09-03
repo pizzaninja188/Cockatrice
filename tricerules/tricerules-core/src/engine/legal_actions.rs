@@ -2398,7 +2398,10 @@ fn legal_zone_land_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             continue;
         };
         for (face_index, face) in definition.faces_iter().enumerate() {
-            if !face.is_land || !emitted.insert((object.id, face_index)) {
+            if !definition.face_available_from_hand(face_index)
+                || !face.is_land
+                || !emitted.insert((object.id, face_index))
+            {
                 continue;
             }
             actions.push(rv1::LegalZoneLandAction {
@@ -2406,7 +2409,48 @@ fn legal_zone_land_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 object_id: object.id,
                 card_name: face.name.clone(),
                 face_index: face_index as u32,
+                zone_change_generation: generation,
             });
+        }
+    }
+    if eng.can_play_lands_from_own_graveyard(pid) {
+        let Some(player_index) = eng.state.player_idx(pid) else {
+            return actions;
+        };
+        for object_id in &eng.state.players[player_index].graveyard {
+            let Some(object) = eng.state.objects.get(object_id) else {
+                continue;
+            };
+            if object.zone != Zone::Graveyard || object.owner != pid {
+                continue;
+            }
+            let Some(definition) = eng.registry.get(&object.card_id) else {
+                continue;
+            };
+            if !definition.matches_card_type_outside_stack(CardTypeFilter::Land) {
+                continue;
+            }
+            let generation = eng
+                .state
+                .zone_change_generation
+                .get(object_id)
+                .copied()
+                .unwrap_or(0);
+            for (face_index, face) in definition.faces_iter().enumerate() {
+                if !definition.face_available_from_hand(face_index)
+                    || !face.is_land
+                    || !emitted.insert((object.id, face_index))
+                {
+                    continue;
+                }
+                actions.push(rv1::LegalZoneLandAction {
+                    source_zone: rv1::CastSourceZone::Graveyard as i32,
+                    object_id: object.id,
+                    card_name: face.name.clone(),
+                    face_index: face_index as u32,
+                    zone_change_generation: generation,
+                });
+            }
         }
     }
     actions

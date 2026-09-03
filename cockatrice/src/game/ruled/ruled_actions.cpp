@@ -627,7 +627,7 @@ bool isSingleClickPlayLegal(const CardItem *card)
                                            ? RuledCastSource::Graveyard
                                            : RuledCastSource::Exile;
         return objectId != 0 &&
-               (state->isZoneActionLegal(objectId, source) || state->isZoneLandActionLegal(objectId));
+               (state->isZoneActionLegal(objectId, source) || state->isZoneLandActionLegal(objectId, source));
     }
     const bool isLand = card->getCardInfo().getCardType().contains("Land", Qt::CaseInsensitive);
     const RuledHandActionKind kind =

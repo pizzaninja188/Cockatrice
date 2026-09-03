@@ -1817,7 +1817,7 @@ pub struct GameState {
     pub command_index: u64,
     /// Consecutive priority passes; reset when a spell/ability is added to stack
     pub passes_since_stack_change: u32,
-    /// Number of lands played from hand this turn; compared against max (1 + extra land plays).
+    /// Number of lands played this turn from any legal zone; compared against max (1 + extras).
     pub lands_played_this_turn: u32,
     /// Successful limited activations in the current turn, keyed to full object and ability
     /// identity. Control changes do not affect the key (CR 602.5b).

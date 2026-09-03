@@ -17,11 +17,12 @@ fn grant_from_percussionist(e: &mut GameEngine, exiled_card: &str) -> u32 {
     top
 }
 
-fn play_land_from_exile(object_id: u32, face_index: u32) -> rv1::RuledCommand {
+fn play_land_from_exile(object_id: u32, generation: u64, face_index: u32) -> rv1::RuledCommand {
     rv1::RuledCommand {
         cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
             source: Some(rv1::LandSource {
                 location: Some(rv1::land_source::Location::ExileObjectId(object_id)),
+                expected_zone_change_generation: Some(generation),
             }),
             face_index,
         })),
@@ -83,7 +84,10 @@ fn percussionist_grants_a_generation_bound_group_and_land_actions() {
         .is_empty());
 
     engine
-        .apply_command(0, &play_land_from_exile(exiled, 1))
+        .apply_command(
+            0,
+            &play_land_from_exile(exiled, engine.state.zone_change_generation[&exiled], 1),
+        )
         .expect("play Timbercrown Pathway from exile");
     assert_eq!(engine.state.objects[&exiled].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&exiled].face_up_index, 1);
@@ -151,6 +155,25 @@ fn exile_land_actions_obey_timing_count_player_and_face_validation() {
     let mut engine = GameEngine::new(12307, &[0, 1], 20, decks, true).expect("new game");
     advance_to_main1_from_game_start(&mut engine);
     let exiled = grant_from_percussionist(&mut engine, "cragcrown_pathway_timbercrown_pathway");
+    let generation = engine.state.zone_change_generation[&exiled];
+
+    let mut missing_generation = play_land_from_exile(exiled, generation, 0);
+    let Some(rv1::ruled_command::Cmd::PlayLand(play_land)) = missing_generation.cmd.as_mut() else {
+        panic!("play-land command");
+    };
+    play_land
+        .source
+        .as_mut()
+        .expect("land source")
+        .expected_zone_change_generation = None;
+    assert!(engine.apply_command(0, &missing_generation).is_err());
+    assert!(engine
+        .apply_command(
+            0,
+            &play_land_from_exile(exiled, generation.saturating_sub(1), 0),
+        )
+        .is_err());
+    assert_eq!(engine.state.objects[&exiled].zone, Zone::Exile);
 
     engine.state.turn_step = TurnStep::Upkeep;
     assert!(engine.initial_response_batch().legal_by_player[&0]
@@ -162,11 +185,17 @@ fn exile_land_actions_obey_timing_count_player_and_face_validation() {
         .zone_land_actions
         .is_empty());
     assert!(engine
-        .apply_command(1, &play_land_from_exile(exiled, 0))
+        .apply_command(
+            1,
+            &play_land_from_exile(exiled, engine.state.zone_change_generation[&exiled], 0,),
+        )
         .is_err());
     engine.state.lands_played_this_turn = 0;
     assert!(engine
-        .apply_command(0, &play_land_from_exile(exiled, 2))
+        .apply_command(
+            0,
+            &play_land_from_exile(exiled, engine.state.zone_change_generation[&exiled], 2,),
+        )
         .is_err());
     assert_eq!(engine.state.objects[&exiled].zone, Zone::Exile);
 }

@@ -1627,4 +1627,7 @@ pub enum StaticAbilityDef {
     /// CR 305.2b / layer 5: controller may play `count` additional lands per turn while this
     /// permanent is on the battlefield. Exploration, Oracle of Mul Daya.
     ExtraLandPlays { count: u32 },
+    /// CR 305.1 / 611.3: the controller may play lands from their own graveyard while this
+    /// permanent is on the battlefield. Icetill Explorer, Crucible of Worlds.
+    PlayLandsFromOwnGraveyard,
 }

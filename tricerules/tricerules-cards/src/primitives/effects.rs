@@ -3892,6 +3892,9 @@ pub enum ContinuousEffectKind {
     /// CR 305.2b / layer 5 (rule-change): controller may play `count` additional lands per turn.
     /// Covers Exploration, Oracle of Mul Daya, and similar enchantments/permanents.
     ExtraLandPlays(u32),
+    /// CR 305.1 / 611.3: the affected player may play lands from their own graveyard while the
+    /// source remains on the battlefield. Covers Icetill Explorer and Crucible of Worlds.
+    PlayLandsFromOwnGraveyard,
 }
 
 #[cfg(test)]

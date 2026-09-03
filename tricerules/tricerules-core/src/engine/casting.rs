@@ -2092,15 +2092,18 @@ impl GameEngine {
         let source = command
             .source
             .as_ref()
-            .and_then(|source| source.location.as_ref())
             .ok_or(EngineError::Illegal("missing land source"))?;
-        let (oid, from_hand) = match source {
+        let location = source
+            .location
+            .as_ref()
+            .ok_or(EngineError::Illegal("missing land source"))?;
+        let (oid, require_graveyard_land_card) = match location {
             rv1::land_source::Location::HandIndex(hand_index) => (
                 *self.state.players[idx]
                     .hand
                     .get(*hand_index as usize)
                     .ok_or(EngineError::Illegal("bad hand index"))?,
-                true,
+                false,
             ),
             rv1::land_source::Location::ExileObjectId(object_id) => {
                 let object = self
@@ -2114,6 +2117,9 @@ impl GameEngine {
                     .get(object_id)
                     .copied()
                     .unwrap_or(0);
+                if source.expected_zone_change_generation != Some(generation) {
+                    return Err(EngineError::Illegal("stale exile land source"));
+                }
                 let permitted = self
                     .state
                     .active_exile_play_permissions
@@ -2129,18 +2135,46 @@ impl GameEngine {
                 }
                 (*object_id, false)
             }
+            rv1::land_source::Location::GraveyardObjectId(object_id) => {
+                let object = self
+                    .state
+                    .objects
+                    .get(object_id)
+                    .ok_or(EngineError::Illegal("unknown graveyard object"))?;
+                let generation = self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0);
+                if source.expected_zone_change_generation != Some(generation) {
+                    return Err(EngineError::Illegal("stale graveyard land source"));
+                }
+                if object.zone != Zone::Graveyard
+                    || object.owner != player
+                    || !self.state.players[idx].graveyard.contains(object_id)
+                    || !self.can_play_lands_from_own_graveyard(player)
+                {
+                    return Err(EngineError::Illegal("illegal land play from graveyard"));
+                }
+                (*object_id, true)
+            }
         };
         let card_id = self.state.objects.get(&oid).unwrap().card_id.clone();
         let def = self
             .registry
             .get(&card_id)
             .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
-        // CR 712: for MDFC lands, check the specific face; for normal lands, check the flat flag.
+        if require_graveyard_land_card && !def.matches_card_type_outside_stack(CardTypeFilter::Land)
+        {
+            return Err(EngineError::Illegal("not a land card in graveyard"));
+        }
+        // CR 712: public-zone land plays use the same face-choice rule as hand land plays.
         let face = def
             .face(face_index)
             .ok_or(EngineError::Illegal("bad face index"))?;
-        if from_hand && !def.face_available_from_hand(face_index) {
-            return Err(EngineError::Illegal("face cannot be played from hand"));
+        if !def.face_available_from_hand(face_index) {
+            return Err(EngineError::Illegal("face cannot be played as a land"));
         }
         if !face.is_land {
             return Err(EngineError::Illegal("not a land"));

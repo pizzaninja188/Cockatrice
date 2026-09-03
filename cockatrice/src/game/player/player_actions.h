@@ -336,8 +336,11 @@ private:
 
     Player *player;
     bool tryPlayRuledLand(CardItem *card);
-    /// Serialize and send a PlayLand command for an engine hand slot or public exile object.
-    bool sendRuledPlayLand(int sourceIndex, int faceIndex, RuledCastSource source = RuledCastSource::Hand);
+    /// Serialize and send a PlayLand command for an engine hand slot or generation-bound public-zone object.
+    bool sendRuledPlayLand(int sourceIndex,
+                          int faceIndex,
+                          RuledCastSource source = RuledCastSource::Hand,
+                          quint64 zoneChangeGeneration = 0);
     bool tryStartRuledSpellCast(CardItem *card);
     // Set up and begin a pending ruled cast for an already-resolved hand slot + face. faceIndex selects
     // the split/MDFC half (0 for single-face); castName/castCost are that face's name and mana cost.

@@ -189,6 +189,8 @@ mod issue_202_hidden_lair;
 mod issue_205_stack_spell_filters;
 #[path = "scenario/issue_208_library_search.rs"]
 mod issue_208_library_search;
+#[path = "scenario/issue_214_graveyard_land_play.rs"]
+mod issue_214_graveyard_land_play;
 #[path = "scenario/issue_216_attachment_scoped_blocking_restrictions.rs"]
 mod issue_216_attachment_scoped_blocking_restrictions;
 #[path = "scenario/issue_217_target_power_scale.rs"]

@@ -455,6 +455,7 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->zoneCastSourceByOid.clear();
     state->zoneCastCostsByCastKey.clear();
     state->zoneLandFacesByOid.clear();
+    state->zoneLandSourceByOid.clear();
     state->validTargetsByHandSlot.clear();
     state->validTargetsByZoneObject.clear();
     state->validTargetsByAbility.clear();
@@ -1754,8 +1755,18 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
 
     for (const auto &action : actions.zone_land_actions()) {
         const quint32 objectId = static_cast<quint32>(action.object_id());
+        const RuledCastSource source = action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD
+                                           ? RuledCastSource::Graveyard
+                                           : RuledCastSource::Exile;
+        state->zoneLandSourceByOid.insert(objectId, source);
         state->zoneLandFacesByOid[objectId].append(
-            {static_cast<int>(action.face_index()), QString::fromStdString(action.card_name()), QString(), 0});
+            {static_cast<int>(action.face_index()),
+             QString::fromStdString(action.card_name()),
+             QString(),
+             0,
+             ruled::v1::CAST_METHOD_NORMAL,
+             false,
+             static_cast<quint64>(action.zone_change_generation())});
     }
 
     state->validTargetsByHandSlot.clear();

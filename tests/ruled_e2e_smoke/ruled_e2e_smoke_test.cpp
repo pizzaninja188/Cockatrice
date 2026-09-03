@@ -4922,6 +4922,121 @@ TEST_F(RuledE2ESmokeTest, TemporaryExileReturnsTheExactPhysicalCardToBothClients
     EXPECT_TRUE(p2.sawTemporaryReturnPhysicalMove);
 }
 
+TEST_F(RuledE2ESmokeTest, IcetillPlaysTheExactGenerationBoundGraveyardLand)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("icetillp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("icetillp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "Icetill game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "Icetill game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer openingDeadline;
+    openingDeadline.start();
+    while (openingDeadline.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+
+    ruled::v1::RuledCommand putIcetill;
+    auto *put = putIcetill.mutable_dev_command();
+    put->set_target_player_id(p1.myId);
+    put->mutable_put_card_in_zone()->set_card_name("Icetill Explorer");
+    put->mutable_put_card_in_zone()->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+    put->mutable_put_card_in_zone()->set_ready(true);
+    ASSERT_TRUE(sendAndPump(p1, putIcetill, QStringLiteral("put Icetill Explorer onto the battlefield")));
+
+    ruled::v1::RuledCommand moveForest;
+    auto *move = moveForest.mutable_dev_command();
+    move->set_target_player_id(p1.myId);
+    move->mutable_move_card()->set_card_name("Forest");
+    move->mutable_move_card()->set_zone(ruled::v1::DEV_ZONE_GRAVEYARD);
+    ASSERT_TRUE(sendAndPump(p1, moveForest, QStringLiteral("move Forest to the graveyard")));
+
+    const ruled::v1::LegalZoneLandAction *graveyardLand = nullptr;
+    for (const auto &action : p1.latestLegal.zone_land_actions()) {
+        if (action.source_zone() == ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD && action.card_name() == "Forest") {
+            graveyardLand = &action;
+            break;
+        }
+    }
+    ASSERT_NE(graveyardLand, nullptr);
+    const quint32 forestOid = graveyardLand->object_id();
+    ASSERT_GT(graveyardLand->zone_change_generation(), 0u);
+    EXPECT_TRUE(p1.graveyardOwnerByEngineOid.count(forestOid));
+    EXPECT_EQ(p1.graveyardOwnerByEngineOid[forestOid], p1.myId);
+    EXPECT_TRUE(p2.graveyardOwnerByEngineOid.count(forestOid));
+    EXPECT_TRUE(std::none_of(p2.latestLegal.zone_land_actions().cbegin(),
+                             p2.latestLegal.zone_land_actions().cend(),
+                             [&](const auto &action) { return action.object_id() == forestOid; }));
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(forestOid));
+    const int physicalForestId = p1.serverCardByEngineOid[forestOid];
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(forestOid));
+    ASSERT_EQ(p2.serverCardByEngineOid[forestOid], physicalForestId);
+
+    ruled::v1::RuledCommand playLand;
+    auto *play = playLand.mutable_play_land();
+    play->mutable_source()->set_graveyard_object_id(forestOid);
+    play->mutable_source()->set_expected_zone_change_generation(graveyardLand->zone_change_generation());
+    play->set_face_index(graveyardLand->face_index());
+    ASSERT_TRUE(sendAndPump(p1, playLand, QStringLiteral("play the generation-bound graveyard Forest")));
+
+    const auto hasForest = [&](const SmokeClient &client) {
+        const auto found = client.battlefieldByPlayer.find(p1.myId);
+        return found != client.battlefieldByPlayer.end() &&
+               std::any_of(found->second.cbegin(), found->second.cend(),
+                           [&](const auto &permanent) { return permanent.oid == forestOid; });
+    };
+    EXPECT_TRUE(hasForest(p1));
+    EXPECT_TRUE(hasForest(p2));
+    EXPECT_EQ(p1.serverCardByEngineOid[forestOid], physicalForestId);
+    EXPECT_EQ(p2.serverCardByEngineOid[forestOid], physicalForestId);
+    EXPECT_EQ(p1.physicalRowAndPt[std::make_pair(p1.myId, physicalForestId)].first, 2);
+    EXPECT_EQ(p2.physicalRowAndPt[std::make_pair(p1.myId, physicalForestId)].first, 2);
+}
+
 TEST_F(RuledE2ESmokeTest, PlayerSetDiscardCollectsPrivateChoicesBeforeOnePhysicalCommit)
 {
     const auto started = startServers();

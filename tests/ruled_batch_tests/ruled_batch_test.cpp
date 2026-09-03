@@ -255,6 +255,11 @@ protected:
         }
     }
 
+    void applyAcceptedCommandVisuals(int playerId, const ruled::v1::RuledCommand &command)
+    {
+        game->ruled()->synchronizer->applyAcceptedCommandVisuals(playerId, command);
+    }
+
     bool hasSyntheticStackBookkeeping(quint32 engineOid) const
     {
         return game->ruled()->synchronizer->ruledStackTargetsByObjectId.contains(engineOid) ||
@@ -1578,6 +1583,36 @@ TEST_F(RuledBatchTest, PermanentMovedLandUsesAuthoritativeBottomRowAndStableIden
     EXPECT_EQ(mountain->getId(), physicalId);
     EXPECT_EQ(findCardByEngineOid(p1, 201u), mountain);
     EXPECT_EQ(mountain->getY(), 2);
+}
+
+TEST_F(RuledBatchTest, AcceptedGraveyardLandPlayMovesTheExactBoundPhysicalCard)
+{
+    seedCardCatalog({"Mountain"});
+    Server_Card *first = addCardToGraveyard(p1, "Mountain");
+    Server_Card *second = addCardToGraveyard(p1, "Mountain");
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *zoneView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    p1Seed.add_graveyard_object_ids(2141u);
+    p1Seed.add_graveyard_object_ids(2142u);
+    *zoneView->add_per_player() = p1Seed;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+    ASSERT_EQ(bindingFor(p1).findGraveyardCardByEngineOid(p1, 2141u), first);
+    ASSERT_EQ(bindingFor(p1).findGraveyardCardByEngineOid(p1, 2142u), second);
+
+    ruled::v1::RuledCommand command;
+    auto *playLand = command.mutable_play_land();
+    playLand->mutable_source()->set_graveyard_object_id(2142u);
+    playLand->mutable_source()->set_expected_zone_change_generation(7u);
+    playLand->set_face_index(0);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), command);
+
+    EXPECT_EQ(second->getZone()->getName(), QString(ZoneNames::TABLE));
+    EXPECT_EQ(second->getY(), 2);
+    EXPECT_EQ(first->getZone()->getName(), QString(ZoneNames::GRAVE));
 }
 
 TEST_F(RuledBatchTest, BattlefieldLandClassificationIsServerOnly)

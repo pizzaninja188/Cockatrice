@@ -4269,6 +4269,7 @@ TEST_F(RuledClientTest, AppliesExileLandActionsAndStablePermissionGroupSnapshots
     land->set_object_id(objectId);
     land->set_face_index(1);
     land->set_card_name("Timbercrown Pathway");
+    land->set_zone_change_generation(17);
     auto *group = actions.add_exile_play_permission_groups();
     group->set_group_id(42);
     group->set_source_label("Clockwork Percussionist");
@@ -4280,9 +4281,12 @@ TEST_F(RuledClientTest, AppliesExileLandActionsAndStablePermissionGroupSnapshots
 
     QSignalSpy changed(state, &RuledClientState::exilePlayPermissionGroupsChanged);
     apply(batch);
-    ASSERT_TRUE(state->isZoneLandActionLegal(objectId));
-    ASSERT_EQ(state->zoneLandFaceOptions(objectId).size(), 1);
-    EXPECT_EQ(state->zoneLandFaceOptions(objectId).first().faceName, QStringLiteral("Timbercrown Pathway"));
+    ASSERT_TRUE(state->isZoneLandActionLegal(objectId, RuledCastSource::Exile));
+    EXPECT_FALSE(state->isZoneLandActionLegal(objectId, RuledCastSource::Graveyard));
+    ASSERT_EQ(state->zoneLandFaceOptions(objectId, RuledCastSource::Exile).size(), 1);
+    const auto landFace = state->zoneLandFaceOptions(objectId, RuledCastSource::Exile).first();
+    EXPECT_EQ(landFace.faceName, QStringLiteral("Timbercrown Pathway"));
+    EXPECT_EQ(landFace.zoneChangeGeneration, 17u);
     ASSERT_EQ(state->exilePlayPermissionGroups.size(), 2);
     EXPECT_EQ(state->exilePlayPermissionGroups.value(42).sourceLabel, QStringLiteral("Clockwork Percussionist"));
     EXPECT_EQ(state->exilePlayPermissionGroups.value(42).objectIds, QVector<quint32>{objectId});
@@ -4295,9 +4299,30 @@ TEST_F(RuledClientTest, AppliesExileLandActionsAndStablePermissionGroupSnapshots
     auto cleared = phaseBatch(ruled::v1::PHASE_ID_MAIN1, kLocalPlayer);
     (*cleared.mutable_legal_by_player())[kLocalPlayer];
     apply(cleared);
-    EXPECT_FALSE(state->isZoneLandActionLegal(objectId));
+    EXPECT_FALSE(state->isZoneLandActionLegal(objectId, RuledCastSource::Exile));
     EXPECT_TRUE(state->exilePlayPermissionGroups.isEmpty());
     EXPECT_EQ(changed.count(), 2);
+}
+
+TEST_F(RuledClientTest, AppliesGenerationBoundGraveyardLandActionsBySource)
+{
+    constexpr quint32 objectId = 214;
+    ruled::v1::RuledEventBatch batch;
+    auto *land = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_land_actions();
+    land->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD);
+    land->set_object_id(objectId);
+    land->set_face_index(0);
+    land->set_card_name("Forest");
+    land->set_zone_change_generation(23);
+
+    apply(batch);
+
+    EXPECT_TRUE(state->isZoneLandActionLegal(objectId, RuledCastSource::Graveyard));
+    EXPECT_FALSE(state->isZoneLandActionLegal(objectId, RuledCastSource::Exile));
+    const auto faces = state->zoneLandFaceOptions(objectId, RuledCastSource::Graveyard);
+    ASSERT_EQ(faces.size(), 1);
+    EXPECT_EQ(faces.first().faceIndex, 0);
+    EXPECT_EQ(faces.first().zoneChangeGeneration, 23u);
 }
 
 TEST_F(RuledClientTest, CounterRemovalCostsAreRecognized)
