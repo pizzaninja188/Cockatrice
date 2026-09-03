@@ -1,0 +1,30 @@
+// Oracle and rulings fetched 2026-09-03. CR 107.1b, 603.6a, 608.2h, 611.2a,
+// 613.4c, 702.185: use the target's signed current power once as this trigger resolves.
+(
+  id: "mightform_harmonizer",
+  name: "Mightform Harmonizer",
+  face_id: "mightform_harmonizer",
+  mana_cost: "{2}{G}{G}",
+  warp_cost: Some("{2}{G}"),
+  types: ["Creature", "Insect", "Druid"],
+  power: 4,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [PumpTarget(
+      power: 0,
+      toughness: 0,
+      scale: Some((
+        basis: Subject(Power),
+        power_per_unit: 1,
+        toughness_per_unit: 0,
+      )),
+      subject: Chosen((kind: Creature, controller: You)),
+    )],
+  )],
+)

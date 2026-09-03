@@ -1,7 +1,7 @@
 use tricerules_cards::primitives::{
     Amount, BattlefieldCreatureCountFilter, CountExpression, EffectSubject, Keyword,
-    PlayerRecipient, PtScale, RelativePlayerSet, SpellEffectKind, TargetFilter, TargetKind,
-    TriggerCondition,
+    PlayerRecipient, PtScale, PtScaleBasis, RelativePlayerSet, SpellEffectKind, TargetFilter,
+    TargetKind, TriggerCondition,
 };
 use tricerules_cards::CardRegistry;
 
@@ -102,7 +102,7 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
             power: 3,
             toughness: 3,
             scale: Some(PtScale {
-                amount: Amount::Count(same_growths),
+                basis: PtScaleBasis::Amount(Amount::Count(same_growths)),
                 power_per_unit: 2,
                 toughness_per_unit: 2,
             }),
@@ -124,7 +124,7 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
             power: 0,
             toughness: 0,
             scale: Some(PtScale {
-                amount: Amount::Count(CountExpression::BattlefieldCreatures {
+                basis: PtScaleBasis::Amount(Amount::Count(CountExpression::BattlefieldCreatures {
                     filter: BattlefieldCreatureCountFilter {
                         controllers: RelativePlayerSet::Controller,
                         subtype: Some("Elemental".into()),
@@ -134,7 +134,7 @@ fn issue_84_cards_have_complete_oracle_characteristics_and_shared_amounts() {
                         required_counter: None,
                         exclude_source: false,
                     },
-                }),
+                },)),
                 power_per_unit: 1,
                 toughness_per_unit: 0,
             }),

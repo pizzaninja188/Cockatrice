@@ -144,7 +144,7 @@ fn validate_effect_cast_cost_conditions(
         | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
         SpellEffectKind::PumpTarget {
             scale: Some(scale), ..
-        } => Some(&scale.amount),
+        } => scale.amount(),
         _ => None,
     };
     if let Some(Amount::CastCost(value)) = amount {
@@ -216,7 +216,7 @@ fn validate_effect_payment_results(
         | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
         SpellEffectKind::PumpTarget {
             scale: Some(scale), ..
-        } => Some(&scale.amount),
+        } => scale.amount(),
         _ => None,
     };
     if let Some(filter) = amount.and_then(Amount::card_result_filter) {

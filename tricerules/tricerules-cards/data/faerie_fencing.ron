@@ -13,10 +13,10 @@
   )],
   spell_effect: [
     PumpTarget(power: 0, toughness: 0, scale: (
-      amount: "X", power_per_unit: -1, toughness_per_unit: -1,
+      basis: Amount("X"), power_per_unit: -1, toughness_per_unit: -1,
     )),
     PumpTarget(power: 0, toughness: 0, scale: (
-      amount: Conditional(condition: CastSnapshot(index: 0), when_true: 3, otherwise: 0),
+      basis: Amount(Conditional(condition: CastSnapshot(index: 0), when_true: 3, otherwise: 0)),
       power_per_unit: -1, toughness_per_unit: -1,
     )),
   ],

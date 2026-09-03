@@ -2311,8 +2311,11 @@ mod tests {
         else {
             panic!("Echo amount");
         };
+        let PtScaleBasis::Amount(amount) = &scale.basis else {
+            panic!("Echo uses an ordinary amount basis");
+        };
         assert_eq!(
-            engine.resolve_amount(&scale.amount, quantity_context(source)),
+            engine.resolve_amount(amount, quantity_context(source)),
             4,
             "artifact creature counts once, tokens and instants never count"
         );

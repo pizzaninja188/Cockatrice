@@ -32,7 +32,7 @@ pub use primitives::{
     GraveyardAggregate, Keyword, LibraryPartitionKind, ManaAmount, ManaSpendFilter,
     ManaSpendingRestriction, ObjectCastCostKind, ObjectContributionKind, ObjectPaymentConstraint,
     PermanentChoiceConstraint, PermanentTypeFilter, PowerComparison, PowerToughnessCharacteristic,
-    PtScale, QuantityTerm, RelativePlayerSet, SearchDestination, SearchZoneSelection,
+    PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet, SearchDestination, SearchZoneSelection,
     SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin, SpellCostModifier, SpellEffectKind,
     TargetMatchFilter, TargetObjectExclusion, TriggerCondition, TriggeredAbilityDef,
     TypeLineAddition, TypeLineReplacement, ZoneCardFilter,

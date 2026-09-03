@@ -8,10 +8,10 @@
     presentation: Fallback,
     trigger: WhenSelfEntersBattlefield,
     effect: [PumpTarget(power: 0, toughness: 0, subject: Chosen((kind: Creature, controller: Opponent)), scale: Some((
-      amount: Count(GraveyardCards(owners: Controller, filter: Some((any_of: Some([
+      basis: Amount(Count(GraveyardCards(owners: Controller, filter: Some((any_of: Some([
         (card_type: Some(Artifact)), (card_type: Some(Creature)), (card_type: Some(Enchantment)),
         (card_type: Some(Land)), (card_type: Some(Planeswalker)), (card_type: Some(Battle)),
-      ]))))), power_per_unit: -1, toughness_per_unit: -1,
+      ])))))), power_per_unit: -1, toughness_per_unit: -1,
     )))],
   )],
 )

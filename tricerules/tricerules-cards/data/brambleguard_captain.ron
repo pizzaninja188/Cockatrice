@@ -8,6 +8,6 @@
     presentation: OracleLines([1]),
     trigger: AtBeginningOfCombat(player: Controller),
     effect: [PumpTarget(power: 0, toughness: 0, subject: Chosen((kind: Creature, controller: You)),
-      scale: Some((amount: Count(SourcePower), power_per_unit: 1, toughness_per_unit: 0)))],
+      scale: Some((basis: Amount(Count(SourcePower)), power_per_unit: 1, toughness_per_unit: 0)))],
   )],
 )

@@ -13,7 +13,7 @@
     presentation: OracleLines([2]),
     costs: [Mana("{2}{W}")],
     effect: [PumpTarget(power: 0, toughness: 0, subject: Source, scale: Some((
-      amount: Count(BattlefieldPermanents(filter: (controllers: Controller, card_type: Some(Enchantment)))),
+      basis: Amount(Count(BattlefieldPermanents(filter: (controllers: Controller, card_type: Some(Enchantment))))),
       power_per_unit: 1, toughness_per_unit: 1,
     )))],
   )],

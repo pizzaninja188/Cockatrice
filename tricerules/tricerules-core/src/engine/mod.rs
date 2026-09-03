@@ -48,7 +48,7 @@ use tricerules_cards::primitives::{
     ManaAmount, ManaSpendFilter, ObjectCastCostKind, ObjectContributionKind,
     ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
     PlayerQuantifier, PlayerRecipient, PowerComparison, PowerToughnessCharacteristic,
-    PreventionAmountBasis, ProtectionCardType, ProtectionGrant, ProtectionQuality,
+    PreventionAmountBasis, ProtectionCardType, ProtectionGrant, ProtectionQuality, PtScaleBasis,
     RelativePlayerSet, ResolutionBranchDef, ResolutionCost, ReturnController, SearchDestination,
     SearchSelectionSlot, SearchZoneSelection, SpecialActionAffected, SpecialActionKind,
     SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin, SpellCostModifier, SpellEffectKind,

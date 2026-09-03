@@ -11,7 +11,7 @@
       power: 3,
       toughness: 3,
       scale: Some((
-        amount: Count(GraveyardCardsNamed(owners: Controller, name: "Growth Cycle")),
+        basis: Amount(Count(GraveyardCardsNamed(owners: Controller, name: "Growth Cycle"))),
         power_per_unit: 2,
         toughness_per_unit: 2,
       )),

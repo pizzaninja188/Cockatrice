@@ -5,59 +5,83 @@ pub(super) fn pump_target(
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
     let SpellEffectKind::PumpTarget {
-        mut power,
-        mut toughness,
+        power,
+        toughness,
         scale,
         subject,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    if let Some(scale) = scale {
-        let units = cx.engine.resolve_amount(
-            &scale.amount,
-            AmountContext::for_stack_item(cx.top, cx.controller)
-                .with_previous_effect_result(cx.previous_effect_result),
-        );
-        let units = i32::try_from(units).unwrap_or(i32::MAX);
-        power = power.saturating_add(scale.power_per_unit.saturating_mul(units));
-        toughness = toughness.saturating_add(scale.toughness_per_unit.saturating_mul(units));
-    }
+    let shared_units = scale.as_ref().and_then(|scale| match &scale.basis {
+        PtScaleBasis::Amount(amount) => Some(i64::from(
+            cx.engine.resolve_amount(
+                amount,
+                AmountContext::for_stack_item(cx.top, cx.controller)
+                    .with_previous_effect_result(cx.previous_effect_result),
+            ),
+        )),
+        PtScaleBasis::Subject(_) => None,
+    });
+
+    let scaled_delta = |fixed: i32, per_unit: i32, units: i64| {
+        i64::from(fixed)
+            .saturating_add(i64::from(per_unit).saturating_mul(units))
+            .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
+    };
 
     // Appeal to Eirdu and the one-target Giant Growth share this effect. A grouped Chosen
-    // subject applies to every surviving target; Source/Triggered subjects still bind once.
+    // subject applies to every surviving target; Source/Triggered subjects still bind once. CR
+    // 608.2h fixes every subject-relative value before any of this instruction's modifiers are
+    // installed, so grouped subjects cannot observe one another's newly created effects.
     let affected = cx.resolve_battlefield_subjects(&subject);
+    let adjustments = affected
+        .into_iter()
+        .filter_map(|tid| {
+            let characteristics = cx.engine.characteristics(tid)?;
+            if !characteristics.is_creature() {
+                return None;
+            }
+            let (delta_power, delta_toughness) =
+                scale.as_ref().map_or((power, toughness), |scale| {
+                    let units = match scale.basis {
+                        PtScaleBasis::Amount(_) => shared_units.unwrap_or(0),
+                        PtScaleBasis::Subject(PowerToughnessCharacteristic::Power) => {
+                            characteristics.signed_power.unwrap_or(0)
+                        }
+                        PtScaleBasis::Subject(PowerToughnessCharacteristic::Toughness) => {
+                            characteristics.signed_toughness.unwrap_or(0)
+                        }
+                    };
+                    (
+                        scaled_delta(power, scale.power_per_unit, units),
+                        scaled_delta(toughness, scale.toughness_per_unit, units),
+                    )
+                });
+            Some((tid, delta_power, delta_toughness))
+        })
+        .collect::<Vec<_>>();
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let top = cx.top;
     let spell_label = cx.spell_label;
-    for tid in affected {
-        let is_valid_target = engine
-            .state
-            .objects
-            .get(&tid)
-            .is_some_and(|t| t.zone == Zone::Battlefield)
-            && engine
-                .characteristics(tid)
-                .is_some_and(|value| value.is_creature());
-        if is_valid_target {
-            let tgt = object_display_name(&engine.state, engine.registry, tid);
-            engine.state.continuous_effects.push(ContinuousEffect {
-                trigger_grant_origin: None,
-                source_id: top.source_permanent_id,
-                affected: AffectedScope::Single(tid),
-                kind: ContinuousEffectKind::PtModify {
-                    delta_power: power,
-                    delta_toughness: toughness,
-                },
-                condition: None,
-                duration: EffectDuration::UntilEndOfTurn,
-                timestamp: engine.state.command_index,
-            });
-            events.push(ev_log(format!(
-                "{spell_label} gives +{power}/+{toughness} to {tgt}"
-            )));
-        }
+    for (tid, delta_power, delta_toughness) in adjustments {
+        let tgt = object_display_name(&engine.state, engine.registry, tid);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: top.source_permanent_id,
+            affected: AffectedScope::Single(tid),
+            kind: ContinuousEffectKind::PtModify {
+                delta_power,
+                delta_toughness,
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: engine.state.command_index,
+        });
+        events.push(ev_log(format!(
+            "{spell_label} gives {delta_power:+}/{delta_toughness:+} to {tgt}"
+        )));
     }
 
     Ok(EffectOutcome::Continue)

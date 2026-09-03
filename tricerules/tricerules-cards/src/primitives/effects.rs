@@ -4,14 +4,14 @@ use super::{
     ActivatedAbilityDef, Amount, BasePowerToughnessValue, CardTypeFilter, CastCostReceiptCondition,
     Color, ConditionObjectRef, CountExpression, CreatureScopeFilter, DamageDivision, EventZone,
     GameCondition, GraveyardDestination, GraveyardFilter, Keyword, LifeAmount, PermanentTypeFilter,
-    PowerComparison, ProtectionQuality, ReflexiveTriggeredAbilityDef, SpecialActionKind,
-    TargetController, TargetFilter, TargetKind, TargetRole, TriggerCondition, TriggeredAbilityDef,
-    TypeLineAddition, TypeLineReplacement,
+    PowerComparison, PowerToughnessCharacteristic, ProtectionQuality, ReflexiveTriggeredAbilityDef,
+    SpecialActionKind, TargetController, TargetFilter, TargetKind, TargetRole, TriggerCondition,
+    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
 };
 #[cfg(test)]
 use super::{
     BattlefieldAggregate, BattlefieldCreatureCountFilter, BattlefieldPermanentFilter,
-    CreatureEventFilter, GraveyardAggregate, PermanentEventFilter, PowerToughnessCharacteristic,
+    CreatureEventFilter, GraveyardAggregate, PermanentEventFilter,
 };
 use crate::{choice_fallback, AbilityPresentation, ChoiceId, ManaCost};
 use serde::{Deserialize, Serialize};
@@ -156,14 +156,56 @@ impl AttachmentFilter {
     }
 }
 
-/// An affine P/T bonus applied by [`SpellEffectKind::PumpTarget`]: resolve `amount` once, multiply
-/// it by the signed per-unit deltas, then add those results to the effect's fixed P/T bonus.
-/// Growth Cycle and Lavakin Brawler are the first spell and triggered-ability users.
+/// The quantity an affine [`SpellEffectKind::PumpTarget`] bonus scales from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PtScaleBasis {
+    /// Resolve an ordinary nonnegative effect amount. Growth Cycle and Lavakin Brawler are the
+    /// first spell and triggered-ability users.
+    Amount(Amount),
+    /// Snapshot the affected creature's current signed characteristic as the effect applies.
+    /// Mightform Harmonizer and Unleash Fury use power; the signed form preserves CR 107.1b's
+    /// exception for doubling a negative power or toughness.
+    Subject(PowerToughnessCharacteristic),
+}
+
+/// An affine P/T bonus applied by [`SpellEffectKind::PumpTarget`]: resolve `basis`, multiply it by
+/// the signed per-unit deltas, then add those results to the effect's fixed P/T bonus.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PtScale {
-    pub amount: Amount,
+    pub basis: PtScaleBasis,
     pub power_per_unit: i32,
     pub toughness_per_unit: i32,
+}
+
+impl PtScale {
+    pub(crate) fn amount(&self) -> Option<&Amount> {
+        match &self.basis {
+            PtScaleBasis::Amount(amount) => Some(amount),
+            PtScaleBasis::Subject(_) => None,
+        }
+    }
+
+    fn validate_cast_snapshot_references(&self, count: usize) -> Result<(), String> {
+        if let Some(amount) = self.amount() {
+            amount.validate_cast_snapshot_references(count)?;
+        }
+        Ok(())
+    }
+
+    fn validate_effect(&self, context: EffectContext) -> Result<(), String> {
+        if self.power_per_unit == 0 && self.toughness_per_unit == 0 {
+            return Err("P/T scale requires a nonzero per-unit modifier".into());
+        }
+        if let Some(amount) = self.amount() {
+            amount.validate_effect(context)?;
+        }
+        Ok(())
+    }
+
+    fn requires_triggering_spell_context(&self) -> bool {
+        self.amount()
+            .is_some_and(Amount::requires_triggering_spell_context)
+    }
 }
 
 /// The two distinct CR face-change actions. Transform toggles an eligible double-faced
@@ -2231,7 +2273,7 @@ impl SpellEffectKind {
             Self::PumpTarget {
                 scale: Some(scale), ..
             } => {
-                scale.amount.validate_cast_snapshot_references(count)?;
+                scale.validate_cast_snapshot_references(count)?;
             }
             Self::ChooseResolutionBranch { branches, .. } => {
                 for branch in branches {
@@ -2354,7 +2396,7 @@ impl SpellEffectKind {
                 | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
                 SpellEffectKind::PumpTarget {
                     scale: Some(scale), ..
-                } => Some(&scale.amount),
+                } => scale.amount(),
                 _ => None,
             };
             let previous = index
@@ -2550,7 +2592,7 @@ impl SpellEffectKind {
             }
             SpellEffectKind::PumpTarget {
                 scale: Some(scale), ..
-            } => scale.amount.validate_effect(context)?,
+            } => scale.validate_effect(context)?,
             SpellEffectKind::DamageTargets { amount, .. } => {
                 amount.validate()?;
                 if amount.requires_game_state() {
@@ -3682,7 +3724,7 @@ impl SpellEffectKind {
             }
             Self::PumpTarget {
                 scale: Some(scale), ..
-            } => scale.amount.requires_triggering_spell_context(),
+            } => scale.requires_triggering_spell_context(),
             Self::ChooseResolutionBranch { branches, .. } => branches.iter().any(|branch| {
                 matches!(
                     &branch.requirement,

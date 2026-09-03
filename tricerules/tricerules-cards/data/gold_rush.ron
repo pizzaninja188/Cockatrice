@@ -6,7 +6,7 @@
   spell_effect: [
     CreateTokens(token: "treasure", count: 1),
     PumpTarget(power: 0, toughness: 0, scale: Some((
-      amount: Count(BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Treasure"]))),
+      basis: Amount(Count(BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Treasure"])))),
       power_per_unit: 2, toughness_per_unit: 2,
     ))),
   ],
