@@ -341,6 +341,8 @@ private:
     bool tryStartRuledSpellCast(CardItem *card);
     // Set up and begin a pending ruled cast for an already-resolved hand slot + face. faceIndex selects
     // the split/MDFC half (0 for single-face); castName/castCost are that face's name and mana cost.
+    // The source and method must remain the exact engine-authored offer; requiring both arguments
+    // prevents alternate-only casts from silently falling back to an ordinary hand cast.
     // Handles the toggle-cancel, {X}, hybrid/Phyrexian pip, target and mana-payment flow.
     bool beginRuledSpellCast(CardItem *card,
                              int ruledHandIndex,
@@ -348,8 +350,8 @@ private:
                              const QString &castName,
                              const QString &castCost,
                              int genericCostReduction,
-                             RuledCastSource source = RuledCastSource::Hand,
-                             ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL,
+                             RuledCastSource source,
+                             ruled::v1::CastMethod castMethod,
                              quint64 castingPermissionId = 0);
     void finalizePendingSpellManaCost();
     bool storeCurrentModalTargetsAndAdvance();

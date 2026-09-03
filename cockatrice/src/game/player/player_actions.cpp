@@ -2314,7 +2314,8 @@ bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
     }
     const auto &face = faces.first();
     return beginRuledSpellCast(card, ruledHandIndex, face.faceIndex, face.faceName, face.manaCost,
-                               face.genericCostReduction);
+                               face.genericCostReduction, RuledCastSource::Hand, face.castMethod,
+                               face.castingPermissionId);
 }
 
 bool PlayerActions::beginRuledSpellCast(CardItem *,
