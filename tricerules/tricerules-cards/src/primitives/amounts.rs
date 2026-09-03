@@ -192,30 +192,42 @@ pub enum Amount {
     /// Count public game state using an engine-owned context. This is shared by entry
     /// replacements and ordinary resolving effects rather than being an entry-only mini-language.
     Count(CountExpression),
+    /// Divide another amount by a positive literal and round down. Banshee and Brass Infiniscope
+    /// share this arithmetic shape.
+    DivideRoundedDown { amount: Box<Amount>, divisor: u32 },
 }
 
 impl Amount {
     pub(crate) fn requires_triggering_spell_context(&self) -> bool {
-        matches!(
-            self,
-            Self::Conditional { condition, .. }
-                if condition.requires_triggering_spell_context()
-        )
+        match self {
+            Self::Conditional { condition, .. } => condition.requires_triggering_spell_context(),
+            Self::DivideRoundedDown { amount, .. } => amount.requires_triggering_spell_context(),
+            _ => false,
+        }
     }
 
     pub(crate) fn validate_source_context(&self, has_source: bool) -> Result<(), String> {
-        if !has_source
-            && matches!(self, Self::Count(expression) if expression.requires_source_power())
-        {
+        if !has_source && self.requires_source_power() {
             return Err("source power requires an ability bound to a battlefield source".into());
         }
         Ok(())
     }
 
+    fn requires_source_power(&self) -> bool {
+        match self {
+            Self::Count(expression) => expression.requires_source_power(),
+            Self::DivideRoundedDown { amount, .. } => amount.requires_source_power(),
+            _ => false,
+        }
+    }
+
     pub(crate) fn validate_cost(&self, has_source: bool) -> Result<(), String> {
         self.validate_live()?;
         self.validate_source_context(has_source)?;
-        if matches!(self, Self::X | Self::Fixed(0)) || self.card_result_filter().is_some() {
+        if self.is_x()
+            || self.resolve_unconditional(0) == Some(0)
+            || self.card_result_filter().is_some()
+        {
             return Err("generic reduction requires a nonzero literal or a public quantity available at cost determination".into());
         }
         Ok(())
@@ -223,7 +235,7 @@ impl Amount {
 
     pub(super) fn validate_effect(&self, context: EffectContext) -> Result<(), String> {
         self.validate()?;
-        if context == EffectContext::Ability && matches!(self, Self::CastCost(_)) {
+        if context == EffectContext::Ability && self.contains_cast_cost() {
             return Err("cast-cost amount requires a spell's cast receipt".into());
         }
         if context == EffectContext::Spell && self.requires_triggering_spell_context() {
@@ -232,14 +244,20 @@ impl Amount {
         self.validate_source_context(context == EffectContext::Ability)
     }
     pub(crate) fn validate_cast_snapshot_references(&self, count: usize) -> Result<(), String> {
-        if let Self::Conditional { condition, .. } = self {
-            condition.validate_cast_snapshot_reference(count)?;
+        match self {
+            Self::Conditional { condition, .. } => {
+                condition.validate_cast_snapshot_reference(count)?;
+            }
+            Self::DivideRoundedDown { amount, .. } => {
+                amount.validate_cast_snapshot_references(count)?;
+            }
+            _ => {}
         }
         Ok(())
     }
 
     pub(crate) fn validate_live(&self) -> Result<(), String> {
-        if matches!(self, Self::CastCost(_)) {
+        if self.contains_cast_cost() {
             return Err("cast-cost amount requires a resolving stack item".into());
         }
         self.validate_cast_snapshot_references(0)?;
@@ -252,33 +270,60 @@ impl Amount {
         match self {
             Amount::Fixed(n) => Some(*n),
             Amount::X => Some(x),
+            Amount::DivideRoundedDown { amount, divisor } => {
+                amount.resolve_unconditional(x)?.checked_div(*divisor)
+            }
             Amount::Conditional { .. } | Amount::Count(_) | Amount::CastCost(_) => None,
         }
     }
 
     /// True if this amount depends on the cast-time X.
     pub fn is_x(&self) -> bool {
-        matches!(self, Amount::X)
+        match self {
+            Amount::X => true,
+            Amount::DivideRoundedDown { amount, .. } => amount.is_x(),
+            _ => false,
+        }
     }
 
     pub fn requires_game_state(&self) -> bool {
-        matches!(
-            self,
-            Amount::Conditional { .. } | Amount::Count(_) | Amount::CastCost(_)
-        )
+        match self {
+            Amount::Conditional { .. } | Amount::Count(_) | Amount::CastCost(_) => true,
+            Amount::DivideRoundedDown { amount, .. } => amount.requires_game_state(),
+            Amount::Fixed(_) | Amount::X => false,
+        }
     }
 
     pub(crate) fn card_result_filter(&self) -> Option<&CardResultFilter> {
         match self {
             Amount::Count(expression) => expression.card_result_filter(),
+            Amount::DivideRoundedDown { amount, .. } => amount.card_result_filter(),
             _ => None,
         }
+    }
+
+    pub(crate) fn cast_cost_amount(&self) -> Option<&CastCostConditionalAmount> {
+        match self {
+            Amount::CastCost(value) => Some(value),
+            Amount::DivideRoundedDown { amount, .. } => amount.cast_cost_amount(),
+            _ => None,
+        }
+    }
+
+    fn contains_cast_cost(&self) -> bool {
+        self.cast_cost_amount().is_some()
     }
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
             Amount::Conditional { condition, .. } => condition.validate(),
             Amount::Count(expression) => expression.validate(),
+            Amount::DivideRoundedDown { amount, divisor } => {
+                if *divisor == 0 {
+                    return Err("DivideRoundedDown divisor must be positive".into());
+                }
+                amount.validate()
+            }
             Amount::Fixed(_) | Amount::X | Amount::CastCost(_) => Ok(()),
         }
     }
@@ -316,6 +361,13 @@ impl Serialize for Amount {
             Amount::Count(expression) => {
                 s.serialize_newtype_variant("Amount", 1, "Count", expression)
             }
+            Amount::DivideRoundedDown { amount, divisor } => {
+                let mut variant =
+                    s.serialize_struct_variant("Amount", 3, "DivideRoundedDown", 2)?;
+                variant.serialize_field("amount", amount)?;
+                variant.serialize_field("divisor", divisor)?;
+                variant.end()
+            }
         }
     }
 }
@@ -325,18 +377,63 @@ enum AmountVariant {
     CastCost,
     Conditional,
     Count,
+    DivideRoundedDown,
 }
 
 #[derive(Deserialize)]
 #[serde(field_identifier, rename_all = "snake_case")]
 enum ConditionalField {
+    Amount,
     CastCost,
     Condition,
+    Divisor,
     WhenTrue,
     Otherwise,
 }
 
 struct ConditionalAmountVisitor;
+
+#[derive(Deserialize)]
+#[serde(field_identifier, rename_all = "snake_case")]
+enum DivideField {
+    Amount,
+    Divisor,
+}
+
+struct DivideRoundedDownVisitor;
+
+impl<'de> serde::de::Visitor<'de> for DivideRoundedDownVisitor {
+    type Value = Amount;
+
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("DivideRoundedDown(amount: ..., divisor: ...)")
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+        let mut amount = None;
+        let mut divisor = None;
+        while let Some(field) = map.next_key()? {
+            match field {
+                DivideField::Amount => {
+                    if amount.is_some() {
+                        return Err(serde::de::Error::duplicate_field("amount"));
+                    }
+                    amount = Some(map.next_value()?);
+                }
+                DivideField::Divisor => {
+                    if divisor.is_some() {
+                        return Err(serde::de::Error::duplicate_field("divisor"));
+                    }
+                    divisor = Some(map.next_value()?);
+                }
+            }
+        }
+        Ok(Amount::DivideRoundedDown {
+            amount: Box::new(amount.ok_or_else(|| serde::de::Error::missing_field("amount"))?),
+            divisor: divisor.ok_or_else(|| serde::de::Error::missing_field("divisor"))?,
+        })
+    }
+}
 
 impl<'de> serde::de::Visitor<'de> for ConditionalAmountVisitor {
     type Value = Amount;
@@ -348,10 +445,18 @@ impl<'de> serde::de::Visitor<'de> for ConditionalAmountVisitor {
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
         let mut condition = None;
         let mut cast_cost = None;
+        let mut amount = None;
+        let mut divisor = None;
         let mut when_true = None;
         let mut otherwise = None;
         while let Some(field) = map.next_key()? {
             match field {
+                ConditionalField::Amount => {
+                    if amount.is_some() {
+                        return Err(serde::de::Error::duplicate_field("amount"));
+                    }
+                    amount = Some(map.next_value()?);
+                }
                 ConditionalField::CastCost => {
                     if cast_cost.is_some() {
                         return Err(serde::de::Error::duplicate_field("cast_cost"));
@@ -363,6 +468,12 @@ impl<'de> serde::de::Visitor<'de> for ConditionalAmountVisitor {
                         return Err(serde::de::Error::duplicate_field("condition"));
                     }
                     condition = Some(map.next_value()?);
+                }
+                ConditionalField::Divisor => {
+                    if divisor.is_some() {
+                        return Err(serde::de::Error::duplicate_field("divisor"));
+                    }
+                    divisor = Some(map.next_value()?);
                 }
                 ConditionalField::WhenTrue => {
                     if when_true.is_some() {
@@ -377,6 +488,24 @@ impl<'de> serde::de::Visitor<'de> for ConditionalAmountVisitor {
                     otherwise = Some(map.next_value()?);
                 }
             }
+        }
+        if let Some(inner) = amount {
+            if condition.is_some()
+                || cast_cost.is_some()
+                || when_true.is_some()
+                || otherwise.is_some()
+            {
+                return Err(serde::de::Error::custom(
+                    "divided amount cannot combine with conditional amount fields",
+                ));
+            }
+            return Ok(Amount::DivideRoundedDown {
+                amount: Box::new(inner),
+                divisor: divisor.ok_or_else(|| serde::de::Error::missing_field("divisor"))?,
+            });
+        }
+        if divisor.is_some() {
+            return Err(serde::de::Error::missing_field("amount"));
         }
         if let Some(condition_value) = cast_cost {
             if condition.is_some() {
@@ -450,6 +579,9 @@ impl<'de> Deserialize<'de> for Amount {
                     AmountVariant::Count => {
                         let expression: CountExpression = access.newtype_variant()?;
                         Ok(Amount::Count(expression))
+                    }
+                    AmountVariant::DivideRoundedDown => {
+                        access.struct_variant(&["amount", "divisor"], DivideRoundedDownVisitor)
                     }
                 }
             }

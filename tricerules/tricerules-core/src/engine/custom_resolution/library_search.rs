@@ -32,6 +32,7 @@ impl GameEngine {
         mut object_ids: Vec<ObjectId>,
         tapped: bool,
         shuffle: bool,
+        searched_library: bool,
         mut events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         let controller = stack.item.controller;
@@ -54,6 +55,7 @@ impl GameEngine {
                 remaining_object_ids: object_ids.clone(),
                 tapped,
                 shuffle,
+                searched_library,
             };
             match self.begin_battlefield_entry(
                 stack.item.clone(),
@@ -94,6 +96,12 @@ impl GameEngine {
         if shuffle {
             crate::engine::shuffle_player_library_for_current_command(&mut self.state, controller);
             events.push(ev_log(format!("P{controller} shuffles their library.")));
+        }
+        if searched_library {
+            self.fire_triggers(&[GameEvent::LibrarySearched {
+                searcher: controller,
+                library_owner: controller,
+            }]);
         }
         self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
     }
@@ -373,7 +381,7 @@ impl GameEngine {
         self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
     }
 
-    /// CR 701.18: the controller submitted their library search choice. Move the found card to
+    /// CR 701.23: the controller submitted their library search choice. Move the found card to
     /// the declared destination, optionally reveal it publicly, then optionally shuffle.
     pub(super) fn finish_library_search(
         &mut self,
@@ -412,6 +420,7 @@ impl GameEngine {
             _ => return Err(EngineError::Illegal("library-search continuation missing")),
         };
         let controller = stack.item.controller;
+        let searched_library = zones.contains(&CardSearchZone::Library);
         let shuffle = shuffle && zones.contains(&CardSearchZone::Library);
         let choices_are_current = chosen.iter().all(|oid| {
             let expected_generation = candidate_generations
@@ -560,12 +569,19 @@ impl GameEngine {
                         chosen.to_vec(),
                         tapped,
                         shuffle,
+                        searched_library,
                         ev,
                     );
                 }
             }
         }
 
+        if searched_library {
+            self.fire_triggers(&[GameEvent::LibrarySearched {
+                searcher: controller,
+                library_owner: controller,
+            }]);
+        }
         self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
     }
 }

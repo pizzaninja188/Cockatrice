@@ -107,6 +107,7 @@ impl GameEngine {
         let mut triggers = Vec::new();
         for entry in batch.ready {
             let oid = entry.object_id;
+            let chosen_x = entry.chosen_x;
             let owner = self.state.objects[&oid].owner;
             let label = events::object_display_name(&self.state, self.registry, oid);
             triggers.extend(
@@ -114,7 +115,10 @@ impl GameEngine {
                     .into_iter()
                     .filter(|event| !matches!(event, GameEvent::ZoneChanges(_))),
             );
-            triggers.push(GameEvent::EntersBattlefield { object_id: oid });
+            triggers.push(GameEvent::EntersBattlefield {
+                object_id: oid,
+                chosen_x,
+            });
             events.push(permanent_moved_event(
                 &self.state,
                 oid,

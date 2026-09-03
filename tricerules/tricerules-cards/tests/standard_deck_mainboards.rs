@@ -19,6 +19,15 @@ struct ExpectedCard {
 
 const COHORT: &[ExpectedCard] = &[
     ExpectedCard {
+        id: "wan_shi_tong,_librarian",
+        name: "Wan Shi Tong, Librarian",
+        mana_cost: "{X}{U}{U}",
+        supertypes: &["Legendary"],
+        types: &["Creature", "Bird", "Spirit"],
+        stats: (Some(1), Some(1)),
+        keywords: &[Keyword::Flash, Keyword::Flying, Keyword::Vigilance],
+    },
+    ExpectedCard {
         id: "dream_beavers",
         name: "Dream Beavers",
         mana_cost: "{B}",
@@ -138,7 +147,10 @@ fn current_standard_mainboard_cohort_has_exact_oracle_characteristics() {
         assert_eq!(definition.name, expected.name, "{}", expected.id);
         assert_eq!(registry.id_for_name(expected.name), Some(expected.id));
         let face = definition.primary_face();
-        let expected_face_id = expected.id.trim_end_matches('!');
+        let expected_face_id = match expected.id {
+            "wan_shi_tong,_librarian" => "wan_shi_tong_librarian",
+            id => id.trim_end_matches('!'),
+        };
         assert_eq!(
             face.face_id.as_str(),
             expected_face_id,
@@ -176,6 +188,38 @@ fn current_standard_mainboard_cohort_has_exact_oracle_characteristics() {
             expected.id
         );
     }
+}
+
+#[test]
+fn wan_shi_tong_uses_etb_x_and_opponent_own_library_search_triggers() {
+    let face = CardRegistry::global()
+        .get("wan_shi_tong,_librarian")
+        .unwrap()
+        .primary_face();
+    assert!(matches!(
+        face.triggered_abilities[0].effect.as_slice(),
+        [
+            SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::X,
+                subject: EffectSubject::Source,
+            },
+            SpellEffectKind::Draw {
+                count: Amount::DivideRoundedDown { amount, divisor: 2 },
+                ..
+            }
+        ] if amount.as_ref() == &Amount::X
+    ));
+    assert_eq!(
+        face.triggered_abilities[0].trigger,
+        TriggerCondition::WhenSelfEntersBattlefield
+    );
+    assert!(matches!(
+        face.triggered_abilities[1].trigger,
+        TriggerCondition::WheneverPlayerSearchesOwnLibrary {
+            player: tricerules_cards::CastTriggerPlayer::Opponent
+        }
+    ));
 }
 
 #[test]

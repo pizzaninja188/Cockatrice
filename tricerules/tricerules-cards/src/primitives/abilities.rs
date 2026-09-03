@@ -604,6 +604,13 @@ pub enum TriggerCondition {
         #[serde(default)]
         player: CastTriggerPlayer,
     },
+    /// Whenever a player searches their own library. The searcher and library owner are distinct
+    /// event facts so effects that search another player's library do not satisfy this condition.
+    /// Wan Shi Tong, Librarian and Ob Nixilis, Unshackled share the event seam.
+    WheneverPlayerSearchesOwnLibrary {
+        #[serde(default)]
+        player: CastTriggerPlayer,
+    },
 }
 
 impl TriggerCondition {

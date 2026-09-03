@@ -189,7 +189,7 @@ impl GameEngine {
             triggered_ability: Some(ability),
             is_triggered: true,
             is_copy: false,
-            chosen_x: 0,
+            chosen_x: trigger_context.entering_chosen_x.unwrap_or(0),
             face_index: source_face_index,
             chosen_modes,
             cast_condition_results: Vec::new(),

@@ -761,9 +761,8 @@ pub enum SpellEffectKind {
     /// and Juzám Djinn (`Controller`, "to you"), Underworld Dreams, Ebony Owl Netsuke.
     ///
     /// `Amount` rather than a bare `u32` follows [`Self::DamageTarget`] — `DamageAll`'s `u32` is
-    /// the known-narrow one (it cannot express Earthquake). Note that `StackItem::chosen_x` is 0
-    /// for triggered abilities, so `Amount::X` here resolves to 0 until an X-costed activated
-    /// ability or spell uses this effect.
+    /// the known-narrow one (it cannot express Earthquake). Triggered abilities normally resolve
+    /// X as 0; a self ETB trigger from an X-cost spell retains that spell's chosen X.
     DamagePlayer {
         amount: Amount,
         #[serde(default)]

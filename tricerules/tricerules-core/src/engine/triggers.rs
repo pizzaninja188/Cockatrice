@@ -230,7 +230,7 @@ impl GameEngine {
         // Register every static ability first so event-time facts and trigger conditions see the
         // completed event's derived characteristics.
         for event in events {
-            if let GameEvent::EntersBattlefield { object_id } = event {
+            if let GameEvent::EntersBattlefield { object_id, .. } = event {
                 if !self.state.room_states.contains_key(object_id) {
                     self.emit_static_abilities_on_enter(*object_id);
                 }
@@ -412,7 +412,16 @@ impl GameEngine {
                 // Rampaging Ferocidon needs the entering creature's controller, and Aether
                 // Flash needs the creature itself. Reuse the generation-bound reference so
                 // either instruction follows current characteristics or the correct LKI.
-                if let GameEvent::EntersBattlefield { object_id } = event {
+                if let GameEvent::EntersBattlefield {
+                    object_id,
+                    chosen_x,
+                } = event
+                {
+                    if trigger.source_id == *object_id
+                        && trigger.ability.trigger == TriggerCondition::WhenSelfEntersBattlefield
+                    {
+                        trigger.trigger_context.entering_chosen_x = Some(*chosen_x);
+                    }
                     if matches!(
                         trigger.ability.trigger,
                         TriggerCondition::WheneverPermanentEntersBattlefield { .. }
@@ -747,7 +756,7 @@ impl GameEngine {
             // The completed operation is available for Blight observers; this delivery adds
             // payment consumers, not a new authored observer condition.
             GameEvent::Blighted(_) | GameEvent::Waterbent { .. } => vec![],
-            GameEvent::EntersBattlefield { object_id } => {
+            GameEvent::EntersBattlefield { object_id, .. } => {
                 let Some(obj) = self.state.objects.get(object_id) else {
                     return vec![];
                 };
@@ -800,6 +809,27 @@ impl GameEngine {
                     }));
                 }
                 out
+            }
+            GameEvent::LibrarySearched {
+                searcher,
+                library_owner,
+            } => {
+                if searcher != library_owner {
+                    return vec![];
+                }
+                sources
+                    .iter()
+                    .flat_map(|source| {
+                        self.matching_snapshot_abilities(source, |condition| {
+                            let TriggerCondition::WheneverPlayerSearchesOwnLibrary { player } =
+                                condition
+                            else {
+                                return false;
+                            };
+                            self.relative_player_matches(*player, *searcher, source.controller)
+                        })
+                    })
+                    .collect()
             }
             GameEvent::CountersPlaced {
                 object,
@@ -2085,6 +2115,7 @@ impl GameEngine {
             GameEvent::PhaseBegan { active_player, .. } => Some(*active_player),
             GameEvent::Sacrificed { player, .. } => Some(*player),
             GameEvent::Surveilled { player } => Some(*player),
+            GameEvent::LibrarySearched { searcher, .. } => Some(*searcher),
             GameEvent::CrimeCommitted { player } => Some(*player),
             GameEvent::Blighted(receipt) => Some(receipt.player),
             GameEvent::Waterbent { player } => Some(*player),
@@ -2259,7 +2290,7 @@ impl GameEngine {
                 triggered_ability: Some(ability),
                 is_triggered: true,
                 is_copy: false,
-                chosen_x: 0,
+                chosen_x: trigger_context.entering_chosen_x.unwrap_or(0),
                 face_index: source_face_index,
                 chosen_modes: vec![],
                 cast_condition_results: Vec::new(),
@@ -2330,6 +2361,59 @@ mod tests {
     use tricerules_cards::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility};
 
     #[test]
+    fn issue_208_own_library_search_keeps_searcher_and_owner_distinct() {
+        let (mut engine, source) = trigger_limit_source();
+        add_limited_grant(
+            &mut engine,
+            source,
+            TriggerCondition::WheneverPlayerSearchesOwnLibrary {
+                player: CastTriggerPlayer::Opponent,
+            },
+        );
+        assert_eq!(
+            engine
+                .collect_event_triggers(&[GameEvent::LibrarySearched {
+                    searcher: 1,
+                    library_owner: 1,
+                }])
+                .len(),
+            1
+        );
+        assert!(engine
+            .collect_event_triggers(&[GameEvent::LibrarySearched {
+                searcher: 0,
+                library_owner: 0,
+            }])
+            .is_empty());
+        assert!(engine
+            .collect_event_triggers(&[GameEvent::LibrarySearched {
+                searcher: 1,
+                library_owner: 0,
+            }])
+            .is_empty());
+    }
+
+    #[test]
+    fn issue_208_only_the_entrants_own_etb_trigger_inherits_chosen_x() {
+        let (mut engine, source) = trigger_limit_source();
+        add_limited_grant(
+            &mut engine,
+            source,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: CastTriggerPlayer::AnyPlayer,
+                filter: Default::default(),
+                creature_filter: None,
+            },
+        );
+        let triggers = engine.collect_event_triggers(&[GameEvent::EntersBattlefield {
+            object_id: source,
+            chosen_x: 7,
+        }]);
+        assert_eq!(triggers.len(), 1);
+        assert_eq!(triggers[0].trigger_context.entering_chosen_x, None);
+    }
+
+    #[test]
     fn issue_185_multiple_lore_counters_create_one_occurrence_per_crossed_numeral() {
         let (mut engine, source) = trigger_limit_source();
         let face = engine
@@ -2384,7 +2468,10 @@ mod tests {
         add_limited_grant(&mut engine, source, trigger);
         assert!(
             engine
-                .collect_event_triggers(&[GameEvent::EntersBattlefield { object_id: source }])
+                .collect_event_triggers(&[GameEvent::EntersBattlefield {
+                    object_id: source,
+                    chosen_x: 0,
+                }])
                 .is_empty(),
             "a Bear is neither a Bird nor a Fish"
         );
@@ -3213,9 +3300,11 @@ mod tests {
         engine.fire_triggers(&[
             GameEvent::EntersBattlefield {
                 object_id: wardens[0],
+                chosen_x: 0,
             },
             GameEvent::EntersBattlefield {
                 object_id: wardens[1],
+                chosen_x: 0,
             },
         ]);
 
@@ -3557,7 +3646,10 @@ mod tests {
         engine.state.objects.get_mut(&source).unwrap().card_id = "knightfisher".into();
         let bird = issue_168_fixture_object(&mut engine, 0, "storm_crow", Zone::Battlefield);
         let enemy = issue_168_fixture_object(&mut engine, 1, "storm_crow", Zone::Battlefield);
-        let entry = |object_id| GameEvent::EntersBattlefield { object_id };
+        let entry = |object_id| GameEvent::EntersBattlefield {
+            object_id,
+            chosen_x: 0,
+        };
         assert_eq!(engine.collect_event_triggers(&[entry(bird)]).len(), 1);
         assert!(engine.collect_event_triggers(&[entry(enemy)]).is_empty());
         assert!(engine.collect_event_triggers(&[entry(source)]).is_empty());

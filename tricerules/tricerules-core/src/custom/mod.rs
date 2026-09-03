@@ -112,6 +112,9 @@ pub struct ResolutionCtx<'a> {
     /// Successful library-to-hand draw edges, kept in occurrence order for the engine to turn
     /// into ordinary draw events after the custom-effect borrow ends.
     drawn_players: Vec<PlayerId>,
+    /// Completed searches, retained until the custom-effect borrow ends so the engine can collect
+    /// ordinary battlefield triggers without exposing mutable game state to card-specific code.
+    library_searches: Vec<(PlayerId, PlayerId)>,
 }
 
 impl<'a> ResolutionCtx<'a> {
@@ -131,11 +134,21 @@ impl<'a> ResolutionCtx<'a> {
             step,
             scratch,
             drawn_players: Vec::new(),
+            library_searches: Vec::new(),
         }
     }
 
     pub(crate) fn take_drawn_players(&mut self) -> Vec<PlayerId> {
         std::mem::take(&mut self.drawn_players)
+    }
+
+    pub(crate) fn take_library_searches(&mut self) -> Vec<(PlayerId, PlayerId)> {
+        std::mem::take(&mut self.library_searches)
+    }
+
+    /// Record one completed search without exposing any searched card identity.
+    pub fn record_library_search(&mut self, searcher: PlayerId, library_owner: PlayerId) {
+        self.library_searches.push((searcher, library_owner));
     }
 
     /// Draw `n` cards for `player` (CR 120). Returns the drawn object ids (fewer than `n` if the

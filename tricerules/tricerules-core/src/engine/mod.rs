@@ -456,6 +456,13 @@ enum GameEvent {
     ZoneChanges(zone_events::ZoneEventBatch),
     EntersBattlefield {
         object_id: ObjectId,
+        chosen_x: u32,
+    },
+    /// One completed search operation. Keep the searcher distinct from the library owner so
+    /// "an opponent searches their library" cannot match a search of somebody else's library.
+    LibrarySearched {
+        searcher: PlayerId,
+        library_owner: PlayerId,
     },
     /// CR 714.2b: one atomic counter-placement edge. Chapter triggers inspect the exact
     /// generation and before/after lore counts rather than reconstructing an event from state.

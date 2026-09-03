@@ -2671,6 +2671,7 @@ mod cast_snapshot_tests {
         let permanent = add(&mut e, 0, "history_static", Zone::Battlefield);
         e.fire_triggers(&[GameEvent::EntersBattlefield {
             object_id: permanent,
+            chosen_x: 0,
         }]);
         let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
         e.state.players[0].mana_pool.black = 2;

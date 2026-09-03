@@ -187,6 +187,8 @@ mod issue_194_dynamic_scope_combat_restrictions;
 mod issue_202_hidden_lair;
 #[path = "scenario/issue_205_stack_spell_filters.rs"]
 mod issue_205_stack_spell_filters;
+#[path = "scenario/issue_208_library_search.rs"]
+mod issue_208_library_search;
 #[path = "scenario/issue_216_attachment_scoped_blocking_restrictions.rs"]
 mod issue_216_attachment_scoped_blocking_restrictions;
 #[path = "scenario/issue_217_target_power_scale.rs"]

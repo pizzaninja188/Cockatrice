@@ -1,4 +1,4 @@
-//! Gifts Ungiven (CR 701.19 search + CR 608 — an *interdependent two-player* resolution).
+//! Gifts Ungiven (CR 701.23 search + CR 608 — an *interdependent two-player* resolution).
 //!
 //! Oracle: "Search your library for up to four cards with different names and reveal them. Target
 //! opponent chooses two of those cards. Put the chosen cards into your graveyard and the rest into
@@ -32,6 +32,7 @@ impl CardEffect for GiftsUngiven {
         let controller = ctx.controller;
         let library = ctx.library(controller);
         if library.is_empty() {
+            ctx.record_library_search(controller, controller);
             ctx.log(format!("P{controller} Gifts Ungiven: empty library."));
             return ResolutionStep::Done;
         }
@@ -58,6 +59,7 @@ impl CardEffect for GiftsUngiven {
             // Step 1: the controller has chosen the cards to reveal. They stay in the library
             // (revealed); the opponent now chooses which two go to the graveyard.
             1 => {
+                ctx.record_library_search(ctx.controller, ctx.controller);
                 let revealed = choice.object_ids.clone();
                 if revealed.is_empty() {
                     ctx.log(format!("P{} Gifts Ungiven: found nothing.", ctx.controller));
@@ -128,7 +130,7 @@ fn distribute(ctx: &mut ResolutionCtx, to_graveyard: &[u32], to_hand: &[u32]) {
     ));
 }
 
-/// "Then shuffle" the controller's library (CR 701.19).
+/// "Then shuffle" the controller's library (CR 701.23).
 fn shuffle(ctx: &mut ResolutionCtx) {
     let controller = ctx.controller;
     ctx.shuffle_library(controller);

@@ -719,6 +719,34 @@ fn amount_serde_preserves_literals_x_and_named_conditionals() {
 }
 
 #[test]
+fn divided_amount_roundtrips_rounds_down_and_rejects_zero_divisors() {
+    let amount: Amount = ron::from_str(r#"DivideRoundedDown(amount: "X", divisor: 2)"#).unwrap();
+    assert_eq!(
+        amount,
+        Amount::DivideRoundedDown {
+            amount: Box::new(Amount::X),
+            divisor: 2,
+        }
+    );
+    assert_eq!(
+        ron::from_str::<Amount>(&ron::to_string(&amount).unwrap()).unwrap(),
+        amount
+    );
+    assert_eq!(
+        [0, 1, 2, 5].map(|x| amount.resolve_unconditional(x).unwrap()),
+        [0, 0, 1, 2]
+    );
+    assert!(amount.is_x());
+
+    assert!(Amount::DivideRoundedDown {
+        amount: Box::new(Amount::Fixed(4)),
+        divisor: 0,
+    }
+    .validate()
+    .is_err());
+}
+
+#[test]
 fn counted_amounts_reject_empty_authored_filters() {
     assert!(Amount::Count(CountExpression::BattlefieldCreatures {
         filter: BattlefieldCreatureCountFilter {

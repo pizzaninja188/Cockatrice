@@ -894,8 +894,12 @@ impl GameEngine {
         attached_to: Option<AttachmentRecipient>,
     ) -> Result<(), EngineError> {
         let object_id = event.object_id;
+        let chosen_x = event.chosen_x;
         let door_event = self.commit_battlefield_entry_state(event, attached_to)?;
-        let mut trigger_events = vec![GameEvent::EntersBattlefield { object_id }];
+        let mut trigger_events = vec![GameEvent::EntersBattlefield {
+            object_id,
+            chosen_x,
+        }];
         trigger_events.extend(door_event);
         self.fire_triggers(&trigger_events);
         Ok(())
@@ -1095,6 +1099,7 @@ impl GameEngine {
         for entry in &entries {
             trigger_events.push(GameEvent::EntersBattlefield {
                 object_id: entry.event.object_id,
+                chosen_x: entry.event.chosen_x,
             });
             trigger_events.extend(self.commit_battlefield_entry_state(entry.event.clone(), None)?);
         }
@@ -1330,6 +1335,7 @@ impl GameEngine {
                 remaining_object_ids,
                 tapped,
                 shuffle,
+                searched_library,
             } => {
                 let object_id = event.object_id;
                 let controller = event.destination_controller;
@@ -1348,6 +1354,7 @@ impl GameEngine {
                     remaining_object_ids,
                     tapped,
                     shuffle,
+                    searched_library,
                     events,
                 )
             }

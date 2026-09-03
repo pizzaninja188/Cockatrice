@@ -42,7 +42,7 @@ impl GameEngine {
         let effect = custom::lookup(&custom_key)
             .ok_or_else(|| EngineError::MissingCard(custom_key.clone()))?;
         let controller = item.controller;
-        let (step, scratch, drawn_players) = {
+        let (step, scratch, drawn_players, library_searches) = {
             let mut ctx = ResolutionCtx::new(
                 &mut self.state,
                 self.registry,
@@ -53,10 +53,17 @@ impl GameEngine {
             );
             let r = effect.begin(&mut ctx);
             let drawn_players = ctx.take_drawn_players();
-            (r, ctx.scratch, drawn_players)
+            let library_searches = ctx.take_library_searches();
+            (r, ctx.scratch, drawn_players, library_searches)
         };
         for drawer in drawn_players {
             self.fire_card_drawn(drawer);
+        }
+        for (searcher, library_owner) in library_searches {
+            self.fire_triggers(&[GameEvent::LibrarySearched {
+                searcher,
+                library_owner,
+            }]);
         }
         self.park_or_finish(item, custom_key, 0, scratch, step, events);
         Ok(())
@@ -316,7 +323,7 @@ impl GameEngine {
         };
 
         let mut ev = vec![];
-        let (step, scratch, drawn_players) = {
+        let (step, scratch, drawn_players, library_searches) = {
             let mut ctx = ResolutionCtx::new(
                 &mut self.state,
                 self.registry,
@@ -327,10 +334,17 @@ impl GameEngine {
             );
             let r = effect.resume(&mut ctx, &choice);
             let drawn_players = ctx.take_drawn_players();
-            (r, ctx.scratch, drawn_players)
+            let library_searches = ctx.take_library_searches();
+            (r, ctx.scratch, drawn_players, library_searches)
         };
         for drawer in drawn_players {
             self.fire_card_drawn(drawer);
+        }
+        for (searcher, library_owner) in library_searches {
+            self.fire_triggers(&[GameEvent::LibrarySearched {
+                searcher,
+                library_owner,
+            }]);
         }
         self.park_or_finish(item, key, step_no, scratch, step, &mut ev);
 
@@ -443,6 +457,7 @@ impl GameEngine {
         self.commit_battlefield_entry_state(entry, Some(recipient))?;
         self.fire_triggers(&[GameEvent::EntersBattlefield {
             object_id: exiled.object_id,
+            chosen_x: 0,
         }]);
         events.extend([
             permanent_moved_event(

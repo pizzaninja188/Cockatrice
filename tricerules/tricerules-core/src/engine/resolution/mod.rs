@@ -1978,11 +1978,15 @@ impl GameEngine {
         let mut trigger_events = Vec::new();
         for (entry, owner, label) in entries {
             let object_id = entry.object_id;
+            let chosen_x = entry.chosen_x;
             // Observer returns are independent one-shot effects. Entry replacement ordering is
             // added in the Aura/choice increment; the base path still uses the canonical commit
             // reset and static-registration machinery.
             let door_event = self.commit_battlefield_entry_state(entry, None)?;
-            trigger_events.push(GameEvent::EntersBattlefield { object_id });
+            trigger_events.push(GameEvent::EntersBattlefield {
+                object_id,
+                chosen_x,
+            });
             trigger_events.extend(door_event);
             events.push(permanent_moved_event(
                 &self.state,
@@ -3806,9 +3810,11 @@ mod attached_subject_tests {
             let triggers = engine.collect_event_triggers(&[
                 GameEvent::EntersBattlefield {
                     object_id: ferocidon,
+                    chosen_x: 0,
                 },
                 GameEvent::EntersBattlefield {
                     object_id: creature,
+                    chosen_x: 0,
                 },
             ]);
             assert_eq!(triggers.len(), 1, "another creature triggers even during simultaneous entry; Ferocidon excludes itself");

@@ -152,6 +152,9 @@ pub struct TriggerContext {
     /// Actual mana paid for the spell whose CR 601.2i cast event created this trigger.
     /// `None` for every other trigger event and for spell copies that were not cast.
     pub triggering_spell_mana_spent: Option<u64>,
+    /// Chosen X retained only for a permanent spell's own ETB trigger. Other permanents observing
+    /// that entry do not inherit the entrant's X.
+    pub entering_chosen_x: Option<u32>,
 }
 
 /// The game entity an Aura or Equipment is attached to. Players are represented explicitly;
@@ -1204,6 +1207,7 @@ pub(crate) enum BattlefieldEntryCompletion {
         remaining_object_ids: Vec<ObjectId>,
         tapped: bool,
         shuffle: bool,
+        searched_library: bool,
     },
     ManifestDread {
         owner: PlayerId,

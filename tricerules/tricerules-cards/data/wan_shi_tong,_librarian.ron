@@ -1,0 +1,32 @@
+// Oracle and rulings verified 2026-09-03.
+(
+  id: "wan_shi_tong,_librarian",
+  name: "Wan Shi Tong, Librarian",
+  face_id: "wan_shi_tong_librarian",
+  mana_cost: "{X}{U}{U}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Bird", "Spirit"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flash, Flying, Vigilance],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([3]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [
+        PutCounters(counter: PlusOnePlusOne, count: "X", subject: Source),
+        Draw(count: DivideRoundedDown(amount: "X", divisor: 2)),
+      ],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([4]),
+      trigger: WheneverPlayerSearchesOwnLibrary(player: Opponent),
+      effect: [
+        PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source),
+        Draw(count: 1),
+      ],
+    ),
+  ],
+)

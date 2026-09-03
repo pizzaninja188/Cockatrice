@@ -147,7 +147,7 @@ fn validate_effect_cast_cost_conditions(
         } => scale.amount(),
         _ => None,
     };
-    if let Some(Amount::CastCost(value)) = amount {
+    if let Some(value) = amount.and_then(Amount::cast_cost_amount) {
         validate_cast_cost_condition(groups, &value.condition)?;
     }
     match effect {

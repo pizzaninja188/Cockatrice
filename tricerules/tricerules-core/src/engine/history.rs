@@ -640,7 +640,7 @@ impl GameEngine {
                     let record = self.state.turn_history.current.player_mut(*player);
                     record.crimes_committed = record.crimes_committed.saturating_add(1);
                 }
-                GameEvent::EntersBattlefield { object_id } => {
+                GameEvent::EntersBattlefield { object_id, .. } => {
                     if let Some(characteristics) = self.characteristics(*object_id) {
                         self.state
                             .turn_history
@@ -1452,6 +1452,10 @@ impl GameEngine {
             }
             Amount::Fixed(value) => *value,
             Amount::X => context.chosen_x,
+            Amount::DivideRoundedDown { amount, divisor } => self
+                .resolve_amount(amount, context)
+                .checked_div(*divisor)
+                .unwrap_or(0),
             Amount::Conditional {
                 condition,
                 when_true,
@@ -1774,8 +1778,14 @@ mod tests {
         ]);
         let mut engine = GameEngine::new(168001, &[0, 1], 20, decks, true).unwrap();
         let land = move_to_battlefield(&mut engine, 0, "forest");
-        engine.record_committed_events(&[GameEvent::EntersBattlefield { object_id: land }]);
-        engine.record_committed_events(&[GameEvent::EntersBattlefield { object_id: land }]);
+        engine.record_committed_events(&[GameEvent::EntersBattlefield {
+            object_id: land,
+            chosen_x: 0,
+        }]);
+        engine.record_committed_events(&[GameEvent::EntersBattlefield {
+            object_id: land,
+            chosen_x: 0,
+        }]);
         let context = ConditionContext {
             controller: 0,
             source_object_id: land,
@@ -2966,7 +2976,10 @@ mod tests {
             commit_life_change(&mut e.state, 1, 2);
             commit_life_change(&mut e.state, 1, -1);
             let source = move_to_battlefield(&mut e, 0, "flamecache_gecko");
-            e.fire_triggers(&[GameEvent::EntersBattlefield { object_id: source }]);
+            e.fire_triggers(&[GameEvent::EntersBattlefield {
+                object_id: source,
+                chosen_x: 0,
+            }]);
             let mut events = Vec::new();
             e.flush_staged_triggers(&mut events);
             assert_eq!(e.state.stack.len(), 1);
@@ -3119,6 +3132,7 @@ mod tests {
         engine.record_committed_events(&[
             GameEvent::EntersBattlefield {
                 object_id: artifact,
+                chosen_x: 0,
             },
             GameEvent::CardDrawn {
                 drawer: 0,
