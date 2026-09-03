@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-09-02. CR 603.6a and 122.1a.
+(
+  id: "sazhs_chocobo",
+  name: "Sazh's Chocobo",
+  face_id: "sazhs_chocobo",
+  mana_cost: "{G}",
+  types: ["Creature", "Bird"],
+  power: 0,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

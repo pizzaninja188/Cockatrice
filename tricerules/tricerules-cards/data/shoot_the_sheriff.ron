@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-09-02. CR 700.13b and 701.7.
+(
+  id: "shoot_the_sheriff",
+  name: "Shoot the Sheriff",
+  face_id: "shoot_the_sheriff",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((
+    kind: Creature,
+    excluded_subtypes: ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"],
+  )))],
+)

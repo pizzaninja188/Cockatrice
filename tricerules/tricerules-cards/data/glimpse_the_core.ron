@@ -1,0 +1,32 @@
+// Oracle and rulings checked 2026-09-02. CR 601.2b/c, 608.2b, and 701.18.
+(
+  id: "glimpse_the_core",
+  name: "Glimpse the Core",
+  face_id: "glimpse_the_core",
+  mana_cost: "{1}{G}",
+  types: ["Sorcery"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (
+        mode_id: "search_basic_forest",
+        presentation: OracleLines([2]),
+        effects: [SearchLibrary(
+          filter: Some((card_type: Some(BasicLand), subtype: Some("Forest"))),
+          destination: Battlefield(tapped: true),
+          shuffle: true,
+          reveal: false,
+        )],
+      ),
+      (
+        mode_id: "return_cave",
+        presentation: OracleLines([3]),
+        effects: [MoveGraveyardCards(
+          filter: (owner: Controller, card_type: Some(Land), required_subtypes: ["Cave"]),
+          destination: Battlefield(tapped: true),
+        )],
+      ),
+    ],
+  ),
+)

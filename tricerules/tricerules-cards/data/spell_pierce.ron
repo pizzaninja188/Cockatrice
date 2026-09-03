@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-09-02. CR 601.2c and 701.5.
+(
+  id: "spell_pierce",
+  name: "Spell Pierce",
+  face_id: "spell_pierce",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(
+    spell_filter: Some(Noncreature),
+    unless_controller_pays: Some(2),
+  )],
+)

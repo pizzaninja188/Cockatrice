@@ -1,0 +1,29 @@
+// Oracle and rulings checked 2026-09-02. CR 601.2b/f-h, 701.5, and Teamwork.
+(
+  id: "we_say_thee_nay!",
+  name: "We Say Thee Nay!",
+  face_id: "we_say_thee_nay",
+  mana_cost: "{1}{U}",
+  types: ["Instant", "Arcane"],
+  cast_cost_groups: [(
+    group_id: "teamwork",
+    presentation: OracleLines([1]),
+    min: 0,
+    max: 1,
+    options: [TapPermanents(
+      option_id: "teamwork_2",
+      presentation: OracleLines([1]),
+      kind: Teamwork,
+      constraint: AggregateMinimum(minimum: 2, contribution: CurrentPower),
+      filter: (kind: Creature, controller: You),
+    )],
+  )],
+  spell_effect: [CounterTargetSpell(
+    spell_filter: None,
+    unless_controller_pays_by_cast_cost: Some((
+      condition: (group_id: "teamwork", option_id: "teamwork_2", expected_selected: true),
+      if_selected: 4,
+      otherwise: 2,
+    )),
+  )],
+)

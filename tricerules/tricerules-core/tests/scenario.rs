@@ -259,6 +259,8 @@ mod source_excluding_targets;
 mod spell_effects;
 #[path = "scenario/stack_and_counterspells.rs"]
 mod stack_and_counterspells;
+#[path = "scenario/standard_deck_mainboards.rs"]
+mod standard_deck_mainboards;
 #[path = "scenario/targeting.rs"]
 mod targeting;
 #[path = "scenario/tokens.rs"]

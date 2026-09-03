@@ -1,0 +1,34 @@
+// Oracle and rulings checked 2026-09-02. CR 602 and 605; the second mana ability's
+// restriction is checked when activation begins.
+(
+  id: "gloomlake_verge",
+  name: "Gloomlake Verge",
+  face_id: "gloomlake_verge",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(u: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(b: 1)])],
+      conditions: [BattlefieldAggregate(
+        filter: (
+          controllers: Controller,
+          any_of: Some([
+            (controllers: Controller, required_subtypes: ["Island"]),
+            (controllers: Controller, required_subtypes: ["Swamp"]),
+          ]),
+        ),
+        aggregate: Count,
+        min: Some(1),
+      )],
+    ),
+  ],
+)

@@ -1,0 +1,20 @@
+// Oracle and rulings checked 2026-09-02. CR 603.6a, 701.18, and 702.9.
+(
+  id: "dream_beavers",
+  name: "Dream Beavers",
+  face_id: "dream_beavers",
+  mana_cost: "{B}",
+  types: ["Creature", "Beaver", "Nightmare"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      EachOpponentLosesLifeYouGainEqual(amount: 1),
+      Scry(count: 1),
+    ],
+  )],
+)

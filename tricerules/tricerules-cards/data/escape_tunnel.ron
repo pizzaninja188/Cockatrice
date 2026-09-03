@@ -1,0 +1,30 @@
+// Oracle and rulings checked 2026-09-02. CR 608.2b, 701.17, 701.18, and 509.1b.
+(
+  id: "escape_tunnel",
+  name: "Escape Tunnel",
+  face_id: "escape_tunnel",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap, SacrificeSelf],
+      effect: [SearchLibrary(
+        filter: Some((card_type: Some(BasicLand))),
+        destination: Battlefield(tapped: true),
+        shuffle: true,
+        reveal: false,
+      )],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Tap, SacrificeSelf],
+      effect: [ApplyCombatRestriction(
+        scope: Chosen((kind: Creature, power: AtMost(2))),
+        restriction: (cant_be_blocked: true),
+      )],
+    ),
+  ],
+)

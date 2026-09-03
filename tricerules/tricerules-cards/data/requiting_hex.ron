@@ -1,0 +1,32 @@
+// Oracle and rulings checked 2026-09-02. CR 601.2b/f-h, 608.2b, and 701.68.
+(
+  id: "requiting_hex",
+  name: "Requiting Hex",
+  face_id: "requiting_hex",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "blight",
+    presentation: OracleLines([1]),
+    min: 0,
+    max: 1,
+    options: [Blight(
+      option_id: "blight_1",
+      presentation: OracleLines([1]),
+      count: 1,
+    )],
+  )],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: Creature, max_mana_value: Some(2)))),
+    ConditionalCastCost(
+      condition: (group_id: "blight", option_id: "blight_1", expected_selected: true),
+      effect: GainLife(amount: 2),
+    ),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature with mana value 2 or less",
+    effect_indices: [0],
+  )])),
+)
