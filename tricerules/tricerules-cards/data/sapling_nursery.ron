@@ -1,0 +1,36 @@
+// Oracle and rulings checked against Scryfall on 2026-09-03.
+// CR 702.41a (affinity), 603.6a (landfall), 602.2b (activation costs), and 611.2c
+// (the resolving indestructible effect snapshots its affected permanents).
+(
+  id: "sapling_nursery",
+  name: "Sapling Nursery",
+  face_id: "sapling_nursery",
+  mana_cost: "{6}{G}{G}",
+  types: ["Enchantment"],
+  cost_modifiers: [BattlefieldCountGenericReduction(
+    amount_per_match: 1,
+    filter: (controllers: Controller, required_subtypes: ["Forest"]),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [CreateTokens(token: "treefolk_g_3_4_reach", count: 1)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    source_zone: Battlefield,
+    costs: [Mana("{1}{G}"), ExileSelf],
+    effect: [GrantKeywordsAllPermanents(
+      filter: (any_of: Some([
+        (kind: AnyPermanent, controller: You, required_subtypes: ["Treefolk"]),
+        (kind: AnyPermanent, controller: You, required_subtypes: ["Forest"]),
+      ])),
+      keywords: [Indestructible],
+    )],
+  )],
+)

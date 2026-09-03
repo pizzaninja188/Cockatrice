@@ -55,6 +55,7 @@ enum CostDebit {
         object_id: ObjectId,
         generation: u64,
         owner: PlayerId,
+        source_zone: AbilitySourceZone,
     },
     /// All cards selected for one exile instruction leave simultaneously.
     ExileGroup {
@@ -1368,6 +1369,25 @@ impl GameEngine {
                         return Err(EngineError::Illegal("one object cannot pay two costs"));
                     }
                     let object = &self.state.objects[&permanent_id];
+                    let source_zone = match object.zone {
+                        Zone::Battlefield
+                            if object.controller == player
+                                && self.state.players[idx].battlefield.contains(&permanent_id) =>
+                        {
+                            AbilitySourceZone::Battlefield
+                        }
+                        Zone::Graveyard
+                            if object.owner == player
+                                && self.state.players[idx].graveyard.contains(&permanent_id) =>
+                        {
+                            AbilitySourceZone::Graveyard
+                        }
+                        _ => {
+                            return Err(EngineError::Illegal(
+                                "self-exile cost source is not in its payable zone",
+                            ));
+                        }
+                    };
                     debits.push(CostDebit::Exile {
                         object_id: permanent_id,
                         generation: self
@@ -1377,6 +1397,7 @@ impl GameEngine {
                             .copied()
                             .unwrap_or(0),
                         owner: object.owner,
+                        source_zone,
                     });
                 }
                 AbilityCost::SacrificeSelf => {
@@ -1789,7 +1810,7 @@ impl GameEngine {
         });
     }
 
-    fn exile_cost_object_current(
+    fn graveyard_exile_cost_object_current(
         &self,
         player_idx: usize,
         oid: ObjectId,
@@ -1808,6 +1829,42 @@ impl GameEngine {
             .copied()
             .unwrap_or(0)
             == generation
+    }
+
+    fn self_exile_current(
+        &self,
+        plan: &CostTransactionPlan,
+        oid: ObjectId,
+        generation: u64,
+        owner: PlayerId,
+        source_zone: AbilitySourceZone,
+    ) -> bool {
+        let in_expected_zone = self.state.objects.get(&oid).is_some_and(|object| {
+            object.owner == owner
+                && match source_zone {
+                    AbilitySourceZone::Battlefield => {
+                        object.zone == Zone::Battlefield
+                            && object.controller == plan.player
+                            && self.state.players[plan.player_idx]
+                                .battlefield
+                                .contains(&oid)
+                    }
+                    AbilitySourceZone::Graveyard => {
+                        object.zone == Zone::Graveyard
+                            && owner == plan.player
+                            && self.state.players[plan.player_idx].graveyard.contains(&oid)
+                    }
+                    AbilitySourceZone::Hand => false,
+                }
+        });
+        in_expected_zone
+            && self
+                .state
+                .zone_change_generation
+                .get(&oid)
+                .copied()
+                .unwrap_or(0)
+                == generation
     }
 
     fn revalidate_cost_transaction(&self, plan: &CostTransactionPlan) -> Result<(), EngineError> {
@@ -1973,9 +2030,8 @@ impl GameEngine {
                     object_id,
                     generation,
                     owner,
-                } => {
-                    self.exile_cost_object_current(plan.player_idx, *object_id, *generation, *owner)
-                }
+                    source_zone,
+                } => self.self_exile_current(plan, *object_id, *generation, *owner, *source_zone),
                 CostDebit::ExileGroup {
                     objects,
                     constraint,
@@ -2001,7 +2057,7 @@ impl GameEngine {
                                     *oid,
                                     Some(filter),
                                 )
-                                && self.exile_cost_object_current(
+                                && self.graveyard_exile_cost_object_current(
                                     plan.player_idx,
                                     *oid,
                                     *generation,
@@ -2231,6 +2287,92 @@ mod convoke_transaction_tests {
             object_id,
             zone_change_generation: engine.state.zone_change_generation[&object_id],
         }
+    }
+
+    fn battlefield_self_exile_fixture() -> (GameEngine, ObjectId, Vec<AbilityCost>) {
+        let mut engine = GameEngine::new(218_001, &[0, 1], 20, None, true).unwrap();
+        let source = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&source).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .unwrap();
+        engine.state.players[0].mana_pool.colorless = 1;
+        engine.state.players[0].mana_pool.green = 1;
+        (
+            engine,
+            source,
+            vec![
+                AbilityCost::Mana(ManaCost::parse("{1}{G}").unwrap()),
+                AbilityCost::ExileSelf,
+            ],
+        )
+    }
+
+    #[test]
+    fn issue_218_battlefield_self_exile_commits_mana_and_exact_object() {
+        let (mut engine, source, costs) = battlefield_self_exile_fixture();
+        let generation = engine.state.zone_change_generation[&source];
+        let plan = engine
+            .plan_ability_costs(0, 0, source, &costs, &[], &[], &[], 0, 0)
+            .expect("a controlled battlefield source can exile itself");
+
+        let receipt = engine.commit_cost_transaction(plan).unwrap();
+
+        assert_eq!(engine.state.objects[&source].zone, Zone::Exile);
+        assert!(!engine.state.players[0].battlefield.contains(&source));
+        assert!(engine.state.players[0].exile.contains(&source));
+        assert_eq!(engine.state.zone_change_generation[&source], generation + 1);
+        assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
+        assert_eq!(engine.state.players[0].mana_pool.green, 0);
+        assert!(receipt.paid_card_costs.iter().any(|cost| {
+            matches!(cost, PaidCardCost::Exile { object_id, .. } if *object_id == source)
+        }));
+        assert!(receipt.move_events.iter().any(|event| {
+            matches!(
+                &event.ev,
+                Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                    if moved.object_id == source
+                        && moved.destination
+                            == rv1::permanent_moved::Destination::Exile as i32
+            )
+        }));
+    }
+
+    #[test]
+    fn issue_218_battlefield_self_exile_revalidates_before_any_debit() {
+        let (mut stale_engine, stale_source, costs) = battlefield_self_exile_fixture();
+        let stale_plan = stale_engine
+            .plan_ability_costs(0, 0, stale_source, &costs, &[], &[], &[], 0, 0)
+            .unwrap();
+        *stale_engine
+            .state
+            .zone_change_generation
+            .get_mut(&stale_source)
+            .unwrap() += 1;
+        let stale_before = format!("{:?}", stale_engine.state);
+        assert!(stale_engine.commit_cost_transaction(stale_plan).is_err());
+        assert_eq!(format!("{:?}", stale_engine.state), stale_before);
+
+        let (mut controlled_engine, controlled_source, costs) = battlefield_self_exile_fixture();
+        let controlled_plan = controlled_engine
+            .plan_ability_costs(0, 0, controlled_source, &costs, &[], &[], &[], 0, 0)
+            .unwrap();
+        controlled_engine
+            .state
+            .objects
+            .get_mut(&controlled_source)
+            .unwrap()
+            .controller = 1;
+        let controlled_before = format!("{:?}", controlled_engine.state);
+        assert!(controlled_engine
+            .commit_cost_transaction(controlled_plan)
+            .is_err());
+        assert_eq!(format!("{:?}", controlled_engine.state), controlled_before);
     }
 
     #[test]

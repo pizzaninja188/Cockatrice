@@ -125,7 +125,8 @@ pub enum AbilityCost {
     Discard,
     /// Discard the source object itself from its owner's hand (cycling and typecycling).
     DiscardSelf,
-    /// Exile the source object itself from its owner's graveyard (renew).
+    /// Exile the source object itself from the battlefield or its owner's graveyard. Sapling
+    /// Nursery and Brittle Effigy use the battlefield form; renew uses the graveyard form.
     ExileSelf,
     /// Sacrifice the source permanent as cost (e.g. Bottle Gnomes).
     SacrificeSelf,

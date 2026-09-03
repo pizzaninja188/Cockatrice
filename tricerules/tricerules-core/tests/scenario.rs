@@ -191,6 +191,8 @@ mod issue_205_stack_spell_filters;
 mod issue_216_attachment_scoped_blocking_restrictions;
 #[path = "scenario/issue_217_target_power_scale.rs"]
 mod issue_217_target_power_scale;
+#[path = "scenario/issue_218_battlefield_exile_cost.rs"]
+mod issue_218_battlefield_exile_cost;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

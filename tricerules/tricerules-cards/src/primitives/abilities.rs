@@ -277,9 +277,12 @@ impl ActivatedAbilityDef {
             return Err("discard-self cost requires a hand source".into());
         }
         if self.costs.contains(&AbilityCost::ExileSelf)
-            && self.source_zone != AbilitySourceZone::Graveyard
+            && !matches!(
+                self.source_zone,
+                AbilitySourceZone::Battlefield | AbilitySourceZone::Graveyard
+            )
         {
-            return Err("exile-self cost requires a graveyard source".into());
+            return Err("exile-self cost requires a battlefield or graveyard source".into());
         }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;
