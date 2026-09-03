@@ -877,15 +877,7 @@ impl GameEngine {
             chosen_modes,
             chosen_mode_indices,
             chosen_mode_labels,
-            mana_value: face.mana_cost.mana_value().saturating_add(
-                (face
-                    .mana_cost
-                    .pips
-                    .iter()
-                    .filter(|pip| matches!(pip, ManaSymbol::X))
-                    .count() as u32)
-                    .saturating_mul(x_value),
-            ),
+            mana_value: face.mana_cost.mana_value_on_stack(x_value),
             convoke: face.keywords.contains(&Keyword::Convoke),
             payment: payment_plan,
         })

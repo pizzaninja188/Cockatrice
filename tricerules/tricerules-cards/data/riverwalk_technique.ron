@@ -1,4 +1,4 @@
-// Oracle verified 2026-08-23. CR 400.3, 401.4, 601.2b, 608.2b, and 701.5.
+// Oracle verified 2026-08-23. CR 400.3, 401.4, 601.2b, 608.2b, and 701.6.
 (
   id: "riverwalk_technique",
   name: "Riverwalk Technique",
@@ -21,7 +21,7 @@
         mode_id: "mode_02",
         presentation: OracleLines([3]),
         effects: [CounterTargetSpell(
-          spell_filter: Noncreature,
+          spell_filter: (card_type: Some(Noncreature)),
           unless_controller_pays: None,
         )],
       ),

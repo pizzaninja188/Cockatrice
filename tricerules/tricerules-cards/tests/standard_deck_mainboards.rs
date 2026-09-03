@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
     CardTypeFilter, CombatRestrictionScope, EffectSubject, GameCondition, ObjectCastCostKind,
-    SpellEffectKind, StaticAbilityDef, TargetKind,
+    SpellEffectKind, StackSpellFilter, StaticAbilityDef, TargetKind,
 };
 use tricerules_cards::{
     Amount, CardRegistry, CastCostOptionDef, CounterKind, Keyword, SearchDestination,
@@ -223,7 +223,10 @@ fn dimir_cohort_uses_authoritative_cost_target_and_trigger_shapes() {
     assert!(matches!(
         pierce.spell_effect.as_slice(),
         [SpellEffectKind::CounterTargetSpell {
-            spell_filter: Some(CardTypeFilter::Noncreature),
+            spell_filter: StackSpellFilter {
+                card_type: Some(CardTypeFilter::Noncreature),
+                ..
+            },
             unless_controller_pays: Some(Amount::Fixed(2)),
             ..
         }]

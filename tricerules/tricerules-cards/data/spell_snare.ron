@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-09-03. CR 202.3, 601.2c, 608.2b, and 701.6.
+(
+  id: "spell_snare",
+  name: "Spell Snare",
+  face_id: "spell_snare",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(
+    spell_filter: (min_mana_value: Some(2), max_mana_value: Some(2)),
+    unless_controller_pays: None,
+  )],
+)

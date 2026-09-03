@@ -22,7 +22,7 @@
     )],
   )],
   spell_effect: [CounterTargetSpell(
-    spell_filter: None,
+    spell_filter: (),
     unless_controller_pays_by_cast_cost: Some((
       condition: (
         group_id: "cast_cost_01",

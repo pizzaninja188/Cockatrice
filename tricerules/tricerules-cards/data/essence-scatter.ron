@@ -4,6 +4,9 @@
   face_id: "essence_scatter",
   mana_cost: "{1}{U}",
   types: ["Instant"],
-  // The counter effect restricts its target to a creature spell (CR 701.5).
-  spell_effect: [CounterTargetSpell(spell_filter: Creature, unless_controller_pays: None)],
+  // The counter effect restricts its target to a creature spell (CR 701.6).
+  spell_effect: [CounterTargetSpell(
+    spell_filter: (card_type: Some(Creature)),
+    unless_controller_pays: None,
+  )],
 )

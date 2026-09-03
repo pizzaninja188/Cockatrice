@@ -1,4 +1,4 @@
-// Oracle and rulings checked 2026-09-02. CR 601.2b/f-h, 701.5, and Teamwork.
+// Oracle and rulings checked 2026-09-02. CR 601.2b/f-h, 701.6, and Teamwork.
 (
   id: "we_say_thee_nay!",
   name: "We Say Thee Nay!",
@@ -19,7 +19,7 @@
     )],
   )],
   spell_effect: [CounterTargetSpell(
-    spell_filter: None,
+    spell_filter: (),
     unless_controller_pays_by_cast_cost: Some((
       condition: (group_id: "teamwork", option_id: "teamwork_2", expected_selected: true),
       if_selected: 4,

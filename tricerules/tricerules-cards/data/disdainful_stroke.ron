@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-09-03. CR 202.3, 601.2c, 608.2b, and 701.6.
+(
+  id: "disdainful_stroke",
+  name: "Disdainful Stroke",
+  face_id: "disdainful_stroke",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(
+    spell_filter: (min_mana_value: Some(4)),
+    unless_controller_pays: None,
+  )],
+)

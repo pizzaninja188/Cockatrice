@@ -156,6 +156,19 @@ impl ManaCost {
             .sum()
     }
 
+    /// Mana value while this cost is on the stack (CR 202.3e). Every `{X}` symbol contributes
+    /// the value announced for X, so `{X}{X}{R}` with X=3 has mana value 7.
+    pub fn mana_value_on_stack(&self, chosen_x: u32) -> u32 {
+        self.mana_value().saturating_add(
+            (self
+                .pips
+                .iter()
+                .filter(|pip| matches!(pip, ManaSymbol::X))
+                .count() as u32)
+                .saturating_mul(chosen_x),
+        )
+    }
+
     /// Colors implied by the cost's colored pips (CR 202.2). Colorless/generic/X contribute none.
     /// A hybrid pip contributes *both* of its colors regardless of how it is paid (CR 202.2b);
     /// mono-hybrid and Phyrexian pips contribute their single color (CR 202.2c).
@@ -266,10 +279,12 @@ mod tests {
     }
 
     #[test]
-    fn x_parses_but_values_zero() {
+    fn x_uses_announced_value_only_on_the_stack() {
         let c = cost("{X}{R}");
         assert!(c.has_x());
         assert_eq!(c.mana_value(), 1); // X = 0 off the stack, {R} = 1
+        assert_eq!(c.mana_value_on_stack(4), 5);
+        assert_eq!(cost("{X}{X}{R}").mana_value_on_stack(3), 7);
     }
 
     #[test]

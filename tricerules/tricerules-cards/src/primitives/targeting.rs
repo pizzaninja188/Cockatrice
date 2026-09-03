@@ -49,7 +49,7 @@ pub enum TargetRole<'a> {
     /// The legacy creature-only target used by the two simple exile primitives.
     CreaturePermanent,
     /// A spell, never an ability, currently on the stack.
-    StackSpell(Option<CardTypeFilter>),
+    StackSpell(&'a StackSpellFilter),
     /// A card in a graveyard constrained by its owner and card characteristics.
     GraveyardCard(&'a GraveyardFilter),
 }
@@ -412,6 +412,30 @@ pub enum CardTypeFilter {
     NonlandPermanent,
     /// Matches any object that does not have the creature card type.
     Noncreature,
+}
+
+/// Characteristics required of a spell target on the stack. Type and inclusive mana-value
+/// bounds compose with AND. Equal bounds express an exact mana value (Spell Snare), while a
+/// single minimum or maximum supports open-ended filters (Disdainful Stroke).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct StackSpellFilter {
+    #[serde(default)]
+    pub card_type: Option<CardTypeFilter>,
+    #[serde(default)]
+    pub min_mana_value: Option<u32>,
+    #[serde(default)]
+    pub max_mana_value: Option<u32>,
+}
+
+impl StackSpellFilter {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        validate_mana_value_bounds(self.min_mana_value, self.max_mana_value)
+    }
+
+    pub fn is_unrestricted(&self) -> bool {
+        self == &Self::default()
+    }
 }
 
 impl CardTypeFilter {
@@ -1312,7 +1336,10 @@ mod tests {
         };
         let creature = SpellEffectKind::ExileTargetGainLifeEqualToPower;
         let stack = SpellEffectKind::CounterTargetSpell {
-            spell_filter: Some(CardTypeFilter::Creature),
+            spell_filter: StackSpellFilter {
+                card_type: Some(CardTypeFilter::Creature),
+                ..Default::default()
+            },
             unless_controller_pays: None,
             unless_controller_pays_by_cast_cost: None,
         };
@@ -1325,10 +1352,13 @@ mod tests {
             [TargetRole::Filtered(_)]
         ));
         assert_eq!(creature.target_roles(), [TargetRole::CreaturePermanent]);
-        assert_eq!(
-            stack.target_roles(),
-            [TargetRole::StackSpell(Some(CardTypeFilter::Creature))]
-        );
+        assert!(matches!(
+            stack.target_roles().as_slice(),
+            [TargetRole::StackSpell(StackSpellFilter {
+                card_type: Some(CardTypeFilter::Creature),
+                ..
+            })]
+        ));
         assert!(matches!(
             graveyard.target_roles().as_slice(),
             [TargetRole::GraveyardCard(_)]

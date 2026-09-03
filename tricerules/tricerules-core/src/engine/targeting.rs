@@ -598,7 +598,7 @@ fn target_role_legality_error(
         ),
         TargetRole::StackSpell(spell_filter) => (
             stack_spell_target_legal(&engine.state, engine.registry, tid, spell_filter),
-            "target must be a spell of the required type on the stack",
+            "target must be a spell with the required characteristics on the stack",
         ),
         TargetRole::GraveyardCard(filter) => (
             graveyard_target_legal(engine, filter, tid, caster, source, trigger_context),
@@ -981,15 +981,14 @@ fn target_filter_legal_with_context(
     true
 }
 
-/// CR 701.5/707.10: legality of `tid` as the target of a counter/copy spell. The object must be a
-/// spell on the stack (not an activated/triggered ability), and — when `spell_filter` is `Some` —
-/// must be a spell of that type (Essence Scatter = Creature, Negate = Noncreature, Twincast =
-/// InstantOrSorcery). `None` accepts any spell (Counterspell).
+/// CR 701.6/707.10: legality of `tid` as the target of a counter/copy spell. The object must be a
+/// spell on the stack (not an activated/triggered ability). Type and mana-value restrictions are
+/// evaluated against the selected face and its announced X value. The default accepts any spell.
 fn stack_spell_target_legal(
     state: &GameState,
     registry: &CardRegistry,
     tid: ObjectId,
-    spell_filter: Option<CardTypeFilter>,
+    spell_filter: &StackSpellFilter,
 ) -> bool {
     let Some(item) = state
         .stack
@@ -998,16 +997,28 @@ fn stack_spell_target_legal(
     else {
         return false;
     };
-    let Some(filter) = spell_filter else {
+    if spell_filter.is_unrestricted() {
         return true;
-    };
+    }
     let Some(face) = registry
         .get(&item.card_id)
         .and_then(|d| d.face(item.face_index))
     else {
         return false;
     };
-    face.matches_card_type(filter)
+    if spell_filter
+        .card_type
+        .is_some_and(|filter| !face.matches_card_type(filter))
+    {
+        return false;
+    }
+    let mana_value = face.mana_cost.mana_value_on_stack(item.chosen_x);
+    spell_filter
+        .min_mana_value
+        .is_none_or(|minimum| mana_value >= minimum)
+        && spell_filter
+            .max_mana_value
+            .is_none_or(|maximum| mana_value <= maximum)
 }
 
 pub(super) fn effect_has_legal_target_at_resolution(
@@ -1918,12 +1929,12 @@ fn spell_target_legality_error_with_context(
             }
         }
         // CR 115.2 / 707.10b: counter and copy effects target spells, not abilities. The optional
-        // `spell_filter` further restricts the spell type (Essence Scatter, Negate, Twincast).
+        // `spell_filter` further restricts spell characteristics (Essence Scatter, Spell Snare).
         SpellEffectKind::CounterTargetSpell { spell_filter, .. }
         | SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
-            if !stack_spell_target_legal(&engine.state, engine.registry, tid, *spell_filter) {
+            if !stack_spell_target_legal(&engine.state, engine.registry, tid, spell_filter) {
                 return Err(EngineError::Illegal(
-                    "target must be a spell of the required type on the stack",
+                    "target must be a spell with the required characteristics on the stack",
                 ));
             }
         }
@@ -2167,6 +2178,156 @@ fn compute_targets_with_context(
 
 #[cfg(test)]
 mod tests {
+    fn issue_205_stack_item(
+        id: ObjectId,
+        card_id: &str,
+        face_index: usize,
+        chosen_x: u32,
+    ) -> StackItem {
+        StackItem {
+            id,
+            controller: 1,
+            card_id: card_id.into(),
+            targets: Vec::new(),
+            ability_text: None,
+            source_permanent_id: None,
+            source_zone_change: 0,
+            source_face_change: 0,
+            ability_index: None,
+            activated_ability: None,
+            triggered_ability: None,
+            is_triggered: false,
+            is_copy: false,
+            face_index,
+            cast_method: SpellCastMethod::Normal,
+            sneak_attack: None,
+            chosen_x,
+            chosen_modes: Vec::new(),
+            cast_condition_results: Vec::new(),
+            cast_occurrence: None,
+            cast_cost_receipts: Vec::new(),
+            payment_result: CardResultCohort::default(),
+            resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
+            trigger_context: TriggerContext::default(),
+        }
+    }
+
+    #[test]
+    fn issue_205_stack_spell_mana_value_bounds_filter_targets() {
+        let registry = CardRegistry::from_chunks_and_tokens(
+            &[
+                r#"(id: "mv_one", name: "MV One", face_id: "mv_one", mana_cost: "{U}", types: ["Instant"])"#,
+                r#"(id: "mv_two", name: "MV Two", face_id: "mv_two", mana_cost: "{1}{U}", types: ["Instant"])"#,
+                r#"(id: "mv_four", name: "MV Four", face_id: "mv_four", mana_cost: "{3}{U}", types: ["Instant"])"#,
+                r#"(id: "x_spell", name: "X Spell", face_id: "x_spell", mana_cost: "{X}{R}", types: ["Sorcery"])"#,
+                r#"(id: "split_spell", name: "Small // Large", layout: Split, faces: [(name: "Small", face_id: "small", mana_cost: "{U}", types: ["Instant"]), (name: "Large", face_id: "large", mana_cost: "{4}{U}", types: ["Instant"])])"#,
+            ],
+            &[],
+        )
+        .unwrap();
+        let decks = Some(vec![vec!["forest".into(); 7], vec!["forest".into(); 7]]);
+        let mut engine = GameEngine::new(205, &[0, 1], 20, decks, true).unwrap();
+        engine.state.stack = vec![
+            issue_205_stack_item(101, "mv_one", 0, 0),
+            issue_205_stack_item(102, "mv_two", 0, 0),
+            issue_205_stack_item(104, "mv_four", 0, 0),
+            issue_205_stack_item(105, "split_spell", 1, 0),
+            issue_205_stack_item(106, "x_spell", 0, 3),
+        ];
+
+        let exact_two = StackSpellFilter {
+            min_mana_value: Some(2),
+            max_mana_value: Some(2),
+            ..Default::default()
+        };
+        assert!(!stack_spell_target_legal(
+            &engine.state,
+            &registry,
+            101,
+            &exact_two
+        ));
+        assert!(stack_spell_target_legal(
+            &engine.state,
+            &registry,
+            102,
+            &exact_two
+        ));
+        assert!(!stack_spell_target_legal(
+            &engine.state,
+            &registry,
+            104,
+            &exact_two
+        ));
+
+        let at_least_four = StackSpellFilter {
+            min_mana_value: Some(4),
+            ..Default::default()
+        };
+        assert!(!stack_spell_target_legal(
+            &engine.state,
+            &registry,
+            102,
+            &at_least_four
+        ));
+        assert!(stack_spell_target_legal(
+            &engine.state,
+            &registry,
+            104,
+            &at_least_four
+        ));
+        assert!(stack_spell_target_legal(
+            &engine.state,
+            &registry,
+            105,
+            &at_least_four
+        ));
+        assert!(stack_spell_target_legal(
+            &engine.state,
+            &registry,
+            106,
+            &at_least_four
+        ));
+
+        let mut copied_x_spell = engine.state.stack.last().unwrap().clone();
+        copied_x_spell.id = 107;
+        copied_x_spell.is_copy = true;
+        engine.state.stack.push(copied_x_spell);
+        assert!(stack_spell_target_legal(
+            &engine.state,
+            &registry,
+            107,
+            &at_least_four
+        ));
+
+        let mut ability = issue_205_stack_item(108, "mv_four", 0, 0);
+        ability.ability_text = Some("Activated ability".into());
+        engine.state.stack.push(ability);
+        assert!(!stack_spell_target_legal(
+            &engine.state,
+            &registry,
+            108,
+            &at_least_four
+        ));
+
+        let at_most_two = StackSpellFilter {
+            max_mana_value: Some(2),
+            ..Default::default()
+        };
+        assert!(stack_spell_target_legal(
+            &engine.state,
+            &registry,
+            102,
+            &at_most_two
+        ));
+        assert!(!stack_spell_target_legal(
+            &engine.state,
+            &registry,
+            104,
+            &at_most_two
+        ));
+    }
+
     #[test]
     fn issue_176_exile_role_accepts_noncreature_artifacts() {
         let card = r#"(id: "test", name: "Test", face_id: "test", types: ["Instant"], spell_effect: [Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact], excluded_permanent_types: [Creature])))])"#;

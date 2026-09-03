@@ -4,6 +4,6 @@
   face_id: "counterspell",
   mana_cost: "{U}{U}",
   types: ["Instant"],
-  // The counter effect has no spell-type restriction (CR 701.5).
-  spell_effect: [CounterTargetSpell(spell_filter: None, unless_controller_pays: None)],
+  // The counter effect has no spell restriction (CR 701.6).
+  spell_effect: [CounterTargetSpell(spell_filter: (), unless_controller_pays: None)],
 )

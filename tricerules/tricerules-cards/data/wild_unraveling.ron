@@ -8,5 +8,5 @@
       Mana(option_id: "option_02", presentation: Fallback, kind: AdditionalPayment, cost: "{1}"),
     ],
   )],
-  spell_effect: [CounterTargetSpell(spell_filter: None, unless_controller_pays: None)],
+  spell_effect: [CounterTargetSpell(spell_filter: (), unless_controller_pays: None)],
 )

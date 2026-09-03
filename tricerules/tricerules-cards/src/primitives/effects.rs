@@ -5,8 +5,8 @@ use super::{
     Color, ConditionObjectRef, CountExpression, CreatureScopeFilter, DamageDivision, EventZone,
     GameCondition, GraveyardDestination, GraveyardFilter, Keyword, LifeAmount, PermanentTypeFilter,
     PowerComparison, PowerToughnessCharacteristic, ProtectionQuality, ReflexiveTriggeredAbilityDef,
-    SpecialActionKind, TargetController, TargetFilter, TargetKind, TargetRole, TriggerCondition,
-    TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
+    SpecialActionKind, StackSpellFilter, TargetController, TargetFilter, TargetKind, TargetRole,
+    TriggerCondition, TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
 };
 #[cfg(test)]
 use super::{
@@ -967,14 +967,16 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_creature")]
         target: TargetFilter,
     },
-    /// CR 701.5: counter target spell on the stack. `spell_filter` narrows which spells are legal
-    /// targets — `None` is unrestricted (Counterspell), `Some(Creature)` is Essence Scatter,
-    /// `Some(Noncreature)` is Negate. `unless_controller_pays` parks resolution for an optional
-    /// generic-mana payment by that spell's controller (Convolute, Mana Leak). Reuses
-    /// [`CardTypeFilter`] so any future "counter target X spell" needs no new variant.
+    /// CR 701.6: counter target spell on the stack. `spell_filter` narrows which spells are legal
+    /// targets by type and/or inclusive mana-value bounds. The default is unrestricted
+    /// (Counterspell); creature and noncreature type filters cover Essence Scatter and Negate;
+    /// exact and minimum mana values cover Spell Snare and Disdainful Stroke.
+    /// `unless_controller_pays` parks resolution for an optional
+    /// generic-mana payment by that spell's controller (Convolute, Mana Leak). The composed
+    /// filter keeps type and mana-value restrictions on one reusable target path.
     CounterTargetSpell {
         #[serde(default)]
-        spell_filter: Option<CardTypeFilter>,
+        spell_filter: StackSpellFilter,
         #[serde(default)]
         unless_controller_pays: Option<Amount>,
         /// Receipt-conditioned soft-counter amount. Dispelling Exhale uses `{4}` when a Dragon
@@ -995,13 +997,14 @@ pub enum SpellEffectKind {
     /// X, and targets; CR 707.10c lets the copy's controller choose new targets (deferred — copies
     /// keep the original's targets for now). `count` covers Twincast / Fork / Reverberate (1) and
     /// "copy it twice" effects without a new variant. `spell_filter` restricts the legal target
-    /// the same way as [`Self::CounterTargetSpell`] — `Some(InstantOrSorcery)` for Twincast /
-    /// Reverberate ("copy target instant or sorcery spell"); only spells (not abilities) qualify.
+    /// the same way as [`Self::CounterTargetSpell`] — `card_type: Some(InstantOrSorcery)` for
+    /// Twincast / Reverberate ("copy target instant or sorcery spell"); only spells (not
+    /// abilities) qualify.
     CopyTargetSpell {
         #[serde(default = "one")]
         count: u32,
         #[serde(default)]
-        spell_filter: Option<CardTypeFilter>,
+        spell_filter: StackSpellFilter,
     },
     /// CR 613.4 layer 7c: give every creature matching `filter` +power/+toughness until end of
     /// turn (the mass, one-shot sibling of [`Self::PumpTarget`]). Untargeted — `filter` selects
@@ -2174,7 +2177,7 @@ impl SpellEffectKind {
             }
             SpellEffectKind::CounterTargetSpell { spell_filter, .. }
             | SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
-                vec![TargetRole::StackSpell(*spell_filter)]
+                vec![TargetRole::StackSpell(spell_filter)]
             }
             SpellEffectKind::MoveGraveyardCards { filter, .. } => {
                 vec![TargetRole::GraveyardCard(filter)]
@@ -2496,6 +2499,11 @@ impl SpellEffectKind {
         }
         for filter in self.target_filters() {
             filter.validate_target_constraints()?;
+        }
+        if let SpellEffectKind::CounterTargetSpell { spell_filter, .. }
+        | SpellEffectKind::CopyTargetSpell { spell_filter, .. } = self
+        {
+            spell_filter.validate()?;
         }
         if let SpellEffectKind::MoveGraveyardCards { filter, .. } = self {
             filter.validate()?;

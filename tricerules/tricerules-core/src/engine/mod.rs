@@ -52,7 +52,7 @@ use tricerules_cards::primitives::{
     RelativePlayerSet, ResolutionBranchDef, ResolutionCost, ReturnController, SearchDestination,
     SearchSelectionSlot, SearchZoneSelection, SpecialActionAffected, SpecialActionKind,
     SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin, SpellCostModifier, SpellEffectKind,
-    SpellManaSpentComparison, StaticAbilityDef, StaticDamagePreventionAmount,
+    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, StaticDamagePreventionAmount,
     TapTriggerCardinality, TargetController, TargetFilter, TargetKind, TargetingCostAction,
     TargetingCostProtected, TargetingDef, TargetingSourceFilter, TriggerCondition,
     TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,

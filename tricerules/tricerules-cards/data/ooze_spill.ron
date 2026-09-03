@@ -6,7 +6,7 @@
   mana_cost: "{1}{U}{U}",
   types: ["Instant"],
   spell_effect: [
-    CounterTargetSpell(spell_filter: None, unless_controller_pays: None),
+    CounterTargetSpell(spell_filter: (), unless_controller_pays: None),
     CreateTokens(token: "mutagen", count: 1),
   ],
 )

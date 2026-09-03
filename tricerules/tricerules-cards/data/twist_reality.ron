@@ -11,7 +11,7 @@
       (
         mode_id: "mode_01",
         presentation: OracleLines([2]),
-        effects: [CounterTargetSpell(spell_filter: None, unless_controller_pays: None)],
+        effects: [CounterTargetSpell(spell_filter: (), unless_controller_pays: None)],
       ),
       (
         mode_id: "mode_02",

@@ -6,5 +6,8 @@
   types: ["Instant"],
   // CR 707.10 / 707.10c: copy target instant or sorcery spell; the copy's controller
   // may choose new targets for the copy before it lands on the stack.
-  spell_effect: [CopyTargetSpell(count: 1, spell_filter: InstantOrSorcery)],
+  spell_effect: [CopyTargetSpell(
+    count: 1,
+    spell_filter: (card_type: Some(InstantOrSorcery)),
+  )],
 )

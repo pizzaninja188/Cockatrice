@@ -516,17 +516,31 @@ fn firebending_uses_a_resolving_combat_retained_mana_effect() {
 #[test]
 fn soft_counter_payment_must_be_nonzero() {
     let invalid = SpellEffectKind::CounterTargetSpell {
-        spell_filter: None,
+        spell_filter: StackSpellFilter::default(),
         unless_controller_pays: Some(Amount::Fixed(0)),
         unless_controller_pays_by_cast_cost: None,
     };
     assert!(invalid.validate(EffectContext::Spell).is_err());
     let mana_leak_shape = SpellEffectKind::CounterTargetSpell {
-        spell_filter: None,
+        spell_filter: StackSpellFilter::default(),
         unless_controller_pays: Some(Amount::Fixed(3)),
         unless_controller_pays_by_cast_cost: None,
     };
     assert!(mana_leak_shape.validate(EffectContext::Spell).is_ok());
+}
+
+#[test]
+fn stack_spell_filter_rejects_inverted_mana_value_bounds() {
+    let invalid = SpellEffectKind::CounterTargetSpell {
+        spell_filter: StackSpellFilter {
+            min_mana_value: Some(4),
+            max_mana_value: Some(2),
+            ..Default::default()
+        },
+        unless_controller_pays: None,
+        unless_controller_pays_by_cast_cost: None,
+    };
+    assert!(invalid.validate(EffectContext::Spell).is_err());
 }
 
 #[test]

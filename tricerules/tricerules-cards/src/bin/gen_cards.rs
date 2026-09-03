@@ -27,7 +27,9 @@ use flate2::read::GzDecoder;
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use tricerules_cards::primitives::{EffectSubject, PlayerRecipient, TargetFilter};
+use tricerules_cards::primitives::{
+    EffectSubject, PlayerRecipient, StackSpellFilter, TargetFilter,
+};
 use tricerules_cards::{
     external_oracle_lines, slugify, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
     ActivatedAbilityDef, ActivationTiming, Amount, CardFaceId, CardRegistry, Color, Keyword,
@@ -507,7 +509,7 @@ fn parse_spell_recipe(text: &str) -> Option<(SpellEffectKind, &'static str)> {
     if text == "Counter target spell." {
         return Some((
             SpellEffectKind::CounterTargetSpell {
-                spell_filter: None,
+                spell_filter: StackSpellFilter::default(),
                 unless_controller_pays: None,
                 unless_controller_pays_by_cast_cost: None,
             },
@@ -845,10 +847,12 @@ fn render_generated_effect(effect: &SpellEffectKind) -> String {
             "ReturnToOwnersHand(subject: Chosen((kind: Creature)))".into()
         }
         SpellEffectKind::CounterTargetSpell {
-            spell_filter: None,
+            spell_filter,
             unless_controller_pays: None,
             unless_controller_pays_by_cast_cost: None,
-        } => "CounterTargetSpell(spell_filter: None, unless_controller_pays: None)".into(),
+        } if spell_filter.is_unrestricted() => {
+            "CounterTargetSpell(spell_filter: (), unless_controller_pays: None)".into()
+        }
         SpellEffectKind::PumpTarget {
             power,
             toughness,
@@ -2052,7 +2056,7 @@ mod tests {
                     None,
                 ),
                 SpellEffectKind::CounterTargetSpell {
-                    spell_filter: None,
+                    spell_filter: StackSpellFilter::default(),
                     unless_controller_pays: None,
                     unless_controller_pays_by_cast_cost: None,
                 },

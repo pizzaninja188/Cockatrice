@@ -7,7 +7,7 @@
   mana_cost: "{1}{U}",
   types: ["Instant"],
   spell_effect: [
-    CounterTargetSpell(spell_filter: None, unless_controller_pays: Some(2)),
+    CounterTargetSpell(spell_filter: (), unless_controller_pays: Some(2)),
     ChooseResolutionBranch(
       selection: FirstApplicable,
       branches: [
