@@ -1,0 +1,14 @@
+// CR 111.10s predefined Map token, verified against the 2026-08-19 Comprehensive Rules.
+(
+  id: "map",
+  name: "Map",
+  face_id: "map",
+  types: ["Artifact", "Map"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    timing: SorcerySpeed,
+    costs: [Mana("{1}"), Tap, SacrificeSelf],
+    effect: [Explore(subject: Chosen((kind: Creature, controller: You)))],
+  )],
+)

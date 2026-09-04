@@ -23,6 +23,7 @@ use super::*;
 mod attacking_tokens;
 mod branches;
 mod copy_choices;
+mod explore;
 mod hand_choice;
 mod library_order;
 mod library_search;
@@ -249,6 +250,9 @@ impl GameEngine {
             }
             ResolutionContinuation::LibraryLook { .. } => {
                 return self.finish_look_choose_bottom(pending, chosen);
+            }
+            ResolutionContinuation::Explore { .. } => {
+                return self.finish_explore_choice(pending, chosen);
             }
             ResolutionContinuation::ManifestDread { .. } => {
                 return self.finish_manifest_dread(pending, chosen[0]);

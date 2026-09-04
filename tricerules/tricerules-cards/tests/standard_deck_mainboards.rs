@@ -163,6 +163,15 @@ const COHORT: &[ExpectedCard] = &[
         stats: (Some(4), Some(3)),
         keywords: &[Keyword::Trample],
     },
+    ExpectedCard {
+        id: "spyglass_siren",
+        name: "Spyglass Siren",
+        mana_cost: "{U}",
+        supertypes: &[],
+        types: &["Creature", "Siren", "Pirate"],
+        stats: (Some(1), Some(1)),
+        keywords: &[Keyword::Flying],
+    },
 ];
 
 #[test]

@@ -1556,6 +1556,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::LibraryPartition { .. } => {
                         zones::library_partition(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::Explore { .. } => zones::explore(&mut cx, effect)?,
                     SpellEffectKind::ManifestDread => zones::manifest_dread(&mut cx)?,
                     effect @ SpellEffectKind::LookChooseToHand { .. } => {
                         zones::look_choose_to_hand(&mut cx, effect)?

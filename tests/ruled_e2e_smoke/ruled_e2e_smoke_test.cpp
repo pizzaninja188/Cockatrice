@@ -8663,6 +8663,185 @@ TEST_F(RuledE2ESmokeTest, DemolitionFieldRoutesIndependentPrivateSearchesToBothS
     }
 }
 
+TEST_F(RuledE2ESmokeTest, SpyglassSirenMapExplorePublishesOnePublicLibraryCardToBothSeats)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("explorep1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("explorep2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Storm Crow")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "Explore game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "Explore game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 && (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority for Explore"));
+    };
+    auto devPutBattlefield = [&](int player, const char *cardName) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(player);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(cardName);
+        put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        put->set_ready(true);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1 for Explore").arg(cardName));
+    };
+    auto findPermanent = [](const SmokeClient &client, int controller,
+                            const QString &cardId) -> const SmokeClient::Permanent * {
+        const auto player = client.battlefieldByPlayer.find(controller);
+        if (player == client.battlefieldByPlayer.end()) {
+            return nullptr;
+        }
+        const auto permanent = std::find_if(player->second.begin(), player->second.end(),
+                                            [&](const auto &candidate) { return candidate.cardId == cardId; });
+        return permanent == player->second.end() ? nullptr : &*permanent;
+    };
+
+    ASSERT_TRUE(devPutBattlefield(p1.myId, "Spyglass Siren"));
+    ASSERT_EQ(p1.stackDepth, 1);
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+
+    const auto *siren = findPermanent(p1, p1.myId, QStringLiteral("spyglass_siren"));
+    const auto *map = findPermanent(p1, p1.myId, QStringLiteral("map"));
+    const auto *observerMap = findPermanent(p2, p1.myId, QStringLiteral("map"));
+    ASSERT_NE(siren, nullptr);
+    ASSERT_NE(map, nullptr);
+    ASSERT_NE(observerMap, nullptr);
+    const quint32 sirenOid = siren->oid;
+    const quint32 mapOid = map->oid;
+    const quint64 mapGeneration = map->generation;
+    ASSERT_EQ(observerMap->oid, mapOid);
+
+    ruled::v1::RuledCommand addMana;
+    addMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_c(1);
+    ASSERT_TRUE(sendAndPump(p1, addMana, QStringLiteral("dev: add {1} for Map")));
+
+    const quint64 abilityKey = static_cast<quint64>(mapOid) << 32;
+    const auto legal = p1.latestLegal.valid_targets_by_ability().find(abilityKey);
+    ASSERT_NE(legal, p1.latestLegal.valid_targets_by_ability().end());
+    ASSERT_EQ(legal->second.groups_size(), 1);
+    const auto &group = legal->second.groups(0);
+    ASSERT_TRUE(std::find(group.valid_permanent_ids().begin(), group.valid_permanent_ids().end(), sirenOid) !=
+                group.valid_permanent_ids().end());
+
+    p1.pendingChoice.reset();
+    p2.pendingChoice.reset();
+    p1.lastResolutionChoice.reset();
+    p2.lastResolutionChoice.reset();
+    ruled::v1::RuledCommand activate;
+    auto *ability = activate.mutable_activate_ability();
+    ability->set_source_object_id(mapOid);
+    ability->set_expected_zone_change_generation(mapGeneration);
+    ability->set_ability_index(0);
+    auto *target = ability->add_targets();
+    target->set_object_id(sirenOid);
+    target->set_group_index(group.group_index());
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    ASSERT_TRUE(sendAndPump(p1, activate, QStringLiteral("activate Map targeting Spyglass Siren")));
+    EXPECT_EQ(findPermanent(p1, p1.myId, QStringLiteral("map")), nullptr);
+    EXPECT_EQ(findPermanent(p2, p1.myId, QStringLiteral("map")), nullptr);
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+
+    ASSERT_TRUE(p1.pendingChoice.has_value());
+    ASSERT_TRUE(p2.lastResolutionChoice.has_value());
+    const auto &chooser = *p1.pendingChoice;
+    const auto &observer = *p2.lastResolutionChoice;
+    ASSERT_EQ(chooser.choice_kind(), ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    ASSERT_EQ(observer.choice_kind(), ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    ASSERT_EQ(chooser.candidate_names_size(), 1);
+    ASSERT_EQ(observer.candidate_names_size(), 1);
+    EXPECT_EQ(chooser.candidate_names(0), "Storm Crow");
+    EXPECT_EQ(observer.candidate_names(0), "Storm Crow");
+    EXPECT_EQ(chooser.reveal_audience(), ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
+    EXPECT_EQ(observer.reveal_audience(), ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
+    ASSERT_EQ(chooser.candidate_selectable_size(), 1);
+    EXPECT_TRUE(chooser.candidate_selectable(0));
+    EXPECT_EQ(observer.candidate_selectable_size(), 0);
+    EXPECT_EQ(observer.prompt_text(), "Opponent is making a resolution choice.");
+    ASSERT_EQ(chooser.candidate_server_card_ids_size(), 1);
+    ASSERT_EQ(observer.candidate_server_card_ids_size(), 1);
+    EXPECT_EQ(chooser.candidate_server_card_ids(0), observer.candidate_server_card_ids(0));
+    ruled::v1::RuledCommand graveyard;
+    graveyard.mutable_submit_resolution_choice()->add_chosen_object_ids(chooser.candidate_object_ids(0));
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(sendAndPump(p1, graveyard, QStringLiteral("put explored Storm Crow into graveyard")));
+    EXPECT_FALSE(p1.pendingChoice.has_value());
+    EXPECT_EQ(p1.stackDepth, 0);
+    EXPECT_EQ(p2.stackDepth, 0);
+
+    auto exploredMove = [](const SmokeClient &client) {
+        return std::find_if(client.physicalMoveEvents.begin(), client.physicalMoveEvents.end(),
+                            [](const Event_MoveCard &move) {
+                                return move.start_zone() == ZoneNames::DECK && move.target_zone() == ZoneNames::GRAVE &&
+                                       move.card_name() == "Storm Crow";
+                            });
+    };
+    const auto p1Move = exploredMove(p1);
+    const auto p2Move = exploredMove(p2);
+    ASSERT_NE(p1Move, p1.physicalMoveEvents.end());
+    ASSERT_NE(p2Move, p2.physicalMoveEvents.end());
+    EXPECT_EQ(p1Move->card_id(), p2Move->card_id());
+    EXPECT_EQ(p1Move->new_card_id(), p2Move->new_card_id());
+
+    for (const SmokeClient *client : {&p1, &p2}) {
+        const auto *updatedSiren = findPermanent(*client, p1.myId, QStringLiteral("spyglass_siren"));
+        ASSERT_NE(updatedSiren, nullptr);
+        EXPECT_EQ(updatedSiren->power, 2);
+        EXPECT_EQ(updatedSiren->toughness, 2);
+        EXPECT_TRUE(client->libraryDetailsStayedConcealed);
+    }
+}
+
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can
 // rebuild it. Servatrice used to reconnect anyway: the fresh connection answered "no session",
 // which is an ok=false the driver reports as a plain context error — invisible in the client. The

@@ -1,0 +1,17 @@
+// Oracle checked 2026-09-04; Explore is CR 701.44 and the predefined Map token is CR 111.10s.
+(
+  id: "spyglass_siren",
+  name: "Spyglass Siren",
+  face_id: "spyglass_siren",
+  mana_cost: "{U}",
+  types: ["Creature", "Siren", "Pirate"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "map", count: 1)],
+  )],
+)

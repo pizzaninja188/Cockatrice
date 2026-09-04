@@ -1300,6 +1300,53 @@ TEST_F(RuledBatchTest, PublicOpponentHandRevealPublishesIdentityButNotSelectionA
     EXPECT_EQ(p2Choice.revealed_zone_owner_player_id(), 2);
 }
 
+// CR 701.44a: Explore reveals the top library card to every participant, but only that
+// permanent's controller may choose whether a revealed nonland goes to the graveyard.
+TEST_F(RuledBatchTest, PublicExploreLibraryRevealPublishesIdentityButNotSelectionAuthority)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    choice->set_prompt_text("Put the revealed card into your graveyard?");
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
+    choice->set_revealed_zone_owner_player_id(1);
+    choice->add_candidate_object_ids(101);
+    choice->add_candidate_card_ids("grizzly_bears");
+    choice->add_candidate_names("Grizzly Bears");
+    choice->add_candidate_selectable(true);
+
+    const auto forP1 = redactFor(batch, p1);
+    const auto p1ChoiceIt = std::find_if(forP1.events().begin(), forP1.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p1ChoiceIt, forP1.events().end());
+    const auto &p1Choice = p1ChoiceIt->resolution_choice_required();
+    ASSERT_EQ(p1Choice.candidate_names_size(), 1);
+    ASSERT_EQ(p1Choice.candidate_server_card_ids_size(), 1);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(0), 0);
+    ASSERT_EQ(p1Choice.candidate_selectable_size(), 1);
+    EXPECT_TRUE(p1Choice.candidate_selectable(0));
+    EXPECT_EQ(p1Choice.prompt_text(), "Put the revealed card into your graveyard?");
+
+    const auto forP2 = redactFor(batch, p2);
+    const auto p2ChoiceIt = std::find_if(forP2.events().begin(), forP2.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p2ChoiceIt, forP2.events().end());
+    const auto &p2Choice = p2ChoiceIt->resolution_choice_required();
+    ASSERT_EQ(p2Choice.candidate_object_ids_size(), 1);
+    ASSERT_EQ(p2Choice.candidate_card_ids_size(), 1);
+    ASSERT_EQ(p2Choice.candidate_names_size(), 1);
+    ASSERT_EQ(p2Choice.candidate_server_card_ids_size(), 1);
+    EXPECT_EQ(p2Choice.candidate_names(0), "Grizzly Bears");
+    EXPECT_EQ(p2Choice.candidate_selectable_size(), 0);
+    EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
+    EXPECT_EQ(p2Choice.reveal_audience(), ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
+    ASSERT_TRUE(p2Choice.has_revealed_zone_owner_player_id());
+    EXPECT_EQ(p2Choice.revealed_zone_owner_player_id(), 1);
+}
+
 TEST_F(RuledBatchTest, PendingPublicRevealIsRestoredOnJoinAndClearedByNextAuthoritativeBatch)
 {
     ruled::v1::IpcResponse response;

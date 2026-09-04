@@ -549,6 +549,11 @@ enum GameEvent {
     Surveilled {
         player: PlayerId,
     },
+    /// CR 701.44b: one completed explore action. The exact permanent generation and controller
+    /// are retained even when no counter or library action was possible.
+    Explored {
+        object: TriggerObjectRef,
+    },
     /// CR 700.13: one completed original cast, activation, or triggered stack placement.
     /// Internal only; target identities and private information never enter a history payload.
     CrimeCommitted {

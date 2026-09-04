@@ -5304,6 +5304,52 @@ TEST_F(RuledClientTest, LibraryLookChoiceShowsEveryCardImageButOnlyMatchingCards
     EXPECT_EQ(state->resolutionHandPickClickOrderFor(3), 1);
 }
 
+TEST_F(RuledClientTest, PublicExploreLibraryLookIsInteractiveOnlyForItsController)
+{
+    QSignalSpy publicReveal(state, &RuledClientState::publicRevealChanged);
+    QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_source_object_id(206);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    rcr->set_prompt_text("Put Storm Crow into your graveyard?");
+    rcr->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
+    rcr->set_revealed_zone_owner_player_id(kLocalPlayer);
+    rcr->set_min(0);
+    rcr->set_max(1);
+    rcr->add_candidate_object_ids(41);
+    rcr->add_candidate_card_ids("storm_crow");
+    rcr->add_candidate_names("Storm Crow");
+    rcr->add_candidate_server_card_ids(0);
+    rcr->add_candidate_selectable(true);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPublicReveal());
+    EXPECT_EQ(state->publicRevealCandidateNames(), QStringList({QStringLiteral("Storm Crow")}));
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Deck);
+    EXPECT_TRUE(state->isResolutionHandPickCardSelectable(0));
+    EXPECT_EQ(publicReveal.count(), 1);
+    EXPECT_EQ(started.count(), 1);
+
+    ruled::v1::RuledEventBatch completed;
+    completed.add_events()->mutable_log()->set_text("Explore completed.");
+    apply(completed);
+    EXPECT_FALSE(state->hasPublicReveal());
+
+    ruled::v1::RuledEventBatch observer;
+    auto *observed = observer.add_events()->mutable_resolution_choice_required();
+    observed->CopyFrom(*rcr);
+    observed->set_deciding_player_id(kOpponent);
+    observed->clear_candidate_selectable();
+    observed->set_prompt_text("Opponent is making a resolution choice.");
+    apply(observer);
+    EXPECT_TRUE(state->hasPublicReveal());
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    EXPECT_EQ(started.count(), 1);
+}
+
 TEST_F(RuledClientTest, LibraryLookOrderingUsesImageClickOrderAndMalformedEligibilityFailsClosed)
 {
     QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);

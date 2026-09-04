@@ -1631,3 +1631,37 @@ fn untargeted_filter_preserves_you_scope_but_defers_opponent_scope() {
     .validate(EffectContext::Spell)
     .is_err());
 }
+
+#[test]
+fn issue_206_explore_primitive_parses_targeted_and_source_forms() {
+    for authored in [
+        "Explore(subject: Chosen((kind: Creature, controller: You)))",
+        "Explore(subject: Source)",
+    ] {
+        let parsed = ron::from_str::<SpellEffectKind>(authored);
+        assert!(
+            parsed.is_ok(),
+            "Explore must be an authored rules primitive: {parsed:?}"
+        );
+    }
+}
+
+#[test]
+fn issue_206_explore_rejects_unsupported_subjects_and_source_bound_spells() {
+    for subject in [
+        EffectSubject::AttachedObject,
+        EffectSubject::TriggerObject,
+        EffectSubject::PreviousEffectObject,
+        EffectSubject::SearchedObject(crate::SearchResultId::new("search_01").unwrap()),
+    ] {
+        let error = SpellEffectKind::Explore { subject }
+            .validate(EffectContext::Ability)
+            .expect_err("unsupported Explore subject");
+        assert!(error.contains("Source or Chosen"));
+    }
+    assert!(SpellEffectKind::Explore {
+        subject: EffectSubject::Source,
+    }
+    .validate(EffectContext::Spell)
+    .is_err());
+}

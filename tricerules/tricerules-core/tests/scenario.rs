@@ -195,6 +195,8 @@ mod issue_202_hidden_lair;
 mod issue_204_land_animation;
 #[path = "scenario/issue_205_stack_spell_filters.rs"]
 mod issue_205_stack_spell_filters;
+#[path = "scenario/issue_206_explore.rs"]
+mod issue_206_explore;
 #[path = "scenario/issue_208_library_search.rs"]
 mod issue_208_library_search;
 #[path = "scenario/issue_209_entry_life_payment.rs"]

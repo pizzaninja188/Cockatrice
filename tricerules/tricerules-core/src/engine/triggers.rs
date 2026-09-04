@@ -1516,6 +1516,7 @@ impl GameEngine {
                     })
                 })
                 .collect(),
+            GameEvent::Explored { .. } => Vec::new(),
             GameEvent::TargetsChosen {
                 controller: targeting_controller,
                 source: targeting_source,
@@ -2241,6 +2242,7 @@ impl GameEngine {
             GameEvent::PhaseBegan { active_player, .. } => Some(*active_player),
             GameEvent::Sacrificed { player, .. } => Some(*player),
             GameEvent::Surveilled { player } => Some(*player),
+            GameEvent::Explored { object } => Some(object.controller_at_event),
             GameEvent::LibrarySearched { searcher, .. } => Some(*searcher),
             GameEvent::CrimeCommitted { player } => Some(*player),
             GameEvent::Blighted(receipt) => Some(receipt.player),

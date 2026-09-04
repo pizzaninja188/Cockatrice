@@ -1441,6 +1441,13 @@ pub enum SpellEffectKind {
     Blight {
         count: u32,
     },
+    /// CR 701.44: the subject explores. This covers targeted Explore instructions such as a Map
+    /// token and source-bound instructions such as Jadelight Ranger. Only a chosen permanent or
+    /// the ability's own source can explore; the engine snapshots the exact object generation and
+    /// its controller when resolution begins.
+    Explore {
+        subject: EffectSubject,
+    },
     PutCounters {
         counter: CounterKind,
         count: Amount,
@@ -2249,6 +2256,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ExileWithOwnerCastPermission { subject, .. }
             | SpellEffectKind::PutInOwnersLibrary { subject, .. }
             | SpellEffectKind::Regenerate { subject }
+            | SpellEffectKind::Explore { subject }
             | SpellEffectKind::PutCounters { subject, .. }
             | SpellEffectKind::RemoveCounters { subject, .. }
             | SpellEffectKind::PutCounterSnapshot { subject, .. } => match subject {
@@ -2480,6 +2488,7 @@ impl SpellEffectKind {
                 | SpellEffectKind::ExileWithOwnerCastPermission { subject: value, .. }
                 | SpellEffectKind::PutInOwnersLibrary { subject: value, .. }
                 | SpellEffectKind::Regenerate { subject: value }
+                | SpellEffectKind::Explore { subject: value }
                 | SpellEffectKind::PutCounters { subject: value, .. }
                 | SpellEffectKind::RemoveCounters { subject: value, .. }
                 | SpellEffectKind::PutCounterSnapshot { subject: value, .. } => subject(value),
@@ -2729,6 +2738,17 @@ impl SpellEffectKind {
         }
         if matches!(self, SpellEffectKind::Blight { count: 0 }) {
             return Err("Blight requires a positive counter count".into());
+        }
+        if let SpellEffectKind::Explore { subject } = self {
+            match subject {
+                EffectSubject::Source | EffectSubject::Chosen(_) => {}
+                EffectSubject::AttachedObject
+                | EffectSubject::TriggerObject
+                | EffectSubject::PreviousEffectObject
+                | EffectSubject::SearchedObject(_) => {
+                    return Err("Explore requires Source or Chosen subject".into());
+                }
+            }
         }
         if let SpellEffectKind::CreateTokenCopies { target, .. } = self {
             if !target.is_permanent_only() {
@@ -3308,6 +3328,8 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
                 ..
+            } | SpellEffectKind::Explore {
+                subject: EffectSubject::Source,
             } | SpellEffectKind::RemoveCounters {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
@@ -3462,6 +3484,9 @@ impl SpellEffectKind {
                 ..
             }
             | SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(target),
+            }
+            | SpellEffectKind::Explore {
                 subject: EffectSubject::Chosen(target),
             } => {
                 if !target.is_permanent_only() {

@@ -944,6 +944,11 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         stage: PendingLibraryLookStage,
     },
+    Explore {
+        stack: ParkedStackResolution,
+        explorer: TriggerObjectRef,
+        revealed: TriggerObjectRef,
+    },
     ManifestDread {
         stack: ParkedStackResolution,
         looked_at: Vec<ObjectId>,
@@ -1019,6 +1024,7 @@ impl ResolutionContinuation {
             | Self::OwnerLibraryPlacement { stack, .. }
             | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
+            | Self::Explore { stack, .. }
             | Self::ManifestDread { stack, .. }
             | Self::EntryCopySource { stack }
             | Self::Populate { stack, .. }
@@ -1055,6 +1061,7 @@ impl ResolutionContinuation {
             | Self::OwnerLibraryPlacement { stack, .. }
             | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
+            | Self::Explore { stack, .. }
             | Self::ManifestDread { stack, .. }
             | Self::EntryCopySource { stack }
             | Self::Populate { stack, .. }

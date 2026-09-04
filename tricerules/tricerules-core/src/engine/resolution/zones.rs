@@ -1987,6 +1987,206 @@ pub(super) fn scry(
     begin_library_partition(cx, count, 0, None, PendingLibraryPartitionKind::Scry)
 }
 
+/// CR 701.44: reveal the top card, move a revealed land to hand, or put a +1/+1 counter on the
+/// exploring permanent and let its controller optionally put a revealed nonland into the
+/// graveyard. The optional nonland move parks behind a public image choice.
+pub(super) fn explore(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::Explore { subject } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let explorer = match subject {
+        EffectSubject::Chosen(_) => {
+            let Some(object_id) = cx.resolve_battlefield_subject(&subject) else {
+                return Ok(EffectOutcome::Continue);
+            };
+            let zone_change_generation = cx
+                .engine
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0);
+            let Some(controller_at_event) = cx.engine.controller_of(object_id) else {
+                return Ok(EffectOutcome::Continue);
+            };
+            TriggerObjectRef {
+                object_id,
+                zone_change_generation,
+                controller_at_event,
+            }
+        }
+        EffectSubject::Source => {
+            let Some(object_id) = cx.top.source_permanent_id else {
+                return Ok(EffectOutcome::Continue);
+            };
+            let Some(controller_at_event) = super::source_controller(cx.engine, cx.top) else {
+                return Ok(EffectOutcome::Continue);
+            };
+            TriggerObjectRef {
+                object_id,
+                zone_change_generation: cx.top.source_zone_change,
+                controller_at_event,
+            }
+        }
+        _ => return Err(EngineError::Illegal("unsupported Explore subject")),
+    };
+    let controller = explorer.controller_at_event;
+    let Some(player_idx) = cx.engine.state.player_idx(controller) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let revealed_id = cx.engine.state.players[player_idx].library.front().copied();
+
+    if revealed_id.is_none() {
+        place_explore_counter(cx.engine, explorer);
+        cx.events.push(ev_log(format!(
+            "P{controller} explores with an empty library ({}).",
+            cx.spell_label
+        )));
+        cx.engine
+            .fire_triggers(&[GameEvent::Explored { object: explorer }]);
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let revealed_id = revealed_id.expect("checked above");
+    let revealed_generation = cx
+        .engine
+        .state
+        .zone_change_generation
+        .get(&revealed_id)
+        .copied()
+        .unwrap_or(0);
+    let revealed_owner = cx
+        .engine
+        .state
+        .objects
+        .get(&revealed_id)
+        .map(|object| object.owner)
+        .ok_or(EngineError::Illegal("Explore revealed card missing"))?;
+    let revealed = TriggerObjectRef {
+        object_id: revealed_id,
+        zone_change_generation: revealed_generation,
+        controller_at_event: controller,
+    };
+    let (candidate_card_ids, candidate_names) = candidate_identities(cx.engine, &[revealed_id]);
+    let revealed_name = candidate_names
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "a card".into());
+    cx.events.push(ev_log(format!(
+        "P{controller} reveals {revealed_name} while exploring ({}).",
+        cx.spell_label
+    )));
+
+    if card_matches_type_filter(
+        &cx.engine.state,
+        cx.engine.registry,
+        revealed_id,
+        Some(&CardTypeFilter::Land),
+    ) {
+        move_object_to_zone(
+            &mut cx.engine.state,
+            cx.engine.registry,
+            revealed_id,
+            Zone::Hand,
+            None,
+        )?;
+        cx.events.push(permanent_moved_event_with_library_position(
+            &cx.engine.state,
+            revealed_id,
+            revealed_owner,
+            rv1::permanent_moved::Destination::Hand,
+            0,
+        ));
+        cx.events.push(ev_log(format!(
+            "P{controller} puts {revealed_name} into their hand."
+        )));
+        cx.engine
+            .fire_triggers(&[GameEvent::Explored { object: explorer }]);
+        return Ok(EffectOutcome::Continue);
+    }
+
+    place_explore_counter(cx.engine, explorer);
+    let prompt = format!(
+        "{revealed_name} was revealed while exploring. Click it to put it into your graveyard, or submit without selecting it to leave it on top of your library."
+    );
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: controller,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: rv1::ChoiceKind::LibraryLook as i32,
+                candidate_object_ids: vec![revealed_id],
+                candidate_card_ids,
+                candidate_names,
+                min: 0,
+                max: 1,
+                ordered: false,
+                unique_names: false,
+                candidate_server_card_ids: Vec::new(),
+                candidate_selectable: vec![true],
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                reveal_audience: rv1::ResolutionRevealAudience::AllParticipants as i32,
+                revealed_zone_owner_player_id: Some(controller),
+                candidate_source_zones: Vec::new(),
+                combat_defender_options: Vec::new(),
+                waterbend: false,
+                selection_slots: Vec::new(),
+            },
+        )),
+    });
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: vec![revealed_id],
+            min: 0,
+            max: 1,
+            ordered: false,
+            unique_names: false,
+            prompt,
+            choice_kind: rv1::ChoiceKind::LibraryLook,
+        },
+        continuation: ResolutionContinuation::Explore {
+            stack: ParkedStackResolution::new(cx.top.clone()),
+            explorer,
+            revealed,
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
+fn place_explore_counter(engine: &mut GameEngine, explorer: TriggerObjectRef) {
+    let is_current = engine
+        .state
+        .zone_change_generation
+        .get(&explorer.object_id)
+        .copied()
+        .unwrap_or(0)
+        == explorer.zone_change_generation
+        && engine
+            .state
+            .objects
+            .get(&explorer.object_id)
+            .is_some_and(|object| object.zone == Zone::Battlefield);
+    if is_current {
+        if let Some(event) = engine.place_counters_with_event(
+            explorer.object_id,
+            CounterKind::PlusOnePlusOne,
+            1,
+            false,
+        ) {
+            engine.fire_triggers(&[event]);
+        }
+    }
+}
+
 /// CR 701.25 surveil and nonkeyword bounded looks share the same private choice contract. The
 /// selected cohort goes to the graveyard; cards retained on top are ordered in a second step when
 /// necessary.
