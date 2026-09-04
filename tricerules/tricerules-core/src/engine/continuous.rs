@@ -255,6 +255,7 @@ impl GameEngine {
                     .unwrap_or(0),
                 resolving_spell_id: None,
                 stack_item: None,
+                previous_effect_result: None,
             },
         )
     }
@@ -1062,6 +1063,7 @@ impl GameEngine {
                         .unwrap_or(0),
                     resolving_spell_id: None,
                     stack_item: None,
+                    previous_effect_result: None,
                 },
             )
         })
@@ -1096,6 +1098,7 @@ impl GameEngine {
                                 .unwrap_or(0),
                             resolving_spell_id: None,
                             stack_item: None,
+                            previous_effect_result: None,
                         },
                     )
                 }

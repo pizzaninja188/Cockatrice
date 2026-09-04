@@ -200,6 +200,7 @@ public:
     int activePlayer = -1;
     int priorityPlayer = -1;
     int stackDepth = 0;
+    std::set<quint32> counteredStackObjectIds;
     bool sawDirectOpeningToMain1 = false;
     int directSettledActivePlayer = -1;
     QStringList labels;
@@ -1230,6 +1231,7 @@ public:
                 }
             } else if (ev.has_stack_object_countered()) {
                 stackDepth = std::max(0, stackDepth - 1);
+                counteredStackObjectIds.insert(ev.stack_object_countered().object_id());
                 if (wardManaSpellOid != 0 && ev.stack_object_countered().object_id() == wardManaSpellOid) {
                     sawWardManaCountered = true;
                 }
@@ -8839,6 +8841,137 @@ TEST_F(RuledE2ESmokeTest, SpyglassSirenMapExplorePublishesOnePublicLibraryCardTo
         EXPECT_EQ(updatedSiren->power, 2);
         EXPECT_EQ(updatedSiren->toughness, 2);
         EXPECT_TRUE(client->libraryDetailsStayedConcealed);
+    }
+}
+
+TEST_F(RuledE2ESmokeTest, TidebinderCountersTriggeredAbilityThroughExistingStackTargetContract)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("tidebinderp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("tidebinderp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(
+        p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "Tidebinder game start (p1)"));
+    ASSERT_TRUE(
+        p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "Tidebinder game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 && (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto devPut = [&](int player, const char *cardName) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(player);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(cardName);
+        put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        put->set_ready(true);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1 for Tidebinder").arg(cardName));
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority for Tidebinder"));
+    };
+    auto findPermanent = [](const SmokeClient &client, int controller,
+                            const QString &cardId) -> const SmokeClient::Permanent * {
+        const auto player = client.battlefieldByPlayer.find(controller);
+        if (player == client.battlefieldByPlayer.end()) {
+            return nullptr;
+        }
+        const auto permanent = std::find_if(player->second.begin(), player->second.end(),
+                                            [&](const auto &candidate) { return candidate.cardId == cardId; });
+        return permanent == player->second.end() ? nullptr : &*permanent;
+    };
+
+    ASSERT_TRUE(devPut(p1.myId, "Grizzly Bears"));
+    ASSERT_TRUE(devPut(p1.myId, "The Wondrous Wasp"));
+    const auto *bear = findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears"));
+    ASSERT_NE(bear, nullptr);
+    ASSERT_TRUE(p1.pendingTriggerTarget.has_value());
+    ASSERT_EQ(p1.pendingTriggerTarget->targets().groups_size(), 1);
+    const auto &waspGroup = p1.pendingTriggerTarget->targets().groups(0);
+    ASSERT_TRUE(std::find(waspGroup.valid_permanent_ids().begin(), waspGroup.valid_permanent_ids().end(), bear->oid) !=
+                waspGroup.valid_permanent_ids().end());
+
+    ruled::v1::RuledCommand chooseWaspTarget;
+    auto *waspTarget = chooseWaspTarget.mutable_choose_trigger_target()->add_targets();
+    waspTarget->set_object_id(bear->oid);
+    waspTarget->set_group_index(waspGroup.group_index());
+    waspTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    p1.pendingTriggerTarget.reset();
+    ASSERT_TRUE(sendAndPump(p1, chooseWaspTarget, QStringLiteral("choose Wasp trigger target")));
+
+    ASSERT_TRUE(devPut(p2.myId, "Tishana's Tidebinder"));
+    ASSERT_TRUE(p2.pendingTriggerTarget.has_value());
+    ASSERT_EQ(p2.pendingTriggerTarget->targets().groups_size(), 1);
+    const auto &tidebinderGroup = p2.pendingTriggerTarget->targets().groups(0);
+    ASSERT_EQ(tidebinderGroup.valid_stack_ids_size(), 1);
+    const quint32 waspAbilityId = tidebinderGroup.valid_stack_ids(0);
+    EXPECT_EQ(tidebinderGroup.valid_permanent_ids_size(), 0);
+
+    ruled::v1::RuledCommand chooseAbilityTarget;
+    auto *abilityTarget = chooseAbilityTarget.mutable_choose_trigger_target()->add_targets();
+    abilityTarget->set_object_id(waspAbilityId);
+    abilityTarget->set_group_index(tidebinderGroup.group_index());
+    abilityTarget->set_kind(ruled::v1::TARGET_REF_KIND_STACK);
+    p2.pendingTriggerTarget.reset();
+    ASSERT_TRUE(sendAndPump(p2, chooseAbilityTarget, QStringLiteral("choose Wasp triggered ability")));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+
+    for (const SmokeClient *client : {&p1, &p2}) {
+        EXPECT_TRUE(client->counteredStackObjectIds.count(waspAbilityId))
+            << "the counter event did not reach both ruled clients";
+        const auto *wasp = findPermanent(*client, p1.myId, QStringLiteral("the_wondrous_wasp"));
+        const auto *untappedBear = findPermanent(*client, p1.myId, QStringLiteral("grizzly_bears"));
+        ASSERT_NE(wasp, nullptr);
+        ASSERT_NE(untappedBear, nullptr);
+        EXPECT_FALSE(wasp->flying) << "Tidebinder did not remove the triggered ability source's abilities";
+        EXPECT_FALSE(untappedBear->tapped) << "the countered Wasp trigger still resolved";
     }
 }
 

@@ -29,7 +29,7 @@ mod misc;
 mod pump_counters;
 mod restrictions;
 mod stack_ops;
-pub(super) use stack_ops::{counter_stack_object_ref, counter_stack_spell};
+pub(super) use stack_ops::{counter_stack_object, counter_stack_object_ref};
 mod tokens;
 pub(in crate::engine) mod zones;
 
@@ -58,7 +58,7 @@ struct EffectCx<'a> {
 
 impl EffectCx<'_> {
     fn previous_battlefield_object(&self) -> Option<ObjectId> {
-        let selected = self.previous_effect_result.selected_objects.first()?;
+        let selected = self.previous_effect_result.produced_objects.first()?;
         let generation = self
             .engine
             .state
@@ -1476,10 +1476,11 @@ impl GameEngine {
                 };
                 match effect {
                     SpellEffectKind::Conditional { condition, effect } => {
-                        if !cx
-                            .engine
-                            .condition_holds(&condition, ConditionContext::for_stack_item(cx.top))
-                        {
+                        if !cx.engine.condition_holds(
+                            &condition,
+                            ConditionContext::for_stack_item(cx.top)
+                                .with_previous_effect_result(cx.previous_effect_result),
+                        ) {
                             EffectOutcome::Continue
                         } else {
                             match *effect {
@@ -1497,6 +1498,9 @@ impl GameEngine {
                                 }
                                 effect @ SpellEffectKind::Untap { .. } => {
                                     misc::untap(&mut cx, effect)?
+                                }
+                                effect @ SpellEffectKind::RemoveAllAbilities { .. } => {
+                                    pump_counters::remove_all_abilities(&mut cx, effect)?
                                 }
                                 _ => {
                                     return Err(EngineError::Illegal(
@@ -1576,6 +1580,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::RemoveAbilitiesAll { .. } => {
                         pump_counters::remove_abilities_all(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::RemoveAllAbilities { .. } => {
+                        pump_counters::remove_all_abilities(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::GrantKeywords { .. } => {
                         pump_counters::grant_keywords(&mut cx, effect)?
                     }
@@ -1612,6 +1619,9 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::CounterTargetSpell { .. } => {
                         stack_ops::counter_target_spell(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::CounterTargetAbility => {
+                        stack_ops::counter_target_ability(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. } => {
                         stack_ops::counter_triggering_stack_object_unless_pays(&mut cx, effect)?
@@ -3532,7 +3542,7 @@ mod attached_subject_tests {
             spell.face_index = face;
             spell.cast_method = method;
             engine.state.stack.push(spell);
-            counter_stack_spell(&mut engine, oid, "test counter", &mut Vec::new()).unwrap();
+            counter_stack_object(&mut engine, oid, "test counter", &mut Vec::new()).unwrap();
             assert_eq!(
                 engine
                     .state

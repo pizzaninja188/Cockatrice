@@ -1,0 +1,38 @@
+// Oracle and rulings verified 2026-09-04. The post-counter check uses current characteristics.
+(
+  id: "tishanas_tidebinder",
+  name: "Tishana's Tidebinder",
+  face_id: "tishanas_tidebinder",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Merfolk", "Wizard"],
+  power: 3,
+  toughness: 2,
+  keywords: [Flash],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      CounterTargetAbility,
+      Conditional(
+        condition: ObjectMatches(
+          object: PreviousEffectObject,
+          filter: (
+            kind: AnyPermanent,
+            permanent_types: [Artifact, Creature, Planeswalker],
+          ),
+        ),
+        effect: RemoveAllAbilities(
+          subject: PreviousEffectObject,
+          duration: WhileSourceOnBattlefield,
+        ),
+      ),
+    ],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 1,
+      prompt: "Choose up to one target activated or triggered ability",
+      effect_indices: [0],
+    )])),
+  )],
+)

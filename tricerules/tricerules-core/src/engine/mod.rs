@@ -137,6 +137,7 @@ struct ConditionContext<'a> {
     source_zone_change: u64,
     resolving_spell_id: Option<ObjectId>,
     stack_item: Option<&'a StackItem>,
+    previous_effect_result: Option<&'a EffectResult>,
 }
 
 impl<'a> ConditionContext<'a> {
@@ -147,7 +148,13 @@ impl<'a> ConditionContext<'a> {
             source_zone_change: item.source_zone_change,
             resolving_spell_id: item.ability_text.is_none().then_some(item.id),
             stack_item: Some(item),
+            previous_effect_result: None,
         }
+    }
+
+    fn with_previous_effect_result(mut self, result: &'a EffectResult) -> Self {
+        self.previous_effect_result = Some(result);
+        self
     }
 }
 

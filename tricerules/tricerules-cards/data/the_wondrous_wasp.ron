@@ -1,0 +1,30 @@
+// Oracle and rulings verified 2026-09-04. CR 611.2b links the effect to this generation.
+(
+  id: "the_wondrous_wasp",
+  name: "The Wondrous Wasp",
+  face_id: "the_wondrous_wasp",
+  mana_cost: "{1}{U}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Hero"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flash, Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      Tap(subject: Chosen((kind: Creature))),
+      RemoveAllAbilities(
+        subject: Chosen((kind: Creature)),
+        duration: WhileSourceOnBattlefield,
+      ),
+    ],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 1,
+      prompt: "Choose up to one target creature",
+      effect_indices: [0, 1],
+    )])),
+  )],
+)

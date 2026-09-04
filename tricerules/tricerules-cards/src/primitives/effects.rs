@@ -1049,6 +1049,10 @@ pub enum SpellEffectKind {
         #[serde(default)]
         unless_controller_pays_by_cast_cost: Option<CastCostConditionalAmount>,
     },
+    /// CR 113.9 / 701.6: counter target activated or triggered ability on the stack. Stifle,
+    /// Disallow, and Tishana's Tidebinder share this rules action. Mana abilities never use the
+    /// stack and cannot be targeted.
+    CounterTargetAbility,
     /// CR 702.21: counter the exact spell or ability whose target-selection event created this
     /// trigger unless that object's controller pays `cost`. This is an untargeted event reference,
     /// not a CR 115 stack target. Cackling Prowler and Dirgur Island Dragon use mana; Spectral
@@ -1119,6 +1123,13 @@ pub enum SpellEffectKind {
     RemoveAbilitiesAll {
         #[serde(default)]
         filter: CreatureScopeFilter,
+    },
+    /// CR 611.2 / 613.1f: remove all abilities from one permanent for the stated duration.
+    /// Ovinize and Turn to Frog use the until-end-of-turn form; The Wondrous Wasp and Tishana's
+    /// Tidebinder use a resolving source's battlefield lifetime.
+    RemoveAllAbilities {
+        subject: EffectSubject,
+        duration: EffectDuration,
     },
     /// CR 613 layer 6: grant one or more keyword abilities until end of turn. `Chosen` is an
     /// ordinary permanent target (Boros Charm); `Source` auto-binds an activated or triggered
@@ -2246,6 +2257,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Tap { subject }
             | SpellEffectKind::Untap { subject }
             | SpellEffectKind::GrantKeywords { subject, .. }
+            | SpellEffectKind::RemoveAllAbilities { subject, .. }
             | SpellEffectKind::GrantKeywordChoice { subject, .. }
             | SpellEffectKind::GrantProtection { subject, .. }
             | SpellEffectKind::GrantTriggeredAbility { subject, .. }
@@ -2301,6 +2313,7 @@ impl SpellEffectKind {
             | SpellEffectKind::CopyTargetSpell { spell_filter, .. } => {
                 vec![TargetRole::StackSpell(spell_filter)]
             }
+            SpellEffectKind::CounterTargetAbility => vec![TargetRole::StackAbility],
             SpellEffectKind::MoveGraveyardCards { filter, .. } => {
                 vec![TargetRole::GraveyardCard(filter)]
             }
@@ -2358,6 +2371,7 @@ impl SpellEffectKind {
                 TargetRole::Filtered(filter) => Some(filter),
                 TargetRole::CreaturePermanent
                 | TargetRole::StackSpell(_)
+                | TargetRole::StackAbility
                 | TargetRole::GraveyardCard(_) => None,
             })
             .collect()
@@ -2443,6 +2457,56 @@ impl SpellEffectKind {
     /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
     /// [`SpellEffectKind::validate`], which the caller runs too.
     pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum ProducedObjectCardinality {
+            None,
+            OptionalOne,
+            ExactlyOne,
+            Many,
+        }
+
+        fn produced_object_cardinality(effect: &SpellEffectKind) -> ProducedObjectCardinality {
+            match effect {
+                SpellEffectKind::ChoosePermanents { min: 1, max: 1, .. } => {
+                    ProducedObjectCardinality::ExactlyOne
+                }
+                SpellEffectKind::ChoosePermanents { max: 1, .. }
+                | SpellEffectKind::CounterTargetAbility
+                | SpellEffectKind::Amass { .. } => ProducedObjectCardinality::OptionalOne,
+                SpellEffectKind::ChoosePermanents { .. } => ProducedObjectCardinality::Many,
+                SpellEffectKind::Conditional { effect, .. } => {
+                    match produced_object_cardinality(effect) {
+                        ProducedObjectCardinality::None => ProducedObjectCardinality::None,
+                        ProducedObjectCardinality::Many => ProducedObjectCardinality::Many,
+                        ProducedObjectCardinality::OptionalOne
+                        | ProducedObjectCardinality::ExactlyOne => {
+                            ProducedObjectCardinality::OptionalOne
+                        }
+                    }
+                }
+                _ => ProducedObjectCardinality::None,
+            }
+        }
+
+        fn previous_object_requirement(effect: &SpellEffectKind) -> Option<bool> {
+            match effect {
+                SpellEffectKind::Conditional { effect, .. } => previous_object_requirement(effect),
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::PreviousEffectObject,
+                    ..
+                } => Some(true),
+                SpellEffectKind::AttachEquipment {
+                    equipment: EffectSubject::PreviousEffectObject,
+                    ..
+                }
+                | SpellEffectKind::RemoveAllAbilities {
+                    subject: EffectSubject::PreviousEffectObject,
+                    ..
+                } => Some(false),
+                _ => None,
+            }
+        }
+
         fn searched_subjects<'a>(effect: &'a SpellEffectKind, out: &mut Vec<&'a SearchResultId>) {
             let mut subject = |subject: &'a EffectSubject| {
                 if let EffectSubject::SearchedObject(result_id) = subject {
@@ -2478,6 +2542,7 @@ impl SpellEffectKind {
                 | SpellEffectKind::Tap { subject: value }
                 | SpellEffectKind::Untap { subject: value }
                 | SpellEffectKind::GrantKeywords { subject: value, .. }
+                | SpellEffectKind::RemoveAllAbilities { subject: value, .. }
                 | SpellEffectKind::GrantKeywordChoice { subject: value, .. }
                 | SpellEffectKind::GrantProtection { subject: value, .. }
                 | SpellEffectKind::GrantTriggeredAbility { subject: value, .. }
@@ -2602,41 +2667,39 @@ impl SpellEffectKind {
             let previous = index
                 .checked_sub(1)
                 .and_then(|previous| effects.get(previous));
-            if matches!(
-                effect,
-                SpellEffectKind::GrantKeywords {
-                    subject: EffectSubject::PreviousEffectObject,
-                    ..
+            let previous_cardinality = previous
+                .map(produced_object_cardinality)
+                .unwrap_or(ProducedObjectCardinality::None);
+            if let Some(requires_exactly_one) = previous_object_requirement(effect) {
+                let valid = if requires_exactly_one {
+                    previous_cardinality == ProducedObjectCardinality::ExactlyOne
+                } else {
+                    matches!(
+                        previous_cardinality,
+                        ProducedObjectCardinality::OptionalOne
+                            | ProducedObjectCardinality::ExactlyOne
+                    )
+                };
+                if !valid {
+                    return Err(
+                        "PreviousEffectObject requires an immediately preceding compatible single-object producer"
+                            .into(),
+                    );
                 }
-            ) && !matches!(
-                previous,
-                Some(SpellEffectKind::ChoosePermanents { min: 1, max: 1, .. })
-            ) {
-                return Err(
-                    "PreviousEffectObject requires an immediately preceding exactly-one ChoosePermanents"
-                        .into(),
-                );
             }
-            let previous_is_at_most_one_permanent_choice = match previous {
-                Some(SpellEffectKind::ChoosePermanents { max: 1, .. }) => true,
-                Some(SpellEffectKind::Conditional { effect, .. }) => matches!(
-                    effect.as_ref(),
-                    SpellEffectKind::ChoosePermanents { max: 1, .. }
-                ),
-                _ => false,
-            };
-            if matches!(
-                effect,
-                SpellEffectKind::AttachEquipment {
-                    equipment: EffectSubject::PreviousEffectObject,
-                    ..
+            if let SpellEffectKind::Conditional { condition, .. } = effect {
+                if condition.references_previous_effect_object()
+                    && !matches!(
+                        previous_cardinality,
+                        ProducedObjectCardinality::OptionalOne
+                            | ProducedObjectCardinality::ExactlyOne
+                    )
+                {
+                    return Err(
+                        "PreviousEffectObject condition requires an immediately preceding compatible single-object producer"
+                            .into(),
+                    );
                 }
-            ) && !previous_is_at_most_one_permanent_choice
-            {
-                return Err(
-                    "AttachEquipment PreviousEffectObject requires an immediately preceding at-most-one ChoosePermanents"
-                        .into(),
-                );
             }
             if let Some(filter) = amount.and_then(Amount::card_result_filter) {
                 if filter.source == CardResultSource::PreviousEffect
@@ -2859,9 +2922,10 @@ impl SpellEffectKind {
                         | SpellEffectKind::ChoosePermanents { .. }
                         | SpellEffectKind::Draw { .. }
                         | SpellEffectKind::Untap { .. }
+                        | SpellEffectKind::RemoveAllAbilities { .. }
                 ) {
                     return Err(
-                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, and Untap effects"
+                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, Untap, and RemoveAllAbilities effects"
                             .into(),
                     );
                 }
@@ -2978,6 +3042,15 @@ impl SpellEffectKind {
             SpellEffectKind::PumpAll { filter, .. }
             | SpellEffectKind::GrantKeywordsAll { filter, .. }
             | SpellEffectKind::RemoveAbilitiesAll { filter } => filter.validate()?,
+            SpellEffectKind::RemoveAllAbilities {
+                duration: EffectDuration::WhileSourceOnBattlefield,
+                ..
+            } if context != EffectContext::Ability => {
+                return Err(
+                    "source-linked RemoveAllAbilities requires an activated or triggered ability"
+                        .into(),
+                );
+            }
             SpellEffectKind::ReturnTriggeredCard {
                 from,
                 entry_counters,
@@ -4191,10 +4264,10 @@ pub enum EffectDuration {
     /// spell or ability (Giant Growth, firebreathing) — independent of their source once made
     /// (CR 611.2g), so they persist even if the source permanent later leaves the battlefield.
     UntilEndOfTurn,
-    /// CR 604.3 / 611.3: a continuous effect generated by a permanent's *static* ability (an
-    /// anthem such as Glorious Anthem or Lord of Atlantis). It exists only while that permanent
-    /// is on the battlefield, so the engine drains it when the source leaves (LTB), not at
-    /// cleanup. The source is identified by [`ContinuousEffect::source_id`].
+    /// A continuous effect linked to a permanent remaining on the battlefield. This covers both
+    /// static abilities (CR 604.3 / 611.3) and resolving effects with a "for as long as" duration
+    /// (CR 611.2b). The engine drains it when that exact source leaves, not at cleanup. The source
+    /// is identified by [`ContinuousEffect::source_id`].
     WhileSourceOnBattlefield,
 }
 

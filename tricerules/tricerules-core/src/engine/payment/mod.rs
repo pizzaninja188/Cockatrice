@@ -256,6 +256,7 @@ impl GameEngine {
                 .unwrap_or(0),
             resolving_spell_id: None,
             stack_item: None,
+            previous_effect_result: None,
         };
         let mut reduction = ActivatedManaReduction::default();
         for modifier in &ability.cost_modifiers {
@@ -740,6 +741,7 @@ impl GameEngine {
                 .unwrap_or(0),
             resolving_spell_id: None,
             stack_item: None,
+            previous_effect_result: None,
         };
         let intrinsic = modifiers
             .iter()
@@ -814,6 +816,7 @@ impl GameEngine {
                             .unwrap_or(0),
                         resolving_spell_id: None,
                         stack_item: None,
+                        previous_effect_result: None,
                     };
                     if condition
                         .as_ref()

@@ -108,7 +108,7 @@ pub(super) fn counter_target_spell(
             }
             return Ok(EffectOutcome::Suspended);
         }
-        counter_stack_spell(engine, tid, spell_label, events)?;
+        counter_stack_object(engine, tid, spell_label, events)?;
     }
 
     Ok(EffectOutcome::Continue)
@@ -349,22 +349,25 @@ pub(crate) fn counter_stack_object_ref(
     if !stack_object_ref_present(engine, target) {
         return Ok(());
     }
-    counter_stack_spell(engine, target.object_id, counter_label, events)
+    counter_stack_object(engine, target.object_id, counter_label, events).map(|_| ())
 }
 
-pub(crate) fn counter_stack_spell(
+/// Shared physical stack removal. Public authored effects retain their distinct spell/ability
+/// vocabulary; this executor returns the exact removed item so a successful counter can feed a
+/// generation-bound follow-up instruction without serializing private resolution state.
+pub(crate) fn counter_stack_object(
     engine: &mut GameEngine,
     target_id: ObjectId,
     counter_label: &str,
     events: &mut Vec<rv1::RuledEvent>,
-) -> Result<(), EngineError> {
+) -> Result<Option<StackItem>, EngineError> {
     let Some(pos) = engine
         .state
         .stack
         .iter()
         .position(|item| item.id == target_id)
     else {
-        return Ok(());
+        return Ok(None);
     };
     let target = &engine.state.stack[pos];
     let target_name = engine
@@ -386,7 +389,7 @@ pub(crate) fn counter_stack_spell(
         events.push(ev_log(format!(
             "{counter_label} cannot counter {target_name}"
         )));
-        return Ok(());
+        return Ok(None);
     }
     let st = engine.state.stack.remove(pos);
     events.push(rv1::RuledEvent {
@@ -418,7 +421,31 @@ pub(crate) fn counter_stack_spell(
         }
     }
     events.push(ev_log(format!("{counter_label} counters {target_name}")));
-    Ok(())
+    Ok(Some(st))
+}
+
+pub(super) fn counter_target_ability(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::CounterTargetAbility = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(&target_id) = cx.targets.first() else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(countered) = counter_stack_object(cx.engine, target_id, cx.spell_label, cx.events)?
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if let Some(source_id) = countered.source_permanent_id {
+        cx.effect_result.produced_objects.push(TriggerObjectRef {
+            object_id: source_id,
+            zone_change_generation: countered.source_zone_change,
+            controller_at_event: countered.controller,
+        });
+    }
+    Ok(EffectOutcome::Continue)
 }
 
 pub(super) fn copy_target_spell(

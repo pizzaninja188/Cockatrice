@@ -217,6 +217,18 @@ pub enum GameCondition {
 }
 
 impl GameCondition {
+    pub(crate) fn references_previous_effect_object(&self) -> bool {
+        self.any_node_matches(|condition| {
+            matches!(
+                condition,
+                Self::ObjectMatches {
+                    object: ConditionObjectRef::PreviousEffectObject,
+                    ..
+                }
+            )
+        })
+    }
+
     pub(crate) fn requires_triggering_spell_context(&self) -> bool {
         match self {
             Self::TriggeringSpellManaSpent { .. } => true,
@@ -228,6 +240,11 @@ impl GameCondition {
     /// Validate a condition in a context without a completed spell cast (costs, abilities,
     /// continuous effects, and the snapshot declarations themselves).
     pub(crate) fn validate_live(&self) -> Result<(), String> {
+        if self.references_previous_effect_object() {
+            return Err(
+                "PreviousEffectObject is available only to an inline Conditional effect".into(),
+            );
+        }
         if self.requires_triggering_spell_context() {
             return Err("triggering-spell mana spending requires a spell-cast trigger".into());
         }
@@ -236,6 +253,12 @@ impl GameCondition {
     }
 
     pub(crate) fn validate_trigger_condition(&self) -> Result<(), String> {
+        if self.references_previous_effect_object() {
+            return Err(
+                "PreviousEffectObject is unavailable to trigger and intervening-if conditions"
+                    .into(),
+            );
+        }
         self.validate_cast_snapshot_reference(0)?;
         self.validate()
     }
@@ -601,7 +624,13 @@ impl PermanentEventFilter {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConditionObjectRef {
     Source,
-    ChosenTarget { group_index: u32, target_index: u32 },
+    ChosenTarget {
+        group_index: u32,
+        target_index: u32,
+    },
+    /// The exact generation-bound object published by the immediately preceding resolution
+    /// instruction. This is available only to an inline `Conditional` effect.
+    PreviousEffectObject,
 }
 
 /// Which battlefield creatures contribute to a [`CountExpression`]. This is deliberately separate

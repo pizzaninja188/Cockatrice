@@ -49,7 +49,7 @@ pub(crate) struct CardResultCohort {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct EffectResult {
     pub cards: Vec<CardResultEntry>,
-    pub selected_objects: Vec<TriggerObjectRef>,
+    pub produced_objects: Vec<TriggerObjectRef>,
     pub receipt: Option<ResolutionReceipt>,
     pub counter_placements: Vec<CounterPlacementReceipt>,
 }
@@ -72,7 +72,7 @@ impl From<CardResultCohort> for EffectResult {
     fn from(cohort: CardResultCohort) -> Self {
         Self {
             cards: cohort.cards,
-            selected_objects: Vec::new(),
+            produced_objects: Vec::new(),
             receipt: None,
             counter_placements: Vec::new(),
         }

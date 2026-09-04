@@ -50,6 +50,9 @@ pub enum TargetRole<'a> {
     CreaturePermanent,
     /// A spell, never an ability, currently on the stack.
     StackSpell(&'a StackSpellFilter),
+    /// An activated or triggered ability, never a spell, currently on the stack. Mana abilities
+    /// never use the stack and therefore cannot enter this target role (CR 605.3b).
+    StackAbility,
     /// A card in a graveyard constrained by its owner and card characteristics.
     GraveyardCard(&'a GraveyardFilter),
 }
@@ -58,7 +61,10 @@ impl TargetRole<'_> {
     pub fn targets_an_object(self) -> bool {
         match self {
             Self::Filtered(filter) => !filter.is_player(),
-            Self::CreaturePermanent | Self::StackSpell(_) | Self::GraveyardCard(_) => true,
+            Self::CreaturePermanent
+            | Self::StackSpell(_)
+            | Self::StackAbility
+            | Self::GraveyardCard(_) => true,
         }
     }
 
@@ -68,7 +74,7 @@ impl TargetRole<'_> {
                 matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
             }),
             Self::CreaturePermanent => true,
-            Self::StackSpell(_) | Self::GraveyardCard(_) => false,
+            Self::StackSpell(_) | Self::StackAbility | Self::GraveyardCard(_) => false,
         }
     }
 
@@ -78,7 +84,7 @@ impl TargetRole<'_> {
                 filter.all_terminal_filters_match(|leaf| matches!(leaf.kind, TargetKind::Creature))
             }
             Self::CreaturePermanent => true,
-            Self::StackSpell(_) | Self::GraveyardCard(_) => false,
+            Self::StackSpell(_) | Self::StackAbility | Self::GraveyardCard(_) => false,
         }
     }
 }

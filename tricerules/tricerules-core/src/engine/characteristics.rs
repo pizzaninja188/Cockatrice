@@ -665,6 +665,7 @@ impl CharacteristicsEvaluator<'_> {
                     source_zone_change: source_generation,
                     resolving_spell_id: None,
                     stack_item: None,
+                    previous_effect_result: None,
                 };
                 let count = self
                     .state
@@ -728,6 +729,7 @@ impl CharacteristicsEvaluator<'_> {
                     source_zone_change: source_generation,
                     resolving_spell_id: None,
                     stack_item: None,
+                    previous_effect_result: None,
                 };
                 let count = self
                     .state
@@ -1237,6 +1239,7 @@ impl CharacteristicsEvaluator<'_> {
                             .unwrap_or(0),
                         resolving_spell_id: None,
                         stack_item: None,
+                        previous_effect_result: None,
                     };
                     let matches = super::history::battlefield_quantity_value(
                         self.state,
@@ -1301,6 +1304,7 @@ impl CharacteristicsEvaluator<'_> {
                         .unwrap_or(0),
                     resolving_spell_id: None,
                     stack_item: None,
+                    previous_effect_result: None,
                 };
                 let count =
                     super::history::battlefield_quantity_value(self.state, count, context, |oid| {

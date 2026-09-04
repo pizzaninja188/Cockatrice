@@ -85,6 +85,7 @@ impl GameEngine {
                 source_zone_change: source.zone_change_generation,
                 resolving_spell_id: None,
                 stack_item: None,
+                previous_effect_result: None,
             },
         )
     }
@@ -627,6 +628,7 @@ impl GameEngine {
                         .unwrap_or(0),
                     resolving_spell_id: None,
                     stack_item: None,
+                    previous_effect_result: None,
                 };
                 (super::history::relative_player_set_contains(
                     &self.state,
@@ -2227,6 +2229,7 @@ impl GameEngine {
                     }),
                     resolving_spell_id: None,
                     stack_item: None,
+                    previous_effect_result: None,
                 },
                 trigger_context,
             )

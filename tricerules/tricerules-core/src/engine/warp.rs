@@ -433,6 +433,7 @@ mod tests {
                 source_zone_change: 0,
                 resolving_spell_id: None,
                 stack_item: None,
+                previous_effect_result: None,
             },
         )
     }

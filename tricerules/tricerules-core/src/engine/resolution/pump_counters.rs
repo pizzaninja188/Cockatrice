@@ -198,6 +198,67 @@ pub(super) fn remove_abilities_all(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn remove_all_abilities(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::RemoveAllAbilities { subject, duration } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some((object_id, ordinary_source_id)) = cx.resolve_continuous_subject(&subject) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let source_id = if duration == EffectDuration::WhileSourceOnBattlefield {
+        let Some(source_id) = cx.top.source_permanent_id else {
+            return Ok(EffectOutcome::Continue);
+        };
+        let source_is_current = cx
+            .engine
+            .state
+            .objects
+            .get(&source_id)
+            .is_some_and(|source| source.zone == Zone::Battlefield)
+            && cx
+                .engine
+                .state
+                .zone_change_generation
+                .get(&source_id)
+                .copied()
+                .unwrap_or(0)
+                == cx.top.source_zone_change;
+        if !source_is_current {
+            return Ok(EffectOutcome::Continue);
+        }
+        Some(source_id)
+    } else {
+        ordinary_source_id
+    };
+
+    cx.engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id,
+        affected: AffectedScope::Single(object_id),
+        kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+        condition: None,
+        duration: duration.clone(),
+        timestamp: cx.engine.state.command_index,
+    });
+    let duration_label = match duration {
+        EffectDuration::Indefinite => "",
+        EffectDuration::UntilEndOfTurn => " until end of turn",
+        EffectDuration::WhileSourceOnBattlefield => {
+            " for as long as its source remains on the battlefield"
+        }
+    };
+    cx.events.push(ev_log(format!(
+        "{} removes all abilities from {}{}",
+        cx.spell_label,
+        object_display_name(&cx.engine.state, cx.engine.registry, object_id),
+        duration_label
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn grant_keywords(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

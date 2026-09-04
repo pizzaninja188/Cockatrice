@@ -1665,3 +1665,54 @@ fn issue_206_explore_rejects_unsupported_subjects_and_source_bound_spells() {
     .validate(EffectContext::Spell)
     .is_err());
 }
+
+#[test]
+fn issue_207_stack_ability_and_source_linked_ability_loss_primitives_parse() {
+    for authored in [
+        "CounterTargetAbility",
+        "RemoveAllAbilities(subject: Chosen((kind: Creature)), duration: WhileSourceOnBattlefield)",
+    ] {
+        let parsed = ron::from_str::<SpellEffectKind>(authored);
+        assert!(
+            parsed.is_ok(),
+            "issue #207 requires a reusable authored primitive: {authored}: {parsed:?}"
+        );
+    }
+
+    let condition = ron::from_str::<GameCondition>(
+        "ObjectMatches(object: PreviousEffectObject, filter: (kind: AnyPermanent, permanent_types: [Artifact, Creature, Planeswalker]))",
+    );
+    assert!(
+        condition.is_ok(),
+        "issue #207 requires generation-bound previous-object conditions: {condition:?}"
+    );
+
+    let tidebinder: Vec<SpellEffectKind> = ron::from_str(
+        r#"[
+            CounterTargetAbility,
+            Conditional(
+                condition: ObjectMatches(
+                    object: PreviousEffectObject,
+                    filter: (kind: AnyPermanent, permanent_types: [Artifact, Creature, Planeswalker]),
+                ),
+                effect: RemoveAllAbilities(
+                    subject: PreviousEffectObject,
+                    duration: WhileSourceOnBattlefield,
+                ),
+            ),
+        ]"#,
+    )
+    .expect("Tidebinder effect sequence parses");
+    SpellEffectKind::validate_list(&tidebinder)
+        .expect("a successful ability counter is a compatible object producer");
+
+    let orphan = tidebinder[1..].to_vec();
+    assert!(SpellEffectKind::validate_list(&orphan).is_err());
+
+    let remove = ron::from_str::<SpellEffectKind>(
+        "RemoveAllAbilities(subject: Chosen((kind: Creature)), duration: WhileSourceOnBattlefield)",
+    )
+    .expect("source-linked removal parses");
+    assert!(remove.validate(EffectContext::Spell).is_err());
+    assert!(remove.validate(EffectContext::Ability).is_ok());
+}

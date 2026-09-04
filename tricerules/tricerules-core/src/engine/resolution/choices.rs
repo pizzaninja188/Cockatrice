@@ -180,7 +180,7 @@ pub(super) fn choose_permanents(
         return Ok(EffectOutcome::Continue);
     }
     if min == max && candidates.len() == min as usize {
-        cx.effect_result.selected_objects = candidates
+        cx.effect_result.produced_objects = candidates
             .iter()
             .map(|oid| TriggerObjectRef {
                 object_id: *oid,

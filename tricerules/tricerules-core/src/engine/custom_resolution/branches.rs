@@ -167,7 +167,7 @@ impl GameEngine {
                         .get(&stack.item.card_id)
                         .map(|definition| definition.name.clone())
                         .unwrap_or_else(|| stack.item.card_id.clone());
-                    counter_stack_spell(
+                    counter_stack_object(
                         self,
                         payment.target_spell_id,
                         &counter_label,

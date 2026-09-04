@@ -135,7 +135,7 @@ impl GameEngine {
             object_display_name(&self.state, self.registry, chosen)
         )));
         Ok(EffectResult {
-            selected_objects: vec![TriggerObjectRef {
+            produced_objects: vec![TriggerObjectRef {
                 object_id: chosen,
                 zone_change_generation: generation,
                 controller_at_event: controller,

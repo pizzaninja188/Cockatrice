@@ -1292,6 +1292,11 @@ impl GameEngine {
                         .zone_change_generation
                         .map(|generation| (target.object_id, generation))
                 }),
+            ConditionObjectRef::PreviousEffectObject => context
+                .previous_effect_result?
+                .produced_objects
+                .first()
+                .map(|object| (object.object_id, object.zone_change_generation)),
         }
     }
 
@@ -1469,6 +1474,7 @@ impl GameEngine {
                         source_zone_change: context.source_zone_change,
                         resolving_spell_id: context.resolving_spell_id,
                         stack_item: context.stack_item,
+                        previous_effect_result: context.previous_effect_result,
                     },
                 ) {
                     *when_true
@@ -1490,6 +1496,7 @@ impl GameEngine {
             source_zone_change: context.source_zone_change,
             resolving_spell_id: context.resolving_spell_id,
             stack_item: context.stack_item,
+            previous_effect_result: context.previous_effect_result,
         };
         match expression {
             CountExpression::SpellsCastThisTurn {
@@ -1683,6 +1690,7 @@ mod tests {
             source_zone_change: 0,
             resolving_spell_id: None,
             stack_item: None,
+            previous_effect_result: None,
         };
         let holds = |engine: &GameEngine, controllers| {
             engine.condition_holds(
@@ -1792,6 +1800,7 @@ mod tests {
             source_zone_change: 0,
             resolving_spell_id: None,
             stack_item: None,
+            previous_effect_result: None,
         };
         assert!(
             !engine.condition_holds(condition, context),
@@ -1835,6 +1844,7 @@ mod tests {
                 source_zone_change: 0,
                 resolving_spell_id: None,
                 stack_item: None,
+                previous_effect_result: None,
             },
         )
     }
@@ -2783,6 +2793,7 @@ mod tests {
             source_zone_change: 0,
             resolving_spell_id: None,
             stack_item: None,
+            previous_effect_result: None,
         };
         for (players, change, quantifier, expected) in [
             (
@@ -3089,6 +3100,7 @@ mod tests {
             source_zone_change: 0,
             resolving_spell_id: None,
             stack_item: None,
+            previous_effect_result: None,
         };
         for (players, count) in [
             (RelativePlayerSet::Controller, 1),
@@ -3168,6 +3180,7 @@ mod tests {
             source_zone_change: generation,
             resolving_spell_id: None,
             stack_item: None,
+            previous_effect_result: None,
         };
         assert!(engine.condition_holds(
             &GameCondition::CardsDrawnThisTurn {
@@ -3271,6 +3284,7 @@ mod tests {
             source_zone_change: 0,
             resolving_spell_id: None,
             stack_item: None,
+            previous_effect_result: None,
         };
 
         let union = BattlefieldPermanentFilter {
@@ -3365,6 +3379,7 @@ mod tests {
             source_zone_change: 0,
             resolving_spell_id: None,
             stack_item: None,
+            previous_effect_result: None,
         };
 
         assert_eq!(engine.battlefield_creature_count(&filter, 0, 0), 0);
@@ -3468,6 +3483,7 @@ mod tests {
             source_zone_change: 0,
             resolving_spell_id: None,
             stack_item: None,
+            previous_effect_result: None,
         };
 
         assert_eq!(engine.effective_power(bear), Some(2));

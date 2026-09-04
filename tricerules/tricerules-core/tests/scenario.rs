@@ -197,6 +197,8 @@ mod issue_204_land_animation;
 mod issue_205_stack_spell_filters;
 #[path = "scenario/issue_206_explore.rs"]
 mod issue_206_explore;
+#[path = "scenario/issue_207_stack_abilities.rs"]
+mod issue_207_stack_abilities;
 #[path = "scenario/issue_208_library_search.rs"]
 mod issue_208_library_search;
 #[path = "scenario/issue_209_entry_life_payment.rs"]

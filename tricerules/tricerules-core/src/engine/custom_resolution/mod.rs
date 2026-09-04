@@ -10,7 +10,7 @@ use super::events::{
 };
 use super::legal_actions::fill_legal;
 use super::resolution::{
-    counter_stack_object_ref, counter_stack_spell, move_object_to_zone, permanent_moved_event,
+    counter_stack_object, counter_stack_object_ref, move_object_to_zone, permanent_moved_event,
     permanent_moved_event_with_library_position, put_permanent_in_graveyard, sacrifice_permanent,
     seat_resolved_spell_last_in_graveyard,
 };
@@ -669,7 +669,7 @@ impl GameEngine {
             } => (stack.clone(), candidate_generations.clone()),
             _ => unreachable!("permanent-choice continuation"),
         };
-        let mut selected_objects = Vec::with_capacity(chosen.len());
+        let mut produced_objects = Vec::with_capacity(chosen.len());
         for oid in chosen {
             let Some(expected_generation) = candidate_generations
                 .iter()
@@ -694,7 +694,7 @@ impl GameEngine {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("stale permanent choice"));
             }
-            selected_objects.push(TriggerObjectRef {
+            produced_objects.push(TriggerObjectRef {
                 object_id: *oid,
                 zone_change_generation: expected_generation,
                 controller_at_event: self
@@ -716,7 +716,7 @@ impl GameEngine {
             stack.item,
             stack.resume_effect_index,
             EffectResult {
-                selected_objects,
+                produced_objects,
                 ..Default::default()
             },
             events,

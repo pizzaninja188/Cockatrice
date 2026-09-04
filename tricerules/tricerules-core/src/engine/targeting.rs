@@ -600,6 +600,14 @@ fn target_role_legality_error(
             stack_spell_target_legal(&engine.state, engine.registry, tid, spell_filter),
             "target must be a spell with the required characteristics on the stack",
         ),
+        TargetRole::StackAbility => (
+            engine
+                .state
+                .stack
+                .iter()
+                .any(|item| item.id == tid && item.ability_text.is_some()),
+            "target must be an activated or triggered ability on the stack",
+        ),
         TargetRole::GraveyardCard(filter) => (
             graveyard_target_legal(engine, filter, tid, caster, source, trigger_context),
             "target must be a matching card in the correct graveyard",
@@ -1212,6 +1220,7 @@ fn validate_effect_targets(
         | SpellEffectKind::Explore { subject }
         | SpellEffectKind::PutCounters { subject, .. } | SpellEffectKind::RemoveCounters { subject, .. } | SpellEffectKind::PutCounterSnapshot { subject, .. }
         | SpellEffectKind::GrantKeywords { subject, .. }
+        | SpellEffectKind::RemoveAllAbilities { subject, .. }
         | SpellEffectKind::GrantKeywordChoice { subject, .. }
         | SpellEffectKind::GrantProtection { subject, .. }
         | SpellEffectKind::GrantTriggeredAbility { subject, .. }
@@ -1387,6 +1396,19 @@ fn validate_effect_targets(
             if !graveyard_target_legal(engine, filter, targets[0].object_id, caster, source, trigger_context) {
                 return Err(EngineError::Illegal(
                     "target must be a matching card in the correct graveyard",
+                ));
+            }
+        }
+        SpellEffectKind::CounterTargetAbility => {
+            if targets.len() != 1
+                || !engine
+                    .state
+                    .stack
+                    .iter()
+                    .any(|item| item.id == targets[0].object_id && item.ability_text.is_some())
+            {
+                return Err(EngineError::Illegal(
+                    "target must be an activated or triggered ability on the stack",
                 ));
             }
         }
@@ -1954,6 +1976,18 @@ fn spell_target_legality_error_with_context(
             if !stack_spell_target_legal(&engine.state, engine.registry, tid, spell_filter) {
                 return Err(EngineError::Illegal(
                     "target must be a spell with the required characteristics on the stack",
+                ));
+            }
+        }
+        SpellEffectKind::CounterTargetAbility => {
+            if !engine
+                .state
+                .stack
+                .iter()
+                .any(|item| item.id == tid && item.ability_text.is_some())
+            {
+                return Err(EngineError::Illegal(
+                    "target must be an activated or triggered ability on the stack",
                 ));
             }
         }
