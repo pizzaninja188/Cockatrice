@@ -122,6 +122,7 @@ fn issue_139_refresh_publishes_targets_from_stored_non_primary_face_ability() {
     engine.state.pending_triggers.push_back(PendingTrigger {
         object_id: trigger_id,
         source_permanent_id: source,
+        source_owner: 0,
         source_face_index: 1,
         source_zone_change: engine
             .state

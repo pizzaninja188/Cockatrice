@@ -593,6 +593,7 @@ impl ManaPool {
 pub struct StagedTrigger {
     pub object_id: ObjectId,
     pub source_permanent_id: ObjectId,
+    pub source_owner: PlayerId,
     pub source_face_index: usize,
     pub source_zone_change: u64,
     pub source_face_change: u64,
@@ -661,6 +662,7 @@ pub struct PendingTrigger {
     /// [`StagedTrigger::object_id`].
     pub object_id: ObjectId,
     pub source_permanent_id: ObjectId,
+    pub source_owner: PlayerId,
     pub source_face_index: usize,
     pub source_zone_change: u64,
     pub source_face_change: u64,
@@ -1351,6 +1353,9 @@ pub struct StackItem {
     pub ability_text: Option<String>,
     /// For activated/triggered abilities: the permanent that sourced this ability (stays in its zone).
     pub source_permanent_id: Option<ObjectId>,
+    /// Owner of the exact source incarnation when this ability was put on the stack. Unlike the
+    /// controller, this remains the library destination even if the source later disappears.
+    pub source_owner: Option<PlayerId>,
     /// Generation of the source permanent when this ability was put on the stack (CR 400.7).
     /// A matching ObjectId after a leave-and-return is a different object and must not receive
     /// the old ability's self-bound effect.
@@ -2185,6 +2190,11 @@ impl GameState {
                 StagedTrigger {
                     object_id,
                     source_permanent_id: delayed.source.object_id,
+                    source_owner: self
+                        .objects
+                        .get(&delayed.source.object_id)
+                        .map(|object| object.owner)
+                        .unwrap_or(delayed.controller),
                     source_face_index: delayed.source_face_index,
                     source_zone_change: delayed.source.zone_change_generation,
                     source_face_change: 0,

@@ -514,6 +514,7 @@ pub(super) fn copy_target_spell(
                     targets: src.targets.clone(),
                     ability_text: None,
                     source_permanent_id: None,
+                    source_owner: None,
                     source_zone_change: 0,
                     source_face_change: 0,
                     ability_index: None,

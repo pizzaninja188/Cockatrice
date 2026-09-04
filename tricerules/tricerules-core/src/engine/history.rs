@@ -2691,6 +2691,7 @@ mod tests {
             targets: vec![],
             ability_text: Some("Test ability".into()),
             source_permanent_id: Some(ours),
+            source_owner: Some(0),
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: Some(0),

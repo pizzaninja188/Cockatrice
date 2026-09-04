@@ -753,6 +753,10 @@ pub struct TargetFilter {
     /// Rooftop Assassin / Downwind Ambusher observe actual damage to this incarnation.
     #[serde(default)]
     pub was_dealt_damage_this_turn: Option<bool>,
+    /// A permanent must currently carry at least one counter of this kind. Floodpits Drowner and
+    /// Bounty Hunter-style targeting use the same physical counter predicate as event filters.
+    #[serde(default)]
+    pub required_counter: Option<super::CounterKind>,
 }
 
 impl TargetFilter {
@@ -836,6 +840,7 @@ impl TargetFilter {
                 || self.min_mana_value.is_some()
                 || self.max_mana_value.is_some()
                 || self.was_dealt_damage_this_turn.is_some()
+                || self.required_counter.is_some()
                 || self
                     .excluded_objects
                     .contains(&TargetObjectExclusion::AttachedObject))
@@ -925,6 +930,7 @@ impl TargetFilter {
             || self.min_mana_value.is_some()
             || self.max_mana_value.is_some()
             || self.was_dealt_damage_this_turn.is_some()
+            || self.required_counter.is_some()
             || self.tapped.is_some()
             || self.combat_role.is_some()
             || self.not_color.is_some()

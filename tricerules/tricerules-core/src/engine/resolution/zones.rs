@@ -916,6 +916,132 @@ pub(super) fn put_in_owners_library(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn shuffle_permanents_into_owners_libraries(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+
+    // CR 701.24c: the instruction still shuffles a named object's owner's library when that
+    // object is no longer in the expected zone. Capture the source owner on the stack item so a
+    // departed source, including a token that has ceased to exist, still identifies that library.
+    let mut affected_owners = Vec::new();
+    let mut object_ids = Vec::new();
+    let mut chosen_role = 0usize;
+    for subject in subjects {
+        match subject {
+            EffectSubject::Source => {
+                if let Some(owner) = cx.top.source_owner {
+                    if !affected_owners.contains(&owner) {
+                        affected_owners.push(owner);
+                    }
+                }
+                if cx.engine.source_is_current_object(cx.top) {
+                    if let Some(object_id) = cx.top.source_permanent_id {
+                        if cx
+                            .engine
+                            .state
+                            .objects
+                            .get(&object_id)
+                            .is_some_and(|object| object.zone == Zone::Battlefield)
+                            && !object_ids.contains(&object_id)
+                        {
+                            object_ids.push(object_id);
+                        }
+                    }
+                }
+            }
+            EffectSubject::Chosen(_) => {
+                let targets = cx
+                    .targets_by_role
+                    .get(chosen_role)
+                    .ok_or(EngineError::Illegal(
+                        "missing target role for multi-subject library shuffle",
+                    ))?;
+                chosen_role += 1;
+                for &object_id in targets {
+                    let Some(object) = cx.engine.state.objects.get(&object_id) else {
+                        continue;
+                    };
+                    if object.zone != Zone::Battlefield {
+                        continue;
+                    }
+                    if !affected_owners.contains(&object.owner) {
+                        affected_owners.push(object.owner);
+                    }
+                    if !object_ids.contains(&object_id) {
+                        object_ids.push(object_id);
+                    }
+                }
+            }
+            EffectSubject::AttachedObject
+            | EffectSubject::TriggerObject
+            | EffectSubject::PreviousEffectObject => {
+                return Err(EngineError::Illegal(
+                    "unsupported subject for multi-subject library shuffle",
+                ));
+            }
+        }
+    }
+
+    // Snapshot every departure before moving anything so all LTB observers see one simultaneous
+    // event boundary. Generation-bound ObjectIds are deduplicated above before this snapshot.
+    let zone_snapshot = cx.engine.snapshot_zone_event();
+    let moves = object_ids
+        .into_iter()
+        .filter_map(|object_id| {
+            let object = cx.engine.state.objects.get(&object_id)?;
+            let owner = object.owner;
+            let name = object_display_name(&cx.engine.state, cx.engine.registry, object_id);
+            let leave_event = cx.engine.battlefield_leave_event(object_id);
+            Some((object_id, owner, name, leave_event))
+        })
+        .collect::<Vec<_>>();
+    let mut leave_events = Vec::new();
+    for (object_id, owner, name, leave_event) in moves {
+        move_object_to_zone(
+            &mut cx.engine.state,
+            cx.engine.registry,
+            object_id,
+            Zone::Library,
+            None,
+        )?;
+        leave_events.extend(leave_event);
+        cx.events.push(permanent_moved_event(
+            &cx.engine.state,
+            object_id,
+            owner,
+            rv1::permanent_moved::Destination::Library,
+        ));
+        cx.events.push(ev_log(format!(
+            "{} puts {name} into its owner's library.",
+            cx.spell_label
+        )));
+    }
+    cx.engine.fire_zone_triggers(zone_snapshot, leave_events);
+
+    // GameState player order is stable, so it provides deterministic shuffle ordering even when
+    // subjects name permanents controlled or owned in a different order.
+    let player_order = cx
+        .engine
+        .state
+        .players
+        .iter()
+        .map(|player| player.id)
+        .collect::<Vec<_>>();
+    for owner in player_order {
+        if affected_owners.contains(&owner) {
+            crate::engine::shuffle_player_library_for_current_command(&mut cx.engine.state, owner);
+            cx.events
+                .push(ev_log(format!("P{owner} shuffles their library.")));
+        }
+    }
+
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn discard_cards(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

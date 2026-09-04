@@ -442,6 +442,7 @@ fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> S
         targets: Vec::new(),
         ability_text: Some("Dev battlefield placement".to_string()),
         source_permanent_id: None,
+        source_owner: None,
         source_zone_change: 0,
         source_face_change: 0,
         ability_index: None,

@@ -1268,6 +1268,12 @@ pub enum SpellEffectKind {
         subject: EffectSubject,
         placement: LibraryPlacement,
     },
+    /// CR 400.3 / 701.24: move every current permanent-valued subject into its owner's library,
+    /// then shuffle each affected library once. Subjects share one simultaneous departure
+    /// snapshot. Floodpits Drowner and Void Stalker use this indivisible instruction.
+    ShufflePermanentsIntoOwnersLibraries {
+        subjects: Vec<EffectSubject>,
+    },
     /// Move a card from a graveyard to hand or battlefield (CR 400.1: graveyard is public).
     /// Raise Dead / Disentomb (creature → hand); future reanimation (creature → battlefield).
     /// The `filter` selects which graveyard and which card types are legal targets; the engine
@@ -2183,6 +2189,16 @@ impl SpellEffectKind {
                     | EffectSubject::PreviousEffectObject => None,
                 })
                 .collect(),
+            SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects } => subjects
+                .iter()
+                .filter_map(|subject| match subject {
+                    EffectSubject::Chosen(filter) => Some(TargetRole::Filtered(filter)),
+                    EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject
+                    | EffectSubject::PreviousEffectObject => None,
+                })
+                .collect(),
             SpellEffectKind::Destroy { subject }
             | SpellEffectKind::Sacrifice { subject }
             | SpellEffectKind::PumpTarget { subject, .. }
@@ -2616,6 +2632,49 @@ impl SpellEffectKind {
             if let EffectSubject::Chosen(target) = subject {
                 if !target.is_permanent_only() {
                     return Err("zone-move subjects require a permanent target".into());
+                }
+            }
+        }
+        if let SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects } = self {
+            if subjects.len() < 2 {
+                return Err(
+                    "ShufflePermanentsIntoOwnersLibraries requires at least two subjects".into(),
+                );
+            }
+            if subjects
+                .iter()
+                .filter(|subject| matches!(subject, EffectSubject::Source))
+                .count()
+                > 1
+            {
+                return Err(
+                    "ShufflePermanentsIntoOwnersLibraries cannot repeat its source subject".into(),
+                );
+            }
+            for subject in subjects {
+                match subject {
+                    EffectSubject::Source if context == EffectContext::Ability => {}
+                    EffectSubject::Source => {
+                        return Err(
+                            "ShufflePermanentsIntoOwnersLibraries source requires an ability"
+                                .into(),
+                        );
+                    }
+                    EffectSubject::Chosen(filter) if filter.is_permanent_only() => {}
+                    EffectSubject::Chosen(_) => {
+                        return Err(
+                            "ShufflePermanentsIntoOwnersLibraries chosen subjects require permanent targets"
+                                .into(),
+                        );
+                    }
+                    EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject
+                    | EffectSubject::PreviousEffectObject => {
+                        return Err(
+                            "ShufflePermanentsIntoOwnersLibraries supports only Source and Chosen subjects"
+                                .into(),
+                        );
+                    }
                 }
             }
         }
@@ -3187,6 +3246,10 @@ impl SpellEffectKind {
                     who: PlayerRecipient::TriggerObjectController,
                     ..
                 }
+        ) || matches!(
+            self,
+            SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects }
+                if subjects.iter().any(|subject| matches!(subject, EffectSubject::Source))
         );
         if context == EffectContext::Spell && (animate_self || source_bound) {
             return Err(
@@ -3795,6 +3858,7 @@ impl SpellEffectKind {
                 }
                 Ok(())
             }
+            SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { .. } => Ok(()),
             // CR 702.6a: equip is an activated ability that only attaches to creatures you
             // control — never a spell effect, and the filter must be creature-typed.
             SpellEffectKind::Equip { target } => {

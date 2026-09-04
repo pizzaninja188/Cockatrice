@@ -267,6 +267,7 @@ impl GameEngine {
             targets: stack_targets,
             ability_text: None,
             source_permanent_id: None,
+            source_owner: None,
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: None,
@@ -991,6 +992,7 @@ impl GameEngine {
             targets: stack_targets,
             ability_text: None,
             source_permanent_id: None,
+            source_owner: None,
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: None,
@@ -1249,6 +1251,7 @@ impl GameEngine {
             ));
         }
         let source_is_token = object.is_token();
+        let source_owner = object.owner;
         let source_zone_change = self
             .state
             .zone_change_generation
@@ -1453,6 +1456,7 @@ impl GameEngine {
             targets: stack_targets,
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(permanent_id),
+            source_owner: Some(source_owner),
             source_zone_change,
             source_face_change,
             ability_index: Some(ability_index),
@@ -2194,6 +2198,7 @@ impl GameEngine {
             targets: Vec::new(),
             ability_text: Some("land play".to_string()),
             source_permanent_id: None,
+            source_owner: None,
             source_zone_change: self
                 .state
                 .zone_change_generation

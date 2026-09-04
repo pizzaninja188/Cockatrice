@@ -1004,6 +1004,9 @@ pub(super) fn permanent_matches_filter_characteristics(
                 .contains(&(oid, generation))
                 != required
         })
+        || filter
+            .required_counter
+            .is_some_and(|counter| object.counter_count(counter) == 0)
     {
         return false;
     }

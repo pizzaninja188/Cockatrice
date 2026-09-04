@@ -685,6 +685,11 @@ impl GameEngine {
             targets: Vec::new(),
             ability_text: Some("combat damage".to_string()),
             source_permanent_id: Some(source_id),
+            source_owner: self
+                .state
+                .objects
+                .get(&source_id)
+                .map(|object| object.owner),
             source_zone_change: self
                 .state
                 .zone_change_generation
@@ -864,6 +869,11 @@ impl GameEngine {
             targets: Vec::new(),
             ability_text: Some("combat damage".to_string()),
             source_permanent_id: Some(first.event.source.object_id),
+            source_owner: self
+                .state
+                .objects
+                .get(&first.event.source.object_id)
+                .map(|object| object.owner),
             source_zone_change: self
                 .state
                 .zone_change_generation

@@ -643,6 +643,7 @@ pub(super) fn create_reflexive_trigger(
             triggers: vec![StagedTrigger {
                 object_id,
                 source_permanent_id: source_id,
+                source_owner: cx.top.source_owner.unwrap_or(cx.controller),
                 source_face_index: cx.top.face_index,
                 source_zone_change: cx.top.source_zone_change,
                 source_face_change: cx.top.source_face_change,

@@ -150,6 +150,7 @@ impl GameEngine {
             .unwrap_or_default();
         let card_id = pending.card_id.clone();
         let source_id = pending.source_permanent_id;
+        let source_owner = pending.source_owner;
         let source_face_index = pending.source_face_index;
         let source_zone_change = pending.source_zone_change;
         let source_face_change = pending.source_face_change;
@@ -183,6 +184,7 @@ impl GameEngine {
             targets: stack_targets.clone(),
             ability_text: Some(ability_text.clone()),
             source_permanent_id: Some(source_id),
+            source_owner: Some(source_owner),
             source_zone_change,
             source_face_change,
             ability_index: Some(ability_index),

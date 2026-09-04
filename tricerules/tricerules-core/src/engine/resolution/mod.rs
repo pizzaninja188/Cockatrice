@@ -1582,6 +1582,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::PutInOwnersLibrary { .. } => {
                         zones::put_in_owners_library(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { .. } => {
+                        zones::shuffle_permanents_into_owners_libraries(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::DiscardCards { .. } => {
                         zones::discard_cards(&mut cx, effect)?
                     }
@@ -2023,6 +2026,7 @@ impl GameEngine {
             targets: Vec::new(),
             ability_text: Some("paired one-shot return".into()),
             source_permanent_id: None,
+            source_owner: None,
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: None,
@@ -3113,6 +3117,7 @@ mod attached_subject_tests {
             targets: vec![],
             ability_text: Some("When this Aura enters, tap enchanted creature.".to_string()),
             source_permanent_id: Some(source),
+            source_owner: Some(0),
             source_zone_change: generation,
             source_face_change: 0,
             ability_index: Some(0),
@@ -4769,6 +4774,7 @@ mod source_keyword_tests {
             targets: vec![],
             ability_text: Some("ping".to_string()),
             source_permanent_id: Some(source),
+            source_owner: Some(0),
             source_zone_change: generation,
             source_face_change: 0,
             ability_index: Some(0),
@@ -4799,6 +4805,7 @@ mod source_keyword_tests {
             targets: vec![],
             ability_text: None,
             source_permanent_id: None,
+            source_owner: None,
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: None,

@@ -455,6 +455,7 @@ fn publish_graveyard_fixture(engine: &mut GameEngine, filter: GraveyardFilter) -
     engine.state.pending_triggers.push_back(PendingTrigger {
         object_id: trigger_id,
         source_permanent_id: source,
+        source_owner: 0,
         source_face_index: 0,
         source_zone_change: engine
             .state

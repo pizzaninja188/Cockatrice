@@ -561,6 +561,12 @@ impl GameEngine {
                 StagedTrigger {
                     object_id,
                     source_permanent_id: trigger.source_id,
+                    source_owner: self
+                        .state
+                        .objects
+                        .get(&trigger.source_id)
+                        .map(|object| object.owner)
+                        .unwrap_or(trigger.controller),
                     source_face_index: trigger.face_index,
                     source_zone_change: trigger.source_zone_change,
                     source_face_change: trigger.source_face_change,
@@ -2229,6 +2235,7 @@ impl GameEngine {
         let StagedTrigger {
             object_id: virtual_id,
             source_permanent_id: source_id,
+            source_owner,
             source_face_index,
             source_zone_change,
             source_face_change,
@@ -2317,6 +2324,7 @@ impl GameEngine {
             self.state.pending_triggers.push_back(PendingTrigger {
                 object_id: virtual_id,
                 source_permanent_id: source_id,
+                source_owner,
                 source_face_index,
                 source_zone_change,
                 source_face_change,
@@ -2368,6 +2376,7 @@ impl GameEngine {
                 targets: vec![],
                 ability_text: Some(ability_text.clone()),
                 source_permanent_id: Some(source_id),
+                source_owner: Some(source_owner),
                 source_zone_change,
                 source_face_change,
                 ability_index: Some(ability_index),
@@ -3232,6 +3241,7 @@ mod tests {
             targets: Vec::new(),
             ability_text: None,
             source_permanent_id: None,
+            source_owner: None,
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: None,

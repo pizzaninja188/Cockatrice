@@ -1467,6 +1467,44 @@ fn return_to_owners_hand_uses_a_validated_permanent_subject() {
 }
 
 #[test]
+fn multi_permanent_library_shuffle_has_general_but_bounded_subjects() {
+    let valid = SpellEffectKind::ShufflePermanentsIntoOwnersLibraries {
+        subjects: vec![
+            EffectSubject::Source,
+            EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                required_counter: Some(CounterKind::Stun),
+                ..Default::default()
+            })),
+        ],
+    };
+    assert_eq!(valid.target_filters().len(), 1);
+    assert!(valid.validate(EffectContext::Ability).is_ok());
+    assert!(valid.validate(EffectContext::Spell).is_err());
+
+    let too_few = SpellEffectKind::ShufflePermanentsIntoOwnersLibraries {
+        subjects: vec![EffectSubject::Source],
+    };
+    assert!(too_few.validate(EffectContext::Ability).is_err());
+
+    let player_subject = SpellEffectKind::ShufflePermanentsIntoOwnersLibraries {
+        subjects: vec![
+            EffectSubject::Source,
+            EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::OpponentPlayer,
+                ..Default::default()
+            })),
+        ],
+    };
+    assert!(player_subject.validate(EffectContext::Ability).is_err());
+
+    let unsupported = SpellEffectKind::ShufflePermanentsIntoOwnersLibraries {
+        subjects: vec![EffectSubject::Source, EffectSubject::AttachedObject],
+    };
+    assert!(unsupported.validate(EffectContext::Ability).is_err());
+}
+
+#[test]
 fn chosen_subject_defaults_to_creature_target() {
     assert_eq!(
         EffectSubject::default(),

@@ -439,6 +439,7 @@ mod damage_source_tests {
             targets: Vec::new(),
             ability_text: source_permanent_id.map(|_| "ability".into()),
             source_permanent_id,
+            source_owner: source_permanent_id.map(|_| 0),
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: None,

@@ -247,6 +247,9 @@ public:
     std::set<int> physicallyAttackingCardIds;
     // Actual legacy card presentation delivered to Qt, keyed by seat and physical id.
     std::map<std::pair<int, int>, std::pair<int, QString>> physicalRowAndPt;
+    // Retain physical zone moves so focused E2E cases can verify exact Server_Card continuity
+    // without adding issue-specific state to the shared client harness.
+    std::vector<Event_MoveCard> physicalMoveEvents;
     struct Pool
     {
         int w = 0, u = 0, b = 0, r = 0, g = 0, c = 0;
@@ -785,6 +788,7 @@ public:
             }
             if (ev.HasExtension(Event_MoveCard::ext)) {
                 const auto &mc = ev.GetExtension(Event_MoveCard::ext);
+                physicalMoveEvents.push_back(mc);
                 const QString from = QString::fromStdString(mc.start_zone());
                 const QString to = QString::fromStdString(mc.target_zone());
                 const QString name = QString::fromStdString(mc.card_name());
@@ -8281,6 +8285,172 @@ TEST_F(RuledE2ESmokeTest, AggregatePowerAndManaValuePaymentsReachBothClientsWith
     ASSERT_TRUE(pass());
     EXPECT_EQ(findPermanent(p1, p1.myId, QStringLiteral("mossbridge_troll"))->power, 25);
     EXPECT_EQ(findPermanent(p2, p1.myId, QStringLiteral("mossbridge_troll"))->power, 25);
+}
+
+TEST_F(RuledE2ESmokeTest, FloodpitsDrownerMovesExactPermanentsAndKeepsLibrariesHidden)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("drownerp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("drownerp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "Floodpits Drowner game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "Floodpits Drowner game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 && (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto devPut = [&](int player, const char *cardName) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(player);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(cardName);
+        put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        put->set_ready(true);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1 for Floodpits Drowner").arg(cardName));
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority for Floodpits Drowner"));
+    };
+    auto findPermanent = [](const SmokeClient &client, int controller,
+                            const QString &cardId) -> const SmokeClient::Permanent * {
+        const auto player = client.battlefieldByPlayer.find(controller);
+        if (player == client.battlefieldByPlayer.end()) {
+            return nullptr;
+        }
+        const auto permanent = std::find_if(player->second.begin(), player->second.end(),
+                                            [&](const auto &candidate) { return candidate.cardId == cardId; });
+        return permanent == player->second.end() ? nullptr : &*permanent;
+    };
+
+    // Put the target down first so Drowner's ETB both proves normal trigger targeting and supplies
+    // the stun counter required by its activated ability.
+    ASSERT_TRUE(devPut(p2.myId, "Grizzly Bears"));
+    ASSERT_TRUE(devPut(p1.myId, "Floodpits Drowner"));
+    const auto *targetBeforeEtb = findPermanent(p1, p2.myId, QStringLiteral("grizzly_bears"));
+    ASSERT_NE(targetBeforeEtb, nullptr);
+    ASSERT_TRUE(p1.pendingTriggerTarget.has_value());
+    ASSERT_EQ(p1.pendingTriggerTarget->targets().groups_size(), 1);
+    const auto &etbGroup = p1.pendingTriggerTarget->targets().groups(0);
+    ASSERT_TRUE(std::find(etbGroup.valid_permanent_ids().begin(), etbGroup.valid_permanent_ids().end(),
+                          targetBeforeEtb->oid) != etbGroup.valid_permanent_ids().end());
+    ruled::v1::RuledCommand chooseEtbTarget;
+    auto *etbTarget = chooseEtbTarget.mutable_choose_trigger_target()->add_targets();
+    etbTarget->set_object_id(targetBeforeEtb->oid);
+    etbTarget->set_group_index(etbGroup.group_index());
+    etbTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    ASSERT_TRUE(sendAndPump(p1, chooseEtbTarget, QStringLiteral("choose Drowner ETB target")));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+
+    ruled::v1::RuledCommand addMana;
+    addMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_u(1);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_c(1);
+    ASSERT_TRUE(sendAndPump(p1, addMana, QStringLiteral("dev: add {1}{U} for Floodpits Drowner")));
+
+    const auto *source = findPermanent(p1, p1.myId, QStringLiteral("floodpits_drowner"));
+    const auto *target = findPermanent(p1, p2.myId, QStringLiteral("grizzly_bears"));
+    ASSERT_NE(source, nullptr);
+    ASSERT_NE(target, nullptr);
+    const quint32 sourceOid = source->oid;
+    const quint32 targetOid = target->oid;
+    const quint64 sourceGeneration = source->generation;
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(sourceOid));
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(targetOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(sourceOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(targetOid));
+    const int sourcePhysicalId = p1.serverCardByEngineOid.at(sourceOid);
+    const int targetPhysicalId = p1.serverCardByEngineOid.at(targetOid);
+    ASSERT_EQ(p2.serverCardByEngineOid.at(sourceOid), sourcePhysicalId);
+    ASSERT_EQ(p2.serverCardByEngineOid.at(targetOid), targetPhysicalId);
+
+    const quint64 abilityKey = static_cast<quint64>(sourceOid) << 32;
+    const auto legal = p1.latestLegal.valid_targets_by_ability().find(abilityKey);
+    ASSERT_NE(legal, p1.latestLegal.valid_targets_by_ability().end());
+    ASSERT_EQ(legal->second.groups_size(), 1);
+    const auto &activationGroup = legal->second.groups(0);
+    ASSERT_TRUE(std::find(activationGroup.valid_permanent_ids().begin(), activationGroup.valid_permanent_ids().end(),
+                          targetOid) != activationGroup.valid_permanent_ids().end());
+
+    ruled::v1::RuledCommand activate;
+    auto *ability = activate.mutable_activate_ability();
+    ability->set_source_object_id(sourceOid);
+    ability->set_expected_zone_change_generation(sourceGeneration);
+    ability->set_ability_index(0);
+    auto *abilityTarget = ability->add_targets();
+    abilityTarget->set_object_id(targetOid);
+    abilityTarget->set_group_index(activationGroup.group_index());
+    abilityTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    ASSERT_TRUE(sendAndPump(p1, activate, QStringLiteral("activate Floodpits Drowner")));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+
+    for (const SmokeClient *client : {&p1, &p2}) {
+        EXPECT_EQ(findPermanent(*client, p1.myId, QStringLiteral("floodpits_drowner")), nullptr);
+        EXPECT_EQ(findPermanent(*client, p2.myId, QStringLiteral("grizzly_bears")), nullptr);
+        const auto movedExactCard = [&](int physicalId, int owner) {
+            return std::any_of(client->physicalMoveEvents.begin(), client->physicalMoveEvents.end(),
+                               [&](const Event_MoveCard &move) {
+                                   return move.start_zone() == ZoneNames::TABLE && move.target_zone() == ZoneNames::DECK &&
+                                          move.card_id() == physicalId && move.new_card_id() == physicalId &&
+                                          move.target_player_id() == owner;
+                               });
+        };
+        EXPECT_TRUE(movedExactCard(sourcePhysicalId, p1.myId))
+            << "the exact physical Drowner did not enter its owner's library";
+        EXPECT_TRUE(movedExactCard(targetPhysicalId, p2.myId))
+            << "the exact physical target did not enter its owner's library";
+        EXPECT_TRUE(client->libraryDetailsStayedConcealed)
+            << "a client received hidden library card identity or ordering";
+    }
 }
 
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can

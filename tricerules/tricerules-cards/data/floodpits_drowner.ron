@@ -1,0 +1,41 @@
+// Oracle and rulings verified against the Duskmourn release notes on 2026-09-04.
+(
+  id: "floodpits_drowner",
+  name: "Floodpits Drowner",
+  face_id: "floodpits_drowner",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Merfolk"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flash, Vigilance],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      Tap(subject: Chosen((kind: Creature, controller: Opponent))),
+      PutCounters(counter: Stun, count: 1, subject: Chosen((kind: Creature, controller: Opponent))),
+    ],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature an opponent controls",
+      effect_indices: [0, 1],
+    )])),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([4]),
+    costs: [Mana("{1}{U}"), Tap],
+    effect: [ShufflePermanentsIntoOwnersLibraries(subjects: [
+      Source,
+      Chosen((kind: Creature, required_counter: Stun)),
+    ])],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature with a stun counter on it",
+      effect_indices: [0],
+    )])),
+  )],
+)

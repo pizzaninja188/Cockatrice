@@ -1070,9 +1070,10 @@ fn validate_effect_targets(
         }
         SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
         | SpellEffectKind::Fight { .. }
-        | SpellEffectKind::AttachEquipment { .. } => {
+        | SpellEffectKind::AttachEquipment { .. }
+        | SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { .. } => {
             return Err(EngineError::Illegal(
-                "creature damage targets require grouped target-role validation",
+                "multi-subject targets require grouped target-role validation",
             ));
         }
         SpellEffectKind::Destroy {
@@ -1739,9 +1740,11 @@ fn spell_target_legality_error_with_context(
     trigger_context: TriggerContext,
 ) -> Result<(), EngineError> {
     match effect {
-        SpellEffectKind::CreatureDealsDamageEqualToPower { .. } | SpellEffectKind::Fight { .. } => {
+        SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
+        | SpellEffectKind::Fight { .. }
+        | SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { .. } => {
             return Err(EngineError::Illegal(
-                "creature damage targets require grouped target-role validation",
+                "multi-subject targets require grouped target-role validation",
             ));
         }
         // Filter-based targeted effects share one legality path; the filter carries any
@@ -2192,6 +2195,7 @@ mod tests {
             targets: Vec::new(),
             ability_text: None,
             source_permanent_id: None,
+            source_owner: None,
             source_zone_change: 0,
             source_face_change: 0,
             ability_index: None,
