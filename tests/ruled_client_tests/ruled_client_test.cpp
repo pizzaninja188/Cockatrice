@@ -1218,15 +1218,32 @@ TEST(RuledPendingTargetTest, BoundedCastCostGroupStaysOpenUntilItsSelectionCount
     EXPECT_EQ(ruledCastCostGroupSelectionCount(spell, 4), 1);
     EXPECT_TRUE(ruledCastCostOptionAlreadySelected(spell, 4, 10));
     EXPECT_TRUE(ruledCastCostGroupCanConfirm(spell, group));
+    EXPECT_FALSE(ruledCastCostGroupSelectionCompletesImmediately(spell, group));
     EXPECT_FALSE(ruledCastCostGroupsComplete(spell));
 
     spell.castCostSelections.append(
         {4, 11, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
     EXPECT_EQ(ruledCastCostGroupSelectionCount(spell, 4), 2);
     EXPECT_TRUE(ruledCastCostGroupCanConfirm(spell, group));
+    EXPECT_FALSE(ruledCastCostGroupSelectionCompletesImmediately(spell, group));
 
     spell.nextCastCostGroup = 1;
     EXPECT_TRUE(ruledCastCostGroupsComplete(spell));
+}
+
+TEST(RuledPendingTargetTest, SingleCastCostChoiceCompletesImmediately)
+{
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+
+    RuledCastCostGroup group;
+    group.groupIndex = 7;
+    group.min = 1;
+    group.max = 1;
+    spell.castCostSelections.append(
+        {7, 1, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
+
+    EXPECT_TRUE(ruledCastCostGroupSelectionCompletesImmediately(spell, group));
 }
 
 TEST(RuledPendingTargetTest, PermanentChoicePromptKeepsEngineSpecificityAndAddsClickGuidance)

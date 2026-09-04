@@ -1082,6 +1082,17 @@ bool PlayerActions::pendingRuledCastCostObjectCanConfirm() const
            (option->aggregateMinimum <= 0 || total >= option->aggregateMinimum);
 }
 
+bool PlayerActions::pendingRuledCastCostObjectUsesExplicitConfirmation() const
+{
+    if (!isAwaitingRuledCastCostObject())
+        return false;
+    const auto &group = pendingRuledSpellCast.castCostGroups.at(pendingRuledSpellCast.nextCastCostGroup);
+    const auto option = std::find_if(group.options.cbegin(), group.options.cend(), [&](const auto &entry) {
+        return entry.optionIndex == pendingRuledSpellCast.activeCastCostOption;
+    });
+    return option != group.options.cend() && ruledCastCostUsesPermanentCohort(option->kind);
+}
+
 void PlayerActions::selectPendingRuledCastCostOption(int optionIndex)
 {
     if (!isAwaitingRuledCastCostOption()) {
@@ -1142,6 +1153,10 @@ void PlayerActions::selectPendingRuledCastCostOption(int optionIndex)
             pendingRuledSpellCast.castCostSelections.append(
                 {group.groupIndex, option->optionIndex, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
         }
+    }
+    if (ruledCastCostGroupSelectionCompletesImmediately(pendingRuledSpellCast, group)) {
+        confirmPendingRuledCastCostGroup();
+        return;
     }
     emit ruledSpellCastPendingChanged(true);
 }
@@ -5713,7 +5728,11 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         pendingRuledSpellCast.activeCastCostOption = -1;
         const QPair<int, int> coordinate{group.groupIndex, option->optionIndex};
         if (!pendingRuledSpellCast.selectedModeLinkedCastCosts.contains(coordinate)) {
-            emit ruledSpellCastPendingChanged(true);
+            if (ruledCastCostGroupSelectionCompletesImmediately(pendingRuledSpellCast, group)) {
+                confirmPendingRuledCastCostGroup();
+            } else {
+                emit ruledSpellCastPendingChanged(true);
+            }
             return true;
         }
         if (!promptForNextRuledCastCostGroup())

@@ -781,8 +781,9 @@ void GamePromptWidget::updateCombatButtonsVisibility()
             mode == PromptMode::CastCostOptions || mode == PromptMode::CastCostObject ? tr("Confirm Costs")
                                                                                        : tr("Confirm Targets"));
         confirmTargetsButton->setVisible((mode == PromptMode::ClickChoice && promptState.max >= 0) ||
-                                         mode == PromptMode::CastCostOptions ||
-                                         (mode == PromptMode::CastCostObject && promptState.max > 0));
+                                         (mode == PromptMode::CastCostOptions && promptState.max > 1) ||
+                                         (mode == PromptMode::CastCostObject &&
+                                          promptState.castCostSelectionRequiresConfirmation));
         confirmTargetsButton->setEnabled(
             mode == PromptMode::CastCostObject
                 ? promptState.castCostSelectionConfirmable

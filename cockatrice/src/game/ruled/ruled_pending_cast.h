@@ -379,6 +379,15 @@ ruledCastCostGroupCanConfirm(const PendingRuledSpellCast &spell, const RuledCast
     return selected >= group.min && selected <= group.max;
 }
 
+/// Choosing the sole allowed group entry is the declaration. Wider groups stay open so the player
+/// can build the intended subset before confirming it.
+[[nodiscard]] inline bool
+ruledCastCostGroupSelectionCompletesImmediately(const PendingRuledSpellCast &spell, const RuledCastCostGroup &group)
+{
+    return group.max == 1 && ruledCastCostGroupSelectionCount(spell, group.groupIndex) == 1 &&
+           ruledCastCostGroupCanConfirm(spell, group);
+}
+
 /// A required exactly-one target group completes on the target click. Every other legal range
 /// needs an explicit confirmation surface, including optional 0-1 groups where confirming zero
 /// targets is semantically different from cancelling the entire cast.

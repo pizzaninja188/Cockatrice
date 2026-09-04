@@ -126,6 +126,7 @@ public:
     [[nodiscard]] int pendingRuledCastCostMinimum() const;
     [[nodiscard]] int pendingRuledCastCostMaximum() const;
     [[nodiscard]] bool pendingRuledCastCostObjectCanConfirm() const;
+    [[nodiscard]] bool pendingRuledCastCostObjectUsesExplicitConfirmation() const;
     void selectPendingRuledCastCostOption(int optionIndex);
     void confirmPendingRuledCastCostGroup();
     void backPendingRuledCastCostObject();

@@ -101,6 +101,8 @@ public:
         int max = -1;
         /// CastCostObject only: authoritative candidate data satisfies count and aggregate bounds.
         bool castCostSelectionConfirmable = false;
+        /// CastCostObject only: a multi-object cohort stays open until the player confirms it.
+        bool castCostSelectionRequiresConfirmation = false;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into

@@ -461,6 +461,7 @@ TEST_F(GamePromptWidgetTest, CastCostOptionsUseTheirOwnButtonRouteAndSuppressPri
     state.selected = 1;
     state.max = 3;
     state.castCostSelectionConfirmable = false;
+    state.castCostSelectionRequiresConfirmation = true;
     widget->setRuledPromptState(state);
     EXPECT_FALSE(btn("confirmTargetsButton")->isHidden());
     EXPECT_FALSE(btn("confirmTargetsButton")->isEnabled());
@@ -473,6 +474,35 @@ TEST_F(GamePromptWidgetTest, CastCostOptionsUseTheirOwnButtonRouteAndSuppressPri
     btn("declineClickChoiceButton")->click();
     EXPECT_EQ(backSpy.count(), 1);
     EXPECT_EQ(resolutionSpy.count(), 0);
+}
+
+TEST_F(GamePromptWidgetTest, SingleChoiceCastCostsHideRedundantConfirmation)
+{
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::CastCostOptions;
+    state.text = "Discard a card or pay 3 life.";
+    state.required = 1;
+    state.max = 1;
+    state.choiceOptions = {{0, "Discard a card", true}, {1, "Pay 3 life", true}};
+    widget->setRuledPromptState(state);
+
+    EXPECT_TRUE(btn("confirmTargetsButton")->isHidden());
+
+    state.mode = PromptMode::CastCostObject;
+    state.choiceOptions.clear();
+    state.selected = 0;
+    state.castCostSelectionConfirmable = false;
+    widget->setRuledPromptState(state);
+
+    EXPECT_TRUE(btn("confirmTargetsButton")->isHidden());
+
+    state.max = 2;
+    state.selected = 1;
+    state.castCostSelectionConfirmable = true;
+    state.castCostSelectionRequiresConfirmation = true;
+    widget->setRuledPromptState(state);
+
+    EXPECT_FALSE(btn("confirmTargetsButton")->isHidden());
 }
 
 TEST_F(GamePromptWidgetTest, CastCostOptionControllerCanReplaceStaleButtonsWithObjectPicker)
