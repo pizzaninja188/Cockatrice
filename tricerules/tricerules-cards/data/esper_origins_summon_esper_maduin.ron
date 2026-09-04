@@ -1,0 +1,70 @@
+// Oracle and rulings verified 2026-09-04 against the FINAL FANTASY release notes.
+// CR 400.7, 608.2m, 122.1h, 702.34, 712.8, and 714 govern this card.
+(
+  id: "esper_origins_summon:_esper_maduin",
+  name: "Esper Origins // Summon: Esper Maduin",
+  layout: Transform,
+  faces: [
+    (
+      name: "Esper Origins",
+      face_id: "esper_origins",
+      mana_cost: "{1}{G}",
+      flashback_cost: Some("{3}{G}"),
+      types: ["Sorcery"],
+      cast_conditions: [CastOrigin(origin: Graveyard)],
+      spell_effect: [
+        LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil),
+        GainLife(amount: 2),
+        Conditional(
+          condition: CastSnapshot(index: 0),
+          effect: ExileSourceThenReturnTransformed(
+            controller: Owner,
+            entry_counters: [(counter: Finality, count: 1)],
+          ),
+        ),
+      ],
+    ),
+    (
+      name: "Summon: Esper Maduin",
+      face_id: "summon_esper_maduin",
+      mana_cost: "",
+      color_indicator: Some([Green]),
+      types: ["Enchantment", "Creature", "Saga", "Elemental"],
+      power: 4,
+      toughness: 4,
+      triggered_abilities: [
+        (
+          ability_id: "chapter_i",
+          presentation: OracleLines([2]),
+          trigger: SagaChapter(chapters: [1]),
+          effect: [RevealTopCardToHandIfMatches(filter: (any_of: Some([
+            (card_type: Some(Land)),
+            (card_type: Some(NonlandPermanent)),
+          ])))],
+        ),
+        (
+          ability_id: "chapter_ii",
+          presentation: OracleLines([3]),
+          trigger: SagaChapter(chapters: [2]),
+          effect: [AddMana(amount: (g: 2), retention: EndOfStep)],
+        ),
+        (
+          ability_id: "chapter_iii",
+          presentation: OracleLines([4]),
+          trigger: SagaChapter(chapters: [3]),
+          effect: [
+            PumpAll(
+              filter: (controller: YouControl, exclude_self: true),
+              power: 2,
+              toughness: 2,
+            ),
+            GrantKeywordsAll(
+              filter: (controller: YouControl, exclude_self: true),
+              keywords: [Trample],
+            ),
+          ],
+        ),
+      ],
+    ),
+  ],
+)

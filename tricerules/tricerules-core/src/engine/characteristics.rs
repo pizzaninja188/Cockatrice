@@ -471,6 +471,7 @@ impl CharacteristicsEvaluator<'_> {
             }
             // Cast snapshots are internal to resolving spells, never continuous characteristics.
             GameCondition::CastSnapshot { .. }
+            | GameCondition::CastOrigin { .. }
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ObjectMatches { .. } => false,
             GameCondition::Void => self.state.turn_history.current.void_holds(),

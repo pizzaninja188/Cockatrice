@@ -1946,6 +1946,11 @@ pub(super) fn return_triggered_card(
             owner,
             spell_label: cx.spell_label.to_string(),
             object_label: object_label.clone(),
+            from_zone: match origin {
+                tricerules_cards::primitives::EventZone::Graveyard => Zone::Graveyard,
+                tricerules_cards::primitives::EventZone::Exile => Zone::Exile,
+                _ => unreachable!("return source was restricted above"),
+            },
         },
         cx.events,
     ) {
@@ -1965,6 +1970,214 @@ pub(super) fn return_triggered_card(
             Ok(EffectOutcome::Continue)
         }
     }
+}
+
+pub(super) fn exile_source_then_return_transformed(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ExileSourceThenReturnTransformed {
+        controller,
+        entry_counters,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+
+    let is_spell = cx.top.ability_text.is_none();
+    if is_spell && cx.top.is_copy {
+        return Ok(EffectOutcome::Continue);
+    }
+    let source_id = if is_spell {
+        cx.top.id
+    } else {
+        let Some(source_id) = cx.top.source_permanent_id else {
+            return Ok(EffectOutcome::Continue);
+        };
+        if !cx.engine.source_is_current_object(cx.top) {
+            return Ok(EffectOutcome::Continue);
+        }
+        source_id
+    };
+    let Some((owner, old_zone, card_id)) = cx
+        .engine
+        .state
+        .objects
+        .get(&source_id)
+        .map(|object| (object.owner, object.zone, object.card_id.clone()))
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if (is_spell && old_zone != Zone::Stack) || (!is_spell && old_zone != Zone::Battlefield) {
+        return Ok(EffectOutcome::Continue);
+    }
+    let can_enter_transformed = cx.engine.registry.get(&card_id).is_some_and(|definition| {
+        definition.layout == Layout::Transform
+            && definition.face(1).is_some_and(CardFace::is_permanent)
+    });
+
+    let object_label = object_display_name(&cx.engine.state, cx.engine.registry, source_id);
+    let zone_snapshot = cx.engine.snapshot_zone_event();
+    let leave_event = (!is_spell)
+        .then(|| cx.engine.battlefield_leave_event(source_id))
+        .flatten();
+    move_object_to_zone(
+        &mut cx.engine.state,
+        cx.engine.registry,
+        source_id,
+        Zone::Exile,
+        None,
+    )?;
+    cx.engine
+        .fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
+    cx.events.push(permanent_moved_event(
+        &cx.engine.state,
+        source_id,
+        owner,
+        rv1::permanent_moved::Destination::Exile,
+    ));
+    if is_spell {
+        cx.events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
+                object_id: source_id,
+                destination: rv1::StackResolveDestination::Exile as i32,
+                owner_player_id: Some(owner),
+            })),
+        });
+    }
+    if !can_enter_transformed {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let destination_controller = match controller {
+        ReturnController::Owner => owner,
+        ReturnController::AbilityController => cx.controller,
+    };
+    let entry_counters = entry_counters
+        .into_iter()
+        .map(|placement| (placement.counter, placement.count))
+        .collect();
+    match cx.engine.begin_battlefield_entry(
+        cx.top.clone(),
+        BattlefieldEntryEvent {
+            object_id: source_id,
+            deciding_player: destination_controller,
+            destination_controller,
+            battle_protector: None,
+            face_index: 1,
+            unlock_room_door: None,
+            chosen_x: 0,
+            cast_cost_receipts: Vec::new(),
+            player_life_snapshot: cx.engine.player_life_snapshot(),
+            tapped: false,
+            set_types: None,
+            entry_counters,
+            applied_effects: Vec::new(),
+        },
+        BattlefieldEntryCompletion::ResolutionEffect {
+            owner,
+            spell_label: cx.spell_label.to_string(),
+            object_label: object_label.clone(),
+            from_zone: Zone::Exile,
+        },
+        cx.events,
+    ) {
+        super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
+        super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+            cx.engine.commit_battlefield_entry(entry, None)?;
+            cx.events.push(ev_log(format!(
+                "{} returns {object_label} transformed from exile to the battlefield.",
+                cx.spell_label
+            )));
+            cx.events.push(permanent_moved_event(
+                &cx.engine.state,
+                source_id,
+                owner,
+                rv1::permanent_moved::Destination::Battlefield,
+            ));
+            Ok(EffectOutcome::Continue)
+        }
+    }
+}
+
+pub(super) fn reveal_top_card_to_hand_if_matches(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::RevealTopCardToHandIfMatches { filter } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(player_idx) = cx.engine.state.player_idx(cx.controller) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(object_id) = cx.engine.state.players[player_idx].library.front().copied() else {
+        cx.events.push(ev_log(format!(
+            "P{} has no card to reveal for {}.",
+            cx.controller, cx.spell_label
+        )));
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some((owner, card_id)) = cx
+        .engine
+        .state
+        .objects
+        .get(&object_id)
+        .map(|object| (object.owner, object.card_id.clone()))
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let generation = cx
+        .engine
+        .state
+        .zone_change_generation
+        .get(&object_id)
+        .copied()
+        .unwrap_or(0);
+    let card_name = cx
+        .engine
+        .registry
+        .get(&card_id)
+        .map(|definition| definition.name.clone())
+        .unwrap_or_else(|| "card".into());
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::CardsRevealed(rv1::CardsRevealed {
+            zone_owner_player_id: cx.controller,
+            source_zone: rv1::ChoiceCandidateSourceZone::Library as i32,
+            cards: vec![rv1::RevealedCard {
+                object_id,
+                zone_change_generation: generation,
+                card_id,
+                card_name: card_name.clone(),
+            }],
+        })),
+    });
+    cx.events.push(ev_log(format!(
+        "P{} reveals {card_name} for {}.",
+        cx.controller, cx.spell_label
+    )));
+
+    if library_card_matches_filter(
+        &cx.engine.state,
+        cx.engine.registry,
+        object_id,
+        Some(&filter),
+    ) {
+        move_object_to_zone(
+            &mut cx.engine.state,
+            cx.engine.registry,
+            object_id,
+            Zone::Hand,
+            None,
+        )?;
+        cx.events.push(permanent_moved_event_with_library_position(
+            &cx.engine.state,
+            object_id,
+            owner,
+            rv1::permanent_moved::Destination::Hand,
+            0,
+        ));
+    }
+    Ok(EffectOutcome::Continue)
 }
 
 /// CR 701.18 scry enters the shared private top-library partition state machine. Scry's selected

@@ -444,6 +444,7 @@ impl GameEngine {
                         owner: controller,
                         spell_label,
                         object_label: card_label,
+                        from_zone: Zone::Graveyard,
                     },
                     &mut events,
                 ) {

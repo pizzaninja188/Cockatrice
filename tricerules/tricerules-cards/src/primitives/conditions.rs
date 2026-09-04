@@ -27,6 +27,9 @@ pub enum GameCondition {
     /// A face-authored condition captured after successful casting. Spell copies were not cast
     /// and have no result; ordinary live conditions elsewhere are unaffected.
     CastSnapshot { index: u32 },
+    /// The zone from which the current physical spell was actually cast. This is captured as a
+    /// face cast condition and consumed through `CastSnapshot`; spell copies were not cast.
+    CastOrigin { origin: SpellCastOrigin },
     /// Compare the actual mana paid for the spell whose cast event created this triggered
     /// ability. The value is frozen at CR 601.2i and follows the trigger through resolution;
     /// printed mana value and aggregate Expend history are deliberately unrelated.
@@ -248,6 +251,20 @@ impl GameCondition {
         if self.requires_triggering_spell_context() {
             return Err("triggering-spell mana spending requires a spell-cast trigger".into());
         }
+        if self.any_node_matches(|condition| matches!(condition, Self::CastOrigin { .. })) {
+            return Err("CastOrigin is available only as a face cast condition".into());
+        }
+        self.validate_cast_snapshot_reference(0)?;
+        self.validate()
+    }
+
+    pub(crate) fn validate_cast_condition(&self) -> Result<(), String> {
+        if self.references_previous_effect_object() {
+            return Err("PreviousEffectObject is unavailable to face cast conditions".into());
+        }
+        if self.requires_triggering_spell_context() {
+            return Err("triggering-spell mana spending requires a spell-cast trigger".into());
+        }
         self.validate_cast_snapshot_reference(0)?;
         self.validate()
     }
@@ -314,6 +331,7 @@ impl GameCondition {
             | GameCondition::Void
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
             | GameCondition::CastSnapshot { .. }
+            | GameCondition::CastOrigin { .. }
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ObjectTapped { .. } => Ok(()),
             GameCondition::ActivePlayer { .. } => Ok(()),
@@ -381,6 +399,7 @@ impl GameCondition {
             | GameCondition::Void
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
             | GameCondition::CastSnapshot { .. }
+            | GameCondition::CastOrigin { .. }
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ActivePlayer { .. }
             | GameCondition::LifeChangedThisTurn { .. }

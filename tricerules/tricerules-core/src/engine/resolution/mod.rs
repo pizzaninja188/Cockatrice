@@ -1502,6 +1502,9 @@ impl GameEngine {
                                 effect @ SpellEffectKind::RemoveAllAbilities { .. } => {
                                     pump_counters::remove_all_abilities(&mut cx, effect)?
                                 }
+                                effect @ SpellEffectKind::ExileSourceThenReturnTransformed {
+                                    ..
+                                } => zones::exile_source_then_return_transformed(&mut cx, effect)?,
                                 _ => {
                                     return Err(EngineError::Illegal(
                                         "unsupported conditional inner effect",
@@ -1559,6 +1562,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::Scry { .. } => zones::scry(&mut cx, effect)?,
                     effect @ SpellEffectKind::LibraryPartition { .. } => {
                         zones::library_partition(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::RevealTopCardToHandIfMatches { .. } => {
+                        zones::reveal_top_card_to_hand_if_matches(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Explore { .. } => zones::explore(&mut cx, effect)?,
                     SpellEffectKind::ManifestDread => zones::manifest_dread(&mut cx)?,
@@ -1750,6 +1756,9 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::ReturnTriggeredCard { .. } => {
                         zones::return_triggered_card(&mut cx, effect)?
+                    }
+                    effect @ SpellEffectKind::ExileSourceThenReturnTransformed { .. } => {
+                        zones::exile_source_then_return_transformed(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::ProduceMana { .. } => {
                         misc::produce_mana(&mut cx, effect)?
@@ -2493,11 +2502,16 @@ fn move_object_to_zone_with_entry_receipt(
     {
         return Ok(None);
     }
+    let has_finality = state
+        .objects
+        .get(&oid)
+        .is_some_and(|object| object.counter_count(CounterKind::Finality) > 0);
     if old_zone == Some(Zone::Battlefield)
         && z == Zone::Graveyard
-        && state.death_replacement_effects.iter().any(|effect| {
-            effect.object_id == oid && effect.zone_change_generation == prior_generation
-        })
+        && (has_finality
+            || state.death_replacement_effects.iter().any(|effect| {
+                effect.object_id == oid && effect.zone_change_generation == prior_generation
+            }))
     {
         z = Zone::Exile;
     }

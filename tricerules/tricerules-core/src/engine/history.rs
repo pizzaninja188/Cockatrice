@@ -929,6 +929,27 @@ impl GameEngine {
                 .and_then(|item| item.cast_condition_results.get(*index as usize))
                 .copied()
                 .unwrap_or(false),
+            GameCondition::CastOrigin { origin } => context
+                .stack_item
+                .filter(|item| item.ability_text.is_none() && !item.is_copy)
+                .and_then(|item| item.cast_occurrence)
+                .and_then(|occurrence| {
+                    self.state
+                        .turn_history
+                        .current
+                        .spell_casts
+                        .iter()
+                        .find(|fact| fact.occurrence == occurrence)
+                })
+                .is_some_and(|fact| {
+                    spell_cast_matches(
+                        &SpellCastFilter {
+                            origin: Some(*origin),
+                            ..SpellCastFilter::default()
+                        },
+                        fact,
+                    )
+                }),
             GameCondition::TriggeringSpellManaSpent { comparison } => {
                 let spent = trigger_context
                     .or_else(|| context.stack_item.map(|item| &item.trigger_context))

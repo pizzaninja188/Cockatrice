@@ -209,6 +209,8 @@ mod issue_210_demolition_field;
 mod issue_211_reflexive_counter_placement;
 #[path = "scenario/issue_212_passages.rs"]
 mod issue_212_passages;
+#[path = "scenario/issue_213_esper_origins.rs"]
+mod issue_213_esper_origins;
 #[path = "scenario/issue_214_graveyard_land_play.rs"]
 mod issue_214_graveyard_land_play;
 #[path = "scenario/issue_215_crew.rs"]

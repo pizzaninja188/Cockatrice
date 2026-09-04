@@ -1271,6 +1271,7 @@ pub(crate) enum BattlefieldEntryCompletion {
         owner: PlayerId,
         spell_label: String,
         object_label: String,
+        from_zone: Zone,
     },
     ObserverReturn {
         owner: PlayerId,

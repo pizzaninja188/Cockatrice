@@ -1436,11 +1436,20 @@ impl GameEngine {
                 owner,
                 spell_label,
                 object_label,
+                from_zone,
             } => {
                 let object_id = event.object_id;
                 self.commit_battlefield_entry(event, None)?;
                 events.push(ev_log(format!(
-                    "{spell_label} returns {object_label} from graveyard to battlefield."
+                    "{spell_label} returns {object_label} from {} to battlefield.",
+                    match from_zone {
+                        Zone::Graveyard => "graveyard",
+                        Zone::Exile => "exile",
+                        Zone::Hand => "hand",
+                        Zone::Library => "library",
+                        Zone::Stack => "the stack",
+                        Zone::Battlefield => "the battlefield",
+                    }
                 )));
                 events.push(permanent_moved_event(
                     &self.state,

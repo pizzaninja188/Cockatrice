@@ -1104,6 +1104,9 @@ message RuledEvent {
     // One or more creatures entered the battlefield attacking after attackers were declared.
     // Clients append these generation-bound edges; they must not replace the declared cohort.
     AttackersAdded attackers_added = 36 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    // A bounded concealed-zone cohort that an effect explicitly reveals to every participant.
+    // Unlike ResolutionChoiceRequired this is informational and never requests a command.
+    CardsRevealed cards_revealed = 37 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   }
 }
 
@@ -1565,6 +1568,19 @@ message ActivePublicReveal {
 
 message ActivePublicRevealSnapshot {
   repeated ActivePublicReveal reveals = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+message RevealedCard {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string card_id = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string card_name = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+message CardsRevealed {
+  int32 zone_owner_player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  ChoiceCandidateSourceZone source_zone = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  repeated RevealedCard cards = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ActivateAbility {

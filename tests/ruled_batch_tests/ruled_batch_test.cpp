@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <google/protobuf/dynamic_message.h>
 #include <gtest/gtest.h>
+#include <libcockatrice/protocol/pb/event_reveal_cards.pb.h>
 #include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/game_event_container.pb.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
@@ -273,6 +274,12 @@ protected:
         return game->ruled()->synchronizer->playerBinding(p->getPlayerId());
     }
 
+    void bindLibraryObject(Server_Player *p, quint32 engineOid, Server_Card *card)
+    {
+        game->ruled()->synchronizer->playerBinding(p->getPlayerId()).registerLibraryEngineOid(engineOid,
+                                                                                               card->getId());
+    }
+
     BatchOutcome callBatchApply(const ruled::v1::IpcResponse &resp)
     {
         const auto r = game->ruled()->synchronizer->applyBatch(resp);
@@ -283,6 +290,11 @@ protected:
         out.tapStateEventsQueued = r.tapStateEventsQueued;
         out.phaseChanged = r.phaseChanged;
         return out;
+    }
+
+    void applyCardsRevealed(const ruled::v1::RuledEventBatch &batch, GameEventStorage &events)
+    {
+        game->ruled()->synchronizer->applyCardsRevealed(batch, events);
     }
 
     ruled::v1::RuledEventBatch redactFor(const ruled::v1::RuledEventBatch &batch,
@@ -438,6 +450,98 @@ protected:
         return v;
     }
 };
+
+TEST_F(RuledBatchTest, CardsRevealedPublishesExactEngineBoundLibraryCard)
+{
+    Server_Card *top = addCardToDeck(p1, "Grizzly Bears");
+    ASSERT_NE(top, nullptr);
+    bindLibraryObject(p1, 213, top);
+
+    ruled::v1::RuledEventBatch batch;
+    auto *reveal = batch.add_events()->mutable_cards_revealed();
+    reveal->set_zone_owner_player_id(p1->getPlayerId());
+    reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
+    auto *card = reveal->add_cards();
+    card->set_object_id(213);
+    card->set_zone_change_generation(7);
+    card->set_card_id("grizzly_bears");
+    card->set_card_name("Grizzly Bears");
+
+    GameEventStorage events;
+    applyCardsRevealed(batch, events);
+
+    ASSERT_EQ(events.getGameEventList().size(), 1);
+    const GameEvent &event = events.getGameEventList().first()->getGameEvent();
+    ASSERT_TRUE(event.HasExtension(Event_RevealCards::ext));
+    const Event_RevealCards &published = event.GetExtension(Event_RevealCards::ext);
+    EXPECT_EQ(published.zone_name(), ZoneNames::DECK);
+    ASSERT_EQ(published.card_id_size(), 1);
+    EXPECT_EQ(published.card_id(0), 0);
+    ASSERT_EQ(published.cards_size(), 1);
+    EXPECT_EQ(published.cards(0).id(), top->getId());
+    EXPECT_EQ(published.cards(0).name(), "Grizzly Bears");
+    EXPECT_EQ(published.number_of_cards(), 1);
+    EXPECT_EQ(events.getGameEventList().first()->getRecipients(),
+              GameEventStorageItem::SendToPrivate | GameEventStorageItem::SendToOthers);
+}
+
+TEST_F(RuledBatchTest, TransformedReturnPreservesPhysicalIdentityAcrossStackExileAndBattlefield)
+{
+    const QString cardId = QStringLiteral("esper_origins_summon:_esper_maduin");
+    const QString combinedName = QStringLiteral("Esper Origins // Summon: Esper Maduin");
+    seedMultifaceCatalog(cardId, combinedName, {"Esper Origins", "Summon: Esper Maduin"},
+                         {combinedName, "Summon: Esper Maduin"});
+    Server_Card *physical = addCardToHand(p1, combinedName);
+    const int physicalId = physical->getId();
+    Server_CardZone *hand = p1->getZones().value(ZoneNames::HAND);
+    Server_CardZone *stack = p1->getZones().value(ZoneNames::STACK);
+    Server_CardZone *exile = p1->getZones().value(ZoneNames::EXILE);
+    Server_CardZone *table = p1->getZones().value(ZoneNames::TABLE);
+    hand->removeCard(physical);
+    stack->insertCard(physical, -1, 0);
+    bindStackObject(213u, physical, p1->getPlayerId(), QStringLiteral("Esper Origins"));
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *toExile = response.mutable_batch()->add_events()->mutable_permanent_moved();
+    toExile->set_object_id(213u);
+    toExile->set_card_id(cardId.toStdString());
+    toExile->set_owner_player_id(p1->getPlayerId());
+    toExile->set_controller_player_id(p1->getPlayerId());
+    toExile->set_destination(ruled::v1::PermanentMoved::DESTINATION_EXILE);
+    auto *toBattlefield = response.mutable_batch()->add_events()->mutable_permanent_moved();
+    toBattlefield->set_object_id(213u);
+    toBattlefield->set_card_id(cardId.toStdString());
+    toBattlefield->set_owner_player_id(p1->getPlayerId());
+    toBattlefield->set_controller_player_id(p1->getPlayerId());
+    toBattlefield->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+    auto *resolved = response.mutable_batch()->add_events()->mutable_stack_resolved();
+    resolved->set_object_id(213u);
+    resolved->set_owner_player_id(p1->getPlayerId());
+    resolved->set_destination(ruled::v1::STACK_RESOLVE_DESTINATION_EXILE);
+    auto *zone = response.mutable_batch()->add_events()->mutable_zone_view();
+    auto *view = zone->add_per_player();
+    view->set_player_id(p1->getPlayerId());
+    auto *object = view->add_battlefield_objects();
+    object->set_object_id(213u);
+    object->set_card_id(cardId.toStdString());
+    object->set_face_up_index(1);
+    object->set_effective_display_name("Summon: Esper Maduin");
+    object->set_owner_player_id(p1->getPlayerId());
+    object->set_controller_player_id(p1->getPlayerId());
+    object->set_is_creature(true);
+    *zone->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    callBatchApply(response);
+
+    ASSERT_EQ(table->getCards().size(), 1);
+    EXPECT_EQ(table->getCards().first(), physical);
+    EXPECT_EQ(physical->getId(), physicalId);
+    EXPECT_EQ(physical->getName(), QStringLiteral("Summon: Esper Maduin"));
+    EXPECT_TRUE(stack->getCards().isEmpty());
+    EXPECT_TRUE(exile->getCards().isEmpty());
+    EXPECT_EQ(findCardByEngineOid(p1, 213u), physical);
+}
 
 TEST_F(RuledBatchTest, AutoPassPoliciesAreAuthenticatedSortedAndDefaultMissingPlayersToStop)
 {

@@ -1505,6 +1505,7 @@ fn validate_effect_targets(
         | SpellEffectKind::LookChooseToHand { .. }
         | SpellEffectKind::Scry { .. }
         | SpellEffectKind::LibraryPartition { .. }
+        | SpellEffectKind::RevealTopCardToHandIfMatches { .. }
         | SpellEffectKind::ManifestDread
         | SpellEffectKind::ExileTopWithPlayPermission { .. }
         | SpellEffectKind::ChooseResolutionBranch { .. }
@@ -1512,6 +1513,7 @@ fn validate_effect_targets(
         | SpellEffectKind::CreateReflexiveTrigger { .. }
         | SpellEffectKind::ChangeSourceFace { .. }
         | SpellEffectKind::ReturnTriggeredCard { .. }
+        | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
         | SpellEffectKind::SiegeDefeat
         | SpellEffectKind::None => {
             if !targets.is_empty() {

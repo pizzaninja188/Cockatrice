@@ -75,6 +75,7 @@
 #include <libcockatrice/protocol/pb/event_list_rooms.pb.h>
 #include <libcockatrice/protocol/pb/event_move_card.pb.h>
 #include <libcockatrice/protocol/pb/event_notify_user.pb.h>
+#include <libcockatrice/protocol/pb/event_reveal_cards.pb.h>
 #include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/game_commands.pb.h>
@@ -226,6 +227,7 @@ public:
         quint64 generation = 0;
         int loyalty = -1;
         int defense = -1;
+        QString countersAnnotation;
         int battleProtector = -1;
         bool firstAbilityActivatable = false;
         quint32 attachmentObjectId = 0;
@@ -251,6 +253,7 @@ public:
     // Retain physical zone moves so focused E2E cases can verify exact Server_Card continuity
     // without adding issue-specific state to the shared client harness.
     std::vector<Event_MoveCard> physicalMoveEvents;
+    std::vector<Event_RevealCards> physicalRevealEvents;
     struct Pool
     {
         int w = 0, u = 0, b = 0, r = 0, g = 0, c = 0;
@@ -786,6 +789,9 @@ public:
                     physicalRowAndPt[{ev.player_id(), created.card_id()}] = {created.y(),
                                                                              QString::fromStdString(created.pt())};
                 }
+            }
+            if (ev.HasExtension(Event_RevealCards::ext)) {
+                physicalRevealEvents.push_back(ev.GetExtension(Event_RevealCards::ext));
             }
             if (ev.HasExtension(Event_MoveCard::ext)) {
                 const auto &mc = ev.GetExtension(Event_MoveCard::ext);
@@ -1608,6 +1614,8 @@ public:
                                                : -1;
                             perm.defense =
                                 battlefieldObject.is_battle() ? static_cast<int>(battlefieldObject.defense()) : -1;
+                            perm.countersAnnotation =
+                                QString::fromStdString(battlefieldObject.counters_annotation());
                             perm.battleProtector = battlefieldObject.has_battle_protector_player_id()
                                                        ? battlefieldObject.battle_protector_player_id()
                                                        : -1;
@@ -8973,6 +8981,181 @@ TEST_F(RuledE2ESmokeTest, TidebinderCountersTriggeredAbilityThroughExistingStack
         EXPECT_FALSE(wasp->flying) << "Tidebinder did not remove the triggered ability source's abilities";
         EXPECT_FALSE(untappedBear->tapped) << "the countered Wasp trigger still resolved";
     }
+}
+
+TEST_F(RuledE2ESmokeTest, EsperOriginsFlashbackReturnsTransformedRevealsPubliclyAndFinalityExiles)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("esperp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("esperp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "Esper Origins game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "Esper Origins game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto passCurrentPriority = [&] {
+        ruled::v1::RuledCommand pass;
+        pass.mutable_pass_priority();
+        if (p1.priorityPlayer == p1.myId) {
+            return send(p1, pass, QStringLiteral("Esper Origins pass priority"));
+        }
+        if (p1.priorityPlayer == p2.myId) {
+            return send(p2, pass, QStringLiteral("Esper Origins pass priority"));
+        }
+        return false;
+    };
+
+    ruled::v1::RuledCommand conjure;
+    auto *put = conjure.mutable_dev_command()->mutable_put_card_in_zone();
+    conjure.mutable_dev_command()->set_target_player_id(p1.myId);
+    put->set_card_name("Esper Origins // Summon: Esper Maduin");
+    put->set_zone(ruled::v1::DEV_ZONE_HAND);
+    ASSERT_TRUE(send(p1, conjure, QStringLiteral("put Esper Origins in hand")));
+
+    ruled::v1::RuledCommand bury;
+    bury.mutable_dev_command()->set_target_player_id(p1.myId);
+    auto *buryMove = bury.mutable_dev_command()->mutable_move_card();
+    buryMove->set_card_name("Esper Origins // Summon: Esper Maduin");
+    buryMove->set_zone(ruled::v1::DEV_ZONE_GRAVEYARD);
+    ASSERT_TRUE(send(p1, bury, QStringLiteral("move Esper Origins to graveyard")));
+
+    ruled::v1::RuledCommand mana;
+    mana.mutable_dev_command()->set_target_player_id(p1.myId);
+    mana.mutable_dev_command()->mutable_add_mana()->set_g(1);
+    mana.mutable_dev_command()->mutable_add_mana()->set_c(3);
+    ASSERT_TRUE(send(p1, mana, QStringLiteral("add flashback mana for Esper Origins")));
+
+    const auto action = std::find_if(p1.latestLegal.zone_cast_actions().begin(),
+                                     p1.latestLegal.zone_cast_actions().end(), [](const auto &candidate) {
+                                         return candidate.card_name() == "Esper Origins" &&
+                                                candidate.source_zone() == ruled::v1::CAST_SOURCE_ZONE_GRAVEYARD;
+                                     });
+    ASSERT_NE(action, p1.latestLegal.zone_cast_actions().end());
+    const quint32 esperOid = action->object_id();
+
+    ruled::v1::RuledCommand cast;
+    auto *spell = cast.mutable_cast_spell();
+    spell->set_cast_method(action->cast_method());
+    spell->mutable_source()->set_graveyard_object_id(esperOid);
+    spell->mutable_source()->set_expected_zone_change_generation(action->zone_change_generation());
+    ASSERT_TRUE(send(p1, cast, QStringLiteral("flashback Esper Origins")));
+    ASSERT_TRUE(passCurrentPriority());
+    ASSERT_TRUE(passCurrentPriority());
+    ASSERT_TRUE(p1.pendingChoice.has_value());
+    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    ASSERT_EQ(p1.pendingChoice->candidate_object_ids_size(), 2);
+
+    ruled::v1::RuledCommand surveil;
+    for (const quint32 oid : p1.pendingChoice->candidate_object_ids()) {
+        surveil.mutable_submit_resolution_choice()->add_chosen_object_ids(oid);
+    }
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, surveil, QStringLiteral("put both surveilled cards into graveyard")));
+
+    const auto transformed = [&]() -> const SmokeClient::Permanent * {
+        const auto battlefield = p1.battlefieldByPlayer.find(p1.myId);
+        if (battlefield == p1.battlefieldByPlayer.end()) {
+            return nullptr;
+        }
+        const auto found = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                        [esperOid](const auto &permanent) { return permanent.oid == esperOid; });
+        return found == battlefield->second.end() ? nullptr : &*found;
+    };
+    ASSERT_NE(transformed(), nullptr);
+    EXPECT_EQ(transformed()->faceIndex, 1);
+    EXPECT_TRUE(transformed()->creature);
+    EXPECT_TRUE(transformed()->countersAnnotation.contains(QStringLiteral("1 finality counter(s)")));
+    EXPECT_TRUE(transformed()->countersAnnotation.contains(QStringLiteral("1 lore counter(s)")));
+
+    for (int passes = 0; passes < 6 && p1.stackDepth > 0; ++passes) {
+        ASSERT_TRUE(passCurrentPriority());
+    }
+    ASSERT_EQ(p1.stackDepth, 0);
+
+    const auto sawForestReveal = [](const SmokeClient &client) {
+        return std::any_of(client.physicalRevealEvents.begin(), client.physicalRevealEvents.end(),
+                           [](const Event_RevealCards &event) {
+                               return event.zone_name() == ZoneNames::DECK && event.cards_size() == 1 &&
+                                      event.cards(0).name() == "Forest";
+                           });
+    };
+    EXPECT_TRUE(sawForestReveal(p1));
+    EXPECT_TRUE(sawForestReveal(p2));
+
+    const auto findMove = [](const SmokeClient &client, const char *from, const char *to, int cardId) {
+        return std::find_if(client.physicalMoveEvents.begin(), client.physicalMoveEvents.end(),
+                            [from, to, cardId](const Event_MoveCard &move) {
+                                return move.start_zone() == from && move.target_zone() == to &&
+                                       (cardId < 0 || move.card_id() == cardId);
+                            });
+    };
+    const auto graveToStack = findMove(p1, ZoneNames::GRAVE, ZoneNames::STACK, -1);
+    ASSERT_NE(graveToStack, p1.physicalMoveEvents.end());
+    const int physicalId = graveToStack->new_card_id();
+    const auto stackToExile = findMove(p1, ZoneNames::STACK, ZoneNames::EXILE, physicalId);
+    ASSERT_NE(stackToExile, p1.physicalMoveEvents.end());
+    EXPECT_EQ(stackToExile->new_card_id(), physicalId);
+    const auto exileToTable = findMove(p1, ZoneNames::EXILE, ZoneNames::TABLE, physicalId);
+    ASSERT_NE(exileToTable, p1.physicalMoveEvents.end());
+    EXPECT_EQ(exileToTable->new_card_id(), physicalId);
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(esperOid));
+    EXPECT_EQ(p1.serverCardByEngineOid[esperOid], physicalId);
+
+    ruled::v1::RuledCommand die;
+    die.mutable_dev_command()->set_target_player_id(p1.myId);
+    auto *move = die.mutable_dev_command()->mutable_move_card();
+    move->set_card_name("Esper Origins // Summon: Esper Maduin");
+    move->set_zone(ruled::v1::DEV_ZONE_GRAVEYARD);
+    ASSERT_TRUE(send(p1, die, QStringLiteral("move finality permanent toward graveyard")));
+    const auto tableToExile = findMove(p1, ZoneNames::TABLE, ZoneNames::EXILE, physicalId);
+    ASSERT_NE(tableToExile, p1.physicalMoveEvents.end());
+    EXPECT_EQ(tableToExile->new_card_id(), physicalId);
+    EXPECT_EQ(transformed(), nullptr);
 }
 
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can

@@ -42,6 +42,9 @@ pub enum CounterKind {
     /// Quest counters are ordinary named counters used by quest-style threshold cards such as
     /// Earthbender Ascension and Overseer of Vault 76.
     Quest,
+    /// CR 122.1h: if a permanent with one or more finality counters would go from the
+    /// battlefield to a graveyard, it is exiled instead. This is not a keyword counter.
+    Finality,
 }
 
 impl CounterKind {
@@ -58,6 +61,7 @@ impl CounterKind {
             CounterKind::Lore => "lore".into(),
             CounterKind::Charge => "charge".into(),
             CounterKind::Quest => "quest".into(),
+            CounterKind::Finality => "finality".into(),
         }
     }
 
@@ -939,6 +943,12 @@ pub enum SpellEffectKind {
         top_max: Option<u32>,
         kind: LibraryPartitionKind,
     },
+    /// Reveal the controller's top library card. If it matches `filter`, put it into that
+    /// player's hand; otherwise leave it on top. Esper Maduin, Llanowar Empath, and Momir Vig
+    /// share this mandatory, non-choice branch.
+    RevealTopCardToHandIfMatches {
+        filter: ZoneCardFilter,
+    },
     /// CR 701.62: look at the top two cards, manifest one, then put the other into the
     /// graveyard. The choice is private, logged, and resumable through the engine's library
     /// picker. Bashful Beastie, Innocuous Rat, Manifest Dread, and Twist Reality.
@@ -1177,6 +1187,15 @@ pub enum SpellEffectKind {
         /// Enduring Curiosity and Enduring Innocence use this to return as enchantments.
         #[serde(default)]
         set_types: Option<TypeLineReplacement>,
+    },
+    /// Exile the resolving spell card or ability source, then return that exact card to the
+    /// battlefield transformed. Esper Origins and the Neon Dynasty transforming Sagas share
+    /// this CR 400.7/712 lifecycle; copies without a physical card cannot return.
+    ExileSourceThenReturnTransformed {
+        #[serde(default)]
+        controller: ReturnController,
+        #[serde(default)]
+        entry_counters: Vec<CounterPlacement>,
     },
     /// CR 603.7: create a one-shot delayed triggered ability that observes `subject`. The
     /// definition must use a delayed-only trigger condition.
@@ -2329,6 +2348,7 @@ impl SpellEffectKind {
             | SpellEffectKind::CreateReflexiveTrigger { .. }
             | SpellEffectKind::Scry { .. }
             | SpellEffectKind::LibraryPartition { .. }
+            | SpellEffectKind::RevealTopCardToHandIfMatches { .. }
             | SpellEffectKind::ManifestDread
             | SpellEffectKind::LookChooseToHand { .. }
             | SpellEffectKind::TapAllCreatures { .. }
@@ -2337,6 +2357,7 @@ impl SpellEffectKind {
             | SpellEffectKind::GrantKeywordsAll { .. }
             | SpellEffectKind::RemoveAbilitiesAll { .. }
             | SpellEffectKind::ReturnTriggeredCard { .. }
+            | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
             | SpellEffectKind::SacrificeObservedObjects
             | SpellEffectKind::ExileWarpedObject
             | SpellEffectKind::ChooseGraveyardCard { .. }
@@ -2923,6 +2944,7 @@ impl SpellEffectKind {
                         | SpellEffectKind::Draw { .. }
                         | SpellEffectKind::Untap { .. }
                         | SpellEffectKind::RemoveAllAbilities { .. }
+                        | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
                 ) {
                     return Err(
                         "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, Untap, and RemoveAllAbilities effects"
@@ -3080,6 +3102,19 @@ impl SpellEffectKind {
                     replacement.validate()?;
                 }
             }
+            SpellEffectKind::ExileSourceThenReturnTransformed { entry_counters, .. } => {
+                let mut kinds = std::collections::HashSet::new();
+                for placement in entry_counters {
+                    placement.counter.validate()?;
+                    if placement.count == 0 {
+                        return Err("entry counter placement count must be positive".into());
+                    }
+                    if !kinds.insert(placement.counter) {
+                        return Err("entry counter placements cannot repeat a counter kind".into());
+                    }
+                }
+            }
+            SpellEffectKind::RevealTopCardToHandIfMatches { filter } => filter.validate()?,
             SpellEffectKind::ChoosePermanents {
                 chooser,
                 filter,

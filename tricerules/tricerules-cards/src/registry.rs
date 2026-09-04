@@ -995,6 +995,50 @@ fn validate_effect_list_metadata(effects: &[SpellEffectKind]) -> Result<(), Stri
     Ok(())
 }
 
+fn effect_returns_source_transformed(effect: &SpellEffectKind) -> bool {
+    match effect {
+        SpellEffectKind::ExileSourceThenReturnTransformed { .. } => true,
+        SpellEffectKind::Conditional { effect, .. }
+        | SpellEffectKind::ConditionalCastCost { effect, .. } => {
+            effect_returns_source_transformed(effect)
+        }
+        SpellEffectKind::ChooseResolutionBranch { branches, .. } => branches
+            .iter()
+            .flat_map(|branch| &branch.effects)
+            .any(effect_returns_source_transformed),
+        SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
+            ability.effect.iter().any(effect_returns_source_transformed)
+        }
+        SpellEffectKind::GrantTriggeredAbility { ability, .. }
+        | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
+            ability.effect.iter().any(effect_returns_source_transformed)
+        }
+        _ => false,
+    }
+}
+
+fn face_returns_source_transformed(face: &CardFace) -> bool {
+    face.spell_effect
+        .iter()
+        .chain(
+            face.modal_spell
+                .iter()
+                .flat_map(|modal| &modal.modes)
+                .flat_map(|mode| &mode.effects),
+        )
+        .chain(
+            face.activated_abilities
+                .iter()
+                .flat_map(|ability| &ability.effect),
+        )
+        .chain(
+            face.triggered_abilities
+                .iter()
+                .flat_map(|ability| &ability.effect),
+        )
+        .any(effect_returns_source_transformed)
+}
+
 fn fixed_source_reduction_cost(cost: &crate::ManaCost) -> bool {
     cost.pips.iter().all(|symbol| {
         matches!(
@@ -1400,6 +1444,17 @@ impl CardRegistry {
                     });
                 }
             }
+            if card.faces_iter().any(face_returns_source_transformed)
+                && !(card.layout == Layout::Transform
+                    && card.faces.len() == 2
+                    && card.faces[1].is_permanent())
+            {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "transformed source return requires a two-face Transform card with a permanent back face"
+                        .into(),
+                });
+            }
             // Validate every face's effects at startup — multi-face cards (CR 709/712/715/720)
             // validate each face uniformly. Spell effects have no source permanent, so `Source`
             // subjects are rejected here (EffectContext::Spell); activated/triggered
@@ -1423,12 +1478,12 @@ impl CardRegistry {
                     });
                 }
                 for condition in &face.cast_conditions {
-                    condition
-                        .validate_live()
-                        .map_err(|reason| RegistryError::InvalidCard {
+                    condition.validate_cast_condition().map_err(|reason| {
+                        RegistryError::InvalidCard {
                             id: card.id.clone(),
                             reason,
-                        })?;
+                        }
+                    })?;
                 }
                 for effect in face.spell_effect.iter().chain(
                     face.modal_spell
@@ -4312,6 +4367,27 @@ mod tests {
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_flip"));
+    }
+
+    #[test]
+    fn transformed_return_requires_a_transform_card_with_a_permanent_back_face() {
+        let bad = r#"(
+            id: "bad_return",
+            name: "Bad Return",
+            face_id: "bad_return",
+            mana_cost: "{G}",
+            types: ["Sorcery"],
+            spell_effect: [ExileSourceThenReturnTransformed(
+                controller: Owner,
+                entry_counters: [(counter: Finality, count: 1)],
+            )],
+        )"#;
+        let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
+        assert!(matches!(
+            err,
+            RegistryError::InvalidCard { ref reason, .. }
+                if reason.contains("permanent back face")
+        ));
     }
 
     #[test]

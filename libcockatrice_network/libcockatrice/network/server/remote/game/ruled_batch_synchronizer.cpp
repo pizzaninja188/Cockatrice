@@ -18,6 +18,7 @@
 #include <libcockatrice/protocol/pb/event_attach_card.pb.h>
 #include <libcockatrice/protocol/pb/event_flip_card.pb.h>
 #include <libcockatrice/protocol/pb/event_game_say.pb.h>
+#include <libcockatrice/protocol/pb/event_reveal_cards.pb.h>
 #include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/event_set_counter.pb.h>
 #include <libcockatrice/utility/ruled_debug.h>
@@ -557,12 +558,73 @@ RuledBatchSynchronizer::BatchApplyResult RuledBatchSynchronizer::applyBatch(cons
     }
 
     applyTokenCreations(batch, battlefieldGridRows);
+    GameEventStorage revealEvents;
+    applyCardsRevealed(batch, revealEvents);
+    if (!revealEvents.getGameEventList().isEmpty()) {
+        revealEvents.sendToGame(game);
+    }
     applyPermanentMoves(batch, preBatchOidMaps, battlefieldGridRows, battlefieldDisplayPlayers);
     applyPhaseStackAndZoneViews(batch, battlefieldGridRows, battlefieldDisplayPlayers, result);
     applyFaceDisplays(batch, result);
     applyAttachmentRestores(batch);
     applyLifeManaAndCombatEvents(batch);
     return result;
+}
+
+// Public engine reveals must be projected before PermanentMoved consumes the physical card from
+// its source zone. ObjectId selects the exact hidden-zone card server-side; only the ordinary
+// Cockatrice reveal event (with full card info) crosses to clients. This keeps the client a
+// renderer and avoids inferring identity from the Oracle name or from the top physical slot.
+void RuledBatchSynchronizer::applyCardsRevealed(const ruled::v1::RuledEventBatch &batch, GameEventStorage &events)
+{
+    for (const auto &event : batch.events()) {
+        if (!event.has_cards_revealed()) {
+            continue;
+        }
+        const auto &revealed = event.cards_revealed();
+        if (revealed.source_zone() != ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY) {
+            qWarning() << "ruled CardsRevealed has unsupported source zone" << revealed.source_zone();
+            continue;
+        }
+        auto *owner = qobject_cast<Server_Player *>(game->getPlayer(revealed.zone_owner_player_id()));
+        if (!owner) {
+            continue;
+        }
+        Server_CardZone *library = owner->getZones().value(ZoneNames::DECK);
+        if (!library) {
+            continue;
+        }
+
+        Event_RevealCards published;
+        published.set_zone_name(ZoneNames::DECK);
+        published.set_grant_write_access(false);
+        for (const auto &identity : revealed.cards()) {
+            const quint32 oid = static_cast<quint32>(identity.object_id());
+            Server_Card *card = playerBinding(owner->getPlayerId()).findCardByEngineOid(owner, oid);
+            if (!card || card->getZone() != library) {
+                qWarning() << "ruled CardsRevealed could not resolve library oid" << oid;
+                continue;
+            }
+            const QString expectedCardId = QString::fromStdString(identity.card_id());
+            const QString expectedName = QString::fromStdString(identity.card_name());
+            if ((!expectedCardId.isEmpty() && cardIdForName(card->getName()) != expectedCardId) ||
+                (!expectedName.isEmpty() && normalizeRuledCardName(card->getName()) != normalizeRuledCardName(expectedName))) {
+                qWarning() << "ruled CardsRevealed identity mismatch for oid" << oid;
+                continue;
+            }
+            const int position = library->getCards().indexOf(card);
+            if (position < 0) {
+                continue;
+            }
+            published.add_card_id(position);
+            card->getInfo(published.add_cards());
+        }
+        if (published.cards_size() == 0) {
+            continue;
+        }
+        published.set_number_of_cards(static_cast<uint32_t>(published.cards_size()));
+        events.enqueueGameEvent(published, owner->getPlayerId());
+    }
 }
 
 // A dev command conjured a card that was in no decklist (see DevCardConjured), so there is no
