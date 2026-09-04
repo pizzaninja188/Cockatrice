@@ -1,5 +1,7 @@
 use super::*;
 
+use crate::state::LibrarySearchEntryProgress;
+
 fn selection_admits_distinct_slots(chosen: &[ObjectId], slots: &[Vec<ObjectId>]) -> bool {
     fn assign(
         chosen_index: usize,
@@ -29,15 +31,12 @@ impl GameEngine {
     pub(in crate::engine) fn continue_library_search_battlefield_entries(
         &mut self,
         stack: ParkedStackResolution,
-        mut object_ids: Vec<ObjectId>,
-        tapped: bool,
-        shuffle: bool,
-        searched_library: bool,
+        mut progress: LibrarySearchEntryProgress,
         mut events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        let controller = stack.item.controller;
-        while !object_ids.is_empty() {
-            let oid = object_ids.remove(0);
+        let controller = progress.searcher;
+        while !progress.remaining_object_ids.is_empty() {
+            let oid = progress.remaining_object_ids.remove(0);
             let object = self
                 .state
                 .objects
@@ -52,10 +51,7 @@ impl GameEngine {
             let completion = BattlefieldEntryCompletion::LibrarySearch {
                 owner,
                 card_label: card_label.clone(),
-                remaining_object_ids: object_ids.clone(),
-                tapped,
-                shuffle,
-                searched_library,
+                progress: progress.clone(),
             };
             match self.begin_battlefield_entry(
                 stack.item.clone(),
@@ -69,7 +65,7 @@ impl GameEngine {
                     chosen_x: 0,
                     cast_cost_receipts: Vec::new(),
                     player_life_snapshot: self.player_life_snapshot(),
-                    tapped,
+                    tapped: progress.tapped,
                     entry_counters: BTreeMap::new(),
                     applied_effects: Vec::new(),
                 },
@@ -93,11 +89,11 @@ impl GameEngine {
                 rv1::permanent_moved::Destination::Battlefield,
             ));
         }
-        if shuffle {
+        if progress.shuffle {
             crate::engine::shuffle_player_library_for_current_command(&mut self.state, controller);
             events.push(ev_log(format!("P{controller} shuffles their library.")));
         }
-        if searched_library {
+        if progress.searched_library {
             self.fire_triggers(&[GameEvent::LibrarySearched {
                 searcher: controller,
                 library_owner: controller,
@@ -114,6 +110,7 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         let (
             stack,
+            searcher,
             count,
             available_zones,
             filter,
@@ -124,6 +121,7 @@ impl GameEngine {
         ) = match &pending.continuation {
             ResolutionContinuation::SearchZoneScope {
                 stack,
+                searcher,
                 count,
                 available_zones,
                 filter,
@@ -133,6 +131,7 @@ impl GameEngine {
                 reveal,
             } => (
                 stack.clone(),
+                *searcher,
                 *count,
                 available_zones.clone(),
                 filter.clone(),
@@ -159,6 +158,7 @@ impl GameEngine {
             self,
             &mut events,
             &stack.item,
+            searcher,
             resolution::zones::ZoneSearchRequest {
                 count,
                 filter,
@@ -170,6 +170,108 @@ impl GameEngine {
                 reveal,
             },
         )?;
+        let next = self
+            .state
+            .pending_resolution
+            .as_mut()
+            .and_then(|pending| pending.continuation.stack_mut())
+            .ok_or(EngineError::Illegal("zone search failed to park"))?;
+        next.resume_effect_index = stack.resume_effect_index;
+        next.previous_result = stack.previous_result;
+        Ok(finish_with_events(self, events))
+    }
+
+    pub(super) fn finish_optional_search_choice(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (
+            stack,
+            searcher,
+            count,
+            filter,
+            slots,
+            zones,
+            destination,
+            conditional_destination,
+            shuffle,
+            reveal,
+        ) = match &pending.continuation {
+            ResolutionContinuation::OptionalSearch {
+                stack,
+                searcher,
+                count,
+                filter,
+                slots,
+                zones,
+                destination,
+                conditional_destination,
+                shuffle,
+                reveal,
+            } => (
+                stack.clone(),
+                *searcher,
+                *count,
+                filter.clone(),
+                slots.clone(),
+                zones.clone(),
+                *destination,
+                conditional_destination.clone(),
+                *shuffle,
+                *reveal,
+            ),
+            _ => return Err(EngineError::Illegal("optional-search continuation missing")),
+        };
+        let invalid = !answer.chosen_object_ids.is_empty()
+            || match decision {
+                rv1::ResolutionChoiceDecision::Decline => false,
+                rv1::ResolutionChoiceDecision::SelectBranch => answer.selected_branch_index != 0,
+                _ => true,
+            };
+        if invalid {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("invalid optional-search selection"));
+        }
+        let mut events = Vec::new();
+        if decision == rv1::ResolutionChoiceDecision::Decline {
+            events.push(ev_log(format!(
+                "P{searcher} declines to search their library."
+            )));
+            return self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                stack.previous_result,
+                events,
+            );
+        }
+        resolution::zones::begin_search_request(
+            self,
+            &mut events,
+            &stack.item,
+            searcher,
+            resolution::zones::SearchRequest {
+                count,
+                filter,
+                slots,
+                zones,
+                destination,
+                conditional_destination,
+                shuffle,
+                reveal,
+            },
+        )?;
+        let Some(next) = self
+            .state
+            .pending_resolution
+            .as_mut()
+            .and_then(|pending| pending.continuation.stack_mut())
+        else {
+            return Err(EngineError::Illegal("optional search failed to park"));
+        };
+        next.resume_effect_index = stack.resume_effect_index;
+        next.previous_result = stack.previous_result;
         Ok(finish_with_events(self, events))
     }
 
@@ -390,6 +492,7 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         let (
             stack,
+            searcher,
             zones,
             candidate_generations,
             selection_slot_candidates,
@@ -400,6 +503,7 @@ impl GameEngine {
         ) = match &pending.continuation {
             ResolutionContinuation::SearchLibrary {
                 stack,
+                searcher,
                 zones,
                 candidate_generations,
                 selection_slot_candidates,
@@ -409,6 +513,7 @@ impl GameEngine {
                 reveal,
             } => (
                 stack.clone(),
+                *searcher,
                 zones.clone(),
                 candidate_generations.clone(),
                 selection_slot_candidates.clone(),
@@ -419,7 +524,7 @@ impl GameEngine {
             ),
             _ => return Err(EngineError::Illegal("library-search continuation missing")),
         };
-        let controller = stack.item.controller;
+        let controller = searcher;
         let searched_library = zones.contains(&CardSearchZone::Library);
         let shuffle = shuffle && zones.contains(&CardSearchZone::Library);
         let choices_are_current = chosen.iter().all(|oid| {
@@ -566,10 +671,13 @@ impl GameEngine {
                 SearchDestination::Battlefield { tapped } => {
                     return self.continue_library_search_battlefield_entries(
                         stack,
-                        chosen.to_vec(),
-                        tapped,
-                        shuffle,
-                        searched_library,
+                        LibrarySearchEntryProgress {
+                            searcher,
+                            remaining_object_ids: chosen.to_vec(),
+                            tapped,
+                            shuffle,
+                            searched_library,
+                        },
                         ev,
                     );
                 }

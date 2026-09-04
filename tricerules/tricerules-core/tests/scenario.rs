@@ -197,6 +197,8 @@ mod issue_205_stack_spell_filters;
 mod issue_208_library_search;
 #[path = "scenario/issue_209_entry_life_payment.rs"]
 mod issue_209_entry_life_payment;
+#[path = "scenario/issue_210_demolition_field.rs"]
+mod issue_210_demolition_field;
 #[path = "scenario/issue_211_reflexive_counter_placement.rs"]
 mod issue_211_reflexive_counter_placement;
 #[path = "scenario/issue_214_graveyard_land_play.rs"]

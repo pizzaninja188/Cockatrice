@@ -5,7 +5,7 @@ use tricerules_cards::primitives::{
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, Keyword, LibraryBottomOrder,
     LibraryPlacement, ManaAmount, ManaSpendingRestriction, PermanentTypeFilter, SearchDestination,
-    TargetFilter, TriggeredAbilityDef, ZoneCardFilter,
+    SearchSelectionSlot, SearchZoneSelection, TargetFilter, TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{is_creature_type, CardFace, ChoiceId, ManaCost, ManaSymbol, ModeId};
@@ -883,6 +883,7 @@ pub enum ResolutionContinuation {
     },
     SearchLibrary {
         stack: ParkedStackResolution,
+        searcher: PlayerId,
         zones: Vec<CardSearchZone>,
         candidate_generations: Vec<(ObjectId, u64)>,
         selection_slot_candidates: Vec<Vec<ObjectId>>,
@@ -893,9 +894,22 @@ pub enum ResolutionContinuation {
     },
     SearchZoneScope {
         stack: ParkedStackResolution,
+        searcher: PlayerId,
         count: u32,
         available_zones: Vec<CardSearchZone>,
         filter: Option<ZoneCardFilter>,
+        destination: SearchDestination,
+        conditional_destination: Option<ConditionalSearchDestination>,
+        shuffle: bool,
+        reveal: bool,
+    },
+    OptionalSearch {
+        stack: ParkedStackResolution,
+        searcher: PlayerId,
+        count: u32,
+        filter: Option<ZoneCardFilter>,
+        slots: Vec<SearchSelectionSlot>,
+        zones: SearchZoneSelection,
         destination: SearchDestination,
         conditional_destination: Option<ConditionalSearchDestination>,
         shuffle: bool,
@@ -989,6 +1003,7 @@ impl ResolutionContinuation {
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
             | Self::SearchZoneScope { stack, .. }
+            | Self::OptionalSearch { stack, .. }
             | Self::OwnerLibraryPlacement { stack, .. }
             | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
@@ -1023,6 +1038,7 @@ impl ResolutionContinuation {
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
             | Self::SearchZoneScope { stack, .. }
+            | Self::OptionalSearch { stack, .. }
             | Self::OwnerLibraryPlacement { stack, .. }
             | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
@@ -1210,6 +1226,15 @@ pub(crate) struct PendingZoneEntryBatch {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct LibrarySearchEntryProgress {
+    pub searcher: PlayerId,
+    pub remaining_object_ids: Vec<ObjectId>,
+    pub tapped: bool,
+    pub shuffle: bool,
+    pub searched_library: bool,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) enum BattlefieldEntryCompletion {
     LandPlay {
         player: PlayerId,
@@ -1232,10 +1257,7 @@ pub(crate) enum BattlefieldEntryCompletion {
     LibrarySearch {
         owner: PlayerId,
         card_label: String,
-        remaining_object_ids: Vec<ObjectId>,
-        tapped: bool,
-        shuffle: bool,
-        searched_library: bool,
+        progress: LibrarySearchEntryProgress,
     },
     ManifestDread {
         owner: PlayerId,
@@ -1490,7 +1512,7 @@ pub enum AffectedScope {
     /// one-shot scopes, this set remains dynamic for the effect's duration (CR 611.2c).
     PermanentsMatching {
         reference_player: PlayerId,
-        filter: TargetFilter,
+        filter: Box<TargetFilter>,
         exclude: Option<ObjectId>,
     },
     /// The permanent currently attached to the Aura or Equipment with `source_oid`. Resolved

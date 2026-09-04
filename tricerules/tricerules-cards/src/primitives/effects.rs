@@ -1484,7 +1484,7 @@ pub enum SpellEffectKind {
         amount: ManaAmount,
         retention: ManaRetention,
     },
-    /// CR 701.18: pause resolution, let the casting player search their library for a card
+    /// CR 701.23: pause resolution, let the named player search their library for a card
     /// matching `filter` (None = any card; Some = only cards of that spell type), move it to
     /// `destination`, then shuffle if `shuffle` is true. Uses the tier-3 interrupt mechanism
     /// (`ResolutionChoiceRequired` / `SubmitResolutionChoice`) with `ChoiceKind::LibrarySearch`
@@ -1492,6 +1492,15 @@ pub enum SpellEffectKind {
     /// Mystical Tutor (instant or sorcery → top of library), and Evolving Wilds (basic land →
     /// battlefield tapped).
     SearchLibrary {
+        /// The player who searches and owns the searched zones. Demolition Field and Ghost
+        /// Quarter name a targeted permanent's controller; existing tutors default to "you".
+        #[serde(default)]
+        who: PlayerRecipient,
+        /// Whether that player may decline to search. Declining is distinct from choosing to
+        /// search and failing to find a qualified card: only the latter shuffles and fires search
+        /// triggers.
+        #[serde(default)]
+        optional: bool,
         /// Number of cards to choose. Existing search effects default to one.
         #[serde(default = "default_one")]
         count: u32,
@@ -1506,7 +1515,7 @@ pub enum SpellEffectKind {
         /// nonempty selects heterogeneous slot mode and publishes only engine-authored edges.
         #[serde(default)]
         slots: Vec<SearchSelectionSlot>,
-        /// Which of the controller's zones are searched. Existing tutors default to library;
+        /// Which of the named player's zones are searched. Existing tutors default to library;
         /// Say Its Name lets its controller choose any nonempty hand/graveyard/library subset.
         #[serde(default)]
         zones: SearchZoneSelection,
@@ -3656,6 +3665,7 @@ impl SpellEffectKind {
             // Library searches use the resolution-interrupt machinery and are legal on spells
             // and nonmana abilities alike (Demonic Tutor, Evolving Wilds).
             SpellEffectKind::SearchLibrary {
+                who,
                 count,
                 filter,
                 slots,
@@ -3665,6 +3675,14 @@ impl SpellEffectKind {
                 count_by_cast_cost,
                 ..
             } => {
+                if matches!(
+                    who,
+                    PlayerRecipient::EachOpponent
+                        | PlayerRecipient::EachPlayer
+                        | PlayerRecipient::AttackingOpponentsOfDefendingPlayer
+                ) {
+                    return Err("SearchLibrary requires a single player recipient".into());
+                }
                 if slots.is_empty() && *count == 0 {
                     return Err("SearchLibrary requires a positive count".into());
                 }
@@ -3699,7 +3717,7 @@ impl SpellEffectKind {
                     && !matches!(zones, SearchZoneSelection::Fixed(zones) if zones == &[CardSearchZone::Library])
                 {
                     return Err(
-                        "SearchLibrary heterogeneous slots currently require the controller's library"
+                        "SearchLibrary heterogeneous slots currently require one player's library"
                             .into(),
                     );
                 }

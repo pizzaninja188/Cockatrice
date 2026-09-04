@@ -8453,6 +8453,216 @@ TEST_F(RuledE2ESmokeTest, FloodpitsDrownerMovesExactPermanentsAndKeepsLibrariesH
     }
 }
 
+TEST_F(RuledE2ESmokeTest, DemolitionFieldRoutesIndependentPrivateSearchesToBothSeats)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("demolitionp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("demolitionp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "Demolition Field game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "Demolition Field game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 && (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto devPut = [&](int player, const char *cardName) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(player);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(cardName);
+        put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        put->set_ready(true);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1 for Demolition Field").arg(cardName));
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority for Demolition Field"));
+    };
+    auto findPermanent = [](const SmokeClient &client, int controller,
+                            const QString &cardId) -> const SmokeClient::Permanent * {
+        const auto player = client.battlefieldByPlayer.find(controller);
+        if (player == client.battlefieldByPlayer.end()) {
+            return nullptr;
+        }
+        const auto permanent = std::find_if(player->second.begin(), player->second.end(),
+                                            [&](const auto &candidate) { return candidate.cardId == cardId; });
+        return permanent == player->second.end() ? nullptr : &*permanent;
+    };
+    const auto observerChoiceIsRedacted = [](const SmokeClient &client) {
+        return client.lastResolutionChoice.has_value() &&
+               client.lastResolutionChoice->candidate_object_ids_size() == 0 &&
+               client.lastResolutionChoice->candidate_card_ids_size() == 0 &&
+               client.lastResolutionChoice->candidate_names_size() == 0 &&
+               client.lastResolutionChoice->candidate_server_card_ids_size() == 0 &&
+               client.lastResolutionChoice->resolution_branches_size() == 0 &&
+               client.lastResolutionChoice->prompt_text() == "Opponent is making a resolution choice.";
+    };
+
+    ASSERT_TRUE(devPut(p1.myId, "Demolition Field"));
+    ASSERT_TRUE(devPut(p2.myId, "Taiga"));
+    ruled::v1::RuledCommand addMana;
+    addMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_c(2);
+    ASSERT_TRUE(sendAndPump(p1, addMana, QStringLiteral("dev: add {2} for Demolition Field")));
+
+    const auto *source = findPermanent(p1, p1.myId, QStringLiteral("demolition_field"));
+    const auto *target = findPermanent(p1, p2.myId, QStringLiteral("taiga"));
+    ASSERT_NE(source, nullptr);
+    ASSERT_NE(target, nullptr);
+    const quint32 sourceOid = source->oid;
+    const quint32 targetOid = target->oid;
+    const quint64 sourceGeneration = source->generation;
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(sourceOid));
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(targetOid));
+    const int sourcePhysicalId = p1.serverCardByEngineOid.at(sourceOid);
+    const int targetPhysicalId = p1.serverCardByEngineOid.at(targetOid);
+
+    const quint64 abilityKey = (static_cast<quint64>(sourceOid) << 32) | 1u;
+    const auto legal = p1.latestLegal.valid_targets_by_ability().find(abilityKey);
+    ASSERT_NE(legal, p1.latestLegal.valid_targets_by_ability().end());
+    ASSERT_EQ(legal->second.groups_size(), 1);
+    const auto &targetGroup = legal->second.groups(0);
+    ASSERT_TRUE(std::find(targetGroup.valid_permanent_ids().begin(), targetGroup.valid_permanent_ids().end(),
+                          targetOid) != targetGroup.valid_permanent_ids().end());
+
+    p1.pendingChoice.reset();
+    p2.pendingChoice.reset();
+    p1.lastResolutionChoice.reset();
+    p2.lastResolutionChoice.reset();
+    ruled::v1::RuledCommand activate;
+    auto *ability = activate.mutable_activate_ability();
+    ability->set_source_object_id(sourceOid);
+    ability->set_expected_zone_change_generation(sourceGeneration);
+    ability->set_ability_index(1);
+    auto *abilityTarget = ability->add_targets();
+    abilityTarget->set_object_id(targetOid);
+    abilityTarget->set_group_index(targetGroup.group_index());
+    abilityTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    ASSERT_TRUE(sendAndPump(p1, activate, QStringLiteral("activate Demolition Field")));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    EXPECT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    EXPECT_EQ(p2.pendingChoice->deciding_player_id(), p2.myId);
+    EXPECT_EQ(p2.pendingChoice->min(), 0u);
+    ASSERT_EQ(p2.pendingChoice->resolution_branches_size(), 1);
+    EXPECT_EQ(p2.pendingChoice->resolution_branches(0).label(), "Search");
+    EXPECT_FALSE(p1.pendingChoice.has_value());
+    EXPECT_TRUE(observerChoiceIsRedacted(p1));
+    EXPECT_EQ(findPermanent(p1, p1.myId, QStringLiteral("demolition_field")), nullptr);
+    EXPECT_EQ(findPermanent(p1, p2.myId, QStringLiteral("taiga")), nullptr);
+
+    ruled::v1::RuledCommand acceptFirstSearch;
+    acceptFirstSearch.mutable_submit_resolution_choice()->set_decision(
+        ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
+    acceptFirstSearch.mutable_submit_resolution_choice()->set_selected_branch_index(0);
+    p2.pendingChoice.reset();
+    p1.lastResolutionChoice.reset();
+    ASSERT_TRUE(sendAndPump(p2, acceptFirstSearch, QStringLiteral("target controller elects to search")));
+
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    ASSERT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
+    EXPECT_EQ(p2.pendingChoice->deciding_player_id(), p2.myId);
+    ASSERT_GT(p2.pendingChoice->candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2.pendingChoice->candidate_object_ids_size(), p2.pendingChoice->candidate_names_size());
+    EXPECT_EQ(p2.pendingChoice->candidate_object_ids_size(), p2.pendingChoice->candidate_server_card_ids_size());
+    EXPECT_FALSE(p1.pendingChoice.has_value());
+    EXPECT_TRUE(observerChoiceIsRedacted(p1));
+    const quint32 chosenIslandOid = p2.pendingChoice->candidate_object_ids(0);
+
+    ruled::v1::RuledCommand chooseIsland;
+    chooseIsland.mutable_submit_resolution_choice()->add_chosen_object_ids(chosenIslandOid);
+    p2.pendingChoice.reset();
+    p1.lastResolutionChoice.reset();
+    ASSERT_TRUE(sendAndPump(p2, chooseIsland, QStringLiteral("target controller finds Island")));
+
+    ASSERT_TRUE(p1.pendingChoice.has_value());
+    EXPECT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    EXPECT_EQ(p1.pendingChoice->deciding_player_id(), p1.myId);
+    EXPECT_FALSE(p2.pendingChoice.has_value());
+    EXPECT_TRUE(observerChoiceIsRedacted(p2));
+    const auto *island1 = findPermanent(p1, p2.myId, QStringLiteral("island"));
+    const auto *island2 = findPermanent(p2, p2.myId, QStringLiteral("island"));
+    ASSERT_NE(island1, nullptr);
+    ASSERT_NE(island2, nullptr);
+    EXPECT_EQ(island1->oid, chosenIslandOid);
+    EXPECT_EQ(island2->oid, chosenIslandOid);
+    EXPECT_FALSE(island1->tapped);
+    EXPECT_FALSE(island2->tapped);
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(chosenIslandOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(chosenIslandOid));
+    EXPECT_EQ(p1.serverCardByEngineOid.at(chosenIslandOid), p2.serverCardByEngineOid.at(chosenIslandOid));
+
+    ruled::v1::RuledCommand declineSecondSearch;
+    declineSecondSearch.mutable_submit_resolution_choice()->set_decision(
+        ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(sendAndPump(p1, declineSecondSearch, QStringLiteral("activator declines second search")));
+    EXPECT_FALSE(p1.pendingChoice.has_value());
+    EXPECT_FALSE(p2.pendingChoice.has_value());
+
+    for (const SmokeClient *client : {&p1, &p2}) {
+        const auto movedToGrave = [&](int physicalId) {
+            return std::any_of(client->physicalMoveEvents.begin(), client->physicalMoveEvents.end(),
+                               [&](const Event_MoveCard &move) {
+                                   return move.start_zone() == ZoneNames::TABLE && move.target_zone() == ZoneNames::GRAVE &&
+                                          move.card_id() == physicalId;
+                               });
+        };
+        EXPECT_TRUE(movedToGrave(sourcePhysicalId));
+        EXPECT_TRUE(movedToGrave(targetPhysicalId));
+        EXPECT_TRUE(client->libraryDetailsStayedConcealed);
+    }
+}
+
 // When the sidecar hangs up an idle connection it frees the engine session, and no reconnect can
 // rebuild it. Servatrice used to reconnect anyway: the fresh connection answered "no session",
 // which is an ok=false the driver reports as a plain context error — invisible in the client. The

@@ -71,7 +71,7 @@ pub(super) fn apply_combat_restriction(
                 AffectedScope::PermanentsMatching {
                     reference_player: cx.controller,
                     exclude: Some(filter_source),
-                    filter,
+                    filter: Box::new(filter),
                 },
                 Some(cx.top.id),
                 "each matching creature".to_string(),

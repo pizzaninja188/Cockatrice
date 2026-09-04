@@ -274,6 +274,10 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             | SpellEffectKind::Mill {
                 who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
                 ..
+            }
+            | SpellEffectKind::SearchLibrary {
+                who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
+                ..
             } => Some(*group_index),
             _ => None,
         });
@@ -727,6 +731,14 @@ pub struct TargetFilter {
     /// restriction). Empty means no excluded subtypes.
     #[serde(default)]
     pub excluded_subtypes: Vec<String>,
+    /// Supertypes every matching permanent must currently have. Legendary-targeting effects use
+    /// the positive form; the negative form below expresses nonbasic lands without confusing
+    /// Basic with a land subtype.
+    #[serde(default)]
+    pub required_supertypes: Vec<String>,
+    /// Supertypes that disqualify the target. Demolition Field and Ghost Quarter exclude Basic.
+    #[serde(default)]
+    pub excluded_supertypes: Vec<String>,
     /// Optional comparison against current derived power. A noncreature has no power and cannot
     /// match a power-constrained filter.
     #[serde(default)]
@@ -915,11 +927,22 @@ impl TargetFilter {
             return Err("target filter cannot both require and exclude a subtype".into());
         }
         if self
-            .excluded_subtypes
+            .required_supertypes
             .iter()
-            .any(|subtype| subtype.trim().is_empty())
+            .chain(self.excluded_supertypes.iter())
+            .any(|supertype| supertype.trim().is_empty())
         {
-            return Err("target filter excluded subtype names must not be empty".into());
+            return Err("target filter supertype names must not be empty".into());
+        }
+        if has_duplicates(&self.required_supertypes) || has_duplicates(&self.excluded_supertypes) {
+            return Err("target filter cannot repeat a supertype predicate".into());
+        }
+        if self
+            .required_supertypes
+            .iter()
+            .any(|supertype| self.excluded_supertypes.contains(supertype))
+        {
+            return Err("target filter cannot both require and exclude a supertype".into());
         }
         Ok(())
     }
@@ -940,6 +963,8 @@ impl TargetFilter {
             || !self.permanent_types.is_empty()
             || !self.required_subtypes.is_empty()
             || !self.excluded_subtypes.is_empty()
+            || !self.required_supertypes.is_empty()
+            || !self.excluded_supertypes.is_empty()
             || self.power.is_some()
             || !self.required_keywords.is_empty()
             || !self.excluded_keywords.is_empty()

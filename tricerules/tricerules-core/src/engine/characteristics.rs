@@ -1037,6 +1037,20 @@ pub(super) fn permanent_matches_filter_characteristics(
         return false;
     }
     if !filter
+        .required_supertypes
+        .iter()
+        .all(|supertype| characteristics.supertypes.contains(supertype))
+    {
+        return false;
+    }
+    if filter
+        .excluded_supertypes
+        .iter()
+        .any(|supertype| characteristics.supertypes.contains(supertype))
+    {
+        return false;
+    }
+    if !filter
         .required_keywords
         .iter()
         .all(|keyword| characteristics.has_keyword(*keyword))

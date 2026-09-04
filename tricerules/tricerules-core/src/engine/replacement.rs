@@ -1476,10 +1476,7 @@ impl GameEngine {
             BattlefieldEntryCompletion::LibrarySearch {
                 owner,
                 card_label,
-                remaining_object_ids,
-                tapped,
-                shuffle,
-                searched_library,
+                progress,
             } => {
                 let object_id = event.object_id;
                 let controller = event.destination_controller;
@@ -1493,14 +1490,7 @@ impl GameEngine {
                     owner,
                     rv1::permanent_moved::Destination::Battlefield,
                 ));
-                self.continue_library_search_battlefield_entries(
-                    stack,
-                    remaining_object_ids,
-                    tapped,
-                    shuffle,
-                    searched_library,
-                    events,
-                )
+                self.continue_library_search_battlefield_entries(stack, progress, events)
             }
             BattlefieldEntryCompletion::ManifestDread {
                 owner,

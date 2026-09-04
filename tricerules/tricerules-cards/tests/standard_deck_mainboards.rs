@@ -1,6 +1,7 @@
 use tricerules_cards::primitives::{
-    CardTypeFilter, CombatRestrictionScope, EffectSubject, GameCondition, ObjectCastCostKind,
-    SpellEffectKind, StackSpellFilter, StaticAbilityDef, TargetKind, TargetingSourceFilter,
+    AbilityCost, CardTypeFilter, CombatRestrictionScope, EffectSubject, GameCondition,
+    ObjectCastCostKind, PlayerRecipient, SpellEffectKind, StackSpellFilter, StaticAbilityDef,
+    TargetController, TargetKind, TargetingSourceFilter,
 };
 use tricerules_cards::{
     Amount, CardRegistry, CastCostOptionDef, CastTriggerPlayer, CounterKind, Keyword,
@@ -114,6 +115,15 @@ const COHORT: &[ExpectedCard] = &[
         mana_cost: "{1}{G}",
         supertypes: &[],
         types: &["Sorcery"],
+        stats: (None, None),
+        keywords: &[],
+    },
+    ExpectedCard {
+        id: "demolition_field",
+        name: "Demolition Field",
+        mana_cost: "",
+        supertypes: &[],
+        types: &["Land"],
         stats: (None, None),
         keywords: &[],
     },
@@ -436,6 +446,41 @@ fn landfall_cohort_uses_authoritative_entry_search_and_combat_shapes() {
             destination: SearchDestination::Battlefield { tapped: true },
             ..
         }]
+    ));
+
+    let field = registry.get("demolition_field").unwrap().primary_face();
+    let ability = &field.activated_abilities[1];
+    assert!(matches!(
+        ability.costs.as_slice(),
+        [AbilityCost::Mana(cost), AbilityCost::Tap, AbilityCost::SacrificeSelf]
+            if cost.to_string() == "{2}"
+    ));
+    let [SpellEffectKind::Destroy {
+        subject: EffectSubject::Chosen(target),
+    }, first, second] = ability.effect.as_slice()
+    else {
+        panic!("Demolition Field has ordered destroy and search effects")
+    };
+    assert_eq!(target.controller, TargetController::Opponent);
+    assert_eq!(target.permanent_types, [PermanentTypeFilter::Land]);
+    assert_eq!(target.excluded_supertypes, ["Basic"]);
+    assert!(matches!(
+        first,
+        SpellEffectKind::SearchLibrary {
+            who: PlayerRecipient::ControllerOfTargetGroup { group_index: 0 },
+            optional: true,
+            destination: SearchDestination::Battlefield { tapped: false },
+            ..
+        }
+    ));
+    assert!(matches!(
+        second,
+        SpellEffectKind::SearchLibrary {
+            who: PlayerRecipient::Controller,
+            optional: true,
+            destination: SearchDestination::Battlefield { tapped: false },
+            ..
+        }
     ));
 
     let chocobo = registry.get("sazhs_chocobo").unwrap().primary_face();

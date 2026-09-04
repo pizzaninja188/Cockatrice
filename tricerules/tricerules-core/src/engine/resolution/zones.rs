@@ -2432,10 +2432,22 @@ pub(in crate::engine) struct ZoneSearchRequest {
     pub reveal: bool,
 }
 
+pub(in crate::engine) struct SearchRequest {
+    pub count: u32,
+    pub filter: Option<ZoneCardFilter>,
+    pub slots: Vec<SearchSelectionSlot>,
+    pub zones: SearchZoneSelection,
+    pub destination: SearchDestination,
+    pub conditional_destination: Option<ConditionalSearchDestination>,
+    pub shuffle: bool,
+    pub reveal: bool,
+}
+
 pub(in crate::engine) fn park_zone_search_choice(
     engine: &mut GameEngine,
     events: &mut Vec<rv1::RuledEvent>,
     top: &StackItem,
+    searcher: PlayerId,
     request: ZoneSearchRequest,
 ) -> Result<(), EngineError> {
     let ZoneSearchRequest {
@@ -2448,11 +2460,10 @@ pub(in crate::engine) fn park_zone_search_choice(
         shuffle,
         reveal,
     } = request;
-    let controller = top.controller;
     let idx = engine
         .state
-        .player_idx(controller)
-        .ok_or(EngineError::UnknownPlayer(controller))?;
+        .player_idx(searcher)
+        .ok_or(EngineError::UnknownPlayer(searcher))?;
     let heterogeneous = !slots.is_empty();
     let mut candidates = Vec::new();
     let mut candidate_zones = Vec::new();
@@ -2501,7 +2512,7 @@ pub(in crate::engine) fn park_zone_search_choice(
     } else {
         count
     };
-    let prompt = format!("P{controller}: search {zone_names} for up to {max} matching card(s).");
+    let prompt = format!("P{searcher}: search {zone_names} for up to {max} matching card(s).");
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
     let multi_zone = zones.len() > 1 || zones.first() != Some(&CardSearchZone::Library);
     let choice_kind = if multi_zone {
@@ -2570,7 +2581,7 @@ pub(in crate::engine) fn park_zone_search_choice(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
-                deciding_player_id: controller,
+                deciding_player_id: searcher,
                 source_object_id: top.id,
                 prompt_text: prompt.clone(),
                 choice_kind: choice_kind as i32,
@@ -2602,7 +2613,7 @@ pub(in crate::engine) fn park_zone_search_choice(
     });
     events.push(ev_log(prompt.clone()));
     engine.state.pending_resolution = Some(PendingResolution {
-        deciding_player: controller,
+        deciding_player: searcher,
         presentation: PendingResolutionPresentation {
             source_object_id: top.id,
             candidates,
@@ -2615,6 +2626,7 @@ pub(in crate::engine) fn park_zone_search_choice(
         },
         continuation: ResolutionContinuation::SearchLibrary {
             stack: ParkedStackResolution::new(top.clone()),
+            searcher,
             zones,
             candidate_generations,
             selection_slot_candidates,
@@ -2627,11 +2639,126 @@ pub(in crate::engine) fn park_zone_search_choice(
     Ok(())
 }
 
+pub(in crate::engine) fn begin_search_request(
+    engine: &mut GameEngine,
+    events: &mut Vec<rv1::RuledEvent>,
+    top: &StackItem,
+    searcher: PlayerId,
+    request: SearchRequest,
+) -> Result<(), EngineError> {
+    let SearchRequest {
+        count,
+        filter,
+        slots,
+        zones,
+        destination,
+        conditional_destination,
+        shuffle,
+        reveal,
+    } = request;
+    match zones {
+        SearchZoneSelection::Fixed(zones) => park_zone_search_choice(
+            engine,
+            events,
+            top,
+            searcher,
+            ZoneSearchRequest {
+                count,
+                filter,
+                slots,
+                zones,
+                destination,
+                conditional_destination,
+                shuffle,
+                reveal,
+            },
+        ),
+        SearchZoneSelection::PlayerChoice(available_zones) => {
+            let combinations = search_zone_combinations(&available_zones);
+            let prompt = format!("P{searcher}: choose which zones to search.");
+            let branches = combinations
+                .iter()
+                .enumerate()
+                .map(|(index, zones)| rv1::ResolutionBranchOption {
+                    branch_index: index as u32,
+                    label: zones
+                        .iter()
+                        .map(|zone| search_zone_label(*zone))
+                        .collect::<Vec<_>>()
+                        .join(" + "),
+                    cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                    cost_text: String::new(),
+                    selectable: true,
+                    search_zones: zones.iter().map(|zone| search_zone_proto(*zone)).collect(),
+                    presentation: None,
+                })
+                .collect();
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                    rv1::ResolutionChoiceRequired {
+                        deciding_player_id: searcher,
+                        source_object_id: top.id,
+                        prompt_text: prompt.clone(),
+                        choice_kind: custom::ChoiceKind::ResolutionBranch as i32,
+                        candidate_object_ids: Vec::new(),
+                        candidate_card_ids: Vec::new(),
+                        min: 1,
+                        max: 1,
+                        ordered: false,
+                        candidate_names: Vec::new(),
+                        candidate_server_card_ids: Vec::new(),
+                        unique_names: false,
+                        generic_mana_cost: 0,
+                        payment_currently_legal: false,
+                        resolution_branches: branches,
+                        mana_cost: String::new(),
+                        candidate_selectable: Vec::new(),
+                        reveal_audience: 0,
+                        revealed_zone_owner_player_id: None,
+                        candidate_source_zones: Vec::new(),
+                        combat_defender_options: Vec::new(),
+                        waterbend: false,
+                        selection_slots: Vec::new(),
+                    },
+                )),
+            });
+            events.push(ev_log(prompt.clone()));
+            engine.state.pending_resolution = Some(PendingResolution {
+                deciding_player: searcher,
+                presentation: PendingResolutionPresentation {
+                    source_object_id: top.id,
+                    candidates: Vec::new(),
+                    min: 1,
+                    max: 1,
+                    ordered: false,
+                    prompt,
+                    choice_kind: custom::ChoiceKind::ResolutionBranch,
+                    unique_names: false,
+                },
+                continuation: ResolutionContinuation::SearchZoneScope {
+                    stack: ParkedStackResolution::new(top.clone()),
+                    searcher,
+                    count,
+                    available_zones,
+                    filter,
+                    destination,
+                    conditional_destination,
+                    shuffle,
+                    reveal,
+                },
+            });
+            Ok(())
+        }
+    }
+}
+
 pub(super) fn search_library(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
     let SpellEffectKind::SearchLibrary {
+        who,
+        optional,
         filter,
         count,
         count_by_cast_cost,
@@ -2660,12 +2787,64 @@ pub(super) fn search_library(
                 .is_none_or(|condition| cx.top.cast_cost_condition_matches(condition))
         })
         .collect();
-    match zones {
-        SearchZoneSelection::Fixed(zones) => park_zone_search_choice(
-            cx.engine,
-            cx.events,
-            cx.top,
-            ZoneSearchRequest {
+    let Some(searcher) = super::player_recipients(cx, who).into_iter().next() else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if optional {
+        let prompt = format!("P{searcher}: search your library?");
+        cx.events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: searcher,
+                    source_object_id: cx.top.id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: custom::ChoiceKind::ResolutionBranch as i32,
+                    candidate_object_ids: Vec::new(),
+                    candidate_card_ids: Vec::new(),
+                    candidate_names: Vec::new(),
+                    min: 0,
+                    max: 1,
+                    ordered: false,
+                    unique_names: false,
+                    candidate_server_card_ids: Vec::new(),
+                    candidate_selectable: Vec::new(),
+                    resolution_branches: vec![rv1::ResolutionBranchOption {
+                        branch_index: 0,
+                        label: "Search".into(),
+                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                        cost_text: String::new(),
+                        selectable: true,
+                        search_zones: Vec::new(),
+                        presentation: None,
+                    }],
+                    mana_cost: String::new(),
+                    generic_mana_cost: 0,
+                    payment_currently_legal: false,
+                    reveal_audience: 0,
+                    revealed_zone_owner_player_id: None,
+                    candidate_source_zones: Vec::new(),
+                    combat_defender_options: Vec::new(),
+                    waterbend: false,
+                    selection_slots: Vec::new(),
+                },
+            )),
+        });
+        cx.events.push(ev_log(prompt.clone()));
+        cx.engine.state.pending_resolution = Some(PendingResolution {
+            deciding_player: searcher,
+            presentation: PendingResolutionPresentation {
+                source_object_id: cx.top.id,
+                candidates: Vec::new(),
+                min: 0,
+                max: 1,
+                ordered: false,
+                unique_names: false,
+                prompt,
+                choice_kind: custom::ChoiceKind::ResolutionBranch,
+            },
+            continuation: ResolutionContinuation::OptionalSearch {
+                stack: ParkedStackResolution::new(cx.top.clone()),
+                searcher,
                 count,
                 filter,
                 slots,
@@ -2675,85 +2854,25 @@ pub(super) fn search_library(
                 shuffle,
                 reveal,
             },
-        )?,
-        SearchZoneSelection::PlayerChoice(available_zones) => {
-            let combinations = search_zone_combinations(&available_zones);
-            let prompt = format!("P{}: choose which zones to search.", cx.controller);
-            let branches = combinations
-                .iter()
-                .enumerate()
-                .map(|(index, zones)| rv1::ResolutionBranchOption {
-                    branch_index: index as u32,
-                    label: zones
-                        .iter()
-                        .map(|zone| search_zone_label(*zone))
-                        .collect::<Vec<_>>()
-                        .join(" + "),
-                    cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
-                    cost_text: String::new(),
-                    selectable: true,
-                    search_zones: zones.iter().map(|zone| search_zone_proto(*zone)).collect(),
-                    presentation: None,
-                })
-                .collect();
-            cx.events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-                    rv1::ResolutionChoiceRequired {
-                        deciding_player_id: cx.controller,
-                        source_object_id: cx.top.id,
-                        prompt_text: prompt.clone(),
-                        choice_kind: custom::ChoiceKind::ResolutionBranch as i32,
-                        candidate_object_ids: Vec::new(),
-                        candidate_card_ids: Vec::new(),
-                        // The player must choose one nonempty authored zone combination before
-                        // the search can begin. Failure to find happens in the following search,
-                        // not by declining this scope choice.
-                        min: 1,
-                        max: 1,
-                        ordered: false,
-                        candidate_names: Vec::new(),
-                        candidate_server_card_ids: Vec::new(),
-                        unique_names: false,
-                        generic_mana_cost: 0,
-                        payment_currently_legal: false,
-                        resolution_branches: branches,
-                        mana_cost: String::new(),
-                        candidate_selectable: Vec::new(),
-                        reveal_audience: 0,
-                        revealed_zone_owner_player_id: None,
-                        candidate_source_zones: Vec::new(),
-                        combat_defender_options: Vec::new(),
-                        waterbend: false,
-                        selection_slots: Vec::new(),
-                    },
-                )),
-            });
-            cx.events.push(ev_log(prompt.clone()));
-            cx.engine.state.pending_resolution = Some(PendingResolution {
-                deciding_player: cx.controller,
-                presentation: PendingResolutionPresentation {
-                    source_object_id: cx.top.id,
-                    candidates: Vec::new(),
-                    min: 1,
-                    max: 1,
-                    ordered: false,
-                    prompt,
-                    choice_kind: custom::ChoiceKind::ResolutionBranch,
-                    unique_names: false,
-                },
-                continuation: ResolutionContinuation::SearchZoneScope {
-                    stack: ParkedStackResolution::new(cx.top.clone()),
-                    count,
-                    available_zones,
-                    filter,
-                    destination,
-                    conditional_destination,
-                    shuffle,
-                    reveal,
-                },
-            });
-        }
+        });
+        return Ok(EffectOutcome::Suspended);
     }
+    begin_search_request(
+        cx.engine,
+        cx.events,
+        cx.top,
+        searcher,
+        SearchRequest {
+            count,
+            filter,
+            slots,
+            zones,
+            destination,
+            conditional_destination,
+            shuffle,
+            reveal,
+        },
+    )?;
     // Resolution is now parked; the "resolves." log is emitted by finish_library_search.
     Ok(EffectOutcome::Suspended)
 }

@@ -426,17 +426,53 @@ mod player_recipient_order_tests {
 
 fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
     match who {
-        PlayerRecipient::ControllerOfTargetGroup { group_index } => cx
-            .targets
-            .iter()
-            .zip(cx.target_group_indices)
-            .find_map(|(&object_id, &target_group)| {
-                (target_group == group_index)
-                    .then(|| cx.engine.controller_of(object_id))
-                    .flatten()
-            })
-            .into_iter()
-            .collect(),
+        PlayerRecipient::ControllerOfTargetGroup { group_index } => {
+            let object_id = cx.targets.iter().zip(cx.target_group_indices).find_map(
+                |(&object_id, &target_group)| (target_group == group_index).then_some(object_id),
+            );
+            let target = cx
+                .top
+                .targets
+                .iter()
+                .chain(
+                    cx.top
+                        .chosen_modes
+                        .iter()
+                        .flat_map(|mode| mode.targets.iter()),
+                )
+                .find(|target| {
+                    target.group_index == group_index && Some(target.object_id) == object_id
+                });
+            target
+                .and_then(|target| {
+                    let generation = target.zone_change_generation?;
+                    let is_current = cx
+                        .engine
+                        .state
+                        .zone_change_generation
+                        .get(&target.object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == generation
+                        && cx
+                            .engine
+                            .state
+                            .objects
+                            .get(&target.object_id)
+                            .is_some_and(|object| object.zone == Zone::Battlefield);
+                    if is_current {
+                        cx.engine.controller_of(target.object_id)
+                    } else {
+                        cx.engine
+                            .state
+                            .last_known_controller_by_generation
+                            .get(&(target.object_id, generation))
+                            .copied()
+                    }
+                })
+                .into_iter()
+                .collect()
+        }
         PlayerRecipient::DefendingPlayer => cx
             .top
             .trigger_context

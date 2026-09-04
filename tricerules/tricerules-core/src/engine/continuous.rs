@@ -479,7 +479,7 @@ impl GameEngine {
                         SpecialActionAffected::Permanents(filter) => {
                             AffectedScope::PermanentsMatching {
                                 reference_player: controller,
-                                filter: *filter,
+                                filter,
                                 exclude: None,
                             }
                         }
@@ -742,7 +742,7 @@ impl GameEngine {
                 } => {
                     let affected = AffectedScope::PermanentsMatching {
                         reference_player: controller,
-                        filter,
+                        filter: Box::new(filter),
                         exclude: None,
                     };
                     for ability in triggered_abilities {

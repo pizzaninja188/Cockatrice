@@ -1,0 +1,52 @@
+// Oracle and rulings verified against Scryfall on 2026-09-04. CR 608.2b-c, 608.2h,
+// 701.23, and 701.24.
+(
+  id: "demolition_field",
+  name: "Demolition Field",
+  face_id: "demolition_field",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{2}"), Tap, SacrificeSelf],
+      effect: [
+        Destroy(subject: Chosen((
+          kind: AnyPermanent,
+          controller: Opponent,
+          permanent_types: [Land],
+          excluded_supertypes: ["Basic"],
+        ))),
+        SearchLibrary(
+          who: ControllerOfTargetGroup(group_index: 0),
+          optional: true,
+          filter: Some((card_type: Some(BasicLand))),
+          destination: Battlefield(tapped: false),
+          shuffle: true,
+          reveal: false,
+        ),
+        SearchLibrary(
+          who: Controller,
+          optional: true,
+          filter: Some((card_type: Some(BasicLand))),
+          destination: Battlefield(tapped: false),
+          shuffle: true,
+          reveal: false,
+        ),
+      ],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target nonbasic land an opponent controls",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

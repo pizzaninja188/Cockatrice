@@ -120,6 +120,12 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
+            ResolutionContinuation::OptionalSearch { .. }
+        ) {
+            return self.finish_optional_search_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::AuthoredBranch {
                 branch: PendingResolutionBranch {
                     stage: PendingResolutionBranchStage::Selecting,
@@ -231,6 +237,9 @@ impl GameEngine {
             }
             ResolutionContinuation::SearchZoneScope { .. } => {
                 unreachable!("search-zone branch handled before object-choice validation")
+            }
+            ResolutionContinuation::OptionalSearch { .. } => {
+                unreachable!("optional-search branch handled before object-choice validation")
             }
             ResolutionContinuation::OwnerLibraryPlacement { .. } => {
                 unreachable!("owner placement branch handled before object-choice validation")
