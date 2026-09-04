@@ -193,7 +193,8 @@ void PlayerActions::reconcilePendingRuledTargetSelections()
                                        option->validPermanentGenericReductions.value(selection.selectedId) ==
                                            selection.genericCostReduction;
                             }
-                            return option->kind == RuledCastCostOptionKind::Mana;
+                            return option->kind == RuledCastCostOptionKind::Mana ||
+                                   option->kind == RuledCastCostOptionKind::PayLife;
                         });
         const bool pendingCastCostObjectStillLegal =
             !pendingRuledSpellCast.waitingForCastCostObject ||
@@ -204,7 +205,7 @@ void PlayerActions::reconcilePendingRuledTargetSelections()
                      return entry.optionIndex == pendingRuledSpellCast.activeCastCostOption;
                  });
                  return option != group.options.cend() && option->selectable &&
-                        ruledCastCostUsesPermanent(option->kind);
+                        ruledCastCostUsesObjectChoice(option->kind);
              }());
         if (!sourceStillLegal ||
             !castCostSelectionsStillLegal ||
@@ -922,7 +923,7 @@ bool PlayerActions::promptForNextRuledCastCostGroup()
                 cancelPendingRuledSpellCast();
                 return false;
             }
-            if (linked->kind != RuledCastCostOptionKind::Mana) {
+            if (ruledCastCostUsesObjectChoice(linked->kind)) {
                 if (ruledCastCostUsesPermanentCohort(linked->kind)) {
                     pendingRuledSpellCast.castCostSelections.append(
                         {group.groupIndex, linked->optionIndex,
@@ -934,9 +935,11 @@ bool PlayerActions::promptForNextRuledCastCostGroup()
                 emit ruledSpellCastPendingChanged(true);
                 return true;
             }
-            const auto additional = parseSimpleManaCost(linked->additionalManaCost);
-            for (auto it = additional.constBegin(); it != additional.constEnd(); ++it) {
-                pendingRuledSpellCast.remainingCost[it.key()] += it.value();
+            if (linked->kind == RuledCastCostOptionKind::Mana) {
+                const auto additional = parseSimpleManaCost(linked->additionalManaCost);
+                for (auto it = additional.constBegin(); it != additional.constEnd(); ++it) {
+                    pendingRuledSpellCast.remainingCost[it.key()] += it.value();
+                }
             }
             pendingRuledSpellCast.castCostSelections.append(
                 {group.groupIndex, linked->optionIndex, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
@@ -1124,7 +1127,7 @@ void PlayerActions::selectPendingRuledCastCostOption(int optionIndex)
             }
             pendingRuledSpellCast.castCostSelections.append(
                 {group.groupIndex, option->optionIndex, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
-        } else {
+        } else if (ruledCastCostUsesObjectChoice(option->kind)) {
             if (ruledCastCostUsesPermanentCohort(option->kind)) {
                 pendingRuledSpellCast.castCostSelections.append(
                     {group.groupIndex, option->optionIndex,
@@ -1135,6 +1138,9 @@ void PlayerActions::selectPendingRuledCastCostOption(int optionIndex)
             pendingRuledSpellCast.castCostObjectError.clear();
             emit ruledSpellCastPendingChanged(true);
             return;
+        } else {
+            pendingRuledSpellCast.castCostSelections.append(
+                {group.groupIndex, option->optionIndex, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
         }
     }
     emit ruledSpellCastPendingChanged(true);
@@ -5636,7 +5642,7 @@ bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
         const auto option = std::find_if(group.options.cbegin(), group.options.cend(), [this](const auto &entry) {
             return entry.optionIndex == pendingRuledSpellCast.activeCastCostOption;
         });
-        if (option == group.options.cend() || !ruledCastCostUsesPermanent(option->kind)) {
+        if (option == group.options.cend() || !ruledCastCostUsesObjectChoice(option->kind)) {
             cancelPendingRuledSpellCast();
             return true;
         }

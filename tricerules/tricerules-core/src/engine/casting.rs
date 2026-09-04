@@ -1077,9 +1077,9 @@ impl GameEngine {
                     delta: -(life_paid as i32),
                 })),
             });
-            batch.events.push(ev_log(format!(
-                "P{player} pays {life_paid} life (Phyrexian mana)."
-            )));
+            batch
+                .events
+                .push(ev_log(format!("P{player} pays {life_paid} life.")));
         }
         for ev in payment.move_events {
             batch.events.push(ev);
@@ -1498,7 +1498,7 @@ impl GameEngine {
                 })),
             });
             batch.events.push(ev_log(format!(
-                "P{player} pays {} life (Phyrexian mana).",
+                "P{player} pays {} life.",
                 payment.life_paid
             )));
         }
@@ -1963,7 +1963,7 @@ impl GameEngine {
                 })),
             });
             batch.events.push(ev_log(format!(
-                "P{player} pays {} life (Phyrexian mana).",
+                "P{player} pays {} life.",
                 payment.life_paid
             )));
         }

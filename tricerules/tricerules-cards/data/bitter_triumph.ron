@@ -1,0 +1,23 @@
+// Oracle and rulings checked against Scryfall on 2026-09-03. The combined additional-cost
+// sentence maps to the group; its alternatives deliberately use engine-authored fallback labels.
+(
+  id: "bitter_triumph",
+  name: "Bitter Triumph",
+  face_id: "bitter_triumph",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "additional_cost",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 1,
+    options: [
+      DiscardCard(option_id: "discard_card", presentation: Fallback),
+      PayLife(option_id: "pay_3_life", presentation: Fallback, amount: 3),
+    ],
+  )],
+  spell_effect: [Destroy(subject: Chosen((any_of: Some([
+    (kind: Creature),
+    (kind: AnyPermanent, permanent_types: [Planeswalker]),
+  ]))))],
+)

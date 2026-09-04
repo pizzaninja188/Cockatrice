@@ -1118,6 +1118,35 @@ TEST(RuledPendingTargetTest, CastCostObjectEligibilityUsesThePublishedOptionCand
               RuledTargetClickEligibility::NotTargeting);
 }
 
+TEST(RuledPendingTargetTest, DiscardCastCostAcceptsOnlyPublishedHandCandidates)
+{
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.waitingForCastCostObject = true;
+    spell.nextCastCostGroup = 0;
+    spell.activeCastCostOption = 4;
+
+    RuledCastCostOption discard;
+    discard.optionIndex = 4;
+    discard.kind = RuledCastCostOptionKind::DiscardCard;
+    discard.selectable = true;
+    discard.validHandIndices = {7};
+    discard.validPermanentIds = {900};
+    RuledCastCostGroup group;
+    group.options = {discard};
+    spell.castCostGroups = {group};
+
+    EXPECT_TRUE(ruledCastCostUsesHandChoice(discard.kind));
+    EXPECT_TRUE(ruledCastCostUsesObjectChoice(discard.kind));
+    EXPECT_EQ(ruledCastCostObjectEligibility(spell, RuledCastCostCandidateKind::Hand, 7),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledCastCostObjectEligibility(spell, RuledCastCostCandidateKind::Hand, 8),
+              RuledTargetClickEligibility::Illegal);
+    EXPECT_EQ(ruledCastCostObjectEligibility(spell, RuledCastCostCandidateKind::Permanent, 900),
+              RuledTargetClickEligibility::Illegal);
+    EXPECT_FALSE(ruledCastCostUsesObjectChoice(RuledCastCostOptionKind::PayLife));
+}
+
 TEST(RuledPendingTargetTest, HarmonizeCastCostOnlyAcceptsPublishedPermanentCandidates)
 {
     PendingRuledSpellCast spell;
@@ -4535,16 +4564,30 @@ TEST_F(RuledClientTest, ParsesEngineAuthoredOptionalCastCostGroups)
     behold->add_valid_permanent_ids(900);
     behold->add_valid_permanent_generations(12);
     behold->set_selectable(true);
+    auto *discard = group->add_options();
+    discard->set_option_index(2);
+    discard->set_label("Discard a card");
+    discard->set_kind(ruled::v1::CAST_COST_OPTION_KIND_DISCARD_CARD);
+    discard->add_valid_hand_indices(8);
+    discard->set_selectable(true);
+    auto *payLife = group->add_options();
+    payLife->set_option_index(3);
+    payLife->set_label("Pay 3 life");
+    payLife->set_kind(ruled::v1::CAST_COST_OPTION_KIND_PAY_LIFE);
+    payLife->set_selectable(true);
     apply(batch);
 
     const auto costs = state->spellCostData(3, 0, RuledCastSource::Hand);
     ASSERT_EQ(costs.castCostGroups.size(), 1);
     EXPECT_EQ(costs.castCostGroups.first().prompt, QStringLiteral("Choose an additional cost."));
-    ASSERT_EQ(costs.castCostGroups.first().options.size(), 2);
+    ASSERT_EQ(costs.castCostGroups.first().options.size(), 4);
     EXPECT_EQ(costs.castCostGroups.first().options.at(0).additionalManaCost, QStringLiteral("{2}"));
     EXPECT_EQ(costs.castCostGroups.first().options.at(1).validHandIndices, QSet<quint32>({7}));
     EXPECT_EQ(costs.castCostGroups.first().options.at(1).validPermanentIds, QSet<quint32>({900}));
     EXPECT_EQ(costs.castCostGroups.first().options.at(1).validPermanentGenerations.value(900), 12u);
+    EXPECT_EQ(costs.castCostGroups.first().options.at(2).kind, RuledCastCostOptionKind::DiscardCard);
+    EXPECT_EQ(costs.castCostGroups.first().options.at(2).validHandIndices, QSet<quint32>({8}));
+    EXPECT_EQ(costs.castCostGroups.first().options.at(3).kind, RuledCastCostOptionKind::PayLife);
 }
 
 TEST_F(RuledClientTest, ParsesTeamworkCohortsTargetRequirementsAndAllModesCost)

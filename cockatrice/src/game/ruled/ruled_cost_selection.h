@@ -23,12 +23,22 @@ inline bool ruledCostNeedsConfirmation(const RuledCostChoice &choice)
     return ruledCostUsesObjectRefs(choice);
 }
 
-inline bool ruledCastCostUsesPermanent(RuledCastCostOptionKind kind)
+inline bool ruledCastCostUsesHandChoice(RuledCastCostOptionKind kind)
+{
+    return kind == RuledCastCostOptionKind::Behold || kind == RuledCastCostOptionKind::DiscardCard;
+}
+
+inline bool ruledCastCostUsesPermanentChoice(RuledCastCostOptionKind kind)
 {
     return kind == RuledCastCostOptionKind::Behold ||
            kind == RuledCastCostOptionKind::TapPermanentForGenericReduction ||
            kind == RuledCastCostOptionKind::Blight || kind == RuledCastCostOptionKind::TapPermanents ||
            kind == RuledCastCostOptionKind::SacrificePermanent;
+}
+
+inline bool ruledCastCostUsesObjectChoice(RuledCastCostOptionKind kind)
+{
+    return ruledCastCostUsesHandChoice(kind) || ruledCastCostUsesPermanentChoice(kind);
 }
 
 inline bool ruledCastCostUsesPermanentCohort(RuledCastCostOptionKind kind)
@@ -85,6 +95,8 @@ inline QString ruledCastCostSelectionPrompt(const RuledCastCostOption &option)
                    : tr("%1: choose %2 permanent(s), then confirm.").arg(option.label).arg(option.objectMin);
     if (option.kind == RuledCastCostOptionKind::SacrificePermanent)
         return tr("%1: choose one permanent to sacrifice, then confirm.").arg(option.label);
+    if (option.kind == RuledCastCostOptionKind::DiscardCard)
+        return tr("%1: click a card in your hand.").arg(option.label);
     return tr("%1: click an authorized card in your hand or permanent you control.").arg(option.label);
 }
 

@@ -297,6 +297,12 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
                 case ruled::v1::CAST_COST_OPTION_KIND_SACRIFICE_PERMANENT:
                     parsedOption.kind = RuledCastCostOptionKind::SacrificePermanent;
                     break;
+                case ruled::v1::CAST_COST_OPTION_KIND_DISCARD_CARD:
+                    parsedOption.kind = RuledCastCostOptionKind::DiscardCard;
+                    break;
+                case ruled::v1::CAST_COST_OPTION_KIND_PAY_LIFE:
+                    parsedOption.kind = RuledCastCostOptionKind::PayLife;
+                    break;
                 default:
                     parsedOption.kind = RuledCastCostOptionKind::Unspecified;
                     break;

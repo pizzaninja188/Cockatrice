@@ -447,12 +447,13 @@ ruledCastCostObjectEligibility(const PendingRuledSpellCast &spell, RuledCastCost
     const auto option = std::find_if(group.options.cbegin(), group.options.cend(), [&spell](const auto &entry) {
         return entry.optionIndex == spell.activeCastCostOption;
     });
-    if (option == group.options.cend() || !option->selectable || !ruledCastCostUsesPermanent(option->kind)) {
+    if (option == group.options.cend() || !option->selectable || !ruledCastCostUsesObjectChoice(option->kind)) {
         return RuledTargetClickEligibility::Illegal;
     }
     const bool legal = kind == RuledCastCostCandidateKind::Hand
-                           ? option->kind == RuledCastCostOptionKind::Behold && option->validHandIndices.contains(id)
-                           : option->validPermanentIds.contains(id);
+                           ? ruledCastCostUsesHandChoice(option->kind) && option->validHandIndices.contains(id)
+                           : ruledCastCostUsesPermanentChoice(option->kind) &&
+                                 option->validPermanentIds.contains(id);
     return legal ? RuledTargetClickEligibility::Legal : RuledTargetClickEligibility::Illegal;
 }
 

@@ -46,6 +46,9 @@ enum CostDebit {
         cast_cost_kind: Option<ObjectCastCostKind>,
     },
     Mana(ManaPaymentPlan),
+    Life {
+        amount: u32,
+    },
     Discard {
         object_id: ObjectId,
         generation: u64,
@@ -616,6 +619,54 @@ impl GameEngine {
                                 ))
                             }
                         }
+                    }
+                    CastCostOptionDef::DiscardCard { .. } => {
+                        use rv1::cast_cost_group_selection::SelectedObject;
+                        let Some(SelectedObject::HandIndex(hand_index)) = selection.selected_object
+                        else {
+                            return Err(EngineError::Illegal(
+                                "discard cast cost requires a selected hand card",
+                            ));
+                        };
+                        if selection.battlefield_objects.is_some() {
+                            return Err(EngineError::Illegal(
+                                "discard cast cost cannot select battlefield objects",
+                            ));
+                        }
+                        let object_id = self.state.players[player_idx]
+                            .hand
+                            .get(hand_index as usize)
+                            .copied()
+                            .ok_or(EngineError::Illegal("invalid discard hand slot"))?;
+                        if object_id == source_oid {
+                            return Err(EngineError::Illegal(
+                                "spell cannot discard itself as its additional cost",
+                            ));
+                        }
+                        let object = &self.state.objects[&object_id];
+                        let generation = self
+                            .state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0);
+                        debits.push(CostDebit::Discard {
+                            object_id,
+                            generation,
+                            owner: object.owner,
+                        });
+                        vec![]
+                    }
+                    CastCostOptionDef::PayLife { amount, .. } => {
+                        if selection.selected_object.is_some()
+                            || selection.battlefield_objects.is_some()
+                        {
+                            return Err(EngineError::Illegal(
+                                "life cast cost option cannot select an object",
+                            ));
+                        }
+                        debits.push(CostDebit::Life { amount: *amount });
+                        vec![]
                     }
                     CastCostOptionDef::TapPermanents {
                         kind,
@@ -1673,6 +1724,14 @@ impl GameEngine {
                             .extend(self.collect_event_triggers(&[event]));
                     }
                 }
+                CostDebit::Life { amount } => {
+                    crate::engine::history::commit_life_change(
+                        &mut self.state,
+                        plan.player_idx,
+                        -(amount as i32),
+                    );
+                    payment.life_paid += amount;
+                }
                 CostDebit::Discard {
                     object_id: oid,
                     owner,
@@ -1872,6 +1931,21 @@ impl GameEngine {
             return Err(EngineError::Illegal("cost transaction player changed"));
         }
         let mut counter_debits: BTreeMap<(ObjectId, CounterKind), u64> = BTreeMap::new();
+        let total_life_payment = plan.debits.iter().try_fold(0u64, |total, debit| {
+            let amount = match debit {
+                CostDebit::Mana(mana) => u64::from(mana.life_cost),
+                CostDebit::Life { amount } => u64::from(*amount),
+                _ => 0,
+            };
+            total.checked_add(amount).ok_or(EngineError::Illegal(
+                "combined life payment exceeds supported range",
+            ))
+        })?;
+        if u64::try_from(self.state.players[plan.player_idx].life)
+            .map_or(true, |life| total_life_payment > life)
+        {
+            return Err(EngineError::Illegal("not enough life to pay all costs"));
+        }
         for debit in &plan.debits {
             let valid = match debit {
                 CostDebit::Waterbend => true,
@@ -1951,6 +2025,7 @@ impl GameEngine {
                 CostDebit::Mana(mana) => {
                     mana_payment_still_valid(&self.state, plan.player_idx, mana)
                 }
+                CostDebit::Life { amount } => *amount > 0 && *amount <= i32::MAX as u32,
                 CostDebit::Tap {
                     object_id,
                     generation,
@@ -3157,6 +3232,45 @@ mod convoke_transaction_tests {
             assert_eq!(engine.state.turn_history.current.player(0).life_lost, 2);
             assert_eq!(engine.state.turn_history.current.player(0).life_gained, 0);
         }
+    }
+
+    #[test]
+    fn issue_199_fixed_and_phyrexian_life_payments_are_validated_as_one_total() {
+        let plan = |engine: &GameEngine| {
+            let mana = super::super::mana::plan_mana_payment_with_reduction(
+                &engine.state,
+                0,
+                &ManaCost::parse("{G/P}").unwrap(),
+                0,
+                0,
+                0,
+                &[rv1::FlexPipPayment {
+                    pip_index: 0,
+                    pay_life: true,
+                }],
+            )
+            .unwrap();
+            CostTransactionPlan {
+                purpose: CostPurpose::Spell,
+                player: 0,
+                player_idx: 0,
+                debits: vec![CostDebit::Mana(mana), CostDebit::Life { amount: 3 }],
+                cast_cost_receipts: vec![],
+            }
+        };
+
+        let mut insufficient = GameEngine::new(199_010, &[0, 1], 4, None, true).unwrap();
+        let before = format!("{:?}", insufficient.state);
+        assert!(insufficient
+            .commit_cost_transaction(plan(&insufficient))
+            .is_err());
+        assert_eq!(format!("{:?}", insufficient.state), before);
+
+        let mut exact = GameEngine::new(199_011, &[0, 1], 5, None, true).unwrap();
+        let receipt = exact.commit_cost_transaction(plan(&exact)).unwrap();
+        assert_eq!(receipt.life_paid, 5);
+        assert_eq!(exact.state.players[0].life, 0);
+        assert_eq!(exact.state.turn_history.current.player(0).life_lost, 5);
     }
 
     #[test]

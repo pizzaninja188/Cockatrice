@@ -237,6 +237,8 @@ enum class RuledCastCostOptionKind : int
     Blight,
     TapPermanents,
     SacrificePermanent,
+    DiscardCard,
+    PayLife,
 };
 
 struct RuledCastCostOption

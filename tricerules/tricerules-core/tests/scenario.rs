@@ -183,6 +183,8 @@ mod issue_192_calibration_cards;
 mod issue_193_selected_counter_removal;
 #[path = "scenario/issue_194_dynamic_scope_combat_restrictions.rs"]
 mod issue_194_dynamic_scope_combat_restrictions;
+#[path = "scenario/issue_199_alternative_additional_costs.rs"]
+mod issue_199_alternative_additional_costs;
 #[path = "scenario/issue_202_hidden_lair.rs"]
 mod issue_202_hidden_lair;
 #[path = "scenario/issue_204_land_animation.rs"]

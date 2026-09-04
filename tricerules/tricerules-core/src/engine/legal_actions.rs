@@ -1375,6 +1375,61 @@ fn legal_spell_cost_choices(
                             ..Default::default()
                         }
                     }
+                    CastCostOptionDef::DiscardCard {
+                        option_id,
+                        presentation,
+                    } => {
+                        let valid_hand_indices = eng.state.players[player_idx]
+                            .hand
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(slot, oid)| (*oid != source).then_some(slot as u32))
+                            .collect::<Vec<_>>();
+                        rv1::LegalCastCostOption {
+                            option_index: option_index as u32,
+                            label: option.fallback_label(),
+                            kind: rv1::CastCostOptionKind::DiscardCard as i32,
+                            selectable: !valid_hand_indices.is_empty(),
+                            valid_hand_indices,
+                            presentation: Some(presentation_ref(
+                                eng.registry,
+                                card_id,
+                                &face.face_id,
+                                [
+                                    PresentationPath::Spell,
+                                    PresentationPath::CastCostGroup(&group.group_id),
+                                    PresentationPath::CastCostOption(option_id),
+                                ],
+                                presentation,
+                                option.fallback_label(),
+                            )),
+                            ..Default::default()
+                        }
+                    }
+                    CastCostOptionDef::PayLife {
+                        option_id,
+                        presentation,
+                        amount,
+                    } => rv1::LegalCastCostOption {
+                        option_index: option_index as u32,
+                        label: option.fallback_label(),
+                        kind: rv1::CastCostOptionKind::PayLife as i32,
+                        selectable: u32::try_from(eng.state.players[player_idx].life)
+                            .is_ok_and(|life| life >= *amount),
+                        presentation: Some(presentation_ref(
+                            eng.registry,
+                            card_id,
+                            &face.face_id,
+                            [
+                                PresentationPath::Spell,
+                                PresentationPath::CastCostGroup(&group.group_id),
+                                PresentationPath::CastCostOption(option_id),
+                            ],
+                            presentation,
+                            option.fallback_label(),
+                        )),
+                        ..Default::default()
+                    },
                     CastCostOptionDef::TapPermanents {
                         option_id,
                         presentation,

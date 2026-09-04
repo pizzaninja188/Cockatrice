@@ -5294,6 +5294,176 @@ TEST_F(RuledE2ESmokeTest, BeholdCastCostIsPrivateUntilItsPublicStackReveal)
     EXPECT_FALSE(p1.activeBeholdReveal || p2.activeBeholdReveal);
 }
 
+TEST_F(RuledE2ESmokeTest, BitterTriumphPaysEitherLifeOrAnExactPrivateHandCard)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("triumphp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("triumphp2"), &transcript);
+    p2.didMulligan = true;
+
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Swamp")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "Bitter Triumph game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "Bitter Triumph game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer openingDeadline;
+    openingDeadline.start();
+    while (openingDeadline.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 && (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto devPut = [&](int targetPlayer, const char *cardName, ruled::v1::DevZone zone, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(targetPlayer);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(cardName);
+        put->set_zone(zone);
+        put->set_ready(ready);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1 for Bitter Triumph").arg(cardName));
+    };
+    auto passPriority = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority in Bitter Triumph flow"));
+    };
+    auto optionOfKind = [](const ruled::v1::LegalCastCostGroup &group, ruled::v1::CastCostOptionKind kind) {
+        return std::find_if(group.options().begin(), group.options().end(),
+                            [kind](const auto &option) { return option.kind() == kind; });
+    };
+
+    ASSERT_TRUE(devPut(p1.myId, "Bitter Triumph", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(devPut(p1.myId, "Bitter Triumph", ruled::v1::DEV_ZONE_HAND, false));
+    ASSERT_TRUE(devPut(p2.myId, "Grizzly Bears", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(devPut(p2.myId, "Grizzly Bears", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ruled::v1::RuledCommand addMana;
+    addMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_b(2);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_c(2);
+    ASSERT_TRUE(sendAndPump(p1, addMana, QStringLiteral("dev: add mana for both Bitter Triumph casts")));
+
+    const auto *first = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Bitter Triumph"));
+    ASSERT_NE(first, nullptr);
+    ASSERT_EQ(first->cost_choices().cast_cost_groups_size(), 1);
+    const auto &firstGroup = first->cost_choices().cast_cost_groups(0);
+    ASSERT_EQ(firstGroup.min(), 1u);
+    ASSERT_EQ(firstGroup.max(), 1u);
+    const auto payLife = optionOfKind(firstGroup, ruled::v1::CAST_COST_OPTION_KIND_PAY_LIFE);
+    const auto discard = optionOfKind(firstGroup, ruled::v1::CAST_COST_OPTION_KIND_DISCARD_CARD);
+    ASSERT_NE(payLife, firstGroup.options().end());
+    ASSERT_NE(discard, firstGroup.options().end());
+    ASSERT_TRUE(payLife->selectable());
+    ASSERT_TRUE(discard->selectable());
+    ASSERT_GT(discard->valid_hand_indices_size(), 0);
+    EXPECT_EQ(p2.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Bitter Triumph")), nullptr);
+
+    const quint32 firstTargetKey = first->hand_index() << 8;
+    const auto firstTargets = p1.latestLegal.valid_targets_by_hand_slot().find(firstTargetKey);
+    ASSERT_NE(firstTargets, p1.latestLegal.valid_targets_by_hand_slot().end());
+    ASSERT_GE(firstTargets->second.groups(0).valid_permanent_ids_size(), 2);
+    const quint32 firstTarget = firstTargets->second.groups(0).valid_permanent_ids(0);
+    ruled::v1::RuledCommand lifeCast;
+    auto *lifeSpell = lifeCast.mutable_cast_spell();
+    lifeSpell->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    lifeSpell->mutable_source()->set_hand_index(first->hand_index());
+    auto *lifeSelection = lifeSpell->add_cast_cost_group_selections();
+    lifeSelection->set_group_index(firstGroup.group_index());
+    lifeSelection->set_option_index(payLife->option_index());
+    auto *lifeTarget = lifeSpell->add_targets();
+    lifeTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    lifeTarget->set_object_id(firstTarget);
+    ASSERT_TRUE(sendAndPump(p1, lifeCast, QStringLiteral("cast Bitter Triumph by paying 3 life")));
+    ASSERT_EQ(p1.lifeByPlayer[p1.myId], 17);
+    ASSERT_EQ(p2.lifeByPlayer[p1.myId], 17);
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+    ASSERT_EQ(p1.graveyardOwnerByEngineOid[firstTarget], p2.myId);
+    ASSERT_EQ(p2.graveyardOwnerByEngineOid[firstTarget], p2.myId);
+
+    const auto *second = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Bitter Triumph"));
+    ASSERT_NE(second, nullptr);
+    const auto &secondGroup = second->cost_choices().cast_cost_groups(0);
+    const auto secondDiscard = optionOfKind(secondGroup, ruled::v1::CAST_COST_OPTION_KIND_DISCARD_CARD);
+    ASSERT_NE(secondDiscard, secondGroup.options().end());
+    ASSERT_GT(secondDiscard->valid_hand_indices_size(), 0);
+    const int discardSlot = static_cast<int>(secondDiscard->valid_hand_indices(0));
+    ASSERT_TRUE(p1.handServerCardBySlot.count(discardSlot));
+    const int discardedServerCard = p1.handServerCardBySlot[discardSlot];
+    const int handBeforeDiscardCast = p1.handSizeByPlayer[p1.myId];
+    const quint32 secondTargetKey = second->hand_index() << 8;
+    const auto secondTargets = p1.latestLegal.valid_targets_by_hand_slot().find(secondTargetKey);
+    ASSERT_NE(secondTargets, p1.latestLegal.valid_targets_by_hand_slot().end());
+    ASSERT_EQ(secondTargets->second.groups(0).valid_permanent_ids_size(), 1);
+    const quint32 secondTarget = secondTargets->second.groups(0).valid_permanent_ids(0);
+
+    ruled::v1::RuledCommand discardCast;
+    auto *discardSpell = discardCast.mutable_cast_spell();
+    discardSpell->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    discardSpell->mutable_source()->set_hand_index(second->hand_index());
+    auto *discardSelection = discardSpell->add_cast_cost_group_selections();
+    discardSelection->set_group_index(secondGroup.group_index());
+    discardSelection->set_option_index(secondDiscard->option_index());
+    discardSelection->set_hand_index(static_cast<quint32>(discardSlot));
+    auto *discardTarget = discardSpell->add_targets();
+    discardTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    discardTarget->set_object_id(secondTarget);
+    ASSERT_TRUE(sendAndPump(p1, discardCast, QStringLiteral("cast Bitter Triumph by discarding a card")));
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], handBeforeDiscardCast - 2);
+    const auto discarded = std::find_if(
+        p1.graveyardOwnerByEngineOid.begin(), p1.graveyardOwnerByEngineOid.end(), [&](const auto &entry) {
+            return entry.second == p1.myId && p1.serverCardByEngineOid[entry.first] == discardedServerCard;
+        });
+    ASSERT_NE(discarded, p1.graveyardOwnerByEngineOid.end());
+    const quint32 discardedOid = discarded->first;
+    ASSERT_EQ(p2.graveyardOwnerByEngineOid[discardedOid], p1.myId);
+    ASSERT_EQ(p2.serverCardByEngineOid[discardedOid], discardedServerCard);
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+    EXPECT_EQ(p1.graveyardOwnerByEngineOid[secondTarget], p2.myId);
+    EXPECT_EQ(p2.graveyardOwnerByEngineOid[secondTarget], p2.myId);
+}
+
 TEST_F(RuledE2ESmokeTest, TappedTargetReductionIsPrivateAndAuthoritativeThroughBothClients)
 {
     const auto started = startServers();

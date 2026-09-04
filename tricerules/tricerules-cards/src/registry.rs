@@ -1,10 +1,10 @@
 use crate::card_def::{CardDefinition, CardFace, Layout, RawCardDefinition};
 use crate::primitives::{
     AbilityCost, ActivatedCostModifier, AdditionalCost, Amount, BattlefieldAggregate,
-    CardResultAction, CardResultSource, CastCostGroupDef, CastCostReceiptCondition, EffectContext,
-    FaceChangeAction, GameCondition, ObjectContributionKind, ResolutionBranchRequirement,
-    SpecialActionAffected, SpellEffectKind, StaticAbilityDef, TargetController, TargetKind,
-    TargetingDef, TriggerCondition, ZoneCardFilter,
+    CardResultAction, CardResultSource, CastCostGroupDef, CastCostOptionDef,
+    CastCostReceiptCondition, EffectContext, FaceChangeAction, GameCondition,
+    ObjectContributionKind, ResolutionBranchRequirement, SpecialActionAffected, SpellEffectKind,
+    StaticAbilityDef, TargetController, TargetKind, TargetingDef, TriggerCondition, ZoneCardFilter,
 };
 use crate::token_def::TokenDefinition;
 use crate::ManaSymbol;
@@ -251,6 +251,31 @@ fn additional_cost_result_actions(costs: &[AdditionalCost]) -> Vec<CardResultAct
             AdditionalCost::Blight { .. } => None,
         })
         .collect()
+}
+
+fn spell_payment_result_actions(
+    costs: &[AdditionalCost],
+    groups: &[CastCostGroupDef],
+) -> Vec<CardResultAction> {
+    let mut actions = additional_cost_result_actions(costs);
+    for action in groups
+        .iter()
+        .flat_map(|group| &group.options)
+        .filter_map(|option| match option {
+            CastCostOptionDef::DiscardCard { .. } => Some(CardResultAction::Discard),
+            CastCostOptionDef::TapPermanents { .. } => Some(CardResultAction::Tap),
+            CastCostOptionDef::SacrificePermanent { .. } => Some(CardResultAction::Sacrifice),
+            CastCostOptionDef::Blight { .. }
+            | CastCostOptionDef::Mana { .. }
+            | CastCostOptionDef::Behold { .. }
+            | CastCostOptionDef::PayLife { .. } => None,
+        })
+    {
+        if !actions.contains(&action) {
+            actions.push(action);
+        }
+    }
+    actions
 }
 
 fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
@@ -1439,7 +1464,8 @@ impl CardRegistry {
                             .into(),
                     });
                 }
-                let payment_actions = additional_cost_result_actions(&face.additional_costs);
+                let payment_actions =
+                    spell_payment_result_actions(&face.additional_costs, &face.cast_cost_groups);
                 for effect in &face.spell_effect {
                     validate_effect_payment_results(&payment_actions, effect).map_err(
                         |reason| RegistryError::InvalidCard {
@@ -2256,6 +2282,23 @@ mod tests {
 
         let error = CardRegistry::from_chunks(&[card]).expect_err("missing discard cost");
         assert!(error.to_string().contains("compatible card cost"));
+
+        let cast_option = card
+            .replace("bad_payment_result", "cast_option_payment_result")
+            .replace(
+                "spell_effect:",
+                r#"cast_cost_groups: [(
+                    group_id: "additional_cost",
+                    presentation: Fallback,
+                    min: 1,
+                    max: 1,
+                    options: [DiscardCard(option_id: "discard", presentation: Fallback)],
+                )],
+                spell_effect:"#,
+            )
+            .replace("effects: []", "effects: [GainLife(amount: 1)]");
+        CardRegistry::from_chunks(&[&cast_option])
+            .expect("a discard cast-cost option backs Payment discard results");
     }
 
     #[test]

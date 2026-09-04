@@ -314,6 +314,19 @@ pub enum CastCostOptionDef {
         hand_filter: ZoneCardFilter,
         permanent_filter: Box<TargetFilter>,
     },
+    /// Discard one other card chosen from the caster's hand. Bone Shards and Bitter Triumph use
+    /// this as one announced cost option.
+    DiscardCard {
+        option_id: ChoiceId,
+        presentation: AbilityPresentation,
+    },
+    /// Pay a fixed amount of life as an announced cost option. Bitter Triumph and Final Payment
+    /// use this alongside a different nonmana payment.
+    PayLife {
+        option_id: ChoiceId,
+        presentation: AbilityPresentation,
+        amount: u32,
+    },
     /// Tap a generation-bound cohort of untapped permanents as an announced cast cost. Teamwork
     /// uses an aggregate CurrentPower constraint; exact-count variants support future mechanics.
     TapPermanents {
@@ -372,6 +385,12 @@ impl CastCostGroupDef {
                     hand_filter.validate()?;
                     permanent_filter.validate_target_constraints()?;
                 }
+                CastCostOptionDef::DiscardCard { .. } => {}
+                CastCostOptionDef::PayLife { amount, .. } => {
+                    if *amount == 0 || *amount > i32::MAX as u32 {
+                        return Err("life payment option requires a positive i32 amount".into());
+                    }
+                }
                 CastCostOptionDef::TapPermanents {
                     constraint, filter, ..
                 } => {
@@ -397,6 +416,8 @@ impl CastCostOptionDef {
             Self::Blight { option_id, .. }
             | Self::Mana { option_id, .. }
             | Self::Behold { option_id, .. }
+            | Self::DiscardCard { option_id, .. }
+            | Self::PayLife { option_id, .. }
             | Self::TapPermanents { option_id, .. }
             | Self::SacrificePermanent { option_id, .. } => option_id,
         }
@@ -407,6 +428,8 @@ impl CastCostOptionDef {
             Self::Blight { presentation, .. }
             | Self::Mana { presentation, .. }
             | Self::Behold { presentation, .. }
+            | Self::DiscardCard { presentation, .. }
+            | Self::PayLife { presentation, .. }
             | Self::TapPermanents { presentation, .. }
             | Self::SacrificePermanent { presentation, .. } => presentation,
         }
@@ -420,6 +443,8 @@ impl CastCostOptionDef {
                 ManaCostChoiceKind::Kicker => format!("Kicker {cost}"),
             },
             Self::Behold { option_id, .. } => choice_fallback("Behold", option_id),
+            Self::DiscardCard { .. } => "Discard a card".into(),
+            Self::PayLife { amount, .. } => format!("Pay {amount} life"),
             Self::TapPermanents { kind, .. } => match kind {
                 ObjectCastCostKind::Teamwork => "Pay teamwork cost".into(),
                 ObjectCastCostKind::Kicker => "Pay tap kicker cost".into(),

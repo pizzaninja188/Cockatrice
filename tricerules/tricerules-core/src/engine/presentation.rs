@@ -201,6 +201,15 @@ pub(super) fn spell_stack_presentation(
                     presentation,
                     ..
                 }
+                | tricerules_cards::CastCostOptionDef::DiscardCard {
+                    option_id,
+                    presentation,
+                }
+                | tricerules_cards::CastCostOptionDef::PayLife {
+                    option_id,
+                    presentation,
+                    ..
+                }
                 | tricerules_cards::CastCostOptionDef::TapPermanents {
                     option_id,
                     presentation,
