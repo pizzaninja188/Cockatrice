@@ -57,6 +57,7 @@ impl GameEngine {
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: self.player_life_snapshot(),
             tapped: false,
+            set_types: None,
             entry_counters: BTreeMap::new(),
             applied_effects: Vec::new(),
         };

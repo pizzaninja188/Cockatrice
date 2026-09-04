@@ -1319,7 +1319,42 @@ impl GameEngine {
                         ));
                     }
 
-                    if event.classification == DamageClassification::Combat {
+                    if event.classification == DamageClassification::Combat && event.amount > 0 {
+                        let source_was_creature =
+                            event.source.types.iter().any(|kind| kind == "Creature")
+                                || sources.iter().any(|source| {
+                                    source.object_id == source_id
+                                        && source.controller == event.source.controller
+                                        && source.types.iter().any(|kind| kind == "Creature")
+                                });
+                        if source_was_creature {
+                            for source in sources {
+                                let mut matching =
+                                    self.matching_snapshot_abilities(source, |condition| {
+                                        let TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer {
+                                            source_controller,
+                                            damaged_player,
+                                        } = condition
+                                        else {
+                                            return false;
+                                        };
+                                        self.relative_player_matches(
+                                            *source_controller,
+                                            event.source.controller,
+                                            source.controller,
+                                        ) && self.relative_player_matches(
+                                            *damaged_player,
+                                            defender_id,
+                                            source.controller,
+                                        )
+                                    });
+                                for trigger in &mut matching {
+                                    trigger.trigger_context.observed_object = Some(source_ref);
+                                    trigger.trigger_context.affected_player = Some(defender_id);
+                                }
+                                out.extend(matching);
+                            }
+                        }
                         for source in sources {
                             if source.attached_to
                                 != Some(AttachmentSnapshot::Object(source_id, source_generation))
@@ -2452,6 +2487,7 @@ impl TriggerSourceSnapshot {
 
 #[cfg(test)]
 mod tests {
+    use super::super::damage::DamageEvent;
     use super::*;
     use tricerules_cards::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility};
 
@@ -3102,6 +3138,117 @@ mod tests {
                     expected
                 );
             }
+        }
+    }
+
+    #[test]
+    fn issue_200_combat_damage_observer_uses_event_time_types_and_relative_players() {
+        let mut engine = GameEngine::new(200_010, &[0, 1], 20, None, true).unwrap();
+        engine.state.players.push(PlayerState::new(2, 20));
+        let ability = engine
+            .registry
+            .get("enduring_curiosity")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .clone();
+        let watcher = TriggerSourceSnapshot {
+            counters: BTreeMap::new(),
+            owner: 1,
+            is_token: false,
+            all_creature_types: false,
+            types: vec!["Enchantment".into(), "Creature".into()],
+            power_toughness: (Some(4), Some(3)),
+            event_conditions_checked: false,
+            object_id: 100,
+            card_id: "enduring_curiosity".into(),
+            face_name: "Enduring Curiosity".into(),
+            controller: 1,
+            face_index: 0,
+            zone_change_generation: 3,
+            face_change_generation: 0,
+            attached_to: None,
+            triggered_abilities: vec![(0, ability.clone(), test_ability_origin(0))],
+        };
+        let event = |classification, source_controller, damaged_player, types: &[&str]| {
+            let mut event = DamageEvent::combat(
+                200,
+                source_controller,
+                "test creature",
+                DamageRecipient::Player(damaged_player),
+                1,
+            );
+            event.classification = classification;
+            event.source.types = types.iter().map(|value| (*value).into()).collect();
+            GameEvent::DamageDealt { event }
+        };
+
+        let matching = engine.collect_triggers(
+            &event(DamageClassification::Combat, 1, 2, &["Creature"]),
+            std::slice::from_ref(&watcher),
+        );
+        assert_eq!(matching.len(), 1);
+        assert_eq!(matching[0].trigger_context.affected_player, Some(2));
+        assert_eq!(
+            matching[0]
+                .trigger_context
+                .observed_object
+                .expect("damaging creature"),
+            TriggerObjectRef {
+                object_id: 200,
+                zone_change_generation: 0,
+                controller_at_event: 1,
+            }
+        );
+        assert!(engine
+            .collect_triggers(
+                &event(DamageClassification::Combat, 0, 2, &["Creature"]),
+                std::slice::from_ref(&watcher),
+            )
+            .is_empty());
+        assert!(engine
+            .collect_triggers(
+                &event(DamageClassification::Noncombat, 1, 2, &["Creature"]),
+                std::slice::from_ref(&watcher),
+            )
+            .is_empty());
+        assert!(engine
+            .collect_triggers(
+                &event(DamageClassification::Combat, 1, 2, &["Artifact"]),
+                std::slice::from_ref(&watcher),
+            )
+            .is_empty());
+        let mut zero_damage =
+            DamageEvent::combat(200, 1, "test creature", DamageRecipient::Player(2), 0);
+        zero_damage.source.types = vec!["Creature".into()];
+        assert!(engine
+            .collect_triggers(
+                &GameEvent::DamageDealt { event: zero_damage },
+                std::slice::from_ref(&watcher),
+            )
+            .is_empty());
+
+        let mut opponents_only = watcher.clone();
+        opponents_only.triggered_abilities[0].1.trigger =
+            TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer {
+                source_controller: CastTriggerPlayer::AnyPlayer,
+                damaged_player: CastTriggerPlayer::Opponent,
+            };
+        for damaged_player in [0, 1, 2] {
+            assert_eq!(
+                !engine
+                    .collect_triggers(
+                        &event(
+                            DamageClassification::Combat,
+                            0,
+                            damaged_player,
+                            &["Creature"],
+                        ),
+                        std::slice::from_ref(&opponents_only),
+                    )
+                    .is_empty(),
+                damaged_player != 1
+            );
         }
     }
 

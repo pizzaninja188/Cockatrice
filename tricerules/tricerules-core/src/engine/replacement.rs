@@ -1,6 +1,8 @@
 //! Shared CR 614/616 replacement ordering and battlefield-entry preprocessing.
 
-use super::characteristics::{apply_face_down_values, creature_matches_scope};
+use super::characteristics::{
+    apply_face_down_values, apply_type_line_replacement, creature_matches_scope,
+};
 use super::events::{ev_log, ev_priority_changed, finish_with_events};
 use super::history::player_life_aggregate_value;
 use super::presentation::{
@@ -84,6 +86,11 @@ impl GameEngine {
     }
 
     fn battlefield_entry_is_battle(&self, event: &BattlefieldEntryEvent) -> bool {
+        if let Some(replacement) = &event.set_types {
+            return replacement
+                .card_types
+                .contains(&PermanentTypeFilter::Battle);
+        }
         let face = self.battlefield_entry_face(event);
         face.is_some_and(|face| face.types.iter().any(|card_type| card_type == "Battle"))
     }
@@ -150,6 +157,9 @@ impl GameEngine {
             .is_some_and(|object| object.face_down)
         {
             apply_face_down_values(&mut characteristics);
+        }
+        if let Some(replacement) = &event.set_types {
+            apply_type_line_replacement(&mut characteristics, replacement);
         }
         characteristics.controller = event.destination_controller;
         creature_matches_scope(
@@ -1095,6 +1105,17 @@ impl GameEngine {
             Zone::Battlefield,
             Some(event.destination_controller),
         )?;
+        if let Some(replacement) = event.set_types.clone() {
+            self.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(event.object_id),
+                kind: ContinuousEffectKind::Layer4SetTypeLine(replacement),
+                condition: None,
+                duration: EffectDuration::Indefinite,
+                timestamp: self.state.command_index,
+            });
+        }
         if let Some(object) = self.state.objects.get_mut(&event.object_id) {
             object.face_up_index = event.face_index;
             object.tapped = event.tapped;
@@ -1956,6 +1977,7 @@ mod tests {
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: engine.player_life_snapshot(),
             tapped: false,
+            set_types: None,
             entry_counters: BTreeMap::from([
                 (CounterKind::PlusOnePlusOne, 3),
                 (CounterKind::Stun, 2),
@@ -1994,6 +2016,7 @@ mod tests {
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: snapshot,
             tapped: false,
+            set_types: None,
             entry_counters: BTreeMap::new(),
             applied_effects: Vec::new(),
         };
@@ -2059,6 +2082,7 @@ mod tests {
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: engine.player_life_snapshot(),
             tapped: false,
+            set_types: None,
             entry_counters: BTreeMap::new(),
             applied_effects: Vec::new(),
         };

@@ -1796,6 +1796,7 @@ pub(super) fn move_graveyard_cards(
                 cast_cost_receipts: vec![],
                 player_life_snapshot: cx.engine.player_life_snapshot(),
                 tapped,
+                set_types: None,
                 entry_counters: BTreeMap::new(),
                 applied_effects: vec![],
             })
@@ -1876,6 +1877,7 @@ pub(super) fn return_triggered_card(
         tapped,
         controller,
         entry_counters,
+        set_types,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -1936,6 +1938,7 @@ pub(super) fn return_triggered_card(
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: cx.engine.player_life_snapshot(),
             tapped,
+            set_types,
             entry_counters,
             applied_effects: Vec::new(),
         },
@@ -2187,6 +2190,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 cast_cost_receipts: Vec::new(),
                 player_life_snapshot: engine.player_life_snapshot(),
                 tapped: false,
+                set_types: None,
                 entry_counters: BTreeMap::new(),
                 applied_effects: Vec::new(),
             },

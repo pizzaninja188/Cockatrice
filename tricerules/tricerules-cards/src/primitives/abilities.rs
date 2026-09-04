@@ -396,6 +396,16 @@ pub enum TriggerCondition {
     },
     /// Whenever this creature deals combat damage to a player (e.g. Scroll Thief).
     WheneverSelfDealsCombatDamageToPlayer,
+    /// CR 510.2 / 603.2c: whenever a creature whose event-time controller matches
+    /// `source_controller` deals combat damage to a player matching `damaged_player`.
+    /// Enduring Curiosity and Bident of Thassa share this controller-relative observer shape;
+    /// the damaging creature is available as `TriggerObject`.
+    WheneverCreatureDealsCombatDamageToPlayer {
+        #[serde(default)]
+        source_controller: CastTriggerPlayer,
+        #[serde(default = "any_player_trigger")]
+        damaged_player: CastTriggerPlayer,
+    },
     /// Whenever this creature deals damage to an opponent, combat or non-combat (e.g. Thieving Magpie).
     WheneverSelfDealsDamageToOpponent,
     /// CR 503.1a: at the beginning of an upkeep step. `player` filters whose upkeep qualifies,
@@ -725,6 +735,7 @@ impl TriggerCondition {
                 }
                 | Self::WheneverAttachedObjectDies
                 | Self::WheneverAttachedObjectDealsCombatDamageToPlayer
+                | Self::WheneverCreatureDealsCombatDamageToPlayer { .. }
                 | Self::WheneverAttachedObjectIsDealtDamage
                 | Self::WheneverControllerAttacks {
                     min_attackers: Some(1),

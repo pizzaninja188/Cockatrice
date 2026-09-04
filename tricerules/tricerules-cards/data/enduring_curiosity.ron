@@ -1,0 +1,34 @@
+// Oracle and rulings verified 2026-09-04. CR 205.1a, 400.7e, 603.2c, 603.10a,
+// 611.2e, and 613.1d.
+(
+  id: "enduring_curiosity",
+  name: "Enduring Curiosity",
+  face_id: "enduring_curiosity",
+  mana_cost: "{2}{U}{U}",
+  types: ["Enchantment", "Creature", "Cat", "Glimmer"],
+  power: 4,
+  toughness: 3,
+  keywords: [Flash],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverCreatureDealsCombatDamageToPlayer(
+        source_controller: Controller,
+        damaged_player: AnyPlayer,
+      ),
+      effect: [Draw(count: 1)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
+      trigger: WhenSelfDies,
+      effect: [ReturnTriggeredCard(
+        reference: AbilitySource,
+        from: [Graveyard],
+        controller: Owner,
+        set_types: Some((card_types: [Enchantment])),
+      )],
+    ),
+  ],
+)

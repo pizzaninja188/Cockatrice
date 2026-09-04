@@ -2668,6 +2668,36 @@ mod tests {
     }
 
     #[test]
+    fn triggered_graveyard_return_rejects_an_invalid_type_line_replacement() {
+        let card = r#"(
+            id: "bad_return_types",
+            name: "Bad Return Types",
+            face_id: "bad_return_types",
+            mana_cost: "{1}{B}",
+            types: ["Creature"],
+            power: 1,
+            toughness: 1,
+            triggered_abilities: [(
+                ability_id: "triggered_01",
+                presentation: Fallback,
+                trigger: WhenSelfDies,
+                effect: [ReturnTriggeredCard(
+                    from: [Graveyard],
+                    reference: AbilitySource,
+                    set_types: Some((card_types: [])),
+                )],
+            )],
+        )"#;
+        let error = CardRegistry::from_chunks(&[card])
+            .expect_err("invalid return type line must fail registry load");
+        assert!(matches!(
+            error,
+            RegistryError::InvalidCard { reason, .. }
+                if reason.contains("type-line replacement")
+        ));
+    }
+
+    #[test]
     fn counter_kinds_accept_supported_keyword_and_stun_but_reject_illegal_keyword_counters() {
         for counter in ["Keyword(Flying)", "Stun"] {
             let card = format!(

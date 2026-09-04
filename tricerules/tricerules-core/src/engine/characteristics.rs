@@ -85,6 +85,23 @@ impl Characteristics {
     }
 }
 
+pub(super) fn apply_type_line_replacement(
+    characteristics: &mut Characteristics,
+    replacement: &tricerules_cards::primitives::TypeLineReplacement,
+) {
+    characteristics.all_creature_types = false;
+    characteristics.types.clear();
+    characteristics.types.extend(
+        replacement
+            .card_types
+            .iter()
+            .map(|card_type| card_type.as_str().to_string()),
+    );
+    characteristics
+        .types
+        .extend(replacement.creature_types.iter().cloned());
+}
+
 struct CharacteristicsEvaluator<'a> {
     state: &'a GameState,
     registry: &'static CardRegistry,
@@ -330,17 +347,7 @@ impl CharacteristicsEvaluator<'_> {
                     }
                 }
                 ContinuousEffectKind::Layer4SetTypeLine(replacement) => {
-                    result.all_creature_types = false;
-                    result.types.clear();
-                    result.types.extend(
-                        replacement
-                            .card_types
-                            .iter()
-                            .map(|card_type| card_type.as_str().to_string()),
-                    );
-                    result
-                        .types
-                        .extend(replacement.creature_types.iter().cloned());
+                    apply_type_line_replacement(result, replacement);
                 }
                 ContinuousEffectKind::Layer4SetCreatureTypes(creature_types) => {
                     result.all_creature_types = false;

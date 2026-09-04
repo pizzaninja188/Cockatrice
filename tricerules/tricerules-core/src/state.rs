@@ -5,7 +5,8 @@ use tricerules_cards::primitives::{
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, Keyword, LibraryBottomOrder,
     LibraryPlacement, ManaAmount, ManaSpendingRestriction, PermanentTypeFilter, SearchDestination,
-    SearchSelectionSlot, SearchZoneSelection, TargetFilter, TriggeredAbilityDef, ZoneCardFilter,
+    SearchSelectionSlot, SearchZoneSelection, TargetFilter, TriggeredAbilityDef,
+    TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{
@@ -1183,6 +1184,9 @@ pub struct BattlefieldEntryEvent {
     /// same snapshot, so replacement ordering cannot retroactively change an entry predicate.
     pub player_life_snapshot: BTreeMap<PlayerId, i32>,
     pub tapped: bool,
+    /// CR 611.2e type-setting effect supplied by the instruction putting this object onto the
+    /// battlefield. Entry replacement predicates and ETB triggers must see these types.
+    pub set_types: Option<TypeLineReplacement>,
     /// Counter state accumulated by entry replacement effects before zone commitment.
     pub entry_counters: BTreeMap<CounterKind, u32>,
     pub applied_effects: Vec<EntryReplacementEffectId>,

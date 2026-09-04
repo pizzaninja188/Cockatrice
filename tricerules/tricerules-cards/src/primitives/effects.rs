@@ -1162,6 +1162,10 @@ pub enum SpellEffectKind {
         controller: ReturnController,
         #[serde(default)]
         entry_counters: Vec<CounterPlacement>,
+        /// CR 611.2e: a type-setting continuous effect that applies as the card enters.
+        /// Enduring Curiosity and Enduring Innocence use this to return as enchantments.
+        #[serde(default)]
+        set_types: Option<TypeLineReplacement>,
     },
     /// CR 603.7: create a one-shot delayed triggered ability that observes `subject`. The
     /// definition must use a delayed-only trigger condition.
@@ -2957,6 +2961,7 @@ impl SpellEffectKind {
             SpellEffectKind::ReturnTriggeredCard {
                 from,
                 entry_counters,
+                set_types,
                 ..
             } => {
                 if from.is_empty()
@@ -2977,6 +2982,9 @@ impl SpellEffectKind {
                     if !kinds.insert(placement.counter) {
                         return Err("entry counter placements cannot repeat a counter kind".into());
                     }
+                }
+                if let Some(replacement) = set_types {
+                    replacement.validate()?;
                 }
             }
             SpellEffectKind::ChoosePermanents {

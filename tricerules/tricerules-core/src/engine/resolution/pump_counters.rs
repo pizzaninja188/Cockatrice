@@ -446,6 +446,7 @@ pub(super) fn earthbend(
                     tapped: true,
                     controller: ReturnController::AbilityController,
                     entry_counters: vec![],
+                    set_types: None,
                 }],
                 modal: None,
                 targeting: None,

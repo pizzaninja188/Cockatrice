@@ -973,6 +973,7 @@ impl GameEngine {
                         cast_cost_receipts: top.cast_cost_receipts.clone(),
                         player_life_snapshot: self.player_life_snapshot(),
                         tapped: top.cast_method == SpellCastMethod::Sneak,
+                        set_types: None,
                         entry_counters: BTreeMap::new(),
                         applied_effects: Vec::new(),
                     },
@@ -2009,6 +2010,7 @@ impl GameEngine {
                 cast_cost_receipts: Vec::new(),
                 player_life_snapshot: self.player_life_snapshot(),
                 tapped: false,
+                set_types: None,
                 entry_counters: BTreeMap::new(),
                 applied_effects: Vec::new(),
             };
@@ -2242,6 +2244,7 @@ impl GameEngine {
                         cast_cost_receipts: Vec::new(),
                         player_life_snapshot: player_life_snapshot.clone(),
                         tapped: enters_tapped,
+                        set_types: None,
                         entry_counters: BTreeMap::new(),
                         applied_effects: Vec::new(),
                     },

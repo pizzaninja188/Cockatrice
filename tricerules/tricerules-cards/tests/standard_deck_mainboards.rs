@@ -1,7 +1,7 @@
 use tricerules_cards::primitives::{
-    AbilityCost, CardTypeFilter, CombatRestrictionScope, EffectSubject, GameCondition,
-    ObjectCastCostKind, PlayerRecipient, SpellEffectKind, StackSpellFilter, StaticAbilityDef,
-    TargetController, TargetKind, TargetingSourceFilter,
+    AbilityCost, CardTypeFilter, CombatRestrictionScope, EffectSubject, EventZone, GameCondition,
+    ObjectCastCostKind, PlayerRecipient, ReturnController, SpellEffectKind, StackSpellFilter,
+    StaticAbilityDef, TargetController, TargetKind, TargetingSourceFilter, TriggeredCardReference,
 };
 use tricerules_cards::{
     Amount, CardRegistry, CastCostOptionDef, CastTriggerPlayer, CounterKind, Keyword,
@@ -19,6 +19,15 @@ struct ExpectedCard {
 }
 
 const COHORT: &[ExpectedCard] = &[
+    ExpectedCard {
+        id: "enduring_curiosity",
+        name: "Enduring Curiosity",
+        mana_cost: "{2}{U}{U}",
+        supertypes: &[],
+        types: &["Enchantment", "Creature", "Cat", "Glimmer"],
+        stats: (Some(4), Some(3)),
+        keywords: &[Keyword::Flash],
+    },
     ExpectedCard {
         id: "wan_shi_tong,_librarian",
         name: "Wan Shi Tong, Librarian",
@@ -208,6 +217,55 @@ fn current_standard_mainboard_cohort_has_exact_oracle_characteristics() {
             expected.id
         );
     }
+}
+
+#[test]
+fn enduring_curiosity_uses_generic_damage_and_type_setting_primitives() {
+    let face = CardRegistry::global()
+        .get("enduring_curiosity")
+        .unwrap()
+        .primary_face();
+    assert_eq!(face.triggered_abilities.len(), 2);
+    assert_eq!(
+        face.triggered_abilities[0].ability_id.as_str(),
+        "triggered_01"
+    );
+    assert_eq!(
+        face.triggered_abilities[0].trigger,
+        TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer {
+            source_controller: CastTriggerPlayer::Controller,
+            damaged_player: CastTriggerPlayer::AnyPlayer,
+        }
+    );
+    assert!(matches!(
+        face.triggered_abilities[0].effect.as_slice(),
+        [SpellEffectKind::Draw {
+            count: Amount::Fixed(1),
+            who: PlayerRecipient::Controller,
+        }]
+    ));
+    assert_eq!(
+        face.triggered_abilities[1].ability_id.as_str(),
+        "triggered_02"
+    );
+    assert_eq!(
+        face.triggered_abilities[1].trigger,
+        TriggerCondition::WhenSelfDies
+    );
+    assert!(matches!(
+        face.triggered_abilities[1].effect.as_slice(),
+        [SpellEffectKind::ReturnTriggeredCard {
+            reference: TriggeredCardReference::AbilitySource,
+            from,
+            tapped: false,
+            controller: ReturnController::Owner,
+            entry_counters,
+            set_types: Some(replacement),
+        }] if from == &[EventZone::Graveyard]
+            && entry_counters.is_empty()
+            && replacement.card_types == [PermanentTypeFilter::Enchantment]
+            && replacement.creature_types.is_empty()
+    ));
 }
 
 #[test]
