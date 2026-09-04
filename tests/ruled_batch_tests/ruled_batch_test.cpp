@@ -1585,7 +1585,7 @@ TEST_F(RuledBatchTest, PermanentMovedLandUsesAuthoritativeBottomRowAndStableIden
     EXPECT_EQ(mountain->getY(), 2);
 }
 
-TEST_F(RuledBatchTest, AcceptedGraveyardLandPlayMovesTheExactBoundPhysicalCard)
+TEST_F(RuledBatchTest, AcceptedGraveyardLandPlayWaitsForCompletionAndMovesTheExactBoundPhysicalCard)
 {
     seedCardCatalog({"Mountain"});
     Server_Card *first = addCardToGraveyard(p1, "Mountain");
@@ -1610,9 +1610,175 @@ TEST_F(RuledBatchTest, AcceptedGraveyardLandPlayMovesTheExactBoundPhysicalCard)
     playLand->set_face_index(0);
     applyAcceptedCommandVisuals(p1->getPlayerId(), command);
 
+    EXPECT_EQ(second->getZone()->getName(), QString(ZoneNames::GRAVE));
+    EXPECT_EQ(first->getZone()->getName(), QString(ZoneNames::GRAVE));
+
+    ruled::v1::IpcResponse completed;
+    completed.set_ok(true);
+    auto *moved = completed.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(2142u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_controller_player_id(p1->getPlayerId());
+    moved->set_card_id("mountain");
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+    auto *completedView = completed.mutable_batch()->add_events()->mutable_zone_view();
+    auto *p1View = completedView->add_per_player();
+    p1View->set_player_id(p1->getPlayerId());
+    p1View->set_private_zones_unchanged(true);
+    p1View->add_graveyard_object_ids(2141u);
+    auto *object = p1View->add_battlefield_objects();
+    object->set_object_id(2142u);
+    object->set_card_id("mountain");
+    object->set_owner_player_id(p1->getPlayerId());
+    object->set_is_land(true);
+    auto *p2View = completedView->add_per_player();
+    p2View->set_player_id(p2->getPlayerId());
+    p2View->set_private_zones_unchanged(true);
+
+    callBatchApply(completed);
+
     EXPECT_EQ(second->getZone()->getName(), QString(ZoneNames::TABLE));
     EXPECT_EQ(second->getY(), 2);
     EXPECT_EQ(first->getZone()->getName(), QString(ZoneNames::GRAVE));
+    EXPECT_EQ(findCardByEngineOid(p1, 2142u), second);
+}
+
+TEST_F(RuledBatchTest, CompletedHandLandMovePreservesPhysicalIdentity)
+{
+    seedCardCatalog({"Watery Grave"});
+    Server_Card *wateryGrave = addCardToHand(p1, "Watery Grave");
+    const int physicalId = wateryGrave->getId();
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    auto *handCard = p1Seed.add_hand_cards();
+    handCard->set_object_id(2091u);
+    handCard->set_card_id("watery_grave");
+    *seedView->add_per_player() = p1Seed;
+    *seedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+    ASSERT_EQ(findCardByEngineOid(p1, 2091u), wateryGrave);
+
+    ruled::v1::RuledCommand command;
+    command.mutable_play_land()->mutable_source()->set_hand_index(0);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), command);
+    ASSERT_EQ(wateryGrave->getZone()->getName(), QString(ZoneNames::HAND));
+
+    ruled::v1::IpcResponse completed;
+    completed.set_ok(true);
+    auto *moved = completed.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(2091u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_controller_player_id(p1->getPlayerId());
+    moved->set_card_id("watery_grave");
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+    auto *zoneView = completed.mutable_batch()->add_events()->mutable_zone_view();
+    auto *p1View = zoneView->add_per_player();
+    p1View->set_player_id(p1->getPlayerId());
+    auto *object = p1View->add_battlefield_objects();
+    object->set_object_id(2091u);
+    object->set_card_id("watery_grave");
+    object->set_owner_player_id(p1->getPlayerId());
+    object->set_is_land(true);
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    callBatchApply(completed);
+
+    EXPECT_EQ(wateryGrave->getZone()->getName(), QString(ZoneNames::TABLE));
+    EXPECT_EQ(wateryGrave->getId(), physicalId);
+    EXPECT_EQ(wateryGrave->getY(), 2);
+    EXPECT_EQ(findCardByEngineOid(p1, 2091u), wateryGrave);
+}
+
+TEST_F(RuledBatchTest, CompletedMdfcLandMoveRevealsTheAuthoritativeEnteredFace)
+{
+    seedMultifaceCatalog("riverglide_pathway", "Riverglide Pathway // Lavaglide Pathway",
+                         {"Riverglide Pathway", "Lavaglide Pathway"},
+                         {"Riverglide Pathway // Lavaglide Pathway", "Lavaglide Pathway"});
+    Server_Card *pathway = addCardToHand(p1, "Riverglide Pathway // Lavaglide Pathway");
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    auto *handCard = p1Seed.add_hand_cards();
+    handCard->set_object_id(2092u);
+    handCard->set_card_id("riverglide_pathway");
+    *seedView->add_per_player() = p1Seed;
+    callBatchApply(seed);
+
+    ruled::v1::IpcResponse completed;
+    completed.set_ok(true);
+    auto *moved = completed.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(2092u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_controller_player_id(p1->getPlayerId());
+    moved->set_card_id("riverglide_pathway");
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+    auto *zoneView = completed.mutable_batch()->add_events()->mutable_zone_view();
+    auto *p1View = zoneView->add_per_player();
+    p1View->set_player_id(p1->getPlayerId());
+    auto *object = p1View->add_battlefield_objects();
+    object->set_object_id(2092u);
+    object->set_card_id("riverglide_pathway");
+    object->set_owner_player_id(p1->getPlayerId());
+    object->set_face_up_index(1);
+    object->set_effective_display_name("Lavaglide Pathway");
+    object->set_is_land(true);
+
+    callBatchApply(completed);
+
+    EXPECT_EQ(pathway->getZone()->getName(), QString(ZoneNames::TABLE));
+    EXPECT_EQ(pathway->getName(), QString("Lavaglide Pathway"));
+    EXPECT_EQ(findCardByEngineOid(p1, 2092u), pathway);
+}
+
+TEST_F(RuledBatchTest, CompletedFaceDownHandMoveKeepsUnderlyingPhysicalIdentity)
+{
+    seedCardCatalog({"Grizzly Bears"});
+    Server_Card *bear = addCardToHand(p1, "Grizzly Bears");
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    auto *handCard = p1Seed.add_hand_cards();
+    handCard->set_object_id(2093u);
+    handCard->set_card_id("grizzly_bears");
+    *seedView->add_per_player() = p1Seed;
+    *seedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+    ASSERT_EQ(findCardByEngineOid(p1, 2093u), bear);
+
+    ruled::v1::IpcResponse completed;
+    completed.set_ok(true);
+    auto *moved = completed.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(2093u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_controller_player_id(p1->getPlayerId());
+    moved->set_card_id("grizzly_bears");
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+    moved->set_face_down(true);
+    auto *zoneView = completed.mutable_batch()->add_events()->mutable_zone_view();
+    auto *p1View = zoneView->add_per_player();
+    p1View->set_player_id(p1->getPlayerId());
+    auto *object = p1View->add_battlefield_objects();
+    object->set_object_id(2093u);
+    object->set_card_id("grizzly_bears");
+    object->set_owner_player_id(p1->getPlayerId());
+    object->set_face_down(true);
+    object->set_effective_display_name("Face-down creature");
+    object->set_is_creature(true);
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    callBatchApply(completed);
+
+    EXPECT_EQ(bear->getZone()->getName(), QString(ZoneNames::TABLE));
+    EXPECT_EQ(bear->getName(), QString("Grizzly Bears"));
+    EXPECT_TRUE(bear->getFaceDown());
+    EXPECT_EQ(findCardByEngineOid(p1, 2093u), bear);
 }
 
 TEST_F(RuledBatchTest, BattlefieldLandClassificationIsServerOnly)

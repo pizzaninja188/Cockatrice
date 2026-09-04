@@ -5037,6 +5037,123 @@ TEST_F(RuledE2ESmokeTest, IcetillPlaysTheExactGenerationBoundGraveyardLand)
     EXPECT_EQ(p2.physicalRowAndPt[std::make_pair(p1.myId, physicalForestId)].first, 2);
 }
 
+TEST_F(RuledE2ESmokeTest, WateryGraveWaitsInHandUntilItsLifePaymentCompletes)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    {
+        const std::string msg = started.message();
+        if (msg.rfind("SKIP:", 0) == 0) {
+            GTEST_SKIP() << msg.substr(5);
+        }
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("waterygravep1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("waterygravep2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Watery Grave")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(
+        p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "Watery Grave game start (p1)"));
+    ASSERT_TRUE(
+        p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "Watery Grave game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer openingDeadline;
+    openingDeadline.start();
+    while (openingDeadline.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto sendAndPump = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+
+    const auto *land = p1.handAction(ruled::v1::HAND_ACTION_PLAY_LAND, QStringLiteral("Watery Grave"));
+    ASSERT_NE(land, nullptr);
+    ASSERT_TRUE(p1.handServerCardBySlot.count(static_cast<int>(land->hand_index())));
+    const int physicalCardId = p1.handServerCardBySlot[static_cast<int>(land->hand_index())];
+    ruled::v1::RuledCommand playLand;
+    playLand.mutable_play_land()->mutable_source()->set_hand_index(land->hand_index());
+    ASSERT_TRUE(sendAndPump(p1, playLand, QStringLiteral("play Watery Grave")));
+
+    ASSERT_TRUE(p1.pendingChoice.has_value());
+    EXPECT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    EXPECT_EQ(p1.pendingChoice->min(), 0u);
+    EXPECT_EQ(p1.pendingChoice->max(), 1u);
+    ASSERT_EQ(p1.pendingChoice->resolution_branches_size(), 1);
+    EXPECT_TRUE(p1.pendingChoice->resolution_branches(0).selectable());
+    EXPECT_FALSE(p2.pendingChoice.has_value());
+    ASSERT_TRUE(p2.lastResolutionChoice.has_value());
+    EXPECT_EQ(p2.lastResolutionChoice->resolution_branches_size(), 0);
+    EXPECT_EQ(p2.lastResolutionChoice->prompt_text(), "Opponent is making a resolution choice.");
+    EXPECT_TRUE(p1.physicalRowAndPt.count(std::make_pair(p1.myId, physicalCardId)) == 0)
+        << "the physical land must remain in hand while its entry cost is pending";
+    const auto beforeEntry = p1.battlefieldByPlayer.find(p1.myId);
+    EXPECT_TRUE(beforeEntry == p1.battlefieldByPlayer.end() ||
+                std::none_of(beforeEntry->second.cbegin(), beforeEntry->second.cend(),
+                             [](const auto &permanent) { return permanent.cardId == "watery_grave"; }));
+
+    ruled::v1::RuledCommand payLife;
+    payLife.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
+    payLife.mutable_submit_resolution_choice()->set_selected_branch_index(0);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(sendAndPump(p1, payLife, QStringLiteral("pay 2 life for Watery Grave")));
+
+    ASSERT_EQ(p1.lifeByPlayer[p1.myId], 18);
+    ASSERT_EQ(p2.lifeByPlayer[p1.myId], 18);
+    const auto findWateryGrave = [&](const SmokeClient &client) {
+        const auto found = client.battlefieldByPlayer.find(p1.myId);
+        if (found == client.battlefieldByPlayer.end()) {
+            return quint32{0};
+        }
+        const auto permanent = std::find_if(found->second.cbegin(), found->second.cend(),
+                                            [](const auto &entry) { return entry.cardId == "watery_grave"; });
+        return permanent == found->second.cend() ? quint32{0} : permanent->oid;
+    };
+    const quint32 wateryGraveOid = findWateryGrave(p1);
+    ASSERT_NE(wateryGraveOid, 0u);
+    ASSERT_EQ(findWateryGrave(p2), wateryGraveOid);
+    ASSERT_TRUE(p1.serverCardByEngineOid.count(wateryGraveOid));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(wateryGraveOid));
+    EXPECT_EQ(p1.serverCardByEngineOid[wateryGraveOid], physicalCardId);
+    EXPECT_EQ(p2.serverCardByEngineOid[wateryGraveOid], physicalCardId);
+    EXPECT_EQ(p1.physicalRowAndPt[std::make_pair(p1.myId, physicalCardId)].first, 2);
+    EXPECT_EQ(p2.physicalRowAndPt[std::make_pair(p1.myId, physicalCardId)].first, 2);
+    const auto &permanents = p1.battlefieldByPlayer[p1.myId];
+    const auto entered = std::find_if(permanents.cbegin(), permanents.cend(),
+                                      [&](const auto &permanent) { return permanent.oid == wateryGraveOid; });
+    ASSERT_NE(entered, permanents.cend());
+    EXPECT_FALSE(entered->tapped);
+}
+
 TEST_F(RuledE2ESmokeTest, PlayerSetDiscardCollectsPrivateChoicesBeforeOnePhysicalCommit)
 {
     const auto started = startServers();

@@ -2244,6 +2244,12 @@ impl GameEngine {
             super::replacement::BattlefieldEntryProgress::Parked => return Ok(batch),
             super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                 self.commit_battlefield_entry(entry, None)?;
+                batch.events.push(permanent_moved_event(
+                    &self.state,
+                    oid,
+                    player,
+                    rv1::permanent_moved::Destination::Battlefield,
+                ));
             }
         }
         self.state.passes_since_stack_change = 0;

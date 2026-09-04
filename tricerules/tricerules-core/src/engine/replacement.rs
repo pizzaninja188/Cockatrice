@@ -182,7 +182,8 @@ impl GameEngine {
                         StaticAbilityDef::EntersTapped {
                             affected: EntersTappedAffected::Self_,
                             condition,
-                        } if !event.tapped
+                            unless_cost,
+                        } if (unless_cost.is_some() || !event.tapped)
                             && condition.as_ref().is_none_or(|condition| {
                                 self.entry_condition_holds(condition, event)
                             }) =>
@@ -257,6 +258,7 @@ impl GameEngine {
                     StaticAbilityDef::EntersTapped {
                         affected: EntersTappedAffected::Permanents,
                         condition,
+                        ..
                     } if !event.tapped
                         && condition.as_ref().is_none_or(|condition| {
                             self.entry_condition_holds(condition, event)
@@ -363,6 +365,130 @@ impl GameEngine {
                 _ => None,
             })
             .max()
+    }
+
+    fn entry_unless_cost(
+        &self,
+        event: &BattlefieldEntryEvent,
+        effect_id: &EntryReplacementEffectId,
+    ) -> Option<EntryCost> {
+        let EntryReplacementEffectId::Intrinsic {
+            object_id,
+            copy_revision,
+            ability_index,
+        } = effect_id
+        else {
+            return None;
+        };
+        let object = self.state.objects.get(object_id)?;
+        if *object_id != event.object_id || object.copy_revision != *copy_revision {
+            return None;
+        }
+        match &self
+            .battlefield_entry_face(event)?
+            .static_abilities
+            .get(*ability_index)?
+            .definition
+        {
+            StaticAbilityDef::EntersTapped {
+                affected: EntersTappedAffected::Self_,
+                unless_cost: Some(cost),
+                ..
+            } => Some(cost.clone()),
+            _ => None,
+        }
+    }
+
+    fn park_entry_cost_choice(
+        &mut self,
+        item: StackItem,
+        event: BattlefieldEntryEvent,
+        completion: BattlefieldEntryCompletion,
+        effect_id: EntryReplacementEffectId,
+        cost: EntryCost,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let (label, cost_text, selectable) = match cost {
+            EntryCost::PayLife { amount } => {
+                let can_pay = self
+                    .state
+                    .player_idx(event.destination_controller)
+                    .is_some_and(|index| self.state.players[index].life >= amount as i32);
+                (
+                    format!("Pay {amount} life"),
+                    format!("{amount} life"),
+                    can_pay,
+                )
+            }
+        };
+        let name = self
+            .battlefield_entry_face(&event)
+            .map(|face| face.name.clone())
+            .unwrap_or_else(|| "this permanent".to_string());
+        let prompt = format!("As {name} enters, you may {label}.");
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: event.destination_controller,
+                    source_object_id: event.object_id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    candidate_object_ids: Vec::new(),
+                    candidate_card_ids: Vec::new(),
+                    min: 0,
+                    max: 1,
+                    ordered: false,
+                    candidate_names: Vec::new(),
+                    candidate_server_card_ids: Vec::new(),
+                    candidate_selectable: Vec::new(),
+                    unique_names: false,
+                    generic_mana_cost: 0,
+                    payment_currently_legal: false,
+                    resolution_branches: vec![rv1::ResolutionBranchOption {
+                        branch_index: 0,
+                        label,
+                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                        cost_text,
+                        selectable,
+                        search_zones: Vec::new(),
+                        presentation: None,
+                    }],
+                    mana_cost: String::new(),
+                    reveal_audience: 0,
+                    revealed_zone_owner_player_id: None,
+                    candidate_source_zones: Vec::new(),
+                    combat_defender_options: Vec::new(),
+                    waterbend: false,
+                    selection_slots: Vec::new(),
+                },
+            )),
+        });
+        let deciding_player = event.destination_controller;
+        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
+            Box::new(PendingBattlefieldEntry {
+                event,
+                applications: Vec::new(),
+                copy_source_effect: None,
+                completion,
+            }),
+        ));
+        self.state.pending_resolution = Some(PendingResolution {
+            deciding_player,
+            presentation: PendingResolutionPresentation {
+                source_object_id: item.id,
+                candidates: Vec::new(),
+                min: 0,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: rv1::ChoiceKind::ResolutionBranch,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::EntryCost {
+                stack: ParkedStackResolution::new(item),
+                effect_id,
+            },
+        });
     }
 
     fn park_read_ahead_choice(
@@ -796,6 +922,17 @@ impl GameEngine {
                             completion,
                             effect_id.clone(),
                             final_chapter,
+                            events,
+                        );
+                        return BattlefieldEntryProgress::Parked;
+                    }
+                    if let Some(cost) = self.entry_unless_cost(&event, effect_id) {
+                        self.park_entry_cost_choice(
+                            item,
+                            event,
+                            completion,
+                            effect_id.clone(),
+                            cost,
                             events,
                         );
                         return BattlefieldEntryProgress::Parked;
@@ -1245,7 +1382,14 @@ impl GameEngine {
             .clone();
         match completion {
             BattlefieldEntryCompletion::LandPlay { player, land_name } => {
+                let object_id = event.object_id;
                 self.commit_battlefield_entry(event, None)?;
+                events.push(permanent_moved_event(
+                    &self.state,
+                    object_id,
+                    player,
+                    rv1::permanent_moved::Destination::Battlefield,
+                ));
                 self.state.passes_since_stack_change = 0;
                 events.push(ev_log(format!("P{player} played {land_name}")));
                 Ok(finish_with_events(self, events))
@@ -1587,6 +1731,16 @@ impl GameEngine {
                 &mut events,
             );
             return Ok(finish_with_events(self, events));
+        } else if let Some(cost) = self.entry_unless_cost(&entry.event, &application.effect_id) {
+            self.park_entry_cost_choice(
+                stack.item,
+                entry.event,
+                entry.completion,
+                application.effect_id,
+                cost,
+                &mut events,
+            );
+            return Ok(finish_with_events(self, events));
         } else {
             self.apply_entry_replacement(&mut entry.event, application.effect_id);
         }
@@ -1600,6 +1754,104 @@ impl GameEngine {
             BattlefieldEntryProgress::Ready(event) => event,
         };
 
+        self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
+    }
+
+    pub(super) fn finish_entry_cost_choice(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, effect_id) = match &pending.continuation {
+            ResolutionContinuation::EntryCost { stack, effect_id } => {
+                (stack.clone(), effect_id.clone())
+            }
+            _ => return Err(EngineError::Illegal("entry-cost continuation missing")),
+        };
+        let Some(pending_event) = self.state.pending_replacement_event.take() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("entry cost choice is stale"));
+        };
+        let mut entry = match pending_event {
+            PendingReplacementEvent::BattlefieldEntry(entry) => *entry,
+            other => {
+                self.state.pending_replacement_event = Some(other);
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("entry cost choice is stale"));
+            }
+        };
+        let restore = |engine: &mut Self,
+                       pending: PendingResolution,
+                       entry: PendingBattlefieldEntry,
+                       message| {
+            engine.state.pending_replacement_event =
+                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+            engine.state.pending_resolution = Some(pending);
+            Err(EngineError::Illegal(message))
+        };
+        if !answer.chosen_object_ids.is_empty()
+            || answer.selected_branch_index != 0
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.cast_spell.is_some()
+            || answer.chosen_combat_defender.is_some()
+            || !matches!(
+                decision,
+                rv1::ResolutionChoiceDecision::SelectBranch
+                    | rv1::ResolutionChoiceDecision::Decline
+            )
+        {
+            return restore(
+                self,
+                pending,
+                entry,
+                "entry cost requires its payment branch or decline",
+            );
+        }
+        let Some(cost) = self.entry_unless_cost(&entry.event, &effect_id) else {
+            return restore(self, pending, entry, "entry cost choice is stale");
+        };
+        let payer = entry.event.destination_controller;
+        if pending.deciding_player != payer {
+            return restore(self, pending, entry, "entry cost payer is stale");
+        }
+
+        let mut events = Vec::new();
+        match (decision, cost) {
+            (rv1::ResolutionChoiceDecision::SelectBranch, EntryCost::PayLife { amount }) => {
+                let Some(player_index) = self.state.player_idx(payer) else {
+                    return restore(self, pending, entry, "entry cost payer is stale");
+                };
+                if self.state.players[player_index].life < amount as i32 {
+                    return restore(self, pending, entry, "entry life payment is unaffordable");
+                }
+                super::history::commit_life_change(&mut self.state, player_index, -(amount as i32));
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                        player_id: payer,
+                        new_total: self.state.players[player_index].life,
+                        delta: -(amount as i32),
+                    })),
+                });
+                events.push(ev_log(format!("P{payer} pays {amount} life.")));
+                entry.event.applied_effects.push(effect_id);
+            }
+            (rv1::ResolutionChoiceDecision::Decline, _) => {
+                self.apply_entry_replacement(&mut entry.event, effect_id);
+            }
+            _ => unreachable!("entry cost decision validated above"),
+        }
+
+        let event = match self.advance_or_park_battlefield_entry(
+            stack.item,
+            entry.event,
+            entry.completion.clone(),
+            &mut events,
+        ) {
+            BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
+            BattlefieldEntryProgress::Ready(event) => event,
+        };
         self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
     }
 

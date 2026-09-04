@@ -1335,6 +1335,15 @@ pub enum EntersTappedAffected {
     Permanents,
 }
 
+/// A cost offered while applying a battlefield-entry replacement. Entry costs are deliberately
+/// distinct from cast, activation, and resolution costs because no spell or ability is resolving
+/// while the proposed entrant is still outside the battlefield (CR 614.12).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EntryCost {
+    /// Watery Grave and Steam Vents use the same optional life-payment operation.
+    PayLife { amount: u32 },
+}
+
 /// Which proposed entrant receives counters from an enters-with-counters replacement. Intrinsic
 /// abilities default to `Self_`; battlefield sources use a derived-characteristic creature scope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -1442,6 +1451,10 @@ pub enum StaticAbilityDef {
         affected: EntersTappedAffected,
         #[serde(default)]
         condition: Option<GameCondition>,
+        /// When present, paying this cost prevents this replacement from setting the entrant's
+        /// tapped flag. It does not clear a tapped flag set by another replacement effect.
+        #[serde(default)]
+        unless_cost: Option<EntryCost>,
     },
     /// CR 614.1c / 122.6: modify the proposed battlefield-entry event so this permanent starts
     /// with `amount` counters of `counter`. `Amount` keeps fixed, X, conditional, and counted

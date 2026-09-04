@@ -102,6 +102,12 @@ impl GameEngine {
         };
         if matches!(
             pending.continuation,
+            ResolutionContinuation::EntryCost { .. }
+        ) {
+            return self.finish_entry_cost_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::SagaReadAhead { .. }
         ) {
             return self.finish_saga_read_ahead_choice(pending, answer, decision);
@@ -273,6 +279,9 @@ impl GameEngine {
             }
             ResolutionContinuation::EntryReplacement { .. } => {
                 return self.finish_battlefield_entry_replacement_choice(pending, chosen[0]);
+            }
+            ResolutionContinuation::EntryCost { .. } => {
+                unreachable!("entry-cost branch handled before object-choice validation")
             }
             ResolutionContinuation::SagaReadAhead { .. } => {
                 unreachable!("read-ahead branch handled before object-choice validation")

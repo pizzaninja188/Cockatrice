@@ -936,6 +936,10 @@ pub enum ResolutionContinuation {
     EntryReplacement {
         stack: ParkedStackResolution,
     },
+    EntryCost {
+        stack: ParkedStackResolution,
+        effect_id: EntryReplacementEffectId,
+    },
     SagaReadAhead {
         stack: ParkedStackResolution,
         effect_id: EntryReplacementEffectId,
@@ -991,6 +995,7 @@ impl ResolutionContinuation {
             | Self::Populate { stack, .. }
             | Self::Blight { stack, .. }
             | Self::EntryReplacement { stack }
+            | Self::EntryCost { stack, .. }
             | Self::SagaReadAhead { stack, .. }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
@@ -1024,6 +1029,7 @@ impl ResolutionContinuation {
             | Self::Populate { stack, .. }
             | Self::Blight { stack, .. }
             | Self::EntryReplacement { stack }
+            | Self::EntryCost { stack, .. }
             | Self::SagaReadAhead { stack, .. }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }

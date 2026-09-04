@@ -1,0 +1,25 @@
+(
+  id: "watery_grave",
+  name: "Watery Grave",
+  face_id: "watery_grave",
+  mana_cost: "",
+  types: ["Land", "Island", "Swamp"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(u: 1), (b: 1)])],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([2]),
+      definition: EntersTapped(
+        affected: Self_,
+        unless_cost: Some(PayLife(amount: 2)),
+      ),
+    ),
+  ],
+)

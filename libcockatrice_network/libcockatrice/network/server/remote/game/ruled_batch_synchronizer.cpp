@@ -268,68 +268,8 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId, const rul
 {
     if (Server_AbstractPlayer *cmdPlayer = game->getPlayer(playerId)) {
         Server_CardZone *handZone = cmdPlayer->getZones().value(ZoneNames::HAND);
-        if (ruledCmd.has_play_land()) {
-            Server_CardZone *tableZone = cmdPlayer->getZones().value(ZoneNames::TABLE);
-            const auto &source = ruledCmd.play_land().source();
-            Server_CardZone *sourceZone = nullptr;
-            Server_Card *card = nullptr;
-            if (source.location_case() == ruled::v1::LandSource::kHandIndex) {
-                const int handIndex = static_cast<int>(source.hand_index());
-                sourceZone = handZone;
-                card = playerBinding(playerId).findHandCardByEngineIndex(static_cast<Server_Player *>(cmdPlayer),
-                                                                         handIndex);
-            } else if (source.location_case() == ruled::v1::LandSource::kExileObjectId) {
-                const quint32 oid = static_cast<quint32>(source.exile_object_id());
-                for (Server_AbstractPlayer *candidate : game->getPlayers()) {
-                    auto *owner = dynamic_cast<Server_Player *>(candidate);
-                    if (!owner) {
-                        continue;
-                    }
-                    card = playerBinding(owner->getPlayerId()).findExileCardByEngineOid(owner, oid);
-                    if (card) {
-                        sourceZone = owner->getZones().value(ZoneNames::EXILE);
-                        break;
-                    }
-                }
-            } else if (source.location_case() == ruled::v1::LandSource::kGraveyardObjectId) {
-                const quint32 oid = static_cast<quint32>(source.graveyard_object_id());
-                for (Server_AbstractPlayer *candidate : game->getPlayers()) {
-                    auto *owner = dynamic_cast<Server_Player *>(candidate);
-                    if (!owner) {
-                        continue;
-                    }
-                    card = playerBinding(owner->getPlayerId()).findGraveyardCardByEngineOid(owner, oid);
-                    if (card) {
-                        sourceZone = owner->getZones().value(ZoneNames::GRAVE);
-                        break;
-                    }
-                }
-            }
-            if (sourceZone && tableZone && card) {
-                // CR 712: an MDFC land (a pathway) enters as the chosen face. Rename the physical
-                // card to that face's Oracle name before it moves to the battlefield, so the
-                // move event reveals the active face and the client shows its art (cards.xml has
-                // a separate entry per face). The catalog maps both face names to the same engine
-                // id, so later zone-view reconciliation still resolves this permanent.
-                const int faceIndex = static_cast<int>(ruledCmd.play_land().face_index());
-                if (faceIndex > 0) {
-                    const QString activeName = faceDisplayName(cardIdForName(card->getName()), faceIndex);
-                    if (!activeName.isEmpty() && activeName != card->getName()) {
-                        card->setCardRef(CardRef{activeName});
-                    }
-                }
-                CardToMove cardToMove;
-                cardToMove.set_card_id(card->getId());
-                GameEventStorage moveGes;
-                // Cockatrice table uses 3 rows; lands belong on the bottom row (grid y = 2).
-                static constexpr int RULED_LAND_GRID_Y = 2;
-                if (ruledApplyMove(cmdPlayer, moveGes, sourceZone, tableZone, cardToMove, -1, RULED_LAND_GRID_Y,
-                                   "playLand")) {
-                    moveGes.sendToGame(game);
-                }
-            }
-        } else if (ruledCmd.has_cast_spell() ||
-                   (ruledCmd.has_submit_resolution_choice() && ruledCmd.submit_resolution_choice().has_cast_spell())) {
+        if (ruledCmd.has_cast_spell() ||
+            (ruledCmd.has_submit_resolution_choice() && ruledCmd.submit_resolution_choice().has_cast_spell())) {
             const auto &acceptedCast =
                 ruledCmd.has_cast_spell() ? ruledCmd.cast_spell() : ruledCmd.submit_resolution_choice().cast_spell();
             // Route all spells to the canonical (lowest player-id) stack zone so every
@@ -924,6 +864,41 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
         Server_CardZone *targetZone = destPlayer->getZones().value(destZone);
         if (!targetZone) {
             continue;
+        }
+        // A permanent entering through an engine-authored move must reveal the authoritative face
+        // before moveCard serializes its event. This replaces the old accepted-PlayLand shortcut:
+        // an entry replacement may park the logical card in hand while its controller decides a
+        // cost, so only the completed ZoneViewSync can name the entered MDFC face safely.
+        if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD && !pm.face_down()) {
+            QString authoritativeDisplayName;
+            for (const auto &batchEvent : batch.events()) {
+                if (!batchEvent.has_zone_view() || batchEvent.zone_view().battlefields_unchanged()) {
+                    continue;
+                }
+                for (const auto &playerView : batchEvent.zone_view().per_player()) {
+                    for (const auto &object : playerView.battlefield_objects()) {
+                        if (static_cast<quint32>(object.object_id()) != oid) {
+                            continue;
+                        }
+                        authoritativeDisplayName = QString::fromStdString(object.effective_display_name());
+                        if (authoritativeDisplayName.isEmpty()) {
+                            const QString cardId = QString::fromStdString(object.card_id());
+                            authoritativeDisplayName =
+                                faceDisplayName(cardId, static_cast<int>(object.face_up_index()));
+                        }
+                        break;
+                    }
+                    if (!authoritativeDisplayName.isEmpty()) {
+                        break;
+                    }
+                }
+                if (!authoritativeDisplayName.isEmpty()) {
+                    break;
+                }
+            }
+            if (!authoritativeDisplayName.isEmpty() && authoritativeDisplayName != card->getName()) {
+                card->setCardRef(CardRef{authoritativeDisplayName});
+            }
         }
         // CR 400.7: transform/flip status, a chosen MDFC face, and a copy snapshot do not carry to
         // another zone. Restore the physical catalog display before moveCard serializes the event

@@ -403,16 +403,33 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             }
         }
         if let StaticAbilityDef::EntersTapped {
-            condition: Some(condition),
-            ..
+            affected,
+            condition,
+            unless_cost,
         } = ability
         {
-            condition
-                .validate_live()
-                .map_err(|reason| RegistryError::InvalidCard {
-                    id: card.id.clone(),
-                    reason,
-                })?;
+            if let Some(condition) = condition {
+                condition
+                    .validate_live()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            if let Some(crate::primitives::EntryCost::PayLife { amount }) = unless_cost {
+                if affected != &crate::primitives::EntersTappedAffected::Self_ {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "entry costs require an intrinsic EntersTapped ability".into(),
+                    });
+                }
+                if *amount == 0 || *amount > i32::MAX as u32 {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "entry life payment requires a positive i32 amount".into(),
+                    });
+                }
+            }
         }
         if let StaticAbilityDef::TargetingCostIncrease {
             protected, amount, ..
@@ -1985,8 +2002,8 @@ mod tests {
     use crate::primitives::{
         Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer, CombatRole, CountExpression,
         CounterKind, CreatureEventFilter, CreatureScopeController, CreatureScopeFilter,
-        EffectSubject, EntersTappedAffected, EntersWithCountersAffected, GameCondition, ManaAmount,
-        PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
+        EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost, GameCondition,
+        ManaAmount, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
         RelativePlayerSet, SpellCostModifier, SpellEffectKind, StaticAbilityDef, TargetFilter,
         TargetKind, TriggerCondition,
     };
@@ -3925,6 +3942,41 @@ mod tests {
     }
 
     #[test]
+    fn issue_209_watery_grave_has_a_typed_positive_entry_cost() {
+        let registry = CardRegistry::from_embedded().unwrap();
+        let face = registry.get("watery_grave").unwrap().primary_face();
+        assert!(face.static_abilities.iter().any(|ability| matches!(
+            &ability.definition,
+            StaticAbilityDef::EntersTapped {
+                affected: EntersTappedAffected::Self_,
+                unless_cost: Some(EntryCost::PayLife { amount: 2 }),
+                ..
+            }
+        )));
+        assert_eq!(face.activated_abilities[0].mana_options().unwrap().len(), 2);
+
+        let zero = r#"(
+            id: "zero_entry_cost",
+            name: "Zero Entry Cost",
+            face_id: "zero_entry_cost",
+            types: ["Land"],
+            static_abilities: [(
+                ability_id: "static_01",
+                presentation: Fallback,
+                definition: EntersTapped(
+                    affected: Self_,
+                    unless_cost: Some(PayLife(amount: 0)),
+                ),
+            )],
+        )"#;
+        assert!(matches!(
+            CardRegistry::from_chunks(&[zero]),
+            Err(RegistryError::InvalidCard { ref reason, .. })
+                if reason.contains("positive i32 amount")
+        ));
+    }
+
+    #[test]
     fn issue_97_entry_replacement_cards_have_exact_shared_data_shapes() {
         let registry = CardRegistry::from_embedded().unwrap();
         let expected_condition = GameCondition::PlayerLifeAggregate {
@@ -4040,6 +4092,7 @@ mod tests {
                     StaticAbilityDef::EntersTapped {
                         affected: EntersTappedAffected::Self_,
                         condition: Some(condition),
+                        ..
                     } if condition == &expected_condition
                 )),
                 "{id} condition"
