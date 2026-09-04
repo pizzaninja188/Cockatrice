@@ -30,7 +30,7 @@ fn selection_admits_distinct_slots(chosen: &[ObjectId], slots: &[Vec<ObjectId>])
 impl GameEngine {
     pub(in crate::engine) fn continue_library_search_battlefield_entries(
         &mut self,
-        stack: ParkedStackResolution,
+        mut stack: ParkedStackResolution,
         mut progress: LibrarySearchEntryProgress,
         mut events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
@@ -88,6 +88,21 @@ impl GameEngine {
                 owner,
                 rv1::permanent_moved::Destination::Battlefield,
             ));
+            if let Some(result_id) = progress.result_id.take() {
+                stack.item.search_results.insert(
+                    result_id,
+                    TriggerObjectRef {
+                        object_id: oid,
+                        zone_change_generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0),
+                        controller_at_event: controller,
+                    },
+                );
+            }
         }
         if progress.shuffle {
             crate::engine::shuffle_player_library_for_current_command(&mut self.state, controller);
@@ -168,6 +183,7 @@ impl GameEngine {
                 conditional_destination,
                 shuffle,
                 reveal,
+                result_id: None,
             },
         )?;
         let next = self
@@ -260,6 +276,7 @@ impl GameEngine {
                 conditional_destination,
                 shuffle,
                 reveal,
+                result_id: None,
             },
         )?;
         let Some(next) = self
@@ -500,6 +517,7 @@ impl GameEngine {
             conditional_destination,
             shuffle,
             reveal,
+            result_id,
         ) = match &pending.continuation {
             ResolutionContinuation::SearchLibrary {
                 stack,
@@ -511,6 +529,7 @@ impl GameEngine {
                 conditional_destination,
                 shuffle,
                 reveal,
+                result_id,
             } => (
                 stack.clone(),
                 *searcher,
@@ -521,6 +540,7 @@ impl GameEngine {
                 conditional_destination.clone(),
                 *shuffle,
                 *reveal,
+                result_id.clone(),
             ),
             _ => return Err(EngineError::Illegal("library-search continuation missing")),
         };
@@ -677,6 +697,7 @@ impl GameEngine {
                             tapped,
                             shuffle,
                             searched_library,
+                            result_id,
                         },
                         ev,
                     );

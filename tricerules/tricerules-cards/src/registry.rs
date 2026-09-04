@@ -290,6 +290,7 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
                 Some(CardResultAction::Sacrifice)
             }
             AbilityCost::Tap
+            | AbilityCost::PayLife { .. }
             | AbilityCost::Blight { .. }
             | AbilityCost::RemoveCounters { .. }
             | AbilityCost::TapPermanents { .. }

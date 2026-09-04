@@ -388,6 +388,7 @@ pub(super) fn activated_ability_info(
                 }
             },
             AbilityCost::Blight { count } => format!("Blight {count}"),
+            AbilityCost::PayLife { amount } => format!("Pay {amount} life"),
             AbilityCost::Loyalty(delta) if *delta >= 0 => format!("+{delta}"),
             AbilityCost::Loyalty(delta) => delta.to_string(),
             AbilityCost::Mana(cost) => cost.to_string(),
@@ -986,6 +987,7 @@ fn legal_ability_cost_choices(
                 });
             }
             AbilityCost::Tap
+            | AbilityCost::PayLife { .. }
             | AbilityCost::Mana(_)
             | AbilityCost::Waterbend(_)
             | AbilityCost::Loyalty(_) => {}

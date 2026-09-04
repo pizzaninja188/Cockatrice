@@ -1118,6 +1118,35 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_BEHOLD) {
+        const int count = rcr.candidate_object_ids_size();
+        if (rcr.min() != 0 || rcr.max() != 1 || rcr.candidate_names_size() != count ||
+            rcr.candidate_source_zones_size() != count) {
+            qWarning() << "Rejecting malformed ruled Behold choice";
+            return;
+        }
+        QVector<quint32> oids;
+        QStringList names;
+        for (int i = 0; i < count; ++i) {
+            oids.append(rcr.candidate_object_ids(i));
+            const QString name = QString::fromStdString(rcr.candidate_names(i));
+            switch (rcr.candidate_source_zones(i)) {
+                case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND:
+                    names.append(tr("%1 (hand)").arg(name));
+                    break;
+                case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_BATTLEFIELD:
+                    names.append(tr("%1 (battlefield)").arg(name));
+                    break;
+                default:
+                    qWarning() << "Rejecting ruled Behold choice with an invalid source zone";
+                    return;
+            }
+        }
+        host->requestResolutionChoiceDialog(QString::fromStdString(rcr.prompt_text()), oids, names, 0, 1, false,
+                                            false);
+        return;
+    }
+
     const bool isLibrarySearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH;
     const bool isLibraryLook = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK;
     const bool isManifestDread = rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD;

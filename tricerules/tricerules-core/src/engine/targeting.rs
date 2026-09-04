@@ -1222,7 +1222,8 @@ fn validate_effect_targets(
             EffectSubject::Source
             | EffectSubject::AttachedObject
             | EffectSubject::TriggerObject
-            | EffectSubject::PreviousEffectObject => {
+            | EffectSubject::PreviousEffectObject
+            | EffectSubject::SearchedObject(_) => {
                 if !targets.is_empty() {
                     return Err(EngineError::Illegal("this effect takes no targets"));
                 }
@@ -1413,38 +1414,44 @@ fn validate_effect_targets(
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
-                | EffectSubject::PreviousEffectObject,
+                | EffectSubject::PreviousEffectObject
+                | EffectSubject::SearchedObject(_),
         }
         | SpellEffectKind::Tap {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
-                | EffectSubject::PreviousEffectObject,
+                | EffectSubject::PreviousEffectObject
+                | EffectSubject::SearchedObject(_),
         }
         | SpellEffectKind::ReturnToOwnersHand {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
-                | EffectSubject::PreviousEffectObject,
+                | EffectSubject::PreviousEffectObject
+                | EffectSubject::SearchedObject(_),
         }
         | SpellEffectKind::Exile {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
-                | EffectSubject::PreviousEffectObject,
+                | EffectSubject::PreviousEffectObject
+                | EffectSubject::SearchedObject(_),
         }
         | SpellEffectKind::ExileWithOwnerCastPermission {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
-                | EffectSubject::PreviousEffectObject,
+                | EffectSubject::PreviousEffectObject
+                | EffectSubject::SearchedObject(_),
             ..
         }
         | SpellEffectKind::PutInOwnersLibrary {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
-                | EffectSubject::PreviousEffectObject,
+                | EffectSubject::PreviousEffectObject
+                | EffectSubject::SearchedObject(_),
             ..
         }
         | SpellEffectKind::PumpAll { .. }
@@ -1463,6 +1470,7 @@ fn validate_effect_targets(
         // CR 605.1a: a mana ability is untargeted by definition.
         | SpellEffectKind::ProduceMana { .. }
         | SpellEffectKind::AddMana { .. }
+        | SpellEffectKind::MayBehold { .. }
         // CR 115.1: "deals N damage to that player / to you" names a player, it does not target.
         | SpellEffectKind::DamagePlayer { .. }
         | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
@@ -2212,6 +2220,7 @@ mod tests {
             cast_occurrence: None,
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
+            search_results: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),

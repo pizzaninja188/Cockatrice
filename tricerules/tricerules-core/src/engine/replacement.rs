@@ -1373,7 +1373,7 @@ impl GameEngine {
         completion: BattlefieldEntryCompletion,
         mut events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
-        let stack = pending
+        let mut stack = pending
             .continuation
             .stack()
             .ok_or(EngineError::Illegal(
@@ -1476,7 +1476,7 @@ impl GameEngine {
             BattlefieldEntryCompletion::LibrarySearch {
                 owner,
                 card_label,
-                progress,
+                mut progress,
             } => {
                 let object_id = event.object_id;
                 let controller = event.destination_controller;
@@ -1490,6 +1490,21 @@ impl GameEngine {
                     owner,
                     rv1::permanent_moved::Destination::Battlefield,
                 ));
+                if let Some(result_id) = progress.result_id.take() {
+                    stack.item.search_results.insert(
+                        result_id,
+                        TriggerObjectRef {
+                            object_id,
+                            zone_change_generation: self
+                                .state
+                                .zone_change_generation
+                                .get(&object_id)
+                                .copied()
+                                .unwrap_or(0),
+                            controller_at_event: controller,
+                        },
+                    );
+                }
                 self.continue_library_search_battlefield_entries(stack, progress, events)
             }
             BattlefieldEntryCompletion::ManifestDread {

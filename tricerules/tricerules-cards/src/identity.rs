@@ -61,6 +61,7 @@ stable_id!(CardFaceId, "card face id");
 stable_id!(AbilityId, "ability id");
 stable_id!(ModeId, "mode id");
 stable_id!(ChoiceId, "choice id");
+stable_id!(SearchResultId, "search result id");
 
 /// Stable identity and non-mechanical presentation metadata around an authored definition.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

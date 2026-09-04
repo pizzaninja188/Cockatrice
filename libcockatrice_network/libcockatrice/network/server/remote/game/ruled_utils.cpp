@@ -102,6 +102,7 @@ bool isPrivateChoiceKind(ruled::v1::ChoiceKind kind)
         case ruled::v1::CHOICE_KIND_ZONE_SEARCH:    // hand / graveyard / library unified search
         case ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS: // chooser-only graveyard selection
         case ruled::v1::CHOICE_KIND_COST_OBJECTS: // chooser-only authored payment candidates
+        case ruled::v1::CHOICE_KIND_BEHOLD: // mixed own hand / battlefield; hand identity stays private
             return true;
         case ruled::v1::CHOICE_KIND_REVEALED:
         case ruled::v1::CHOICE_KIND_TARGET_OBJECTS:

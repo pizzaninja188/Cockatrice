@@ -201,6 +201,8 @@ mod issue_209_entry_life_payment;
 mod issue_210_demolition_field;
 #[path = "scenario/issue_211_reflexive_counter_placement.rs"]
 mod issue_211_reflexive_counter_placement;
+#[path = "scenario/issue_212_passages.rs"]
+mod issue_212_passages;
 #[path = "scenario/issue_214_graveyard_land_play.rs"]
 mod issue_214_graveyard_land_play;
 #[path = "scenario/issue_215_crew.rs"]

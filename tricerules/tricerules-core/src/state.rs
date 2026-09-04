@@ -8,7 +8,9 @@ use tricerules_cards::primitives::{
     SearchSelectionSlot, SearchZoneSelection, TargetFilter, TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
-use tricerules_cards::{is_creature_type, CardFace, ChoiceId, ManaCost, ManaSymbol, ModeId};
+use tricerules_cards::{
+    is_creature_type, CardFace, ChoiceId, ManaCost, ManaSymbol, ModeId, SearchResultId,
+};
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
 pub type PlayerId = i32;
@@ -850,6 +852,13 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         candidate_generations: Vec<(ObjectId, u64)>,
     },
+    BeholdChoice {
+        stack: ParkedStackResolution,
+        candidate_generations: Vec<(ObjectId, u64)>,
+        hand_candidates: Vec<ObjectId>,
+        hand_filter: ZoneCardFilter,
+        permanent_filter: TargetFilter,
+    },
     AmassChoice {
         stack: ParkedStackResolution,
         subtype: ArmySubtype,
@@ -891,6 +900,7 @@ pub enum ResolutionContinuation {
         conditional_destination: Option<ConditionalSearchDestination>,
         shuffle: bool,
         reveal: bool,
+        result_id: Option<SearchResultId>,
     },
     SearchZoneScope {
         stack: ParkedStackResolution,
@@ -994,6 +1004,7 @@ impl ResolutionContinuation {
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
             | Self::PermanentChoice { stack, .. }
+            | Self::BeholdChoice { stack, .. }
             | Self::AmassChoice { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
@@ -1029,6 +1040,7 @@ impl ResolutionContinuation {
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
             | Self::PermanentChoice { stack, .. }
+            | Self::BeholdChoice { stack, .. }
             | Self::AmassChoice { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
@@ -1232,6 +1244,7 @@ pub(crate) struct LibrarySearchEntryProgress {
     pub tapped: bool,
     pub shuffle: bool,
     pub searched_library: bool,
+    pub result_id: Option<SearchResultId>,
 }
 
 #[derive(Debug, Clone)]
@@ -1427,6 +1440,8 @@ pub struct StackItem {
     /// Exact card objects used to pay this spell or ability's costs. Copies retain the original
     /// cohort under CR 707.10.
     pub(crate) payment_result: CardResultCohort,
+    /// Server-only generation-bound objects published by earlier library-search instructions.
+    pub search_results: BTreeMap<SearchResultId, TriggerObjectRef>,
     /// Resolution branches already answered, keyed by their index in the original effect list.
     /// `None` records an optional decline; `Some(i)` records the chosen authored branch.
     pub resolution_branch_choices: BTreeMap<u32, Option<usize>>,

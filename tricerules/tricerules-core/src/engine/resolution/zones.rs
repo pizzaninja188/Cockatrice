@@ -978,7 +978,8 @@ pub(super) fn shuffle_permanents_into_owners_libraries(
             }
             EffectSubject::AttachedObject
             | EffectSubject::TriggerObject
-            | EffectSubject::PreviousEffectObject => {
+            | EffectSubject::PreviousEffectObject
+            | EffectSubject::SearchedObject(_) => {
                 return Err(EngineError::Illegal(
                     "unsupported subject for multi-subject library shuffle",
                 ));
@@ -2430,6 +2431,7 @@ pub(in crate::engine) struct ZoneSearchRequest {
     pub conditional_destination: Option<ConditionalSearchDestination>,
     pub shuffle: bool,
     pub reveal: bool,
+    pub result_id: Option<tricerules_cards::SearchResultId>,
 }
 
 pub(in crate::engine) struct SearchRequest {
@@ -2441,6 +2443,7 @@ pub(in crate::engine) struct SearchRequest {
     pub conditional_destination: Option<ConditionalSearchDestination>,
     pub shuffle: bool,
     pub reveal: bool,
+    pub result_id: Option<tricerules_cards::SearchResultId>,
 }
 
 pub(in crate::engine) fn park_zone_search_choice(
@@ -2459,6 +2462,7 @@ pub(in crate::engine) fn park_zone_search_choice(
         conditional_destination,
         shuffle,
         reveal,
+        result_id,
     } = request;
     let idx = engine
         .state
@@ -2634,6 +2638,7 @@ pub(in crate::engine) fn park_zone_search_choice(
             conditional_destination,
             shuffle,
             reveal,
+            result_id,
         },
     });
     Ok(())
@@ -2655,6 +2660,7 @@ pub(in crate::engine) fn begin_search_request(
         conditional_destination,
         shuffle,
         reveal,
+        result_id,
     } = request;
     match zones {
         SearchZoneSelection::Fixed(zones) => park_zone_search_choice(
@@ -2671,9 +2677,15 @@ pub(in crate::engine) fn begin_search_request(
                 conditional_destination,
                 shuffle,
                 reveal,
+                result_id,
             },
         ),
         SearchZoneSelection::PlayerChoice(available_zones) => {
+            if result_id.is_some() {
+                return Err(EngineError::Illegal(
+                    "search result binding requires a fixed library search",
+                ));
+            }
             let combinations = search_zone_combinations(&available_zones);
             let prompt = format!("P{searcher}: choose which zones to search.");
             let branches = combinations
@@ -2768,6 +2780,7 @@ pub(super) fn search_library(
         conditional_destination,
         shuffle,
         reveal,
+        result_id,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -2871,6 +2884,7 @@ pub(super) fn search_library(
             conditional_destination,
             shuffle,
             reveal,
+            result_id,
         },
     )?;
     // Resolution is now parked; the "resolves." log is emitted by finish_library_search.

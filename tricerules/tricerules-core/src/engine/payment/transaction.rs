@@ -1245,6 +1245,9 @@ impl GameEngine {
                         .ok_or(EngineError::Illegal("missing Blight selection"))?;
                     debits.push(self.plan_blight_selection(player, *count, selection)?);
                 }
+                AbilityCost::PayLife { amount } => {
+                    debits.push(CostDebit::Life { amount: *amount });
+                }
                 AbilityCost::Loyalty(delta) => {
                     let object = self
                         .state

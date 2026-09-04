@@ -16,7 +16,7 @@ pub use card_def::{
 pub use identity::{
     ability_fallback, choice_fallback, external_oracle_lines, mode_fallback,
     resolve_external_presentation, AbilityId, AbilityPresentation, CardFaceId, ChoiceId,
-    IdentifiedAbility, ModeId,
+    IdentifiedAbility, ModeId, SearchResultId,
 };
 pub use mana::{ColorPip, ManaCost, ManaSymbol};
 pub use presentation::PresentationFaceMetadata;

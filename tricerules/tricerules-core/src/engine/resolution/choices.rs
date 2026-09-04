@@ -277,6 +277,149 @@ pub(super) fn choose_permanents(
     Ok(EffectOutcome::Suspended)
 }
 
+pub(super) fn may_behold(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::MayBehold {
+        who,
+        hand_filter,
+        permanent_filter,
+        ..
+    } = effect
+    else {
+        unreachable!();
+    };
+    let recipients = super::player_recipients(cx, who);
+    let [deciding_player] = recipients.as_slice() else {
+        return Err(EngineError::Illegal(
+            "Behold requires exactly one deciding player",
+        ));
+    };
+    let deciding_player = *deciding_player;
+    let player_index = cx
+        .engine
+        .state
+        .player_idx(deciding_player)
+        .ok_or(EngineError::UnknownPlayer(deciding_player))?;
+    let hand_candidates = cx.engine.state.players[player_index]
+        .hand
+        .iter()
+        .copied()
+        .filter(|oid| {
+            super::library_card_matches_filter(
+                &cx.engine.state,
+                cx.engine.registry,
+                *oid,
+                Some(&hand_filter),
+            )
+        })
+        .collect::<Vec<_>>();
+    let source = crate::engine::targeting::TargetSourceIdentity::for_stack_item(cx.engine, cx.top);
+    let permanent_candidates = cx
+        .engine
+        .state
+        .players
+        .iter()
+        .flat_map(|player| player.battlefield.iter().copied())
+        .filter(|oid| {
+            crate::engine::targeting::permanent_choice_filter_legal(
+                cx.engine,
+                &permanent_filter,
+                *oid,
+                deciding_player,
+                source,
+                cx.top.trigger_context,
+            )
+        })
+        .collect::<Vec<_>>();
+    let candidates = hand_candidates
+        .iter()
+        .chain(&permanent_candidates)
+        .copied()
+        .collect::<Vec<_>>();
+    if candidates.is_empty() {
+        cx.events.push(ev_log(format!(
+            "P{deciding_player} has no matching object to behold."
+        )));
+        return Ok(EffectOutcome::RestartResolutionBranch(None));
+    }
+    let candidate_card_ids = candidates
+        .iter()
+        .map(|oid| cx.engine.state.objects[oid].card_id.clone())
+        .collect();
+    let candidate_names = candidates
+        .iter()
+        .map(|oid| {
+            crate::engine::events::object_display_name(&cx.engine.state, cx.engine.registry, *oid)
+        })
+        .collect();
+    let candidate_source_zones = hand_candidates
+        .iter()
+        .map(|_| rv1::ChoiceCandidateSourceZone::Hand as i32)
+        .chain(
+            permanent_candidates
+                .iter()
+                .map(|_| rv1::ChoiceCandidateSourceZone::Battlefield as i32),
+        )
+        .collect();
+    let prompt = format!("P{deciding_player}: you may behold a matching object.");
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: deciding_player,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: rv1::ChoiceKind::Behold as i32,
+                candidate_object_ids: candidates.clone(),
+                candidate_card_ids,
+                candidate_names,
+                min: 0,
+                max: 1,
+                candidate_source_zones,
+                ..Default::default()
+            },
+        )),
+    });
+    cx.events.push(ev_log(prompt.clone()));
+    let candidate_generations = candidates
+        .iter()
+        .map(|oid| {
+            (
+                *oid,
+                cx.engine
+                    .state
+                    .zone_change_generation
+                    .get(oid)
+                    .copied()
+                    .unwrap_or(0),
+            )
+        })
+        .collect();
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates,
+            min: 0,
+            max: 1,
+            ordered: false,
+            prompt,
+            choice_kind: rv1::ChoiceKind::Behold,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::BeholdChoice {
+            stack: ParkedStackResolution::new(cx.top.clone())
+                .with_previous_result(cx.previous_effect_result.clone()),
+            candidate_generations,
+            hand_candidates,
+            hand_filter,
+            permanent_filter,
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
 pub(in crate::engine) fn resolution_branch_is_live(
     engine: &crate::engine::GameEngine,
     top: &StackItem,

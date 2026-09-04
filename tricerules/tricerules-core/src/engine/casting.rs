@@ -284,6 +284,7 @@ impl GameEngine {
             cast_occurrence: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
+            search_results: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
@@ -1007,6 +1008,7 @@ impl GameEngine {
             cast_occurrence: None,
             cast_cost_receipts,
             payment_result,
+            search_results: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: payment.blight_receipts.clone(),
             // A spell's effects always act on its controller.
@@ -1477,6 +1479,7 @@ impl GameEngine {
                     .map(|cost| cost.result().clone())
                     .collect(),
             },
+            search_results: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: payment.blight_receipts.clone(),
             // An activated ability's effects act on the player who activated it.
@@ -1605,6 +1608,21 @@ impl GameEngine {
             return false;
         }
         if !self.counter_costs_payable(permanent_id, &ability.costs) {
+            return false;
+        }
+        let life_cost = ability
+            .costs
+            .iter()
+            .try_fold(0u32, |total, cost| match cost {
+                AbilityCost::PayLife { amount } => total.checked_add(*amount),
+                _ => Some(total),
+            });
+        let available_life = self
+            .state
+            .player_idx(activating_player)
+            .map(|index| self.state.players[index].life.max(0) as u32)
+            .unwrap_or(0);
+        if life_cost.is_none_or(|cost| cost > available_life) {
             return false;
         }
         if !self.activation_limit_allows(permanent_id, ability_index, ability) {
@@ -2220,6 +2238,7 @@ impl GameEngine {
             cast_occurrence: None,
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
+            search_results: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),

@@ -1,0 +1,30 @@
+// Oracle and rulings checked against Scryfall on 2026-09-04.
+// CR 118.4, 608.2c, 701.4, 701.20, 701.23, and 701.26: life is paid atomically;
+// Behold may use an Elf permanent or reveal an Elf card from hand, then untaps the found land.
+(
+  id: "elven_passage",
+  name: "Elven Passage",
+  face_id: "elven_passage",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap, PayLife(amount: 1), SacrificeSelf],
+    effect: [
+      SearchLibrary(
+        filter: Some((card_type: Some(BasicLand))),
+        destination: Battlefield(tapped: true),
+        shuffle: true,
+        reveal: false,
+        result_id: Some("found_land"),
+      ),
+      MayBehold(
+        choice_id: "behold_elf",
+        hand_filter: (subtype: Some("Elf")),
+        permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+        if_beheld: [Untap(subject: SearchedObject("found_land"))],
+      ),
+    ],
+  )],
+)

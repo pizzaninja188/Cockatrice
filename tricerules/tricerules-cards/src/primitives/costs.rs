@@ -102,6 +102,9 @@ pub enum AbilityCost {
     },
     /// CR 701.68: Gristle Glutton and Spiral into Solitude put all counters on one creature.
     Blight { count: u32 },
+    /// CR 119.4 / 602.2b: pay a fixed amount of life as part of one atomic activation cost.
+    /// Elven Passage and Champion of the Weird are the first data consumers.
+    PayLife { amount: u32 },
     /// CR 606.4: add (positive), remove (negative), or leave unchanged (zero) loyalty counters
     /// as the cost of activating a planeswalker's loyalty ability.
     Loyalty(i32),
@@ -189,6 +192,9 @@ impl AbilityCost {
                 Ok(())
             }
             Self::Blight { count: 0 } => Err("blight cost requires a positive count".into()),
+            Self::PayLife { amount: 0 } => {
+                Err("activation life payment requires a positive amount".into())
+            }
             Self::TapPermanents {
                 constraint, filter, ..
             } => {

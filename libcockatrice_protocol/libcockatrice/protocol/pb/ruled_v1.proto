@@ -1292,6 +1292,9 @@ enum ChoiceKind {
   // Public battlefield permanents chosen during resolution without targeting (CR 608.2d).
   // Final Showdown and source-selection effects such as Sakashima's Will use this click surface.
   CHOICE_KIND_PERMANENT_OBJECTS = 21;
+  // CR 701.4: optionally choose a matching permanent you control or reveal a matching card from
+  // your hand during resolution. Private because the mixed cohort exposes hand contents.
+  CHOICE_KIND_BEHOLD = 22;
 }
 
 enum ChoiceCandidateSourceZone {
@@ -1299,6 +1302,7 @@ enum ChoiceCandidateSourceZone {
   CHOICE_CANDIDATE_SOURCE_ZONE_HAND = 1;
   CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD = 2;
   CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY = 3;
+  CHOICE_CANDIDATE_SOURCE_ZONE_BATTLEFIELD = 4;
 }
 
 // Whether a concealed-zone cohort attached to a resolution choice is merely looked at by the

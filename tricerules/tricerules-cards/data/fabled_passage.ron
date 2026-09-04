@@ -1,0 +1,32 @@
+// Oracle and rulings checked against Scryfall on 2026-09-04.
+// CR 608.2c, 701.23, and 701.26: bind the found land after it enters, then inspect the
+// post-search battlefield and untap that exact physical object when four lands are controlled.
+(
+  id: "fabled_passage",
+  name: "Fabled Passage",
+  face_id: "fabled_passage",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap, SacrificeSelf],
+    effect: [
+      SearchLibrary(
+        filter: Some((card_type: Some(BasicLand))),
+        destination: Battlefield(tapped: true),
+        shuffle: true,
+        reveal: false,
+        result_id: Some("found_land"),
+      ),
+      Conditional(
+        condition: BattlefieldAggregate(
+          filter: (controllers: Controller, card_type: Some(Land)),
+          aggregate: Count,
+          min: Some(4),
+        ),
+        effect: Untap(subject: SearchedObject("found_land")),
+      ),
+    ],
+  )],
+)

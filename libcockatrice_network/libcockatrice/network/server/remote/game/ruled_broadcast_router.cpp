@@ -375,7 +375,8 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                 rcr->clear_selection_slots();
             }
             const bool requiresSourceZones = rcr->choice_kind() == ruled::v1::CHOICE_KIND_ZONE_SEARCH ||
-                                             rcr->choice_kind() == ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS;
+                                             rcr->choice_kind() == ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS ||
+                                             rcr->choice_kind() == ruled::v1::CHOICE_KIND_BEHOLD;
             if (requiresSourceZones && (rcr->candidate_source_zones_size() != rcr->candidate_object_ids_size() ||
                                         rcr->candidate_card_ids_size() != rcr->candidate_object_ids_size() ||
                                         rcr->candidate_names_size() != rcr->candidate_object_ids_size())) {

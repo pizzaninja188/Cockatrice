@@ -2708,6 +2708,7 @@ mod tests {
             cast_condition_results: vec![],
             cast_occurrence: None,
             payment_result: CardResultCohort::default(),
+            search_results: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),

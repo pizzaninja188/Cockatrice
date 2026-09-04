@@ -42,7 +42,8 @@ pub(super) fn destroy(
         EffectSubject::Source
         | EffectSubject::AttachedObject
         | EffectSubject::TriggerObject
-        | EffectSubject::PreviousEffectObject => {
+        | EffectSubject::PreviousEffectObject
+        | EffectSubject::SearchedObject(_) => {
             resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
                 .into_iter()
                 .collect()
@@ -116,7 +117,8 @@ pub(super) fn sacrifice(
         EffectSubject::Source
         | EffectSubject::AttachedObject
         | EffectSubject::TriggerObject
-        | EffectSubject::PreviousEffectObject => {
+        | EffectSubject::PreviousEffectObject
+        | EffectSubject::SearchedObject(_) => {
             resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
                 .into_iter()
                 .collect()
@@ -345,7 +347,8 @@ pub(super) fn create_delayed_trigger(
         EffectSubject::Source
         | EffectSubject::AttachedObject
         | EffectSubject::TriggerObject
-        | EffectSubject::PreviousEffectObject => {
+        | EffectSubject::PreviousEffectObject
+        | EffectSubject::SearchedObject(_) => {
             resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
         }
         EffectSubject::Chosen(target) => cx.targets.first().copied().filter(|object_id| {
@@ -564,6 +567,7 @@ fn attach_equipment_subject(
             object
         }
         EffectSubject::PreviousEffectObject => cx.previous_battlefield_object(),
+        EffectSubject::SearchedObject(_) => cx.resolve_battlefield_subject(subject),
         EffectSubject::Source | EffectSubject::AttachedObject | EffectSubject::TriggerObject => {
             None
         }

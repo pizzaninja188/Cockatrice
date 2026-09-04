@@ -126,7 +126,8 @@ impl EffectCx<'_> {
             EffectSubject::Source | EffectSubject::AttachedObject => self.top.source_permanent_id,
             EffectSubject::Chosen(_)
             | EffectSubject::TriggerObject
-            | EffectSubject::PreviousEffectObject => Some(self.top.id),
+            | EffectSubject::PreviousEffectObject
+            | EffectSubject::SearchedObject(_) => Some(self.top.id),
         };
         Some((object_id, source_id))
     }
@@ -591,6 +592,22 @@ fn resolve_effect_subject(
             .filter(|_| engine.source_is_current_object(top)),
         EffectSubject::Chosen(_) => targets.first().copied(),
         EffectSubject::PreviousEffectObject => None,
+        EffectSubject::SearchedObject(result_id) => {
+            let searched = top.search_results.get(result_id)?;
+            let current_generation = engine
+                .state
+                .zone_change_generation
+                .get(&searched.object_id)
+                .copied()
+                .unwrap_or(0);
+            (current_generation == searched.zone_change_generation
+                && engine
+                    .state
+                    .objects
+                    .get(&searched.object_id)
+                    .is_some_and(|object| object.zone == Zone::Battlefield))
+            .then_some(searched.object_id)
+        }
         EffectSubject::TriggerObject => {
             let trigger_object = top.trigger_context.observed_object?;
             let current_generation = engine
@@ -1364,6 +1381,15 @@ impl GameEngine {
                         continue;
                     }
                 }
+                if let SpellEffectKind::MayBehold { if_beheld, .. } = &entry.effect {
+                    if let Some(choice) = top.resolution_branch_choices.get(&(effect_index as u32))
+                    {
+                        if choice.is_some() {
+                            expanded.extend(build_entries(if_beheld, None, &[]));
+                        }
+                        continue;
+                    }
+                }
                 expanded.push(entry);
             }
             resolution_effects = expanded;
@@ -1467,6 +1493,9 @@ impl GameEngine {
                                 }
                                 effect @ SpellEffectKind::Draw { .. } => {
                                     zones::draw(&mut cx, effect)?
+                                }
+                                effect @ SpellEffectKind::Untap { .. } => {
+                                    misc::untap(&mut cx, effect)?
                                 }
                                 _ => {
                                     return Err(EngineError::Illegal(
@@ -1714,6 +1743,9 @@ impl GameEngine {
                         misc::produce_mana(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::AddMana { .. } => misc::add_mana(&mut cx, effect)?,
+                    effect @ SpellEffectKind::MayBehold { .. } => {
+                        choices::may_behold(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::SearchLibrary { .. } => {
                         zones::search_library(&mut cx, effect)?
                     }
@@ -2079,6 +2111,7 @@ impl GameEngine {
             cast_occurrence: None,
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
+            search_results: Default::default(),
             resolution_branch_choices: BTreeMap::new(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
@@ -3170,6 +3203,7 @@ mod attached_subject_tests {
             cast_occurrence: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
+            search_results: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
@@ -4827,6 +4861,7 @@ mod source_keyword_tests {
             cast_occurrence: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
+            search_results: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
@@ -4858,6 +4893,7 @@ mod source_keyword_tests {
             cast_occurrence: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
+            search_results: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),

@@ -271,6 +271,9 @@ impl GameEngine {
             ResolutionContinuation::PermanentChoice { .. } => {
                 return self.finish_permanent_choice(pending, chosen);
             }
+            ResolutionContinuation::BeholdChoice { .. } => {
+                return self.finish_behold_choice(pending, chosen);
+            }
             ResolutionContinuation::AmassChoice { .. } => {
                 return self.finish_amass_choice(pending, chosen[0]);
             }
@@ -711,6 +714,103 @@ impl GameEngine {
                 selected_objects,
                 ..Default::default()
             },
+            events,
+        )
+    }
+
+    fn finish_behold_choice(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, candidate_generations, hand_candidates, hand_filter, permanent_filter) =
+            match &pending.continuation {
+                ResolutionContinuation::BeholdChoice {
+                    stack,
+                    candidate_generations,
+                    hand_candidates,
+                    hand_filter,
+                    permanent_filter,
+                } => (
+                    stack.clone(),
+                    candidate_generations.clone(),
+                    hand_candidates.clone(),
+                    hand_filter.clone(),
+                    permanent_filter.clone(),
+                ),
+                _ => unreachable!("behold-choice continuation"),
+            };
+        let effect_index = stack
+            .resume_effect_index
+            .and_then(|next| next.checked_sub(1))
+            .ok_or(EngineError::Illegal("Behold effect index missing"))?;
+        let mut item = stack.item;
+        let mut events = Vec::new();
+
+        if chosen.is_empty() {
+            item.resolution_branch_choices.insert(effect_index, None);
+            events.push(ev_log(format!(
+                "P{} declines to behold.",
+                pending.deciding_player
+            )));
+        } else {
+            let oid = chosen[0];
+            let Some(expected_generation) = candidate_generations
+                .iter()
+                .find_map(|(candidate, generation)| (*candidate == oid).then_some(*generation))
+            else {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("invalid Behold choice"));
+            };
+            let current_generation = self
+                .state
+                .zone_change_generation
+                .get(&oid)
+                .copied()
+                .unwrap_or(0);
+            let is_hand_candidate = hand_candidates.contains(&oid);
+            let is_current = current_generation == expected_generation
+                && if is_hand_candidate {
+                    self.state.objects.get(&oid).is_some_and(|object| {
+                        object.owner == pending.deciding_player
+                            && object.zone == Zone::Hand
+                            && resolution::library_card_matches_filter(
+                                &self.state,
+                                self.registry,
+                                oid,
+                                Some(&hand_filter),
+                            )
+                    })
+                } else {
+                    let source = TargetSourceIdentity::for_stack_item(self, &item);
+                    targeting::permanent_choice_filter_legal(
+                        self,
+                        &permanent_filter,
+                        oid,
+                        pending.deciding_player,
+                        source,
+                        item.trigger_context,
+                    )
+                };
+            if !is_current {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "Behold choice became stale or no longer matches",
+                ));
+            }
+            let name = object_display_name(&self.state, self.registry, oid);
+            events.push(ev_log(if is_hand_candidate {
+                format!("P{} reveals {name}.", pending.deciding_player)
+            } else {
+                format!("P{} beholds {name}.", pending.deciding_player)
+            }));
+            item.resolution_branch_choices.insert(effect_index, Some(0));
+        }
+
+        self.complete_parked_resolution_with_previous(
+            item,
+            Some(effect_index),
+            stack.previous_result,
             events,
         )
     }

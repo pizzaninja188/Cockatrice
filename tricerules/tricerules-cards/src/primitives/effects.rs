@@ -13,7 +13,7 @@ use super::{
     BattlefieldAggregate, BattlefieldCreatureCountFilter, BattlefieldPermanentFilter,
     CreatureEventFilter, GraveyardAggregate, PermanentEventFilter,
 };
-use crate::{choice_fallback, AbilityPresentation, ChoiceId, ManaCost};
+use crate::{choice_fallback, AbilityPresentation, ChoiceId, ManaCost, SearchResultId};
 use serde::{Deserialize, Serialize};
 
 fn default_one() -> u32 {
@@ -112,6 +112,9 @@ pub enum EffectSubject {
     /// The exact generation-bound permanent selected by the immediately preceding
     /// `ChoosePermanents(min: 1, max: 1)` instruction. This is an untargeted CR 608 choice.
     PreviousEffectObject,
+    /// The exact post-entry incarnation published by an earlier, single-card battlefield
+    /// [`SpellEffectKind::SearchLibrary`] instruction in this resolution.
+    SearchedObject(SearchResultId),
     Chosen(Box<TargetFilter>),
 }
 
@@ -1484,6 +1487,17 @@ pub enum SpellEffectKind {
         amount: ManaAmount,
         retention: ManaRetention,
     },
+    /// CR 701.4: optionally behold one matching permanent you control or matching card from your
+    /// hand while resolving. Elven Passage and Sarkhan, Dragon Ascendant share this shape.
+    MayBehold {
+        #[serde(default)]
+        who: PlayerRecipient,
+        choice_id: ChoiceId,
+        hand_filter: ZoneCardFilter,
+        permanent_filter: TargetFilter,
+        #[serde(default)]
+        if_beheld: Vec<SpellEffectKind>,
+    },
     /// CR 701.23: pause resolution, let the named player search their library for a card
     /// matching `filter` (None = any card; Some = only cards of that spell type), move it to
     /// `destination`, then shuffle if `shuffle` is true. Uses the tier-3 interrupt mechanism
@@ -1532,6 +1546,10 @@ pub enum SpellEffectKind {
         /// Reveal the found card publicly (Mystical Tutor reveals to both players). Default: false.
         #[serde(default)]
         reveal: bool,
+        /// Stable server-only identity for the post-entry object selected by an exactly-one
+        /// battlefield search. Later effects may consume it through `SearchedObject`.
+        #[serde(default)]
+        result_id: Option<SearchResultId>,
     },
     /// CR 301.5 / 702.6: the equip activated ability — attach this equipment to `target` creature
     /// you control. At resolution the engine moves `attached_to` on the equipment's `GameObject`
@@ -2182,7 +2200,8 @@ impl SpellEffectKind {
                     EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
-                    | EffectSubject::PreviousEffectObject => None,
+                    | EffectSubject::PreviousEffectObject
+                    | EffectSubject::SearchedObject(_) => None,
                 })
                 .collect(),
             SpellEffectKind::AttachEquipment {
@@ -2195,7 +2214,8 @@ impl SpellEffectKind {
                     EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
-                    | EffectSubject::PreviousEffectObject => None,
+                    | EffectSubject::PreviousEffectObject
+                    | EffectSubject::SearchedObject(_) => None,
                 })
                 .collect(),
             SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects } => subjects
@@ -2205,7 +2225,8 @@ impl SpellEffectKind {
                     EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
-                    | EffectSubject::PreviousEffectObject => None,
+                    | EffectSubject::PreviousEffectObject
+                    | EffectSubject::SearchedObject(_) => None,
                 })
                 .collect(),
             SpellEffectKind::Destroy { subject }
@@ -2231,7 +2252,8 @@ impl SpellEffectKind {
                 EffectSubject::Source
                 | EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
-                | EffectSubject::PreviousEffectObject => Vec::new(),
+                | EffectSubject::PreviousEffectObject
+                | EffectSubject::SearchedObject(_) => Vec::new(),
             },
             SpellEffectKind::ApplyCombatRestriction { scope, .. } => match scope {
                 CombatRestrictionScope::Chosen(target) => vec![TargetRole::Filtered(target)],
@@ -2307,6 +2329,7 @@ impl SpellEffectKind {
             | SpellEffectKind::CreateAttackingTokens { .. }
             | SpellEffectKind::ProduceMana { .. }
             | SpellEffectKind::AddMana { .. }
+            | SpellEffectKind::MayBehold { .. }
             | SpellEffectKind::SearchLibrary { .. }
             | SpellEffectKind::PreventAllCombatDamageTurn
             | SpellEffectKind::DamageCantBePreventedThisTurn
@@ -2408,6 +2431,58 @@ impl SpellEffectKind {
     /// effects). Rules that depend on *sibling* effects live here; per-effect rules live in
     /// [`SpellEffectKind::validate`], which the caller runs too.
     pub fn validate_list(effects: &[SpellEffectKind]) -> Result<(), String> {
+        fn searched_subjects<'a>(effect: &'a SpellEffectKind, out: &mut Vec<&'a SearchResultId>) {
+            let mut subject = |subject: &'a EffectSubject| {
+                if let EffectSubject::SearchedObject(result_id) = subject {
+                    out.push(result_id);
+                }
+            };
+            match effect {
+                SpellEffectKind::Conditional { effect, .. }
+                | SpellEffectKind::ConditionalCastCost { effect, .. } => {
+                    searched_subjects(effect, out)
+                }
+                SpellEffectKind::MayBehold { if_beheld, .. } => {
+                    for nested in if_beheld {
+                        searched_subjects(nested, out);
+                    }
+                }
+                SpellEffectKind::Fight { first, second }
+                | SpellEffectKind::AttachEquipment {
+                    equipment: first,
+                    creature: second,
+                } => {
+                    subject(first);
+                    subject(second);
+                }
+                SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { subjects } => {
+                    for value in subjects {
+                        subject(value);
+                    }
+                }
+                SpellEffectKind::Destroy { subject: value }
+                | SpellEffectKind::Sacrifice { subject: value }
+                | SpellEffectKind::PumpTarget { subject: value, .. }
+                | SpellEffectKind::Tap { subject: value }
+                | SpellEffectKind::Untap { subject: value }
+                | SpellEffectKind::GrantKeywords { subject: value, .. }
+                | SpellEffectKind::GrantKeywordChoice { subject: value, .. }
+                | SpellEffectKind::GrantProtection { subject: value, .. }
+                | SpellEffectKind::GrantTriggeredAbility { subject: value, .. }
+                | SpellEffectKind::CreateDelayedTrigger { subject: value, .. }
+                | SpellEffectKind::AddTypes { subject: value, .. }
+                | SpellEffectKind::ReturnToOwnersHand { subject: value }
+                | SpellEffectKind::Exile { subject: value }
+                | SpellEffectKind::ExileWithOwnerCastPermission { subject: value, .. }
+                | SpellEffectKind::PutInOwnersLibrary { subject: value, .. }
+                | SpellEffectKind::Regenerate { subject: value }
+                | SpellEffectKind::PutCounters { subject: value, .. }
+                | SpellEffectKind::RemoveCounters { subject: value, .. }
+                | SpellEffectKind::PutCounterSnapshot { subject: value, .. } => subject(value),
+                _ => {}
+            }
+        }
+
         fn produces_card_result(effect: &SpellEffectKind, action: CardResultAction) -> bool {
             match action {
                 CardResultAction::Discard => matches!(
@@ -2466,7 +2541,28 @@ impl SpellEffectKind {
             );
         }
 
+        let mut search_results = std::collections::HashSet::new();
         for (index, effect) in effects.iter().enumerate() {
+            let mut referenced = Vec::new();
+            searched_subjects(effect, &mut referenced);
+            if let Some(missing) = referenced
+                .into_iter()
+                .find(|result_id| !search_results.contains(result_id.as_str()))
+            {
+                return Err(format!(
+                    "searched object '{}' requires an earlier SearchLibrary producer",
+                    missing
+                ));
+            }
+            if let SpellEffectKind::SearchLibrary {
+                result_id: Some(result_id),
+                ..
+            } = effect
+            {
+                if !search_results.insert(result_id.as_str()) {
+                    return Err(format!("duplicate search result id '{}'", result_id));
+                }
+            }
             let amount = match effect {
                 SpellEffectKind::DamageTarget { amount, .. }
                 | SpellEffectKind::DamageAll { amount, .. }
@@ -2678,7 +2774,8 @@ impl SpellEffectKind {
                     }
                     EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject
-                    | EffectSubject::PreviousEffectObject => {
+                    | EffectSubject::PreviousEffectObject
+                    | EffectSubject::SearchedObject(_) => {
                         return Err(
                             "ShufflePermanentsIntoOwnersLibraries supports only Source and Chosen subjects"
                                 .into(),
@@ -2737,9 +2834,10 @@ impl SpellEffectKind {
                         | SpellEffectKind::GrantKeywords { .. }
                         | SpellEffectKind::ChoosePermanents { .. }
                         | SpellEffectKind::Draw { .. }
+                        | SpellEffectKind::Untap { .. }
                 ) {
                     return Err(
-                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, and Draw effects"
+                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, and Untap effects"
                             .into(),
                     );
                 }
@@ -2916,6 +3014,50 @@ impl SpellEffectKind {
                         "Equipment attachment choice constraints require an Equipment-only filter"
                             .into(),
                     );
+                }
+            }
+            SpellEffectKind::MayBehold {
+                who,
+                choice_id,
+                hand_filter,
+                permanent_filter,
+                if_beheld,
+            } => {
+                if matches!(
+                    who,
+                    PlayerRecipient::EachOpponent
+                        | PlayerRecipient::EachPlayer
+                        | PlayerRecipient::AttackingOpponentsOfDefendingPlayer
+                ) {
+                    return Err("MayBehold requires exactly one deciding player".into());
+                }
+                choice_id.validate()?;
+                hand_filter.validate()?;
+                permanent_filter.validate_characteristic_constraints()?;
+                if !permanent_filter.all_terminal_filters_match(|leaf| {
+                    matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                        && leaf.controller == TargetController::You
+                }) {
+                    return Err(
+                        "MayBehold permanent filter must select permanents you control".into(),
+                    );
+                }
+                if if_beheld.is_empty() {
+                    return Err("MayBehold requires at least one success effect".into());
+                }
+                for effect in if_beheld {
+                    if effect.needs_target()
+                        || matches!(
+                            effect,
+                            SpellEffectKind::MayBehold { .. }
+                                | SpellEffectKind::ChooseResolutionBranch { .. }
+                        )
+                    {
+                        return Err(
+                            "MayBehold success effects must be untargeted and non-nested".into(),
+                        );
+                    }
+                    effect.validate(context)?;
                 }
             }
             SpellEffectKind::ChooseResolutionBranch {
@@ -3666,6 +3808,7 @@ impl SpellEffectKind {
             // and nonmana abilities alike (Demonic Tutor, Evolving Wilds).
             SpellEffectKind::SearchLibrary {
                 who,
+                optional,
                 count,
                 filter,
                 slots,
@@ -3673,6 +3816,7 @@ impl SpellEffectKind {
                 destination,
                 conditional_destination,
                 count_by_cast_cost,
+                result_id,
                 ..
             } => {
                 if matches!(
@@ -3732,6 +3876,22 @@ impl SpellEffectKind {
                 }
                 if let Some(conditional) = conditional_destination {
                     conditional.condition.validate()?;
+                }
+                if let Some(result_id) = result_id {
+                    result_id.validate()?;
+                    if *optional
+                        || *count != 1
+                        || count_by_cast_cost.is_some()
+                        || !slots.is_empty()
+                        || !matches!(zones, SearchZoneSelection::Fixed(zones) if zones == &[CardSearchZone::Library])
+                        || *destination != (SearchDestination::Battlefield { tapped: true })
+                        || conditional_destination.is_some()
+                    {
+                        return Err(
+                            "search result binding requires one mandatory library search to the battlefield tapped"
+                                .into(),
+                        );
+                    }
                 }
                 Ok(())
             }

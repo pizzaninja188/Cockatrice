@@ -1142,6 +1142,57 @@ TEST_F(RuledBatchTest, MultiZoneSearchMetadataAndTransientIdsAreDeciderPrivate)
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+TEST_F(RuledBatchTest, BeholdMixedZoneCandidatesAreDeciderPrivate)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_BEHOLD);
+    choice->set_prompt_text("You may behold an Elf");
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(501);
+    choice->add_candidate_object_ids(777);
+    choice->add_candidate_card_ids("llanowar_elves");
+    choice->add_candidate_card_ids("safewright_cavalry");
+    choice->add_candidate_names("Llanowar Elves");
+    choice->add_candidate_names("Safewright Cavalry");
+    choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+    choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_BATTLEFIELD);
+
+    const auto forP1 = redactFor(batch, p1);
+    const auto p1It = std::find_if(forP1.events().begin(), forP1.events().end(),
+                                   [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p1It, forP1.events().end());
+    const auto &p1Choice = p1It->resolution_choice_required();
+    EXPECT_EQ(p1Choice.candidate_object_ids_size(), 2);
+    EXPECT_EQ(p1Choice.candidate_source_zones_size(), 2);
+
+    const auto forP2 = redactFor(batch, p2);
+    const auto p2It = std::find_if(forP2.events().begin(), forP2.events().end(),
+                                   [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(p2It, forP2.events().end());
+    const auto &p2Choice = p2It->resolution_choice_required();
+    EXPECT_EQ(p2Choice.candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_card_ids_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_names_size(), 0);
+    EXPECT_EQ(p2Choice.candidate_source_zones_size(), 0);
+    EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
+
+    ruled::v1::RuledEventBatch malformed;
+    auto *bad = malformed.add_events()->mutable_resolution_choice_required();
+    bad->CopyFrom(*choice);
+    bad->mutable_candidate_source_zones()->RemoveLast();
+    const auto malformedForP1 = redactFor(malformed, p1);
+    const auto malformedIt = std::find_if(malformedForP1.events().begin(), malformedForP1.events().end(),
+                                          [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(malformedIt, malformedForP1.events().end());
+    const auto &malformedChoice = malformedIt->resolution_choice_required();
+    EXPECT_EQ(malformedChoice.candidate_object_ids_size(), 0);
+    EXPECT_EQ(malformedChoice.candidate_source_zones_size(), 0);
+    EXPECT_EQ(malformedChoice.prompt_text(), "Resolution choice metadata is unavailable.");
+}
+
 // Private "look" effects such as Cracked Skull expose the complete target hand and the
 // engine-authored eligibility mask only to the deciding player. The other seat gets neither the
 // identities nor a derived type oracle.
