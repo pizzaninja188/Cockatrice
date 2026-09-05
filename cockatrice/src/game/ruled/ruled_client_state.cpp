@@ -444,13 +444,16 @@ void RuledClientState::setActivePublicReveals(QVector<RuledActivePublicReveal> r
     activePublicReveals = std::move(reveals);
     QStringList names;
     QVector<int> playerIds;
+    QStringList sourceDescriptions;
     names.reserve(activePublicReveals.size());
     playerIds.reserve(activePublicReveals.size());
+    sourceDescriptions.reserve(activePublicReveals.size());
     for (const auto &reveal : activePublicReveals) {
         names.append(reveal.cardName);
         playerIds.append(reveal.revealingPlayerId);
+        sourceDescriptions.append(reveal.sourceDescription);
     }
-    emit activePublicRevealsChanged(std::move(names), std::move(playerIds));
+    emit activePublicRevealsChanged(std::move(names), std::move(playerIds), std::move(sourceDescriptions));
 }
 
 void RuledClientState::sendResolutionChoice(const QVector<quint32> &chosenOids,

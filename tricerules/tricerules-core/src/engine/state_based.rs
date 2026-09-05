@@ -68,6 +68,31 @@ impl GameEngine {
     ) -> Result<bool, EngineError> {
         let mut changed = self.reindex_battlefield_control(out);
         changed |= self.refresh_enduring_story_designations();
+        let lost_players = self
+            .state
+            .players
+            .iter()
+            .filter(|player| player.has_lost)
+            .map(|player| player.id)
+            .collect::<HashSet<_>>();
+        let removed_emblems = self
+            .state
+            .static_emblems
+            .iter()
+            .filter(|emblem| lost_players.contains(&emblem.controller))
+            .map(|emblem| emblem.object_id)
+            .collect::<HashSet<_>>();
+        if !removed_emblems.is_empty() {
+            self.state
+                .static_emblems
+                .retain(|emblem| !removed_emblems.contains(&emblem.object_id));
+            self.state.continuous_effects.retain(|effect| {
+                effect
+                    .source_id
+                    .is_none_or(|source| !removed_emblems.contains(&source))
+            });
+            changed = true;
+        }
         if self.state.pending_resolution.is_some() {
             return Ok(changed);
         }

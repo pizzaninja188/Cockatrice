@@ -191,6 +191,8 @@ mod issue_200_enduring_curiosity;
 mod issue_201_multi_object_library;
 #[path = "scenario/issue_202_hidden_lair.rs"]
 mod issue_202_hidden_lair;
+#[path = "scenario/issue_203_kaito.rs"]
+mod issue_203_kaito;
 #[path = "scenario/issue_204_land_animation.rs"]
 mod issue_204_land_animation;
 #[path = "scenario/issue_205_stack_spell_filters.rs"]

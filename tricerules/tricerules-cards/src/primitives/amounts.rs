@@ -11,6 +11,10 @@ use std::fmt;
 /// creation share one authoritative evaluator.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CountExpression {
+    /// Count selected players who lost any life during the current turn. This counts players,
+    /// not life points, and remains true after later life gain or after a player loses the game.
+    /// Kaito, Strefan, and Gev share this turn-history query.
+    PlayersWhoLostLifeThisTurn { players: RelativePlayerSet },
     /// Magebane Lizard counts the caster's noncreature spells; Thunder Salvo excludes
     /// only the resolving spell's own committed occurrence, not an uncast copy's original.
     SpellsCastThisTurn {
@@ -121,7 +125,7 @@ impl CountExpression {
             Self::GraveyardCards { filter, .. } => {
                 filter.as_ref().map_or(Ok(()), ZoneCardFilter::validate)
             }
-            Self::SourcePower => Ok(()),
+            Self::PlayersWhoLostLifeThisTurn { .. } | Self::SourcePower => Ok(()),
             Self::DeclaredAttackers { filter, .. } => filter.validate(),
             Self::Affine { terms, .. } => {
                 if terms.is_empty() {

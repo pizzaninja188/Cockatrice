@@ -1684,6 +1684,10 @@ message AbilityInfo {
   // Mana affordability is deliberately NOT folded in: mana is floated after the ability is chosen.
   bool activatable = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   PresentationRef presentation = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Stable index into the source card's authored activated_abilities list. Battlefield views may
+  // omit abilities whose source_zone is Hand or Graveyard, so repeated-field position is not an
+  // activation command index.
+  uint32 ability_index = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message BattlefieldObject {
@@ -1747,6 +1751,13 @@ message LibraryCard {
   uint32 object_id = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }
 
+// Presentation-only emblem identity. This is deliberately not a battlefield permanent: the
+// engine owns emblem rules state while Servatrice mirrors each marker as a table token.
+message EmblemMarkerView {
+  uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string display_name = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
 // Authoritative per-player zone view. Servatrice consumes the server-only concealed zones to
 // synchronize physical cards, then the reflection redactor removes them from every client copy.
 message RuledPerPlayerView {
@@ -1783,6 +1794,9 @@ message RuledPerPlayerView {
   repeated LibraryCard library_cards = 35 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   // CR 702.195: public, irreversible player designation established by Storied.
   bool has_enduring_story = 36 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Public nonpermanent emblem markers controlled by this player. Sent on every zone snapshot,
+  // including when `battlefields_unchanged` is true, so the relay can reconcile independently.
+  repeated EmblemMarkerView static_emblems = 37 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ZoneViewSync {

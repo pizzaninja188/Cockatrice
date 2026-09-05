@@ -1123,15 +1123,19 @@ void RuledBatchSynchronizer::applyPhaseStackAndZoneViews(const ruled::v1::RuledE
             continue;
         }
         for (const auto &view : event.zone_view().per_player()) {
-            if (!view.has_enduring_story()) {
-                continue;
-            }
             if (Server_AbstractPlayer *abstractPlayer = game->getPlayer(view.player_id())) {
                 storyTokenGesHasEvents =
                     playerBinding(view.player_id())
-                        .ensureEnduringStoryToken(static_cast<Server_Player *>(abstractPlayer),
-                                                  ruledBattlefieldGridY(false, false), &storyTokenGes) ||
+                        .reconcileStaticEmblemTokens(static_cast<Server_Player *>(abstractPlayer), view,
+                                                     ruledBattlefieldGridY(false, false), &storyTokenGes) ||
                     storyTokenGesHasEvents;
+                if (view.has_enduring_story()) {
+                    storyTokenGesHasEvents =
+                        playerBinding(view.player_id())
+                            .ensureEnduringStoryToken(static_cast<Server_Player *>(abstractPlayer),
+                                                      ruledBattlefieldGridY(false, false), &storyTokenGes) ||
+                        storyTokenGesHasEvents;
+                }
             }
         }
     }
@@ -1840,6 +1844,9 @@ void RuledBatchSynchronizer::applyStartupBatch(const ruled::v1::IpcResponse &res
             applyBattlefieldControllerTransfers(physicalView, startupResult);
             for (const auto &p : physicalView.per_player()) {
                 if (Server_AbstractPlayer *ab = game->getPlayer(p.player_id())) {
+                    playerBinding(p.player_id())
+                        .reconcileStaticEmblemTokens(static_cast<Server_Player *>(ab), p,
+                                                     ruledBattlefieldGridY(false, false), nullptr);
                     if (p.has_enduring_story()) {
                         playerBinding(p.player_id())
                             .ensureEnduringStoryToken(static_cast<Server_Player *>(ab),

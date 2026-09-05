@@ -19,9 +19,9 @@ use crate::state::{
     PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
     ReplacementPriority, ResolutionContinuation, ResolutionReceipt, RoomState, SpellCastMethod,
     StackItem, StackObjectRef, StackPresentation, StackTarget, StagedTrigger, StagedTriggerGroup,
-    TokenBattlefieldEntry, TokenEntryBatchOptions, TriggerAbilityOrigin, TriggerContext,
-    TriggerObjectRef, TriggerStackObjectRef, TriggerUseKey, TurnHistory, TurnObjectFact, TurnStep,
-    UndoableManaAbility, Zone,
+    StaticEmblemInstance, TokenBattlefieldEntry, TokenEntryBatchOptions, TriggerAbilityOrigin,
+    TriggerContext, TriggerObjectRef, TriggerStackObjectRef, TriggerUseKey, TurnHistory,
+    TurnObjectFact, TurnStep, UndoableManaAbility, Zone,
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -661,6 +661,7 @@ struct PrivateZoneSnapshot {
 struct BattlefieldViewSnapshot {
     players: Vec<PlayerBattlefieldSnapshot>,
     continuous_effects: Vec<ContinuousEffect>,
+    static_emblems: Vec<StaticEmblemInstance>,
     activation_uses_this_turn: HashMap<ActivationUseKey, u32>,
     activation_uses_per_object: HashMap<PersistentActivationUseKey, u32>,
     turn_history: TurnHistory,
@@ -1081,6 +1082,7 @@ impl GameEngine {
             pending_resolution: None,
             pending_replacement_event: None,
             continuous_effects: Vec::new(),
+            static_emblems: Vec::new(),
             skip_next_untap: HashSet::new(),
             damage_prevention_effects: Vec::new(),
             damage_prevention_prohibitions: Vec::new(),

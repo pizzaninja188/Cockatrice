@@ -204,6 +204,33 @@ impl ActivatedAbilityDef {
         if self.is_loyalty_ability() && self.source_zone != AbilitySourceZone::Battlefield {
             return Err("loyalty abilities require a battlefield source".into());
         }
+        let return_unblocked_count = self
+            .costs
+            .iter()
+            .filter(|cost| matches!(cost, AbilityCost::ReturnUnblockedAttacker))
+            .count();
+        if return_unblocked_count > 1 {
+            return Err("activated ability may return only one unblocked attacker".into());
+        }
+        if return_unblocked_count == 1 && self.source_zone != AbilitySourceZone::Hand {
+            return Err("return-unblocked-attacker cost requires a hand source".into());
+        }
+        let ninjutsu_entry_count = self
+            .effect
+            .iter()
+            .filter(|effect| {
+                matches!(
+                    effect,
+                    SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
+                )
+            })
+            .count();
+        if return_unblocked_count != ninjutsu_entry_count || ninjutsu_entry_count > 1 {
+            return Err(
+                "return-unblocked-attacker cost and tapped-attacking source entry must occur together exactly once"
+                    .into(),
+            );
+        }
         if self
             .effect
             .iter()
@@ -1644,6 +1671,11 @@ pub enum StaticAbilityDef {
     /// Tapestry Warden exercise threshold types, base P/T, keywords, and granted abilities.
     ConditionalSelfModifier {
         condition: GameCondition,
+        /// CR 205.1a: replace the ordinary type line while the condition holds. Kaito and
+        /// Gideon Blackblade use this instead of layering an additive Creature type over their
+        /// planeswalker type.
+        #[serde(default)]
+        set_types: Option<TypeLineReplacement>,
         /// CR 721.2a: some threshold abilities add a card type while their condition holds.
         #[serde(default)]
         add_types: TypeLineAddition,

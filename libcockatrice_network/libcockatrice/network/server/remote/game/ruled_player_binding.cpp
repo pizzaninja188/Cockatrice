@@ -16,6 +16,7 @@
 #include <QDebug>
 #include <QStringList>
 #include <libcockatrice/protocol/pb/card_attributes.pb.h>
+#include <libcockatrice/protocol/pb/event_destroy_card.pb.h>
 #include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/utility/zone_names.h>
 
@@ -433,7 +434,8 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         QList<Server_Card *> engineTableCards;
         engineTableCards.reserve(tableZone->getCards().size());
         for (Server_Card *card : tableZone->getCards()) {
-            if (card && card->getId() != enduringStoryServerCardId) {
+            if (card && card->getId() != enduringStoryServerCardId &&
+                !staticEmblemServerCardIds.values().contains(card->getId())) {
                 engineTableCards.append(card);
             }
         }
@@ -957,6 +959,66 @@ bool RuledPlayerBinding::ensureEnduringStoryToken(Server_Player *player, int bat
         player->sendCreateTokenEvents(table, card, x, battlefieldGridY, *ges);
     }
     return true;
+}
+
+bool RuledPlayerBinding::reconcileStaticEmblemTokens(Server_Player *player,
+                                                      const ruled::v1::RuledPerPlayerView &view,
+                                                      int battlefieldGridY,
+                                                      GameEventStorage *ges)
+{
+    Server_CardZone *table = player ? player->getZones().value(ZoneNames::TABLE) : nullptr;
+    if (!table) {
+        return false;
+    }
+
+    QSet<quint32> desired;
+    for (const auto &emblem : view.static_emblems()) {
+        desired.insert(static_cast<quint32>(emblem.object_id()));
+    }
+
+    bool changed = false;
+    for (auto it = staticEmblemServerCardIds.begin(); it != staticEmblemServerCardIds.end();) {
+        if (desired.contains(it.key())) {
+            ++it;
+            continue;
+        }
+        if (Server_Card *card = table->getCard(it.value(), nullptr, false)) {
+            table->removeCard(card);
+            if (ges) {
+                Event_DestroyCard event;
+                event.set_zone_name(std::string(ZoneNames::TABLE));
+                event.set_card_id(static_cast<::google::protobuf::uint32>(card->getId()));
+                ges->enqueueGameEvent(event, player->getPlayerId());
+            }
+            card->deleteLater();
+        }
+        it = staticEmblemServerCardIds.erase(it);
+        changed = true;
+    }
+
+    for (const auto &emblem : view.static_emblems()) {
+        const quint32 objectId = static_cast<quint32>(emblem.object_id());
+        const int existingId = staticEmblemServerCardIds.value(objectId, -1);
+        if (existingId >= 0 && table->getCard(existingId, nullptr, false)) {
+            continue;
+        }
+        const QString name = QString::fromStdString(emblem.display_name());
+        int x = table->hasCoords() ? table->getFreeGridColumn(-1, battlefieldGridY, name, true) : 0;
+        if (x < 0) {
+            x = 0;
+        }
+        auto *card = new Server_Card({name, QString()}, player->newCardId(), x, battlefieldGridY);
+        card->moveToThread(player->thread());
+        card->setAnnotation(QStringLiteral("Emblem"));
+        card->setDestroyOnZoneChange(true);
+        table->insertCard(card, x, battlefieldGridY);
+        staticEmblemServerCardIds.insert(objectId, card->getId());
+        if (ges) {
+            player->sendCreateTokenEvents(table, card, x, battlefieldGridY, *ges);
+        }
+        changed = true;
+    }
+    return changed;
 }
 
 bool RuledPlayerBinding::createRuledDevCard(Server_Player *player,

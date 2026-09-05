@@ -1273,6 +1273,11 @@ pub(crate) enum BattlefieldEntryCompletion {
         object_label: String,
         from_zone: Zone,
     },
+    Ninjutsu {
+        owner: PlayerId,
+        object_label: String,
+        assignment: CombatAttackAssignment,
+    },
     ObserverReturn {
         owner: PlayerId,
         object_label: String,
@@ -1430,9 +1435,9 @@ pub struct StackItem {
     pub face_index: usize,
     /// CR 601.2b: the announced cast method, retained for method-specific stack-exit rules.
     pub cast_method: SpellCastMethod,
-    /// CR 702.190b: the generation-bound attack assignment of the creature returned to pay
-    /// Sneak. Spell copies retain this cost fact under CR 707.10.
-    pub sneak_attack: Option<CombatAttackAssignment>,
+    /// CR 702.49a / 702.190b: the generation-bound attack assignment of the creature returned to
+    /// pay Ninjutsu or Sneak. Spell copies retain this cost fact under CR 707.10.
+    pub returned_attacker_assignment: Option<CombatAttackAssignment>,
     /// CR 107.3b: the value chosen for `{X}` as this spell was cast. `0` for spells without an
     /// `{X}` pip (and for abilities). On the stack the spell's mana value is `fixed_mv + chosen_x`;
     /// at resolution this feeds [`Amount::X`](tricerules_cards::Amount) effect amounts.
@@ -1568,6 +1573,16 @@ pub struct ContinuousEffect {
     pub duration: EffectDuration,
     /// `command_index` at creation; used for layer sublayer timestamp ordering (CR 613.7).
     pub timestamp: u64,
+}
+
+/// A public emblem marker with no engine-zone presence. Its runtime object id gives the relay a
+/// stable table-token identity and links the marker to its separately compiled indefinite effect.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StaticEmblemInstance {
+    pub object_id: ObjectId,
+    pub controller: PlayerId,
+    pub emblem_id: String,
+    pub display_name: String,
 }
 
 /// The stack-bound payload of a one-shot delayed triggered ability (CR 603.7).
@@ -1972,6 +1987,7 @@ pub struct GameState {
     /// recomputed from base + this list on demand — `GameObject.power/toughness` always hold the
     /// printed base value and are never mutated by effects.
     pub continuous_effects: Vec<ContinuousEffect>,
+    pub static_emblems: Vec<StaticEmblemInstance>,
     /// CR 502.3 / 611.2a rules-changing effects that suppress one permanent's next controller
     /// untap. The generation is part of identity because relay-compatible ObjectIds survive zone
     /// changes (CR 400.7). A set intentionally coalesces repeated applications: every identical

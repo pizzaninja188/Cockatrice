@@ -230,6 +230,7 @@ public:
         QString countersAnnotation;
         int battleProtector = -1;
         bool firstAbilityActivatable = false;
+        std::vector<quint32> abilityIndices;
         quint32 attachmentObjectId = 0;
         int attachmentPlayerId = -1;
         std::array<bool, 2> roomDoors{false, false};
@@ -252,6 +253,7 @@ public:
     std::map<std::pair<int, int>, std::pair<int, QString>> physicalRowAndPt;
     // Retain physical zone moves so focused E2E cases can verify exact Server_Card continuity
     // without adding issue-specific state to the shared client harness.
+    std::vector<Event_CreateToken> physicalCreateTokenEvents;
     std::vector<Event_MoveCard> physicalMoveEvents;
     std::vector<Event_RevealCards> physicalRevealEvents;
     struct Pool
@@ -335,6 +337,7 @@ public:
     bool sawAggressiveObserverReadOnly = false;
     bool aggressivePublicRevealActive = false;
     bool sawAggressivePublicRevealClosed = false;
+    std::vector<ruled::v1::ActivePublicReveal> activePublicReveals;
     QStringList aggressiveRevealNames;
     bool submittedAggressiveChoice = false;
     bool sawAggressiveExile = false;
@@ -785,6 +788,7 @@ public:
             }
             if (ev.HasExtension(Event_CreateToken::ext)) {
                 const auto &created = ev.GetExtension(Event_CreateToken::ext);
+                physicalCreateTokenEvents.push_back(created);
                 if (created.zone_name() == ZoneNames::TABLE) {
                     physicalRowAndPt[{ev.player_id(), created.card_id()}] = {created.y(),
                                                                              QString::fromStdString(created.pt())};
@@ -1511,8 +1515,10 @@ public:
                             .arg(rcr.candidate_object_ids_size()));
                 }
             } else if (ev.has_active_public_reveal_snapshot()) {
+                activePublicReveals.clear();
                 bool hasDragon = false;
                 for (const auto &reveal : ev.active_public_reveal_snapshot().reveals()) {
+                    activePublicReveals.push_back(reveal);
                     hasDragon = hasDragon ||
                                 (reveal.card_id() == "adult_gold_dragon" && reveal.card_name() == "Adult Gold Dragon");
                 }
@@ -1621,6 +1627,9 @@ public:
                                                        : -1;
                             perm.firstAbilityActivatable = battlefieldObject.activated_abilities_size() > 0 &&
                                                            battlefieldObject.activated_abilities(0).activatable();
+                            for (const auto &ability : battlefieldObject.activated_abilities()) {
+                                perm.abilityIndices.push_back(ability.ability_index());
+                            }
                             perm.roomDoorCount = std::min(2, battlefieldObject.room_doors_size());
                             for (int door = 0; door < perm.roomDoorCount; ++door) {
                                 const auto &publishedDoor = battlefieldObject.room_doors(door);
@@ -6504,6 +6513,309 @@ TEST_F(RuledE2ESmokeTest, PlaneswalkerBattleTargetsSplitCombatAndSiegeCastReachB
     EXPECT_EQ(observer->defense, -1);
     EXPECT_EQ(p1.serverCardByEngineOid[battleOid], exiledPhysicalId);
     EXPECT_EQ(p2.serverCardByEngineOid[battleOid], exiledPhysicalId);
+}
+
+TEST_F(RuledE2ESmokeTest, KaitoNinjutsuHandSourcePaymentPreviewIsPrivateAndValid)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("ninjutsup1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("ninjutsup2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "issue 203 Ninjutsu game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "issue 203 Ninjutsu game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    for (SmokeClient *client : {&p1, &p2}) {
+        ruled::v1::RuledCommand stops;
+        auto *policy = stops.mutable_set_auto_pass_policy();
+        policy->add_stop_on_own_turn(ruled::v1::PHASE_ID_MAIN1);
+        policy->add_stop_on_opponent_turn(ruled::v1::PHASE_ID_MAIN1);
+        policy->add_stop_on_own_turn(ruled::v1::PHASE_ID_DECLARE_BLOCKERS);
+        policy->add_stop_on_opponent_turn(ruled::v1::PHASE_ID_DECLARE_BLOCKERS);
+        client->sendRuled(stops, QStringLiteral("issue 203 publish Ninjutsu combat stop"));
+    }
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto pass = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(client, command, QStringLiteral("issue 203 Ninjutsu pass"));
+    };
+    auto put = [&](const char *name, ruled::v1::DevZone zone, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        auto *placement = dev->mutable_put_card_in_zone();
+        placement->set_card_name(name);
+        placement->set_zone(zone);
+        placement->set_ready(ready);
+        return send(p1, command, QStringLiteral("issue 203 put %1").arg(name));
+    };
+
+    ASSERT_TRUE(put("Grizzly Bears", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(put("Kaito, Bane of Nightmares", ruled::v1::DEV_ZONE_HAND, false));
+    const auto &battlefield = p1.battlefieldByPlayer[p1.myId];
+    const auto bearIt =
+        std::find_if(battlefield.begin(), battlefield.end(), [](const SmokeClient::Permanent &permanent) {
+            return permanent.cardId == QStringLiteral("grizzly_bears");
+        });
+    ASSERT_NE(bearIt, battlefield.end());
+    const SmokeClient::Permanent bear = *bearIt;
+
+    QElapsedTimer toAttack;
+    toAttack.start();
+    while (p1.phase != ruled::v1::PHASE_ID_DECLARE_ATTACKERS && toAttack.elapsed() < 20000) {
+        ASSERT_TRUE(pass(p1.priorityPlayer == p1.myId ? p1 : p2));
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_DECLARE_ATTACKERS);
+    const auto assignment = std::find_if(
+        p1.latestLegal.legal_attack_assignments().begin(), p1.latestLegal.legal_attack_assignments().end(),
+        [&](const ruled::v1::AttackAssignment &candidate) {
+            return candidate.attacker_object_id() == bear.oid && candidate.has_defender() &&
+                   candidate.defender().kind() == ruled::v1::TARGET_REF_KIND_PLAYER &&
+                   candidate.defender().object_id() == static_cast<quint32>(p2.myId);
+        });
+    ASSERT_NE(assignment, p1.latestLegal.legal_attack_assignments().end());
+    ruled::v1::RuledCommand declare;
+    *declare.mutable_declare_attackers()->add_assignments() = *assignment;
+    ASSERT_TRUE(send(p1, declare, QStringLiteral("issue 203 declare unblocked attacker")));
+
+    auto ninjutsuAvailable = [&] {
+        const auto *action = p1.zoneAbilityAction(QStringLiteral("Kaito, Bane of Nightmares"),
+                                                  ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+        return p1.priorityPlayer == p1.myId && action && action->has_ability() && action->ability().activatable();
+    };
+    QElapsedTimer toNinjutsu;
+    toNinjutsu.start();
+    while (!ninjutsuAvailable() && toNinjutsu.elapsed() < 10000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_DECLARE_BLOCKERS) {
+            ruled::v1::RuledCommand noBlocks;
+            noBlocks.mutable_declare_blockers();
+            ASSERT_TRUE(send(p2, noBlocks, QStringLiteral("issue 203 declare no blockers")));
+        } else if (p1.priorityPlayer == p2.myId) {
+            ASSERT_TRUE(pass(p2));
+        }
+    }
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+    const auto *availableAction = p1.zoneAbilityAction(QStringLiteral("Kaito, Bane of Nightmares"),
+                                                       ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    ASSERT_NE(availableAction, nullptr);
+    ASSERT_TRUE(availableAction->has_ability());
+    ASSERT_TRUE(availableAction->ability().activatable());
+    ruled::v1::RuledCommand addMana;
+    addMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_u(1);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_b(1);
+    addMana.mutable_dev_command()->mutable_add_mana()->set_c(1);
+    ASSERT_TRUE(send(p1, addMana, QStringLiteral("issue 203 add Ninjutsu mana")));
+    const auto *published = p1.zoneAbilityAction(QStringLiteral("Kaito, Bane of Nightmares"),
+                                                 ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    ASSERT_NE(published, nullptr);
+    const auto action = *published;
+    const quint64 abilityKey = (static_cast<quint64>(action.object_id()) << 32) | action.ability_index();
+    const auto choices = p1.latestLegal.cost_choices_by_ability().find(abilityKey);
+    ASSERT_NE(choices, p1.latestLegal.cost_choices_by_ability().end());
+    const auto returnChoice = std::find_if(choices->second.choices().begin(), choices->second.choices().end(),
+                                           [](const ruled::v1::LegalCostChoice &choice) {
+                                               return choice.kind() ==
+                                                      ruled::v1::COST_CHOICE_KIND_RETURN_UNBLOCKED_ATTACKER;
+                                           });
+    ASSERT_NE(returnChoice, choices->second.choices().end());
+
+    ruled::v1::RuledCommand query;
+    auto *preview = query.mutable_preview_payment();
+    preview->set_transaction_id(203);
+    preview->set_revision(1);
+    auto *activation = preview->mutable_activate_ability();
+    activation->set_source_object_id(action.object_id());
+    activation->set_source_zone(action.source_zone());
+    activation->set_expected_zone_change_generation(action.zone_change_generation());
+    activation->set_ability_index(action.ability_index());
+    auto *cost = activation->add_cost_selections();
+    cost->set_cost_index(returnChoice->cost_index());
+    auto *returned = cost->mutable_battlefield_objects()->add_objects();
+    returned->set_object_id(bear.oid);
+    returned->set_zone_change_generation(bear.generation);
+    const int previewCount = p1.paymentPreviewCount;
+    const int observerPreviewCount = p2.paymentPreviewCount;
+    const quint64 stateVersion = p1.stateVersion;
+    p1.sendRuled(query, QStringLiteral("issue 203 private Ninjutsu payment preview"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.paymentPreviewCount == previewCount + 1; }, 10000,
+                             "Ninjutsu hand-source preview"));
+    p2.pump(100);
+    ASSERT_TRUE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+    EXPECT_FALSE(p1.paymentPreview.complete());
+    EXPECT_EQ(p1.paymentPreview.selection().source().object_id(), action.object_id());
+    EXPECT_EQ(p1.paymentPreview.selection().source().zone_change_generation(), action.zone_change_generation());
+    EXPECT_EQ(p1.stateVersion, stateVersion) << "payment previews must remain read-only";
+    EXPECT_EQ(p2.paymentPreviewCount, observerPreviewCount) << "payment previews are private";
+
+    preview->set_revision(2);
+    *activation->mutable_payment() = p1.paymentPreview.selection();
+    activation->mutable_payment()->mutable_mana()->set_u(1);
+    activation->mutable_payment()->mutable_mana()->set_b(1);
+    activation->mutable_payment()->mutable_mana()->set_c(1);
+    p1.sendRuled(query, QStringLiteral("issue 203 exact Ninjutsu mana preview"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.paymentPreviewCount == previewCount + 2; }, 10000,
+                             "Ninjutsu exact mana preview"));
+    p2.pump(100);
+    ASSERT_TRUE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+    EXPECT_TRUE(p1.paymentPreview.complete());
+    EXPECT_EQ(p1.stateVersion, stateVersion);
+    EXPECT_EQ(p2.paymentPreviewCount, observerPreviewCount);
+
+    ruled::v1::RuledCommand activate;
+    *activate.mutable_activate_ability() = *activation;
+    ASSERT_TRUE(send(p1, activate, QStringLiteral("issue 203 activate Ninjutsu with exact payment")));
+    for (const SmokeClient *client : {&p1, &p2}) {
+        ASSERT_EQ(client->activePublicReveals.size(), 1u);
+        const auto &reveal = client->activePublicReveals.front();
+        EXPECT_EQ(reveal.card_name(), "Kaito, Bane of Nightmares");
+        EXPECT_EQ(reveal.source_description(), "Kaito, Bane of Nightmares");
+        EXPECT_EQ(reveal.revealing_player_id(), p1.myId);
+    }
+}
+
+TEST_F(RuledE2ESmokeTest, KaitoStaticEmblemCreatesPresentationTokenForBothClients)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("kaitop1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("kaitop2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "issue 203 game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "issue 203 game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto pass = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(client, command, QStringLiteral("issue 203 pass"));
+    };
+
+    ruled::v1::RuledCommand putKaito;
+    auto *dev = putKaito.mutable_dev_command();
+    dev->set_target_player_id(p1.myId);
+    auto *placement = dev->mutable_put_card_in_zone();
+    placement->set_card_name("Kaito, Bane of Nightmares");
+    placement->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+    placement->set_ready(true);
+    ASSERT_TRUE(send(p1, putKaito, QStringLiteral("issue 203 put Kaito")));
+
+    const auto ownBattlefield = p1.battlefieldByPlayer.find(p1.myId);
+    ASSERT_NE(ownBattlefield, p1.battlefieldByPlayer.end());
+    ASSERT_EQ(ownBattlefield->second.size(), 1u);
+    const auto &kaito = ownBattlefield->second.front();
+    EXPECT_EQ(kaito.abilityIndices, std::vector<quint32>({1, 2, 3}));
+    ASSERT_EQ(p2.battlefieldByPlayer[p1.myId].size(), 1u);
+    EXPECT_EQ(p2.battlefieldByPlayer[p1.myId].front().abilityIndices, std::vector<quint32>({1, 2, 3}));
+    const std::size_t physicalCardsBefore = p1.physicalRowAndPt.size();
+
+    ruled::v1::RuledCommand activate;
+    p1.setBattlefieldAbilitySource(activate.mutable_activate_ability(), kaito.oid);
+    activate.mutable_activate_ability()->set_ability_index(1);
+    ASSERT_TRUE(send(p1, activate, QStringLiteral("issue 203 activate Kaito +1")));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+
+    const QString emblemName = QStringLiteral("Kaito, Bane of Nightmares Emblem");
+    auto hasEmblemCreate = [&](const SmokeClient &client) {
+        return std::any_of(client.physicalCreateTokenEvents.begin(), client.physicalCreateTokenEvents.end(),
+                           [&](const Event_CreateToken &event) {
+                               return event.zone_name() == ZoneNames::TABLE &&
+                                      QString::fromStdString(event.card_name()) == emblemName &&
+                                      event.annotation() == "Emblem";
+                           });
+    };
+    EXPECT_TRUE(hasEmblemCreate(p1));
+    EXPECT_TRUE(hasEmblemCreate(p2));
+    EXPECT_EQ(p1.physicalRowAndPt.size(), physicalCardsBefore + 1);
+    EXPECT_EQ(p2.physicalRowAndPt.size(), physicalCardsBefore + 1);
 }
 
 TEST_F(RuledE2ESmokeTest, MobilizeDefenderChoiceAndTokenLifecycleReachBothClients)

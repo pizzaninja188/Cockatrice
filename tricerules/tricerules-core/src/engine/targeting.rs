@@ -1488,6 +1488,8 @@ fn validate_effect_targets(
         | SpellEffectKind::SacrificeObservedObjects
         | SpellEffectKind::ExileWarpedObject
         | SpellEffectKind::AnimateSelf { .. }
+        | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
+        | SpellEffectKind::CreateStaticEmblem { .. }
         | SpellEffectKind::PreventAllCombatDamageTurn
         | SpellEffectKind::DamageCantBePreventedThisTurn
         // CR 605.1a: a mana ability is untargeted by definition.
@@ -2256,7 +2258,7 @@ mod tests {
             is_copy: false,
             face_index,
             cast_method: SpellCastMethod::Normal,
-            sneak_attack: None,
+            returned_attacker_assignment: None,
             chosen_x,
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),

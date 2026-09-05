@@ -890,6 +890,9 @@ impl GameEngine {
         trigger_context: Option<&TriggerContext>,
     ) -> bool {
         match condition {
+            GameCondition::AllOf(branches) => branches.iter().all(|branch| {
+                self.condition_holds_with_trigger_context(branch, context, trigger_context)
+            }),
             GameCondition::AnyOf(branches) => branches.iter().any(|branch| {
                 self.condition_holds_with_trigger_context(branch, context, trigger_context)
             }),
@@ -1520,6 +1523,21 @@ impl GameEngine {
             previous_effect_result: context.previous_effect_result,
         };
         match expression {
+            CountExpression::PlayersWhoLostLifeThisTurn { players } => self
+                .state
+                .players
+                .iter()
+                .filter(|player| {
+                    relative_player_set_contains(
+                        &self.state,
+                        *players,
+                        context.controller,
+                        player.id,
+                    ) && self.state.turn_history.current.player(player.id).life_lost > 0
+                })
+                .count()
+                .try_into()
+                .unwrap_or(i64::MAX),
             CountExpression::SpellsCastThisTurn {
                 players,
                 filter,
@@ -2196,6 +2214,19 @@ mod tests {
     }
 
     #[test]
+    fn issue_203_players_who_lost_life_counts_players_even_after_they_lose() {
+        let mut engine = quantity_engine();
+        engine.state.turn_history.current.player_mut(1).life_lost = 3;
+        engine.state.players[1].has_lost = true;
+        let amount = Amount::Count(CountExpression::PlayersWhoLostLifeThisTurn {
+            players: RelativePlayerSet::Opponents,
+        });
+        assert_eq!(engine.resolve_amount(&amount, quantity_context(0)), 1);
+        engine.state.turn_history.finish_turn();
+        assert_eq!(engine.resolve_amount(&amount, quantity_context(0)), 0);
+    }
+
+    #[test]
     fn issue_165_maxima_use_derived_signed_values_and_all_opponents() {
         let mut engine = quantity_engine();
         let mut filter = BattlefieldPermanentFilter {
@@ -2732,7 +2763,7 @@ mod tests {
             is_copy: false,
             face_index: 0,
             cast_method: SpellCastMethod::Normal,
-            sneak_attack: None,
+            returned_attacker_assignment: None,
             chosen_x: 0,
             chosen_modes: vec![],
             cast_cost_receipts: vec![],

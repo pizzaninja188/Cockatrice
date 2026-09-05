@@ -105,6 +105,9 @@ pub enum AbilityCost {
     /// CR 119.4 / 602.2b: pay a fixed amount of life as part of one atomic activation cost.
     /// Elven Passage and Champion of the Weird are the first data consumers.
     PayLife { amount: u32 },
+    /// CR 702.49a: return one unblocked attacking creature you control to its owner's hand.
+    /// Ninjutsu abilities use the existing generation-bound battlefield selection surface.
+    ReturnUnblockedAttacker,
     /// CR 606.4: add (positive), remove (negative), or leave unchanged (zero) loyalty counters
     /// as the cost of activating a planeswalker's loyalty ability.
     Loyalty(i32),

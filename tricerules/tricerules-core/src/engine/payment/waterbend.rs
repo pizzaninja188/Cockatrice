@@ -51,24 +51,53 @@ impl GameEngine {
             .state
             .player_idx(player)
             .ok_or(EngineError::UnknownPlayer(player))?;
-        if command.source_zone != rv1::AbilitySourceZone::Battlefield as i32
-            || self.payment_object_ref(source).zone_change_generation
-                != command.expected_zone_change_generation
-            || !self
-                .state
+        let source_zone = match rv1::AbilitySourceZone::try_from(command.source_zone)
+            .map_err(|_| EngineError::Illegal("unknown ability source zone"))?
+        {
+            rv1::AbilitySourceZone::Battlefield => AbilitySourceZone::Battlefield,
+            rv1::AbilitySourceZone::Hand => AbilitySourceZone::Hand,
+            rv1::AbilitySourceZone::Graveyard => AbilitySourceZone::Graveyard,
+        };
+        let source_current =
+            self.state
                 .objects
                 .get(&source)
-                .is_some_and(|o| o.zone == Zone::Battlefield && o.controller == player)
-            || !self.state.players[idx].battlefield.contains(&source)
+                .is_some_and(|object| match source_zone {
+                    AbilitySourceZone::Battlefield => {
+                        object.zone == Zone::Battlefield
+                            && object.controller == player
+                            && self.state.players[idx].battlefield.contains(&source)
+                    }
+                    AbilitySourceZone::Hand => {
+                        object.zone == Zone::Hand
+                            && object.owner == player
+                            && self.state.players[idx].hand.contains(&source)
+                    }
+                    AbilitySourceZone::Graveyard => {
+                        object.zone == Zone::Graveyard
+                            && object.owner == player
+                            && self.state.players[idx].graveyard.contains(&source)
+                    }
+                });
+        if !source_current
+            || self.payment_object_ref(source).zone_change_generation
+                != command.expected_zone_change_generation
         {
             return Err(EngineError::Illegal("stale activation source"));
         }
-        let ability = self
-            .effective_activated_abilities(source)
-            .into_iter()
-            .find(|(index, _, _, _)| *index == command.ability_index as usize)
-            .map(|(_, ability, _, _)| ability)
-            .ok_or(EngineError::Illegal("missing activated ability"))?;
+        let ability = match source_zone {
+            AbilitySourceZone::Battlefield => self
+                .effective_activated_abilities(source)
+                .into_iter()
+                .find(|(index, _, _, _)| *index == command.ability_index as usize)
+                .map(|(_, ability, _, _)| ability),
+            AbilitySourceZone::Hand | AbilitySourceZone::Graveyard => self
+                .authored_zone_activated_abilities(source, source_zone)
+                .into_iter()
+                .find(|(index, _, _)| *index == command.ability_index as usize)
+                .map(|(_, ability, _)| ability),
+        }
+        .ok_or(EngineError::Illegal("missing activated ability"))?;
         if !self.ability_activatable(source, command.ability_index as usize, &ability) {
             return Err(EngineError::Illegal("activation restrictions not met"));
         }

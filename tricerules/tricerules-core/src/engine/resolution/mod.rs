@@ -191,8 +191,8 @@ impl GameEngine {
             }
         }
         if let Some(assignment) = item
-            .sneak_attack
-            .and_then(|assignment| self.add_sneak_attacker(item.id, assignment))
+            .returned_attacker_assignment
+            .and_then(|assignment| self.add_returned_attacker(item.id, assignment))
         {
             events.push(RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::AttackersAdded(rv1::AttackersAdded {
@@ -1535,6 +1535,14 @@ impl GameEngine {
                     effect @ SpellEffectKind::DamageTarget { .. } => {
                         damage::damage_target(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking => {
+                        zones::put_ability_source_onto_battlefield_tapped_and_attacking(
+                            &mut cx, effect,
+                        )?
+                    }
+                    effect @ SpellEffectKind::CreateStaticEmblem { .. } => {
+                        pump_counters::create_static_emblem(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::ExileIfWouldDieThisTurn { .. } => {
                         zones::exile_if_would_die_this_turn(&mut cx, effect)?
                     }
@@ -2126,7 +2134,7 @@ impl GameEngine {
             is_copy: true,
             face_index: 0,
             cast_method: SpellCastMethod::Normal,
-            sneak_attack: None,
+            returned_attacker_assignment: None,
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),
@@ -3224,7 +3232,7 @@ mod attached_subject_tests {
             is_copy: false,
             face_index: 0,
             cast_method: SpellCastMethod::Normal,
-            sneak_attack: None,
+            returned_attacker_assignment: None,
             chosen_x: 0,
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
@@ -4882,7 +4890,7 @@ mod source_keyword_tests {
             is_copy: false,
             face_index: 0,
             cast_method: SpellCastMethod::Normal,
-            sneak_attack: None,
+            returned_attacker_assignment: None,
             chosen_x: 0,
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
@@ -4914,7 +4922,7 @@ mod source_keyword_tests {
             is_copy: false,
             face_index: 0,
             cast_method: SpellCastMethod::Normal,
-            sneak_attack: None,
+            returned_attacker_assignment: None,
             chosen_x,
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),

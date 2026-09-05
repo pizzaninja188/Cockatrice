@@ -7,18 +7,15 @@ use super::legal_actions::fill_legal;
 use super::*;
 
 impl GameEngine {
-    /// CR 702.190a: the object returned for Sneak must still be an unblocked attacking creature
-    /// controlled by the caster in that caster's declare-blockers step. The blocker map retains
-    /// an attacker key after its last blocker leaves, so key absence is the authoritative
-    /// "unblocked" test rather than an empty current blocker list.
-    pub(super) fn sneak_return_assignment(
+    fn return_unblocked_attacker_assignment(
         &self,
         player: PlayerId,
         object: &rv1::CostObjectRef,
+        step_allowed: impl FnOnce(TurnStep) -> bool,
     ) -> Option<CombatAttackAssignment> {
         if self.state.active_player_id() != player
             || self.state.priority_player_id() != player
-            || self.state.turn_step != TurnStep::DeclareBlockers
+            || !step_allowed(self.state.turn_step)
         {
             return None;
         }
@@ -47,6 +44,63 @@ impl GameEngine {
         .then_some(assignment)
     }
 
+    /// CR 702.190a: the object returned for Sneak must still be an unblocked attacking creature
+    /// controlled by the caster in that caster's declare-blockers step. The blocker map retains
+    /// an attacker key after its last blocker leaves, so key absence is the authoritative
+    /// "unblocked" test rather than an empty current blocker list.
+    pub(super) fn sneak_return_assignment(
+        &self,
+        player: PlayerId,
+        object: &rv1::CostObjectRef,
+    ) -> Option<CombatAttackAssignment> {
+        self.return_unblocked_attacker_assignment(player, object, |step| {
+            step == TurnStep::DeclareBlockers
+        })
+    }
+
+    /// CR 702.49a: Ninjutsu may return an unblocked attacker after blockers are declared and
+    /// throughout the remainder of combat, including either combat-damage step.
+    pub(super) fn ninjutsu_return_assignment(
+        &self,
+        player: PlayerId,
+        object: &rv1::CostObjectRef,
+    ) -> Option<CombatAttackAssignment> {
+        self.return_unblocked_attacker_assignment(player, object, |step| {
+            matches!(
+                step,
+                TurnStep::DeclareBlockers
+                    | TurnStep::FirstStrikeDamage
+                    | TurnStep::CombatDamage
+                    | TurnStep::EndCombat
+            )
+        })
+    }
+
+    pub(super) fn ninjutsu_return_candidates(&self, player: PlayerId) -> Vec<ObjectId> {
+        self.state
+            .combat
+            .as_ref()
+            .map(|combat| combat.attacking.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|object_id| {
+                self.ninjutsu_return_assignment(
+                    player,
+                    &rv1::CostObjectRef {
+                        object_id: *object_id,
+                        zone_change_generation: self
+                            .state
+                            .zone_change_generation
+                            .get(object_id)
+                            .copied()
+                            .unwrap_or(0),
+                    },
+                )
+                .is_some()
+            })
+            .collect()
+    }
+
     pub(super) fn sneak_return_candidates(&self, player: PlayerId) -> Vec<ObjectId> {
         self.state
             .combat
@@ -72,10 +126,11 @@ impl GameEngine {
             .collect()
     }
 
-    /// CR 702.190b / 506.3: a resolving Sneak permanent inherits the paid creature's recipient,
-    /// but it was never declared as an attacker. Only the current entrant and captured recipient
-    /// are revalidated; declaration restrictions are intentionally not applied.
-    pub(super) fn add_sneak_attacker(
+    /// CR 702.49a / 702.190b / 506.3: a resolving Ninjutsu or Sneak permanent inherits the paid
+    /// creature's recipient, but it was never declared as an attacker. Only the current entrant
+    /// and captured recipient are revalidated; declaration restrictions are intentionally not
+    /// applied.
+    pub(super) fn add_returned_attacker(
         &mut self,
         object_id: ObjectId,
         paid_assignment: CombatAttackAssignment,

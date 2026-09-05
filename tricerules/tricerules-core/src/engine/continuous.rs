@@ -768,6 +768,7 @@ impl GameEngine {
                 }
                 StaticAbilityDef::ConditionalSelfModifier {
                     condition,
+                    set_types,
                     add_types,
                     base_power,
                     base_toughness,
@@ -779,6 +780,17 @@ impl GameEngine {
                     can_attack_as_though_without_defender,
                 } => {
                     let affected = AffectedScope::Single(object_id);
+                    if let Some(set_types) = set_types {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer4SetTypeLine(set_types),
+                            condition: Some(condition.clone()),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
                     if !add_types.is_empty() {
                         self.state.continuous_effects.push(ContinuousEffect {
                             trigger_grant_origin: None,

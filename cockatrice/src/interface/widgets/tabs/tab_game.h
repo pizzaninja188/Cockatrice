@@ -244,7 +244,9 @@ private slots:
                                     int zoneOwnerPlayerId,
                                     QStringList cardNames,
                                     QVector<int> serverCardIds);
-    void onRuledActivePublicRevealsChanged(QStringList cardNames, QVector<int> revealingPlayerIds);
+    void onRuledActivePublicRevealsChanged(QStringList cardNames,
+                                           QVector<int> revealingPlayerIds,
+                                           QStringList sourceDescriptions);
     void onRuledExilePlayPermissionGroupsChanged();
     /// CR 603.3b: opens or closes the simultaneous-trigger ordering window. Only the deciding
     /// player is sent `active = true`, so at most one client shows it.

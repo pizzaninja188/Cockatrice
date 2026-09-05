@@ -572,7 +572,7 @@ pub(super) fn copy_target_spell(
                     } else {
                         SpellCastMethod::Normal
                     },
-                    sneak_attack: src.sneak_attack,
+                    returned_attacker_assignment: src.returned_attacker_assignment,
                 };
                 // CR 707.10c: prompt for new targets on the first copy; push any
                 // additional copies immediately with the original targets.

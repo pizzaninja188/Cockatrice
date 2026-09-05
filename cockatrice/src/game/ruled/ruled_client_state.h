@@ -1239,9 +1239,11 @@ public:
             return indices;
         }
         QList<int> indices;
-        const int count = engineOidToActivatedAbilityTexts.value(oid).size();
-        for (int index = 0; index < count; ++index) {
-            indices.append(index);
+        const QStringList texts = engineOidToActivatedAbilityTexts.value(oid);
+        for (int index = 0; index < texts.size(); ++index) {
+            if (!texts.at(index).isEmpty()) {
+                indices.append(index);
+            }
         }
         return indices;
     }
@@ -1928,9 +1930,12 @@ signals:
                              int zoneOwnerPlayerId,
                              QStringList cardNames,
                              QVector<int> serverCardIds);
-    /// Exact snapshot of behold-style cast-cost reveals. Names and revealing-player ids are
-    /// parallel and empty means the persistent read-only popup must be destroyed.
-    void activePublicRevealsChanged(QStringList cardNames, QVector<int> revealingPlayerIds);
+    /// Exact snapshot of cards kept publicly revealed while their spell or ability remains on the
+    /// stack. Names, revealing-player ids, and source descriptions are parallel; empty means the
+    /// persistent read-only popup must be destroyed.
+    void activePublicRevealsChanged(QStringList cardNames,
+                                    QVector<int> revealingPlayerIds,
+                                    QStringList sourceDescriptions);
 
 private:
     [[nodiscard]] bool resolutionPickSelectionAdmitsSlots(const QList<int> &selectedServerCardIds) const;

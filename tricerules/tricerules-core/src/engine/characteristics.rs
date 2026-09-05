@@ -454,6 +454,15 @@ impl CharacteristicsEvaluator<'_> {
         queried_pre_layer_6: &Characteristics,
     ) -> bool {
         match condition {
+            GameCondition::AllOf(branches) => branches.iter().all(|branch| {
+                self.characteristic_condition_holds(
+                    branch,
+                    source_oid,
+                    controller,
+                    queried_oid,
+                    queried_pre_layer_6,
+                )
+            }),
             GameCondition::AnyOf(branches) => branches.iter().any(|branch| {
                 self.characteristic_condition_holds(
                     branch,

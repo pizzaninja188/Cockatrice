@@ -1,5 +1,48 @@
 use super::*;
 
+pub(super) fn create_static_emblem(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::CreateStaticEmblem {
+        emblem_id,
+        display_name,
+        creatures,
+        power,
+        toughness,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let object_id = cx.engine.state.next_object_id;
+    cx.engine.state.next_object_id += 1;
+    cx.engine.state.static_emblems.push(StaticEmblemInstance {
+        object_id,
+        controller: cx.controller,
+        emblem_id,
+        display_name: display_name.clone(),
+    });
+    cx.engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: Some(object_id),
+        affected: AffectedScope::CreaturesMatching {
+            reference_player: cx.controller,
+            filter: creatures,
+            exclude: None,
+        },
+        kind: ContinuousEffectKind::PtModify {
+            delta_power: power,
+            delta_toughness: toughness,
+        },
+        condition: None,
+        duration: EffectDuration::Indefinite,
+        timestamp: cx.engine.state.command_index,
+    });
+    cx.events
+        .push(ev_log(format!("P{} gets {display_name}.", cx.controller)));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn pump_target(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

@@ -108,7 +108,7 @@ pub(in crate::engine) struct CostPaymentReceipt {
     pub(in crate::engine) expend_triggers: Vec<crate::engine::triggers::CollectedTrigger>,
     pub(in crate::engine) restricted_mana_spent: Vec<(u32, ManaAmount)>,
     pub(in crate::engine) cast_cost_receipts: Vec<CastCostReceipt>,
-    pub(in crate::engine) sneak_attack: Option<CombatAttackAssignment>,
+    pub(in crate::engine) returned_attacker_assignment: Option<CombatAttackAssignment>,
     pub(in crate::engine) sneak_returned_name: Option<String>,
 }
 
@@ -1248,20 +1248,45 @@ impl GameEngine {
                 AbilityCost::PayLife { amount } => {
                     debits.push(CostDebit::Life { amount: *amount });
                 }
+                AbilityCost::ReturnUnblockedAttacker => {
+                    expected_selections += 1;
+                    let selection = by_index
+                        .get(&cost_index)
+                        .ok_or(EngineError::Illegal("missing Ninjutsu return selection"))?;
+                    let Some(Selection::BattlefieldObjects(selected)) =
+                        selection.selection.as_ref()
+                    else {
+                        return Err(EngineError::Illegal(
+                            "Ninjutsu requires a generation-bound battlefield object",
+                        ));
+                    };
+                    let [object] = selected.objects.as_slice() else {
+                        return Err(EngineError::Illegal(
+                            "Ninjutsu requires exactly one unblocked attacker",
+                        ));
+                    };
+                    let assignment = self.ninjutsu_return_assignment(player, object).ok_or(
+                        EngineError::Illegal("illegal or stale Ninjutsu return selection"),
+                    )?;
+                    if !consumed.insert(object.object_id) {
+                        return Err(EngineError::Illegal("one object cannot pay two costs"));
+                    }
+                    let owner = self.state.objects[&object.object_id].owner;
+                    debits.push(CostDebit::ReturnUnblockedAttacker {
+                        object: *object,
+                        owner,
+                        assignment,
+                    });
+                }
                 AbilityCost::Loyalty(delta) => {
                     let object = self
                         .state
                         .objects
                         .get(&permanent_id)
                         .ok_or(EngineError::Illegal("planeswalker missing"))?;
-                    if object.zone != Zone::Battlefield
-                        || object.controller != player
-                        || !self
-                            .characteristics(permanent_id)
-                            .is_some_and(|value| value.has_type("Planeswalker"))
-                    {
+                    if object.zone != Zone::Battlefield || object.controller != player {
                         return Err(EngineError::Illegal(
-                            "loyalty cost requires a planeswalker you control",
+                            "loyalty cost requires its battlefield source under your control",
                         ));
                     }
                     if (*delta > 0 && !self.can_receive_counters(permanent_id))
@@ -1626,7 +1651,7 @@ impl GameEngine {
             expend_triggers: vec![],
             restricted_mana_spent: vec![],
             cast_cost_receipts: plan.cast_cost_receipts,
-            sneak_attack: None,
+            returned_attacker_assignment: None,
             sneak_returned_name: None,
         };
         for debit in plan.debits {
@@ -1807,7 +1832,7 @@ impl GameEngine {
                     let oid = object.object_id;
                     let returned_name = object_display_name(&self.state, self.registry, oid);
                     move_object_to_zone(&mut self.state, self.registry, oid, Zone::Hand, None)
-                        .expect("prevalidated Sneak return must commit");
+                        .expect("prevalidated returned-attacker cost must commit");
                     if let Some(combat) = self.state.combat.as_mut() {
                         combat.attacking.retain(|candidate| *candidate != oid);
                         combat.attack_assignments.remove(&oid);
@@ -1826,7 +1851,7 @@ impl GameEngine {
                             },
                         )),
                     });
-                    payment.sneak_attack = Some(assignment);
+                    payment.returned_attacker_assignment = Some(assignment);
                     payment.sneak_returned_name = Some(returned_name);
                 }
                 CostDebit::ObserveHand { .. } | CostDebit::ObservePermanent { .. } => {}
@@ -2015,9 +2040,6 @@ impl GameEngine {
                                         >= delta.unsigned_abs())
                         })
                         && self
-                            .characteristics(*object_id)
-                            .is_some_and(|value| value.has_type("Planeswalker"))
-                        && self
                             .state
                             .zone_change_generation
                             .get(object_id)
@@ -2161,16 +2183,22 @@ impl GameEngine {
                     object,
                     owner,
                     assignment,
-                } => self
-                    .state
-                    .objects
-                    .get(&object.object_id)
-                    .is_some_and(|permanent| {
-                        permanent.owner == *owner
-                            && self.state.player_idx(*owner).is_some()
-                            && self.sneak_return_assignment(plan.player, object)
-                                == Some(*assignment)
-                    }),
+                } => {
+                    let assignment_is_current = match plan.purpose {
+                        CostPurpose::Spell => self.sneak_return_assignment(plan.player, object),
+                        CostPurpose::Ability => {
+                            self.ninjutsu_return_assignment(plan.player, object)
+                        }
+                    } == Some(*assignment);
+                    self.state
+                        .objects
+                        .get(&object.object_id)
+                        .is_some_and(|permanent| {
+                            permanent.owner == *owner
+                                && self.state.player_idx(*owner).is_some()
+                                && assignment_is_current
+                        })
+                }
                 CostDebit::ObserveHand {
                     object_id,
                     generation,

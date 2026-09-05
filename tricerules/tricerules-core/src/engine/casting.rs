@@ -277,7 +277,7 @@ impl GameEngine {
             is_copy: false,
             face_index: expected_face_index,
             cast_method: SpellCastMethod::SiegeDefeat,
-            sneak_attack: None,
+            returned_attacker_assignment: None,
             chosen_x: 0,
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
@@ -949,7 +949,7 @@ impl GameEngine {
         let origin = self.state.objects[&oid].zone;
         let cast_departure = (origin == Zone::Graveyard).then(|| self.snapshot_zone_event());
         let payment = self.commit_cost_transaction(payment_plan)?;
-        let sneak_attack = payment.sneak_attack;
+        let returned_attacker_assignment = payment.returned_attacker_assignment;
         let life_paid = payment.life_paid;
         let mana_spent = payment.mana_spent;
         let mut paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
@@ -1014,7 +1014,7 @@ impl GameEngine {
             // A spell's effects always act on its controller.
             trigger_context: TriggerContext::default(),
             cast_method,
-            sneak_attack,
+            returned_attacker_assignment,
         });
         super::resolution::move_object_to_zone(
             &mut self.state,
@@ -1486,7 +1486,7 @@ impl GameEngine {
             // An activated ability's effects act on the player who activated it.
             trigger_context: TriggerContext::default(),
             cast_method: SpellCastMethod::Normal,
-            sneak_attack: None,
+            returned_attacker_assignment: payment.returned_attacker_assignment,
         });
         self.state.passes_since_stack_change = 0;
         self.state.priority_idx = idx;
@@ -1611,6 +1611,16 @@ impl GameEngine {
         if !self.counter_costs_payable(permanent_id, &ability.costs) {
             return false;
         }
+        if ability
+            .costs
+            .iter()
+            .any(|cost| matches!(cost, AbilityCost::ReturnUnblockedAttacker))
+            && self
+                .ninjutsu_return_candidates(activating_player)
+                .is_empty()
+        {
+            return false;
+        }
         let life_cost = ability
             .costs
             .iter()
@@ -1641,12 +1651,6 @@ impl GameEngine {
             AbilityCost::Loyalty(delta) => Some(*delta),
             _ => None,
         }) {
-            if !self
-                .characteristics(permanent_id)
-                .is_some_and(|value| value.has_type("Planeswalker"))
-            {
-                return false;
-            }
             if (delta > 0 && !self.can_receive_counters(permanent_id))
                 || (delta < 0 && object.counter_count(CounterKind::Loyalty) < delta.unsigned_abs())
             {
@@ -2233,7 +2237,7 @@ impl GameEngine {
             is_copy: false,
             face_index,
             cast_method: SpellCastMethod::Normal,
-            sneak_attack: None,
+            returned_attacker_assignment: None,
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),

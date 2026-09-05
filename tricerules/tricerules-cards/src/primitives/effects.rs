@@ -789,6 +789,20 @@ pub enum SpellEffectKind {
         keywords: Vec<Keyword>,
         duration: EffectDuration,
     },
+    /// Move this activated ability's exact hand-zone source onto the battlefield tapped and
+    /// attacking the defender inherited from its returned-attacker cost. Kaito and Ninja of the
+    /// Deep Hours exercise the shared Ninjutsu resolution action.
+    PutAbilitySourceOntoBattlefieldTappedAndAttacking,
+    /// Create a persistent, nonpermanent emblem marker and its controller-scoped static creature
+    /// modifier. Kaito and Gideon-style emblems share this narrow static-anthem representation;
+    /// triggered emblem abilities remain intentionally unsupported.
+    CreateStaticEmblem {
+        emblem_id: String,
+        display_name: String,
+        creatures: CreatureScopeFilter,
+        power: i32,
+        toughness: i32,
+    },
     DamageTarget {
         amount: Amount,
         target: TargetFilter,
@@ -2337,6 +2351,8 @@ impl SpellEffectKind {
                 vec![TargetRole::GraveyardCard(filter)]
             }
             SpellEffectKind::DamagePlayer { .. }
+            | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
+            | SpellEffectKind::CreateStaticEmblem { .. }
             | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
             | SpellEffectKind::Draw { .. }
             | SpellEffectKind::Discard { .. }
@@ -2795,6 +2811,31 @@ impl SpellEffectKind {
         }
         if context == EffectContext::Ability {
             self.validate_cast_snapshot_references(0)?;
+        }
+        if matches!(
+            self,
+            SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
+        ) && context != EffectContext::Ability
+        {
+            return Err(
+                "tapped-attacking ability-source entry requires an activated ability".into(),
+            );
+        }
+        if let SpellEffectKind::CreateStaticEmblem {
+            emblem_id,
+            display_name,
+            creatures,
+            power,
+            toughness,
+        } = self
+        {
+            if emblem_id.trim().is_empty() || display_name.trim().is_empty() {
+                return Err("static emblem id and display name cannot be empty".into());
+            }
+            if *power == 0 && *toughness == 0 {
+                return Err("static emblem must modify power or toughness".into());
+            }
+            creatures.validate()?;
         }
         for filter in self.target_filters() {
             filter.validate_target_constraints()?;

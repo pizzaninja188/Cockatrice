@@ -1522,12 +1522,23 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
             QStringList costLabels;
             QVector<bool> activatable;
             for (const auto &ability : battlefieldObject.activated_abilities()) {
-                texts.append(ability.has_presentation() ? presentationResolver.resolve(ability.presentation())
-                                                        : QString::fromStdString(ability.text()));
-                manaCosts.append(QString::fromStdString(ability.mana_cost()));
-                manaProduced.append(QString::fromStdString(ability.mana_produced()));
-                costLabels.append(QString::fromStdString(ability.cost_label()));
-                activatable.append(ability.activatable());
+                const int abilityIndex = static_cast<int>(ability.ability_index());
+                if (abilityIndex < 0) {
+                    continue;
+                }
+                while (texts.size() <= abilityIndex) {
+                    texts.append(QString{});
+                    manaCosts.append(QString{});
+                    manaProduced.append(QString{});
+                    costLabels.append(QString{});
+                    activatable.append(false);
+                }
+                texts[abilityIndex] = ability.has_presentation() ? presentationResolver.resolve(ability.presentation())
+                                                                : QString::fromStdString(ability.text());
+                manaCosts[abilityIndex] = QString::fromStdString(ability.mana_cost());
+                manaProduced[abilityIndex] = QString::fromStdString(ability.mana_produced());
+                costLabels[abilityIndex] = QString::fromStdString(ability.cost_label());
+                activatable[abilityIndex] = ability.activatable();
             }
             if (!texts.isEmpty()) {
                 state->engineOidToActivatedAbilityTexts.insert(oid, texts);

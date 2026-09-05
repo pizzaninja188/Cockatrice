@@ -2739,9 +2739,12 @@ void TabGame::onRuledPublicRevealChanged(bool active,
     qDeleteAll(previousCards);
 }
 
-void TabGame::onRuledActivePublicRevealsChanged(QStringList cardNames, QVector<int> revealingPlayerIds)
+void TabGame::onRuledActivePublicRevealsChanged(QStringList cardNames,
+                                                QVector<int> revealingPlayerIds,
+                                                QStringList sourceDescriptions)
 {
-    const bool validSnapshot = !cardNames.isEmpty() && cardNames.size() == revealingPlayerIds.size() && game && scene;
+    const bool validSnapshot = !cardNames.isEmpty() && cardNames.size() == revealingPlayerIds.size() &&
+                               cardNames.size() == sourceDescriptions.size() && game && scene;
     Player *scaffoldPlayer =
         validSnapshot ? game->getPlayerManager()->getPlayers().value(revealingPlayerIds.constFirst(), nullptr) : nullptr;
     CardZoneLogic *handZone = scaffoldPlayer ? scaffoldPlayer->getZones().value(ZoneNames::HAND) : nullptr;
@@ -2763,6 +2766,11 @@ void TabGame::onRuledActivePublicRevealsChanged(QStringList cardNames, QVector<i
         card->set_name(cardNames.at(i).toStdString());
         card->set_id(-100000 - i);
         card->set_face_down(false);
+        const QString sourceDescription = sourceDescriptions.at(i);
+        card->set_annotation((sourceDescription.isEmpty()
+                                  ? tr("Revealed from hand")
+                                  : tr("Revealed from hand for %1").arg(sourceDescription))
+                                 .toStdString());
         activeCastRevealCards.append(card);
         cards.append(card);
     }
@@ -2781,7 +2789,7 @@ void TabGame::onRuledActivePublicRevealsChanged(QStringList cardNames, QVector<i
             activeCastRevealCards.clear();
         });
     }
-    activeCastRevealView->setWindowTitle(tr("Cards revealed for spells on the stack"));
+    activeCastRevealView->setWindowTitle(tr("Revealed from hand"));
     qDeleteAll(previousCards);
 }
 

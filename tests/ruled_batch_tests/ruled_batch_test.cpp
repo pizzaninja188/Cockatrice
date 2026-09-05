@@ -1630,6 +1630,56 @@ TEST_F(RuledBatchTest, EnduringStoryViewCreatesOneOrdinaryUnboundBattlefieldToke
     EXPECT_EQ(findCardByEngineOid(p1, 184u), bear) << "the helper token must stay outside battlefield reconciliation";
 }
 
+TEST_F(RuledBatchTest, StaticEmblemSnapshotReconcilesPresentationOnlyTableTokens)
+{
+    Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *zoneView = response.mutable_batch()->add_events()->mutable_zone_view();
+    auto emblemView = buildPerPlayerView(p1, {203u}, {false});
+    auto *first = emblemView.add_static_emblems();
+    first->set_object_id(9001u);
+    first->set_display_name("Kaito, Bane of Nightmares Emblem");
+    auto *second = emblemView.add_static_emblems();
+    second->set_object_id(9002u);
+    second->set_display_name("Kaito, Bane of Nightmares Emblem");
+    *zoneView->add_per_player() = emblemView;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+
+    EXPECT_TRUE(callBatchApply(response).zoneViewApplied);
+    const auto &tableCards = p1->getZones().value(ZoneNames::TABLE)->getCards();
+    ASSERT_EQ(tableCards.size(), 3);
+    EXPECT_EQ(std::count_if(tableCards.begin(), tableCards.end(), [](const Server_Card *card) {
+                  return card && card->getAnnotation() == QStringLiteral("Emblem");
+              }),
+              2);
+    EXPECT_EQ(findCardByEngineOid(p1, 203u), bear);
+    EXPECT_EQ(bindingFor(p1).engineOidToServerCardId.size(), 1)
+        << "presentation-only emblems must stay outside battlefield identity";
+
+    EXPECT_TRUE(callBatchApply(response).zoneViewApplied);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards().size(), 3)
+        << "repeated snapshots must not duplicate emblem tokens";
+
+    ruled::v1::IpcResponse reduced;
+    reduced.set_ok(true);
+    auto *reducedZoneView = reduced.mutable_batch()->add_events()->mutable_zone_view();
+    reducedZoneView->set_battlefields_unchanged(true);
+    auto reducedP1 = buildPerPlayerView(p1, {}, {});
+    reducedP1.set_private_zones_unchanged(true);
+    auto *remaining = reducedP1.add_static_emblems();
+    remaining->set_object_id(9001u);
+    remaining->set_display_name("Kaito, Bane of Nightmares Emblem");
+    *reducedZoneView->add_per_player() = reducedP1;
+    auto reducedP2 = buildPerPlayerView(p2, {}, {});
+    reducedP2.set_private_zones_unchanged(true);
+    *reducedZoneView->add_per_player() = reducedP2;
+    EXPECT_TRUE(callBatchApply(reduced).zoneViewApplied);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards().size(), 2);
+    EXPECT_EQ(bindingFor(p1).staticEmblemServerCardIds.size(), 1);
+    EXPECT_EQ(findCardByEngineOid(p1, 203u), bear);
+}
+
 TEST_F(RuledBatchTest, EarthbendUpdatesBadgeAndRowOnAnExistingLand)
 {
     seedCardCatalog({"Forest"});

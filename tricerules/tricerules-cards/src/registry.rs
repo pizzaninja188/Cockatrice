@@ -291,6 +291,7 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
             }
             AbilityCost::Tap
             | AbilityCost::PayLife { .. }
+            | AbilityCost::ReturnUnblockedAttacker
             | AbilityCost::Blight { .. }
             | AbilityCost::RemoveCounters { .. }
             | AbilityCost::TapPermanents { .. }
@@ -518,6 +519,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
         }
         if let StaticAbilityDef::ConditionalSelfModifier {
             condition,
+            set_types,
             add_types,
             base_power,
             base_toughness,
@@ -537,6 +539,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 })?;
             if *delta_power == 0
                 && *delta_toughness == 0
+                && set_types.is_none()
                 && add_types.is_empty()
                 && base_power.is_none()
                 && base_toughness.is_none()
@@ -560,6 +563,14 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             }
             if !add_types.is_empty() {
                 add_types
+                    .validate()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            if let Some(set_types) = set_types {
+                set_types
                     .validate()
                     .map_err(|reason| RegistryError::InvalidCard {
                         id: card.id.clone(),

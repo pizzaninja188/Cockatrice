@@ -1459,6 +1459,32 @@ impl GameEngine {
                 ));
                 self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
             }
+            BattlefieldEntryCompletion::Ninjutsu {
+                owner,
+                object_label,
+                assignment,
+            } => {
+                let object_id = event.object_id;
+                self.commit_battlefield_entry(event, None)?;
+                events.push(ev_log(format!(
+                    "{} puts {object_label} onto the battlefield tapped and attacking.",
+                    stack.item.ability_text.as_deref().unwrap_or("Ninjutsu")
+                )));
+                events.push(permanent_moved_event(
+                    &self.state,
+                    object_id,
+                    owner,
+                    rv1::permanent_moved::Destination::Battlefield,
+                ));
+                if let Some(assignment) = self.add_returned_attacker(object_id, assignment) {
+                    events.push(rv1::RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::AttackersAdded(rv1::AttackersAdded {
+                            assignments: vec![assignment],
+                        })),
+                    });
+                }
+                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+            }
             BattlefieldEntryCompletion::ObserverReturn {
                 owner,
                 object_label,

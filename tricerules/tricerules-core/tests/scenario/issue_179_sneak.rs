@@ -454,7 +454,10 @@ fn issue_179_spell_copy_keeps_the_sneak_choice_without_repaying_it() {
         .find(|item| item.is_copy)
         .expect("Twincast copy");
     assert_eq!(copy.cast_method.label(), Some("Sneak"));
-    assert_eq!(copy.sneak_attack, original.sneak_attack);
+    assert_eq!(
+        copy.returned_attacker_assignment,
+        original.returned_attacker_assignment
+    );
     assert_eq!(engine.state.objects[&attacker].zone, Zone::Hand);
     assert_eq!(
         engine.state.players[0]

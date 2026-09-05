@@ -2436,7 +2436,7 @@ impl GameEngine {
                 blight_receipts: Vec::new(),
                 trigger_context,
                 cast_method: SpellCastMethod::Normal,
-                sneak_attack: None,
+                returned_attacker_assignment: None,
             });
             self.state.passes_since_stack_change = 0;
             events.push(rv1::RuledEvent {
@@ -2911,6 +2911,7 @@ mod tests {
                 condition: GameCondition::ActivePlayer {
                     players: RelativePlayerSet::Controller,
                 },
+                set_types: None,
                 add_types: tricerules_cards::primitives::TypeLineAddition::default(),
                 base_power: None,
                 base_toughness: None,
@@ -3404,7 +3405,7 @@ mod tests {
             is_copy,
             face_index: 0,
             cast_method: SpellCastMethod::Normal,
-            sneak_attack: None,
+            returned_attacker_assignment: None,
             chosen_x: 0,
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),

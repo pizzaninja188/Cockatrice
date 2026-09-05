@@ -24,7 +24,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             .iter()
             .filter(|item| !item.is_copy)
             .flat_map(|item| {
-                item.cast_cost_receipts.iter().flat_map(|receipt| {
+                let cast_reveals = item.cast_cost_receipts.iter().flat_map(|receipt| {
                     receipt.objects.iter().filter_map(|object| {
                         let CastCostObjectReceipt::RevealedHand {
                             card_id, card_name, ..
@@ -45,7 +45,31 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                             card_name: card_name.clone(),
                         })
                     })
-                })
+                });
+                let ninjutsu_reveal = item
+                    .activated_ability
+                    .as_ref()
+                    .filter(|ability| {
+                        ability
+                            .costs
+                            .contains(&AbilityCost::ReturnUnblockedAttacker)
+                    })
+                    .map(|_| {
+                        let card_name = eng
+                            .registry
+                            .get(&item.card_id)
+                            .map(|definition| definition.name.clone())
+                            .unwrap_or_else(|| item.card_id.clone());
+                        rv1::ActivePublicReveal {
+                            source_stack_object_id: item.id,
+                            group_index: 0,
+                            revealing_player_id: item.controller,
+                            source_description: card_name.clone(),
+                            card_id: item.card_id.clone(),
+                            card_name,
+                        }
+                    });
+                cast_reveals.chain(ninjutsu_reveal)
             })
             .collect()
     };
@@ -389,6 +413,7 @@ pub(super) fn activated_ability_info(
             },
             AbilityCost::Blight { count } => format!("Blight {count}"),
             AbilityCost::PayLife { amount } => format!("Pay {amount} life"),
+            AbilityCost::ReturnUnblockedAttacker => "Return an unblocked attacker".to_string(),
             AbilityCost::Loyalty(delta) if *delta >= 0 => format!("+{delta}"),
             AbilityCost::Loyalty(delta) => delta.to_string(),
             AbilityCost::Mana(cost) => cost.to_string(),
@@ -433,6 +458,7 @@ pub(super) fn activated_ability_info(
             &ability.presentation,
             fallback,
         )),
+        ability_index: ability_index as u32,
     }
 }
 
@@ -802,6 +828,29 @@ fn legal_ability_cost_choices(
                 let choice = eng.blight_cost_choice(player, cost_index, *count);
                 structurally_payable &= !choice.candidate_ids.is_empty();
                 choices.push(choice);
+            }
+            AbilityCost::ReturnUnblockedAttacker => {
+                let candidate_ids = eng.ninjutsu_return_candidates(player);
+                structurally_payable &= !candidate_ids.is_empty();
+                requirements.push(ObjectPaymentRequirement::Exact {
+                    candidates: candidate_ids.clone(),
+                    count: 1,
+                });
+                choices.push(rv1::LegalCostChoice {
+                    cost_index: cost_index as u32,
+                    zone: rv1::CostChoiceZone::Battlefield as i32,
+                    candidate_ids: candidate_ids.clone(),
+                    min: 1,
+                    max: 1,
+                    blight_count: 0,
+                    counter_removal: None,
+                    kind: rv1::CostChoiceKind::ReturnUnblockedAttacker as i32,
+                    candidate_objects: candidate_ids
+                        .iter()
+                        .map(|oid| cost_object_candidate(eng, *oid, 0))
+                        .collect(),
+                    aggregate_minimum: None,
+                });
             }
             AbilityCost::Discard => {
                 let candidate_ids: Vec<u32> = (0..eng.state.players[player_idx].hand.len())

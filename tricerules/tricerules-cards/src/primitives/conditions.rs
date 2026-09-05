@@ -11,6 +11,10 @@ use serde::{Deserialize, Serialize};
 /// the identities of the cards that moved through a graveyard.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameCondition {
+    /// Boolean conjunction across otherwise independent public game-state predicates. Every
+    /// branch is evaluated against the same consumer context; Kaito, Bane of Nightmares and
+    /// Gideon Blackblade combine turn ownership and loyalty checks through this reusable shape.
+    AllOf(Vec<GameCondition>),
     /// Boolean disjunction across otherwise independent public game-state predicates. Every
     /// branch is evaluated against the same consumer context; this is the shared condition shape
     /// for Hidden Lair and the rest of its basic-land-enabled cycle.
@@ -235,7 +239,9 @@ impl GameCondition {
     pub(crate) fn requires_triggering_spell_context(&self) -> bool {
         match self {
             Self::TriggeringSpellManaSpent { .. } => true,
-            Self::AnyOf(branches) => branches.iter().any(Self::requires_triggering_spell_context),
+            Self::AllOf(branches) | Self::AnyOf(branches) => {
+                branches.iter().any(Self::requires_triggering_spell_context)
+            }
             _ => false,
         }
     }
@@ -288,7 +294,7 @@ impl GameCondition {
     ) -> bool {
         predicate(self)
             || match self {
-                Self::AnyOf(branches) => branches
+                Self::AllOf(branches) | Self::AnyOf(branches) => branches
                     .iter()
                     .any(|branch| branch.any_node_matches(predicate)),
                 _ => false,
@@ -303,7 +309,7 @@ impl GameCondition {
                         .into(),
                 );
             }
-            Self::AnyOf(branches) => {
+            Self::AllOf(branches) | Self::AnyOf(branches) => {
                 for branch in branches {
                     branch.validate_cast_snapshot_reference(count)?;
                 }
@@ -315,6 +321,18 @@ impl GameCondition {
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
+            GameCondition::AllOf(branches) => {
+                if branches.len() < 2 {
+                    return Err("condition AllOf requires at least two branches".into());
+                }
+                for (index, branch) in branches.iter().enumerate() {
+                    branch.validate()?;
+                    if branches[..index].contains(branch) {
+                        return Err("condition AllOf cannot contain duplicate branches".into());
+                    }
+                }
+                Ok(())
+            }
             GameCondition::AnyOf(branches) => {
                 if branches.len() < 2 {
                     return Err("condition AnyOf requires at least two branches".into());
@@ -394,7 +412,8 @@ impl GameCondition {
 
     pub fn matches_value(&self, value: u32) -> bool {
         match self {
-            GameCondition::AnyOf(_)
+            GameCondition::AllOf(_)
+            | GameCondition::AnyOf(_)
             | GameCondition::HasEnduringStory { .. }
             | GameCondition::Void
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }

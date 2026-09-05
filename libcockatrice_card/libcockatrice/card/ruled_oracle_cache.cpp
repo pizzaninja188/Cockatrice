@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QStringList>
 #include <algorithm>
@@ -21,15 +22,8 @@ void setError(QString *error, const QString &message)
         *error = message;
     }
 }
-}
 
-QString RuledOracleCache::cachePathForCardDatabase(const QString &cardDatabasePath)
-{
-    const QFileInfo info(cardDatabasePath);
-    return info.dir().filePath(info.completeBaseName() + QStringLiteral(".ruled-oracle.json"));
-}
-
-QString RuledOracleCache::normalizedText(const QString &text)
+QString legacyNormalizedText(const QString &text)
 {
     QString normalized = text;
     normalized.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
@@ -40,6 +34,30 @@ QString RuledOracleCache::normalizedText(const QString &text)
         if (!trimmed.isEmpty()) {
             lines.append(trimmed);
         }
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString legacyTextSha256(const QString &text)
+{
+    return QString::fromLatin1(
+        QCryptographicHash::hash(legacyNormalizedText(text).toUtf8(), QCryptographicHash::Sha256).toHex());
+}
+}
+
+QString RuledOracleCache::cachePathForCardDatabase(const QString &cardDatabasePath)
+{
+    const QFileInfo info(cardDatabasePath);
+    return info.dir().filePath(info.completeBaseName() + QStringLiteral(".ruled-oracle.json"));
+}
+
+QString RuledOracleCache::normalizedText(const QString &text)
+{
+    static const QRegularExpression bracketedLoyaltyCost(
+        QStringLiteral(R"(^\[((?:\+|−|-)?(?:\d+|X))\]:)"));
+    QStringList lines = legacyNormalizedText(text).split(QLatin1Char('\n'));
+    for (QString &line : lines) {
+        line.replace(bracketedLoyaltyCost, QStringLiteral("\\1:"));
     }
     return lines.join(QLatin1Char('\n'));
 }
@@ -134,12 +152,14 @@ bool RuledOracleCache::load(const QString &cachePath, QString *error)
         const QString faceName = face.value(QStringLiteral("faceName")).toString();
         const QString text = face.value(QStringLiteral("oracleText")).toString();
         const QString sha256 = face.value(QStringLiteral("sha256")).toString().toLower();
-        if (cardName.isEmpty() || faceName.isEmpty() || sha256.size() != 64 || textSha256(text) != sha256) {
+        const QString canonicalSha256 = textSha256(text);
+        if (cardName.isEmpty() || faceName.isEmpty() || sha256.size() != 64 ||
+            (canonicalSha256 != sha256 && legacyTextSha256(text) != sha256)) {
             setError(error, QStringLiteral("ruled Oracle cache contains incompatible face data"));
             cachedFaces.clear();
             return false;
         }
-        cachedFaces.insert(key(cardName, faceName), CachedFace{text, sha256});
+        cachedFaces.insert(key(cardName, faceName), CachedFace{normalizedText(text), canonicalSha256});
     }
     valid = true;
     return true;

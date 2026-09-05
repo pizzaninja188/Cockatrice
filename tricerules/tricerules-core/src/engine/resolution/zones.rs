@@ -1972,6 +1972,87 @@ pub(super) fn return_triggered_card(
     }
 }
 
+pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    if !matches!(
+        effect,
+        SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
+    ) {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    }
+    let Some(source_id) = cx.top.source_permanent_id else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(assignment) = cx.top.returned_attacker_assignment else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let current_generation = cx
+        .engine
+        .state
+        .zone_change_generation
+        .get(&source_id)
+        .copied()
+        .unwrap_or(0);
+    let Some(object) = cx.engine.state.objects.get(&source_id) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if object.zone != Zone::Hand || current_generation != cx.top.source_zone_change {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let owner = object.owner;
+    let object_label = object_display_name(&cx.engine.state, cx.engine.registry, source_id);
+    match cx.engine.begin_battlefield_entry(
+        cx.top.clone(),
+        BattlefieldEntryEvent {
+            object_id: source_id,
+            deciding_player: cx.controller,
+            destination_controller: cx.controller,
+            battle_protector: None,
+            face_index: cx.top.face_index,
+            unlock_room_door: None,
+            chosen_x: 0,
+            cast_cost_receipts: Vec::new(),
+            player_life_snapshot: cx.engine.player_life_snapshot(),
+            tapped: true,
+            set_types: None,
+            entry_counters: BTreeMap::new(),
+            applied_effects: Vec::new(),
+        },
+        BattlefieldEntryCompletion::Ninjutsu {
+            owner,
+            object_label: object_label.clone(),
+            assignment,
+        },
+        cx.events,
+    ) {
+        super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
+        super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+            cx.engine.commit_battlefield_entry(entry, None)?;
+            cx.events.push(ev_log(format!(
+                "{} puts {object_label} onto the battlefield tapped and attacking.",
+                cx.spell_label
+            )));
+            cx.events.push(permanent_moved_event(
+                &cx.engine.state,
+                source_id,
+                owner,
+                rv1::permanent_moved::Destination::Battlefield,
+            ));
+            if let Some(assignment) = cx.engine.add_returned_attacker(source_id, assignment) {
+                cx.events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::AttackersAdded(rv1::AttackersAdded {
+                        assignments: vec![assignment],
+                    })),
+                });
+            }
+            Ok(EffectOutcome::Continue)
+        }
+    }
+}
+
 pub(super) fn exile_source_then_return_transformed(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

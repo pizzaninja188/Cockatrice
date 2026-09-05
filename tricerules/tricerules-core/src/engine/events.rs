@@ -373,6 +373,16 @@ impl GameEngine {
         rv1::RuledPerPlayerView {
             player_id: p.id,
             has_enduring_story: p.has_enduring_story,
+            static_emblems: self
+                .state
+                .static_emblems
+                .iter()
+                .filter(|emblem| emblem.controller == p.id)
+                .map(|emblem| rv1::EmblemMarkerView {
+                    object_id: emblem.object_id,
+                    display_name: emblem.display_name.clone(),
+                })
+                .collect(),
             private_zones_unchanged: false,
             hand_cards: if include_private {
                 p.hand
@@ -651,6 +661,7 @@ impl GameEngine {
         BattlefieldViewSnapshot {
             players,
             continuous_effects: self.state.continuous_effects.clone(),
+            static_emblems: self.state.static_emblems.clone(),
             activation_uses_this_turn: self.state.activation_uses_this_turn.clone(),
             activation_uses_per_object: self.state.activation_uses_per_object.clone(),
             turn_history: self.state.turn_history.clone(),

@@ -21,9 +21,13 @@
 #include "game/ruled/ruled_restricted_mana_model.h"
 #include "game/ruled/ruled_zone_snapshot_policy.h"
 
+#include <QCryptographicHash>
 #include <QSignalSpy>
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QString>
 #include <QTest>
@@ -883,6 +887,54 @@ TEST(RuledPresentationResolverTest, NormalizesLineEndingsWhitespaceHeadingsAndBu
     EXPECT_EQ(RuledOracleCache::normalizedText(
                   QString::fromUtf8("  Choose two —\r\n\r\n • First mode  \r  • Second mode\n\t\nTail  ")),
               QString::fromUtf8("Choose two —\n• First mode\n• Second mode\nTail"));
+}
+
+TEST(RuledPresentationResolverTest, NormalizesMtgjsonBracketedLoyaltyLabelsForScryfallCompatibility)
+{
+    QTemporaryDir directory;
+    ASSERT_TRUE(directory.isValid());
+    const QString cardDatabasePath = directory.filePath(QStringLiteral("cards.xml"));
+    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(cardDatabasePath);
+    const QString mtgjsonText = QString::fromUtf8(
+        "Ninjutsu {1}{U}{B}\n"
+        "[+1]: You get an emblem.\n"
+        "[0]: Surveil 2.\n"
+        "[−2]: Tap target creature.");
+    const QString scryfallText = QString::fromUtf8(
+        "Ninjutsu {1}{U}{B}\n"
+        "+1: You get an emblem.\n"
+        "0: Surveil 2.\n"
+        "−2: Tap target creature.");
+    const QString legacySha = QString::fromLatin1(
+        QCryptographicHash::hash(mtgjsonText.toUtf8(), QCryptographicHash::Sha256).toHex());
+    const QJsonObject legacyCache{
+        {QStringLiteral("formatVersion"), 1},
+        {QStringLiteral("source"),
+         QJsonObject{{QStringLiteral("url"), QStringLiteral("https://example.test/AllPrintings.json")},
+                     {QStringLiteral("version"), QStringLiteral("snapshot-1")}}},
+        {QStringLiteral("faces"),
+         QJsonArray{QJsonObject{{QStringLiteral("cardName"), QStringLiteral("Kaito, Bane of Nightmares")},
+                                {QStringLiteral("faceName"), QStringLiteral("Kaito, Bane of Nightmares")},
+                                {QStringLiteral("oracleText"), mtgjsonText},
+                                {QStringLiteral("sha256"), legacySha}}}},
+    };
+    QFile cacheFile(cachePath);
+    ASSERT_TRUE(cacheFile.open(QIODevice::WriteOnly));
+    ASSERT_GT(cacheFile.write(QJsonDocument(legacyCache).toJson(QJsonDocument::Compact)), 0);
+    cacheFile.close();
+
+    RuledPresentationResolver resolver;
+    QString error;
+    ASSERT_TRUE(resolver.loadForCardDatabase(cardDatabasePath, &error)) << error.toStdString();
+    ruled::v1::PresentationRef presentation;
+    presentation.set_external_card_name("Kaito, Bane of Nightmares");
+    presentation.set_external_face_name("Kaito, Bane of Nightmares");
+    presentation.set_oracle_text_sha256(RuledOracleCache::textSha256(scryfallText).toStdString());
+    presentation.set_fallback_text("activated_02");
+    presentation.add_oracle_line_indices(2);
+
+    EXPECT_EQ(RuledOracleCache::normalizedText(mtgjsonText), scryfallText);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("+1: You get an emblem."));
 }
 
 TEST(RuledPresentationResolverTest, SelectsExactSplitRoomAndTransformFaces)
@@ -3192,10 +3244,12 @@ TEST_F(RuledClientTest, ZoneViewParsesDamageAndPipeDelimitedAbilities)
     object->set_object_id(100);
     object->set_damage(3);
     auto *manaAbility = object->add_activated_abilities();
+    manaAbility->set_ability_index(0);
     manaAbility->set_text("Add {G}.");
     manaAbility->set_mana_produced("G");
     manaAbility->set_cost_label("{T}");
     auto *drawAbility = object->add_activated_abilities();
+    drawAbility->set_ability_index(1);
     drawAbility->set_text("Sacrifice this: draw a card.");
     drawAbility->set_mana_cost("1");
     drawAbility->set_cost_label("Sacrifice this");
@@ -3217,6 +3271,31 @@ TEST_F(RuledClientTest, ZoneViewParsesDamageAndPipeDelimitedAbilities)
     // The flag only re-announces on a change.
     apply(batch);
     EXPECT_EQ(fsSpy.count(), 1);
+}
+
+TEST_F(RuledClientTest, BattlefieldAbilityIndicesPreserveAuthoredZoneGaps)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(kLocalPlayer);
+    auto *object = view->add_battlefield_objects();
+    object->set_object_id(203);
+    for (const auto &[abilityIndex, label] :
+         std::initializer_list<std::pair<quint32, const char *>>{{1, "+1: Create an emblem."},
+                                                                {2, "0: Surveil 2."},
+                                                                {3, "-2: Tap target creature."}}) {
+        auto *ability = object->add_activated_abilities();
+        ability->set_ability_index(abilityIndex);
+        ability->set_text(label);
+        ability->set_activatable(true);
+    }
+    apply(batch);
+
+    EXPECT_EQ(state->activatedAbilityIndicesForOid(203), QList<int>({1, 2, 3}));
+    EXPECT_EQ(state->activatedAbilityMenuLabel(203, 1), QStringLiteral("+1: Create an emblem."));
+    EXPECT_EQ(state->activatedAbilityMenuLabel(203, 2), QStringLiteral("0: Surveil 2."));
+    EXPECT_EQ(state->activatedAbilityMenuLabel(203, 3), QStringLiteral("-2: Tap target creature."));
+    EXPECT_TRUE(state->activatedAbilityMenuLabel(203, 0).isEmpty());
 }
 
 TEST_F(RuledClientTest, ParsesSpellCostChoicesForHandAndPublicZoneCasts)
@@ -3262,11 +3341,13 @@ TEST_F(RuledClientTest, ActivatedAbilityMenuLabelsDoNotDuplicateStructuredCosts)
     object->set_object_id(100);
 
     auto *manaAbility = object->add_activated_abilities();
+    manaAbility->set_ability_index(0);
     manaAbility->set_text("{2}{R}: Ability text.");
     manaAbility->set_mana_cost("2R");
     manaAbility->set_cost_label("{2}{R}");
 
     auto *compositeAbility = object->add_activated_abilities();
+    compositeAbility->set_ability_index(1);
     compositeAbility->set_text("{2}, {T}, Sacrifice a creature: Draw a card.");
     compositeAbility->set_mana_cost("2");
     compositeAbility->set_cost_label("{2}, {T}, Sacrifice a creature");
@@ -3285,6 +3366,7 @@ TEST_F(RuledClientTest, ActivatedAbilityAvailabilityTracksTheEngineAcrossFullZon
         auto *object = view->add_battlefield_objects();
         object->set_object_id(100);
         auto *ability = object->add_activated_abilities();
+        ability->set_ability_index(0);
         ability->set_text("{1}{W}, {T}: Tap target creature. Activate only if you control a creature with flying.");
         ability->set_activatable(activatable);
         return batch;
@@ -3310,6 +3392,7 @@ TEST_F(RuledClientTest, BattlefieldOmissionRetainsStateWhileOtherZoneViewFieldsU
     object->set_toughness(5);
     object->set_damage(2);
     auto *ability = object->add_activated_abilities();
+    ability->set_ability_index(0);
     ability->set_text("Draw a card.");
     ability->set_cost_label("{T}");
     ability->set_activatable(true);
@@ -4777,9 +4860,13 @@ TEST_F(RuledClientTest, ActiveCastRevealsReplaceAsExactSnapshotsAndClear)
 
     ASSERT_EQ(state->getActivePublicReveals().size(), 2);
     ASSERT_EQ(changed.count(), 1);
+    EXPECT_EQ(changed.at(0).size(), 3)
+        << "the reveal UI needs the source descriptions to distinguish revealed cards from stack objects";
     EXPECT_EQ(changed.at(0).at(0).toStringList(),
               QStringList({QStringLiteral("Adult Gold Dragon"), QStringLiteral("Shivan Dragon")}));
     EXPECT_EQ(changed.at(0).at(1).value<QVector<int>>(), QVector<int>({kLocalPlayer, kOpponent}));
+    EXPECT_EQ(changed.at(0).at(2).toStringList(),
+              QStringList({QStringLiteral("Caustic Exhale"), QStringLiteral("Osseous Exhale")}));
 
     ruled::v1::RuledEventBatch second;
     auto *replacement = second.add_events()->mutable_active_public_reveal_snapshot()->add_reveals();

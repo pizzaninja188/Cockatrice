@@ -1,0 +1,70 @@
+// Oracle and Duskmourn release-note rulings verified 2026-09-04. Ninjutsu is a hand-zone
+// activated ability; Kaito's animation replaces his type line but leaves printed abilities intact.
+(
+  id: "kaito,_bane_of_nightmares",
+  name: "Kaito, Bane of Nightmares",
+  face_id: "kaito_bane_of_nightmares",
+  mana_cost: "{2}{U}{B}",
+  supertypes: ["Legendary"],
+  types: ["Planeswalker", "Kaito"],
+  loyalty: 4,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: ConditionalSelfModifier(
+      condition: AllOf([
+        ActivePlayer(players: Controller),
+        SourceCounterCount(counter: Loyalty, min: Some(1)),
+      ]),
+      set_types: Some((card_types: [Creature], creature_types: ["Ninja"])),
+      base_power: Some(3),
+      base_toughness: Some(4),
+      keywords: [Hexproof],
+    ),
+  )],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      source_zone: Hand,
+      costs: [Mana("{1}{U}{B}"), ReturnUnblockedAttacker],
+      effect: [PutAbilitySourceOntoBattlefieldTappedAndAttacking],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Loyalty(1)],
+      effect: [CreateStaticEmblem(
+        emblem_id: "kaito_bane_of_nightmares_emblem",
+        display_name: "Kaito, Bane of Nightmares Emblem",
+        creatures: (controller: Some(YouControl), subtype: Some("Ninja")),
+        power: 1,
+        toughness: 1,
+      )],
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: OracleLines([4]),
+      costs: [Loyalty(0)],
+      effect: [
+        LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil),
+        Draw(count: Count(PlayersWhoLostLifeThisTurn(players: Opponents))),
+      ],
+    ),
+    (
+      ability_id: "activated_04",
+      presentation: OracleLines([5]),
+      costs: [Loyalty(-2)],
+      effect: [
+        Tap(subject: Chosen((kind: Creature))),
+        PutCounters(counter: Stun, count: 2, subject: Chosen((kind: Creature))),
+      ],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature",
+        effect_indices: [0, 1],
+      )])),
+    ),
+  ],
+)
