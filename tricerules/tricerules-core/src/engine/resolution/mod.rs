@@ -1703,9 +1703,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::ExileUntilSourceLeaves { .. } => {
                         zones::exile_until_source_leaves(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::TapAllCreatures { .. } => {
-                        misc::tap_all_creatures(&mut cx, effect)?
-                    }
+                    effect @ SpellEffectKind::TapAll { .. } => mass::tap_all(&mut cx, effect)?,
                     effect @ SpellEffectKind::UntapAll { .. } => mass::untap_all(&mut cx, effect)?,
                     effect @ SpellEffectKind::DestroyAll { .. } => {
                         mass::destroy_all(&mut cx, effect)?

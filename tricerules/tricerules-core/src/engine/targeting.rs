@@ -1431,7 +1431,7 @@ fn validate_effect_targets(
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::DamageAll { .. }
-        | SpellEffectKind::TapAllCreatures { .. }
+        | SpellEffectKind::TapAll { .. }
         | SpellEffectKind::UntapAll { .. }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Source

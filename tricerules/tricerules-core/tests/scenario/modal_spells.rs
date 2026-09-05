@@ -337,6 +337,32 @@ fn cryptic_command_bounce_then_tap_uses_printed_order_and_relative_controller() 
 }
 
 #[test]
+fn cryptic_command_does_not_mass_tap_when_its_only_target_left_the_battlefield() {
+    let mut e = GameEngine::new(225_002, &[0, 1], 20, cryptic_decks(), true).unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    let target = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let other = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    fund_cryptic(&mut e, 0);
+    let index = hand_index_for_card(&e, 0, "cryptic_command");
+    e.apply_command(
+        0,
+        &cast_modal_spell(index, vec![(1, target_object(target)), (2, vec![])]),
+    )
+    .expect("bounce and tap modes");
+    // Model the target leaving in response. CR 608.2b: no chosen mode resolves when all
+    // of the spell's targets are illegal, even though the mass-tap mode has no targets.
+    e.state.players[1].battlefield.retain(|oid| *oid != target);
+    e.state.players[1].graveyard.push(target);
+    e.state.objects.get_mut(&target).unwrap().zone = tricerules_core::Zone::Graveyard;
+    *e.state.zone_change_generation.entry(target).or_default() += 1;
+    let action = e.state.next_tap_action_id;
+    resolve_entire_stack_two_player(&mut e);
+    assert!(!e.state.objects[&other].tapped);
+    assert_eq!(e.state.next_tap_action_id, action);
+    assert!(e.state.stack.is_empty() && e.state.pending_resolution.is_none());
+}
+
+#[test]
 fn cryptic_command_counter_and_draw_resolve_together() {
     let decks = Some(vec![
         vec![

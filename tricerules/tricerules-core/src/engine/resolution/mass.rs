@@ -1,6 +1,10 @@
 use super::*;
 use crate::engine::{attempt_untap, UntapOutcome};
 
+#[cfg(test)]
+#[path = "mass_tap_tests.rs"]
+mod mass_tap_tests;
+
 fn attachment_kind_matches(
     characteristics: &super::super::characteristics::Characteristics,
     kind: AttachmentKind,
@@ -190,21 +194,16 @@ pub(super) fn destroy_all(
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn untap_all(
-    cx: &mut EffectCx<'_>,
-    effect: SpellEffectKind,
-) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::UntapAll { players, filter } = effect else {
-        return Err(EngineError::Illegal("resolution dispatch mismatch"));
-    };
-    let controller = cx.controller;
-    let engine = &mut *cx.engine;
-
-    // CR 701.20: untargeted, so hexproof/shroud are irrelevant and the battlefield is snapshotted
-    // as this resolves. `filter` selects what (creature / any permanent), `players` selects whose
-    // — the filter's controller relation cannot: untargeted selection has no activating player for
-    // `battlefield_objects_matching` to compare against.
-    let affected: Vec<_> = battlefield_objects_matching(engine, &filter)
+/// Shared selection for mass tap and untap (Cryptic Command / Vitalize). CR 115.10 / 608.2h:
+/// snapshot current characteristics at resolution without checking targetability. Preserve the
+/// selector's deterministic player-then-battlefield order; `players` alone owns controller scope.
+fn scoped_battlefield_objects(
+    engine: &GameEngine,
+    controller: PlayerId,
+    players: RelativePlayerSet,
+    filter: &TargetFilter,
+) -> Vec<ObjectId> {
+    battlefield_objects_matching(engine, filter)
         .into_iter()
         .filter(|oid| {
             engine
@@ -217,7 +216,36 @@ pub(super) fn untap_all(
                     RelativePlayerSet::All => true,
                 })
         })
-        .collect();
+        .collect()
+}
+
+pub(super) fn tap_all(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::TapAll { players, filter } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let affected = scoped_battlefield_objects(cx.engine, cx.controller, players, &filter);
+    let tap_events = cx.engine.tap_permanents(cx.controller, &affected);
+    let tapped = tap_events.len();
+    cx.engine.fire_triggers(&tap_events);
+    cx.events.push(ev_log(format!(
+        "{} taps {tapped} affected permanent(s)",
+        cx.spell_label
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn untap_all(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::UntapAll { players, filter } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let engine = &mut *cx.engine;
+    let affected = scoped_battlefield_objects(engine, cx.controller, players, &filter);
     let mut untapped = 0;
     for oid in affected {
         if attempt_untap(engine, oid) == UntapOutcome::Untapped {

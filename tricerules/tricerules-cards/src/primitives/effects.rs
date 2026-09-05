@@ -1015,7 +1015,7 @@ pub enum SpellEffectKind {
         power: BasePowerToughnessValue,
         toughness: BasePowerToughnessValue,
     },
-    /// CR 701.19: tap `subject`. `Chosen` preserves ordinary permanent targeting.
+    /// CR 701.26: tap `subject`. `Chosen` preserves ordinary permanent targeting.
     Tap {
         #[serde(default)]
         subject: EffectSubject,
@@ -1027,24 +1027,27 @@ pub enum SpellEffectKind {
     SkipNextUntap {
         target: TargetFilter,
     },
-    /// Tap every creature controlled by the selected relative player set. This is untargeted and
-    /// snapshots the battlefield as it resolves. Covers Cryptic Command and Tempest Caller.
-    TapAllCreatures {
+    /// CR 701.26: tap every permanent matching `filter` controlled by `players`. Untargeted,
+    /// with the cohort snapshotted at resolution using current characteristics. Cryptic Command
+    /// uses opponents' creatures; Blinding Light uses all nonwhite creatures. As with `UntapAll`,
+    /// controller scope belongs in `players`, not in the filter's controller relationship.
+    TapAll {
         players: RelativePlayerSet,
+        #[serde(default = "TargetFilter::default_creature")]
+        filter: TargetFilter,
     },
-    /// CR 701.20: untap `subject`. `Chosen` preserves ordinary permanent targeting for Seeker of
+    /// CR 701.26: untap `subject`. `Chosen` preserves ordinary permanent targeting for Seeker of
     /// Skybreak and Aphetto Alchemist; `Source` is the untargeted self-reference used by
     /// Sabertooth Mauler. An untapped chosen permanent is still legal and the effect is a no-op.
     Untap {
         #[serde(default)]
         subject: EffectSubject,
     },
-    /// CR 701.20: untap every permanent matching `filter` controlled by `players`. Untargeted, and
-    /// snapshots the battlefield as it resolves, like [`Self::TapAllCreatures`]. Controller scope
+    /// CR 701.26: untap every permanent matching `filter` controlled by `players`. Untargeted, and
+    /// snapshots the battlefield as it resolves, like [`Self::TapAll`]. Controller scope
     /// lives in `players` rather than in the filter's `controller`, because untargeted mass
     /// selection goes through `battlefield_objects_matching`, which has no activating player to
-    /// compare against. Covers Vitalize (`Controller` + creature) and Early Harvest / Turnabout
-    /// (a player's lands).
+    /// compare against. Vitalize (`Controller` + creature) and mass tapping share this selection.
     UntapAll {
         players: RelativePlayerSet,
         #[serde(default = "TargetFilter::default_creature")]
@@ -1997,9 +2000,9 @@ pub struct ConditionalManaOutput {
     pub options: Vec<ManaAmount>,
 }
 
-/// Which players' creatures a mass one-shot effect affects, relative to the effect controller.
+/// Which players' permanents a mass one-shot effect affects, relative to the effect controller.
 /// Kept separate from target selection because these effects do not target. Covers Cryptic
-/// Command / Tempest Caller (`Opponents`) and controller-only mass tap/untap effects (`Controller`).
+/// Command (`Opponents`), Vitalize (`Controller`), and Blinding Light (`All`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RelativePlayerSet {
     Controller,
@@ -2367,7 +2370,7 @@ impl SpellEffectKind {
             | SpellEffectKind::RevealTopCardToHandIfMatches { .. }
             | SpellEffectKind::ManifestDread
             | SpellEffectKind::LookChooseToHand { .. }
-            | SpellEffectKind::TapAllCreatures { .. }
+            | SpellEffectKind::TapAll { .. }
             | SpellEffectKind::UntapAll { .. }
             | SpellEffectKind::PumpAll { .. }
             | SpellEffectKind::GrantKeywordsAll { .. }
@@ -3704,6 +3707,7 @@ impl SpellEffectKind {
             // players). Only Creature / AnyPermanent are honored by the engine.
             SpellEffectKind::DestroyAll { kind, .. }
             | SpellEffectKind::DamageAll { kind, .. }
+            | SpellEffectKind::TapAll { filter: kind, .. }
             | SpellEffectKind::UntapAll { filter: kind, .. } => {
                 kind.validate_characteristic_constraints()?;
                 if !kind.all_terminal_filters_match(|leaf| {

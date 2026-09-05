@@ -21,7 +21,7 @@
       (
         mode_id: "mode_03",
         presentation: OracleLines([4]),
-        effects: [TapAllCreatures(players: Opponents)],
+        effects: [TapAll(players: Opponents, filter: (kind: Creature))],
       ),
       (
         mode_id: "mode_04",

@@ -396,7 +396,7 @@ fn sentry_can_decline_payment_and_illegal_reflexive_targets_do_not_tap() {
 }
 
 #[test]
-fn accepted_tap_commands_replay_with_identical_batches_and_action_ids() {
+fn accepted_targeted_and_mass_tap_commands_replay_with_identical_batches_and_action_ids() {
     use tricerules_proto::ruled::v1::{
         dev_command::Dev, DevAddMana, DevCommand, DevPutCardInZone, DevZone,
     };
@@ -430,83 +430,84 @@ fn accepted_tap_commands_replay_with_identical_batches_and_action_ids() {
             }),
         )
     };
-    let mut engine = fresh();
-    let mut log = Vec::new();
-    for player in [0, 1, 0, 1] {
-        record(&mut engine, &mut log, player, pass());
-    }
-    record(
-        &mut engine,
-        &mut log,
-        0,
-        put(0, "Sharae of Numbing Depths", DevZone::Battlefield),
-    );
-    record(
-        &mut engine,
-        &mut log,
-        0,
-        put(1, "Grizzly Bears", DevZone::Battlefield),
-    );
-    let first = *engine.state.players[1].battlefield.last().unwrap();
-    record(
-        &mut engine,
-        &mut log,
-        0,
-        put(1, "Grizzly Bears", DevZone::Battlefield),
-    );
-    let second = *engine.state.players[1].battlefield.last().unwrap();
-    record(
-        &mut engine,
-        &mut log,
-        0,
-        put(0, "Frost Breath", DevZone::Hand),
-    );
-    record(
-        &mut engine,
-        &mut log,
-        0,
-        dev(
+    for (card_id, name) in [
+        ("frost_breath", "Frost Breath"),
+        ("cryptic_command", "Cryptic Command"),
+    ] {
+        let mut engine = fresh();
+        let mut log = Vec::new();
+        for player in [0, 1, 0, 1] {
+            record(&mut engine, &mut log, player, pass());
+        }
+        record(
+            &mut engine,
+            &mut log,
             0,
-            Dev::AddMana(DevAddMana {
-                u: 3,
-                ..Default::default()
-            }),
-        ),
-    );
-    let slot = hand_index_for_card(&engine, 0, "frost_breath");
-    let before = engine.initial_response_batch();
-    assert!(engine
-        .apply_command(
+            put(0, "Sharae of Numbing Depths", DevZone::Battlefield),
+        );
+        record(
+            &mut engine,
+            &mut log,
             0,
-            &cast_spell(slot, [target_object(first), target_object(first)].concat())
-        )
-        .is_err());
-    assert_eq!(engine.initial_response_batch(), before);
-    record(
-        &mut engine,
-        &mut log,
-        0,
-        cast_spell(slot, [target_object(first), target_object(second)].concat()),
-    );
-    for player in [0, 1, 0, 1] {
-        record(&mut engine, &mut log, player, pass());
+            put(1, "Grizzly Bears", DevZone::Battlefield),
+        );
+        let first = *engine.state.players[1].battlefield.last().unwrap();
+        record(
+            &mut engine,
+            &mut log,
+            0,
+            put(1, "Grizzly Bears", DevZone::Battlefield),
+        );
+        let second = *engine.state.players[1].battlefield.last().unwrap();
+        record(&mut engine, &mut log, 0, put(0, name, DevZone::Hand));
+        record(
+            &mut engine,
+            &mut log,
+            0,
+            dev(
+                0,
+                Dev::AddMana(DevAddMana {
+                    u: 4,
+                    ..Default::default()
+                }),
+            ),
+        );
+        let slot = hand_index_for_card(&engine, 0, card_id);
+        let (invalid, valid) = if card_id == "cryptic_command" {
+            (
+                cast_modal_spell(slot, vec![(2, vec![]), (2, vec![])]),
+                cast_modal_spell(slot, vec![(2, vec![]), (3, vec![])]),
+            )
+        } else {
+            (
+                cast_spell(slot, [target_object(first), target_object(first)].concat()),
+                cast_spell(slot, [target_object(first), target_object(second)].concat()),
+            )
+        };
+        let before = engine.initial_response_batch();
+        assert!(engine.apply_command(0, &invalid).is_err());
+        assert_eq!(engine.initial_response_batch(), before);
+        record(&mut engine, &mut log, 0, valid);
+        for player in [0, 1, 0, 1] {
+            record(&mut engine, &mut log, player, pass());
+        }
+        assert!(engine.state.stack.is_empty());
+        assert_eq!(engine.state.next_tap_action_id, 1);
+        let mut replay = fresh();
+        for (player, command, batch) in log {
+            assert_eq!(replay.apply_command(player, &command).unwrap(), batch);
+        }
+        assert_eq!(
+            replay.state.next_tap_action_id,
+            engine.state.next_tap_action_id
+        );
+        assert_eq!(
+            replay.state.trigger_uses_this_turn,
+            engine.state.trigger_uses_this_turn
+        );
+        assert_eq!(
+            replay.initial_response_batch(),
+            engine.initial_response_batch()
+        );
     }
-    assert!(engine.state.stack.is_empty());
-    assert_eq!(engine.state.next_tap_action_id, 1);
-    let mut replay = fresh();
-    for (player, command, batch) in log {
-        assert_eq!(replay.apply_command(player, &command).unwrap(), batch);
-    }
-    assert_eq!(
-        replay.state.next_tap_action_id,
-        engine.state.next_tap_action_id
-    );
-    assert_eq!(
-        replay.state.trigger_uses_this_turn,
-        engine.state.trigger_uses_this_turn
-    );
-    assert_eq!(
-        replay.initial_response_batch(),
-        engine.initial_response_batch()
-    );
 }

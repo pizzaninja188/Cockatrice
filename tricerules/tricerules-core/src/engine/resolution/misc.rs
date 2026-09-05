@@ -457,48 +457,6 @@ pub(super) fn create_delayed_trigger(
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn tap_all_creatures(
-    cx: &mut EffectCx<'_>,
-    effect: SpellEffectKind,
-) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::TapAllCreatures { players } = effect else {
-        return Err(EngineError::Illegal("resolution dispatch mismatch"));
-    };
-    let controller = cx.controller;
-    let affected: Vec<_> = cx
-        .engine
-        .state
-        .objects
-        .keys()
-        .copied()
-        .filter(|oid| {
-            cx.engine
-                .characteristics(*oid)
-                .is_some_and(|characteristics| {
-                    characteristics.is_creature()
-                        && match players {
-                            RelativePlayerSet::Controller => {
-                                characteristics.controller == controller
-                            }
-                            RelativePlayerSet::Opponents => cx
-                                .engine
-                                .state
-                                .are_opponents(characteristics.controller, controller),
-                            RelativePlayerSet::All => true,
-                        }
-                })
-        })
-        .collect();
-    let tap_events = cx.engine.tap_permanents(controller, &affected);
-    let tapped = tap_events.len();
-    cx.engine.fire_triggers(&tap_events);
-    cx.events.push(ev_log(format!(
-        "{} taps {tapped} affected creature(s)",
-        cx.spell_label
-    )));
-    Ok(EffectOutcome::Continue)
-}
-
 fn attach_equipment_source(
     cx: &mut EffectCx<'_>,
     effect_name: &str,
