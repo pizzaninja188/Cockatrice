@@ -34,6 +34,36 @@
             </prop>
         </card>
         <card>
+            <name>Map Token</name>
+            <text>{1}, {T}, Sacrifice this artifact: Target creature you control explores. Activate only as a sorcery.</text>
+            <token>1</token>
+            <tablerow>1</tablerow>
+            <prop>
+                <type>Token Artifact — Map</type>
+                <maintype>Artifact</maintype>
+            </prop>
+        </card>
+        <card>
+            <name>Marker Token</name>
+            <text>{T}: Add {C}.</text>
+            <token>1</token>
+            <tablerow>1</tablerow>
+            <prop>
+                <type>Token Artifact — Marker</type>
+                <maintype>Artifact</maintype>
+            </prop>
+        </card>
+        <card>
+            <name>Marker Token </name>
+            <text>{T}: Draw a card.</text>
+            <token>1</token>
+            <tablerow>1</tablerow>
+            <prop>
+                <type>Token Artifact — Marker</type>
+                <maintype>Artifact</maintype>
+            </prop>
+        </card>
+        <card>
             <name>Kitten</name>
             <set>CAT</set>
             <tablerow>0</tablerow>

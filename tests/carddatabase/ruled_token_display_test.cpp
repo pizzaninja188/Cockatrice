@@ -52,3 +52,19 @@ TEST(RuledTokenDisplayTest, ResolvesNoncreatureTokensByPrintedAbilityText)
                                    {QStringLiteral("{2}, Sacrifice this token: You gain 3 life.")});
     EXPECT_TRUE(wrongAbility.name.isEmpty()) << "never substitute a token with different printed text";
 }
+
+TEST(RuledTokenDisplayTest, StableEngineFallbackResolvesOnlyOneStructuralTokenCandidate)
+{
+    auto db = std::make_unique<CardDatabase>(nullptr, new NoopCardPreferenceProvider(),
+                                             new TestCardDatabasePathProvider(), new NoopCardSetPriorityController());
+    db->loadCardDatabases();
+    ASSERT_EQ(db->getLoadStatus(), Ok);
+
+    const CardRef map = RuledTokenDisplay::resolve(db->query(), QStringLiteral("Map"), {}, {}, {},
+                                                   {QStringLiteral("Map — activated ability (activated_01)")});
+    EXPECT_EQ(map.name, QStringLiteral("Map Token"));
+
+    const CardRef ambiguous = RuledTokenDisplay::resolve(db->query(), QStringLiteral("Marker"), {}, {}, {},
+                                                         {QStringLiteral("Marker — activated ability (activated_01)")});
+    EXPECT_TRUE(ambiguous.name.isEmpty()) << "a stable fallback must not guess between display variants";
+}

@@ -41,6 +41,12 @@ QString abilityMarker(const QString &text)
     }
     return normalizeAbilityText(text);
 }
+
+bool isStableEngineAbilityFallback(const QString &text)
+{
+    return text.endsWith(QLatin1Char(')')) && (text.contains(QStringLiteral(" — activated ability (")) ||
+                                               text.contains(QStringLiteral(" — triggered ability (")));
+}
 } // namespace
 
 CardRef RuledTokenDisplay::resolve(const CardDatabaseQuerier *db,
@@ -56,16 +62,26 @@ CardRef RuledTokenDisplay::resolve(const CardDatabaseQuerier *db,
 
     QStringList expectedAbilities;
     expectedAbilities.reserve(keywords.size() + abilityTexts.size());
+    QStringList printedAbilityTexts;
+    printedAbilityTexts.reserve(abilityTexts.size());
+    bool hasStableAbilityFallback = false;
     for (const QString &keyword : keywords) {
         expectedAbilities.append(abilityMarker(keyword));
     }
     for (const QString &ability : abilityTexts) {
+        if (isStableEngineAbilityFallback(ability)) {
+            hasStableAbilityFallback = true;
+            continue;
+        }
         expectedAbilities.append(abilityMarker(ability));
+        printedAbilityTexts.append(ability);
     }
     expectedAbilities.removeAll(QString());
-    const QString expectedText = normalizeAbilityText(keywords.join(QString()) + abilityTexts.join(QString()));
+    const QString expectedText = normalizeAbilityText(keywords.join(QString()) + printedAbilityTexts.join(QString()));
     const QString expectedColors = normalizeColors(color);
     const QString baseName = tokenName + QStringLiteral(" Token");
+    CardRef structuralFallback;
+    int structuralFallbackCount = 0;
 
     // Magic-Token disambiguates variants with trailing spaces, but not every family starts at the
     // zero-space spelling. Search the complete bounded family without stopping at a gap.
@@ -77,6 +93,20 @@ CardRef RuledTokenDisplay::resolve(const CardDatabaseQuerier *db,
         }
 
         const QString candidateText = normalizeAbilityText(info->getText());
+        bool containsEveryAbility = true;
+        for (const QString &ability : expectedAbilities) {
+            if (!candidateText.contains(ability)) {
+                containsEveryAbility = false;
+                break;
+            }
+        }
+        // Presentation-only Oracle prose is intentionally not embedded in tricerules card data.
+        // When TokenIdentity therefore carries its stable fallback label, retain a candidate only
+        // as a last resort and accept it below solely when the structural family is unambiguous.
+        if (hasStableAbilityFallback && !candidateText.isEmpty() && containsEveryAbility) {
+            structuralFallback = {info->getName(), {}};
+            ++structuralFallbackCount;
+        }
         if (expectedAbilities.isEmpty()) {
             if (!candidateText.isEmpty()) {
                 continue;
@@ -85,13 +115,6 @@ CardRef RuledTokenDisplay::resolve(const CardDatabaseQuerier *db,
             if (candidateText.isEmpty()) {
                 continue;
             }
-            bool containsEveryAbility = true;
-            for (const QString &ability : expectedAbilities) {
-                if (!candidateText.contains(ability)) {
-                    containsEveryAbility = false;
-                    break;
-                }
-            }
             if (!containsEveryAbility ||
                 (!expectedText.contains(candidateText) && !candidateText.contains(expectedText))) {
                 continue;
@@ -99,5 +122,5 @@ CardRef RuledTokenDisplay::resolve(const CardDatabaseQuerier *db,
         }
         return {info->getName(), {}};
     }
-    return {};
+    return structuralFallbackCount == 1 ? structuralFallback : CardRef{};
 }
