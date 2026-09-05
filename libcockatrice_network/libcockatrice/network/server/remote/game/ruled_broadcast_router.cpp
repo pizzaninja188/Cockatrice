@@ -428,9 +428,10 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                            rcr->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK ||
                            rcr->choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD ||
                            rcr->choice_kind() == ruled::v1::CHOICE_KIND_ZONE_SEARCH ||
-                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS) {
-                    // LibrarySearch / LibraryTop / LibraryLook / ManifestDread: assign each candidate a sequential
-                    // index as its server card ID.
+                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS ||
+                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_BEHOLD) {
+                    // Image-based concealed/mixed-zone choices assign each candidate a sequential index as its
+                    // server card ID.
                     // Deck cards are not in engineOidToServerCardId (only battlefield/hand/stack are),
                     // so there is no server-side lookup available. Sequential indices give every
                     // physical card (including duplicate-named ones) a unique client-side ID.

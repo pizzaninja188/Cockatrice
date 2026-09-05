@@ -280,6 +280,11 @@ protected:
                                                                                                card->getId());
     }
 
+    void bindPublicObject(Server_Player *p, quint32 engineOid, Server_Card *card)
+    {
+        game->ruled()->synchronizer->playerBinding(p->getPlayerId()).registerEngineOid(engineOid, card->getId());
+    }
+
     BatchOutcome callBatchApply(const ruled::v1::IpcResponse &resp)
     {
         const auto r = game->ruled()->synchronizer->applyBatch(resp);
@@ -481,6 +486,39 @@ TEST_F(RuledBatchTest, CardsRevealedPublishesExactEngineBoundLibraryCard)
     EXPECT_EQ(published.cards(0).id(), top->getId());
     EXPECT_EQ(published.cards(0).name(), "Grizzly Bears");
     EXPECT_EQ(published.number_of_cards(), 1);
+    EXPECT_EQ(events.getGameEventList().first()->getRecipients(),
+              GameEventStorageItem::SendToPrivate | GameEventStorageItem::SendToOthers);
+}
+
+TEST_F(RuledBatchTest, CardsRevealedPublishesExactEngineBoundHandCard)
+{
+    Server_Card *cardInHand = addCardToHand(p1, "Grizzly Bears");
+    ASSERT_NE(cardInHand, nullptr);
+    bindPublicObject(p1, 214, cardInHand);
+
+    ruled::v1::RuledEventBatch batch;
+    auto *reveal = batch.add_events()->mutable_cards_revealed();
+    reveal->set_zone_owner_player_id(p1->getPlayerId());
+    reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+    auto *card = reveal->add_cards();
+    card->set_object_id(214);
+    card->set_zone_change_generation(3);
+    card->set_card_id("grizzly_bears");
+    card->set_card_name("Grizzly Bears");
+
+    GameEventStorage events;
+    applyCardsRevealed(batch, events);
+
+    ASSERT_EQ(events.getGameEventList().size(), 1);
+    const GameEvent &event = events.getGameEventList().first()->getGameEvent();
+    ASSERT_TRUE(event.HasExtension(Event_RevealCards::ext));
+    const Event_RevealCards &published = event.GetExtension(Event_RevealCards::ext);
+    EXPECT_EQ(published.zone_name(), ZoneNames::HAND);
+    ASSERT_EQ(published.card_id_size(), 1);
+    EXPECT_EQ(published.card_id(0), 0);
+    ASSERT_EQ(published.cards_size(), 1);
+    EXPECT_EQ(published.cards(0).id(), cardInHand->getId());
+    EXPECT_EQ(published.cards(0).name(), "Grizzly Bears");
     EXPECT_EQ(events.getGameEventList().first()->getRecipients(),
               GameEventStorageItem::SendToPrivate | GameEventStorageItem::SendToOthers);
 }
@@ -1271,6 +1309,9 @@ TEST_F(RuledBatchTest, BeholdMixedZoneCandidatesAreDeciderPrivate)
     const auto &p1Choice = p1It->resolution_choice_required();
     EXPECT_EQ(p1Choice.candidate_object_ids_size(), 2);
     EXPECT_EQ(p1Choice.candidate_source_zones_size(), 2);
+    ASSERT_EQ(p1Choice.candidate_server_card_ids_size(), 2);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(0), 0);
+    EXPECT_EQ(p1Choice.candidate_server_card_ids(1), 1);
 
     const auto forP2 = redactFor(batch, p2);
     const auto p2It = std::find_if(forP2.events().begin(), forP2.events().end(),

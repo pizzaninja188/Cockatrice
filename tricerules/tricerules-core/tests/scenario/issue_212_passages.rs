@@ -1,6 +1,6 @@
 use super::helpers::*;
 use tricerules_core::Zone;
-use tricerules_proto::ruled::v1::{ChoiceCandidateSourceZone, ChoiceKind};
+use tricerules_proto::ruled::v1::{ruled_event::Ev, ChoiceCandidateSourceZone, ChoiceKind};
 
 fn setup_passage(card_id: &str, extra_cards: &[&str]) -> (GameEngine, u32) {
     let mut specials = vec![card_id];
@@ -86,11 +86,24 @@ fn elven_passage_pays_life_and_can_behold_an_elf_card_from_hand() {
     );
     assert!(engine.state.objects[&found].tapped);
 
-    engine
+    let batch = engine
         .apply_command(0, &submit_resolution_choice(vec![elf]))
         .expect("behold Elf from hand");
     assert_eq!(engine.state.objects[&elf].zone, Zone::Hand);
     assert!(!engine.state.objects[&found].tapped);
+    let reveal = batch
+        .events
+        .iter()
+        .find_map(|event| match event.ev.as_ref() {
+            Some(Ev::CardsRevealed(reveal)) => Some(reveal),
+            _ => None,
+        })
+        .expect("public hand reveal event");
+    assert_eq!(reveal.zone_owner_player_id, 0);
+    assert_eq!(reveal.source_zone(), ChoiceCandidateSourceZone::Hand);
+    assert_eq!(reveal.cards.len(), 1);
+    assert_eq!(reveal.cards[0].object_id, elf);
+    assert_eq!(reveal.cards[0].card_id, "safewright_cavalry");
 }
 
 #[test]
@@ -127,10 +140,14 @@ fn elven_passage_can_behold_an_elf_permanent() {
         ChoiceCandidateSourceZone::Battlefield as i32
     );
 
-    engine
+    let batch = engine
         .apply_command(0, &submit_resolution_choice(vec![elf]))
         .expect("behold Elf permanent");
     assert!(!engine.state.objects[&found].tapped);
+    assert!(!batch
+        .events
+        .iter()
+        .any(|event| matches!(event.ev, Some(Ev::CardsRevealed(_)))));
 }
 
 #[test]

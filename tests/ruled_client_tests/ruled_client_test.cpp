@@ -1821,8 +1821,9 @@ TEST_F(RuledClientTest, MultiZoneSearchCarriesSourceAnnotationsAndMalformedMetad
     EXPECT_FALSE(state->isResolutionHandPickActive());
 }
 
-TEST_F(RuledClientTest, BeholdUsesAMixedZoneModalAndMalformedMetadataFailsClosed)
+TEST_F(RuledClientTest, BeholdUsesAnAnnotatedImagePickerAndMalformedMetadataFailsClosed)
 {
+    QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);
     ruled::v1::RuledEventBatch batch;
     auto *choice = batch.add_events()->mutable_resolution_choice_required();
     choice->set_deciding_player_id(kLocalPlayer);
@@ -1832,24 +1833,30 @@ TEST_F(RuledClientTest, BeholdUsesAMixedZoneModalAndMalformedMetadataFailsClosed
     choice->set_max(1);
     choice->add_candidate_object_ids(71);
     choice->add_candidate_object_ids(72);
+    choice->add_candidate_server_card_ids(0);
+    choice->add_candidate_server_card_ids(1);
     choice->add_candidate_names("Llanowar Elves");
     choice->add_candidate_names("Safewright Cavalry");
     choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
     choice->add_candidate_source_zones(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_BATTLEFIELD);
     apply(batch);
 
-    EXPECT_EQ(host.dialogRequests, 1);
-    EXPECT_EQ(host.lastDialogCandidateOids, QVector<quint32>({71u, 72u}));
-    EXPECT_EQ(host.lastDialogCandidateNames,
-              QStringList({QStringLiteral("Llanowar Elves (hand)"),
-                           QStringLiteral("Safewright Cavalry (battlefield)")}));
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Behold"));
+    EXPECT_FALSE(state->resolutionHandPickShowViewControls());
+    EXPECT_EQ(state->resolutionHandPickCandidateAnnotations(),
+              QStringList({QStringLiteral("Hand"), QStringLiteral("Battlefield")}));
+    EXPECT_EQ(host.dialogRequests, 0);
+    ASSERT_EQ(started.count(), 1);
 
+    state->clearPendingChoice();
     ruled::v1::RuledEventBatch malformed;
     auto *bad = malformed.add_events()->mutable_resolution_choice_required();
     bad->CopyFrom(*choice);
     bad->mutable_candidate_source_zones()->RemoveLast();
     apply(malformed);
-    EXPECT_EQ(host.dialogRequests, 1);
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    EXPECT_EQ(started.count(), 1);
 }
 
 TEST_F(RuledClientTest, ParsesAuthoritativeActivatedCostChoicesAndPayability)

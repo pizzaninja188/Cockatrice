@@ -573,8 +573,9 @@ RuledBatchSynchronizer::BatchApplyResult RuledBatchSynchronizer::applyBatch(cons
 
 // Public engine reveals must be projected before PermanentMoved consumes the physical card from
 // its source zone. ObjectId selects the exact hidden-zone card server-side; only the ordinary
-// Cockatrice reveal event (with full card info) crosses to clients. This keeps the client a
-// renderer and avoids inferring identity from the Oracle name or from the top physical slot.
+// Cockatrice reveal event (with full card info) crosses to clients. Library reveals and hand
+// reveals use the same path, so the client never infers identity from an Oracle name or a zone
+// position.
 void RuledBatchSynchronizer::applyCardsRevealed(const ruled::v1::RuledEventBatch &batch, GameEventStorage &events)
 {
     for (const auto &event : batch.events()) {
@@ -582,7 +583,9 @@ void RuledBatchSynchronizer::applyCardsRevealed(const ruled::v1::RuledEventBatch
             continue;
         }
         const auto &revealed = event.cards_revealed();
-        if (revealed.source_zone() != ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY) {
+        const bool fromLibrary = revealed.source_zone() == ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY;
+        const bool fromHand = revealed.source_zone() == ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND;
+        if (!fromLibrary && !fromHand) {
             qWarning() << "ruled CardsRevealed has unsupported source zone" << revealed.source_zone();
             continue;
         }
@@ -590,19 +593,20 @@ void RuledBatchSynchronizer::applyCardsRevealed(const ruled::v1::RuledEventBatch
         if (!owner) {
             continue;
         }
-        Server_CardZone *library = owner->getZones().value(ZoneNames::DECK);
-        if (!library) {
+        const QString zoneName = fromLibrary ? ZoneNames::DECK : ZoneNames::HAND;
+        Server_CardZone *sourceZone = owner->getZones().value(zoneName);
+        if (!sourceZone) {
             continue;
         }
 
         Event_RevealCards published;
-        published.set_zone_name(ZoneNames::DECK);
+        published.set_zone_name(zoneName.toStdString());
         published.set_grant_write_access(false);
         for (const auto &identity : revealed.cards()) {
             const quint32 oid = static_cast<quint32>(identity.object_id());
             Server_Card *card = playerBinding(owner->getPlayerId()).findCardByEngineOid(owner, oid);
-            if (!card || card->getZone() != library) {
-                qWarning() << "ruled CardsRevealed could not resolve library oid" << oid;
+            if (!card || card->getZone() != sourceZone) {
+                qWarning() << "ruled CardsRevealed could not resolve source-zone oid" << oid;
                 continue;
             }
             const QString expectedCardId = QString::fromStdString(identity.card_id());
@@ -612,7 +616,7 @@ void RuledBatchSynchronizer::applyCardsRevealed(const ruled::v1::RuledEventBatch
                 qWarning() << "ruled CardsRevealed identity mismatch for oid" << oid;
                 continue;
             }
-            const int position = library->getCards().indexOf(card);
+            const int position = sourceZone->getCards().indexOf(card);
             if (position < 0) {
                 continue;
             }

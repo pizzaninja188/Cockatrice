@@ -804,11 +804,30 @@ impl GameEngine {
                 ));
             }
             let name = object_display_name(&self.state, self.registry, oid);
-            events.push(ev_log(if is_hand_candidate {
-                format!("P{} reveals {name}.", pending.deciding_player)
+            if is_hand_candidate {
+                let card_id = self.state.objects[&oid].card_id.clone();
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::CardsRevealed(rv1::CardsRevealed {
+                        zone_owner_player_id: pending.deciding_player,
+                        source_zone: rv1::ChoiceCandidateSourceZone::Hand as i32,
+                        cards: vec![rv1::RevealedCard {
+                            object_id: oid,
+                            zone_change_generation: current_generation,
+                            card_id,
+                            card_name: name.clone(),
+                        }],
+                    })),
+                });
+                events.push(ev_log(format!(
+                    "P{} reveals {name}.",
+                    pending.deciding_player
+                )));
             } else {
-                format!("P{} beholds {name}.", pending.deciding_player)
-            }));
+                events.push(ev_log(format!(
+                    "P{} beholds {name}.",
+                    pending.deciding_player
+                )));
+            }
             item.resolution_branch_choices.insert(effect_index, Some(0));
         }
 

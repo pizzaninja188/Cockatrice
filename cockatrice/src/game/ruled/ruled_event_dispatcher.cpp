@@ -1118,40 +1118,12 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_BEHOLD) {
-        const int count = rcr.candidate_object_ids_size();
-        if (rcr.min() != 0 || rcr.max() != 1 || rcr.candidate_names_size() != count ||
-            rcr.candidate_source_zones_size() != count) {
-            qWarning() << "Rejecting malformed ruled Behold choice";
-            return;
-        }
-        QVector<quint32> oids;
-        QStringList names;
-        for (int i = 0; i < count; ++i) {
-            oids.append(rcr.candidate_object_ids(i));
-            const QString name = QString::fromStdString(rcr.candidate_names(i));
-            switch (rcr.candidate_source_zones(i)) {
-                case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND:
-                    names.append(tr("%1 (hand)").arg(name));
-                    break;
-                case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_BATTLEFIELD:
-                    names.append(tr("%1 (battlefield)").arg(name));
-                    break;
-                default:
-                    qWarning() << "Rejecting ruled Behold choice with an invalid source zone";
-                    return;
-            }
-        }
-        host->requestResolutionChoiceDialog(QString::fromStdString(rcr.prompt_text()), oids, names, 0, 1, false,
-                                            false);
-        return;
-    }
-
     const bool isLibrarySearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH;
     const bool isLibraryLook = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK;
     const bool isManifestDread = rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD;
     const bool isZoneSearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_ZONE_SEARCH;
     const bool isGraveyardCards = rcr.choice_kind() == ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS;
+    const bool isBehold = rcr.choice_kind() == ruled::v1::CHOICE_KIND_BEHOLD;
     if (isLibraryLook && (rcr.candidate_object_ids_size() != rcr.candidate_names_size() ||
                           rcr.candidate_server_card_ids_size() != rcr.candidate_names_size() ||
                           rcr.candidate_selectable_size() != rcr.candidate_names_size())) {
@@ -1174,20 +1146,24 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         emit state->combatStateChanged();
         return;
     }
-    if ((isZoneSearch || isGraveyardCards) && (rcr.candidate_source_zones_size() != rcr.candidate_names_size() ||
-                                               rcr.candidate_object_ids_size() != rcr.candidate_names_size())) {
+    if (isBehold && (rcr.min() != 0 || rcr.max() != 1)) {
+        qWarning() << "Rejecting malformed ruled Behold choice";
+        return;
+    }
+    if ((isZoneSearch || isGraveyardCards || isBehold) &&
+        (rcr.candidate_source_zones_size() != rcr.candidate_names_size() ||
+         rcr.candidate_object_ids_size() != rcr.candidate_names_size())) {
         qWarning() << "Rejecting malformed ruled multi-zone choice";
         return;
     }
 
     if ((isLibrarySearch || rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP || isLibraryLook ||
-         isManifestDread || isZoneSearch || isGraveyardCards) &&
+         isManifestDread || isZoneSearch || isGraveyardCards || isBehold) &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
         (rcr.candidate_names_size() > 0 || isEmptyLibrarySearch)) {
-        // LibrarySearch, LibraryTop, LibraryLook, or ManifestDread with server card ids: deck
-        // zone-view pick. All
-        // show card images from the local library, so they share the popup — only the title and
-        // optional engine-authored click eligibility differ.
+        // Image-based hidden or mixed-zone choices use a synthetic deck zone-view pick. They
+        // share the popup; only the title, source annotation, and optional engine-authored click
+        // eligibility differ.
         // LIBRARY_TOP is CR 701.18 scry, which may arrive twice for one spell: once to pick the
         // cards going to the bottom (min 0), then, if two or more stay on top, ordered to arrange
         // them. Click order carries the ordering, exactly as it does for Brainstorm's hand pick.
@@ -1212,6 +1188,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         } else if (isGraveyardCards) {
             pick.viewTitle = tr("Choose from your graveyard");
             pick.showViewControls = false;
+        } else if (isBehold) {
+            pick.viewTitle = tr("Behold");
+            pick.showViewControls = false;
         } else {
             pick.viewTitle =
                 rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP ? tr("Scry") : tr("Search your library");
@@ -1229,7 +1208,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
                 }
             }
             pick.candidateNames.append(name);
-            if (isZoneSearch || isGraveyardCards) {
+            if (isZoneSearch || isGraveyardCards || isBehold) {
                 switch (rcr.candidate_source_zones(i)) {
                     case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND:
                         pick.candidateAnnotations.append(tr("Hand"));
@@ -1239,6 +1218,13 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
                         break;
                     case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY:
                         pick.candidateAnnotations.append(tr("Library"));
+                        break;
+                    case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_BATTLEFIELD:
+                        if (!isBehold) {
+                            qWarning() << "Rejecting ruled choice with an invalid source zone";
+                            return;
+                        }
+                        pick.candidateAnnotations.append(tr("Battlefield"));
                         break;
                     default:
                         qWarning() << "Rejecting ruled choice with unspecified source zone";
