@@ -1,3 +1,4 @@
+use super::destruction::{attempt_destroy, DestroyLogStyle, DestroyOutcome, DestroySnapshot};
 use super::*;
 use crate::engine::{attempt_untap, UntapOutcome};
 
@@ -68,49 +69,37 @@ pub(super) fn destroy_attached(
             let was_creature = engine
                 .characteristics(oid)
                 .is_some_and(|characteristics| characteristics.is_creature());
-            (oid, name, indestructible, owner, source, was_creature)
+            DestroySnapshot {
+                object_id: oid,
+                name,
+                indestructible,
+                owner,
+                source,
+                was_creature,
+            }
         })
         .collect::<Vec<_>>();
 
     let zone_snapshot = engine.snapshot_zone_event();
     let mut destroyed = Vec::new();
     let mut tap_events = Vec::new();
-    for (oid, name, indestructible, owner, source, was_creature) in snapshots {
-        if indestructible {
-            events.push(ev_log(format!(
-                "{name} is indestructible and survives {spell_label}."
-            )));
-            continue;
-        }
-        let (regenerated, tap_event) = consume_regen_shield(engine, oid, events);
-        if regenerated {
-            tap_events.extend(tap_event);
-            events.push(ev_log(format!("{name} regenerates.")));
-            continue;
-        }
-        let died = destroy_permanent(&mut engine.state, engine.registry, oid)?;
-        events.push(ev_log(format!("{spell_label} destroys {name}")));
-        if let Some(owner_id) = owner {
-            events.push(permanent_moved_event(
-                &engine.state,
-                oid,
-                owner_id,
-                rv1::permanent_moved::Destination::Graveyard,
-            ));
-        }
-        if let Some(source) = source {
-            destroyed.push((source, was_creature, died));
+    for snapshot in snapshots {
+        match attempt_destroy(
+            engine,
+            snapshot,
+            false,
+            spell_label,
+            DestroyLogStyle::Cohort,
+            events,
+        )? {
+            DestroyOutcome::Indestructible => {}
+            DestroyOutcome::Regenerated { trigger_events } => tap_events.extend(trigger_events),
+            DestroyOutcome::Destroyed { trigger_events, .. } => destroyed.extend(trigger_events),
         }
     }
 
     let mut trigger_events = tap_events;
-    trigger_events.extend(
-        destroyed
-            .into_iter()
-            .flat_map(|(source, was_creature, died)| {
-                leaves_and_dies_events(source, was_creature, died)
-            }),
-    );
+    trigger_events.extend(destroyed);
     engine.fire_zone_triggers(zone_snapshot, trigger_events);
 
     Ok(EffectOutcome::Continue)
@@ -131,7 +120,7 @@ pub(super) fn destroy_all(
     let events = &mut *cx.events;
     let spell_label = cx.spell_label;
 
-    // CR 701.7 / 704.4: all matching permanents are destroyed simultaneously,
+    // CR 701.8 / 704.4: all matching permanents are destroyed simultaneously,
     // then their "dies" triggers fire together. Indestructible permanents survive
     // (CR 702.12b). `prevent_regeneration` bypasses shields (Wrath of God).
     // Untargeted, so hexproof/shroud are irrelevant.
@@ -146,49 +135,32 @@ pub(super) fn destroy_all(
         })
         .collect::<Vec<_>>();
     let zone_snapshot = engine.snapshot_zone_event();
-    let mut destroyed: Vec<(TriggerSourceSnapshot, bool, bool)> = Vec::new();
+    let mut destroyed = Vec::new();
     let mut tap_events = Vec::new();
     for (tid, source, was_creature) in victims {
-        let indestructible = engine.effective_has_keyword(tid, Keyword::Indestructible);
-        let tgt = object_display_name(&engine.state, engine.registry, tid);
-        if indestructible {
-            events.push(ev_log(format!(
-                "{tgt} is indestructible and survives {spell_label}."
-            )));
-            continue;
-        }
-        // CR 701.19c: "can't be regenerated" bypasses shields.
-        if !prevent_regeneration {
-            let (regenerated, tap_event) = consume_regen_shield(engine, tid, events);
-            if regenerated {
-                tap_events.extend(tap_event);
-                events.push(ev_log(format!("{tgt} regenerates.")));
-                continue;
-            }
-        }
-        let owner = engine.state.objects.get(&tid).map(|o| o.owner);
-        let died = destroy_permanent(&mut engine.state, engine.registry, tid)?;
-        events.push(ev_log(format!("{spell_label} destroys {tgt}")));
-        if let Some(owner_id) = owner {
-            events.push(permanent_moved_event(
-                &engine.state,
-                tid,
-                owner_id,
-                rv1::permanent_moved::Destination::Graveyard,
-            ));
-        }
-        if let Some(source) = source {
-            destroyed.push((source, was_creature, died));
+        let snapshot = DestroySnapshot {
+            object_id: tid,
+            indestructible: engine.effective_has_keyword(tid, Keyword::Indestructible),
+            name: object_display_name(&engine.state, engine.registry, tid),
+            owner: engine.state.objects.get(&tid).map(|object| object.owner),
+            source,
+            was_creature,
+        };
+        match attempt_destroy(
+            engine,
+            snapshot,
+            prevent_regeneration,
+            spell_label,
+            DestroyLogStyle::Cohort,
+            events,
+        )? {
+            DestroyOutcome::Indestructible => {}
+            DestroyOutcome::Regenerated { trigger_events } => tap_events.extend(trigger_events),
+            DestroyOutcome::Destroyed { trigger_events, .. } => destroyed.extend(trigger_events),
         }
     }
     let mut trigger_events = tap_events;
-    trigger_events.extend(
-        destroyed
-            .into_iter()
-            .flat_map(|(source, was_creature, died)| {
-                leaves_and_dies_events(source, was_creature, died)
-            }),
-    );
+    trigger_events.extend(destroyed);
     engine.fire_zone_triggers(zone_snapshot, trigger_events);
 
     Ok(EffectOutcome::Continue)

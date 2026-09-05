@@ -21,6 +21,9 @@ pub(in crate::engine) use choices::{card_result_characteristic_sum, card_result_
 mod amass;
 mod blight;
 mod damage;
+mod destruction;
+#[cfg(test)]
+mod destruction_tests;
 /// `pub(super)` so the combat damage step can reach `life::apply_life_gain` — lifelink is the one
 /// life-gain edge outside stack resolution, and it must go through the same funnel.
 pub(super) mod life;

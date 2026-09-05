@@ -1,3 +1,4 @@
+use super::destruction::{attempt_destroy, DestroyLogStyle, DestroyOutcome, DestroySnapshot};
 use super::*;
 use crate::engine::presentation::{
     stack_child_presentation_ref, PresentationPath, StackPresentationSource,
@@ -57,46 +58,34 @@ pub(super) fn destroy(
     let zone_snapshot = engine.snapshot_zone_event();
     let mut trigger_events = Vec::new();
     for tid in subjects {
-        let tgt = object_display_name(&engine.state, engine.registry, tid);
-        let indestructible = engine.effective_has_keyword(tid, Keyword::Indestructible);
-        if indestructible {
-            events.push(ev_log(format!(
-                "{spell_label} has no effect: {tgt} is indestructible."
-            )));
-        } else {
-            let (regenerated, tap_event) = consume_regen_shield(engine, tid, events);
-            if regenerated {
-                events.push(ev_log(format!("{tgt} regenerates.")));
-                trigger_events.extend(tap_event);
-                continue;
-            }
-            events.push(ev_log(format!("{spell_label} destroys {tgt}")));
-            let owner = engine.state.objects.get(&tid).map(|o| o.owner);
-            let source = zone_snapshot.source(tid);
-            let was_creature = engine
+        let snapshot = DestroySnapshot {
+            object_id: tid,
+            name: object_display_name(&engine.state, engine.registry, tid),
+            indestructible: engine.effective_has_keyword(tid, Keyword::Indestructible),
+            owner: engine.state.objects.get(&tid).map(|object| object.owner),
+            source: zone_snapshot.source(tid),
+            was_creature: engine
                 .characteristics(tid)
-                .is_some_and(|value| value.is_creature());
-            let died = destroy_permanent(&mut engine.state, engine.registry, tid)?;
-            if let Some(owner_id) = owner {
-                // "Destroyed this way" observes the successful destroy action, not the final
-                // destination. A replacement may move the permanent elsewhere; indestructible
-                // and regeneration were handled above and therefore never produce this receipt.
-                effect_result.cards.push(payment::card_result_entry(
-                    &engine.state,
-                    engine.registry,
-                    CardResultAction::Destroy,
-                    owner_id,
-                    tid,
-                ));
-                events.push(permanent_moved_event(
-                    &engine.state,
-                    tid,
-                    owner_id,
-                    rv1::permanent_moved::Destination::Graveyard,
-                ));
-            }
-            if let Some(source) = source {
-                trigger_events.extend(leaves_and_dies_events(source, was_creature, died));
+                .is_some_and(|value| value.is_creature()),
+        };
+        match attempt_destroy(
+            engine,
+            snapshot,
+            false,
+            spell_label,
+            DestroyLogStyle::Subject,
+            events,
+        )? {
+            DestroyOutcome::Indestructible => {}
+            DestroyOutcome::Regenerated {
+                trigger_events: taps,
+            } => trigger_events.extend(taps),
+            DestroyOutcome::Destroyed {
+                receipt,
+                trigger_events: departures,
+            } => {
+                effect_result.cards.extend(receipt);
+                trigger_events.extend(departures);
             }
         }
     }
