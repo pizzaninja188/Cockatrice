@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cockatrice Workflow"
+  short_description: "Plan, verify, and deliver Cockatrice issue work"
+  default_prompt: "Use $cockatrice-workflow to handle this Cockatrice issue through the requested phase."

@@ -20,8 +20,10 @@
     ./scripts/gen-card-checklist.ps1 --check
 #>
 
+$ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $manifest = Join-Path $repoRoot "tricerules\Cargo.toml"
 $out = Join-Path $repoRoot "tricerules\CARDS.md"
 
 cargo run --release --manifest-path $manifest -p tricerules-cards --features checklist --bin gen-checklist -- --out $out @args
+exit $LASTEXITCODE

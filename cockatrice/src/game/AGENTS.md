@@ -21,6 +21,7 @@ Engine legal actions, targets, prompts, and object identities are authoritative.
 - `TabGame::refreshRuledPromptState()` owns mode selection. `TabGame` otherwise handles placement and signal connections.
 - Targeting is derived from `TargetingSources`; combat, priority, and sticky blocker errors remain orthogonal inputs.
 - Reuse existing commands and signals for UI text and actions before adding protobuf.
+- A valid one-of-one cast-cost group advances as soon as the option and any required object selection are complete. Do not add a redundant Confirm Costs step; retain explicit confirmation for multi-object cohorts.
 - Widget visibility tests use `isHidden()` because offscreen tests do not show the parent widget.
 
 ## Client verification
@@ -28,6 +29,8 @@ Engine legal actions, targets, prompts, and object identities are authoritative.
 Read `../../../docs/AGENT-VERIFICATION.md`. Client-only iteration builds the Cockatrice and touched test targets, then runs `ruled_client_test`, `game_prompt_widget_test`, and any specifically affected client test. Protobuf or relay changes require the full cross-component gate and `ruled_e2e_smoke_test`.
 
 Qt module additions for tests belong in `cmake/FindQtRuntime.cmake` through `_TEST_NEEDED`, not in a per-test `CMakeLists.txt` workaround.
+
+For touched interaction paths, verify the actual context-menu action, target-arrow anchor, picker annotations, popup count, and payment progression as applicable. Trace the engine offer through relay identity and the real click/render path; a passing view-model or relay test does not prove that interaction. Add focused coverage at the touched UI seam and specify remaining hands-on acceptance.
 
 ## Manual verification on Windows
 
@@ -55,3 +58,5 @@ help
 `put` always conjures and is limited to hand or battlefield. `move` relocates an existing object and is the path to graveyard, exile, or library. Dev commands are accepted only when both the session and sidecar gates are enabled; they remain logged commands. `put bf` fires ETB/static registration but no cast trigger, and `put gy` deliberately does not fire dies triggers.
 
 Final summaries must distinguish manual steps actually performed from recommended steps. For privacy or identity changes, verify both seats' visible state, physical zone movement, and cross-zone identity rather than relying only on headless tests.
+
+Record user-performed acceptance as user-confirmed. When the user defers testing, keep it deferred while completing applicable automated gates and already-authorized delivery.

@@ -58,9 +58,73 @@ Use `-ShowLogOnSuccess` only when the successful output itself is required evide
 ./tests/scripts/run_quiet_command_test.ps1
 ```
 
+## Final verification entry point
+
+Choose the affected side after tracing the actual producers and consumers; the script does not
+infer scope from filenames. From the repository root:
+
+```powershell
+./scripts/verify.ps1 -Side Rust
+./scripts/verify.ps1 -Side Rust -CardData
+./scripts/verify.ps1 -Side Cpp
+./scripts/verify.ps1 -Side Both -CardData
+./scripts/verify.ps1 -Side Both -CardData -Preview
+```
+
+The script locates the checkout from its own path, so invoking it by an absolute path from another
+directory is also supported. Rust runs in `tricerules`; Ninja runs in a child Windows PowerShell;
+CTest uses `build/windows-ninja-all`, rejects an empty suite, and requires ruled E2E prerequisites
+with `RULED_E2E_REQUIRE=1`. The caller's E2E environment is restored after CTest.
+
+Rust selects full tests, all-target Clippy with warnings denied, and format checking. Cpp selects
+the full Ninja build and CTest. `-CardData` adds the read-only card check and requires Rust or Both.
+Every selection ends with `git diff --check`. Preview prints argument arrays and working
+directories without running commands or creating artifacts.
+
+Each run retains logs and `summary.json` in a unique directory under `build/verification-logs`.
+The summary records selected gates, commands, working directories, exit codes, and log paths.
+The first failure prints its full log and stops the run with that exit code; remaining gates are
+marked `NotRun`. Previous passing results are never reused. Missing sources or tools are failures,
+not permission to omit a required gate. Diagnose unrelated baseline drift before changing it.
+
+For card additions, explicitly refresh and review generated changes before final verification:
+
+```powershell
+./scripts/update-card-data.ps1 -Mode Refresh
+./scripts/update-card-data.ps1 -Mode Check
+```
+
+Check is the default. It runs the canonical generator check and validates a temporary checklist,
+then compares that checklist with `tricerules/CARDS.md`, ignoring only CRLF/LF differences. It
+writes only build artifacts. Refresh updates existing generated RON and fingerprints, validates
+the new checklist before replacing `CARDS.md`, then runs Check. Review all resulting changes;
+neither command stages files, downloads sources, or enables `--include-new`.
+
+Optional `-OracleBulk` and `-CardsXml` override the existing local source defaults. Relative paths
+resolve from the repository root. Bulk metadata remains the adjacent `<input>.meta.json` and the
+generator verifies its SHA. Failed checklist name validation preserves the old checklist; earlier
+generated RON/fingerprint writes during Refresh remain available for review.
+
+The legacy `gen-card-checklist.ps1 --check` validates names **and writes its output**. Use the new
+Check entry point for verification that must leave tracked files untouched.
+
+Workflow script regressions use isolated checkouts and native command fixtures:
+
+```powershell
+powershell.exe -NoProfile -File tests/scripts/run_quiet_command_test.ps1
+powershell.exe -NoProfile -File tests/scripts/generator_wrapper_test.ps1
+powershell.exe -NoProfile -File tests/scripts/update_card_data_test.ps1
+powershell.exe -NoProfile -File tests/scripts/verify_workflow_test.ps1
+```
+
+Also run these with `pwsh.exe` when PowerShell 7 is available. After changing orchestration, run
+the real combined gate once; fixture success alone does not establish the toolchain integration.
+
 ## Windows
 
-The Ninja script enters the VS x64 environment and configures on first use:
+Use the final entry point above for completion. For focused work or diagnosing a failed gate,
+the underlying commands remain available. The Ninja script enters the VS x64 environment and
+configures on first use:
 
 ```powershell
 ./scripts/build-ninja.ps1

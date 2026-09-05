@@ -133,6 +133,27 @@ text, and repeating the complete rules text inside `Choose a target for ...` obs
 Nested spell choices still use stable paths beginning with the spell node, but that path component
 does not require its own presentation mapping.
 
+### Token and state-marker display prerequisites
+
+Ruled-created token and state-marker artwork/details use the client's separately imported
+Magic-Token database, normally `tokens.xml`. Updating `cards.xml`, the ruled Oracle cache, or
+engine RON does not refresh that database.
+
+For a blank or incorrect token display:
+
+1. Check the exact engine-emitted token/state name and the physical client's mapped identity.
+2. Find the configured token database path in Cockatrice settings; do not assume the default path.
+3. Inspect that file for the exact entry, its image references, and its source/version metadata.
+   Compare against the current Magic-Token source used by Oracle's Tokens import.
+4. If missing or stale, run Oracle's **Tokens import**, save to the configured path, and reload
+   the database or restart the client. Updating the normal Cards import alone is insufficient.
+5. Recheck the actual spawned object. If the data is current and the entry exists, trace the
+   client token-display mapping instead of assuming every blank display is stale data.
+
+Some state entries intentionally have no rules text. Validate the expected name, type, and art
+against that entry. Do not add hardcoded image URLs or copied display prose to engine/relay code
+to compensate for a stale external database.
+
 ### Presentation-bearing surfaces
 
 Every authored display node needs stable identity and an explicit `OracleLines` or `Fallback`
@@ -422,16 +443,11 @@ cannot select mechanics, IDs, or presentation mappings. Review the dry run and g
 never accept unrelated bulk churn.
 
 Use `gen-cards --check` against the pinned SHA-verified snapshot to detect drift without writing.
-The wrapper can mask a failing child exit code in some PowerShell flows, so verify `$LASTEXITCODE`
-or invoke the generator executable directly when collecting completion evidence.
-
-Direct check from the repository root:
+Both PowerShell generator wrappers preserve the child's exit code. For the combined read-only
+generator and checklist check, use the workflow entry point from the repository root:
 
 ```powershell
-cargo run --release --manifest-path tricerules\Cargo.toml `
-  -p tricerules-cards --features gencards --bin gen-cards -- `
-  --input oracle-cards.jsonl.gz --check
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+./scripts/update-card-data.ps1 -Mode Check
 ```
 
 ## 9. Track partial implementations
@@ -449,12 +465,20 @@ Use red/green TDD for behavior changes: add the smallest focused regression, con
 failure, implement one coherent increment, and rerun it. Finish with the exact Rust and card-data
 gates in [`docs/AGENT-VERIFICATION.md`](../../../docs/AGENT-VERIFICATION.md).
 
-For card-data changes, regenerate `tricerules/CARDS.md` and run the name gate from the repository
+For card-data changes, refresh existing generated RON, presentation fingerprints, and the
+validated checklist, review the resulting diff, then run final verification from the repository
 root:
 
 ```powershell
-./scripts/gen-card-checklist.ps1 --check
+./scripts/update-card-data.ps1 -Mode Refresh
+./scripts/verify.ps1 -Side Rust -CardData
 ```
+
+Use `-Side Both` when C++ contracts are affected. Refresh uses the existing pinned local input;
+it does not fetch new data or enable `--include-new`. Check is non-mutating for tracked files.
+The legacy checklist generator's `--check` validates names but still writes its output; do not
+use it as a read-only drift check. Source overrides and retained failure evidence are described
+in the verification guide.
 
 Complete the ruled interaction checklist when adding or changing a substantive primitive,
 protocol, relay, or client contract. Rust-only status is N/A for C++ testing only after confirming
@@ -470,6 +494,7 @@ that presentation transport, visibility, physical identity, and client behavior 
 - [ ] Every ability and choice-bearing child has stable identity and presentation.
 - [ ] Every `OracleLines` mapping matches the correct face's normalized current lines.
 - [ ] Every non-obvious `Fallback` has a deliberate reason.
+- [ ] New token/state-marker displays have the correct exact identity and external database entry; any hands-on acceptance is recorded separately.
 - [ ] Target prompts contain only short, effect-specific click guidance.
 - [ ] RON contains no copied Oracle display prose or freeform choice labels.
 - [ ] Happy and illegal scenarios cover the implemented mechanics and relevant prompt/choice path.

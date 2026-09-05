@@ -35,3 +35,4 @@ if ($args -notcontains "--input") {
 }
 
 cargo run --release --manifest-path $manifest -p tricerules-cards --features gencards --bin gen-cards -- @extra @args
+exit $LASTEXITCODE

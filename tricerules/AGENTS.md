@@ -25,10 +25,6 @@ completion checklist. Do not copy nearby legacy RON as a substitute for followin
 
 ## Rust verification
 
-Read `../docs/AGENT-VERIFICATION.md` before running commands. During red/green iteration, run the best matching scenario or registry test. Before completion of a Rust change, run:
+Read `../docs/AGENT-VERIFICATION.md` before running commands. During red/green iteration, run the best matching scenario or registry test through the quiet runner with working directory `tricerules`.
 
-- Full `cargo test`
-- `cargo clippy --all-targets -- -D warnings`
-- `cargo fmt --check`
-- Card checklist `--check` when card data or registry names changed
-- `git diff --check`
+For final verification, use `scripts/verify.ps1 -Side Rust` from the repository root. Add `-CardData` when card data or registry names changed; use `-Side Both` if the change also affects C++ contracts. The script runs the full Rust test, Clippy, format, and diff gates with exact exit codes. Explicitly refresh card data with `scripts/update-card-data.ps1 -Mode Refresh` and review the generated diff before the final check.

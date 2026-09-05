@@ -24,7 +24,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before cross-component work. I
 - **Determinism** is `(seed, command log) -> state`; choices and dev commands that affect state must remain logged commands.
 - Keep `ruled_v1.proto` aligned across every Rust and C++ consumer. Treat engine `ObjectId`, tricerules `card_id`, Oracle name, `Server_Card.id`, hand slot, and face index as distinct identities.
 
-Before adding a new effect, trigger, cost, keyword, helper, state field, proto field, or legal action, name at least two real cards or two distinct mechanics it supports. Widen the parameters when only one use fits.
+Before adding a new effect, trigger, cost, keyword, helper, state field, proto field, or legal action, name at least two real cards or two distinct mechanics it supports. Widen the parameters when only one use fits. In the plan, compare the closest existing primitive and explain why reuse, extension, or separation is correct.
 
 Comprehensive Rules govern mechanics and Oracle governs card-specific behavior. Verify exact CR numbers and quotations against the current official rules, and fetch card rulings rather than coding non-obvious interactions from memory. For substantive ruled work, finish with an **MTG applicability** note stating the governed concepts and compliance or deferral; otherwise state “No MTG rules surface area.”
 
@@ -44,6 +44,7 @@ Load only the guidance relevant to the task:
 ## Verification ladder
 
 Use the exact commands and affected-side matrix in [docs/AGENT-VERIFICATION.md](docs/AGENT-VERIFICATION.md).
+Use `scripts/verify.ps1` for final affected-side verification; keep focused red/green commands on the quiet runner. Card-data verification uses `scripts/update-card-data.ps1 -Mode Check`; refresh is a separate explicit operation.
 
 1. **Red:** run the smallest regression that proves the missing or broken behavior.
 2. **Green:** apply one coherent implementation increment and rerun that regression.
@@ -62,4 +63,7 @@ If a build fails only because a running executable is locked, stop the exact Coc
 - Batch independent reads and searches. Keep successful command output concise and show detailed logs on failure.
 - Separate required work from optional polish. Do not perform unrelated cleanup while implementing an approved plan.
 - Once a decision-complete plan is approved, implement it directly without reopening settled design choices.
+- When the user explicitly defers manual testing, record it as deferred and finish applicable automated gates and any already-authorized delivery. Distinguish agent-performed acceptance from user-confirmed acceptance; never claim deferred tests were performed.
 - When asked to commit, stage only intended files, inspect the staged diff, make one focused commit, and preserve unrelated work.
+
+The repository [Cockatrice workflow skill](.agents/skills/cockatrice-workflow/SKILL.md) routes issue planning, implementation, and authorized delivery through this guidance.
