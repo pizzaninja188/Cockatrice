@@ -2660,28 +2660,27 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
     #[test]
-    fn windows_fetch_wrapper_uses_current_jsonl_contract_and_writes_metadata() {
-        let wrapper = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    fn windows_card_data_wrappers_preserve_inputs_and_download_provenance() {
+        let regression = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("..")
-            .join("scripts")
-            .join("fetch-scryfall-bulk.ps1");
-        let source = fs::read_to_string(wrapper).expect("read PowerShell fetch wrapper");
-        assert!(source.contains("jsonl_download_uri"));
-        assert!(source.contains("sha256"));
-        assert!(source.contains(".meta.json"));
-        assert!(!source.contains("$entry.download_uri"));
-    }
-
-    #[test]
-    fn windows_generator_wrapper_defaults_to_gzipped_jsonl() {
-        let wrapper = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..")
-            .join("scripts")
-            .join("gen-cards.ps1");
-        let source = fs::read_to_string(wrapper).expect("read PowerShell generator wrapper");
-        assert!(source.contains("oracle-cards.jsonl.gz"));
+            .join("tests/scripts/card_data_wrapper_test.ps1");
+        let output = std::process::Command::new("powershell.exe")
+            // Cargo may inherit PowerShell 7's module path; let Windows PowerShell
+            // discover its own standard modules instead of loading incompatible ones.
+            .env_remove("PSModulePath")
+            .args(["-NoProfile", "-NonInteractive", "-File"])
+            .arg(regression)
+            .output()
+            .expect("run offline Windows wrapper regression");
+        assert!(
+            output.status.success(),
+            "wrapper regression failed ({}):\n{}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }

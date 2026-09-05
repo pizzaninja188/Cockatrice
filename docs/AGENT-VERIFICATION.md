@@ -113,6 +113,7 @@ Workflow script regressions use isolated checkouts and native command fixtures:
 ```powershell
 powershell.exe -NoProfile -File tests/scripts/run_quiet_command_test.ps1
 powershell.exe -NoProfile -File tests/scripts/generator_wrapper_test.ps1
+powershell.exe -NoProfile -File tests/scripts/card_data_wrapper_test.ps1
 powershell.exe -NoProfile -File tests/scripts/update_card_data_test.ps1
 powershell.exe -NoProfile -File tests/scripts/verify_workflow_test.ps1
 ```

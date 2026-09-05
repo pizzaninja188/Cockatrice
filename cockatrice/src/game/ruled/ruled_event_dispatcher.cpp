@@ -357,6 +357,55 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
     return data;
 }
 
+QVector<RuledModalSpellOption>
+parseSpellModes(const google::protobuf::RepeatedPtrField<ruled::v1::LegalSpellMode> &source,
+                const RuledPresentationResolver &resolver)
+{
+    QVector<RuledModalSpellOption> modes;
+    modes.reserve(source.size());
+    for (const auto &mode : source) {
+        modes.append(
+            {static_cast<int>(mode.mode_index()),
+             mode.has_presentation() ? resolver.resolve(mode.presentation()) : QString::fromStdString(mode.label()),
+             mode.selectable(), mode.needs_target(),
+             mode.has_targets() ? parseSpellTargets(mode.targets()) : RuledClientState::SpellTargetData{},
+             mode.has_linked_cast_cost() ? static_cast<int>(mode.linked_cast_cost().group_index()) : -1,
+             mode.has_linked_cast_cost() ? static_cast<int>(mode.linked_cast_cost().option_index()) : -1});
+    }
+    return modes;
+}
+
+// Both source-zone paths use the same indexed presentation lists. Their callers retain
+// ownership of replacing a battlefield snapshot versus updating one published zone action.
+struct AbilityListRefs
+{
+    QStringList &texts;
+    QStringList &manaCosts;
+    QStringList &manaProduced;
+    QStringList &costLabels;
+    QVector<bool> &activatable;
+};
+
+void copyAbilityInfo(AbilityListRefs lists,
+                     int abilityIndex,
+                     const ruled::v1::AbilityInfo &ability,
+                     const RuledPresentationResolver &resolver)
+{
+    while (lists.texts.size() <= abilityIndex) {
+        lists.texts.append(QString{});
+        lists.manaCosts.append(QString{});
+        lists.manaProduced.append(QString{});
+        lists.costLabels.append(QString{});
+        lists.activatable.append(false);
+    }
+    lists.texts[abilityIndex] =
+        ability.has_presentation() ? resolver.resolve(ability.presentation()) : QString::fromStdString(ability.text());
+    lists.manaCosts[abilityIndex] = QString::fromStdString(ability.mana_cost());
+    lists.manaProduced[abilityIndex] = QString::fromStdString(ability.mana_produced());
+    lists.costLabels[abilityIndex] = QString::fromStdString(ability.cost_label());
+    lists.activatable[abilityIndex] = ability.activatable();
+}
+
 /// Copies the engine's structured hand-action contract into the generic client-side indexes.
 QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::LegalActions &actions,
                                                               const RuledPresentationResolver &resolver)
@@ -393,20 +442,7 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         if (action.modes_size() > 0) {
             set.modalMinModesByCastKey.insert(castKey, static_cast<int>(action.min_modes()));
             set.modalMaxModesByCastKey.insert(castKey, static_cast<int>(action.max_modes()));
-            QVector<RuledModalSpellOption> modes;
-            modes.reserve(action.modes_size());
-            for (const auto &mode : action.modes()) {
-                modes.append(
-                    {static_cast<int>(mode.mode_index()),
-                     mode.has_presentation() ? resolver.resolve(mode.presentation())
-                                             : QString::fromStdString(mode.label()),
-                     mode.selectable(),
-                     mode.needs_target(),
-                     mode.has_targets() ? parseSpellTargets(mode.targets()) : RuledClientState::SpellTargetData{},
-                     mode.has_linked_cast_cost() ? static_cast<int>(mode.linked_cast_cost().group_index()) : -1,
-                     mode.has_linked_cast_cost() ? static_cast<int>(mode.linked_cast_cost().option_index()) : -1});
-            }
-            set.modalOptionsByCastKey.insert(castKey, modes);
+            set.modalOptionsByCastKey.insert(castKey, parseSpellModes(action.modes(), resolver));
             if (action.has_all_modes_cast_cost()) {
                 set.allModesCastCostByCastKey.insert(
                     castKey,
@@ -1513,19 +1549,8 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
                 if (abilityIndex < 0) {
                     continue;
                 }
-                while (texts.size() <= abilityIndex) {
-                    texts.append(QString{});
-                    manaCosts.append(QString{});
-                    manaProduced.append(QString{});
-                    costLabels.append(QString{});
-                    activatable.append(false);
-                }
-                texts[abilityIndex] = ability.has_presentation() ? presentationResolver.resolve(ability.presentation())
-                                                                : QString::fromStdString(ability.text());
-                manaCosts[abilityIndex] = QString::fromStdString(ability.mana_cost());
-                manaProduced[abilityIndex] = QString::fromStdString(ability.mana_produced());
-                costLabels[abilityIndex] = QString::fromStdString(ability.cost_label());
-                activatable[abilityIndex] = ability.activatable();
+                copyAbilityInfo({texts, manaCosts, manaProduced, costLabels, activatable}, abilityIndex, ability,
+                                presentationResolver);
             }
             if (!texts.isEmpty()) {
                 state->engineOidToActivatedAbilityTexts.insert(oid, texts);
@@ -1764,19 +1789,8 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         if (action.modes_size() > 0) {
             state->zoneCastActions.modalMinModesByCastKey.insert(castKey, static_cast<int>(action.min_modes()));
             state->zoneCastActions.modalMaxModesByCastKey.insert(castKey, static_cast<int>(action.max_modes()));
-            QVector<RuledModalSpellOption> modes;
-            for (const auto &mode : action.modes()) {
-                modes.append(
-                    {static_cast<int>(mode.mode_index()),
-                     mode.has_presentation() ? presentationResolver.resolve(mode.presentation())
-                                             : QString::fromStdString(mode.label()),
-                     mode.selectable(),
-                     mode.needs_target(),
-                     mode.has_targets() ? parseSpellTargets(mode.targets()) : RuledClientState::SpellTargetData{},
-                     mode.has_linked_cast_cost() ? static_cast<int>(mode.linked_cast_cost().group_index()) : -1,
-                     mode.has_linked_cast_cost() ? static_cast<int>(mode.linked_cast_cost().option_index()) : -1});
-            }
-            state->zoneCastActions.modalOptionsByCastKey.insert(castKey, modes);
+            state->zoneCastActions.modalOptionsByCastKey.insert(castKey,
+                                                                parseSpellModes(action.modes(), presentationResolver));
             if (action.has_all_modes_cast_cost()) {
                 state->zoneCastActions.allModesCastCostByCastKey.insert(
                     castKey,
@@ -1866,19 +1880,8 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         auto &manaProduced = state->engineOidToActivatedAbilityManaProduced[oid];
         auto &costLabels = state->engineOidToActivatedAbilityCostLabels[oid];
         auto &activatable = state->engineOidToActivatedAbilityActivatable[oid];
-        while (texts.size() <= abilityIndex) {
-            texts.append(QString{});
-            manaCosts.append(QString{});
-            manaProduced.append(QString{});
-            costLabels.append(QString{});
-            activatable.append(false);
-        }
-        texts[abilityIndex] = ability.has_presentation() ? presentationResolver.resolve(ability.presentation())
-                                                        : QString::fromStdString(ability.text());
-        manaCosts[abilityIndex] = QString::fromStdString(ability.mana_cost());
-        manaProduced[abilityIndex] = QString::fromStdString(ability.mana_produced());
-        costLabels[abilityIndex] = QString::fromStdString(ability.cost_label());
-        activatable[abilityIndex] = ability.activatable();
+        copyAbilityInfo({texts, manaCosts, manaProduced, costLabels, activatable}, abilityIndex, ability,
+                        presentationResolver);
     }
 
     state->openingUiKind = RuledOpeningUiKind::None;

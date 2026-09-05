@@ -1654,6 +1654,76 @@ TEST_F(RuledClientTest, AppliesAuthoritativeModalModeDataPerFace)
     EXPECT_FALSE(modes[1].selectable);
 }
 
+TEST_F(RuledClientTest, ModalDecodingPreservesPresentationTargetsAndCostLinksAcrossCastSources)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *hand = addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 5, "Modal spell", 1);
+    auto *zone = actions.add_zone_cast_actions();
+    zone->set_object_id(77);
+    zone->set_face_index(1);
+    zone->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    zone->set_casting_permission_id(8);
+    zone->set_cast_method(ruled::v1::CAST_METHOD_PERMISSION);
+    zone->set_zone_change_generation(12);
+    const auto addModes = [](auto *action) {
+        action->set_min_modes(1);
+        action->set_max_modes(2);
+        action->mutable_all_modes_cast_cost()->set_group_index(4);
+        action->mutable_all_modes_cast_cost()->set_option_index(6);
+        auto *mode = action->add_modes();
+        mode->set_mode_index(3);
+        mode->set_label("Unused label");
+        mode->mutable_presentation()->set_fallback_text("Presented mode");
+        mode->set_selectable(true);
+        mode->set_needs_target(true);
+        mode->mutable_linked_cast_cost()->set_group_index(2);
+        mode->mutable_linked_cast_cost()->set_option_index(7);
+        auto *group = mode->mutable_targets()->add_groups();
+        group->set_group_index(0);
+        group->set_min(1);
+        group->set_max(1);
+        group->set_can_target_opponent(true);
+        auto *disabled = action->add_modes();
+        disabled->set_mode_index(9);
+        disabled->set_label("Disabled mode");
+    };
+    addModes(hand);
+    addModes(zone);
+    apply(batch);
+
+    const RuledCastActionKey handKey{5, 1, RuledCastSource::Hand, ruled::v1::CAST_METHOD_NORMAL, 0};
+    const RuledCastActionKey zoneKey{77, 1, RuledCastSource::Exile, ruled::v1::CAST_METHOD_PERMISSION, 8};
+    const auto checkModes = [](const RuledHandActionSet &set, const RuledCastActionKey &key) {
+        EXPECT_EQ(set.modalMinModesByCastKey.value(key), 1);
+        EXPECT_EQ(set.modalMaxModesByCastKey.value(key), 2);
+        EXPECT_EQ(set.allModesCastCostByCastKey.value(key), qMakePair(4, 6));
+        const auto modes = set.modalOptionsByCastKey.value(key);
+        ASSERT_EQ(modes.size(), 2);
+        EXPECT_EQ(modes[0].modeIndex, 3);
+        EXPECT_EQ(modes[0].label, QStringLiteral("Presented mode"));
+        EXPECT_TRUE(modes[0].selectable);
+        EXPECT_TRUE(modes[0].needsTarget);
+        EXPECT_TRUE(modes[0].targets.canTargetOpponent);
+        EXPECT_EQ(modes[0].linkedCastCostGroupIndex, 2);
+        EXPECT_EQ(modes[0].linkedCastCostOptionIndex, 7);
+        EXPECT_EQ(modes[1].modeIndex, 9);
+        EXPECT_EQ(modes[1].label, QStringLiteral("Disabled mode"));
+        EXPECT_FALSE(modes[1].selectable);
+        EXPECT_FALSE(modes[1].needsTarget);
+        EXPECT_FALSE(modes[1].targets.canTargetOpponent);
+        EXPECT_EQ(modes[1].linkedCastCostGroupIndex, -1);
+        EXPECT_EQ(modes[1].linkedCastCostOptionIndex, -1);
+    };
+    checkModes(state->handActions[ruled::v1::HAND_ACTION_CAST_SPELL], handKey);
+    checkModes(state->zoneCastActions, zoneKey);
+    EXPECT_FALSE(state->zoneCastActions.modalOptionsByCastKey.contains(handKey));
+    EXPECT_EQ(state->zoneCastActions.faceOptionsByIndex.value(77).first().zoneChangeGeneration, 12u);
+    apply(ruled::v1::RuledEventBatch{});
+    EXPECT_TRUE(state->zoneCastActions.modalOptionsByCastKey.isEmpty());
+    EXPECT_TRUE(state->handActions.isEmpty());
+}
+
 TEST_F(RuledClientTest, AppliesStructuredCleanupDiscardActionsAndRequiredCount)
 {
     ruled::v1::RuledEventBatch batch;
@@ -3326,6 +3396,55 @@ TEST_F(RuledClientTest, BattlefieldAbilityIndicesPreserveAuthoredZoneGaps)
     EXPECT_EQ(state->activatedAbilityMenuLabel(203, 2), QStringLiteral("0: Surveil 2."));
     EXPECT_EQ(state->activatedAbilityMenuLabel(203, 3), QStringLiteral("-2: Tap target creature."));
     EXPECT_TRUE(state->activatedAbilityMenuLabel(203, 0).isEmpty());
+}
+
+TEST_F(RuledClientTest, AbilityDecodingPreservesSparseSlotsAndPresentationAcrossSourceZones)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(kLocalPlayer);
+    auto *object = view->add_battlefield_objects();
+    object->set_object_id(203);
+    ruled::v1::AbilityInfo ability;
+    ability.set_ability_index(2);
+    ability.set_text("Unused label");
+    ability.mutable_presentation()->set_fallback_text("Presented ability");
+    ability.set_mana_cost("{1}");
+    ability.set_mana_produced("G");
+    ability.set_cost_label("{1}, {T}");
+    ability.set_activatable(true);
+    *object->add_activated_abilities() = ability;
+    auto *zone = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_ability_actions();
+    zone->set_object_id(204);
+    zone->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    zone->set_hand_index(5);
+    zone->set_zone_change_generation(7);
+    zone->set_ability_index(2);
+    *zone->mutable_ability() = ability;
+    // The zone action's outer index is authoritative, not the embedded AbilityInfo index.
+    zone->mutable_ability()->set_ability_index(9);
+    apply(batch);
+
+    for (quint32 oid : {203u, 204u}) {
+        EXPECT_EQ(state->activatedAbilitiesForOid(oid), QStringList({{}, {}, QStringLiteral("Presented ability")}));
+        EXPECT_EQ(state->activatedAbilityManaCostsForOid(oid), QStringList({{}, {}, QStringLiteral("{1}")}));
+        EXPECT_EQ(state->activatedAbilityManaProducedForOid(oid), QStringList({{}, {}, QStringLiteral("G")}));
+        EXPECT_EQ(state->activatedAbilityCostLabelsForOid(oid), QStringList({{}, {}, QStringLiteral("{1}, {T}")}));
+        EXPECT_FALSE(state->abilityActivatable(oid, 0));
+        EXPECT_TRUE(state->abilityActivatable(oid, 2));
+    }
+    EXPECT_EQ(state->zoneAbilityOidForHandSlot(5), 204u);
+    EXPECT_EQ(state->abilitySourceGeneration(204), 7u);
+
+    object->mutable_activated_abilities(0)->clear_presentation();
+    object->mutable_activated_abilities(0)->set_text("Updated ability");
+    object->mutable_activated_abilities(0)->set_activatable(false);
+    *zone->mutable_ability() = object->activated_abilities(0);
+    apply(batch);
+    for (quint32 oid : {203u, 204u}) {
+        EXPECT_EQ(state->activatedAbilityMenuLabel(oid, 2), QStringLiteral("Updated ability"));
+        EXPECT_FALSE(state->abilityActivatable(oid, 2));
+    }
 }
 
 TEST_F(RuledClientTest, ParsesSpellCostChoicesForHandAndPublicZoneCasts)
