@@ -980,7 +980,7 @@ fn legal_ability_cost_choices(
                     .copied()
                     .filter(|oid| !exclude_source || *oid != source)
                     .filter(|oid| {
-                        super::resolution::library_card_matches_filter(
+                        super::card_predicates::zone_card_matches_filter(
                             &eng.state,
                             eng.registry,
                             *oid,
@@ -1199,7 +1199,7 @@ fn legal_spell_cost_choices(
                     .copied()
                     .filter(|oid| !exclude_source || *oid != source)
                     .filter(|oid| {
-                        super::resolution::library_card_matches_filter(
+                        super::card_predicates::zone_card_matches_filter(
                             &eng.state,
                             eng.registry,
                             *oid,
@@ -1367,7 +1367,7 @@ fn legal_spell_cost_choices(
                             .enumerate()
                             .filter(|(_, oid)| {
                                 *oid != source
-                                    && super::resolution::library_card_matches_filter(
+                                    && super::card_predicates::zone_card_matches_filter(
                                         &eng.state,
                                         eng.registry,
                                         *oid,

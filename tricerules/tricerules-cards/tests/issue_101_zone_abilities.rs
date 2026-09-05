@@ -30,7 +30,7 @@ fn typecycling_is_authored_from_hand_with_self_discard_and_subtype_search() {
         else {
             panic!("typecycling uses the shared revealed subtype search")
         };
-        assert_eq!(filter.subtype.as_deref(), Some(subtype));
+        assert_eq!(filter.required_subtypes, [subtype]);
         assert!(filter.card_type.is_none());
     }
 }

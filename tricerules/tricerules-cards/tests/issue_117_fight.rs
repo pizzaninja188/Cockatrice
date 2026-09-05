@@ -54,14 +54,14 @@ fn issue_117_bushwhack_has_search_and_two_target_fight_modes() {
         [SpellEffectKind::SearchLibrary {
             filter: Some(tricerules_cards::primitives::ZoneCardFilter {
                 card_type: Some(CardTypeFilter::BasicLand),
-                subtype: None,
+                required_subtypes: subtypes,
                 ..
             }),
             destination: SearchDestination::Hand,
             shuffle: true,
             reveal: true,
             ..
-        }]
+        }] if subtypes.is_empty()
     ));
     let [SpellEffectKind::Fight { first, second }] = modal.modes[1].effects.as_slice() else {
         panic!("Bushwhack's second mode uses Fight");

@@ -4,6 +4,6 @@
   id: "calamitous_cave-in", name: "Calamitous Cave-In", face_id: "calamitous_cave_in", mana_cost: "{3}{R}", types: ["Sorcery"],
   spell_effect: [DamageAll(amount: Count(Affine(terms: [
     (coefficient: 1, quantity: BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Cave"]))),
-    (coefficient: 1, quantity: GraveyardCards(owners: Controller, filter: Some((subtype: Some("Cave"))))),
+    (coefficient: 1, quantity: GraveyardCards(owners: Controller, filter: Some((required_subtypes: ["Cave"])))),
   ])), kind: (any_of: Some([(kind: Creature), (kind: AnyPermanent, permanent_types: [Planeswalker])])))],
 )

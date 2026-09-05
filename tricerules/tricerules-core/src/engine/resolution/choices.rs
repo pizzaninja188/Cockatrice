@@ -307,7 +307,7 @@ pub(super) fn may_behold(
         .iter()
         .copied()
         .filter(|oid| {
-            super::library_card_matches_filter(
+            super::zone_card_matches_filter(
                 &cx.engine.state,
                 cx.engine.registry,
                 *oid,

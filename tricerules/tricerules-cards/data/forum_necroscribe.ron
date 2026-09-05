@@ -30,7 +30,7 @@
         ),
       ),
       effect: [MoveGraveyardCards(
-        filter: (owner: Controller, card_type: Some(Creature)),
+        filter: (owner: Controller, card: Some((card_type: Some(Creature)))),
         destination: Battlefield(),
       )],
       targeting: Some((groups: [(

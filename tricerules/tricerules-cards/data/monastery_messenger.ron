@@ -13,7 +13,7 @@
     presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [MoveGraveyardCards(
-      filter: (owner: Controller, excluded_card_types: [Creature, Land]),
+      filter: (owner: Controller, card: Some((excluded_card_types: [Creature, Land]))),
       destination: LibraryTop,
     )],
     targeting: Some((groups: [(

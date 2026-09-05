@@ -414,7 +414,7 @@ pub(super) fn graveyard_aggregate_value(
         .filter_map(|oid| state.objects.get(&oid))
         .filter(|object| object.zone == Zone::Graveyard && !object.is_token())
         .filter(|object| {
-            super::resolution::library_card_matches_filter(state, registry, object.id, filter)
+            super::card_predicates::zone_card_matches_filter(state, registry, object.id, filter)
         })
         .filter_map(|object| registry.get(&object.card_id))
         .collect();
@@ -3391,7 +3391,7 @@ mod tests {
                 RelativePlayerSet::Controller,
                 GraveyardAggregate::CardCount,
                 Some(&ZoneCardFilter {
-                    subtype: Some("Lesson".into()),
+                    required_subtypes: vec!["Lesson".into()],
                     ..Default::default()
                 }),
                 0,

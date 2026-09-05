@@ -21,7 +21,7 @@
       ),
       MayBehold(
         choice_id: "behold_elf",
-        hand_filter: (subtype: Some("Elf")),
+        hand_filter: (required_subtypes: ["Elf"]),
         permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
         if_beheld: [Untap(subject: SearchedObject("found_land"))],
       ),

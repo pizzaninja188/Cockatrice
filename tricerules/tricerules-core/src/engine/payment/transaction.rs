@@ -540,7 +540,7 @@ impl GameEngine {
                                     .copied()
                                     .ok_or(EngineError::Illegal("invalid behold hand slot"))?;
                                 if object_id == source_oid
-                                    || !super::super::resolution::library_card_matches_filter(
+                                    || !super::super::card_predicates::zone_card_matches_filter(
                                         &self.state,
                                         self.registry,
                                         object_id,
@@ -1002,7 +1002,7 @@ impl GameEngine {
                         let oid = selected.object_id;
                         if (*exclude_source && oid == source_oid)
                             || !self.state.players[player_idx].graveyard.contains(&oid)
-                            || !super::super::resolution::library_card_matches_filter(
+                            || !super::super::card_predicates::zone_card_matches_filter(
                                 &self.state,
                                 self.registry,
                                 oid,
@@ -1539,7 +1539,7 @@ impl GameEngine {
                         let oid = selected.object_id;
                         if (*exclude_source && oid == permanent_id)
                             || !self.state.players[idx].graveyard.contains(&oid)
-                            || !super::super::resolution::library_card_matches_filter(
+                            || !super::super::card_predicates::zone_card_matches_filter(
                                 &self.state,
                                 self.registry,
                                 oid,
@@ -2151,7 +2151,7 @@ impl GameEngine {
                     self.object_payment_selection_satisfies(*constraint, &refs)
                         && objects.iter().all(|(oid, generation, owner)| {
                             (!*exclude_source || *source != *oid)
-                                && super::super::resolution::library_card_matches_filter(
+                                && super::super::card_predicates::zone_card_matches_filter(
                                     &self.state,
                                     self.registry,
                                     *oid,

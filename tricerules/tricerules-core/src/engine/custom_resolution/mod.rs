@@ -779,7 +779,7 @@ impl GameEngine {
                     self.state.objects.get(&oid).is_some_and(|object| {
                         object.owner == pending.deciding_player
                             && object.zone == Zone::Hand
-                            && resolution::library_card_matches_filter(
+                            && card_predicates::zone_card_matches_filter(
                                 &self.state,
                                 self.registry,
                                 oid,

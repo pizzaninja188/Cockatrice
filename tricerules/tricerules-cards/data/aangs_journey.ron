@@ -23,7 +23,7 @@
         (
           slot_id: "slot_02",
           presentation: Fallback,
-          filter: (subtype: Some("Shrine")),
+          filter: (required_subtypes: ["Shrine"]),
           enabled_by_cast_cost: Some((
             group_id: "cast_cost_01",
             option_id: "option_01",

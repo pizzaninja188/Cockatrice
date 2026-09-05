@@ -3220,7 +3220,7 @@ mod tests {
             types: ["Sorcery"],
             spell_effect: [
                 MoveGraveyardCards(
-                    filter: (owner: AnyPlayer, card_type: Some(Creature)),
+                    filter: (owner: AnyPlayer, card: Some((card_type: Some(Creature)))),
                     destination: Battlefield(tapped: false),
                 ),
                 LoseLife(amount: TargetManaValue),

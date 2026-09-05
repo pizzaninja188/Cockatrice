@@ -13,7 +13,7 @@
     options: [Behold(
       option_id: "option_01",
       presentation: OracleLines([1]),
-      hand_filter: (subtype: Some("Dragon")),
+      hand_filter: (required_subtypes: ["Dragon"]),
       permanent_filter: (
         kind: AnyPermanent,
         controller: You,

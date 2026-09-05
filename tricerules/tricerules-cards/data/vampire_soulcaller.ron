@@ -15,7 +15,7 @@
       ability_id: "triggered_01",
       presentation: OracleLines([3]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [MoveGraveyardCards(filter: (owner: Controller, card_type: Some(Creature)), destination: Hand)],
+      effect: [MoveGraveyardCards(filter: (owner: Controller, card: Some((card_type: Some(Creature)))), destination: Hand)],
     ),
   ],
 )

@@ -7,7 +7,7 @@
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [SearchLibrary(filter: Some((any_of: Some([
-      (card_type: Some(BasicLand)), (subtype: Some("Desert")),
+      (card_type: Some(BasicLand)), (required_subtypes: ["Desert"]),
     ]))), destination: Hand, shuffle: true, reveal: true)],
   )],
   static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: CountScaledSelfPt(

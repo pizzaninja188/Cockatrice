@@ -110,6 +110,33 @@ For Rust engine behavior, reject illegal input with `EngineError::Illegal` rathe
 Keep steps, priority, event-time facts, new-object identity, hidden information, and player roles
 explicit. Use player-set-generic logic rather than two-player arithmetic.
 
+### Printed-card filters and graveyard targets
+
+Use `ZoneCardFilter` for printed characteristics outside the battlefield and stack: searches,
+hand-reveal costs, graveyard choices, and graveyard counts share this predicate. Leaves combine
+with AND; `any_of` contains at least two distinct branches and cannot share a node with leaf fields.
+Required subtypes all match, excluded subtypes/types must not match, and mana-value bounds are
+inclusive. `has_adventure` tests the presence of Adventure characteristics, not which face was
+last cast. `printed_power` inspects the normal/front printed numeric power; it does not evaluate
+battlefield modifiers.
+
+`GraveyardFilter` adds target context around an optional `card` predicate. Its `owner` and
+generation-aware `excluded_objects` apply to every branch. Omit `card` for any card in the allowed
+graveyards; `card: Some(())` is invalid. Do not use battlefield `TargetFilter` for these predicates.
+
+```ron
+// A land card with the Cave subtype in your graveyard.
+filter: (owner: Controller, card: Some((card_type: Some(Land), required_subtypes: ["Cave"])))
+
+// A non-targeting creature-or-land choice/search.
+filter: (any_of: Some([(card_type: Some(Creature)), (card_type: Some(Land))]))
+```
+
+Exact names are rules names, not joined registry/deck names. Split cards and Rooms match either
+half's name; Adventure, Omen, flip, and double-faced cards use their normal/front name here.
+The removed graveyard characteristic fields and singular `ZoneCardFilter.subtype` are rejected;
+author `card: Some(...)` and `required_subtypes: [...]` directly.
+
 ### Saga definitions
 
 Author a Saga face with both `"Enchantment"` and `"Saga"` types and one

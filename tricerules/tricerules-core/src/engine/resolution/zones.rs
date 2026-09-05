@@ -1665,7 +1665,7 @@ pub(super) fn choose_graveyard_card(
             exact_result_generations
                 .as_ref()
                 .is_none_or(|entries| entries.contains(&(*oid, generation)))
-                && library_card_matches_filter(
+                && zone_card_matches_filter(
                     &cx.engine.state,
                     cx.engine.registry,
                     *oid,
@@ -2237,7 +2237,7 @@ pub(super) fn reveal_top_card_to_hand_if_matches(
         cx.controller, cx.spell_label
     )));
 
-    if library_card_matches_filter(
+    if zone_card_matches_filter(
         &cx.engine.state,
         cx.engine.registry,
         object_id,
@@ -2811,7 +2811,7 @@ pub(super) fn look_choose_to_hand(
 
     let selectable: Vec<bool> = looked
         .iter()
-        .map(|&oid| library_card_matches_filter(&engine.state, engine.registry, oid, Some(&filter)))
+        .map(|&oid| zone_card_matches_filter(&engine.state, engine.registry, oid, Some(&filter)))
         .collect();
     let legal: Vec<ObjectId> = looked
         .iter()
@@ -2978,7 +2978,7 @@ pub(in crate::engine) fn park_zone_search_choice(
         for oid in cohort.into_iter().filter(|oid| {
             if heterogeneous {
                 slots.iter().any(|slot| {
-                    library_card_matches_filter(
+                    zone_card_matches_filter(
                         &engine.state,
                         engine.registry,
                         *oid,
@@ -2986,7 +2986,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                     )
                 })
             } else {
-                library_card_matches_filter(&engine.state, engine.registry, *oid, filter.as_ref())
+                zone_card_matches_filter(&engine.state, engine.registry, *oid, filter.as_ref())
             }
         }) {
             candidates.push(oid);
@@ -3030,7 +3030,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                 .iter()
                 .enumerate()
                 .filter_map(|(index, oid)| {
-                    library_card_matches_filter(
+                    zone_card_matches_filter(
                         &engine.state,
                         engine.registry,
                         *oid,

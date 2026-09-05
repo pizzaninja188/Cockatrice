@@ -18,8 +18,8 @@ use crate::primitives::{
     ActivatedAbilityDef, AdditionalCost, Amount, CardTypeFilter, CastCostGroupDef,
     CastCostOptionRef, CastCostReceiptCondition, Color, CountExpression, CounterKind,
     EffectContext, EntersWithCountersAffected, Evasion, GameCondition, Keyword,
-    PermanentTypeFilter, ProtectionQuality, SpellCostModifier, SpellEffectKind, StaticAbilityDef,
-    TargetingDef, TriggeredAbilityDef,
+    PermanentTypeFilter, PowerComparison, ProtectionQuality, SpellCostModifier, SpellEffectKind,
+    StaticAbilityDef, TargetingDef, TriggeredAbilityDef, ZoneCardFilter,
 };
 use crate::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility, ModeId};
 use serde::{Deserialize, Serialize};
@@ -1088,6 +1088,53 @@ impl CardDefinition {
     /// True if this card has more than one face (any non-`Normal` layout).
     pub fn is_multiface(&self) -> bool {
         self.faces.len() > 1
+    }
+
+    /// Printed predicates shared by library searches, hand-reveal costs, and graveyard targets.
+    /// Callers own zone membership, targetability, and object identity. This deliberately does
+    /// not evaluate battlefield/stack characteristics or an object's last visible face.
+    pub fn matches_zone_card_filter(&self, filter: &ZoneCardFilter) -> bool {
+        if let Some(branches) = &filter.any_of {
+            return branches
+                .iter()
+                .any(|branch| self.matches_zone_card_filter(branch));
+        }
+        filter
+            .exact_name
+            .as_deref()
+            .is_none_or(|name| self.has_name_outside_stack(name))
+            && filter
+                .card_type
+                .is_none_or(|kind| self.matches_card_type_outside_stack(kind))
+            && !filter
+                .excluded_card_types
+                .iter()
+                .any(|kind| self.matches_card_type_outside_stack(*kind))
+            && filter
+                .min_mana_value
+                .is_none_or(|min| self.mana_value_outside_stack() >= min)
+            && filter
+                .max_mana_value
+                .is_none_or(|max| self.mana_value_outside_stack() <= max)
+            && filter
+                .required_subtypes
+                .iter()
+                .all(|subtype| self.has_subtype_outside_stack(subtype))
+            && !filter
+                .excluded_subtypes
+                .iter()
+                .any(|subtype| self.has_subtype_outside_stack(subtype))
+            && filter
+                .has_adventure
+                .is_none_or(|required| (self.layout == Layout::Adventure) == required)
+            && filter.printed_power.is_none_or(|comparison| {
+                self.primary_face()
+                    .power
+                    .is_some_and(|power| match comparison {
+                        PowerComparison::AtLeast(minimum) => power >= minimum,
+                        PowerComparison::AtMost(maximum) => power <= maximum,
+                    })
+            })
     }
 
     /// Whether this physical card matches `filter` in a zone other than the battlefield or stack.

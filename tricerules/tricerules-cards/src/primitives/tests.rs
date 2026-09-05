@@ -73,7 +73,7 @@ fn structured_choice_metadata_is_stable_nonmechanical_and_unique() {
         r#"SearchLibrary(
             slots: [
                 (slot_id: "slot_01", presentation: Fallback, filter: (card_type: Some(BasicLand))),
-                (slot_id: "slot_01", presentation: Fallback, filter: (subtype: Some("Shrine"))),
+                (slot_id: "slot_01", presentation: Fallback, filter: (required_subtypes: ["Shrine"])),
             ],
             destination: Hand,
         )"#,
@@ -178,7 +178,7 @@ fn issue_204_self_animation_schema_is_source_bound_and_fail_closed() {
 
 #[test]
 fn issue_176_graveyard_cost_reduction_is_a_typed_target_filter() {
-    let card = r#"(id: "test", name: "Test", face_id: "test", mana_cost: "{4}{B}", types: ["Sorcery"], cost_modifiers: [TargetMatchGenericReduction(amount: 3, filter: Graveyard((card_type: Some(Creature), max_mana_value: Some(3))))], spell_effect: [MoveGraveyardCards(filter: (card_type: Some(Creature)), destination: Battlefield())])"#;
+    let card = r#"(id: "test", name: "Test", face_id: "test", mana_cost: "{4}{B}", types: ["Sorcery"], cost_modifiers: [TargetMatchGenericReduction(amount: 3, filter: Graveyard((card: Some((card_type: Some(Creature), max_mana_value: Some(3))))))], spell_effect: [MoveGraveyardCards(filter: (card: Some((card_type: Some(Creature)))), destination: Battlefield())])"#;
     assert!(crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_ok());
 }
 #[test]
@@ -310,7 +310,7 @@ fn issue_159_heterogeneous_library_search_slots_deserialize() {
         r#"SearchLibrary(
             slots: [
                 (slot_id: "slot_01", presentation: Fallback, filter: (card_type: Some(BasicLand))),
-                (slot_id: "slot_02", presentation: Fallback, filter: (subtype: Some("Shrine")), enabled_by_cast_cost: Some((group_id: "cast_cost_01", option_id: "option_01", expected_selected: true))),
+                (slot_id: "slot_02", presentation: Fallback, filter: (required_subtypes: ["Shrine"]), enabled_by_cast_cost: Some((group_id: "cast_cost_01", option_id: "option_01", expected_selected: true))),
             ],
             destination: Hand,
             reveal: true,
@@ -490,7 +490,7 @@ fn issue_165_static_quantity_accepts_permanents_without_pt_recursion() {
 fn issue_165_public_quantities_roundtrip() {
     for source in [
         "Count(BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: [\"Island\"])))",
-        "Count(GraveyardCards(owners: Controller, filter: Some((subtype: Some(\"Cave\")))))",
+        "Count(GraveyardCards(owners: Controller, filter: Some((required_subtypes: [\"Cave\"]))))",
         "Count(BattlefieldMaximum(filter: (controllers: Controller, card_type: Some(Creature)), characteristic: Toughness))",
         "Count(SourcePower)",
         "Count(DeclaredAttackers(players: All))",
@@ -698,7 +698,7 @@ fn zone_card_filters_validate_leaf_and_recursive_or_shapes() {
                 ..Default::default()
             },
         ]),
-        subtype: Some("Bird".into()),
+        required_subtypes: vec!["Bird".into()],
         ..Default::default()
     }
     .validate()

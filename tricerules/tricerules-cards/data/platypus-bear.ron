@@ -18,7 +18,7 @@
     condition: GraveyardAggregate(
       owners: Controller,
       aggregate: CardCount,
-      filter: Some((subtype: Some("Lesson"))),
+      filter: Some((required_subtypes: ["Lesson"])),
       min: Some(1),
     ),
     can_attack_as_though_without_defender: true,

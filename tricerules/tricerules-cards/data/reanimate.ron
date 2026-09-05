@@ -8,7 +8,7 @@
   // control (CR 110.2). LoseLife is untargeted and reads the mana value of the same target the
   // MoveGraveyardCards declared, so the two must stay in one effect list.
   spell_effect: [
-    MoveGraveyardCards(filter: (owner: AnyPlayer, card_type: Some(Creature)), destination: Battlefield(tapped: false)),
+    MoveGraveyardCards(filter: (owner: AnyPlayer, card: Some((card_type: Some(Creature)))), destination: Battlefield(tapped: false)),
     LoseLife(amount: TargetManaValue),
   ],
 )

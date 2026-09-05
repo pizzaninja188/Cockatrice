@@ -8,7 +8,7 @@
   types: ["Sorcery"],
   spell_effect: [
     MoveGraveyardCards(
-      filter: (owner: Controller, card_type: Some(Creature)),
+      filter: (owner: Controller, card: Some((card_type: Some(Creature)))),
       destination: Hand,
     ),
     Discard(who: Controller, count: 1),

@@ -1679,6 +1679,7 @@ fn default_destroy_subject() -> EffectSubject {
 /// with AND semantics; `any_of` recursively joins two or more filters with OR. Tempest Hawk and
 /// Living Phone use exact-name and printed-power leaves, while Say Its Name uses creature-or-land.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct ZoneCardFilter {
     #[serde(default)]
     pub any_of: Option<Vec<Self>>,
@@ -1687,36 +1688,51 @@ pub struct ZoneCardFilter {
     #[serde(default)]
     pub card_type: Option<CardTypeFilter>,
     #[serde(default)]
-    pub subtype: Option<String>,
+    pub excluded_card_types: Vec<CardTypeFilter>,
+    /// No One Left Behind and Recommission use inclusive mana-value bounds.
+    #[serde(default)]
+    pub min_mana_value: Option<u32>,
+    #[serde(default)]
+    pub max_mana_value: Option<u32>,
+    /// All required subtypes must match; no excluded subtype may match.
+    #[serde(default)]
+    pub required_subtypes: Vec<String>,
+    #[serde(default)]
+    pub excluded_subtypes: Vec<String>,
+    /// Edgewall Inn and Seek Thrills inspect the presence of Adventure characteristics.
+    #[serde(default)]
+    pub has_adventure: Option<bool>,
     #[serde(default)]
     pub printed_power: Option<PowerComparison>,
 }
 
 impl ZoneCardFilter {
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_tree()?;
+        let mut leaves = Vec::new();
+        self.collect_terminal_filters(&mut leaves);
+        if super::targeting::terminal_filters_have_duplicates(&leaves) {
+            return Err("zone card filter cannot contain duplicate terminal predicates".into());
+        }
+        Ok(())
+    }
+
+    fn validate_tree(&self) -> Result<(), String> {
         if let Some(branches) = &self.any_of {
             if branches.len() < 2 {
                 return Err("zone card filter any_of requires at least two branches".into());
             }
-            if self.exact_name.is_some()
-                || self.card_type.is_some()
-                || self.subtype.is_some()
-                || self.printed_power.is_some()
-            {
-                return Err(
-                    "zone card filter any_of cannot be combined with leaf predicates".into(),
-                );
+            let mut leaf_fields = self.clone();
+            leaf_fields.any_of = None;
+            if leaf_fields != Self::default() {
+                return Err("zone card filter any_of must be a pure OR node".into());
             }
             for branch in branches {
-                branch.validate()?;
+                branch.validate_tree()?;
             }
             return Ok(());
         }
-        if self.exact_name.is_none()
-            && self.card_type.is_none()
-            && self.subtype.is_none()
-            && self.printed_power.is_none()
-        {
+        if self == &Self::default() {
             return Err("zone card filter requires at least one predicate".into());
         }
         if self
@@ -1726,14 +1742,31 @@ impl ZoneCardFilter {
         {
             return Err("zone card filter exact name cannot be empty".into());
         }
+        super::targeting::validate_mana_value_bounds(self.min_mana_value, self.max_mana_value)?;
+        super::targeting::validate_subtype_predicates(
+            &self.required_subtypes,
+            &self.excluded_subtypes,
+        )?;
+        if super::targeting::has_duplicates(&self.excluded_card_types) {
+            return Err("zone card filter has a duplicate excluded card type".into());
+        }
         if self
-            .subtype
-            .as_ref()
-            .is_some_and(|value| value.trim().is_empty())
+            .card_type
+            .is_some_and(|required| self.excluded_card_types.contains(&required))
         {
-            return Err("zone card filter subtype cannot be empty".into());
+            return Err("zone card filter cannot both require and exclude a card type".into());
         }
         Ok(())
+    }
+
+    fn collect_terminal_filters<'a>(&'a self, out: &mut Vec<&'a Self>) {
+        if let Some(branches) = &self.any_of {
+            for branch in branches {
+                branch.collect_terminal_filters(out);
+            }
+        } else {
+            out.push(self);
+        }
     }
 }
 
@@ -4516,7 +4549,7 @@ mod issue_158_predicate_tests {
             owners: RelativePlayerSet::Controller,
             aggregate: GraveyardAggregate::CardCount,
             filter: Some(ZoneCardFilter {
-                subtype: Some("Lesson".into()),
+                required_subtypes: vec!["Lesson".into()],
                 ..Default::default()
             }),
             min: Some(1),

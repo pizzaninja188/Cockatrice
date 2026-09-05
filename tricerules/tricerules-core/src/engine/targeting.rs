@@ -392,11 +392,6 @@ pub(super) fn graveyard_target_legal(
     source: TargetSourceIdentity,
     trigger_context: TriggerContext,
 ) -> bool {
-    if let Some(branches) = &filter.any_of {
-        return branches.iter().any(|branch| {
-            graveyard_target_legal(engine, branch, oid, caster, source, trigger_context)
-        });
-    }
     let Some(obj) = engine.state.objects.get(&oid) else {
         return false;
     };
@@ -429,45 +424,10 @@ pub(super) fn graveyard_target_legal(
     let Some(definition) = engine.registry.get(&obj.card_id) else {
         return false;
     };
-    let mana_value = definition.mana_value_outside_stack();
-    if filter.min_mana_value.is_some_and(|min| mana_value < min)
-        || filter.max_mana_value.is_some_and(|max| mana_value > max)
-        || !filter
-            .required_subtypes
-            .iter()
-            .all(|subtype| definition.has_subtype_outside_stack(subtype))
-        || filter
-            .excluded_subtypes
-            .iter()
-            .any(|subtype| definition.has_subtype_outside_stack(subtype))
-        || filter
-            .has_adventure
-            .is_some_and(|required| (definition.layout == Layout::Adventure) != required)
-    {
-        return false;
-    }
-    // Card-type restriction.
-    if let Some(card_type) = filter.card_type {
-        let Some(def) = engine.registry.get(&obj.card_id) else {
-            return false;
-        };
-        if !def.matches_card_type_outside_stack(card_type) {
-            return false;
-        }
-    }
-    if !filter.excluded_card_types.is_empty() {
-        let Some(def) = engine.registry.get(&obj.card_id) else {
-            return false;
-        };
-        if filter
-            .excluded_card_types
-            .iter()
-            .any(|card_type| def.matches_card_type_outside_stack(*card_type))
-        {
-            return false;
-        }
-    }
-    true
+    filter
+        .card
+        .as_ref()
+        .is_none_or(|card| definition.matches_zone_card_filter(card))
 }
 
 /// CR 702.16 / CR 702.18: returns false when `tid` is a permanent that the `caster` cannot
@@ -2630,7 +2590,7 @@ mod tests {
             "excluded_subtypes: [\"Bear\"]",
             "has_adventure: Some(true)",
         ] {
-            let filter = issue_176_graveyard(&format!("({predicate})"));
+            let filter = issue_176_graveyard(&format!("(card: Some(({predicate})))"));
             assert!(
                 !graveyard_target_legal(
                     &engine,
@@ -2643,7 +2603,7 @@ mod tests {
                 "{predicate}"
             );
         }
-        let filter = issue_176_graveyard("(min_mana_value: Some(2), max_mana_value: Some(2), required_subtypes: [\"Bear\"], has_adventure: Some(false))");
+        let filter = issue_176_graveyard("(card: Some((min_mana_value: Some(2), max_mana_value: Some(2), required_subtypes: [\"Bear\"], has_adventure: Some(false))))");
         assert!(graveyard_target_legal(
             &engine,
             &filter,
@@ -2710,34 +2670,34 @@ mod tests {
                 TriggerContext::default(),
             )
         };
-        assert!(legal("(owner: Opponent, has_adventure: Some(true), min_mana_value: Some(3), max_mana_value: Some(3), required_subtypes: [\"Giant\"])", ids[0], 0));
+        assert!(legal("(owner: Opponent, card: Some((has_adventure: Some(true), min_mana_value: Some(3), max_mana_value: Some(3), required_subtypes: [\"Giant\"])))", ids[0], 0));
         assert!(!legal(
-            "(owner: Opponent, has_adventure: Some(true))",
+            "(owner: Opponent, card: Some((has_adventure: Some(true))))",
             ids[0],
             20
         ));
         assert!(
             legal(
-                "(owner: Opponent, required_subtypes: [\"Giant\"])",
+                "(owner: Opponent, card: Some((required_subtypes: [\"Giant\"])))",
                 ids[1],
                 1
             ),
             "changeling works in a graveyard belonging to a third seat"
         );
         assert!(!legal(
-            "(owner: AnyPlayer, excluded_subtypes: [\"Giant\"])",
+            "(owner: AnyPlayer, card: Some((excluded_subtypes: [\"Giant\"])))",
             ids[1],
             0
         ));
         assert!(
             legal(
-                "(owner: AnyPlayer, card_type: Some(Creature), max_mana_value: Some(0))",
+                "(owner: AnyPlayer, card: Some((card_type: Some(Creature), max_mana_value: Some(0))))",
                 ids[2],
                 0
             ),
             "X is zero outside the stack"
         );
-        assert!(legal("(owner: AnyPlayer, min_mana_value: Some(2), max_mana_value: Some(2), required_subtypes: [\"Human\"])", ids[3], 0));
+        assert!(legal("(owner: AnyPlayer, card: Some((min_mana_value: Some(2), max_mana_value: Some(2), required_subtypes: [\"Human\"])))", ids[3], 0));
     }
     use super::*;
     use tricerules_cards::{primitives::TargetGroupDef, CounterKind};

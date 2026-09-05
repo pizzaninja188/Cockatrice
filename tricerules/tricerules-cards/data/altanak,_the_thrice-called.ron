@@ -20,7 +20,7 @@
     source_zone: Hand,
     costs: [Mana("{1}{G}"), DiscardSelf],
     effect: [MoveGraveyardCards(
-      filter: (owner: Controller, card_type: Some(Land)),
+      filter: (owner: Controller, card: Some((card_type: Some(Land)))),
       destination: Battlefield(tapped: true),
     )],
   )],

@@ -4,7 +4,7 @@
 use super::helpers::*;
 use tricerules_cards::primitives::{
     CardTypeFilter, ContinuousEffectKind, CounterKind, EffectDuration, GraveyardFilter,
-    SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    SpellEffectKind, TriggerCondition, TriggeredAbilityDef, ZoneCardFilter,
 };
 use tricerules_cards::CardRegistry;
 use tricerules_core::state::PendingTrigger;
@@ -447,9 +447,8 @@ fn graveyard_fixture_ability(filter: GraveyardFilter) -> TriggeredAbilityDef {
     ability
 }
 
-fn publish_graveyard_fixture(engine: &mut GameEngine, filter: GraveyardFilter) -> (u32, Vec<u32>) {
+fn publish_fixture_trigger(engine: &mut GameEngine, ability: TriggeredAbilityDef) -> u32 {
     let source = inject_creature_on_battlefield(engine, 0, "grizzly_bears");
-    let ability = graveyard_fixture_ability(filter);
     let trigger_id = engine.state.next_object_id;
     engine.state.next_object_id += 1;
     engine.state.pending_triggers.push_back(PendingTrigger {
@@ -473,6 +472,11 @@ fn publish_graveyard_fixture(engine: &mut GameEngine, filter: GraveyardFilter) -
         may: ability.may,
         trigger_context: Default::default(),
     });
+    source
+}
+
+fn publish_graveyard_fixture(engine: &mut GameEngine, filter: GraveyardFilter) -> (u32, Vec<u32>) {
+    let source = publish_fixture_trigger(engine, graveyard_fixture_ability(filter));
     let key = u64::from(source) << 32;
     let candidates = engine.initial_response_batch().legal_by_player[&0].valid_targets_by_ability
         [&key]
@@ -480,6 +484,118 @@ fn publish_graveyard_fixture(engine: &mut GameEngine, filter: GraveyardFilter) -
         .valid_graveyard_ids
         .clone();
     (source, candidates)
+}
+
+#[test]
+fn issue_198_shared_predicate_publishes_and_resolves_searches_and_graveyard_targets() {
+    for search in [false, true] {
+        let mut engine = GameEngine::new(198_114, &[0, 1], 20, None, true).unwrap();
+        advance_to_main1_from_game_start(&mut engine);
+        let inject = if search {
+            inject_library_card
+        } else {
+            inject_graveyard_card
+        };
+        let fire = inject(&mut engine, 0, "fire_ice");
+        let giant = inject(&mut engine, 0, "bonecrusher_giant_stomp");
+        let wrong_type = inject(&mut engine, 0, "forest");
+        let wrong_owner = inject(&mut engine, 1, "bonecrusher_giant_stomp");
+        let filter = ZoneCardFilter {
+            any_of: Some(vec![
+                ZoneCardFilter {
+                    exact_name: Some("Fire".into()),
+                    ..Default::default()
+                },
+                ZoneCardFilter {
+                    exact_name: Some("Bonecrusher Giant".into()),
+                    card_type: Some(CardTypeFilter::Creature),
+                    required_subtypes: vec!["Giant".into()],
+                    excluded_card_types: vec![CardTypeFilter::Instant],
+                    min_mana_value: Some(3),
+                    max_mana_value: Some(3),
+                    has_adventure: Some(true),
+                    printed_power: Some(tricerules_cards::PowerComparison::AtLeast(4)),
+                    ..Default::default()
+                },
+            ]),
+            ..Default::default()
+        };
+        filter.validate().unwrap();
+        let mut ability = graveyard_fixture_ability(GraveyardFilter {
+            card: Some(filter.clone()),
+            ..Default::default()
+        });
+        ability.may = false;
+        if search {
+            let mut effect = CardRegistry::global()
+                .get("demonic_tutor")
+                .unwrap()
+                .primary_face()
+                .spell_effect[0]
+                .clone();
+            let SpellEffectKind::SearchLibrary {
+                filter: search_filter,
+                ..
+            } = &mut effect
+            else {
+                panic!("Demonic Tutor search fixture");
+            };
+            *search_filter = Some(filter);
+            ability.effect = vec![effect];
+        }
+        let source = publish_fixture_trigger(&mut engine, ability);
+        if !search {
+            let batch = engine.initial_response_batch();
+            assert_eq!(
+                batch.legal_by_player[&0].valid_targets_by_ability[&(u64::from(source) << 32)]
+                    .groups[0]
+                    .valid_graveyard_ids,
+                [fire, giant]
+            );
+            for illegal in [wrong_type, wrong_owner] {
+                assert!(engine
+                    .apply_command(0, &issue_176_choose(None, target_object(illegal)))
+                    .is_err());
+            }
+        }
+        engine
+            .apply_command(
+                0,
+                &issue_176_choose(None, if search { vec![] } else { target_object(giant) }),
+            )
+            .expect("announce the engine-offered trigger");
+        engine.apply_command(0, &pass()).unwrap();
+        let batch = engine.apply_command(1, &pass()).expect("resolve trigger");
+        if search {
+            let choice =
+                find_resolution_choice(&batch).expect("search is parked for an engine choice");
+            assert_eq!(choice.candidate_object_ids, [fire, giant]);
+            assert_eq!(choice.deciding_player_id, 0);
+            assert_eq!(choice.reveal_audience(), ResolutionRevealAudience::None);
+            for illegal in [wrong_type, wrong_owner] {
+                assert!(engine
+                    .apply_command(0, &submit_resolution_choice(vec![illegal]))
+                    .is_err());
+            }
+            assert!(engine
+                .apply_command(1, &submit_resolution_choice(vec![giant]))
+                .is_err());
+            engine
+                .apply_command(0, &submit_resolution_choice(vec![giant]))
+                .expect("take the offered card");
+        }
+        assert!(engine.state.players[0].hand.contains(&giant));
+        assert_eq!(
+            engine.state.objects[&fire].zone,
+            if search {
+                Zone::Library
+            } else {
+                Zone::Graveyard
+            }
+        );
+        assert!(engine.state.stack.is_empty());
+        assert!(engine.state.pending_resolution.is_none());
+    }
 }
 
 #[test]
@@ -654,16 +770,19 @@ fn graveyard_or_and_exclusion_fixtures_publish_and_revalidate_exact_candidates()
     let (_, candidates) = publish_graveyard_fixture(
         &mut say_engine,
         GraveyardFilter {
-            any_of: Some(vec![
-                GraveyardFilter {
-                    card_type: Some(CardTypeFilter::Creature),
-                    ..Default::default()
-                },
-                GraveyardFilter {
-                    card_type: Some(CardTypeFilter::Land),
-                    ..Default::default()
-                },
-            ]),
+            card: Some(ZoneCardFilter {
+                any_of: Some(vec![
+                    ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::Creature),
+                        ..Default::default()
+                    },
+                    ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::Land),
+                        ..Default::default()
+                    },
+                ]),
+                ..Default::default()
+            }),
             ..Default::default()
         },
     );
@@ -679,8 +798,11 @@ fn graveyard_or_and_exclusion_fixtures_publish_and_revalidate_exact_candidates()
     let (_, candidates) = publish_graveyard_fixture(
         &mut messenger_engine,
         GraveyardFilter {
-            card_type: Some(CardTypeFilter::Noncreature),
-            excluded_card_types: vec![CardTypeFilter::Land],
+            card: Some(ZoneCardFilter {
+                card_type: Some(CardTypeFilter::Noncreature),
+                excluded_card_types: vec![CardTypeFilter::Land],
+                ..Default::default()
+            }),
             ..Default::default()
         },
     );

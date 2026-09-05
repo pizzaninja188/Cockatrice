@@ -2903,48 +2903,6 @@ pub(super) fn card_matches_type_filter(
     def.matches_card_type_outside_stack(*filter)
 }
 
-pub(super) fn library_card_matches_filter(
-    state: &GameState,
-    registry: &'static CardRegistry,
-    oid: ObjectId,
-    filter: Option<&ZoneCardFilter>,
-) -> bool {
-    let Some(filter) = filter else {
-        return true;
-    };
-    let Some(def) = state
-        .objects
-        .get(&oid)
-        .and_then(|object| registry.get(&object.card_id))
-    else {
-        return false;
-    };
-    if let Some(branches) = &filter.any_of {
-        return branches
-            .iter()
-            .any(|branch| library_card_matches_filter(state, registry, oid, Some(branch)));
-    }
-    filter
-        .exact_name
-        .as_deref()
-        .is_none_or(|name| def.name == name)
-        && filter
-            .card_type
-            .is_none_or(|card_type| def.matches_card_type_outside_stack(card_type))
-        && filter
-            .subtype
-            .as_deref()
-            .is_none_or(|subtype| def.has_subtype_outside_stack(subtype))
-        && filter.printed_power.is_none_or(|comparison| {
-            def.primary_face()
-                .power
-                .is_some_and(|power| match comparison {
-                    PowerComparison::AtLeast(minimum) => power >= minimum,
-                    PowerComparison::AtMost(maximum) => power <= maximum,
-                })
-        })
-}
-
 #[cfg(test)]
 mod exile_permission_generation_tests {
     use super::*;
@@ -3014,13 +2972,13 @@ mod zone_card_filter_tests {
             ..Default::default()
         };
 
-        assert!(library_card_matches_filter(
+        assert!(zone_card_matches_filter(
             &engine.state,
             engine.registry,
             object_id,
             Some(&front_face_power),
         ));
-        assert!(!library_card_matches_filter(
+        assert!(!zone_card_matches_filter(
             &engine.state,
             engine.registry,
             object_id,

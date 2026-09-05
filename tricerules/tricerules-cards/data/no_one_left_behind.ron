@@ -5,6 +5,6 @@
   face_id: "no_one_left_behind",
   mana_cost: "{4}{B}",
   types: ["Sorcery"],
-  cost_modifiers: [TargetMatchGenericReduction(amount: 3, filter: Graveyard((card_type: Some(Creature), max_mana_value: Some(3))))],
-  spell_effect: [MoveGraveyardCards(filter: (card_type: Some(Creature)), destination: Battlefield())],
+  cost_modifiers: [TargetMatchGenericReduction(amount: 3, filter: Graveyard((card: Some((card_type: Some(Creature), max_mana_value: Some(3))))))],
+  spell_effect: [MoveGraveyardCards(filter: (card: Some((card_type: Some(Creature)))), destination: Battlefield())],
 )

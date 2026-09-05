@@ -2,7 +2,7 @@
 
 use super::{
     CastCostReceiptCondition, Color, ConditionObjectRef, Keyword, PermanentChoiceConstraint,
-    SpellEffectKind,
+    SpellEffectKind, ZoneCardFilter,
 };
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -555,68 +555,22 @@ impl TargetMatchFilter {
     }
 }
 
-/// Filter for graveyard-zone targets (cards in a graveyard, not battlefield permanents).
-/// Parallel to [`TargetFilter`] but for a different zone.
+/// Graveyard target context, composed with a non-targeting printed-card predicate.
+/// Raise Dead restricts the owner and card type; Hoarding Recluse excludes its source identity.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct GraveyardFilter {
     #[serde(default)]
     pub excluded_objects: Vec<TargetObjectExclusion>,
-    /// A pure disjunction of two or more recursively validated filters. When present, every
-    /// leaf field on this node must retain its default value.
-    #[serde(default)]
-    pub any_of: Option<Vec<Self>>,
-    /// Which player's graveyard. Defaults to the caster's own graveyard.
     #[serde(default)]
     pub owner: GraveyardOwner,
-    /// Optional card-type restriction. `None` = any card.
+    /// None permits any printed card; context checks still apply.
     #[serde(default)]
-    pub card_type: Option<CardTypeFilter>,
-    /// Card types a matching card must not have.
-    #[serde(default)]
-    pub excluded_card_types: Vec<CardTypeFilter>,
-    /// No One Left Behind and Recommission use inclusive printed mana-value bounds.
-    #[serde(default)]
-    pub min_mana_value: Option<u32>,
-    #[serde(default)]
-    pub max_mana_value: Option<u32>,
-    /// March of the Drowned and Ghoulcaller's Chant select subtypes outside the battlefield.
-    #[serde(default)]
-    pub required_subtypes: Vec<String>,
-    #[serde(default)]
-    pub excluded_subtypes: Vec<String>,
-    /// Edgewall Inn and Seek Thrills inspect the card's alternative Adventure characteristics.
-    #[serde(default)]
-    pub has_adventure: Option<bool>,
+    pub card: Option<ZoneCardFilter>,
 }
 
 impl GraveyardFilter {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        self.validate_tree()?;
-        let mut leaves = Vec::new();
-        self.collect_terminal_filters(&mut leaves);
-        if terminal_filters_have_duplicates(&leaves) {
-            return Err("graveyard filter cannot contain duplicate terminal predicates".into());
-        }
-        Ok(())
-    }
-
-    fn validate_tree(&self) -> Result<(), String> {
-        if let Some(branches) = &self.any_of {
-            let mut leaf_fields = self.clone();
-            leaf_fields.any_of = None;
-            if leaf_fields != Self::default() {
-                return Err("graveyard filter any_of must be a pure OR node".into());
-            }
-            if branches.len() < 2 {
-                return Err("graveyard filter any_of requires at least two alternatives".into());
-            }
-            for branch in branches {
-                branch.validate_tree()?;
-            }
-            return Ok(());
-        }
-
-        validate_mana_value_bounds(self.min_mana_value, self.max_mana_value)?;
         if has_duplicates(&self.excluded_objects)
             || self
                 .excluded_objects
@@ -624,27 +578,7 @@ impl GraveyardFilter {
         {
             return Err("graveyard filter requires unique Source exclusions".into());
         }
-        validate_subtype_predicates(&self.required_subtypes, &self.excluded_subtypes)?;
-        if has_duplicates(&self.excluded_card_types) {
-            return Err("graveyard filter has a duplicate excluded card type".into());
-        }
-        if self
-            .card_type
-            .is_some_and(|required| self.excluded_card_types.contains(&required))
-        {
-            return Err("graveyard filter cannot both require and exclude a card type".into());
-        }
-        Ok(())
-    }
-
-    fn collect_terminal_filters<'a>(&'a self, out: &mut Vec<&'a Self>) {
-        if let Some(branches) = &self.any_of {
-            for branch in branches {
-                branch.collect_terminal_filters(out);
-            }
-        } else {
-            out.push(self);
-        }
+        self.card.as_ref().map_or(Ok(()), ZoneCardFilter::validate)
     }
 }
 
@@ -1037,21 +971,24 @@ impl TargetFilter {
     }
 }
 
-fn has_duplicates<T: PartialEq>(values: &[T]) -> bool {
+pub(super) fn has_duplicates<T: PartialEq>(values: &[T]) -> bool {
     values
         .iter()
         .enumerate()
         .any(|(index, value)| values[..index].contains(value))
 }
 
-fn validate_mana_value_bounds(min: Option<u32>, max: Option<u32>) -> Result<(), String> {
+pub(super) fn validate_mana_value_bounds(min: Option<u32>, max: Option<u32>) -> Result<(), String> {
     if min.zip(max).is_some_and(|(min, max)| min > max) {
         return Err("filter minimum mana value exceeds maximum".into());
     }
     Ok(())
 }
 
-fn validate_subtype_predicates(required: &[String], excluded: &[String]) -> Result<(), String> {
+pub(super) fn validate_subtype_predicates(
+    required: &[String],
+    excluded: &[String],
+) -> Result<(), String> {
     if required
         .iter()
         .chain(excluded)
@@ -1065,7 +1002,7 @@ fn validate_subtype_predicates(required: &[String], excluded: &[String]) -> Resu
     Ok(())
 }
 
-fn terminal_filters_have_duplicates<T: PartialEq>(leaves: &[&T]) -> bool {
+pub(super) fn terminal_filters_have_duplicates<T: PartialEq>(leaves: &[&T]) -> bool {
     leaves
         .iter()
         .enumerate()
@@ -1091,12 +1028,12 @@ mod tests {
             assert!(filter.validate_target_constraints().is_err(), "{source}");
         }
         for source in [
-            "(min_mana_value: Some(3), max_mana_value: Some(2))",
-            "(required_subtypes: [\"Bear\"], excluded_subtypes: [\"Bear\"])",
-            "(required_subtypes: [\"\"])",
+            "(card: Some((min_mana_value: Some(3), max_mana_value: Some(2))))",
+            "(card: Some((required_subtypes: [\"Bear\"], excluded_subtypes: [\"Bear\"])))",
+            "(card: Some((required_subtypes: [\"\"])))",
             "(excluded_objects: [AttachedObject])",
             "(excluded_objects: [Source, Source])",
-            "(has_adventure: Some(true), any_of: Some([(card_type: Some(Creature)), (card_type: Some(Land))]))",
+            "(card: Some((has_adventure: Some(true), any_of: Some([(card_type: Some(Creature)), (card_type: Some(Land))]))))",
         ] {
             let filter: GraveyardFilter = ron::from_str(source).unwrap();
             assert!(filter.validate().is_err(), "{source}");
@@ -1194,15 +1131,16 @@ mod tests {
         assert!(broken_wings.validate_target_constraints().is_ok());
 
         let say_its_name = graveyard_filter(
-            "(any_of: Some([(card_type: Some(Creature)), (card_type: Some(Land))]))",
+            "(card: Some((any_of: Some([(card_type: Some(Creature)), (card_type: Some(Land))]))))",
         );
         assert!(say_its_name.validate().is_ok());
 
-        let monastery_messenger =
-            graveyard_filter("(card_type: Some(Noncreature), excluded_card_types: [Land])");
+        let monastery_messenger = graveyard_filter(
+            "(card: Some((card_type: Some(Noncreature), excluded_card_types: [Land])))",
+        );
         assert!(monastery_messenger.validate().is_ok());
         assert_eq!(
-            monastery_messenger.excluded_card_types,
+            monastery_messenger.card.unwrap().excluded_card_types,
             vec![CardTypeFilter::Land]
         );
     }
@@ -1292,22 +1230,22 @@ mod tests {
     #[test]
     fn issue_114_rejects_malformed_or_contradictory_graveyard_filters() {
         for (ron, expected) in [
-            ("(any_of: Some([]))", "at least two"),
-            ("(any_of: Some([(card_type: Some(Creature))]))", "at least two"),
+            ("(card: Some((any_of: Some([]))))", "at least two"),
+            ("(card: Some((any_of: Some([(card_type: Some(Creature))]))))", "at least two"),
             (
-                "(owner: AnyPlayer, any_of: Some([(card_type: Some(Creature)), (card_type: Some(Land))]))",
+                "(card: Some((card_type: Some(Artifact), any_of: Some([(card_type: Some(Creature)), (card_type: Some(Land))]))))",
                 "pure OR node",
             ),
             (
-                "(any_of: Some([(card_type: Some(Creature)), (card_type: Some(Creature))]))",
+                "(card: Some((any_of: Some([(card_type: Some(Creature)), (card_type: Some(Creature))]))))",
                 "duplicate terminal",
             ),
             (
-                "(card_type: Some(Land), excluded_card_types: [Land])",
+                "(card: Some((card_type: Some(Land), excluded_card_types: [Land])))",
                 "require and exclude",
             ),
             (
-                "(excluded_card_types: [Creature, Creature])",
+                "(card: Some((excluded_card_types: [Creature, Creature])))",
                 "duplicate excluded card type",
             ),
         ] {

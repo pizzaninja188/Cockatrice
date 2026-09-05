@@ -158,7 +158,10 @@ impl<'a> ConditionContext<'a> {
     }
 }
 
+use card_predicates::zone_card_matches_filter;
+
 mod blight;
+mod card_predicates;
 mod casting;
 mod characteristics;
 mod combat;
@@ -184,6 +187,9 @@ mod targeting;
 mod triggers;
 mod warp;
 mod zone_events;
+
+#[cfg(test)]
+mod zone_card_filter_tests;
 
 #[cfg(test)]
 mod face_change_tests {

@@ -13,7 +13,7 @@
         mode_id: "search_basic_forest",
         presentation: OracleLines([2]),
         effects: [SearchLibrary(
-          filter: Some((card_type: Some(BasicLand), subtype: Some("Forest"))),
+          filter: Some((card_type: Some(BasicLand), required_subtypes: ["Forest"])),
           destination: Battlefield(tapped: true),
           shuffle: true,
           reveal: false,
@@ -23,7 +23,7 @@
         mode_id: "return_cave",
         presentation: OracleLines([3]),
         effects: [MoveGraveyardCards(
-          filter: (owner: Controller, card_type: Some(Land), required_subtypes: ["Cave"]),
+          filter: (owner: Controller, card: Some((card_type: Some(Land), required_subtypes: ["Cave"]))),
           destination: Battlefield(tapped: true),
         )],
       ),

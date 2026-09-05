@@ -4,5 +4,5 @@
   face_id: "zombify",
   mana_cost: "{3}{B}",
   types: ["Sorcery"],
-  spell_effect: [MoveGraveyardCards(filter: (owner: Controller, card_type: Some(Creature)), destination: Battlefield(tapped: false))],
+  spell_effect: [MoveGraveyardCards(filter: (owner: Controller, card: Some((card_type: Some(Creature)))), destination: Battlefield(tapped: false))],
 )
