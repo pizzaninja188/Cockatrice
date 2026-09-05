@@ -1417,6 +1417,7 @@ void RuledEventDispatcher::applyBattlefieldObjectMap(const ruled::v1::Battlefiel
              ++sit) {
             const int ctrlPid = state->syntheticAbilityControllerPid.value(sit.key(), localPid);
             state->ownerCardIdToEngineOid.insert(RuledClientState::makeOwnedCardKey(ctrlPid, sit.value()), sit.key());
+            state->engineOidToCardId.insert(sit.key(), sit.value());
         }
     }
     ctx.battlefieldMapDirty = true;

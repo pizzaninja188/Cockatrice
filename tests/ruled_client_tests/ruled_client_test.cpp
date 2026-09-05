@@ -2472,6 +2472,29 @@ TEST_F(RuledClientTest, AbilityOnStackGetsASyntheticCardAndClearsThePendingTrigg
     EXPECT_EQ(state->stackAnnotation(900), QStringLiteral("Return target creature card..."));
 }
 
+TEST_F(RuledClientTest, SyntheticStackCardIdentityIsBidirectionalAndSurvivesBattlefieldSync)
+{
+    constexpr quint32 abilityOid = 900;
+    constexpr int fakeCardId = 0x70000384;
+    state->registerSyntheticStackCard(abilityOid, fakeCardId, kLocalPlayer);
+
+    EXPECT_EQ(state->engineOidForCardId(kLocalPlayer, fakeCardId), abilityOid);
+    EXPECT_EQ(state->cardIdForEngineOid(abilityOid), fakeCardId)
+        << "stack target resolution needs the reverse identity to prefer the visible window copy";
+
+    ruled::v1::RuledEventBatch sync;
+    sync.add_events()->mutable_battlefield_object_map();
+    apply(sync);
+    EXPECT_EQ(state->engineOidForCardId(kLocalPlayer, fakeCardId), abilityOid);
+    EXPECT_EQ(state->cardIdForEngineOid(abilityOid), fakeCardId);
+
+    // GameEventHandler uses -1 when Qt deleted the CardItem before normal teardown; the state
+    // still owns the registered fake ID and must remove the exact forward mapping.
+    state->unregisterSyntheticStackCard(abilityOid, -1);
+    EXPECT_EQ(state->engineOidForCardId(kLocalPlayer, fakeCardId), 0u);
+    EXPECT_EQ(state->cardIdForEngineOid(abilityOid), -1);
+}
+
 // Paying a sacrifice cost (Bottle Gnomes) queues a dies trigger, and the activated ability that
 // consumed the cost reaches the stack in the same batch. Both an activated and a triggered ability
 // are card_id-less, so without is_triggered the activated one wiped the prompt for the trigger it

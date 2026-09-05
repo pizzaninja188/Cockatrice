@@ -1778,13 +1778,16 @@ void RuledClientState::registerSyntheticStackCard(quint32 virtualOid, int fakeCa
     syntheticAbilityFakeIds.insert(virtualOid, fakeCardId);
     syntheticAbilityControllerPid.insert(virtualOid, zonePlayerId);
     ownerCardIdToEngineOid.insert(makeOwnedCardKey(zonePlayerId, fakeCardId), virtualOid);
+    engineOidToCardId.insert(virtualOid, fakeCardId);
 }
 
 void RuledClientState::unregisterSyntheticStackCard(quint32 virtualOid, int fakeCardId)
 {
-    syntheticAbilityFakeIds.remove(virtualOid);
+    const int registeredFakeId = syntheticAbilityFakeIds.take(virtualOid);
+    const int mappedFakeId = registeredFakeId != 0 ? registeredFakeId : fakeCardId;
     const int zonePid = syntheticAbilityControllerPid.take(virtualOid);
-    ownerCardIdToEngineOid.remove(makeOwnedCardKey(zonePid, fakeCardId));
+    ownerCardIdToEngineOid.remove(makeOwnedCardKey(zonePid, mappedFakeId));
+    engineOidToCardId.remove(virtualOid);
 }
 
 // ---------------------------------------------------------------------------------------
