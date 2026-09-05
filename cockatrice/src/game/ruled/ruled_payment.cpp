@@ -2,6 +2,7 @@
 
 #include <QHash>
 #include <algorithm>
+#include <atomic>
 #include <limits>
 #include <utility>
 
@@ -17,10 +18,14 @@ void RuledPayment::begin(bool guardSanitized)
 
 void RuledPayment::clear()
 {
+    retiredOptimisticManaCounterIds.append(takeQueuedManaCounterIds());
     if (!submitting)
         for (const auto &entry : optimisticManaCounters)
             retiredOptimisticManaCounterIds.append(entry.counterId);
-    ++transactionId;
+    // Suspended payments restore older instances. IDs must remain unique across those restores
+    // so a delayed preview for one mana ability cannot complete a later activation.
+    static std::atomic<quint64> nextTransactionId{0};
+    transactionId = ++nextTransactionId;
     revision = 0;
     active = pending = submitting = false;
     guardSanitizedPayment = submissionArmed = false;
@@ -28,6 +33,13 @@ void RuledPayment::clear()
     restrictedMana.Clear();
     view.Clear();
     optimisticManaCounters.clear();
+}
+
+RuledPayment RuledPayment::suspend()
+{
+    auto saved = std::move(*this);
+    *this = RuledPayment{};
+    return saved;
 }
 
 void RuledPayment::invalidate()
@@ -43,6 +55,9 @@ bool RuledPayment::beginSubmission()
     if (!active || pending || submitting || !view.valid() || !view.complete() || view.selection_changed() ||
         (guardSanitizedPayment && !submissionArmed))
         return false;
+    // These pips arrived after the previewed selection. They are not part of the command and
+    // must remain floating, even when no further pool snapshot changes their counter.
+    retiredOptimisticManaCounterIds.append(takeQueuedManaCounterIds());
     submitting = true;
     return true;
 }
@@ -209,13 +224,62 @@ bool RuledPayment::payMana(QChar symbol, quint32 groupId, int optimisticCounterI
     return true;
 }
 
+bool RuledPayment::stageMana(QChar symbol, quint32 groupId, int optimisticCounterId)
+{
+    if (!active || submitting || !QStringLiteral("WUBRGC").contains(symbol.toUpper()))
+        return false;
+    if (pending || !queuedMana.isEmpty()) {
+        queuedMana.append({symbol.toUpper(), groupId, optimisticCounterId});
+        return true;
+    }
+    return payMana(symbol, groupId, optimisticCounterId);
+}
+
+RuledPayment *RuledPayment::producedManaRecipient(RuledPayment *suspended)
+{
+    if (active && !submitting)
+        return this;
+    // A mana ability resolves before its acknowledgement restores the outer payment. Its
+    // output belongs to that waiting payment, never to the ability that just produced it.
+    return suspended && suspended->active && !suspended->submitting ? suspended : nullptr;
+}
+
+QVector<int> RuledPayment::takeQueuedManaCounterIds()
+{
+    QVector<int> result;
+    for (const auto &entry : queuedMana)
+        if (entry.counterId >= 0)
+            result.append(entry.counterId);
+    queuedMana.clear();
+    return result;
+}
+
 int RuledPayment::optimisticManaCounterSpendCount(int counterId) const
 {
     if (submitting) {
         return 0;
     }
     return std::count_if(optimisticManaCounters.cbegin(), optimisticManaCounters.cend(),
+                         [counterId](const auto &entry) { return entry.counterId == counterId; }) +
+           std::count_if(queuedMana.cbegin(), queuedMana.cend(),
                          [counterId](const auto &entry) { return entry.counterId == counterId; });
+}
+
+int RuledPayment::restrictedManaSpendCount(quint32 groupId, QChar symbol) const
+{
+    symbol = symbol.toUpper();
+    if (submitting || groupId == 0 || !QStringLiteral("WUBRGC").contains(symbol))
+        return 0;
+    int count = std::count_if(queuedMana.cbegin(), queuedMana.cend(), [groupId, symbol](const auto &entry) {
+        return entry.groupId == groupId && entry.symbol == symbol;
+    });
+    for (const auto &group : restrictedMana) {
+        if (group.restriction_group_id() != groupId)
+            continue;
+        const auto *field = group.GetDescriptor()->FindFieldByName(QString(symbol.toLower()).toStdString());
+        count += static_cast<int>(group.GetReflection()->GetUInt32(group, field));
+    }
+    return count;
 }
 
 QVector<int> RuledPayment::takeRetiredOptimisticManaCounterIds()
@@ -232,6 +296,7 @@ QVector<int> RuledPayment::takeAllOptimisticManaCounterIds()
     for (const auto &entry : optimisticManaCounters)
         result.append(entry.counterId);
     result.append(retiredOptimisticManaCounterIds);
+    result.append(takeQueuedManaCounterIds());
     optimisticManaCounters.clear();
     retiredOptimisticManaCounterIds.clear();
     return result;

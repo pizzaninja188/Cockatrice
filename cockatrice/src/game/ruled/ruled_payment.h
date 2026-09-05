@@ -13,6 +13,7 @@ class RuledPayment
 public:
     void begin(bool guardSanitizedPayment = false);
     void clear();
+    RuledPayment suspend();
     void invalidate();
     bool beginSubmission();
     quint64 transaction() const
@@ -25,7 +26,11 @@ public:
     bool apply(const ruled::v1::PaymentPreview &preview);
     bool select(quint32 oid, int kind);
     bool payMana(QChar symbol, quint32 groupId = 0, int optimisticCounterId = -1);
+    bool stageMana(QChar symbol, quint32 groupId = 0, int optimisticCounterId = -1);
+    RuledPayment *producedManaRecipient(RuledPayment *suspended);
     [[nodiscard]] int optimisticManaCounterSpendCount(int counterId) const;
+    [[nodiscard]] int restrictedManaSpendCount(quint32 groupId, QChar symbol) const;
+    QVector<int> takeQueuedManaCounterIds();
     QVector<int> takeRetiredOptimisticManaCounterIds();
     QVector<int> takeAllOptimisticManaCounterIds();
     bool remove(quint32 oid);
@@ -39,6 +44,14 @@ public:
     ruled::v1::PaymentSelection selection;
     google::protobuf::RepeatedPtrField<ruled::v1::ManaSpendSelection> restrictedMana;
     ruled::v1::PaymentPreview view;
+
+    struct QueuedMana
+    {
+        QChar symbol;
+        quint32 groupId = 0;
+        int counterId = -1;
+    };
+    QVector<QueuedMana> queuedMana;
 
 private:
     struct OptimisticManaCounter

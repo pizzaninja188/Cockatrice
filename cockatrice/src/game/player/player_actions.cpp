@@ -1705,7 +1705,8 @@ int PlayerActions::ruledManaCounterOptimisticSpendCount(int counterId) const
 int PlayerActions::ruledRestrictedManaOptimisticSpendCount(quint32 groupId, QChar symbol) const
 {
     const QChar normalized = symbol.toUpper() == QLatin1Char('X') ? QLatin1Char('C') : symbol.toUpper();
-    return restrictedManaPaymentSelections.value(groupId).value(normalized);
+    return restrictedManaPaymentSelections.value(groupId).value(normalized) +
+           ruledPayment->restrictedManaSpendCount(groupId, normalized);
 }
 
 bool PlayerActions::ruledRestrictedManaPaymentPending() const
@@ -1806,6 +1807,8 @@ void PlayerActions::finishRuledResolutionPaymentSubmission(bool accepted)
 
 void PlayerActions::autoApplyFloatedManaToPendingCost(const QString &counterName, int amount)
 {
+    if (ruledPayment->autoPayMana(counterName, amount))
+        return;
     if (amount <= 0) {
         return;
     }
@@ -3131,6 +3134,8 @@ bool PlayerActions::finalizeTargetSelectionAndContinue()
 
 void PlayerActions::autoApplyRestrictedManaToPendingCost(quint32 groupId, QChar symbol, int amount)
 {
+    if (ruledPayment->autoPayMana(QString(symbol), amount, groupId))
+        return;
     if (amount <= 0) {
         return;
     }

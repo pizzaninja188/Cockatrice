@@ -401,6 +401,128 @@ TEST_F(RuledClientTest, SharedPaymentTracksOptimisticPoolDebitsAndRetiresSanitiz
     EXPECT_EQ(payment.takeRetiredOptimisticManaCounterIds(), QVector<int>({17}));
 }
 
+TEST_F(RuledClientTest, SuspendingPaymentDoesNotRefundTheOuterSpellIntoTheManaPool)
+{
+    auto &payment = state->payment;
+    payment.begin();
+    ASSERT_TRUE(payment.payMana('U', 0, 17));
+    auto spell = payment.suspend();
+    payment.begin(true);
+    EXPECT_TRUE(payment.takeRetiredOptimisticManaCounterIds().isEmpty())
+        << "opening Gloomlake Verge's mana ability must not refund the suspended spell's pip";
+    EXPECT_EQ(spell.optimisticManaCounterSpendCount(17), 1);
+    payment.clear();
+    payment = std::move(spell);
+    EXPECT_EQ(payment.takeAllOptimisticManaCounterIds(), QVector<int>({17}));
+}
+
+TEST_F(RuledClientTest, NestedPaymentsDoNotReusePreviewTransactionIds)
+{
+    auto &payment = state->payment;
+    payment.begin();
+    auto spell = payment.suspend();
+    payment.begin(true);
+    const auto firstManaAbility = payment.request({});
+    payment = std::move(spell);
+    spell = payment.suspend();
+    payment.begin(true);
+    const auto secondManaAbility = payment.request({});
+    EXPECT_NE(firstManaAbility.transaction_id(), secondManaAbility.transaction_id());
+    ruled::v1::PaymentPreview stale;
+    stale.set_transaction_id(firstManaAbility.transaction_id());
+    stale.set_revision(firstManaAbility.revision());
+    stale.set_valid(true);
+    stale.set_complete(true);
+    EXPECT_FALSE(payment.apply(stale));
+}
+
+TEST_F(RuledClientTest, ManaProducedByNestedActivationPaysTheSuspendedSpellOrAbility)
+{
+    for (const bool abilityPayment : {false, true}) {
+        RuledPayment payment;
+        payment.begin(abilityPayment);
+        payment.invalidate();
+        ASSERT_TRUE(payment.stageMana('U', 0, 17));
+        auto outer = payment.suspend();
+        payment.begin(true);
+        // While paying the mana ability's own cost, further mana belongs to that inner cost.
+        EXPECT_EQ(payment.producedManaRecipient(&outer), &payment);
+        payment.submitting = true;
+        // Gloomlake Verge / Hidden Lair's pool event arrives before the activation acknowledgement.
+        auto *recipient = payment.producedManaRecipient(&outer);
+        ASSERT_EQ(recipient, &outer);
+        ASSERT_TRUE(recipient->stageMana('B', 0, 18));
+        EXPECT_EQ(outer.optimisticManaCounterSpendCount(17), 1);
+        EXPECT_EQ(outer.optimisticManaCounterSpendCount(18), 1);
+        EXPECT_TRUE(payment.takeAllOptimisticManaCounterIds().isEmpty());
+        payment = std::move(outer);
+        EXPECT_EQ(payment.queuedMana.size(), 2);
+        // Cancel restores the original and newly produced pips once each.
+        EXPECT_EQ(payment.takeAllOptimisticManaCounterIds(), QVector<int>({17, 18}));
+        EXPECT_TRUE(payment.takeAllOptimisticManaCounterIds().isEmpty());
+    }
+}
+
+TEST_F(RuledClientTest, CompletingPaymentReleasesQueuedSurplusMana)
+{
+    auto &payment = state->payment;
+    payment.begin();
+    ASSERT_TRUE(payment.stageMana('U', 0, 17));
+    auto request = payment.request({});
+    // A multi-mana activation produces another pip while the final pip's preview is in flight.
+    ASSERT_TRUE(payment.stageMana('U', 0, 17));
+    ruled::v1::PaymentPreview response;
+    response.set_transaction_id(request.transaction_id());
+    response.set_revision(request.revision());
+    response.set_valid(true);
+    response.set_complete(true);
+    *response.mutable_selection() = request.cast_spell().payment();
+    ASSERT_TRUE(payment.apply(response));
+    ASSERT_TRUE(payment.beginSubmission());
+    EXPECT_EQ(payment.selection.mana().u(), 1u);
+    EXPECT_TRUE(payment.queuedMana.isEmpty());
+    EXPECT_EQ(payment.takeRetiredOptimisticManaCounterIds(), QVector<int>({17}))
+        << "the extra pip was never submitted, so its display debit must be restored";
+    EXPECT_TRUE(payment.takeRetiredOptimisticManaCounterIds().isEmpty());
+}
+
+TEST_F(RuledClientTest, ProducedManaWithoutAPaymentRecipientRemainsFloating)
+{
+    RuledPayment payment;
+    EXPECT_EQ(payment.producedManaRecipient(nullptr), nullptr);
+    payment.begin();
+    payment.submitting = true;
+    EXPECT_EQ(payment.producedManaRecipient(nullptr), nullptr);
+}
+
+TEST_F(RuledClientTest, RestrictedManaDisplayTracksQueuedAndSuspendedSharedPayments)
+{
+    auto &payment = state->payment;
+    payment.begin();
+    ASSERT_TRUE(payment.stageMana('R', 9));
+    ASSERT_TRUE(payment.stageMana('R', 9));
+    EXPECT_EQ(payment.restrictedManaSpendCount(9, 'R'), 2);
+    EXPECT_EQ(payment.restrictedManaSpendCount(8, 'R'), 0);
+    auto outer = payment.suspend();
+    payment.begin(true);
+    EXPECT_EQ(payment.restrictedManaSpendCount(9, 'R'), 0);
+    EXPECT_EQ(outer.restrictedManaSpendCount(9, 'R'), 2);
+    payment = std::move(outer);
+    auto request = payment.request({});
+    ruled::v1::PaymentPreview response;
+    response.set_transaction_id(request.transaction_id());
+    response.set_revision(request.revision());
+    response.set_valid(true);
+    response.set_complete(true);
+    *response.mutable_restricted_mana() = request.cast_spell().restricted_mana();
+    ASSERT_TRUE(payment.apply(response));
+    ASSERT_TRUE(payment.beginSubmission());
+    EXPECT_EQ(payment.restrictedManaSpendCount(9, 'R'), 0)
+        << "the engine's submitted pool snapshot already includes the selected restricted mana";
+    EXPECT_TRUE(payment.takeRetiredOptimisticManaCounterIds().isEmpty())
+        << "restricted mana must never refund an ordinary counter";
+}
+
 TEST_F(RuledClientTest, SubmittedSharedPaymentStopsDebitingAuthoritativeSnapshots)
 {
     auto &payment = state->payment;

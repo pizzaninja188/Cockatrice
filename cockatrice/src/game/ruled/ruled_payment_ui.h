@@ -1,8 +1,8 @@
 #ifndef RULED_PAYMENT_UI_H
 #define RULED_PAYMENT_UI_H
 
-#include "ruled_pending_cast.h"
 #include "ruled_payment.h"
+#include "ruled_pending_cast.h"
 
 #include <QPair>
 #include <QVector>
@@ -21,10 +21,12 @@ public:
     static std::optional<ruled::v1::RuledCommand> buildActivationCommand(PlayerActions *actions);
     bool startOrRefresh();
     bool payMana(const QString &name, quint32 groupId = 0);
+    bool autoPayMana(const QString &name, int amount, quint32 groupId = 0);
     bool click(CardItem *card, bool leftClick);
     [[nodiscard]] QVector<QPair<int, QString>> contributionOptions(CardItem *card) const;
     bool contribute(CardItem *card, int kind);
     [[nodiscard]] int optimisticManaCounterSpendCount(int counterId) const;
+    [[nodiscard]] int restrictedManaSpendCount(quint32 groupId, QChar symbol) const;
     bool applicable() const;
     QString prompt() const;
     void clear();
@@ -41,20 +43,12 @@ private:
         Resolution
     };
 
-    struct QueuedMana
-    {
-        QChar symbol;
-        quint32 groupId = 0;
-        int counterId = -1;
-    };
-
     struct SuspendedPayment
     {
         std::optional<PendingRuledSpellCast> spell;
         std::optional<PendingActivatedAbility> ability;
         RuledPayment payment;
         Context context = Context::None;
-        QVector<QueuedMana> queuedMana;
     };
     Context context() const;
     Context activeContext = Context::None;
@@ -64,10 +58,10 @@ private:
     void received();
     void changed();
     void restoreOptimisticManaCounters(const QVector<int> &counterIds);
+    bool stageMana(RuledPayment &model, const QString &name, quint32 groupId);
     PlayerActions *actions;
     bool queued = false;
     bool choosingLifePayment = false;
-    QVector<QueuedMana> queuedMana;
     QVector<SuspendedPayment> suspendedPayments;
 };
 

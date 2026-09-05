@@ -103,7 +103,7 @@ bool RuledPaymentUi::startOrRefresh()
         // A rejected resolution command restores its parked model before emitting the prompt.
         if (!(activeContext == Context::None && nextContext == Context::Resolution && model.active))
             clear();
-        queuedMana.clear();
+        model.queuedMana.clear();
         activeContext = nextContext;
     }
     if (nextContext == Context::Ability) {
@@ -146,7 +146,7 @@ bool RuledPaymentUi::startOrRefresh()
             for (int i = 0; i < lifeChoices.size(); ++i)
                 if (alternatives.value(i)) {
                     auto &indices = nextContext == Context::Spell ? actions->pendingRuledSpellCast.lifePipIndices
-                                                                 : actions->pendingActivatedAbility.lifePipIndices;
+                                                                  : actions->pendingActivatedAbility.lifePipIndices;
                     indices.append(lifeChoices.at(i).pipIndex);
                 }
         }
@@ -214,9 +214,9 @@ void RuledPaymentUi::received()
     if (model.view.selection_changed())
         game->getGameEventHandler()->ruled()->emitLocalLog(QString::fromStdString(model.view.error()));
     if (model.beginSubmission()) {
+        restoreOptimisticManaCounters(model.takeRetiredOptimisticManaCounterIds());
         const auto submittingContext = context();
         if (submittingContext == Context::Resolution) {
-            queuedMana.clear();
             game->getGameEventHandler()->ruled()->payResolutionMana();
             return;
         }
@@ -228,7 +228,6 @@ void RuledPaymentUi::received()
         }
         model.writePayment(*command);
         const auto transaction = model.transaction();
-        queuedMana.clear();
         RuledActions::sendRuledCommandExpectingAck(
             game, *command, [this, transaction, submittingContext](bool accepted) {
                 auto &current = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
@@ -253,8 +252,8 @@ void RuledPaymentUi::received()
             });
         return;
     }
-    if (!queuedMana.isEmpty()) {
-        const auto contribution = queuedMana.takeFirst();
+    if (!model.queuedMana.isEmpty()) {
+        const auto contribution = model.queuedMana.takeFirst();
         if (!model.payMana(contribution.symbol, contribution.groupId, contribution.counterId))
             restoreOptimisticManaCounters({contribution.counterId});
         schedule();
@@ -269,13 +268,36 @@ bool RuledPaymentUi::payMana(const QString &name, quint32 groupId)
     auto &model = state->payment;
     if (!model.active)
         model.begin(context() != Context::Spell);
+    if (model.submitting)
+        return true;
+    const bool staged = stageMana(model, name, groupId);
+    if (staged)
+        schedule();
+    return staged;
+}
+
+bool RuledPaymentUi::autoPayMana(const QString &name, int amount, quint32 groupId)
+{
+    if (!applicable() && suspendedPayments.isEmpty())
+        return false;
+    auto &current = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
+    auto *recipient =
+        current.producedManaRecipient(suspendedPayments.isEmpty() ? nullptr : &suspendedPayments.last().payment);
+    if (recipient)
+        for (int i = 0; i < amount; ++i)
+            if (!stageMana(*recipient, name, groupId))
+                break;
+    schedule();
+    return true;
+}
+
+bool RuledPaymentUi::stageMana(RuledPayment &model, const QString &name, quint32 groupId)
+{
     QString symbol = name.trimmed().toUpper();
     if (symbol == QLatin1String("X"))
         symbol = QStringLiteral("C");
     if (symbol.size() != 1 || !QStringLiteral("WUBRGC").contains(symbol.at(0)))
         return false;
-    if (model.submitting)
-        return true;
     int counterId = -1;
     if (groupId == 0) {
         for (auto it = actions->player->getCounters().constBegin(); it != actions->player->getCounters().constEnd();
@@ -290,13 +312,10 @@ bool RuledPaymentUi::payMana(const QString &name, quint32 groupId)
             return false;
         counter->setValue(counter->getValue() - 1);
     }
-    if (model.pending || !queuedMana.isEmpty()) {
-        queuedMana.append({symbol.at(0), groupId, counterId});
-    } else if (!model.payMana(symbol.at(0), groupId, counterId)) {
+    if (!model.stageMana(symbol.at(0), groupId, counterId)) {
         restoreOptimisticManaCounters({counterId});
         return false;
     }
-    schedule();
     return true;
 }
 
@@ -377,9 +396,19 @@ bool RuledPaymentUi::contribute(CardItem *card, int kind)
 int RuledPaymentUi::optimisticManaCounterSpendCount(int counterId) const
 {
     const auto &model = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
-    return model.optimisticManaCounterSpendCount(counterId) +
-           std::count_if(queuedMana.cbegin(), queuedMana.cend(),
-                         [counterId](const auto &entry) { return entry.counterId == counterId; });
+    int count = model.optimisticManaCounterSpendCount(counterId);
+    for (const auto &frame : suspendedPayments)
+        count += frame.payment.optimisticManaCounterSpendCount(counterId);
+    return count;
+}
+
+int RuledPaymentUi::restrictedManaSpendCount(quint32 groupId, QChar symbol) const
+{
+    const auto &model = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
+    int count = model.restrictedManaSpendCount(groupId, symbol);
+    for (const auto &frame : suspendedPayments)
+        count += frame.payment.restrictedManaSpendCount(groupId, symbol);
+    return count;
 }
 
 void RuledPaymentUi::restoreOptimisticManaCounters(const QVector<int> &counterIds)
@@ -419,12 +448,8 @@ void RuledPaymentUi::clear()
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     auto &model = state->payment;
     QVector<int> optimisticCounterIds = model.takeAllOptimisticManaCounterIds();
-    for (const auto &entry : queuedMana)
-        if (entry.counterId >= 0)
-            optimisticCounterIds.append(entry.counterId);
     if (!model.submitting)
         restoreOptimisticManaCounters(optimisticCounterIds);
-    queuedMana.clear();
     activeContext = Context::None;
     if (!actions->player->getPlayerInfo()->getLocal())
         return;
@@ -440,9 +465,8 @@ void RuledPaymentUi::suspendForManaAbility(quint32 oid, int abilityIndex)
     if (state->activatedAbilityManaProducedForOid(oid).value(abilityIndex).isEmpty())
         return;
     SuspendedPayment frame;
-    frame.payment = state->payment;
+    frame.payment = state->payment.suspend();
     frame.context = activeContext;
-    frame.queuedMana = queuedMana;
     if (context() == Context::Spell) {
         frame.spell = actions->pendingRuledSpellCast;
         actions->pendingRuledSpellCast.valid = false;
@@ -453,8 +477,6 @@ void RuledPaymentUi::suspendForManaAbility(quint32 oid, int abilityIndex)
         return;
     }
     suspendedPayments.append(std::move(frame));
-    state->payment.clear();
-    queuedMana.clear();
     activeContext = Context::None;
 }
 
@@ -466,7 +488,6 @@ void RuledPaymentUi::resumeAfterManaAbility()
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     state->payment = std::move(frame.payment);
     state->payment.submitting = false;
-    queuedMana = std::move(frame.queuedMana);
     activeContext = frame.context;
     if (frame.spell) {
         actions->ruledPendingCast->spell = *frame.spell;
