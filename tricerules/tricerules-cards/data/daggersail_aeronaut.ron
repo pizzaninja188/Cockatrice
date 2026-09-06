@@ -8,7 +8,7 @@
   power: 3,
   toughness: 2,
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+    (ability_id: "static_01", presentation: OracleLines([1]), definition: ConditionalSelfModifier(
       condition: ActivePlayer(players: Controller),
       keywords: [Flying],
     )),

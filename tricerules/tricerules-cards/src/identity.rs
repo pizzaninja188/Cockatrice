@@ -137,6 +137,9 @@ pub fn resolve_external_presentation(
     external_face_text: Option<&str>,
     fallback: impl FnOnce() -> String,
 ) -> String {
+    if presentation.validate().is_err() {
+        return fallback();
+    }
     if let (AbilityPresentation::OracleLines(indices), Some(text)) =
         (presentation, external_face_text)
     {
@@ -217,5 +220,19 @@ mod tests {
             resolve_external_presentation(&mapping, None, || "fallback".into()),
             "fallback"
         );
+    }
+
+    #[test]
+    fn malformed_external_mapping_uses_fallback_without_panicking() {
+        for indices in [vec![], vec![0], vec![2, 1], vec![1, 1]] {
+            assert_eq!(
+                resolve_external_presentation(
+                    &AbilityPresentation::OracleLines(indices),
+                    Some("One\nTwo"),
+                    || "fallback".into()
+                ),
+                "fallback"
+            );
+        }
     }
 }

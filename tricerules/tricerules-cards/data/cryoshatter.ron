@@ -8,14 +8,14 @@
   spell_effect: [AuraAttach(target: (kind: Creature))],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([3]),
     trigger: WheneverAttachedObjectBecomesTapped,
     effect: [Destroy(subject: TriggerObject)],
   ), (
     ability_id: "triggered_02",
-    presentation: Fallback,
+    presentation: OracleLines([3]),
     trigger: WheneverAttachedObjectIsDealtDamage,
     effect: [Destroy(subject: TriggerObject)],
   )],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(delta_power: -5, delta_toughness: 0))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: AttachedModifier(delta_power: -5, delta_toughness: 0))],
 )

@@ -8,7 +8,7 @@
   toughness: 1,
   keywords: [Flash],
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: EntersWithCounters(
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: EntersWithCounters(
       counter: PlusOnePlusOne,
       amount: Count(CreatureDeathsThisTurn),
     )),

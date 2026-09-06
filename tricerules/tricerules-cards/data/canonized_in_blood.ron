@@ -8,7 +8,7 @@
     types: ["Enchantment"],
     triggered_abilities: [(
         ability_id: "triggered_01",
-        presentation: Fallback,
+        presentation: OracleLines([1]),
         trigger: AtBeginningOfEndStep(player: Controller),
         intervening_if: Some(PermanentCardsEnteredGraveyardThisTurn(players: Controller, min: Some(1))),
         effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature, controller: You)))],

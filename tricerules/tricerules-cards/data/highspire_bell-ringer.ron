@@ -9,7 +9,7 @@
   power: 1,
   toughness: 4,
   keywords: [Flying],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SpellGenericReduction(
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: SpellGenericReduction(
     casters: Controller,
     amount: 1,
     condition: Some(SpellsCastThisTurn(

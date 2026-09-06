@@ -7,6 +7,6 @@
   // CR 604/613.4 layer 7c: static controller-wide +1/+1 anthem, active while on
   // the battlefield; drains when it leaves.
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: AnthemPt(filter: (controller: YouControl), delta_power: 1, delta_toughness: 1)),
+    (ability_id: "static_01", presentation: OracleLines([1]), definition: AnthemPt(filter: (controller: YouControl), delta_power: 1, delta_toughness: 1)),
   ],
 )

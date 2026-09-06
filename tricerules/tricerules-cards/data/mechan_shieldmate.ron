@@ -9,7 +9,7 @@
   power: 3,
   toughness: 2,
   keywords: [Defender],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: ConditionalSelfModifier(
     condition: PermanentsEnteredThisTurn(
       controllers: Controller,
       filter: (permanent_type: Some(Artifact)),

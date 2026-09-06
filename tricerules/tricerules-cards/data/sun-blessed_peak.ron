@@ -5,7 +5,7 @@
   face_id: "sun_blessed_peak",
   mana_cost: "",
   types: ["Land"],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Self_))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersTapped(affected: Self_))],
   activated_abilities: [
     (
       ability_id: "activated_01",

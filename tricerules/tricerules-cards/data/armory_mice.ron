@@ -7,7 +7,7 @@
   types: ["Creature", "Mouse"],
   power: 3,
   toughness: 1,
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: ConditionalSelfModifier(
     condition: PermanentsEnteredThisTurn(controllers: Controller, filter: (excluded_types: [Land]), min: Some(2)),
     delta_toughness: 2,
   ))],

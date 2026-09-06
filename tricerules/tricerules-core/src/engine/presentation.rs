@@ -330,6 +330,28 @@ mod tests {
     }
 
     #[test]
+    fn token_ability_publishes_readable_fallback_without_unresolvable_oracle_mapping() {
+        let registry = CardRegistry::global();
+        let card = registry.get("clue").unwrap();
+        let face = card.primary_face();
+        let ability = &face.activated_abilities[0];
+        let definition = AbilityDefinitionId {
+            card_id: card.id.clone(),
+            face_id: face.face_id.clone(),
+            ability_path: vec![ability.ability_id.clone()],
+        };
+        let reference = ability_presentation(
+            registry,
+            &definition,
+            &ability.presentation,
+            ability.fallback_text(&face.name),
+        );
+        assert_eq!(reference.fallback_text, "{2}, Sacrifice Clue: Draw a card.");
+        assert!(reference.oracle_line_indices.is_empty());
+        assert!(reference.oracle_text_sha256.is_empty());
+    }
+
+    #[test]
     fn physical_spell_has_no_root_presentation() {
         let presentation =
             spell_stack_presentation(CardRegistry::global(), "aangs_journey", 0, &[], &[]);

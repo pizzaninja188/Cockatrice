@@ -66,7 +66,7 @@ fn structured_choice_metadata_is_stable_nonmechanical_and_unique() {
     .expect("structured branch presentation");
     let mut externally_mapped = branch.clone();
     externally_mapped.presentation = crate::AbilityPresentation::OracleLines(vec![1]);
-    assert_eq!(branch.fallback_label(), "Choice (draw)");
+    assert_eq!(branch.fallback_label(), "Draw a card.");
     assert_eq!(branch.fallback_label(), externally_mapped.fallback_label());
 
     let duplicate_slots: super::SpellEffectKind = ron::from_str(
@@ -1715,4 +1715,71 @@ fn issue_207_stack_ability_and_source_linked_ability_loss_primitives_parse() {
     .expect("source-linked removal parses");
     assert!(remove.validate(EffectContext::Spell).is_err());
     assert!(remove.validate(EffectContext::Ability).is_ok());
+}
+#[test]
+fn simple_ability_fallbacks_describe_typed_costs_and_effects() {
+    let registry = crate::CardRegistry::from_embedded().unwrap();
+    let forest = registry.get("forest").unwrap();
+    assert_eq!(
+        forest.faces[0].activated_abilities[0].fallback_text("Forest"),
+        "{T}: Add {G}."
+    );
+    let ability: super::ActivatedAbilityDef = ron::from_str(
+        r#"(ability_id: "synthetic_draw", presentation: Fallback, costs: [Mana("{2}"), Tap, SacrificeSelf], effect: [Draw(count: 1)])"#,
+    ).unwrap();
+    assert_eq!(
+        ability.fallback_text("Clue"),
+        "{2}, {T}, Sacrifice Clue: Draw a card."
+    );
+    let trigger: super::TriggeredAbilityDef = ron::from_str(
+        r#"(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: 3)])"#,
+    ).unwrap();
+    assert_eq!(
+        trigger.fallback_text("Healer"),
+        "When Healer enters, you gain 3 life."
+    );
+}
+
+#[test]
+fn simple_fallbacks_cover_synthetic_choices_and_keep_unknown_instructions_whole() {
+    let branch: super::ResolutionBranchDef = ron::from_str(
+        r#"(branch_id: "continue", presentation: Fallback, cost: None, effects: [])"#,
+    )
+    .unwrap();
+    assert_eq!(branch.fallback_label(), "Continue");
+    let ability: super::ActivatedAbilityDef = ron::from_str(
+        r#"(ability_id: "activated_01", presentation: Fallback, costs: [Tap], effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])])"#,
+    ).unwrap();
+    assert_eq!(
+        ability.fallback_text("Birds"),
+        "{T}: Add one mana of any color."
+    );
+    let ability: super::TriggeredAbilityDef = ron::from_str(
+        r#"(ability_id: "triggered_01", presentation: Fallback, trigger: WheneverSelfAttacks(minimum_other_attackers: 0), effect: [AddMana(amount: (r: 2), retention: EndOfCombat)])"#,
+    ).unwrap();
+    assert_eq!(
+        ability.fallback_text("Firebender"),
+        "Whenever Firebender attacks, add {R}{R}. This mana lasts until end of combat."
+    );
+    let unknown: super::ActivatedAbilityDef = ron::from_str(
+        r#"(ability_id: "activated_01", presentation: Fallback, costs: [Tap], effect: [Draw(count: 1), ManifestDread])"#,
+    ).unwrap();
+    assert_eq!(
+        unknown.fallback_text("Source"),
+        "Source — activated ability (activated_01)"
+    );
+}
+
+#[test]
+fn simple_targeted_fallbacks_cover_map_and_granted_damage_abilities() {
+    let map = crate::CardRegistry::global().get("map").unwrap();
+    assert_eq!(map.faces[0].activated_abilities[0].fallback_text("Map"),
+        "{1}, {T}, Sacrifice Map: Target creature you control explores. Activate only as a sorcery.");
+    let ability: super::ActivatedAbilityDef = ron::from_str(
+        r#"(ability_id: "granted_01", presentation: Fallback, costs: [Tap], effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))])"#,
+    ).unwrap();
+    assert_eq!(
+        ability.fallback_text("Source"),
+        "{T}: Deal 1 damage to any target."
+    );
 }

@@ -10,7 +10,7 @@
       (card_type: Some(BasicLand)), (required_subtypes: ["Desert"]),
     ]))), destination: Hand, shuffle: true, reveal: true)],
   )],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: CountScaledSelfPt(
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: CountScaledSelfPt(
     count: BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Desert"])),
     power_per_match: 1, toughness_per_match: 1,
   ))],

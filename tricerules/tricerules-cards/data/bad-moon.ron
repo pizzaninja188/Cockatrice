@@ -7,6 +7,6 @@
   // CR 604/613.4 layer 7c: color-filtered, symmetrical +1/+1 modification (every
   // player's black creatures).
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: AnthemPt(filter: (color: Black), delta_power: 1, delta_toughness: 1)),
+    (ability_id: "static_01", presentation: OracleLines([1]), definition: AnthemPt(filter: (color: Black), delta_power: 1, delta_toughness: 1)),
   ],
 )

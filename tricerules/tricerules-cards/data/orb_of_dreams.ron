@@ -4,5 +4,5 @@
   face_id: "orb_of_dreams",
   mana_cost: "{3}",
   types: ["Artifact"],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Permanents))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersTapped(affected: Permanents))],
 )

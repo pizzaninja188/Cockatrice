@@ -6,7 +6,7 @@
   mana_cost: "{2}{W}",
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(delta_power: 2, delta_toughness: 2, keywords: [Vigilance]))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([3]), definition: AttachedModifier(delta_power: 2, delta_toughness: 2, keywords: [Vigilance]))],
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([2]),

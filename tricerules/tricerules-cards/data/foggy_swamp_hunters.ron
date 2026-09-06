@@ -7,7 +7,7 @@
   types: ["Creature", "Human", "Ranger", "Ally"],
   power: 3,
   toughness: 4,
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: ConditionalSelfModifier(
     condition: CardsDrawnThisTurn(players: Controller, min: Some(2)),
     keywords: [Lifelink, Menace],
   ))],

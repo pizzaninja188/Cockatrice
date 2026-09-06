@@ -7,7 +7,7 @@
   power: 3,
   toughness: 3,
   keywords: [Menace],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ProhibitLifeGain(players: All))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: ProhibitLifeGain(players: All))],
   triggered_abilities: [
     (
       ability_id: "triggered_01",

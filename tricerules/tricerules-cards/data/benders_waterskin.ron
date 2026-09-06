@@ -5,7 +5,7 @@
   face_id: "bender_s_waterskin",
   mana_cost: "{3}",
   types: ["Artifact"],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: UntapsDuringOtherPlayersUntapSteps)],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: UntapsDuringOtherPlayersUntapSteps)],
   activated_abilities: [(
     ability_id: "activated_01",
     presentation: OracleLines([2]),

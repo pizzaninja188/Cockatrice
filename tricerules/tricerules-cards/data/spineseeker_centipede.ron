@@ -23,7 +23,7 @@
     ),
   ],
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: ConditionalSelfModifier(
       condition: GraveyardAggregate(
         owners: Controller,
         aggregate: DistinctCardTypes,

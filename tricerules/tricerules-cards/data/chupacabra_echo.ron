@@ -5,7 +5,7 @@
   types: ["Creature", "Beast", "Horror", "Spirit"], power: 3, toughness: 2,
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [PumpTarget(power: 0, toughness: 0, subject: Chosen((kind: Creature, controller: Opponent)), scale: Some((
       basis: Amount(Count(GraveyardCards(owners: Controller, filter: Some((any_of: Some([

@@ -5,7 +5,7 @@
   mana_cost: "{1}",
   types: ["Artifact", "Equipment"],
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(delta_power: 2, delta_toughness: 0)),
+    (ability_id: "static_01", presentation: OracleLines([1]), definition: AttachedModifier(delta_power: 2, delta_toughness: 0)),
   ],
   activated_abilities: [
     (

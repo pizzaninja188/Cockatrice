@@ -15,7 +15,7 @@
   )],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WheneverPlayerCommitsCrime(player: Controller),
     effect: [Untap(subject: Source)],
     max_triggers_per_turn: Some(1),

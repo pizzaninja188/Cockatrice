@@ -5,6 +5,6 @@
   mana_cost: "{G}",
   types: ["Enchantment"],
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: ExtraLandPlays(count: 1)),
+    (ability_id: "static_01", presentation: OracleLines([1]), definition: ExtraLandPlays(count: 1)),
   ],
 )

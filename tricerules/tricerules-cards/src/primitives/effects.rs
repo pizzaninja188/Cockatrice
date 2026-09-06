@@ -572,7 +572,9 @@ impl ResolutionBranchDef {
             ResolutionCost::TapPermanents { count, .. } => {
                 format!("Tap {count} permanent(s)")
             }
-            ResolutionCost::None => choice_fallback("Choice", &self.branch_id),
+            ResolutionCost::None if self.effects.is_empty() => "Continue".into(),
+            ResolutionCost::None => super::presentation::simple_effects(&self.effects)
+                .unwrap_or_else(|| choice_fallback("Choice", &self.branch_id)),
         }
     }
 }

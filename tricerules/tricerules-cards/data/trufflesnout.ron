@@ -9,7 +9,7 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: Fallback,
+      presentation: OracleLines([1, 2, 3]),
       trigger: WhenSelfEntersBattlefield,
       modal: Some((
         min_modes: 1,

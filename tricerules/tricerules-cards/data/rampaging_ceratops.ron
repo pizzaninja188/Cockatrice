@@ -2,5 +2,5 @@
 (
   id: "rampaging_ceratops", name: "Rampaging Ceratops", face_id: "rampaging_ceratops", mana_cost: "{4}{R}",
   types: ["Creature", "Dinosaur"], power: 5, toughness: 4,
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SelfCombatRestriction(restriction: (minimum_blockers: Some(3))))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: SelfCombatRestriction(restriction: (minimum_blockers: Some(3))))],
 )

@@ -4,11 +4,11 @@
   types: ["Creature", "Rat", "Rogue"], power: 1, toughness: 4,
   keywords: [Vigilance],
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: ConditionalSelfModifier(
       condition: GraveyardAggregate(owners: Controller, aggregate: CardCount, min: Some(7)),
       delta_power: 1,
     )),
-    (ability_id: "static_02", presentation: Fallback, definition: SelfCombatRestriction(
+    (ability_id: "static_02", presentation: OracleLines([2]), definition: SelfCombatRestriction(
       restriction: (cant_be_blocked: true),
       condition: Some(GraveyardAggregate(owners: Controller, aggregate: CardCount, min: Some(7))),
     )),

@@ -15,10 +15,10 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: Fallback,
+      presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
       effect: [GainLife(amount: 1)],
     ),
   ],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Self_))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersTapped(affected: Self_))],
 )

@@ -10,13 +10,13 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [Earthbend(count: 2)],
     ),
   ],
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: AnthemKeyword(
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: AnthemKeyword(
       filter: (controller: YouControl, required_counter: PlusOnePlusOne),
       keyword: Trample,
     )),

@@ -6,5 +6,5 @@
   // CR 303.4 (Auras); CR 702.9 (flying); CR 613.1f (ability-adding effects).
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(keywords: [Flying]))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: AttachedModifier(keywords: [Flying]))],
 )

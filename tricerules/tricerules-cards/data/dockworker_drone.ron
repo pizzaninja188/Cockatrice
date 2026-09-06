@@ -7,7 +7,7 @@
   types: ["Artifact", "Creature", "Robot"],
   power: 1,
   toughness: 1,
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersWithCounters(counter: PlusOnePlusOne, amount: 1))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersWithCounters(counter: PlusOnePlusOne, amount: 1))],
   triggered_abilities: [(
     ability_id: "triggered_01",
     presentation: OracleLines([2]),

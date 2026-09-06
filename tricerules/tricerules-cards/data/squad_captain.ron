@@ -8,7 +8,7 @@
   toughness: 2,
   keywords: [Vigilance],
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: EntersWithCounters(
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: EntersWithCounters(
       counter: PlusOnePlusOne,
       amount: Count(BattlefieldCreatures(
         filter: (controllers: Controller, exclude_source: true),

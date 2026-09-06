@@ -4,7 +4,7 @@
   types: ["Creature", "Faerie", "Rogue"], power: 3, toughness: 2, keywords: [Flying],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [ChooseResolutionBranch(optional: true, branches: [(
       branch_id: "blight_1", presentation: Fallback, cost: Blight(count: 1),

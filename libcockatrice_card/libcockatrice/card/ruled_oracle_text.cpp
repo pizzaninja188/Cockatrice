@@ -93,16 +93,28 @@ void RuledOracleText::writeXml(QXmlStreamWriter &xml) const
     xml.writeEndElement();
 }
 
+RuledOracleText::FaceResult
+RuledOracleText::inspectFace(const QString &cardName, const QString &faceName, const QString &sha256) const
+{
+    static const QRegularExpression fingerprint(QStringLiteral("^[0-9a-fA-F]{64}$"));
+    if (!fingerprint.match(sha256).hasMatch()) {
+        return {{}, FaceStatus::InvalidFingerprint, {}};
+    }
+    for (const auto &face : faces) {
+        if (face.cardName == cardName && face.faceName == faceName) {
+            const QString actualSha256 = textSha256(face.oracleText);
+            if (actualSha256 != sha256.toLower()) {
+                return {{}, FaceStatus::FingerprintMismatch, actualSha256};
+            }
+            return {face.oracleText, face.oracleText.isEmpty() ? FaceStatus::EmptyText : FaceStatus::Matched,
+                    actualSha256};
+        }
+    }
+    return {{}, FaceStatus::MissingFace, {}};
+}
+
 QString
 RuledOracleText::compatibleFaceText(const QString &cardName, const QString &faceName, const QString &sha256) const
 {
-    if (sha256.size() != 64) {
-        return {};
-    }
-    for (const auto &face : faces) {
-        if (face.cardName == cardName && face.faceName == faceName && textSha256(face.oracleText) == sha256.toLower()) {
-            return face.oracleText;
-        }
-    }
-    return {};
+    return inspectFace(cardName, faceName, sha256).text;
 }

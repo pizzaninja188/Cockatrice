@@ -18,11 +18,26 @@ struct RuledOracleTextFace
 class RuledOracleText
 {
 public:
+    enum class FaceStatus
+    {
+        Matched,
+        MissingFace,
+        InvalidFingerprint,
+        FingerprintMismatch,
+        EmptyText
+    };
+    struct FaceResult
+    {
+        QString text;
+        FaceStatus status;
+        QString actualSha256;
+    };
     static QString normalizedText(const QString &text);
     static QString textSha256(const QString &text);
     void addFace(const QString &cardName, const QString &faceName, const QString &text);
     void readXml(QXmlStreamReader &xml);
     void writeXml(QXmlStreamWriter &xml) const;
+    FaceResult inspectFace(const QString &cardName, const QString &faceName, const QString &sha256) const;
     QString compatibleFaceText(const QString &cardName, const QString &faceName, const QString &sha256) const;
 
 private:

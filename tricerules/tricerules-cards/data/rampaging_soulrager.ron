@@ -7,7 +7,7 @@
   power: 1,
   toughness: 4,
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+    (ability_id: "static_01", presentation: OracleLines([1]), definition: ConditionalSelfModifier(
       condition: UnlockedRoomDoorCount(
         controllers: Controller,
         min: Some(2),

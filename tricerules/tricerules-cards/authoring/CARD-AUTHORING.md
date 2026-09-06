@@ -245,6 +245,41 @@ Do not use `Fallback` merely to avoid verifying line numbers. It is an explicit 
 decision, not a TODO marker. Add a short RON comment when the reason is not obvious. A mechanical
 implementation gap belongs in `partial-cards.tsv`; `Fallback` does not record partial support.
 
+Record every intentional authored `Fallback` in [presentation-exceptions.tsv](presentation-exceptions.tsv)
+with four tab-separated fields: card ID, face ID, node path, and a specific reason. Copy the node
+path from the audit output; ability and choice IDs identify array entries. Token templates use
+intentional fallback because they have no normal-card Oracle fingerprint. Their artwork matching
+keeps stable identity markers separate from readable menu and stack labels.
+
+### Inspect and check presentation
+
+From the repository root, use the pinned, SHA-verified Oracle snapshot:
+
+```powershell
+./scripts/gen-cards.ps1 --audit-presentation --inspect-card Forest
+./scripts/gen-cards.ps1 --audit-presentation --check
+```
+
+These commands are read-only. Inspection accepts a card name or ID and prints each face's
+normalized numbered Oracle lines, fingerprint, and node mappings. The audit distinguishes mapped
+nodes, intentional exceptions with reasons, and unresolved fallback nodes. For simple abilities,
+an exact match between a complete generated description and an Oracle line produces an advisory
+suggestion; the tool never applies mappings. Review the mechanics and current Oracle/rulings before
+accepting a suggestion. Index validation cannot prove that a line describes the correct ability.
+
+Ordinary `gen-cards --check` also runs the audit. It rejects unresolved fallback, missing source
+faces, empty/out-of-range/duplicate/descending line indices, and malformed, duplicate, or stale
+exceptions. After changing a node, update or remove its exception and rerun the check.
+
+Simple fallback descriptions include costs, effects, and supported timing restrictions. If any
+piece cannot be described completely, the whole ability keeps its stable generic label.
+
+Client resolution remains all-or-fallback. The `cockatrice.ruled.presentation` logging category
+explains missing cards/faces, absent or invalid fingerprints, expected/loaded hash mismatches, and
+invalid line selections. Identical warnings are emitted once per resolver, with a bounded cache.
+Intentional fallback with no Oracle line selection is silent. Use these diagnostics to repair
+metadata or the external card database; display text never determines legality.
+
 ### Keep target prompts narrow
 
 `TargetGroupDef.prompt` is the narrow exception to the no-prose rule. It provides short,

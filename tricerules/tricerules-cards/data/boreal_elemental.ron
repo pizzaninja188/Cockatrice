@@ -8,7 +8,7 @@
   toughness: 4,
   keywords: [Flying],
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: TargetingCostIncrease(
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: TargetingCostIncrease(
       protected: Source,
       actors: Opponents,
       actions: Spells,

@@ -7,13 +7,13 @@
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: AttachedModifier(
       add_types: (card_types: [Artifact], creature_types: ["Toy"]),
       set_power: 0,
       set_toughness: 2,
       remove_all_abilities: true,
     )),
-    (ability_id: "static_02", presentation: Fallback, definition: ProhibitSpecialAction(
+    (ability_id: "static_02", presentation: OracleLines([3]), definition: ProhibitSpecialAction(
       action: TurnFaceUp,
       affected: AttachedPermanent,
     )),

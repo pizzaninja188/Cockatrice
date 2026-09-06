@@ -11,7 +11,7 @@
   keywords: [Haste],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WhenSelfDies,
     effect: [ExileTopWithPlayPermission(player: Controller)],
   )],

@@ -7,10 +7,10 @@
   types: ["Creature", "Shapeshifter"],
   power: 1,
   toughness: 2,
-  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)],
+  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: OracleLines([1]), definition: Changeling)],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [
       SearchLibrary(

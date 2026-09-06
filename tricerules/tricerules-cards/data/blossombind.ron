@@ -13,7 +13,7 @@
     effect: [Tap(subject: AttachedObject)],
   )],
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(cant_untap: true)),
-    (ability_id: "static_02", presentation: Fallback, definition: ProhibitCounters(affected: AttachedPermanent)),
+    (ability_id: "static_01", presentation: OracleLines([3]), definition: AttachedModifier(cant_untap: true)),
+    (ability_id: "static_02", presentation: OracleLines([3]), definition: ProhibitCounters(affected: AttachedPermanent)),
   ],
 )

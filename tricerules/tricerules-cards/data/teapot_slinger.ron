@@ -10,7 +10,7 @@
   keywords: [Menace],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WheneverPlayerExpendsMana(amount: 4),
     effect: [DamagePlayer(amount: 2, who: EachOpponent)],
   )],

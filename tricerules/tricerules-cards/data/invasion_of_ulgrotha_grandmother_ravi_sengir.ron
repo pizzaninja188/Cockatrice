@@ -11,7 +11,7 @@
       defense: 5,
       triggered_abilities: [(
         ability_id: "triggered_01",
-        presentation: Fallback,
+        presentation: OracleLines([2]),
         trigger: WhenSelfEntersBattlefield,
         effect: [
           DamageTarget(amount: 3, target: (kind: AnyTarget, excluded_objects: [Source])),
@@ -30,7 +30,7 @@
       keywords: [Flying],
       triggered_abilities: [(
         ability_id: "triggered_01",
-        presentation: Fallback,
+        presentation: OracleLines([2]),
         trigger: WheneverCreatureDies(controller: Opponent, filter: (exclude_source: false),),
         effect: [
           PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source),

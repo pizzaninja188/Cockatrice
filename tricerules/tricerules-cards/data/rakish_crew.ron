@@ -14,7 +14,7 @@
     ),
     (
       ability_id: "triggered_02",
-      presentation: Fallback,
+      presentation: OracleLines([2]),
       trigger: WheneverPermanentLeavesBattlefield(
         controller: Controller,
         filter: (any_subtypes: ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"]),

@@ -12,13 +12,13 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
       effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))],
     ),
     (
       ability_id: "triggered_02",
-      presentation: Fallback,
+      presentation: OracleLines([2]),
       trigger: AtBeginningOfEndStep(player: Controller),
       intervening_if: Some(CreatureDeathsThisTurn(min: Some(1), max: None)),
       effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],

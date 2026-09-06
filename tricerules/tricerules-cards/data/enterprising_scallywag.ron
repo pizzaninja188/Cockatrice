@@ -9,7 +9,7 @@
     toughness: 2,
     triggered_abilities: [(
         ability_id: "triggered_01",
-        presentation: Fallback,
+        presentation: OracleLines([1]),
         trigger: AtBeginningOfEndStep(player: Controller),
         intervening_if: Some(PermanentCardsEnteredGraveyardThisTurn(players: Controller, min: Some(1))),
         effect: [CreateTokens(token: "treasure", count: 1)],

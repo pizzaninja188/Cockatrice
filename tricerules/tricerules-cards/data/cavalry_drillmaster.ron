@@ -9,7 +9,7 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [
         PumpTarget(power: 2, toughness: 0, subject: Chosen((kind: Creature))),

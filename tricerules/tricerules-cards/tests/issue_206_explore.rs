@@ -15,10 +15,10 @@ fn issue_206_map_token_has_the_exact_explore_activation() {
     let [ability] = face.activated_abilities.as_slice() else {
         panic!("Map has one activated ability");
     };
-    assert_eq!(
-        ability.presentation,
-        AbilityPresentation::OracleLines(vec![1])
-    );
+    // Token templates cannot bind a normal-card Oracle fingerprint.
+    assert_eq!(ability.presentation, AbilityPresentation::Fallback);
+    assert_eq!(ability.fallback_text("Map"),
+        "{1}, {T}, Sacrifice Map: Target creature you control explores. Activate only as a sorcery.");
     assert_eq!(ability.timing, ActivationTiming::SorcerySpeed);
     assert!(matches!(
         ability.costs.as_slice(),

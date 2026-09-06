@@ -8,7 +8,7 @@
   toughness: 2,
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [
       MillTargetPlayer(count: 2, target: (kind: AnyPlayer)),

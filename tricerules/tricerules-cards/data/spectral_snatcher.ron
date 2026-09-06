@@ -10,7 +10,7 @@
   toughness: 5,
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([1]),
     trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
     effect: [CounterTriggeringStackObjectUnlessPays(cost: DiscardCard(filter: None))],
   )],

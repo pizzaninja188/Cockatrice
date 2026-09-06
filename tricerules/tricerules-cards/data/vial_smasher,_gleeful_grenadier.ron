@@ -9,7 +9,7 @@
   toughness: 2,
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([1]),
     trigger: WheneverPermanentEntersBattlefield(
       controller: Controller,
       filter: (any_subtypes: ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"], exclude_source: true),

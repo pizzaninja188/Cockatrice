@@ -8,5 +8,5 @@
   power: 2,
   toughness: 1,
   keywords: [Flying],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ProhibitCounters(affected: Self_))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: ProhibitCounters(affected: Self_))],
 )

@@ -10,11 +10,11 @@
   keywords: [Defender],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [Mill(count: 2, player: Controller)],
   )],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([3]), definition: ConditionalSelfModifier(
     condition: GraveyardAggregate(
       owners: Controller,
       aggregate: CardCount,

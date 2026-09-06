@@ -6,5 +6,5 @@
   types: ["Creature", "Shapeshifter"],
   power: 0,
   toughness: 0,
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersAsCopy(filter: (kind: Creature)))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersAsCopy(filter: (kind: Creature)))],
 )

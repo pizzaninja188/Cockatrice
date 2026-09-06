@@ -7,6 +7,6 @@
   types: ["Creature", "Shapeshifter"],
   power: 2,
   toughness: 2,
-  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)],
+  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: OracleLines([1]), definition: Changeling)],
   keywords: [Flash],
 )

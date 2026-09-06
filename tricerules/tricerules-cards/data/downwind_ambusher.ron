@@ -10,7 +10,7 @@
   keywords: [Flash],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2, 3, 4]),
     trigger: WhenSelfEntersBattlefield,
     modal: Some((min_modes: 1, max_modes: 1, modes: [
       (mode_id: "mode_01", presentation: OracleLines([3]), effects: [PumpTarget(power: -1, toughness: -1, subject: Chosen((kind: Creature, controller: Opponent)))]),

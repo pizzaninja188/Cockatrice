@@ -10,7 +10,7 @@
   keywords: [Deathtouch],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WheneverPlayerCommitsCrime(player: Controller),
     effect: [GrantKeywordChoice(subject: Chosen((kind: Creature, controller: You)), choices: [Menace, Lifelink])],
   )],

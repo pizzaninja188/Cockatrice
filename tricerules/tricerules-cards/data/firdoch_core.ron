@@ -6,7 +6,7 @@
   face_id: "firdoch_core",
   mana_cost: "{3}",
   types: ["Kindred", "Artifact", "Shapeshifter"],
-  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)],
+  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: OracleLines([1]), definition: Changeling)],
   activated_abilities: [(
     ability_id: "activated_01",
     presentation: OracleLines([2]),

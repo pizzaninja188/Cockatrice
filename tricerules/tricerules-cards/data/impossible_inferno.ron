@@ -12,7 +12,7 @@
       selection: FirstApplicable,
       branches: [
         (
-          branch_id: "exile_the_top_card", presentation: Fallback,
+          branch_id: "exile_the_top_card", presentation: OracleLines([2]),
           cost: None,
           requirement: GameCondition(GraveyardAggregate(
             owners: Controller,

@@ -6,5 +6,5 @@
   types: ["Creature", "Zombie"],
   power: 2,
   toughness: 2,
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersTapped(affected: Self_))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersTapped(affected: Self_))],
 )

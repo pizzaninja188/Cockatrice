@@ -126,6 +126,32 @@ impl ActivatedAbilityDef {
         face_name: &str,
         ability_path: &[crate::AbilityId],
     ) -> String {
+        if self.conditions.is_empty() && self.cost_modifiers.is_empty() && self.targeting.is_none()
+        {
+            if let (Some(costs), Some(effects)) = (
+                super::presentation::simple_costs(&self.costs, face_name),
+                super::presentation::simple_effects(&self.effect),
+            ) {
+                let mut text = format!(
+                    "{}: {effects}",
+                    if costs.is_empty() { "{0}" } else { &costs }
+                );
+                if self.timing == ActivationTiming::SorcerySpeed {
+                    text.push_str(" Activate only as a sorcery.");
+                }
+                if let Some(limit) = self.activation_limit {
+                    text.push_str(&match limit {
+                        ActivationLimit::PerTurn { max_activations } => {
+                            format!(" Activate at most {max_activations} time(s) each turn.")
+                        }
+                        ActivationLimit::PerObject { max_activations } => format!(
+                            " Activate at most {max_activations} time(s) for this permanent."
+                        ),
+                    });
+                }
+                return text;
+            }
+        }
         crate::ability_fallback(face_name, "activated ability", ability_path)
     }
     /// CR 605.1a: a mana ability produces mana, doesn't target, and isn't a loyalty ability.
@@ -1108,6 +1134,40 @@ impl TriggeredAbilityDef {
         face_name: &str,
         ability_path: &[crate::AbilityId],
     ) -> String {
+        if self.targeting.is_none()
+            && self.modal.is_none()
+            && self.intervening_if.is_none()
+            && !self.may
+            && !self.triggers_only_once
+            && self.max_triggers_per_turn.is_none()
+        {
+            let trigger = match self.trigger {
+                TriggerCondition::WhenSelfEntersBattlefield => {
+                    Some(format!("When {face_name} enters"))
+                }
+                TriggerCondition::WhenSelfDies => Some(format!("When {face_name} dies")),
+                TriggerCondition::WhenSelfLeavesBattlefield => {
+                    Some(format!("When {face_name} leaves the battlefield"))
+                }
+                TriggerCondition::WheneverSelfBecomesTapped => {
+                    Some(format!("Whenever {face_name} becomes tapped"))
+                }
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                } => Some(format!("Whenever {face_name} attacks")),
+                TriggerCondition::AtBeginningOfNextEndStep => {
+                    Some("At the beginning of the next end step".into())
+                }
+                _ => None,
+            };
+            if let (Some(trigger), Some(mut effects)) =
+                (trigger, super::presentation::simple_effects(&self.effect))
+            {
+                // The supported instructions begin with an ASCII imperative, never a proper name.
+                effects[..1].make_ascii_lowercase();
+                return format!("{trigger}, {effects}");
+            }
+        }
         crate::ability_fallback(face_name, "triggered ability", ability_path)
     }
     pub(crate) fn validate_trigger_limit(&self) -> Result<(), String> {

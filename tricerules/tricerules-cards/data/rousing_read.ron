@@ -18,6 +18,6 @@
     ),
   ],
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(delta_power: 1, delta_toughness: 1, keywords: [Flying])),
+    (ability_id: "static_01", presentation: OracleLines([3]), definition: AttachedModifier(delta_power: 1, delta_toughness: 1, keywords: [Flying])),
   ],
 )

@@ -9,11 +9,11 @@
   power: 3,
   toughness: 3,
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+    (ability_id: "static_01", presentation: OracleLines([1]), definition: ConditionalSelfModifier(
       condition: ActivePlayer(players: Controller),
       keywords: [FirstStrike],
     )),
-    (ability_id: "static_02", presentation: Fallback, definition: AnthemKeyword(
+    (ability_id: "static_02", presentation: OracleLines([2]), definition: AnthemKeyword(
       filter: (controller: YouControl, required_counter: PlusOnePlusOne),
       condition: ActivePlayer(players: Controller),
       keyword: FirstStrike,

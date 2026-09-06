@@ -36,6 +36,9 @@ use tricerules_cards::{
     ManaAmount, ManaCost, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
+#[path = "gen_cards/presentation_audit.rs"]
+mod presentation_audit;
+
 /// MTG supertypes (CR 205.4). Everything else on the left of the em dash is a card type.
 const SUPERTYPES: &[&str] = &["Basic", "Legendary", "Snow", "World", "Ongoing", "Host"];
 
@@ -49,6 +52,8 @@ struct Args {
     check: bool,
     include_new: bool,
     limit: Option<usize>,
+    audit_presentation: bool,
+    inspect_card: Option<String>,
 }
 
 fn print_usage() {
@@ -64,6 +69,8 @@ fn print_usage() {
          --check            verify canonical generated output without writing\n  \
          --include-new      include newly qualifying cards (requires author review)\n  \
          --limit <N>        emit at most N cards (for spot checks)\n  \
+         --audit-presentation report numbered Oracle lines, mappings, suggestions, and exceptions; write nothing\n  \
+         --inspect-card <name-or-id> restrict the presentation audit to one card\n  \
          -h, --help         show this help"
     );
 }
@@ -78,6 +85,8 @@ fn parse_args() -> Result<Args, String> {
     let mut check = false;
     let mut include_new = false;
     let mut limit: Option<usize> = None;
+    let mut audit_presentation = false;
+    let mut inspect_card = None;
 
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -96,6 +105,10 @@ fn parse_args() -> Result<Args, String> {
                 ))
             }
             "--dry-run" => dry_run = true,
+            "--audit-presentation" => audit_presentation = true,
+            "--inspect-card" => {
+                inspect_card = Some(it.next().ok_or("--inspect-card needs a value")?)
+            }
             "--check" => check = true,
             "--include-new" => include_new = true,
             "--limit" => {
@@ -121,6 +134,15 @@ fn parse_args() -> Result<Args, String> {
     if check && limit.is_some() {
         return Err("--check cannot be combined with --limit".into());
     }
+    if inspect_card.is_some() && !audit_presentation {
+        return Err("--inspect-card requires --audit-presentation".into());
+    }
+    if audit_presentation && (limit.is_some() || include_new || dry_run) {
+        return Err(
+            "--audit-presentation cannot be combined with --limit, --include-new, or --dry-run"
+                .into(),
+        );
+    }
     let metadata = metadata.unwrap_or_else(|| PathBuf::from(format!("{input}.meta.json")));
     let out_dir = out_dir.unwrap_or_else(|| {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -142,6 +164,8 @@ fn parse_args() -> Result<Args, String> {
         check,
         include_new,
         limit,
+        audit_presentation,
+        inspect_card,
     })
 }
 
@@ -1418,6 +1442,7 @@ fn bucket(id: &str) -> char {
 struct SourcePresentationFace {
     name: String,
     oracle_text_sha256: String,
+    lines: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1432,6 +1457,14 @@ fn normalized_oracle_text_sha256(text: &str) -> String {
 }
 
 fn source_presentation_card(card: &Value) -> Option<SourcePresentationCard> {
+    // Token variants have their own display identity. A same-name token must not make a
+    // normal card's fingerprint ambiguous (Ajani's Pridemate and Spellgorger Weird).
+    if matches!(
+        str_field(card, "layout"),
+        "token" | "double_faced_token" | "emblem"
+    ) {
+        return None;
+    }
     let name = str_field(card, "name").trim();
     if name.is_empty() {
         return None;
@@ -1450,6 +1483,7 @@ fn source_presentation_card(card: &Value) -> Option<SourcePresentationCard> {
                         SourcePresentationFace {
                             name: face_name.to_string(),
                             oracle_text_sha256: normalized_oracle_text_sha256(oracle_text),
+                            lines: external_oracle_lines(oracle_text),
                         }
                     })
                 })
@@ -1461,6 +1495,7 @@ fn source_presentation_card(card: &Value) -> Option<SourcePresentationCard> {
                 vec![SourcePresentationFace {
                     name: name.to_string(),
                     oracle_text_sha256: normalized_oracle_text_sha256(oracle_text),
+                    lines: external_oracle_lines(oracle_text),
                 }]
             })
         })?;
@@ -1635,6 +1670,9 @@ fn main() -> ExitCode {
                 }
             }
         }
+        if args.audit_presentation {
+            return true;
+        }
         match evaluate(
             &card,
             &existing_ids,
@@ -1678,6 +1716,23 @@ fn main() -> ExitCode {
     };
     eprintln!("Read {read_count} cards from {}.", args.input);
 
+    if args.audit_presentation {
+        return match presentation_audit::run(&presentation_sources, args.inspect_card.as_deref()) {
+            Ok((report, problems)) => {
+                print!("{report}");
+                if args.check && problems != 0 {
+                    ExitCode::FAILURE
+                } else {
+                    ExitCode::SUCCESS
+                }
+            }
+            Err(error) => {
+                eprintln!("error: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     eprint!("{}", stats.render());
     if let Some(tag_input) = &args.oracle_tags {
         match oracle_tag_report(Path::new(tag_input), &unsupported_oracle_ids) {
@@ -1698,6 +1753,17 @@ fn main() -> ExitCode {
         render_presentation_registry(&provenance, &registry, &presentation_sources);
 
     if args.check {
+        match presentation_audit::run(&presentation_sources, None) {
+            Ok((_, 0)) => eprintln!("Presentation mappings and intentional exceptions are valid."),
+            Ok((report, _)) => {
+                eprintln!("{report}");
+                return ExitCode::FAILURE;
+            }
+            Err(error) => {
+                eprintln!("presentation audit failed: {error}");
+                return ExitCode::FAILURE;
+            }
+        }
         let mut drift = Vec::new();
         let mut expected_paths = HashSet::new();
         for gen in &to_emit {

@@ -10,7 +10,7 @@
   keywords: [Flying],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WheneverPlayerCommitsCrime(player: Controller),
     effect: [LoseLife(amount: Fixed(1), who: EachOpponent), GainLife(amount: 1)],
     max_triggers_per_turn: Some(1),

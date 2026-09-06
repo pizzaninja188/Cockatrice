@@ -9,7 +9,7 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [PutCounters(
         counter: PlusOnePlusOne,
@@ -19,7 +19,7 @@
     ),
     (
       ability_id: "triggered_02",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WhenSelfDies,
       effect: [PutCounters(
         counter: PlusOnePlusOne,

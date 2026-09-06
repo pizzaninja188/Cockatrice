@@ -9,7 +9,7 @@
   keywords: [Reach],
   activated_abilities: [(
     ability_id: "activated_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     source_zone: Graveyard,
     costs: [Mana("{4}{G}"), ExileSelf],
     effect: [

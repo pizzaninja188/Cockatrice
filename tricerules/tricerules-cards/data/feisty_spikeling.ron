@@ -7,8 +7,8 @@
   types: ["Creature", "Shapeshifter"],
   power: 2,
   toughness: 1,
-  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: OracleLines([1]), definition: Changeling)],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: ConditionalSelfModifier(
     condition: ActivePlayer(players: Controller),
     keywords: [FirstStrike],
   ))],

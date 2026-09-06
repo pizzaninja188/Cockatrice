@@ -11,7 +11,7 @@
   keywords: [Deathtouch],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WheneverSelfDealsCombatDamageToPlayer,
     intervening_if: Some(CrimesCommittedThisTurn(players: Controller, min: Some(1))),
     effect: [ChooseResolutionBranch(

@@ -10,7 +10,7 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: OracleLines([1]),
+      presentation: Fallback,
       trigger: WheneverPlayerCastsSpell(
         caster: Controller,
         filter: (card_type: Some(Noncreature)),

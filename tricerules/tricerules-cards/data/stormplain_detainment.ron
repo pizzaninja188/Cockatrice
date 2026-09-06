@@ -7,7 +7,7 @@
   types: ["Enchantment"],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [ExileUntilSourceLeaves(target: (kind: AnyPermanent, controller: Opponent, excluded_permanent_types: [Land]))],
   )],

@@ -7,7 +7,7 @@
   spell_effect: [AuraAttach(target: (kind: AnyPlayer))],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WheneverAttachedPlayerIsAttacked,
     effect: [
       CreateTokens(token: "gold", count: 1),

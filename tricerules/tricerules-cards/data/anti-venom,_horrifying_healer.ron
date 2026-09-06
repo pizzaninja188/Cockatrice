@@ -10,7 +10,7 @@
   power: 5,
   toughness: 5,
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: PreventDamage(
+    (ability_id: "static_01", presentation: OracleLines([2]), definition: PreventDamage(
       subject: Source,
       amount: All,
       additional_effect: Some(PutCounters(counter: PlusOnePlusOne, basis: Attempted)),

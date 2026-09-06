@@ -6,7 +6,7 @@
   // Layered name, color, type, ability, and base-P/T changes are modeled independently.
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: Creature))],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: AttachedModifier(
     set_types: Some((card_types: [Creature], creature_types: ["Citizen"])),
     set_name: Some("Legitimate Businessperson"),
     set_colors: Some([White, Green]),

@@ -8,7 +8,7 @@
   power: 2,
   toughness: 2,
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: TargetingCostIncrease(
+    (ability_id: "static_01", presentation: OracleLines([1, 2]), definition: TargetingCostIncrease(
       protected: Creatures((controller: Some(YouControl), subtype: Some("Merfolk"))),
       actors: Opponents,
       actions: SpellsAndActivatedAbilities,

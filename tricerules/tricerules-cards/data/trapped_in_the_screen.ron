@@ -8,13 +8,13 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
       effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))],
     ),
     (
       ability_id: "triggered_02",
-      presentation: Fallback,
+      presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
       effect: [ExileUntilSourceLeaves(target: (kind: AnyPermanent, controller: Opponent, permanent_types: [Artifact, Creature, Enchantment]))],
     ),

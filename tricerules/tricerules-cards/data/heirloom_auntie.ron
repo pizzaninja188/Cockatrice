@@ -7,10 +7,10 @@
   types: ["Creature", "Goblin", "Warlock"],
   power: 4,
   toughness: 4,
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersWithCounters(counter: MinusOneMinusOne, amount: 2))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersWithCounters(counter: MinusOneMinusOne, amount: 2))],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WheneverCreatureDies(controller: Controller, filter: (exclude_source: true)),
     effect: [
       LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil),

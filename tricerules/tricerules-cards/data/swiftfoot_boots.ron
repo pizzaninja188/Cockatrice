@@ -5,10 +5,10 @@
   mana_cost: "{2}",
   // CR 301.5 / 702.6 (Equipment/equip); CR 702.10 (haste); CR 702.18 (hexproof).
   types: ["Artifact", "Equipment"],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(keywords: [Hexproof, Haste]))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: AttachedModifier(keywords: [Hexproof, Haste]))],
   activated_abilities: [(
     ability_id: "activated_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     costs: [Mana("{1}")],
     effect: [Equip(target: (kind: Creature, controller: You))],
   )],

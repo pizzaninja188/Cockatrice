@@ -15,13 +15,13 @@
     ),
     (
       ability_id: "activated_02",
-      presentation: Fallback,
+      presentation: OracleLines([2]),
       costs: [Loyalty(-1)],
       effect: [TargetPlayerDraws(count: 1, target: (kind: AnyPlayer))],
     ),
     (
       ability_id: "activated_03",
-      presentation: Fallback,
+      presentation: OracleLines([3]),
       costs: [Loyalty(-10)],
       effect: [MillTargetPlayer(count: 20, target: (kind: AnyPlayer))],
     ),

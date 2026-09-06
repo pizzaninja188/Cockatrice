@@ -16,7 +16,7 @@
   )],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
     effect: [AddMana(amount: (r: 1), retention: EndOfCombat)],
   )],

@@ -9,7 +9,7 @@
   toughness: 2,
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([1]),
     trigger: WheneverPlayerExpendsMana(amount: 4),
     effect: [GrantKeywords(subject: Source, keywords: [Indestructible])],
   )],

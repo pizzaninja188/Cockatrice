@@ -329,12 +329,23 @@ pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
         ability_texts: face
             .activated_abilities
             .iter()
-            .map(|ability| ability.fallback_text(&values.display_name))
-            .chain(
-                face.triggered_abilities
-                    .iter()
-                    .map(|ability| ability.fallback_text(&values.display_name)),
-            )
+            // These strings identify artwork candidates, not ability labels. Keep the stable
+            // identity fallback here: generated descriptions are not verbatim token Oracle text.
+            // Legal actions and synthetic ability cards publish the readable fallback separately.
+            .map(|ability| {
+                tricerules_cards::ability_fallback(
+                    &values.display_name,
+                    "activated ability",
+                    std::slice::from_ref(&ability.ability_id),
+                )
+            })
+            .chain(face.triggered_abilities.iter().map(|ability| {
+                tricerules_cards::ability_fallback(
+                    &values.display_name,
+                    "triggered ability",
+                    std::slice::from_ref(&ability.ability_id),
+                )
+            }))
             .collect(),
     }
 }

@@ -787,7 +787,7 @@ pub type FaceRef<'a> = &'a CardFace;
 ///
 /// Single-face cards are authored flat (no `faces:` wrapper) — this is the schema the ~870
 /// hand-authored and generated files use, and it is deliberately unchanged.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RawCardDefinition {
     pub id: String,

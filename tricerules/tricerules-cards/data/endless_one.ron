@@ -7,6 +7,6 @@
   power: 0,
   toughness: 0,
   static_abilities: [
-    (ability_id: "static_01", presentation: Fallback, definition: EntersWithCounters(counter: PlusOnePlusOne, amount: "X")),
+    (ability_id: "static_01", presentation: OracleLines([1]), definition: EntersWithCounters(counter: PlusOnePlusOne, amount: "X")),
   ],
 )

@@ -8,13 +8,13 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [CreateTokens(token: "rabbit_w_1_1", count: 1), Scry(count: 1)],
     ),
     (
       ability_id: "triggered_02",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WheneverPlayerSacrificesPermanent(player: Controller, filter: (source_only: true)),
       effect: [CreateTokens(token: "rabbit_w_1_1", count: 1), Scry(count: 1)],
     ),

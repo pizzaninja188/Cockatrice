@@ -8,11 +8,11 @@
   spell_effect: [AuraAttach(target: (kind: AnyPermanent, permanent_types: [Land]))],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
     effect: [GainLife(amount: 3)],
   )],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(activated_abilities: [(
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([3]), definition: AttachedModifier(activated_abilities: [(
     ability_id: "activated_01",
     presentation: Fallback,
     costs: [Tap],

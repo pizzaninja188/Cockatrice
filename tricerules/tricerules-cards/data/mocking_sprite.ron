@@ -9,7 +9,7 @@
   power: 2,
   toughness: 1,
   keywords: [Flying],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SpellGenericReduction(
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: SpellGenericReduction(
     casters: Controller,
     spell_type: Some(InstantOrSorcery),
     amount: 1,

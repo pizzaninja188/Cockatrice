@@ -1,4 +1,4 @@
-// Oracle checked 2026-08-26. The targeted graveyard cards share one graveyard (CR 115.9c).
+// Partial: target selection currently requires one graveyard; see authoring/partial-cards.tsv.
 (
   id: "rooftop_percher",
   name: "Rooftop Percher",
@@ -7,11 +7,11 @@
   types: ["Creature", "Shapeshifter"],
   power: 3,
   toughness: 3,
-  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: Fallback, definition: Changeling)],
+  characteristic_defining_abilities: [(ability_id: "characteristic_01", presentation: OracleLines([1]), definition: Changeling)],
   keywords: [Flying],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([3]),
     trigger: WhenSelfEntersBattlefield,
     effect: [
       MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile),

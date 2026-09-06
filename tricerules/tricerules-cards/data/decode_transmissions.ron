@@ -6,9 +6,9 @@
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
   spell_effect: [ChooseResolutionBranch(selection: FirstApplicable, branches: [
-    (branch_id: "draw_two_cards_each_opponent_loses_2_life", presentation: Fallback, cost: None,
+    (branch_id: "draw_two_cards_each_opponent_loses_2_life", presentation: OracleLines([2]), cost: None,
       requirement: GameCondition(Void), effects: [Draw(count: 2), LoseLife(amount: Fixed(2), who: EachOpponent)]),
-    (branch_id: "draw_two_cards_and_lose_2_life", presentation: Fallback, cost: None,
+    (branch_id: "draw_two_cards_and_lose_2_life", presentation: OracleLines([1]), cost: None,
       requirement: Always, effects: [Draw(count: 2), LoseLife(amount: Fixed(2))]),
   ])],
 )

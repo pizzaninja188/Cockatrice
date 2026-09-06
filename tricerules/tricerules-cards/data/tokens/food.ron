@@ -6,7 +6,7 @@
   types: ["Artifact", "Food"],
   activated_abilities: [(
     ability_id: "activated_01",
-    presentation: OracleLines([1]),
+    presentation: Fallback,
     costs: [Mana("{2}"), Tap, SacrificeSelf],
     effect: [GainLife(amount: 3)],
   )],

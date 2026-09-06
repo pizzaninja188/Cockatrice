@@ -5,7 +5,7 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [ChooseResolutionBranch(optional: true, branches: [(
         branch_id: "blight_2", presentation: Fallback, cost: Blight(count: 2),
@@ -14,7 +14,7 @@
     ),
     (
       ability_id: "triggered_02",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [ChooseResolutionBranch(optional: true, branches: [(
         branch_id: "blight_2", presentation: Fallback, cost: Blight(count: 2),

@@ -9,7 +9,7 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WheneverPermanentEntersBattlefield(
         controller: Controller,
         filter: (permanent_type: Some(Enchantment)),
@@ -18,7 +18,7 @@
     ),
     (
       ability_id: "triggered_02",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WheneverPlayerFullyUnlocksRoom(player: Controller),
       effect: [GrantKeywords(subject: Source, keywords: [Lifelink])],
     ),

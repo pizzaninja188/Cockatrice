@@ -6,7 +6,7 @@
   types: ["Artifact", "Treasure"],
   activated_abilities: [(
     ability_id: "activated_01",
-    presentation: OracleLines([1]),
+    presentation: Fallback,
     costs: [Tap, SacrificeSelf],
     effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
   )],

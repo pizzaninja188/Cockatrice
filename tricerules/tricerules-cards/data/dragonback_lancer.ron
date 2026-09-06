@@ -10,7 +10,7 @@
   keywords: [Flying],
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([2]),
     trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
     effect: [CreateAttackingTokens(token: "warrior_r_1_1", count: 1, sacrifice_timing: Some(NextEndStep))],
   )],

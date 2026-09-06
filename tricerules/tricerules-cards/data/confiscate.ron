@@ -6,5 +6,5 @@
   // CR 303.4 and 613.1b.
   types: ["Enchantment", "Aura"],
   spell_effect: [AuraAttach(target: (kind: AnyPermanent))],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ControlsAttached)],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: ControlsAttached)],
 )

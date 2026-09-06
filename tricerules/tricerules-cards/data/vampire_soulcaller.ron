@@ -9,7 +9,7 @@
   power: 3,
   toughness: 2,
   keywords: [Flying],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SelfCombatRestriction(restriction: (cant_block: true)))],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: SelfCombatRestriction(restriction: (cant_block: true)))],
   triggered_abilities: [
     (
       ability_id: "triggered_01",

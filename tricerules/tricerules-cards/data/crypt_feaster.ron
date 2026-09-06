@@ -11,7 +11,7 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: Fallback,
+      presentation: OracleLines([2]),
       trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
       effect: [PumpTarget(power: 2, toughness: 0, subject: Source)],
       intervening_if: Some(GraveyardAggregate(

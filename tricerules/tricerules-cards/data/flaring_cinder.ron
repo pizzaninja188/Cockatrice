@@ -11,7 +11,7 @@
   triggered_abilities: [
     (
       ability_id: "triggered_01",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WhenSelfEntersBattlefield,
       effect: [ChooseResolutionBranch(
         optional: true,
@@ -24,7 +24,7 @@
     ),
     (
       ability_id: "triggered_02",
-      presentation: Fallback,
+      presentation: OracleLines([1]),
       trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (min_mana_value: Some(4))),
       effect: [ChooseResolutionBranch(
         optional: true,

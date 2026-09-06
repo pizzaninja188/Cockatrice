@@ -1008,6 +1008,26 @@ TEST(RuledPresentationResolverTest, EmptyMappingAlwaysUsesEngineFallback)
     presentation.set_fallback_text("engine-authored fallback");
     RuledPresentationResolver resolver;
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("engine-authored fallback"));
+    EXPECT_TRUE(resolver.inspect(presentation).diagnostic.isEmpty());
+}
+
+TEST(RuledPresentationResolverTest, RejectsDuplicateAndDescendingMappings)
+{
+    CardNameMap cards;
+    auto card = CardInfo::newInstance("Card");
+    card->ruled().addFace("Card", "Card", "One\nTwo");
+    cards.insert("Card", card);
+    RuledPresentationResolver resolver([&cards](const QString &name) { return cards.value(name); });
+    ruled::v1::PresentationRef presentation;
+    presentation.set_external_card_name("Card");
+    presentation.set_external_face_name("Card");
+    presentation.set_oracle_text_sha256(RuledOracleText::textSha256("One\nTwo").toStdString());
+    presentation.set_fallback_text("fallback");
+    presentation.add_oracle_line_indices(2);
+    presentation.add_oracle_line_indices(2);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
+    presentation.set_oracle_line_indices(1, 1);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
 }
 
 TEST(RuledPresentationResolverTest, UsesDatabaseFaceTextWithoutCompanionCache)
@@ -1023,13 +1043,16 @@ TEST(RuledPresentationResolverTest, UsesDatabaseFaceTextWithoutCompanionCache)
     presentation.set_fallback_text("fallback");
     presentation.add_oracle_line_indices(1);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("{T}: Add {G}."));
+    EXPECT_TRUE(resolver.inspect(presentation).diagnostic.isEmpty());
     // Lookup follows the loaded database, with no retained file or stale face snapshot.
     cards.clear();
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
+    EXPECT_TRUE(resolver.inspect(presentation).diagnostic.contains("Card absent"));
     cards = readPresentationCards(R"(<cockatrice_carddatabase version="4"><cards><card><name>Forest</name>
       <text>Ordinary display</text><ruled-oracle><face card-name="Forest" face-name="Forest">
       <text>Changed external wording</text></face></ruled-oracle></card></cards></cockatrice_carddatabase>)");
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
+    EXPECT_TRUE(resolver.inspect(presentation).diagnostic.contains("Oracle fingerprint mismatch"));
     presentation.set_oracle_text_sha256(RuledOracleText::textSha256("Changed external wording").toStdString());
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("Changed external wording"));
 }
@@ -1116,12 +1139,14 @@ Two</text></face></ruled-oracle></card></cards></cockatrice_carddatabase>)");
     presentation.set_external_card_name("Card");
     presentation.set_external_face_name("Missing");
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
+    EXPECT_TRUE(resolver.inspect(presentation).diagnostic.contains("Missing exact Oracle face data"));
     presentation.set_external_face_name("Face");
     presentation.set_oracle_text_sha256(std::string(64, 'f'));
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
     presentation.set_oracle_text_sha256(RuledOracleText::textSha256("One\nTwo").toStdString());
     presentation.set_oracle_line_indices(0, 0);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
+    EXPECT_TRUE(resolver.inspect(presentation).diagnostic.contains("Invalid Oracle mapping at line 0"));
     presentation.set_oracle_line_indices(0, 1);
     presentation.add_oracle_line_indices(3);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));

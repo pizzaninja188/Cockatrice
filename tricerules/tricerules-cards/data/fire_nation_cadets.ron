@@ -14,7 +14,7 @@
     costs: [Mana("{2}")],
     effect: [PumpTarget(power: 1, toughness: 0, subject: Source)],
   )],
-  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ConditionalSelfModifier(
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: ConditionalSelfModifier(
     condition: GraveyardAggregate(
       owners: Controller,
       aggregate: CardCount,

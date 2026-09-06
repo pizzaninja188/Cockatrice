@@ -3,7 +3,7 @@
   types: ["Creature", "Goblin", "Warlock"], power: 5, toughness: 4,
   triggered_abilities: [(
     ability_id: "triggered_01",
-    presentation: Fallback,
+    presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [ChooseResolutionBranch(optional: false, branches: [
       (branch_id: "pay_2", presentation: Fallback, cost: Mana("{2}"), effects: []),
