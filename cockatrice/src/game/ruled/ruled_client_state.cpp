@@ -420,42 +420,6 @@ void RuledClientState::clearPendingChoiceOfKind(ChoiceKind kind)
     }
 }
 
-void RuledClientState::setPublicReveal(RuledPublicReveal reveal)
-{
-    publicReveal = std::move(reveal);
-    emit publicRevealChanged(true, publicReveal->sourceObjectId, publicReveal->zoneOwnerPlayerId,
-                             publicReveal->candidateNames, publicReveal->candidateServerCardIds);
-}
-
-void RuledClientState::clearPublicReveal()
-{
-    if (!publicReveal.has_value()) {
-        return;
-    }
-    publicReveal.reset();
-    emit publicRevealChanged(false, 0, -1, {}, {});
-}
-
-void RuledClientState::setActivePublicReveals(QVector<RuledActivePublicReveal> reveals)
-{
-    if (activePublicReveals == reveals) {
-        return;
-    }
-    activePublicReveals = std::move(reveals);
-    QStringList names;
-    QVector<int> playerIds;
-    QStringList sourceDescriptions;
-    names.reserve(activePublicReveals.size());
-    playerIds.reserve(activePublicReveals.size());
-    sourceDescriptions.reserve(activePublicReveals.size());
-    for (const auto &reveal : activePublicReveals) {
-        names.append(reveal.cardName);
-        playerIds.append(reveal.revealingPlayerId);
-        sourceDescriptions.append(reveal.sourceDescription);
-    }
-    emit activePublicRevealsChanged(std::move(names), std::move(playerIds), std::move(sourceDescriptions));
-}
-
 void RuledClientState::sendResolutionChoice(const QVector<quint32> &chosenOids,
                                             ruled::v1::ResolutionChoiceDecision decision)
 {
@@ -1799,7 +1763,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     finishEngineCommand();
     // Pending choice + the trigger stack bookkeeping that outlives it.
     clearPendingChoice();
-    clearPublicReveal();
+    reveals.clear();
     lastTriggerSourceOid = 0;
     lastTriggerAbilityIndex = 0;
     lastTriggerControllerPlayerId = -1;

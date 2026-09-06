@@ -444,6 +444,12 @@ bool isResolutionPickZoneCard(const RuledClientState *state, const CardItem *car
     if (!zone) {
         return false;
     }
+    if (zone->property("ruledRevealSnapshot").toBool()) {
+        return state->pendingChoice->publicReveal && !state->reveals.choiceId().isEmpty() &&
+               zone->property("ruledRevealId").toString() == state->reveals.choiceId();
+    }
+    if (state->pendingChoice->publicReveal)
+        return false;
     const auto *viewZone = qobject_cast<const ZoneViewZoneLogic *>(zone);
     const Player *zonePlayer = zone->getPlayer();
     const bool zoneIsLocal = zonePlayer && zonePlayer->getPlayerInfo()->getLocal();

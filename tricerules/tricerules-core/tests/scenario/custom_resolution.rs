@@ -259,6 +259,7 @@ fn gifts_ungiven_opponent_chooses_the_split() {
     // library search (ChoiceKind::LibrarySearch), so the relay redacts the candidate library
     // cards from the opponent — the library must not leak. Only the chosen cards become public.
     let search = find_resolution_choice(&batch).expect("search choice");
+    assert!(search.public_reveal.is_none());
     assert_eq!(search.deciding_player_id, 0);
     assert_eq!(
         search.choice_kind(),
@@ -278,6 +279,20 @@ fn gifts_ungiven_opponent_chooses_the_split() {
 
     // Second interrupt: the OPPONENT chooses which two go to the controller's graveyard.
     let split = find_resolution_choice(&batch2).expect("opponent split choice");
+    let reveal = split
+        .public_reveal
+        .as_ref()
+        .expect("Gifts explicitly publishes its revealed set to everyone");
+    assert_eq!(reveal.zone_owner_player_id, 0);
+    assert_eq!(
+        reveal
+            .cards
+            .iter()
+            .map(|card| card.object_id)
+            .collect::<Vec<_>>(),
+        found
+    );
+    assert!(!reveal.reveal_id.is_empty());
     assert_eq!(split.deciding_player_id, 1, "opponent decides the split");
     assert_eq!((split.min, split.max), (2, 2));
     assert_eq!(

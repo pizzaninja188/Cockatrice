@@ -46,6 +46,7 @@ class QToolButton;
 class QMenu;
 class ZoneViewLayout;
 class ZoneViewWidget;
+class RuledRevealWindows;
 class CardZoneLogic;
 class PhasesToolbar;
 class PlayerListWidget;
@@ -111,10 +112,7 @@ private:
     QPointer<ZoneViewWidget> revealedPickView;
     // ServerInfo_Card storage for the revealed-cards popup (owned by this instance).
     QList<ServerInfo_Card *> revealedPickCards;
-    /// Read-only exact snapshot of cards revealed for spells that remain on the stack. Separate
-    /// from resolution reveals so the two lifecycles cannot close or overwrite each other.
-    QPointer<ZoneViewWidget> activeCastRevealView;
-    QList<ServerInfo_Card *> activeCastRevealCards;
+    RuledRevealWindows *ruledRevealWindows = nullptr;
     /// One closeable, control-free mirror per active engine permission cohort. Closing a group
     /// records a local dismissal until that group disappears from the authoritative snapshot.
     QHash<quint64, QPointer<ZoneViewWidget>> exilePlayPermissionViews;
@@ -238,15 +236,7 @@ private slots:
     void onRuledLibrarySearchPickStarted(QStringList candidateNames, QVector<int> serverCardIds);
     /// Creates or closes the revealed-cards popup for RevealedCards pick (Gifts Ungiven step 2).
     void onRuledRevealedPickChanged(bool started, QStringList cardNames, QVector<int> serverCardIds, int min, int max);
-    /// Reconciles the one engine-authored public hand reveal as an exact snapshot.
-    void onRuledPublicRevealChanged(bool active,
-                                    quint32 sourceObjectId,
-                                    int zoneOwnerPlayerId,
-                                    QStringList cardNames,
-                                    QVector<int> serverCardIds);
-    void onRuledActivePublicRevealsChanged(QStringList cardNames,
-                                           QVector<int> revealingPlayerIds,
-                                           QStringList sourceDescriptions);
+
     void onRuledExilePlayPermissionGroupsChanged();
     /// CR 603.3b: opens or closes the simultaneous-trigger ordering window. Only the deciding
     /// player is sent `active = true`, so at most one client shows it.

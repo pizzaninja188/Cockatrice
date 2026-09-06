@@ -339,11 +339,11 @@ fn issue_143_coercion_publicly_reveals_and_can_choose_any_card() {
     let choice = find_resolution_choice(&batch).expect("opponent-hand choice");
     assert_eq!(choice.candidate_object_ids, [land, creature]);
     assert_eq!(choice.candidate_selectable, [true, true]);
+    assert!(choice.public_reveal.is_some());
     assert_eq!(
-        choice.reveal_audience(),
-        ResolutionRevealAudience::AllParticipants
+        choice.public_reveal.as_ref().unwrap().zone_owner_player_id,
+        1
     );
-    assert_eq!(choice.revealed_zone_owner_player_id, Some(1));
     assert_eq!(
         engine
             .state
@@ -410,8 +410,8 @@ fn issue_143_cracked_skull_remains_a_private_look() {
     let choice = find_resolution_choice(&batch).expect("private hand choice");
     assert_eq!(choice.candidate_object_ids, [land, nonland]);
     assert_eq!(choice.candidate_selectable, [false, true]);
-    assert_eq!(choice.reveal_audience(), ResolutionRevealAudience::None);
-    assert_eq!(choice.revealed_zone_owner_player_id, None);
+    assert!(choice.public_reveal.is_none());
+    assert!(choice.public_reveal.is_none());
     assert_eq!((choice.min, choice.max), (0, 1));
     engine
         .apply_command(0, &submit_resolution_choice(vec![]))

@@ -66,7 +66,6 @@ private:
                               const QHash<quint32, int> &battlefieldDisplayPlayers,
                               BatchApplyResult &result);
     void applyTokenCreations(const ruled::v1::RuledEventBatch &batch, const QHash<quint32, int> &battlefieldGridRows);
-    void applyCardsRevealed(const ruled::v1::RuledEventBatch &batch, GameEventStorage &events);
     void applyPermanentMoves(const ruled::v1::RuledEventBatch &batch,
                              const QHash<int, QHash<quint32, int>> &preBatchOidMaps,
                              const QHash<quint32, int> &battlefieldGridRows,

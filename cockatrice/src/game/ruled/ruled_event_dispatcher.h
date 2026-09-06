@@ -27,6 +27,7 @@ class AttackersDeclared;
 class AttackersAdded;
 class AttackersPreview;
 class ActivePublicRevealSnapshot;
+class CardsRevealed;
 class BattlefieldObjectMap;
 class BlockersDeclared;
 class BlockersPreview;
@@ -62,7 +63,7 @@ public:
 
     /// Parse a serialized `RuledEventBatch` and apply it. Returns false when the payload does not
     /// parse; in that case the pre-batch reset has already run (matching legacy behaviour).
-    bool processPayload(const std::string &payload);
+    bool processPayload(const std::string &payload, bool suppressRevealWindows = false);
 
     /// Apply an already-parsed batch. Exposed for tests.
     void processBatch(const ruled::v1::RuledEventBatch &batch);
@@ -115,6 +116,7 @@ private:
     void applyRemovedFromCombat(const ruled::v1::CreaturesRemovedFromCombat &rfc, BatchContext &ctx);
     void applyLifeChanged(const ruled::v1::LifeChanged &lc, BatchContext &ctx);
     void applyManaPoolUpdated(const ruled::v1::ManaPoolUpdated &mpu, BatchContext &ctx);
+    void applyCardsRevealed(const ruled::v1::CardsRevealed &reveal);
     void applyActivePublicRevealSnapshot(const ruled::v1::ActivePublicRevealSnapshot &snapshot);
 
     /// The local player's `LegalActions` entry: hand-action label parsing, targeting tables,

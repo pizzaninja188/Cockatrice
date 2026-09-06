@@ -571,7 +571,7 @@ fn issue_198_shared_predicate_publishes_and_resolves_searches_and_graveyard_targ
                 find_resolution_choice(&batch).expect("search is parked for an engine choice");
             assert_eq!(choice.candidate_object_ids, [fire, giant]);
             assert_eq!(choice.deciding_player_id, 0);
-            assert_eq!(choice.reveal_audience(), ResolutionRevealAudience::None);
+            assert!(choice.public_reveal.is_none());
             for illegal in [wrong_type, wrong_owner] {
                 assert!(engine
                     .apply_command(0, &submit_resolution_choice(vec![illegal]))

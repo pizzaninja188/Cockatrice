@@ -256,6 +256,7 @@ public:
     std::vector<Event_CreateToken> physicalCreateTokenEvents;
     std::vector<Event_MoveCard> physicalMoveEvents;
     std::vector<Event_RevealCards> physicalRevealEvents;
+    std::vector<ruled::v1::CardsRevealed> revealEvents;
     struct Pool
     {
         int w = 0, u = 0, b = 0, r = 0, g = 0, c = 0;
@@ -337,7 +338,7 @@ public:
     bool sawAggressiveObserverReadOnly = false;
     bool aggressivePublicRevealActive = false;
     bool sawAggressivePublicRevealClosed = false;
-    std::vector<ruled::v1::ActivePublicReveal> activePublicReveals;
+    std::vector<ruled::v1::CardsRevealed> activePublicReveals;
     QStringList aggressiveRevealNames;
     bool submittedAggressiveChoice = false;
     bool sawAggressiveExile = false;
@@ -1447,8 +1448,7 @@ public:
                     }
                 }
                 if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND) {
-                    const bool publicReveal =
-                        rcr.reveal_audience() == ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS;
+                    const bool publicReveal = rcr.has_public_reveal();
                     batchHasPublicReveal = batchHasPublicReveal || publicReveal;
                     if (rcr.deciding_player_id() == myId) {
                         bool hasEligibleBear = false;
@@ -1460,8 +1460,8 @@ public:
                             }
                             hasLand = hasLand || rcr.candidate_names(i) == "Island";
                         }
-                        sawAggressiveChooserMask = publicReveal && rcr.has_revealed_zone_owner_player_id() &&
-                                                   rcr.revealed_zone_owner_player_id() == oppId &&
+                        sawAggressiveChooserMask = publicReveal && rcr.has_public_reveal() &&
+                                                   rcr.public_reveal().zone_owner_player_id() == oppId &&
                                                    rcr.candidate_object_ids_size() == rcr.candidate_names_size() &&
                                                    rcr.candidate_card_ids_size() == rcr.candidate_names_size() &&
                                                    rcr.candidate_names_size() == rcr.candidate_server_card_ids_size() &&
@@ -1475,8 +1475,8 @@ public:
                             hasLand = hasLand || name == "Island";
                         }
                         sawAggressiveObserverReadOnly =
-                            publicReveal && rcr.has_revealed_zone_owner_player_id() &&
-                            rcr.revealed_zone_owner_player_id() == myId &&
+                            publicReveal && rcr.has_public_reveal() &&
+                            rcr.public_reveal().zone_owner_player_id() == myId &&
                             rcr.candidate_object_ids_size() == rcr.candidate_names_size() &&
                             rcr.candidate_card_ids_size() == rcr.candidate_names_size() &&
                             rcr.candidate_names_size() == rcr.candidate_server_card_ids_size() &&
@@ -1514,13 +1514,16 @@ public:
                             .arg(rcr.ordered())
                             .arg(rcr.candidate_object_ids_size()));
                 }
+            } else if (ev.has_cards_revealed()) {
+                revealEvents.push_back(ev.cards_revealed());
             } else if (ev.has_active_public_reveal_snapshot()) {
                 activePublicReveals.clear();
                 bool hasDragon = false;
                 for (const auto &reveal : ev.active_public_reveal_snapshot().reveals()) {
                     activePublicReveals.push_back(reveal);
-                    hasDragon = hasDragon ||
-                                (reveal.card_id() == "adult_gold_dragon" && reveal.card_name() == "Adult Gold Dragon");
+                    hasDragon =
+                        hasDragon || (reveal.cards_size() == 1 && reveal.cards(0).card_id() == "adult_gold_dragon" &&
+                                      reveal.cards(0).card_name() == "Adult Gold Dragon");
                 }
                 if (hasDragon) {
                     sawActiveBeholdReveal = true;
@@ -6713,9 +6716,10 @@ TEST_F(RuledE2ESmokeTest, KaitoNinjutsuHandSourcePaymentPreviewIsPrivateAndValid
     for (const SmokeClient *client : {&p1, &p2}) {
         ASSERT_EQ(client->activePublicReveals.size(), 1u);
         const auto &reveal = client->activePublicReveals.front();
-        EXPECT_EQ(reveal.card_name(), "Kaito, Bane of Nightmares");
+        ASSERT_EQ(reveal.cards_size(), 1);
+        EXPECT_EQ(reveal.cards(0).card_name(), "Kaito, Bane of Nightmares");
         EXPECT_EQ(reveal.source_description(), "Kaito, Bane of Nightmares");
-        EXPECT_EQ(reveal.revealing_player_id(), p1.myId);
+        EXPECT_EQ(reveal.zone_owner_player_id(), p1.myId);
     }
 }
 
@@ -9124,8 +9128,8 @@ TEST_F(RuledE2ESmokeTest, SpyglassSirenMapExplorePublishesOnePublicLibraryCardTo
     ASSERT_EQ(observer.candidate_names_size(), 1);
     EXPECT_EQ(chooser.candidate_names(0), "Storm Crow");
     EXPECT_EQ(observer.candidate_names(0), "Storm Crow");
-    EXPECT_EQ(chooser.reveal_audience(), ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
-    EXPECT_EQ(observer.reveal_audience(), ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
+    EXPECT_TRUE(chooser.has_public_reveal());
+    EXPECT_TRUE(observer.has_public_reveal());
     ASSERT_EQ(chooser.candidate_selectable_size(), 1);
     EXPECT_TRUE(chooser.candidate_selectable(0));
     EXPECT_EQ(observer.candidate_selectable_size(), 0);
@@ -9161,6 +9165,48 @@ TEST_F(RuledE2ESmokeTest, SpyglassSirenMapExplorePublishesOnePublicLibraryCardTo
         EXPECT_EQ(updatedSiren->power, 2);
         EXPECT_EQ(updatedSiren->toughness, 2);
         EXPECT_TRUE(client->libraryDetailsStayedConcealed);
+    }
+
+    // Repeat with a land: no resolution choice is needed, but BOTH seats must receive its
+    // immutable reveal even though the physical card moves to hand in the very same batch.
+    ASSERT_TRUE(devPutBattlefield(p1.myId, "Forest"));
+    ruled::v1::RuledCommand moveForest;
+    auto *moveDev = moveForest.mutable_dev_command();
+    moveDev->set_target_player_id(p1.myId);
+    moveDev->mutable_move_card()->set_card_name("Forest");
+    moveDev->mutable_move_card()->set_zone(ruled::v1::DEV_ZONE_LIBRARY);
+    ASSERT_TRUE(sendAndPump(p1, moveForest, QStringLiteral("move Forest into library for land explore")));
+    // Dev movement appends to the library. Remove every Crow from this fixed 40-card
+    // fixture so Forest is the only library card, without relying on a hidden top-card ID.
+    ruled::v1::RuledCommand removeCrow;
+    auto *removeDev = removeCrow.mutable_dev_command();
+    removeDev->set_target_player_id(p1.myId);
+    removeDev->mutable_move_card()->set_card_name("Storm Crow");
+    removeDev->mutable_move_card()->set_zone(ruled::v1::DEV_ZONE_EXILE);
+    for (int i = 0; i < 40; ++i)
+        ASSERT_TRUE(sendAndPump(p1, removeCrow, QStringLiteral("prepare land-only library")));
+    ASSERT_TRUE(devPutBattlefield(p1.myId, "Spyglass Siren"));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+    const auto *nextMap = findPermanent(p1, p1.myId, QStringLiteral("map"));
+    ASSERT_NE(nextMap, nullptr);
+    ability->set_source_object_id(nextMap->oid);
+    ability->set_expected_zone_change_generation(nextMap->generation);
+    ASSERT_TRUE(sendAndPump(p1, addMana, QStringLiteral("add mana for land explore")));
+    ASSERT_TRUE(sendAndPump(p1, activate, QStringLiteral("activate Map for land explore")));
+    ASSERT_TRUE(passPriority(p1));
+    ASSERT_TRUE(passPriority(p2));
+    EXPECT_FALSE(p1.pendingChoice.has_value());
+    for (const SmokeClient *client : {&p1, &p2}) {
+        const auto reveal = std::find_if(client->revealEvents.begin(), client->revealEvents.end(),
+                                         [](const ruled::v1::CardsRevealed &event) {
+                                             return event.cards_size() == 1 && event.cards(0).card_name() == "Forest";
+                                         });
+        ASSERT_NE(reveal, client->revealEvents.end());
+        EXPECT_FALSE(reveal->reveal_id().empty());
+        EXPECT_EQ(reveal->source_zone(), ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
+        EXPECT_EQ(reveal->zone_owner_player_id(), p1.myId);
+        EXPECT_EQ(findPermanent(*client, p1.myId, QStringLiteral("spyglass_siren"))->power, 2);
     }
 }
 
@@ -9430,10 +9476,10 @@ TEST_F(RuledE2ESmokeTest, EsperOriginsFlashbackReturnsTransformedRevealsPublicly
     ASSERT_EQ(p1.stackDepth, 0);
 
     const auto sawForestReveal = [](const SmokeClient &client) {
-        return std::any_of(client.physicalRevealEvents.begin(), client.physicalRevealEvents.end(),
-                           [](const Event_RevealCards &event) {
-                               return event.zone_name() == ZoneNames::DECK && event.cards_size() == 1 &&
-                                      event.cards(0).name() == "Forest";
+        return std::any_of(client.revealEvents.begin(), client.revealEvents.end(),
+                           [](const ruled::v1::CardsRevealed &event) {
+                               return event.source_zone() == ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY &&
+                                      event.cards_size() == 1 && event.cards(0).card_name() == "Forest";
                            });
     };
     EXPECT_TRUE(sawForestReveal(p1));

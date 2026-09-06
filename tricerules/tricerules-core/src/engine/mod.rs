@@ -181,6 +181,7 @@ mod presentation;
 mod priority;
 pub(crate) mod replacement;
 mod resolution;
+pub(crate) mod reveals;
 mod sagas;
 mod state_based;
 mod targeting;
@@ -1591,7 +1592,8 @@ impl GameEngine {
         // advance it — a rejected command must leave it untouched, otherwise replay (which
         // re-applies only the accepted commands) would compute different shuffles/timestamps and
         // diverge from live play.
-        if result.is_ok() {
+        if let Ok(batch) = result.as_mut() {
+            reveals::identify_reveals(batch, self.state.command_index);
             self.state.command_index += 1;
         }
         // CR 701.20: report the becomes-untapped edges this command produced, so Servatrice can

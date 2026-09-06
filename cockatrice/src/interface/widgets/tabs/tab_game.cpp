@@ -20,6 +20,7 @@
 #include "../game/ruled/ruled_client_state.h"
 #include "../game/ruled/ruled_dev_command_parser.h"
 #include "../game/ruled/ruled_dev_console.h"
+#include "../game/ruled/ruled_reveal_windows.h"
 #include "../game/zones/view_zone.h"
 #include "../game/zones/view_zone_widget.h"
 #include "../interface/card_picture_loader/card_picture_loader.h"
@@ -474,10 +475,7 @@ void TabGame::connectToGameEventHandler()
                 &TabGame::onRuledLibrarySearchPickStarted);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::revealedPickChanged, this,
                 &TabGame::onRuledRevealedPickChanged);
-        connect(game->getGameEventHandler()->ruled(), &RuledClientState::publicRevealChanged, this,
-                &TabGame::onRuledPublicRevealChanged);
-        connect(game->getGameEventHandler()->ruled(), &RuledClientState::activePublicRevealsChanged, this,
-                &TabGame::onRuledActivePublicRevealsChanged);
+        ruledRevealWindows = new RuledRevealWindows(game, scene, game->getGameEventHandler()->ruled(), this);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::exilePlayPermissionGroupsChanged, this,
                 &TabGame::onRuledExilePlayPermissionGroupsChanged);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerOrderUiChanged, this,
@@ -2681,116 +2679,6 @@ void TabGame::onRuledRevealedPickChanged(bool started,
         qDeleteAll(revealedPickCards);
         revealedPickCards.clear();
     });
-}
-
-void TabGame::onRuledPublicRevealChanged(bool active,
-                                         quint32 /*sourceObjectId*/,
-                                         int zoneOwnerPlayerId,
-                                         QStringList cardNames,
-                                         QVector<int> serverCardIds)
-{
-    const bool validSnapshot =
-        active && !cardNames.isEmpty() && cardNames.size() == serverCardIds.size() && game && scene;
-    Player *zoneOwner =
-        validSnapshot ? game->getPlayerManager()->getPlayers().value(zoneOwnerPlayerId, nullptr) : nullptr;
-    CardZoneLogic *handZone = zoneOwner ? zoneOwner->getZones().value(ZoneNames::HAND) : nullptr;
-    if (!validSnapshot || !zoneOwner || !handZone) {
-        if (revealedPickView) {
-            revealedPickView->close();
-            revealedPickView = nullptr;
-        }
-        qDeleteAll(revealedPickCards);
-        revealedPickCards.clear();
-        return;
-    }
-
-    // Every active signal is an exact snapshot. Refill the existing widget for both same-key
-    // refreshes and different-key replacements, preserving geometry and never appending stale
-    // cards from an earlier reveal.
-    QList<ServerInfo_Card *> previousCards = revealedPickCards;
-    revealedPickCards.clear();
-    QList<const ServerInfo_Card *> cardList;
-    for (int i = 0; i < cardNames.size(); ++i) {
-        auto *card = new ServerInfo_Card;
-        card->set_name(cardNames.at(i).toStdString());
-        card->set_id(serverCardIds.at(i));
-        card->set_face_down(false);
-        revealedPickCards.append(card);
-        cardList.append(card);
-    }
-
-    if (revealedPickView) {
-        revealedPickView->getZone()->getLogic()->clearContents();
-        revealedPickView->getZone()->initializeCards(cardList);
-    } else {
-        // The revealed hand owner supplies the scaffold, so spectators do not need a local
-        // Player. It is read-only, control-free, and non-closeable while resolution is parked.
-        revealedPickView =
-            new ZoneViewWidget(zoneOwner, handZone, -1, true, false, cardList, false, false, true, false);
-        scene->addItem(revealedPickView);
-        revealedPickView->setPos(340, 80);
-        connect(revealedPickView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
-            revealedPickView = nullptr;
-            qDeleteAll(revealedPickCards);
-            revealedPickCards.clear();
-        });
-    }
-    revealedPickView->setWindowTitle(tr("%1's revealed hand").arg(zoneOwner->getPlayerInfo()->getName()));
-    qDeleteAll(previousCards);
-}
-
-void TabGame::onRuledActivePublicRevealsChanged(QStringList cardNames,
-                                                QVector<int> revealingPlayerIds,
-                                                QStringList sourceDescriptions)
-{
-    const bool validSnapshot = !cardNames.isEmpty() && cardNames.size() == revealingPlayerIds.size() &&
-                               cardNames.size() == sourceDescriptions.size() && game && scene;
-    Player *scaffoldPlayer =
-        validSnapshot ? game->getPlayerManager()->getPlayers().value(revealingPlayerIds.constFirst(), nullptr) : nullptr;
-    CardZoneLogic *handZone = scaffoldPlayer ? scaffoldPlayer->getZones().value(ZoneNames::HAND) : nullptr;
-    if (!validSnapshot || !scaffoldPlayer || !handZone) {
-        if (activeCastRevealView) {
-            activeCastRevealView->close();
-            activeCastRevealView = nullptr;
-        }
-        qDeleteAll(activeCastRevealCards);
-        activeCastRevealCards.clear();
-        return;
-    }
-
-    QList<ServerInfo_Card *> previousCards = activeCastRevealCards;
-    activeCastRevealCards.clear();
-    QList<const ServerInfo_Card *> cards;
-    for (int i = 0; i < cardNames.size(); ++i) {
-        auto *card = new ServerInfo_Card;
-        card->set_name(cardNames.at(i).toStdString());
-        card->set_id(-100000 - i);
-        card->set_face_down(false);
-        const QString sourceDescription = sourceDescriptions.at(i);
-        card->set_annotation((sourceDescription.isEmpty()
-                                  ? tr("Revealed from hand")
-                                  : tr("Revealed from hand for %1").arg(sourceDescription))
-                                 .toStdString());
-        activeCastRevealCards.append(card);
-        cards.append(card);
-    }
-
-    if (activeCastRevealView) {
-        activeCastRevealView->getZone()->getLogic()->clearContents();
-        activeCastRevealView->getZone()->initializeCards(cards);
-    } else {
-        activeCastRevealView =
-            new ZoneViewWidget(scaffoldPlayer, handZone, -1, true, false, cards, false, false, true, false);
-        scene->addItem(activeCastRevealView);
-        activeCastRevealView->setPos(680, 80);
-        connect(activeCastRevealView, &ZoneViewWidget::closePressed, this, [this](ZoneViewWidget *) {
-            activeCastRevealView = nullptr;
-            qDeleteAll(activeCastRevealCards);
-            activeCastRevealCards.clear();
-        });
-    }
-    activeCastRevealView->setWindowTitle(tr("Revealed from hand"));
-    qDeleteAll(previousCards);
 }
 
 void TabGame::onRuledExilePlayPermissionGroupsChanged()

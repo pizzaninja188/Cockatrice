@@ -67,6 +67,8 @@ pub enum ResolutionStep {
 /// tier-3 card (and reused later by X-spells / modal spells): the engine validates the response
 /// against `candidates`/`min`/`max` before resuming, so per-card proto is never needed.
 pub struct ResolutionInterrupt {
+    /// Explicit public reveal; private looks and searches leave this false.
+    pub public_reveal: bool,
     /// Who must answer (CR allows the *opponent* to decide for part of Gifts Ungiven).
     pub deciding_player: PlayerId,
     /// Display-only prompt text (server-only; no Oracle lookup on the relay).
@@ -99,6 +101,7 @@ pub struct ResolutionChoice {
 /// but exposes only audited mutators that maintain zone integrity (the same operations the
 /// engine's primitive resolution uses), so custom code cannot corrupt invariants.
 pub struct ResolutionCtx<'a> {
+    source_object_id: ObjectId,
     state: &'a mut GameState,
     registry: &'static CardRegistry,
     events: &'a mut Vec<rv1::RuledEvent>,
@@ -123,10 +126,12 @@ impl<'a> ResolutionCtx<'a> {
         registry: &'static CardRegistry,
         events: &'a mut Vec<rv1::RuledEvent>,
         controller: PlayerId,
+        source_object_id: ObjectId,
         step: u32,
         scratch: Vec<ObjectId>,
     ) -> Self {
         ResolutionCtx {
+            source_object_id,
             state,
             registry,
             events,
@@ -304,6 +309,17 @@ impl<'a> ResolutionCtx<'a> {
         } else {
             None
         }
+    }
+
+    /// Publish an instantaneous public reveal before any later zone movement.
+    pub fn reveal_cards(&mut self, object_ids: &[ObjectId]) {
+        self.events.extend(crate::engine::reveals::reveal_cards(
+            self.state,
+            self.registry,
+            object_ids,
+            self.source_object_id,
+            &self.card_name(self.source_object_id),
+        ));
     }
 
     /// Append a game-log line.

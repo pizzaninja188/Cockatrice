@@ -95,8 +95,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
                 resolution_branches: Vec::new(),
                 mana_cost: String::new(),
                 candidate_selectable: vec![true],
-                reveal_audience: 0,
-                revealed_zone_owner_player_id: None,
+                public_reveal: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
@@ -355,8 +354,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
                 payment_currently_legal: false,
-                reveal_audience: rv1::ResolutionRevealAudience::None as i32,
-                revealed_zone_owner_player_id: None,
+                public_reveal: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
@@ -877,8 +875,7 @@ pub(super) fn put_in_owners_library(
                         ],
                         mana_cost: String::new(),
                         candidate_selectable: Vec::new(),
-                        reveal_audience: 0,
-                        revealed_zone_owner_player_id: None,
+                        public_reveal: None,
                         candidate_source_zones: Vec::new(),
                         combat_defender_options: Vec::new(),
                         waterbend: false,
@@ -1209,6 +1206,27 @@ fn choose_hand_cards_for_player(
         })
         .collect();
 
+    if visibility == HandChoiceVisibility::PublicReveal
+        && (eligible.is_empty() || chooser == DiscardChooser::Random)
+    {
+        events.extend(super::super::reveals::reveal_cards(
+            &engine.state,
+            engine.registry,
+            &hand,
+            top.id,
+            spell_label,
+        ));
+        if !hand.is_empty() {
+            events.push(ev_log(format!(
+                "P{affected_player} reveals: {}.",
+                hand.iter()
+                    .map(|&oid| object_display_name(&engine.state, engine.registry, oid))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        }
+    }
+
     if chooser == DiscardChooser::Random {
         let chosen_count = (count as usize).min(eligible.len());
         if chosen_count == 0 {
@@ -1288,13 +1306,17 @@ fn choose_hand_cards_for_player(
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
                 payment_currently_legal: false,
-                reveal_audience: if visibility == HandChoiceVisibility::PublicReveal {
-                    rv1::ResolutionRevealAudience::AllParticipants as i32
+                public_reveal: if visibility == HandChoiceVisibility::PublicReveal {
+                    super::super::reveals::reveal_choice(
+                        &engine.state,
+                        engine.registry,
+                        &hand,
+                        top.id,
+                        spell_label,
+                    )
                 } else {
-                    rv1::ResolutionRevealAudience::None as i32
+                    None
                 },
-                revealed_zone_owner_player_id: (visibility == HandChoiceVisibility::PublicReveal)
-                    .then_some(affected_player),
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
@@ -1578,8 +1600,7 @@ pub(super) fn target_player_sacrifices(
                             mana_cost: String::new(),
                             generic_mana_cost: 0,
                             payment_currently_legal: false,
-                            reveal_audience: 0,
-                            revealed_zone_owner_player_id: None,
+                            public_reveal: None,
                             candidate_source_zones: Vec::new(),
                             combat_defender_options: Vec::new(),
                             waterbend: false,
@@ -1707,8 +1728,7 @@ pub(super) fn choose_graveyard_card(
                 resolution_branches: Vec::new(),
                 mana_cost: String::new(),
                 candidate_selectable: Vec::new(),
-                reveal_audience: 0,
-                revealed_zone_owner_player_id: None,
+                public_reveal: None,
                 candidate_source_zones: vec![
                     rv1::ChoiceCandidateSourceZone::Graveyard as i32;
                     candidates.len()
@@ -2207,31 +2227,19 @@ pub(super) fn reveal_top_card_to_hand_if_matches(
     else {
         return Ok(EffectOutcome::Continue);
     };
-    let generation = cx
-        .engine
-        .state
-        .zone_change_generation
-        .get(&object_id)
-        .copied()
-        .unwrap_or(0);
     let card_name = cx
         .engine
         .registry
         .get(&card_id)
         .map(|definition| definition.name.clone())
         .unwrap_or_else(|| "card".into());
-    cx.events.push(rv1::RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::CardsRevealed(rv1::CardsRevealed {
-            zone_owner_player_id: cx.controller,
-            source_zone: rv1::ChoiceCandidateSourceZone::Library as i32,
-            cards: vec![rv1::RevealedCard {
-                object_id,
-                zone_change_generation: generation,
-                card_id,
-                card_name: card_name.clone(),
-            }],
-        })),
-    });
+    cx.events.extend(super::super::reveals::reveal_cards(
+        &cx.engine.state,
+        cx.engine.registry,
+        &[object_id],
+        cx.top.id,
+        cx.spell_label,
+    ));
     cx.events.push(ev_log(format!(
         "P{} reveals {card_name} for {}.",
         cx.controller, cx.spell_label
@@ -2380,6 +2388,13 @@ pub(super) fn explore(
         revealed_id,
         Some(&CardTypeFilter::Land),
     ) {
+        cx.events.extend(super::super::reveals::reveal_cards(
+            &cx.engine.state,
+            cx.engine.registry,
+            &[revealed_id],
+            cx.top.id,
+            cx.spell_label,
+        ));
         move_object_to_zone(
             &mut cx.engine.state,
             cx.engine.registry,
@@ -2426,8 +2441,13 @@ pub(super) fn explore(
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
                 payment_currently_legal: false,
-                reveal_audience: rv1::ResolutionRevealAudience::AllParticipants as i32,
-                revealed_zone_owner_player_id: Some(controller),
+                public_reveal: super::super::reveals::reveal_choice(
+                    &cx.engine.state,
+                    cx.engine.registry,
+                    &[revealed_id],
+                    cx.top.id,
+                    cx.spell_label,
+                ),
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
@@ -2599,8 +2619,7 @@ fn begin_library_partition(
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
                 payment_currently_legal: false,
-                reveal_audience: 0,
-                revealed_zone_owner_player_id: None,
+                public_reveal: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
@@ -2738,8 +2757,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
                 payment_currently_legal: false,
-                reveal_audience: 0,
-                revealed_zone_owner_player_id: None,
+                public_reveal: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
@@ -2844,8 +2862,7 @@ pub(super) fn look_choose_to_hand(
                 generic_mana_cost: 0,
                 payment_currently_legal: false,
                 candidate_selectable: selectable,
-                reveal_audience: 0,
-                revealed_zone_owner_player_id: None,
+                public_reveal: None,
                 candidate_source_zones: Vec::new(),
                 combat_defender_options: Vec::new(),
                 waterbend: false,
@@ -3100,8 +3117,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                 mana_cost: String::new(),
                 generic_mana_cost: 0,
                 payment_currently_legal: false,
-                reveal_audience: 0,
-                revealed_zone_owner_player_id: None,
+                public_reveal: None,
                 candidate_source_zones: if multi_zone {
                     candidate_zones
                 } else {
@@ -3223,8 +3239,7 @@ pub(in crate::engine) fn begin_search_request(
                         resolution_branches: branches,
                         mana_cost: String::new(),
                         candidate_selectable: Vec::new(),
-                        reveal_audience: 0,
-                        revealed_zone_owner_player_id: None,
+                        public_reveal: None,
                         candidate_source_zones: Vec::new(),
                         combat_defender_options: Vec::new(),
                         waterbend: false,
@@ -3331,8 +3346,7 @@ pub(super) fn search_library(
                     mana_cost: String::new(),
                     generic_mana_cost: 0,
                     payment_currently_legal: false,
-                    reveal_audience: 0,
-                    revealed_zone_owner_player_id: None,
+                    public_reveal: None,
                     candidate_source_zones: Vec::new(),
                     combat_defender_options: Vec::new(),
                     waterbend: false,

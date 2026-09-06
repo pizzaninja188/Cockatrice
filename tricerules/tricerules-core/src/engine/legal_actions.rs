@@ -10,69 +10,8 @@ use super::targeting::{
 use super::*;
 
 pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
-    batch.events.retain(|event| {
-        !matches!(
-            event.ev,
-            Some(rv1::ruled_event::Ev::ActivePublicRevealSnapshot(_))
-        )
-    });
-    let reveals = if eng.state.winner.is_some() {
-        vec![]
-    } else {
-        eng.state
-            .stack
-            .iter()
-            .filter(|item| !item.is_copy)
-            .flat_map(|item| {
-                let cast_reveals = item.cast_cost_receipts.iter().flat_map(|receipt| {
-                    receipt.objects.iter().filter_map(|object| {
-                        let CastCostObjectReceipt::RevealedHand {
-                            card_id, card_name, ..
-                        } = object
-                        else {
-                            return None;
-                        };
-                        Some(rv1::ActivePublicReveal {
-                            source_stack_object_id: item.id,
-                            group_index: receipt.group_index,
-                            revealing_player_id: item.controller,
-                            source_description: object_display_name(
-                                &eng.state,
-                                eng.registry,
-                                item.id,
-                            ),
-                            card_id: card_id.clone(),
-                            card_name: card_name.clone(),
-                        })
-                    })
-                });
-                let ninjutsu_reveal = item
-                    .activated_ability
-                    .as_ref()
-                    .filter(|ability| {
-                        ability
-                            .costs
-                            .contains(&AbilityCost::ReturnUnblockedAttacker)
-                    })
-                    .map(|_| {
-                        let card_name = eng
-                            .registry
-                            .get(&item.card_id)
-                            .map(|definition| definition.name.clone())
-                            .unwrap_or_else(|| item.card_id.clone());
-                        rv1::ActivePublicReveal {
-                            source_stack_object_id: item.id,
-                            group_index: 0,
-                            revealing_player_id: item.controller,
-                            source_description: card_name.clone(),
-                            card_id: item.card_id.clone(),
-                            card_name,
-                        }
-                    });
-                cast_reveals.chain(ninjutsu_reveal)
-            })
-            .collect()
-    };
+    super::reveals::preserve_active_occurrences(batch);
+    let reveals = super::reveals::active_reveals(eng);
     batch.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ActivePublicRevealSnapshot(
             rv1::ActivePublicRevealSnapshot { reveals },

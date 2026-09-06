@@ -144,7 +144,7 @@ Every signal is declared on `RuledClientState` and emitted by it or by the dispa
 | `resolutionHandPickUiChanged(int,int)` | `TabGame` | Tier-3 pick prompt; `required == -1` means cleared. |
 | `librarySearchPickStarted(QStringList,QVector<int>)` | `TabGame` | Auto-open the deck zone view with the candidates. |
 | `revealedPickChanged(bool,QStringList,QVector<int>,int,int)` | `TabGame` | Open/close a chooser-private revealed-cards popup. |
-| `publicRevealChanged(bool,quint32,int,QStringList,QVector<int>)` | `TabGame` | Reconcile the table-visible public-reveal popup as an exact snapshot. |
+| `RuledRevealState::changed()` | `RuledRevealWindows` | Reconcile all public reveal windows; active choices share the same surface and completed snapshots remain locally dismissible. |
 | `triggerNeedsTarget(QString)` | *(none today)* | Emitted on `TriggerNeedsTarget`; the prompt text currently reaches the panel through `enginePromptFeed` instead. Wire it, or drop it, when the trigger-target UI next changes. |
 
 Incoming direction — `GamePromptWidget` signals connect straight to `RuledClientState` slots
@@ -271,3 +271,5 @@ Three grammar rules worth knowing before extending it:
   such ambiguity (no zone word is numeric). Seats are 1-based ordinals, never raw player ids.
 
 Adding a primitive is a proto arm, a `parse` case, and an engine handler — no new UI.
+
+Public reveals use the shared contract documented in [the reveal audit](../../../../docs/REVEAL-AUDIT.md). Private look/search choices never publish public reveal metadata.

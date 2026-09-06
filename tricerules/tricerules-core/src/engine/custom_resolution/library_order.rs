@@ -194,8 +194,7 @@ impl GameEngine {
                         PendingLibraryPartitionKind::Surveil
                         | PendingLibraryPartitionKind::Look => vec![true; n as usize],
                     },
-                    reveal_audience: 0,
-                    revealed_zone_owner_player_id: None,
+                    public_reveal: None,
                     candidate_source_zones: Vec::new(),
                     combat_defender_options: Vec::new(),
                     waterbend: false,
@@ -286,6 +285,13 @@ impl GameEngine {
         if let Some(oid) = selected {
             let name = object_display_name(&self.state, self.registry, oid);
             let owner = self.state.objects[&oid].owner;
+            ev.extend(super::super::reveals::reveal_cards(
+                &self.state,
+                self.registry,
+                &[oid],
+                stack.item.id,
+                &object_display_name(&self.state, self.registry, stack.item.id),
+            ));
             move_object_to_zone(&mut self.state, self.registry, oid, Zone::Hand, None)?;
             ev.push(ev_log(format!("P{controller} reveals {name}.")));
             ev.push(ev_log(format!(
@@ -357,8 +363,7 @@ impl GameEngine {
                     generic_mana_cost: 0,
                     payment_currently_legal: false,
                     candidate_selectable: vec![true; remaining.len()],
-                    reveal_audience: 0,
-                    revealed_zone_owner_player_id: None,
+                    public_reveal: None,
                     candidate_source_zones: Vec::new(),
                     combat_defender_options: Vec::new(),
                     waterbend: false,

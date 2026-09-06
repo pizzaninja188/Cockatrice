@@ -24,6 +24,7 @@
 
 #include "ruled_payment.h"
 #include "ruled_pick_surface.h"
+#include "ruled_reveal_state.h"
 
 #include <QHash>
 #include <QList>
@@ -829,33 +830,7 @@ public:
     /// (or on another seat). Written only through setPendingChoice / clearPendingChoice*.
     std::optional<RuledPendingChoice> pendingChoice;
 
-    struct RuledPublicReveal
-    {
-        quint32 sourceObjectId = 0;
-        int zoneOwnerPlayerId = -1;
-        QStringList candidateNames;
-        QVector<int> candidateServerCardIds;
-
-        bool operator==(const RuledPublicReveal &) const = default;
-    };
-    /// Public information mirrored on every participant independently of chooser authority.
-    /// The key is (sourceObjectId, zoneOwnerPlayerId); each incoming value is an exact snapshot.
-    std::optional<RuledPublicReveal> publicReveal;
-
-    struct RuledActivePublicReveal
-    {
-        quint32 sourceStackObjectId = 0;
-        quint32 groupIndex = 0;
-        int revealingPlayerId = -1;
-        QString sourceDescription;
-        QString cardId;
-        QString cardName;
-
-        bool operator==(const RuledActivePublicReveal &) const = default;
-    };
-    /// Exact public snapshot of cards revealed to satisfy optional cast costs whose spells are
-    /// still on the stack. Multiple spells may contribute entries concurrently.
-    QVector<RuledActivePublicReveal> activePublicReveals;
+    RuledRevealState reveals{this};
 
     // Last TriggerNeedsTarget seen, recorded on *every* client — not just the ability's
     // controller. This is stack bookkeeping, not a choice: it is what lets the synthetic stack
@@ -1683,30 +1658,6 @@ public:
     void toggleResolutionHandPickCard(int serverCardId);
     void submitResolutionHandPick();
 
-    [[nodiscard]] bool hasPublicReveal() const
-    {
-        return publicReveal.has_value();
-    }
-    [[nodiscard]] quint32 publicRevealSourceObjectId() const
-    {
-        return publicReveal.has_value() ? publicReveal->sourceObjectId : 0;
-    }
-    [[nodiscard]] int publicRevealOwnerPlayerId() const
-    {
-        return publicReveal.has_value() ? publicReveal->zoneOwnerPlayerId : -1;
-    }
-    [[nodiscard]] QStringList publicRevealCandidateNames() const
-    {
-        return publicReveal.has_value() ? publicReveal->candidateNames : QStringList{};
-    }
-    void setPublicReveal(RuledPublicReveal reveal);
-    void clearPublicReveal();
-    [[nodiscard]] QVector<RuledActivePublicReveal> getActivePublicReveals() const
-    {
-        return activePublicReveals;
-    }
-    void setActivePublicReveals(QVector<RuledActivePublicReveal> reveals);
-
     [[nodiscard]] bool isResolutionPaymentActive() const
     {
         return hasPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
@@ -1923,19 +1874,6 @@ signals:
     /// started=true: the opponent (deciding player) should see a revealed-cards popup.
     /// cardNames: oracle names; serverCardIds: IDs used for click-to-pick (parallel).
     void revealedPickChanged(bool started, QStringList cardNames, QVector<int> serverCardIds, int min, int max);
-    /// Exact public reveal snapshot for all players and spectators. `active=false` destroys the
-    /// sole popup; active snapshots refill the existing widget in place.
-    void publicRevealChanged(bool active,
-                             quint32 sourceObjectId,
-                             int zoneOwnerPlayerId,
-                             QStringList cardNames,
-                             QVector<int> serverCardIds);
-    /// Exact snapshot of cards kept publicly revealed while their spell or ability remains on the
-    /// stack. Names, revealing-player ids, and source descriptions are parallel; empty means the
-    /// persistent read-only popup must be destroyed.
-    void activePublicRevealsChanged(QStringList cardNames,
-                                    QVector<int> revealingPlayerIds,
-                                    QStringList sourceDescriptions);
 
 private:
     [[nodiscard]] bool resolutionPickSelectionAdmitsSlots(const QList<int> &selectedServerCardIds) const;

@@ -7,7 +7,7 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::{CardRegistry, CounterKind};
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
-use tricerules_proto::ruled::v1::{permanent_moved, ChoiceKind, ResolutionRevealAudience};
+use tricerules_proto::ruled::v1::{permanent_moved, ChoiceKind};
 
 fn put_on_top(engine: &mut GameEngine, player: usize, card_id: &str) -> u32 {
     let object_id = inject_library_card(engine, player, card_id);
@@ -85,11 +85,11 @@ fn issue_206_nonland_explore_counters_then_offers_a_public_optional_graveyard_mo
     assert_eq!(choice.candidate_object_ids, vec![top]);
     assert_eq!(choice.candidate_selectable, vec![true]);
     assert_eq!((choice.min, choice.max), (0, 1));
+    assert!(choice.public_reveal.is_some());
     assert_eq!(
-        choice.reveal_audience(),
-        ResolutionRevealAudience::AllParticipants
+        choice.public_reveal.as_ref().unwrap().zone_owner_player_id,
+        0
     );
-    assert_eq!(choice.revealed_zone_owner_player_id, Some(0));
     assert_eq!(
         engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
         1
@@ -140,7 +140,26 @@ fn issue_206_nonland_explore_counters_then_offers_a_public_optional_graveyard_mo
 fn issue_206_land_explore_reveals_and_moves_the_land_to_hand_without_a_counter() {
     let (mut engine, source, top) = begin_source_explore(206_002, Some("forest"));
     let top = top.expect("top card");
-    pass_both_players(&mut engine);
+    let first = engine.state.priority_player_id();
+    engine.apply_command(first, &pass()).unwrap();
+    let batch = engine.apply_command(1 - first, &pass()).unwrap();
+    let reveal = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::CardsRevealed(reveal)) => {
+                Some(reveal)
+            }
+            _ => None,
+        })
+        .expect("a land explore must publish a reveal snapshot before moving the card");
+    assert_eq!(reveal.cards.len(), 1);
+    assert_eq!(reveal.cards[0].object_id, top);
+    assert_eq!(reveal.cards[0].card_name, "Forest");
+    assert_eq!(
+        reveal.source_zone(),
+        tricerules_proto::ruled::v1::ChoiceCandidateSourceZone::Library
+    );
 
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&top].zone, Zone::Hand);

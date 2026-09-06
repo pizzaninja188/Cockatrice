@@ -60,11 +60,11 @@ fn issue_143_aggressive_negotiations_publicly_reveals_the_hand() {
 
     let choice = find_resolution_choice(&parked).expect("opponent-hand choice");
     assert_eq!(choice.choice_kind(), ChoiceKind::OpponentHand);
+    assert!(choice.public_reveal.is_some());
     assert_eq!(
-        choice.reveal_audience(),
-        ResolutionRevealAudience::AllParticipants
+        choice.public_reveal.as_ref().unwrap().zone_owner_player_id,
+        1
     );
-    assert_eq!(choice.revealed_zone_owner_player_id, Some(1));
     assert_eq!(choice.deciding_player_id, 0);
     assert_eq!(choice.min, 1);
     assert_eq!(choice.max, 1);

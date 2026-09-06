@@ -49,6 +49,7 @@ impl GameEngine {
                 self.registry,
                 events,
                 controller,
+                item.id,
                 0,
                 Vec::new(),
             );
@@ -354,6 +355,7 @@ impl GameEngine {
                 self.registry,
                 &mut ev,
                 controller,
+                item.id,
                 step_no,
                 scratch,
             );
@@ -805,19 +807,13 @@ impl GameEngine {
             }
             let name = object_display_name(&self.state, self.registry, oid);
             if is_hand_candidate {
-                let card_id = self.state.objects[&oid].card_id.clone();
-                events.push(rv1::RuledEvent {
-                    ev: Some(rv1::ruled_event::Ev::CardsRevealed(rv1::CardsRevealed {
-                        zone_owner_player_id: pending.deciding_player,
-                        source_zone: rv1::ChoiceCandidateSourceZone::Hand as i32,
-                        cards: vec![rv1::RevealedCard {
-                            object_id: oid,
-                            zone_change_generation: current_generation,
-                            card_id,
-                            card_name: name.clone(),
-                        }],
-                    })),
-                });
+                events.extend(super::reveals::reveal_cards(
+                    &self.state,
+                    self.registry,
+                    &[oid],
+                    item.id,
+                    &object_display_name(&self.state, self.registry, item.id),
+                ));
                 events.push(ev_log(format!(
                     "P{} reveals {name}.",
                     pending.deciding_player
@@ -928,13 +924,22 @@ impl GameEngine {
                     unique_names: interrupt.unique_names,
                     // Populated by the server relay per-player; the engine never fills it.
                     candidate_server_card_ids: Vec::new(),
-                    candidate_selectable: Vec::new(),
+                    candidate_selectable: vec![true; interrupt.candidates.len()],
                     resolution_branches: Vec::new(),
                     mana_cost: String::new(),
                     generic_mana_cost: 0,
                     payment_currently_legal: false,
-                    reveal_audience: 0,
-                    revealed_zone_owner_player_id: None,
+                    public_reveal: if interrupt.public_reveal {
+                        super::reveals::reveal_choice(
+                            &self.state,
+                            self.registry,
+                            &interrupt.candidates,
+                            item.id,
+                            &object_display_name(&self.state, self.registry, item.id),
+                        )
+                    } else {
+                        None
+                    },
                     candidate_source_zones: Vec::new(),
                     combat_defender_options: Vec::new(),
                     waterbend: false,

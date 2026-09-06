@@ -106,6 +106,8 @@ set(cockatrice_SOURCES
     src/game/replay.cpp
     src/game/ruled/ruled_actions.cpp
     src/game/ruled/ruled_autopilot.cpp
+    src/game/ruled/ruled_reveal_state.cpp
+    src/game/ruled/ruled_reveal_windows.cpp
     src/game/ruled/ruled_client_state.cpp
     src/game/ruled/ruled_dev_command_parser.cpp
     src/game/ruled/ruled_dev_console.cpp

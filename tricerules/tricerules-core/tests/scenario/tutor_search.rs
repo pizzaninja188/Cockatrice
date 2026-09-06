@@ -56,8 +56,18 @@ fn demonic_tutor_puts_chosen_card_in_hand() {
     );
 
     // Submit the search choice: pick the mountain.
-    e.apply_command(0, &submit_resolution_choice(vec![mountain_oid]))
+    let completion = e
+        .apply_command(0, &submit_resolution_choice(vec![mountain_oid]))
         .expect("submit search choice");
+    assert!(
+        !completion.events.iter().any(|event| matches!(
+            event.ev,
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::CardsRevealed(
+                _
+            ))
+        )),
+        "Demonic Tutor does not reveal its found card"
+    );
 
     assert!(e.state.pending_resolution.is_none(), "resolution completed");
     // Mountain is now in hand.
@@ -143,8 +153,23 @@ fn mystical_tutor_filters_to_instant_or_sorcery() {
 
     // Choose the counterspell — it should go on top of the library.
     let lib_top_before = e.state.players[0].library.front().copied();
-    e.apply_command(0, &submit_resolution_choice(vec![counter_oid]))
+    let completion = e
+        .apply_command(0, &submit_resolution_choice(vec![counter_oid]))
         .expect("submit");
+    let reveal = completion
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::CardsRevealed(reveal)) => {
+                Some(reveal)
+            }
+            _ => None,
+        })
+        .expect("Mystical Tutor reveals the found card despite shuffling in the same command");
+    assert_eq!(reveal.cards.len(), 1);
+    assert_eq!(reveal.cards[0].object_id, counter_oid);
+    assert_eq!(reveal.cards[0].card_name, "Counterspell");
+    assert!(!reveal.reveal_id.is_empty());
 
     assert!(e.state.pending_resolution.is_none());
     assert_eq!(

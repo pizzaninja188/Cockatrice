@@ -2010,8 +2010,7 @@ impl GameEngine {
                             resolution_branches: Vec::new(),
                             mana_cost: String::new(),
                             candidate_selectable: Vec::new(),
-                            reveal_audience: 0,
-                            revealed_zone_owner_player_id: None,
+                            public_reveal: None,
                             candidate_source_zones: Vec::new(),
                             combat_defender_options: Vec::new(),
                             waterbend: false,
@@ -3651,7 +3650,7 @@ mod attached_subject_tests {
                     })
                     .unwrap();
                 assert_eq!(choice.deciding_player_id, 0);
-                assert_eq!(choice.reveal_audience, 0);
+                assert!(choice.public_reveal.is_none());
                 assert_eq!(choice.candidate_object_ids, candidates);
                 engine.state.objects.get_mut(&source).unwrap().power = Some(7);
                 let answer = rv1::SubmitResolutionChoice {

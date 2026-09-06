@@ -38,6 +38,7 @@ impl CardEffect for GiftsUngiven {
         }
         let max = library.len().min(4) as u32;
         ResolutionStep::NeedsChoice(ResolutionInterrupt {
+            public_reveal: false,
             deciding_player: controller,
             prompt: format!(
                 "Gifts Ungiven: search your library for up to {max} card(s) with different names."
@@ -76,12 +77,14 @@ impl CardEffect for GiftsUngiven {
 
                 let Some(opponent) = ctx.opponent_of(ctx.controller) else {
                     // No single opponent: with no one to choose, all revealed go to hand.
+                    ctx.reveal_cards(&revealed);
                     distribute(ctx, &[], &revealed);
                     shuffle(ctx);
                     return ResolutionStep::Done;
                 };
                 let pick = revealed.len().min(2) as u32;
                 ResolutionStep::NeedsChoice(ResolutionInterrupt {
+                    public_reveal: true,
                     deciding_player: opponent,
                     prompt: format!(
                         "Gifts Ungiven: choose {pick} of the revealed card(s) to put into \

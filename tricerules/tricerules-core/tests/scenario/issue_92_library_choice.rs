@@ -61,6 +61,10 @@ fn commune_uses_images_for_all_looked_cards_then_orders_the_remainder() {
 
     let batch = cast_instant_and_resolve(&mut e, 0, "commune_with_nature", green_mana());
     let choose = find_resolution_choice(&batch).expect("look choice");
+    assert!(
+        choose.public_reveal.is_none(),
+        "looking does not reveal the candidate set"
+    );
     assert_eq!(choose.choice_kind(), ChoiceKind::LibraryLook);
     assert_eq!(choose.candidate_object_ids, top[..5]);
     assert_eq!(
@@ -85,10 +89,28 @@ fn commune_uses_images_for_all_looked_cards_then_orders_the_remainder() {
     let order_batch = e
         .apply_command(0, &submit_resolution_choice(vec![top[0]]))
         .expect("choose Grizzly Bears");
+    let reveal = order_batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::CardsRevealed(reveal)) => {
+                Some(reveal)
+            }
+            _ => None,
+        })
+        .expect("the chosen card is publicly revealed before moving to hand");
+    assert_eq!(reveal.cards.len(), 1);
+    assert_eq!(reveal.cards[0].object_id, top[0]);
+    assert_eq!(reveal.cards[0].card_name, "Grizzly Bears");
+    assert!(!reveal.reveal_id.is_empty());
     assert_eq!(e.state.objects[&top[0]].zone, Zone::Hand);
     assert!(e.state.players[0].hand.contains(&top[0]));
 
     let order = find_resolution_choice(&order_batch).expect("bottom ordering choice");
+    assert!(
+        order.public_reveal.is_none(),
+        "unselected cards remain private"
+    );
     assert_eq!(order.choice_kind(), ChoiceKind::LibraryLook);
     assert_eq!(order.candidate_object_ids, top[1..5]);
     assert_eq!(order.candidate_selectable, [true; 4]);

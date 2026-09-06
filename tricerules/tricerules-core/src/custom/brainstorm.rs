@@ -32,6 +32,7 @@ impl CardEffect for Brainstorm {
             return ResolutionStep::Done;
         }
         ResolutionStep::NeedsChoice(ResolutionInterrupt {
+            public_reveal: false,
             deciding_player: controller,
             prompt: format!(
                 "Brainstorm: choose {count} card{} to put back on top of your library (last chosen = top).",

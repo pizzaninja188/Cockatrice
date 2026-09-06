@@ -591,6 +591,16 @@ impl GameEngine {
 
         let mut ev = vec![];
 
+        if reveal {
+            ev.extend(super::super::reveals::reveal_cards(
+                &self.state,
+                self.registry,
+                chosen,
+                stack.item.id,
+                &object_display_name(&self.state, self.registry, stack.item.id),
+            ));
+        }
+
         if chosen.is_empty() {
             ev.push(ev_log(format!("P{controller} finds no card.")));
             if shuffle {

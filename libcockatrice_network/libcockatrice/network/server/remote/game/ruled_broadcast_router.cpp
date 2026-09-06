@@ -390,8 +390,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                 rcr->set_prompt_text("Resolution choice metadata is unavailable.");
             }
             const bool isDecider = rcr->deciding_player_id() == participant->getPlayerId();
-            const bool isPublicReveal =
-                rcr->reveal_audience() == ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS;
+            const bool isPublicReveal = rcr->has_public_reveal();
             if (isPrivateChoiceKind(rcr->choice_kind()) && !isDecider && !isPublicReveal) {
                 rcr->clear_candidate_object_ids();
                 rcr->clear_candidate_card_ids();

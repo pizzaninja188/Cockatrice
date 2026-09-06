@@ -189,8 +189,34 @@ protected:
         delete state;
     }
 
-    void apply(const ruled::v1::RuledEventBatch &batch)
+    void apply(ruled::v1::RuledEventBatch batch)
     {
+        // Populate the shared snapshot for tests constructing a public choice. Tests can supply
+        // an explicit reveal_id to exercise malformed payloads without this fixture completion.
+        for (auto &event : *batch.mutable_events()) {
+            if (!event.has_resolution_choice_required())
+                continue;
+            auto *choice = event.mutable_resolution_choice_required();
+            if (!choice->has_public_reveal() || !choice->public_reveal().reveal_id().empty())
+                continue;
+            auto *reveal = choice->mutable_public_reveal();
+            reveal->set_source_object_id(choice->source_object_id());
+            reveal->set_source_zone(choice->choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK
+                                        ? ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY
+                                        : ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+            std::string key = "test:" + std::to_string(choice->source_object_id()) + ":" +
+                              std::to_string(reveal->zone_owner_player_id());
+            for (int i = 0; i < choice->candidate_names_size(); ++i) {
+                auto *card = reveal->add_cards();
+                if (i < choice->candidate_object_ids_size())
+                    card->set_object_id(choice->candidate_object_ids(i));
+                if (i < choice->candidate_card_ids_size())
+                    card->set_card_id(choice->candidate_card_ids(i));
+                card->set_card_name(choice->candidate_names(i));
+                key += ":" + choice->candidate_names(i);
+            }
+            reveal->set_reveal_id(key);
+        }
         // Go through the serialized entry point so the per-batch reset runs exactly as it does
         // when an Event_RuledPayload arrives.
         std::string payload;
@@ -5163,55 +5189,36 @@ TEST_F(RuledClientTest, ParsesPublicPermanentResolutionChoiceAsUntargetedBoardCl
               RuledTargetClickEligibility::Illegal);
 }
 
-TEST_F(RuledClientTest, ActiveCastRevealsReplaceAsExactSnapshotsAndClear)
+TEST_F(RuledClientTest, ActiveRevealsShareHistoryAndBecomeDismissibleWhenTheirSourceLeaves)
 {
-    QSignalSpy changed(state, &RuledClientState::activePublicRevealsChanged);
-    ruled::v1::RuledEventBatch first;
-    auto *snapshot = first.add_events()->mutable_active_public_reveal_snapshot();
-    auto *caustic = snapshot->add_reveals();
-    caustic->set_source_stack_object_id(700);
-    caustic->set_group_index(0);
-    caustic->set_revealing_player_id(kLocalPlayer);
-    caustic->set_source_description("Caustic Exhale");
-    caustic->set_card_id("adult_gold_dragon");
-    caustic->set_card_name("Adult Gold Dragon");
-    auto *osseous = snapshot->add_reveals();
-    osseous->set_source_stack_object_id(701);
-    osseous->set_group_index(0);
-    osseous->set_revealing_player_id(kOpponent);
-    osseous->set_source_description("Osseous Exhale");
-    osseous->set_card_id("shivan_dragon");
-    osseous->set_card_name("Shivan Dragon");
-    apply(first);
-
-    ASSERT_EQ(state->getActivePublicReveals().size(), 2);
-    ASSERT_EQ(changed.count(), 1);
-    EXPECT_EQ(changed.at(0).size(), 3)
-        << "the reveal UI needs the source descriptions to distinguish revealed cards from stack objects";
-    EXPECT_EQ(changed.at(0).at(0).toStringList(),
-              QStringList({QStringLiteral("Adult Gold Dragon"), QStringLiteral("Shivan Dragon")}));
-    EXPECT_EQ(changed.at(0).at(1).value<QVector<int>>(), QVector<int>({kLocalPlayer, kOpponent}));
-    EXPECT_EQ(changed.at(0).at(2).toStringList(),
-              QStringList({QStringLiteral("Caustic Exhale"), QStringLiteral("Osseous Exhale")}));
-
-    ruled::v1::RuledEventBatch second;
-    auto *replacement = second.add_events()->mutable_active_public_reveal_snapshot()->add_reveals();
-    replacement->set_source_stack_object_id(701);
-    replacement->set_group_index(0);
-    replacement->set_revealing_player_id(kOpponent);
-    replacement->set_source_description("Osseous Exhale");
-    replacement->set_card_id("shivan_dragon");
-    replacement->set_card_name("Shivan Dragon");
-    apply(second);
-    ASSERT_EQ(state->getActivePublicReveals().size(), 1);
-    EXPECT_EQ(state->getActivePublicReveals().first().sourceStackObjectId, 701u);
-
-    ruled::v1::RuledEventBatch cleared;
-    cleared.add_events()->mutable_active_public_reveal_snapshot();
-    apply(cleared);
-    EXPECT_TRUE(state->getActivePublicReveals().isEmpty());
-    ASSERT_EQ(changed.count(), 3);
-    EXPECT_TRUE(changed.at(2).at(0).toStringList().isEmpty());
+    ruled::v1::RuledEventBatch batch;
+    auto *snapshot = batch.add_events()->mutable_active_public_reveal_snapshot();
+    for (int i = 0; i < 2; ++i) {
+        auto *reveal = snapshot->add_reveals();
+        reveal->set_reveal_id("stack:" + std::to_string(700 + i));
+        reveal->set_source_object_id(700 + i);
+        reveal->set_zone_owner_player_id(i == 0 ? kLocalPlayer : kOpponent);
+        reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+        reveal->set_source_description(i == 0 ? "Caustic Exhale" : "Osseous Exhale");
+        auto *card = reveal->add_cards();
+        card->set_card_id(i == 0 ? "adult_gold_dragon" : "shivan_dragon");
+        card->set_card_name(i == 0 ? "Adult Gold Dragon" : "Shivan Dragon");
+    }
+    QSignalSpy changed(&state->reveals, &RuledRevealState::changed);
+    apply(batch);
+    ASSERT_EQ(state->reveals.entries().size(), 2);
+    EXPECT_EQ(state->reveals.entries().first().sourceDescription, QStringLiteral("Caustic Exhale"));
+    EXPECT_EQ(state->reveals.entries().first().phase, RuledRevealState::Phase::Active);
+    state->reveals.dismiss("stack:700");
+    EXPECT_EQ(state->reveals.entries().size(), 2);
+    apply(batch);
+    EXPECT_EQ(changed.count(), 1);
+    ruled::v1::RuledEventBatch completed;
+    completed.add_events()->mutable_active_public_reveal_snapshot();
+    apply(completed);
+    EXPECT_EQ(state->reveals.entries().first().phase, RuledRevealState::Phase::Completed);
+    state->reveals.dismiss("stack:700");
+    EXPECT_EQ(state->reveals.entries().size(), 1);
 }
 
 TEST_F(RuledClientTest, MandatoryResolutionBranchesCannotSubmitDecline)
@@ -5719,7 +5726,7 @@ TEST_F(RuledClientTest, LibraryLookChoiceShowsEveryCardImageButOnlyMatchingCards
 
 TEST_F(RuledClientTest, PublicExploreLibraryLookIsInteractiveOnlyForItsController)
 {
-    QSignalSpy publicReveal(state, &RuledClientState::publicRevealChanged);
+    QSignalSpy publicReveal(&state->reveals, &RuledRevealState::changed);
     QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);
     ruled::v1::RuledEventBatch batch;
     auto *rcr = batch.add_events()->mutable_resolution_choice_required();
@@ -5727,8 +5734,8 @@ TEST_F(RuledClientTest, PublicExploreLibraryLookIsInteractiveOnlyForItsControlle
     rcr->set_source_object_id(206);
     rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
     rcr->set_prompt_text("Put Storm Crow into your graveyard?");
-    rcr->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
-    rcr->set_revealed_zone_owner_player_id(kLocalPlayer);
+    rcr->mutable_public_reveal();
+    rcr->mutable_public_reveal()->set_zone_owner_player_id(kLocalPlayer);
     rcr->set_min(0);
     rcr->set_max(1);
     rcr->add_candidate_object_ids(41);
@@ -5738,18 +5745,21 @@ TEST_F(RuledClientTest, PublicExploreLibraryLookIsInteractiveOnlyForItsControlle
     rcr->add_candidate_selectable(true);
     apply(batch);
 
-    ASSERT_TRUE(state->hasPublicReveal());
-    EXPECT_EQ(state->publicRevealCandidateNames(), QStringList({QStringLiteral("Storm Crow")}));
+    ASSERT_TRUE(state->reveals.hasChoice());
+    EXPECT_EQ(state->reveals.choice()->cardNames(), QStringList({QStringLiteral("Storm Crow")}));
     ASSERT_TRUE(state->isResolutionHandPickActive());
-    EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Deck);
+    EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Revealed);
     EXPECT_TRUE(state->isResolutionHandPickCardSelectable(0));
     EXPECT_EQ(publicReveal.count(), 1);
-    EXPECT_EQ(started.count(), 1);
+    EXPECT_EQ(started.count(), 0) << "A public reveal must use one shared choice window";
 
     ruled::v1::RuledEventBatch completed;
     completed.add_events()->mutable_log()->set_text("Explore completed.");
     apply(completed);
-    EXPECT_FALSE(state->hasPublicReveal());
+    EXPECT_FALSE(state->reveals.hasChoice());
+    ASSERT_EQ(state->reveals.entries().size(), 1);
+    EXPECT_EQ(state->reveals.entries().first().phase, RuledRevealState::Phase::Completed);
+    EXPECT_TRUE(state->reveals.entries().first().choiceCardIds.isEmpty());
 
     ruled::v1::RuledEventBatch observer;
     auto *observed = observer.add_events()->mutable_resolution_choice_required();
@@ -5758,9 +5768,9 @@ TEST_F(RuledClientTest, PublicExploreLibraryLookIsInteractiveOnlyForItsControlle
     observed->clear_candidate_selectable();
     observed->set_prompt_text("Opponent is making a resolution choice.");
     apply(observer);
-    EXPECT_TRUE(state->hasPublicReveal());
+    EXPECT_TRUE(state->reveals.hasChoice());
     EXPECT_FALSE(state->isResolutionHandPickActive());
-    EXPECT_EQ(started.count(), 1);
+    EXPECT_EQ(started.count(), 0);
 }
 
 TEST_F(RuledClientTest, LibraryLookOrderingUsesImageClickOrderAndMalformedEligibilityFailsClosed)
@@ -5891,7 +5901,7 @@ TEST_F(RuledClientTest, OpponentHandChoiceRendersAsARevealedPickTitledAsAHand)
 
 TEST_F(RuledClientTest, PublicHandRevealIsReadOnlyForObserversAndReconcilesExactSnapshots)
 {
-    QSignalSpy publicReveal(state, &RuledClientState::publicRevealChanged);
+    QSignalSpy publicReveal(&state->reveals, &RuledRevealState::changed);
     QSignalSpy timeline(state, &RuledClientState::engineTimeline);
     auto makeReveal = [](quint32 sourceOid, int ownerId, std::initializer_list<const char *> names) {
         ruled::v1::RuledEventBatch batch;
@@ -5899,8 +5909,8 @@ TEST_F(RuledClientTest, PublicHandRevealIsReadOnlyForObserversAndReconcilesExact
         rcr->set_deciding_player_id(kLocalPlayer + 1);
         rcr->set_source_object_id(sourceOid);
         rcr->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
-        rcr->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
-        rcr->set_revealed_zone_owner_player_id(ownerId);
+        rcr->mutable_public_reveal();
+        rcr->mutable_public_reveal()->set_zone_owner_player_id(ownerId);
         int index = 0;
         for (const char *name : names) {
             rcr->add_candidate_object_ids(100 + index);
@@ -5913,14 +5923,13 @@ TEST_F(RuledClientTest, PublicHandRevealIsReadOnlyForObserversAndReconcilesExact
     };
 
     apply(makeReveal(700, 2, {"Forest", "Grizzly Bears"}));
-    ASSERT_TRUE(state->hasPublicReveal());
-    EXPECT_EQ(state->publicRevealSourceObjectId(), 700u);
-    EXPECT_EQ(state->publicRevealOwnerPlayerId(), 2);
-    EXPECT_EQ(state->publicRevealCandidateNames(),
+    ASSERT_TRUE(state->reveals.hasChoice());
+    EXPECT_EQ(state->reveals.choice()->sourceObjectId, 700u);
+    EXPECT_EQ(state->reveals.choice()->owner, 2);
+    EXPECT_EQ(state->reveals.choice()->cardNames(),
               QStringList({QStringLiteral("Forest"), QStringLiteral("Grizzly Bears")}));
     EXPECT_FALSE(state->isResolutionHandPickActive());
     ASSERT_EQ(publicReveal.count(), 1);
-    EXPECT_TRUE(publicReveal.at(0).at(0).toBool());
     ASSERT_EQ(timeline.count(), 1);
     EXPECT_EQ(timeline.at(0).at(0).toString(), QStringLiteral("P2 reveals: Forest, Grizzly Bears.\n"));
 
@@ -5930,18 +5939,18 @@ TEST_F(RuledClientTest, PublicHandRevealIsReadOnlyForObserversAndReconcilesExact
     ASSERT_EQ(timeline.count(), 2);
     EXPECT_TRUE(timeline.at(1).at(0).toString().isEmpty());
 
-    // Same key is a replacement snapshot, not an append.
+    // A new reveal occurrence from the same source retains the previous snapshot.
     apply(makeReveal(700, 2, {"Island"}));
-    EXPECT_EQ(state->publicRevealCandidateNames(), QStringList({QStringLiteral("Island")}));
-    ASSERT_EQ(publicReveal.count(), 3);
+    EXPECT_EQ(state->reveals.choice()->cardNames(), QStringList({QStringLiteral("Island")}));
+    ASSERT_EQ(publicReveal.count(), 2);
     ASSERT_EQ(timeline.count(), 3);
     EXPECT_EQ(timeline.at(2).at(0).toString(), QStringLiteral("P2 reveals: Island.\n"));
 
-    // A different key replaces the sole reveal rather than creating concurrent state.
+    // A different source also retains earlier completed reveals.
     apply(makeReveal(701, 1, {"Swamp", "Thoughtseize"}));
-    EXPECT_EQ(state->publicRevealSourceObjectId(), 701u);
-    EXPECT_EQ(state->publicRevealOwnerPlayerId(), 1);
-    EXPECT_EQ(state->publicRevealCandidateNames(),
+    EXPECT_EQ(state->reveals.choice()->sourceObjectId, 701u);
+    EXPECT_EQ(state->reveals.choice()->owner, 1);
+    EXPECT_EQ(state->reveals.choice()->cardNames(),
               QStringList({QStringLiteral("Swamp"), QStringLiteral("Thoughtseize")}));
     EXPECT_FALSE(state->isResolutionHandPickActive());
     ASSERT_EQ(timeline.count(), 4);
@@ -5950,9 +5959,9 @@ TEST_F(RuledClientTest, PublicHandRevealIsReadOnlyForObserversAndReconcilesExact
     ruled::v1::RuledEventBatch completed;
     completed.add_events()->mutable_log()->set_text("Choice completed.");
     apply(completed);
-    EXPECT_FALSE(state->hasPublicReveal());
-    ASSERT_EQ(publicReveal.count(), 5);
-    EXPECT_FALSE(publicReveal.at(4).at(0).toBool());
+    EXPECT_FALSE(state->reveals.hasChoice());
+    ASSERT_EQ(publicReveal.count(), 4);
+    EXPECT_EQ(state->reveals.entries().size(), 3);
 }
 
 TEST_F(RuledClientTest, WardAnnotationAndPaymentUseTheExistingRuledPromptModes)
@@ -6029,14 +6038,14 @@ TEST_F(RuledClientTest, PrivateOpponentHandLookDoesNotEnterThePublicGameLog)
 
 TEST_F(RuledClientTest, PublicHandRevealIsInteractiveOnlyForDeciderAndIgnoresPreviewBatches)
 {
-    QSignalSpy publicReveal(state, &RuledClientState::publicRevealChanged);
+    QSignalSpy publicReveal(&state->reveals, &RuledRevealState::changed);
     ruled::v1::RuledEventBatch batch;
     auto *rcr = batch.add_events()->mutable_resolution_choice_required();
     rcr->set_deciding_player_id(kLocalPlayer);
     rcr->set_source_object_id(800);
     rcr->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
-    rcr->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
-    rcr->set_revealed_zone_owner_player_id(kLocalPlayer + 1);
+    rcr->mutable_public_reveal();
+    rcr->mutable_public_reveal()->set_zone_owner_player_id(kLocalPlayer + 1);
     for (int i = 0; i < 2; ++i) {
         rcr->add_candidate_object_ids(200 + i);
         rcr->add_candidate_card_ids(i == 0 ? "forest" : "grizzly_bears");
@@ -6049,7 +6058,7 @@ TEST_F(RuledClientTest, PublicHandRevealIsInteractiveOnlyForDeciderAndIgnoresPre
     rcr->set_max(1);
     apply(batch);
 
-    ASSERT_TRUE(state->hasPublicReveal());
+    ASSERT_TRUE(state->reveals.hasChoice());
     ASSERT_TRUE(state->isResolutionHandPickActive());
     EXPECT_FALSE(state->isResolutionHandPickCardSelectable(0));
     EXPECT_TRUE(state->isResolutionHandPickCardSelectable(1));
@@ -6057,7 +6066,7 @@ TEST_F(RuledClientTest, PublicHandRevealIsInteractiveOnlyForDeciderAndIgnoresPre
     ruled::v1::RuledEventBatch preview;
     preview.add_events()->mutable_attackers_preview()->set_declaring_player_id(kLocalPlayer);
     apply(preview);
-    EXPECT_TRUE(state->hasPublicReveal());
+    EXPECT_TRUE(state->reveals.hasChoice());
     EXPECT_EQ(publicReveal.count(), 1);
 }
 
@@ -6075,23 +6084,111 @@ TEST(RuledPickSurfaceTest, PublicRevealAcceptsNonlocalHandViewButOtherPicksRemai
 
 TEST_F(RuledClientTest, MalformedPublicHandRevealFailsClosed)
 {
-    QSignalSpy publicReveal(state, &RuledClientState::publicRevealChanged);
+    QSignalSpy publicReveal(&state->reveals, &RuledRevealState::changed);
     ruled::v1::RuledEventBatch batch;
     auto *rcr = batch.add_events()->mutable_resolution_choice_required();
     rcr->set_deciding_player_id(kLocalPlayer + 1);
     rcr->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
-    rcr->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
-    rcr->set_revealed_zone_owner_player_id(2);
+    rcr->mutable_public_reveal();
+    rcr->mutable_public_reveal()->set_zone_owner_player_id(2);
     rcr->add_candidate_object_ids(100);
     rcr->add_candidate_card_ids("forest");
     rcr->add_candidate_names("Forest");
     // Missing the parallel transient popup id.
     apply(batch);
 
-    EXPECT_FALSE(state->hasPublicReveal());
+    EXPECT_FALSE(state->reveals.hasChoice());
     EXPECT_FALSE(state->isResolutionHandPickActive());
     EXPECT_EQ(publicReveal.count(), 0);
     EXPECT_EQ(host.dialogRequests, 0);
+}
+
+TEST_F(RuledClientTest, InstantRevealOccurrencesRetainSnapshotsAndDismissIndependently)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *reveal = batch.add_events()->mutable_cards_revealed();
+    reveal->set_reveal_id("event:20:0");
+    reveal->set_source_description("Explore");
+    reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
+    reveal->set_zone_owner_player_id(kLocalPlayer);
+    auto *card = reveal->add_cards();
+    card->set_object_id(44);
+    card->set_zone_change_generation(3);
+    card->set_card_id("forest");
+    card->set_card_name("Forest");
+    apply(batch);
+    apply(batch);
+    ASSERT_EQ(state->reveals.entries().size(), 1);
+    EXPECT_EQ(state->reveals.entries().first().cards.first().generation, 3);
+    EXPECT_TRUE(state->reveals.entries().first().choiceCardIds.isEmpty());
+    state->reveals.dismiss("event:20:0");
+    apply(batch);
+    EXPECT_TRUE(state->reveals.entries().isEmpty()) << "a repeated batch must not undo local dismissal";
+    reveal->set_reveal_id("event:21:0");
+    apply(batch);
+    ASSERT_EQ(state->reveals.entries().size(), 1) << "revealing the same card again is a new occurrence";
+    EXPECT_EQ(state->reveals.entries().first().cardNames(), QStringList({"Forest"}));
+}
+
+TEST_F(RuledClientTest, PublicChoiceUsesSharedSurfaceRegardlessOfChoiceKind)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_source_object_id(801);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(44);
+    choice->add_candidate_card_ids("forest");
+    choice->add_candidate_names("Forest");
+    choice->add_candidate_server_card_ids(3);
+    choice->mutable_public_reveal()->set_zone_owner_player_id(kLocalPlayer);
+    apply(batch);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Revealed);
+    EXPECT_TRUE(state->pendingChoice->publicReveal);
+}
+
+TEST(RuledRevealStateTest, ReusingAnOccurrenceIdCannotReplaceItsRevealedIdentity)
+{
+    RuledRevealState state;
+    ruled::v1::CardsRevealed reveal;
+    reveal.set_reveal_id("event:30:0");
+    auto *card = reveal.add_cards();
+    card->set_object_id(44);
+    card->set_card_id("forest");
+    card->set_card_name("Forest");
+    ASSERT_TRUE(state.beginChoice(reveal, {0}));
+    ASSERT_TRUE(state.beginChoice(reveal, {0})) << "an unchanged authoritative snapshot is accepted";
+    reveal.mutable_cards(0)->set_card_id("island");
+    reveal.mutable_cards(0)->set_card_name("Island");
+    EXPECT_FALSE(state.beginChoice(reveal, {0}));
+    ASSERT_NE(state.choice(), nullptr);
+    EXPECT_EQ(state.choice()->cardNames(), QStringList({"Forest"}));
+}
+
+TEST_F(RuledClientTest, ReplaySeekingSuppressesExpiredWindowsAndRestoresActiveReveals)
+{
+    ruled::v1::RuledEventBatch instant;
+    auto *reveal = instant.add_events()->mutable_cards_revealed();
+    reveal->set_reveal_id("event:40:0");
+    auto *card = reveal->add_cards();
+    card->set_card_id("forest");
+    card->set_card_name("Forest");
+    ASSERT_TRUE(dispatcher->processPayload(instant.SerializeAsString(), true));
+    EXPECT_TRUE(state->reveals.windowsSuppressed());
+    EXPECT_TRUE(state->reveals.entries().isEmpty());
+    ruled::v1::RuledEventBatch active;
+    auto *snapshot = active.add_events()->mutable_active_public_reveal_snapshot();
+    *snapshot->add_reveals() = *reveal;
+    snapshot->mutable_reveals(0)->set_reveal_id("stack:40:cost:0");
+    ASSERT_TRUE(dispatcher->processPayload(active.SerializeAsString(), true));
+    ASSERT_EQ(state->reveals.entries().size(), 1);
+    EXPECT_TRUE(state->reveals.windowsSuppressed());
+    apply(active);
+    EXPECT_FALSE(state->reveals.windowsSuppressed());
+    EXPECT_EQ(state->reveals.entries().first().phase, RuledRevealState::Phase::Active);
 }
 
 TEST_F(RuledClientTest, TargetObjectAndLegendKeepChoicesUseClickToSelect)

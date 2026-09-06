@@ -50,6 +50,8 @@ public slots:
 class ZoneViewWidget : public QGraphicsWidget
 {
     Q_OBJECT
+    friend class RuledRevealWindows;
+
 private:
     ZoneViewZone *zone;
     QGraphicsWidget *zoneContainer;

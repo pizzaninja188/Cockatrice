@@ -590,7 +590,8 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                     eventReverseTurn(event.GetExtension(Event_ReverseTurn::ext), playerId, context);
                     break;
                 case GameEvent::RULED_PAYLOAD:
-                    ruledDispatcher->processPayload(event.GetExtension(Event_RuledPayload::ext).payload());
+                    ruledDispatcher->processPayload(event.GetExtension(Event_RuledPayload::ext).payload(),
+                                                    options.testFlag(SKIP_REVEAL_WINDOW));
                     break;
 
                 default: {

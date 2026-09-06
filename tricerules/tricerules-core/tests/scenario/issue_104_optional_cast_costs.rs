@@ -168,11 +168,11 @@ fn behold_reveals_only_the_selected_dragon_until_the_spell_leaves_the_stack() {
         })
         .expect("active reveal snapshot");
     assert_eq!(snapshot.reveals.len(), 1);
-    assert_eq!(snapshot.reveals[0].card_id, "adult_gold_dragon");
+    assert_eq!(snapshot.reveals[0].cards[0].card_id, "adult_gold_dragon");
     assert!(!snapshot
         .reveals
         .iter()
-        .any(|reveal| reveal.card_id == "grizzly_bears"));
+        .any(|reveal| reveal.cards[0].card_id == "grizzly_bears"));
 
     resolve_entire_stack_two_player(&mut e);
     let cleared = e

@@ -297,11 +297,6 @@ protected:
         return out;
     }
 
-    void applyCardsRevealed(const ruled::v1::RuledEventBatch &batch, GameEventStorage &events)
-    {
-        game->ruled()->synchronizer->applyCardsRevealed(batch, events);
-    }
-
     ruled::v1::RuledEventBatch redactFor(const ruled::v1::RuledEventBatch &batch,
                                          Server_AbstractParticipant *participant)
     {
@@ -456,71 +451,30 @@ protected:
     }
 };
 
-TEST_F(RuledBatchTest, CardsRevealedPublishesExactEngineBoundLibraryCard)
+TEST_F(RuledBatchTest, RevealSnapshotsReachBothSeatsWithoutDependingOnCurrentPhysicalZone)
 {
-    Server_Card *top = addCardToDeck(p1, "Grizzly Bears");
-    ASSERT_NE(top, nullptr);
-    bindLibraryObject(p1, 213, top);
-
-    ruled::v1::RuledEventBatch batch;
-    auto *reveal = batch.add_events()->mutable_cards_revealed();
-    reveal->set_zone_owner_player_id(p1->getPlayerId());
-    reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY);
-    auto *card = reveal->add_cards();
-    card->set_object_id(213);
-    card->set_zone_change_generation(7);
-    card->set_card_id("grizzly_bears");
-    card->set_card_name("Grizzly Bears");
-
-    GameEventStorage events;
-    applyCardsRevealed(batch, events);
-
-    ASSERT_EQ(events.getGameEventList().size(), 1);
-    const GameEvent &event = events.getGameEventList().first()->getGameEvent();
-    ASSERT_TRUE(event.HasExtension(Event_RevealCards::ext));
-    const Event_RevealCards &published = event.GetExtension(Event_RevealCards::ext);
-    EXPECT_EQ(published.zone_name(), ZoneNames::DECK);
-    ASSERT_EQ(published.card_id_size(), 1);
-    EXPECT_EQ(published.card_id(0), 0);
-    ASSERT_EQ(published.cards_size(), 1);
-    EXPECT_EQ(published.cards(0).id(), top->getId());
-    EXPECT_EQ(published.cards(0).name(), "Grizzly Bears");
-    EXPECT_EQ(published.number_of_cards(), 1);
-    EXPECT_EQ(events.getGameEventList().first()->getRecipients(),
-              GameEventStorageItem::SendToPrivate | GameEventStorageItem::SendToOthers);
-}
-
-TEST_F(RuledBatchTest, CardsRevealedPublishesExactEngineBoundHandCard)
-{
-    Server_Card *cardInHand = addCardToHand(p1, "Grizzly Bears");
-    ASSERT_NE(cardInHand, nullptr);
-    bindPublicObject(p1, 214, cardInHand);
-
-    ruled::v1::RuledEventBatch batch;
-    auto *reveal = batch.add_events()->mutable_cards_revealed();
-    reveal->set_zone_owner_player_id(p1->getPlayerId());
-    reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
-    auto *card = reveal->add_cards();
-    card->set_object_id(214);
-    card->set_zone_change_generation(3);
-    card->set_card_id("grizzly_bears");
-    card->set_card_name("Grizzly Bears");
-
-    GameEventStorage events;
-    applyCardsRevealed(batch, events);
-
-    ASSERT_EQ(events.getGameEventList().size(), 1);
-    const GameEvent &event = events.getGameEventList().first()->getGameEvent();
-    ASSERT_TRUE(event.HasExtension(Event_RevealCards::ext));
-    const Event_RevealCards &published = event.GetExtension(Event_RevealCards::ext);
-    EXPECT_EQ(published.zone_name(), ZoneNames::HAND);
-    ASSERT_EQ(published.card_id_size(), 1);
-    EXPECT_EQ(published.card_id(0), 0);
-    ASSERT_EQ(published.cards_size(), 1);
-    EXPECT_EQ(published.cards(0).id(), cardInHand->getId());
-    EXPECT_EQ(published.cards(0).name(), "Grizzly Bears");
-    EXPECT_EQ(events.getGameEventList().first()->getRecipients(),
-              GameEventStorageItem::SendToPrivate | GameEventStorageItem::SendToOthers);
+    for (const auto zone :
+         {ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_LIBRARY, ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND,
+          ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_GRAVEYARD}) {
+        ruled::v1::RuledEventBatch batch;
+        auto *reveal = batch.add_events()->mutable_cards_revealed();
+        reveal->set_reveal_id("event:42:0");
+        reveal->set_zone_owner_player_id(p1->getPlayerId());
+        reveal->set_source_zone(zone);
+        reveal->set_source_description("Explore");
+        auto *card = reveal->add_cards();
+        card->set_object_id(213);
+        card->set_zone_change_generation(7);
+        card->set_card_id("grizzly_bears");
+        card->set_card_name("Grizzly Bears");
+        // No physical binding is necessary: this is a historical engine-authored snapshot,
+        // so moves or a shuffle in the same command cannot erase or substitute its identity.
+        for (auto *recipient : {p1, p2}) {
+            auto received = redactFor(batch, recipient);
+            ASSERT_EQ(received.events_size(), 1);
+            EXPECT_EQ(received.events(0).cards_revealed().SerializeAsString(), reveal->SerializeAsString());
+        }
+    }
 }
 
 TEST_F(RuledBatchTest, TransformedReturnPreservesPhysicalIdentityAcrossStackExileAndBattlefield)
@@ -1399,8 +1353,8 @@ TEST_F(RuledBatchTest, PublicOpponentHandRevealPublishesIdentityButNotSelectionA
     choice->set_prompt_text("Choose a nonland card to exile.");
     choice->set_min(1);
     choice->set_max(1);
-    choice->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
-    choice->set_revealed_zone_owner_player_id(2);
+    choice->mutable_public_reveal();
+    choice->mutable_public_reveal()->set_zone_owner_player_id(2);
     for (const quint32 oid : {101u, 102u}) {
         choice->add_candidate_object_ids(oid);
     }
@@ -1440,9 +1394,9 @@ TEST_F(RuledBatchTest, PublicOpponentHandRevealPublishesIdentityButNotSelectionA
     EXPECT_EQ(p2Choice.candidate_server_card_ids(1), 1);
     EXPECT_EQ(p2Choice.candidate_selectable_size(), 0);
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
-    EXPECT_EQ(p2Choice.reveal_audience(), ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
-    ASSERT_TRUE(p2Choice.has_revealed_zone_owner_player_id());
-    EXPECT_EQ(p2Choice.revealed_zone_owner_player_id(), 2);
+    EXPECT_TRUE(p2Choice.has_public_reveal());
+    ASSERT_TRUE(p2Choice.has_public_reveal());
+    EXPECT_EQ(p2Choice.public_reveal().zone_owner_player_id(), 2);
 }
 
 // CR 701.44a: Explore reveals the top library card to every participant, but only that
@@ -1456,8 +1410,8 @@ TEST_F(RuledBatchTest, PublicExploreLibraryRevealPublishesIdentityButNotSelectio
     choice->set_prompt_text("Put the revealed card into your graveyard?");
     choice->set_min(0);
     choice->set_max(1);
-    choice->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
-    choice->set_revealed_zone_owner_player_id(1);
+    choice->mutable_public_reveal();
+    choice->mutable_public_reveal()->set_zone_owner_player_id(1);
     choice->add_candidate_object_ids(101);
     choice->add_candidate_card_ids("grizzly_bears");
     choice->add_candidate_names("Grizzly Bears");
@@ -1487,9 +1441,9 @@ TEST_F(RuledBatchTest, PublicExploreLibraryRevealPublishesIdentityButNotSelectio
     EXPECT_EQ(p2Choice.candidate_names(0), "Grizzly Bears");
     EXPECT_EQ(p2Choice.candidate_selectable_size(), 0);
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
-    EXPECT_EQ(p2Choice.reveal_audience(), ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
-    ASSERT_TRUE(p2Choice.has_revealed_zone_owner_player_id());
-    EXPECT_EQ(p2Choice.revealed_zone_owner_player_id(), 1);
+    EXPECT_TRUE(p2Choice.has_public_reveal());
+    ASSERT_TRUE(p2Choice.has_public_reveal());
+    EXPECT_EQ(p2Choice.public_reveal().zone_owner_player_id(), 1);
 }
 
 TEST_F(RuledBatchTest, PendingPublicRevealIsRestoredOnJoinAndClearedByNextAuthoritativeBatch)
@@ -1500,8 +1454,8 @@ TEST_F(RuledBatchTest, PendingPublicRevealIsRestoredOnJoinAndClearedByNextAuthor
     choice->set_deciding_player_id(1);
     choice->set_choice_kind(ruled::v1::CHOICE_KIND_OPPONENT_HAND);
     choice->set_prompt_text("Choose a nonland card to exile.");
-    choice->set_reveal_audience(ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS);
-    choice->set_revealed_zone_owner_player_id(2);
+    choice->mutable_public_reveal();
+    choice->mutable_public_reveal()->set_zone_owner_player_id(2);
     choice->add_candidate_object_ids(101);
     choice->add_candidate_card_ids("grizzly_bears");
     choice->add_candidate_names("Grizzly Bears");
@@ -2672,12 +2626,12 @@ TEST_F(RuledBatchTest, CastCostCandidatesStayPrivateWhileActiveBeholdRevealIsPub
     option->add_valid_permanent_generations(12);
     option->set_selectable(true);
     auto *reveal = batch.add_events()->mutable_active_public_reveal_snapshot()->add_reveals();
-    reveal->set_source_stack_object_id(700);
-    reveal->set_group_index(0);
-    reveal->set_revealing_player_id(p1->getPlayerId());
+    reveal->set_source_object_id(700);
+    reveal->set_reveal_id("stack:700:cost:0");
+    reveal->set_zone_owner_player_id(p1->getPlayerId());
     reveal->set_source_description("Caustic Exhale");
-    reveal->set_card_id("adult_gold_dragon");
-    reveal->set_card_name("Adult Gold Dragon");
+    reveal->add_cards()->set_card_id("adult_gold_dragon");
+    reveal->mutable_cards(0)->set_card_name("Adult Gold Dragon");
 
     const auto forController = redactFor(batch, p1);
     ASSERT_TRUE(forController.legal_by_player().contains(p1->getPlayerId()));
@@ -2690,12 +2644,13 @@ TEST_F(RuledBatchTest, CastCostCandidatesStayPrivateWhileActiveBeholdRevealIsPub
     EXPECT_EQ(controllerOption.valid_hand_indices_size(), 1);
     EXPECT_EQ(controllerOption.valid_permanent_generations(0), 12u);
     ASSERT_EQ(forController.events_size(), 1);
-    EXPECT_EQ(forController.events(0).active_public_reveal_snapshot().reveals(0).card_name(), "Adult Gold Dragon");
+    EXPECT_EQ(forController.events(0).active_public_reveal_snapshot().reveals(0).cards(0).card_name(),
+              "Adult Gold Dragon");
 
     const auto forOpponent = redactFor(batch, p2);
     EXPECT_FALSE(forOpponent.legal_by_player().contains(p1->getPlayerId()));
     ASSERT_EQ(forOpponent.events_size(), 1);
-    EXPECT_EQ(forOpponent.events(0).active_public_reveal_snapshot().reveals(0).card_id(), "adult_gold_dragon");
+    EXPECT_EQ(forOpponent.events(0).active_public_reveal_snapshot().reveals(0).cards(0).card_id(), "adult_gold_dragon");
 }
 
 TEST_F(RuledBatchTest, ExileCastingPermissionIdentityAndOfferStayOwnerOnly)

@@ -462,7 +462,7 @@ RuledEventDispatcher::RuledEventDispatcher(RuledClientState *_state, RuledClient
 {
 }
 
-bool RuledEventDispatcher::processPayload(const std::string &payload)
+bool RuledEventDispatcher::processPayload(const std::string &payload, bool suppressRevealWindows)
 {
     ruled::v1::RuledEventBatch batch;
     if (!batch.ParseFromString(payload)) {
@@ -475,8 +475,11 @@ bool RuledEventDispatcher::processPayload(const std::string &payload)
             emit state->paymentPreviewReceived();
         return true;
     }
+    state->reveals.setWindowsSuppressed(suppressRevealWindows);
     resetPerBatchLegalActions();
     processBatch(batch);
+    if (suppressRevealWindows)
+        state->reveals.discardCompleted();
     return true;
 }
 
@@ -556,6 +559,9 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         }
         if (e.has_resolution_choice_required()) {
             applyResolutionChoiceRequired(e.resolution_choice_required(), ctx);
+        }
+        if (e.has_cards_revealed()) {
+            applyCardsRevealed(e.cards_revealed());
         }
         if (e.has_active_public_reveal_snapshot()) {
             applyActivePublicRevealSnapshot(e.active_public_reveal_snapshot());
@@ -824,16 +830,14 @@ void RuledEventDispatcher::applyStackResolved(const ruled::v1::StackResolved &sr
                              " confirms the client saw the resolve";
 }
 
+void RuledEventDispatcher::applyCardsRevealed(const ruled::v1::CardsRevealed &reveal)
+{
+    state->reveals.publish(reveal);
+}
+
 void RuledEventDispatcher::applyActivePublicRevealSnapshot(const ruled::v1::ActivePublicRevealSnapshot &snapshot)
 {
-    QVector<RuledClientState::RuledActivePublicReveal> reveals;
-    reveals.reserve(snapshot.reveals_size());
-    for (const auto &entry : snapshot.reveals()) {
-        reveals.append({entry.source_stack_object_id(), entry.group_index(), entry.revealing_player_id(),
-                        QString::fromStdString(entry.source_description()), QString::fromStdString(entry.card_id()),
-                        QString::fromStdString(entry.card_name())});
-    }
-    state->setActivePublicReveals(std::move(reveals));
+    state->reveals.applyActiveSnapshot(snapshot);
 }
 
 void RuledEventDispatcher::applyStackObjectCountered(const ruled::v1::StackObjectCountered &countered,
@@ -960,7 +964,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     // Tier-3 custom resolution paused for a player choice (CR 608).
     ctx.promptFeed += QString::fromStdString(rcr.prompt_text()) + QStringLiteral("\n");
     const bool isDecider = static_cast<int>(rcr.deciding_player_id()) == host->localPlayerId();
-    const bool isPublicReveal = rcr.reveal_audience() == ruled::v1::RESOLUTION_REVEAL_AUDIENCE_ALL_PARTICIPANTS;
+    const bool isPublicReveal = rcr.has_public_reveal();
     // Retire the previous resolution UI before publishing its replacement. A repeated public
     // reveal marks its pending pick as shared, so this does not close the existing popup.
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPick);
@@ -971,34 +975,67 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     state->clearPendingChoiceOfKind(ChoiceKind::SiegeCast);
     state->clearPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender);
     if (isPublicReveal) {
+        const auto &reveal = rcr.public_reveal();
         const int count = rcr.candidate_names_size();
         const bool selectableShapeValid =
-            isDecider ? rcr.candidate_selectable_size() == count : rcr.candidate_selectable_size() == 0;
-        const bool identityShapeValid =
-            count > 0 && rcr.has_revealed_zone_owner_player_id() && rcr.candidate_object_ids_size() == count &&
-            rcr.candidate_card_ids_size() == count && rcr.candidate_server_card_ids_size() == count;
+            isDecider ? (rcr.candidate_selectable_size() == 0 || rcr.candidate_selectable_size() == count)
+                      : rcr.candidate_selectable_size() == 0;
+        bool identityShapeValid = count > 0 && !reveal.reveal_id().empty() && reveal.cards_size() == count &&
+                                  rcr.candidate_object_ids_size() == count && rcr.candidate_card_ids_size() == count &&
+                                  rcr.candidate_server_card_ids_size() == count;
+        for (int i = 0; identityShapeValid && i < count; ++i) {
+            identityShapeValid = reveal.cards(i).object_id() == rcr.candidate_object_ids(i) &&
+                                 reveal.cards(i).card_id() == rcr.candidate_card_ids(i) &&
+                                 reveal.cards(i).card_name() == rcr.candidate_names(i);
+        }
         if (!identityShapeValid || !selectableShapeValid) {
             qWarning() << "Rejecting malformed ruled public reveal";
             return;
         }
-        RuledClientState::RuledPublicReveal reveal;
-        reveal.sourceObjectId = rcr.source_object_id();
-        reveal.zoneOwnerPlayerId = rcr.revealed_zone_owner_player_id();
-        for (int i = 0; i < count; ++i) {
-            reveal.candidateNames.append(QString::fromStdString(rcr.candidate_names(i)));
-            reveal.candidateServerCardIds.append(rcr.candidate_server_card_ids(i));
+        QVector<int> ids;
+        if (isDecider)
+            for (int id : rcr.candidate_server_card_ids())
+                ids.append(id);
+        const bool newReveal = !state->reveals.entries().contains(QString::fromStdString(reveal.reveal_id()));
+        if (!state->reveals.beginChoice(reveal, ids)) {
+            qWarning() << "Rejecting reused or invalid public reveal identity";
+            return;
         }
-        const bool snapshotChanged = !state->publicReveal.has_value() || *state->publicReveal != reveal;
-        if (snapshotChanged) {
+        if (newReveal) {
             ctx.timeline += QStringLiteral("P%1 reveals: %2.\n")
-                                .arg(reveal.zoneOwnerPlayerId)
-                                .arg(reveal.candidateNames.join(QStringLiteral(", ")));
+                                .arg(reveal.zone_owner_player_id())
+                                .arg(state->reveals.choice()->cardNames().join(QStringLiteral(", ")));
         }
-        state->setPublicReveal(std::move(reveal));
         ctx.publicRevealSeen = true;
     }
     if (!isDecider) {
         state->choiceWaitingPlayerId = static_cast<int>(rcr.deciding_player_id());
+        return;
+    }
+
+    if (isPublicReveal) {
+        PendingChoice pick;
+        pick.kind = ChoiceKind::ResolutionPick;
+        pick.pickZone = PickZone::Revealed;
+        pick.publicReveal = true;
+        pick.min = static_cast<int>(rcr.min());
+        pick.max = static_cast<int>(rcr.max());
+        pick.uniqueNames = rcr.unique_names();
+        pick.promptText = QString::fromStdString(rcr.prompt_text());
+        pick.viewTitle = tr("Revealed cards");
+        pick.hasSelectableRestriction = rcr.candidate_selectable_size() > 0;
+        for (int i = 0; i < rcr.candidate_names_size(); ++i) {
+            const int id = rcr.candidate_server_card_ids(i);
+            const QString name = QString::fromStdString(rcr.candidate_names(i));
+            pick.candidateNames.append(name);
+            pick.serverCardIdToOid.insert(id, rcr.candidate_object_ids(i));
+            pick.serverCardIdToName.insert(id, name);
+            if (pick.hasSelectableRestriction && rcr.candidate_selectable(i))
+                pick.selectableServerCardIds.insert(id);
+        }
+        state->setPendingChoice(std::move(pick));
+        emit state->resolutionHandPickUiChanged(static_cast<int>(rcr.min()), 0);
+        emit state->combatStateChanged();
         return;
     }
 
@@ -1195,7 +1232,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if ((isLibrarySearch || rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP || isLibraryLook ||
+    if (!isPublicReveal &&
+        (isLibrarySearch || rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP || isLibraryLook ||
          isManifestDread || isZoneSearch || isGraveyardCards || isBehold) &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
         (rcr.candidate_names_size() > 0 || isEmptyLibrarySearch)) {
@@ -1307,7 +1345,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if ((rcr.choice_kind() == ruled::v1::CHOICE_KIND_REVEALED ||
+    if ((isPublicReveal || rcr.choice_kind() == ruled::v1::CHOICE_KIND_REVEALED ||
          rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND) &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() && rcr.candidate_names_size() > 0) {
         const bool isOpponentHand = rcr.choice_kind() == ruled::v1::CHOICE_KIND_OPPONENT_HAND;
@@ -1324,8 +1362,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         pick.max = static_cast<int>(rcr.max());
         pick.promptText = QString::fromStdString(rcr.prompt_text());
         pick.pickZone = PickZone::Revealed;
-        pick.hasSelectableRestriction = isOpponentHand;
+        pick.hasSelectableRestriction = rcr.candidate_selectable_size() > 0;
         pick.publicReveal = isPublicReveal;
+        pick.uniqueNames = rcr.unique_names();
         // Both kinds render identically, but they are not the same thing: REVEALED was shown to
         // the whole table, OPPONENT_HAND is a hand only the decider may look at (CR 701.7). The
         // proto does not carry whose hand it is, so the title stays seat-agnostic — if a future
@@ -1339,7 +1378,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             const int scid = rcr.candidate_server_card_ids(i);
             if (scid >= 0) {
                 pick.serverCardIdToOid.insert(scid, oid);
-                if (isOpponentHand && rcr.candidate_selectable(i)) {
+                if (pick.hasSelectableRestriction && rcr.candidate_selectable(i)) {
                     pick.selectableServerCardIds.insert(scid);
                 }
             }
@@ -1965,7 +2004,7 @@ void RuledEventDispatcher::applyNoLegalActions()
 void RuledEventDispatcher::finishBatch(BatchContext &ctx)
 {
     if (ctx.reconcilePublicReveal && !ctx.publicRevealSeen) {
-        state->clearPublicReveal();
+        state->reveals.completeChoice();
     }
     state->pruneCleanupDiscardSelectionAndEmitUi();
     emit state->legalActionsChanged();

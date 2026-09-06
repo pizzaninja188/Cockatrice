@@ -2948,11 +2948,11 @@ fn issue_143_thoughtseize_publicly_reveals_then_loses_two_life() {
         "the target player's life is untouched"
     );
     let choice = find_resolution_choice(&resolve_batch).expect("Thoughtseize hand choice");
+    assert!(choice.public_reveal.is_some());
     assert_eq!(
-        choice.reveal_audience(),
-        ResolutionRevealAudience::AllParticipants
+        choice.public_reveal.as_ref().unwrap().zone_owner_player_id,
+        1
     );
-    assert_eq!(choice.revealed_zone_owner_player_id, Some(1));
 
     let resume_batch = e
         .apply_command(0, &submit_resolution_choice(vec![bear_oid]))

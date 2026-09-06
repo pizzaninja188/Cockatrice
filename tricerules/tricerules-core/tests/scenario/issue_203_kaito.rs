@@ -222,7 +222,7 @@ fn kaito_ninjutsu_returns_an_exact_unblocked_attacker_and_reveals_the_source() {
         matches!(
             &event.ev,
             Some(Ev::ActivePublicRevealSnapshot(snapshot))
-                if snapshot.reveals.iter().any(|reveal| reveal.card_id == "kaito,_bane_of_nightmares")
+                if snapshot.reveals.iter().any(|reveal| reveal.cards[0].card_id == "kaito,_bane_of_nightmares")
         )
     }));
 }
