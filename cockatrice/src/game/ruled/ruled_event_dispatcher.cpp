@@ -509,7 +509,7 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
-    state->resolutionChoiceWaitingPlayerId = -1;
+    state->choiceWaitingPlayerId = -1;
 }
 
 void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
@@ -895,6 +895,7 @@ void RuledEventDispatcher::applyTriggerNeedsTarget(const ruled::v1::TriggerNeeds
         ctx.promptFeed += tnt.modes_size() > 0 ? QStringLiteral("Choose a mode for “%1”.\n").arg(abilityText)
                                                : QStringLiteral("Choose a target for “%1”.\n").arg(abilityText);
     } else {
+        state->choiceWaitingPlayerId = state->lastTriggerControllerPlayerId;
         state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerTarget);
         state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerMode);
     }
@@ -942,6 +943,7 @@ void RuledEventDispatcher::applyTriggerOrderRequired(const ruled::v1::TriggerOrd
                                          "(%1 left) — what you pick first resolves last.\n")
                               .arg(candidates.size());
     } else {
+        state->choiceWaitingPlayerId = static_cast<int>(tor.deciding_player_id());
         state->clearPendingChoiceOfKind(ChoiceKind::TriggerOrder);
         ctx.promptFeed +=
             QStringLiteral("Waiting: opponent is ordering %1 simultaneous triggers.\n").arg(candidates.size());
@@ -996,7 +998,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         ctx.publicRevealSeen = true;
     }
     if (!isDecider) {
-        state->resolutionChoiceWaitingPlayerId = static_cast<int>(rcr.deciding_player_id());
+        state->choiceWaitingPlayerId = static_cast<int>(rcr.deciding_player_id());
         return;
     }
 

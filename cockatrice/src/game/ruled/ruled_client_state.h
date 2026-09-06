@@ -615,9 +615,9 @@ public:
     QList<int> openingBottomSelectedIndices;
     QVector<int> openingPickSeatIds;
     RuledOpeningUiKind openingUiKind = RuledOpeningUiKind::None;
-    /// Public resolution-choice marker on non-deciding clients. It suppresses stale priority
+    /// Public engine-choice marker on non-deciding clients. It suppresses stale priority
     /// controls while the engine is parked without exposing private candidates or prompt details.
-    int resolutionChoiceWaitingPlayerId = -1;
+    int choiceWaitingPlayerId = -1;
     int openingMulliganCount = 0;
     ruled::v1::PhaseId lastEnginePhaseId = ruled::v1::PHASE_ID_UNSPECIFIED;
 
@@ -1740,17 +1740,17 @@ public:
     {
         return pendingChoicePromptText(ChoiceKind::ResolutionPayment);
     }
-    [[nodiscard]] bool isWaitingForResolutionChoice() const
+    [[nodiscard]] bool isWaitingForChoice() const
     {
-        return resolutionChoiceWaitingPlayerId >= 0;
+        return choiceWaitingPlayerId >= 0;
     }
     [[nodiscard]] QString resolutionPaymentManaCost() const
     {
         return isResolutionPaymentActive() ? pendingChoice->manaCost : QString{};
     }
-    [[nodiscard]] int resolutionChoiceWaitingPlayer() const
+    [[nodiscard]] int choiceWaitingPlayer() const
     {
-        return resolutionChoiceWaitingPlayerId;
+        return choiceWaitingPlayerId;
     }
     void payResolutionMana();
     void declineResolutionMana();

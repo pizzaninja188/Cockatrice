@@ -770,9 +770,9 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.selected = h->resolutionCostObjectSelectedCount();
         state.canDecline = h->pendingClickChoiceMayDecline();
         state.text = h->pendingChoicePromptText(ChoiceKind::CostObjects);
-    } else if (h->isWaitingForResolutionChoice()) {
+    } else if (h->isWaitingForChoice()) {
         state.mode = PromptMode::WaitingForChoice;
-        if (Player *decider = game->getPlayerManager()->getPlayer(h->resolutionChoiceWaitingPlayer())) {
+        if (Player *decider = game->getPlayerManager()->getPlayer(h->choiceWaitingPlayer())) {
             state.text = tr("Waiting for %1...").arg(decider->getPlayerInfo()->getName());
         } else {
             state.text = tr("Waiting for opponent...");

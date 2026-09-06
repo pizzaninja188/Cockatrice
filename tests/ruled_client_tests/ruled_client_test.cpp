@@ -2900,6 +2900,36 @@ TEST_F(RuledClientTest, TriggerNeedsTargetOnlyPendsForItsController)
     // We see the trigger, but only its controller may answer it.
     EXPECT_FALSE(state->hasPendingTriggerTarget());
     EXPECT_EQ(state->pendingTriggerController(), kOpponent);
+    EXPECT_TRUE(state->isWaitingForChoice());
+    EXPECT_EQ(state->choiceWaitingPlayer(), kOpponent);
+
+    // A redacted observer event has no target candidates. Repeated publication must keep waiting.
+    apply(batch);
+    EXPECT_TRUE(state->isWaitingForChoice());
+
+    ruled::v1::RuledEventBatch completed;
+    completed.add_events()->mutable_stack_pushed()->set_object_id(501);
+    apply(completed);
+    EXPECT_FALSE(state->isWaitingForChoice());
+}
+
+TEST_F(RuledClientTest, TriggerModeWaitTransfersToTheNextDecidingPlayer)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *trigger = batch.add_events()->mutable_trigger_needs_target();
+    trigger->set_controller_player_id(kOpponent);
+    trigger->set_min_modes(1);
+    trigger->set_max_modes(1);
+    // Modes are private, so the observer learns only who is deciding.
+    apply(batch);
+    EXPECT_TRUE(state->isWaitingForChoice());
+    EXPECT_FALSE(state->hasPendingChoiceOptions());
+
+    trigger->set_controller_player_id(kLocalPlayer);
+    trigger->add_modes()->set_label("Draw a card.");
+    apply(batch);
+    EXPECT_FALSE(state->isWaitingForChoice());
+    EXPECT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::TriggerMode));
 }
 
 TEST_F(RuledClientTest, SpellCopyInheritsTheOriginalPrinting)
@@ -3759,6 +3789,12 @@ TEST_F(RuledClientTest, TriggerOrderRequiredIsNotPromptedForTheOpponent)
 
     EXPECT_FALSE(state->hasPendingTriggerOrder());
     EXPECT_TRUE(state->triggerOrderCandidates().isEmpty());
+    EXPECT_TRUE(state->isWaitingForChoice());
+    EXPECT_EQ(state->choiceWaitingPlayer(), kLocalPlayer + 1);
+
+    apply(triggerOrderBatch(kLocalPlayer));
+    EXPECT_FALSE(state->isWaitingForChoice());
+    EXPECT_TRUE(state->hasPendingTriggerOrder());
 }
 
 TEST_F(RuledClientTest, TriggerOrderPopupCardsMapToTheirTriggers)
@@ -3966,12 +4002,12 @@ TEST_F(RuledClientTest, ManaPaymentPromptsOnlyTheDecidingPlayer)
     rcr->set_payment_currently_legal(true);
     apply(batch);
     EXPECT_FALSE(state->isResolutionPaymentActive());
-    EXPECT_TRUE(state->isWaitingForResolutionChoice());
-    EXPECT_EQ(state->resolutionChoiceWaitingPlayer(), kOpponent);
+    EXPECT_TRUE(state->isWaitingForChoice());
+    EXPECT_EQ(state->choiceWaitingPlayer(), kOpponent);
 
     ruled::v1::RuledEventBatch completed;
     apply(completed);
-    EXPECT_FALSE(state->isWaitingForResolutionChoice());
+    EXPECT_FALSE(state->isWaitingForChoice());
 }
 
 TEST_F(RuledClientTest, FaceDownObjectMapProvidesPrivateIdentityAndPrunesOnReplacement)
@@ -5264,12 +5300,12 @@ TEST_F(RuledClientTest, PrivateHandChoiceMakesTheNonDecidingPlayerWait)
     apply(batch);
 
     EXPECT_FALSE(state->isResolutionHandPickActive());
-    EXPECT_TRUE(state->isWaitingForResolutionChoice());
-    EXPECT_EQ(state->resolutionChoiceWaitingPlayer(), kOpponent);
+    EXPECT_TRUE(state->isWaitingForChoice());
+    EXPECT_EQ(state->choiceWaitingPlayer(), kOpponent);
 
     ruled::v1::RuledEventBatch completed;
     apply(completed);
-    EXPECT_FALSE(state->isWaitingForResolutionChoice());
+    EXPECT_FALSE(state->isWaitingForChoice());
 }
 
 TEST_F(RuledClientTest, SequentialPlayerSetDiscardReplacesPickWithWaitAndNextPrivatePick)
@@ -5296,8 +5332,8 @@ TEST_F(RuledClientTest, SequentialPlayerSetDiscardReplacesPickWithWaitAndNextPri
     apply(waiting);
     EXPECT_FALSE(state->isResolutionHandPickActive());
     EXPECT_EQ(state->resolutionHandPickSelected(), 0);
-    EXPECT_TRUE(state->isWaitingForResolutionChoice());
-    EXPECT_EQ(state->resolutionChoiceWaitingPlayer(), kOpponent);
+    EXPECT_TRUE(state->isWaitingForChoice());
+    EXPECT_EQ(state->choiceWaitingPlayer(), kOpponent);
 
     ruled::v1::RuledEventBatch nextPrivate;
     auto *nextChoice = nextPrivate.add_events()->mutable_resolution_choice_required();
@@ -5310,7 +5346,7 @@ TEST_F(RuledClientTest, SequentialPlayerSetDiscardReplacesPickWithWaitAndNextPri
     nextChoice->add_candidate_server_card_ids(2);
     apply(nextPrivate);
     ASSERT_TRUE(state->isResolutionHandPickActive());
-    EXPECT_FALSE(state->isWaitingForResolutionChoice());
+    EXPECT_FALSE(state->isWaitingForChoice());
     EXPECT_FALSE(state->isResolutionHandPickCardSelectable(1));
     EXPECT_TRUE(state->isResolutionHandPickCardSelectable(2));
 
@@ -5947,8 +5983,8 @@ TEST_F(RuledClientTest, WardAnnotationAndPaymentUseTheExistingRuledPromptModes)
     discard->set_prompt_text("Opponent is making a resolution choice.");
     apply(discardWardObserver);
     EXPECT_FALSE(state->isResolutionHandPickActive());
-    EXPECT_TRUE(state->isWaitingForResolutionChoice());
-    EXPECT_EQ(state->resolutionChoiceWaitingPlayer(), kOpponent);
+    EXPECT_TRUE(state->isWaitingForChoice());
+    EXPECT_EQ(state->choiceWaitingPlayer(), kOpponent);
 }
 
 TEST_F(RuledClientTest, CounterEventRemovesOnlyTheExactSyntheticStackObject)

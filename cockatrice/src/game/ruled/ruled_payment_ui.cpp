@@ -86,7 +86,7 @@ bool RuledPaymentUi::startOrRefresh()
 {
     const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     if (actions->player->getPlayerInfo()->getLocal() && actions->pendingRuledSpellCast.valid &&
-        (state->pendingChoice || state->resolutionChoiceWaitingPlayerId >= 0)) {
+        (state->pendingChoice || state->choiceWaitingPlayerId >= 0)) {
         actions->cancelPendingRuledSpellCast();
         return true;
     }
