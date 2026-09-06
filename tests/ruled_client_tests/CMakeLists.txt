@@ -6,6 +6,7 @@
 # widget or game-object dependency, so the dev-console grammar is covered without a running game.
 add_executable(
   ruled_client_test ruled_client_test.cpp
+  ${VERSION_STRING_CPP}
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_client_state.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_dev_command_parser.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_event_dispatcher.cpp

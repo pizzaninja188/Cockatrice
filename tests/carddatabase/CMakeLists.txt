@@ -15,6 +15,10 @@ add_executable(
   ${VERSION_STRING_CPP}
   carddatabase_test.cpp
   ruled_token_display_test.cpp
+  ruled_oracle_import_test.cpp
+  ${CMAKE_SOURCE_DIR}/oracle/src/oracleimporter.cpp
+  ${CMAKE_SOURCE_DIR}/oracle/src/parsehelpers.cpp
+  ${CMAKE_SOURCE_DIR}/oracle/src/qt-json/json.cpp
   mocks.cpp
   ${CMAKE_SOURCE_DIR}/cockatrice/src/game/ruled/ruled_token_display.cpp
 )

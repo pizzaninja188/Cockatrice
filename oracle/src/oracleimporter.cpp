@@ -275,7 +275,7 @@ int OracleImporter::importCardsFromSet(const CardSetPtr &currentSet, const QList
         if (faceName.isEmpty()) {
             faceName = name;
         }
-        oracleFaces.append(RuledOracleFace{name, faceName, text});
+        const QString oracleCardName = name;
 
         // card properties
         QVariantHash properties;
@@ -413,6 +413,7 @@ int OracleImporter::importCardsFromSet(const CardSetPtr &currentSet, const QList
             }
 
             CardInfoPtr newCard = addCard(name + numComponent, text, isToken, properties, relatedCards, printingInfo);
+            newCard->ruled().addFace(oracleCardName, faceName, text);
             numCards++;
         }
     }
@@ -459,6 +460,9 @@ int OracleImporter::importCardsFromSet(const CardSetPtr &currentSet, const QList
             }
         }
         CardInfoPtr newCard = addCard(name, text, isToken, properties, noRelatedCards, printingInfo);
+        for (const auto &face : splitCardParts) {
+            newCard->ruled().addFace(name, face.getName(), face.getText());
+        }
         numCards++;
     }
 
@@ -564,16 +568,7 @@ int OracleImporter::startImport()
 bool OracleImporter::saveToFile(const QString &fileName, const QString &sourceUrl, const QString &sourceVersion)
 {
     CockatriceXml4Parser parser(new NoopCardPreferenceProvider(), new NoopCardSetPriorityController());
-    if (!parser.saveToFile(createDefaultMagicFormats(), sets, cards, fileName, sourceUrl, sourceVersion)) {
-        return false;
-    }
-    QString error;
-    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(fileName);
-    if (!RuledOracleCache::writeAtomic(cachePath, sourceUrl, sourceVersion, oracleFaces, &error)) {
-        qWarning() << "Failed to save ruled Oracle cache" << cachePath << error;
-        return false;
-    }
-    return true;
+    return parser.saveToFile(createDefaultMagicFormats(), sets, cards, fileName, sourceUrl, sourceVersion);
 }
 
 void OracleImporter::clear()
@@ -581,5 +576,4 @@ void OracleImporter::clear()
     sets.clear();
     cards.clear();
     allSets.clear();
-    oracleFaces.clear();
 }

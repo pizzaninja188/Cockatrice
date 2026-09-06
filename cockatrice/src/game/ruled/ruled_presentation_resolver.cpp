@@ -1,44 +1,29 @@
 #include "ruled_presentation_resolver.h"
 
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
-#include <QFileInfo>
-
-bool RuledPresentationResolver::loadForCardDatabase(const QString &cardDatabasePath, QString *error)
-{
-    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(cardDatabasePath);
-    const bool loaded = cache.load(cachePath, error);
-    if (loaded) {
-        const QFileInfo info(cachePath);
-        loadedCachePath = cachePath;
-        loadedLastModified = info.lastModified();
-        loadedSize = info.size();
-    }
-    return loaded;
-}
-
-void RuledPresentationResolver::refreshForCardDatabase(const QString &cardDatabasePath)
-{
-    if (cardDatabasePath.isEmpty()) {
-        return;
-    }
-    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(cardDatabasePath);
-    const QFileInfo info(cachePath);
-    if (cachePath == loadedCachePath && info.exists() && info.lastModified() == loadedLastModified &&
-        info.size() == loadedSize) {
-        return;
-    }
-    loadForCardDatabase(cardDatabasePath);
-}
 
 QString RuledPresentationResolver::resolve(const ruled::v1::PresentationRef &presentation) const
 {
     const QString fallback = QString::fromStdString(presentation.fallback_text());
-    if (presentation.oracle_line_indices().empty()) {
+    if (presentation.oracle_line_indices().empty() || !lookup) {
         return fallback;
     }
-    const QString text = cache.compatibleFaceText(QString::fromStdString(presentation.external_card_name()),
-                                                  QString::fromStdString(presentation.external_face_name()),
-                                                  QString::fromStdString(presentation.oracle_text_sha256()));
+    const QString cardName = QString::fromStdString(presentation.external_card_name());
+    const QString faceName = QString::fromStdString(presentation.external_face_name());
+    const QString sha256 = QString::fromStdString(presentation.oracle_text_sha256());
+    QString text;
+    // Combined layouts live under the full card name; transform/MDFC faces have their own entries.
+    for (QString databaseName : {cardName, faceName}) {
+        // Match the importer's display-name spelling without changing the external face identity.
+        databaseName.replace(QStringLiteral("Æ"), QStringLiteral("AE"));
+        databaseName.replace(QStringLiteral("’"), QStringLiteral("'"));
+        if (const auto card = lookup(databaseName)) {
+            text = card->ruled().compatibleFaceText(cardName, faceName, sha256);
+            if (!text.isEmpty()) {
+                break;
+            }
+        }
+    }
     if (text.isEmpty()) {
         return fallback;
     }

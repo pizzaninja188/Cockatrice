@@ -261,6 +261,7 @@ void CockatriceXml4Parser::loadCardsFromXml(QXmlStreamReader &xml)
         if (xmlName == "card") {
             QString name = QString("");
             QString text = QString("");
+            RuledOracleText ruledOracle;
             QVariantHash properties = QVariantHash();
             QList<CardRelation *> relatedCards, reverseRelatedCards;
             auto _sets = SetToPrintingsMap();
@@ -282,6 +283,8 @@ void CockatriceXml4Parser::loadCardsFromXml(QXmlStreamReader &xml)
                     name = xml.readElementText(QXmlStreamReader::IncludeChildElements);
                 } else if (xmlName == "text") {
                     text = xml.readElementText(QXmlStreamReader::IncludeChildElements);
+                } else if (xmlName == "ruled-oracle") {
+                    ruledOracle.readXml(xml);
                 } else if (xmlName == "token") {
                     isToken = static_cast<bool>(xml.readElementText(QXmlStreamReader::IncludeChildElements).toInt());
                     // generic properties
@@ -382,6 +385,7 @@ void CockatriceXml4Parser::loadCardsFromXml(QXmlStreamReader &xml)
                                                  .upsideDownArt = upsideDown};
             CardInfoPtr newCard = CardInfo::newInstance(name, text, isToken, properties, relatedCards,
                                                         reverseRelatedCards, _sets, attributes);
+            newCard->ruled() = std::move(ruledOracle);
             emit addCard(newCard);
         }
     }
@@ -472,6 +476,7 @@ static QXmlStreamWriter &operator<<(QXmlStreamWriter &xml, const CardInfoPtr &in
     // variable - assigned properties
     xml.writeTextElement("name", info->getName());
     xml.writeTextElement("text", info->getText());
+    info->ruled().writeXml(xml);
     if (info->getIsToken()) {
         xml.writeTextElement("token", "1");
     }

@@ -139,6 +139,27 @@ card". Nothing here is interchangeable.
 decision (is it a creature? can it be targeted? what does this ability cost?) must come from the
 engine. `CardDatabaseQuerier` answers "what does it look like", nothing more.
 
+### Oracle presentation storage
+
+Oracle writes normalized per-face text into each `cards.xml` card's `<ruled-oracle>` block.
+Every `<face card-name="..." face-name="...">` contains a `<text>` element; these external
+identities survive the importer's combined display entries for split and Adventure cards and
+its separate entries for transform/MDFC faces. The existing card-level `<text>` remains the
+ordinary display text. Source URL/version remain in the database's existing `<info>` block.
+
+`CardInfo` owns a `RuledOracleText` object, and the XML reader, writer, and card clone preserve it.
+`RuledPresentationResolver` queries the currently loaded database through `RuledClientHost`,
+checks the exact external card/face identity and normalized text fingerprint supplied by the
+engine, and selects the one-based Oracle lines. It never parses combined display text to guess
+face boundaries. Missing, malformed, or incompatible face data returns the engine fallback as
+one unit; explicit `Fallback` mappings still bypass external text.
+
+There is no companion `cards.ruled-oracle.json` file or separate file watcher. Reimport with
+the fork's Oracle and reload the card database after upgrading an old installation; an old
+JSON cache is ignored. Database reloads affect subsequent presentation resolution through the
+same loaded-card lookup. RON mappings, engine fingerprints, protobuf, and rules authority are
+independent of this storage format.
+
 ### Who converts what
 
 | Map | Built by | Direction | Notes |

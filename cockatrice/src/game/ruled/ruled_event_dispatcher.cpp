@@ -457,7 +457,8 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
 } // namespace
 
 RuledEventDispatcher::RuledEventDispatcher(RuledClientState *_state, RuledClientHost *_host, QObject *parent)
-    : QObject(parent), state(_state), host(_host)
+    : QObject(parent), state(_state), host(_host),
+      presentationResolver([_host](const QString &name) { return _host->presentationCard(name); })
 {
 }
 
@@ -513,7 +514,6 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
 
 void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
 {
-    presentationResolver.refreshForCardDatabase(host->cardDatabasePath());
     BatchContext ctx;
 
     for (const auto &event : batch.events()) {

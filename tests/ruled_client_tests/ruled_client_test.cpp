@@ -21,17 +21,14 @@
 #include "game/ruled/ruled_restricted_mana_model.h"
 #include "game/ruled/ruled_zone_snapshot_policy.h"
 
-#include <QCryptographicHash>
+#include <QBuffer>
 #include <QSignalSpy>
-#include <QDir>
-#include <QFile>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QTemporaryDir>
 #include <QString>
 #include <QTest>
 #include <gtest/gtest.h>
+#include <libcockatrice/card/database/parser/cockatrice_xml_4.h>
+#include <libcockatrice/interfaces/noop_card_preference_provider.h>
+#include <libcockatrice/interfaces/noop_card_set_priority_controller.h>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
 namespace
@@ -49,6 +46,11 @@ public:
     int priorityPlayer = -1;
     int toolbarPhase = -1;
     int arrowSyncRequests = 0;
+    CardNameMap presentationCards;
+    CardInfoPtr presentationCard(const QString &name) const override
+    {
+        return presentationCards.value(name);
+    }
 
     struct SyntheticCard
     {
@@ -961,37 +963,41 @@ TEST(RuledPendingTargetTest, SpellPromptUsesFaceAndActiveModeContext)
                                 "Choose target spell."));
 }
 
+CardNameMap readPresentationCards(QByteArray xml)
+{
+    QBuffer input(&xml);
+    input.open(QIODevice::ReadOnly);
+    NoopCardPreferenceProvider preferences;
+    NoopCardSetPriorityController priorities;
+    CockatriceXml4Parser parser(&preferences, &priorities);
+    CardNameMap cards;
+    QObject::connect(&parser, &ICardDatabaseParser::addCard,
+                     [&cards](CardInfoPtr card) { cards.insert(card->getName(), card); });
+    parser.parseFile(input);
+    return cards;
+}
+
 TEST(RuledPresentationResolverTest, ResolvesExactFaceLinesAndFallsBackAsOneUnit)
 {
-    QTemporaryDir directory;
-    ASSERT_TRUE(directory.isValid());
-    const QString cardDatabasePath = directory.filePath(QStringLiteral("cards.xml"));
-    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(cardDatabasePath);
+    auto cards = readPresentationCards(R"(<cockatrice_carddatabase version="4"><cards><card>
+      <name>Fire // Ice</name><text>Combined text must never be used</text>
+      <ruled-oracle><face card-name="Fire // Ice" face-name="Fire">
+      <text>Choose one —
+• First mode
+• Second mode</text></face></ruled-oracle></card></cards></cockatrice_carddatabase>)");
+    RuledPresentationResolver resolver([&cards](const QString &name) { return cards.value(name); });
     const QString oracleText = QStringLiteral("Choose one —\n• First mode\n• Second mode");
-    QString writeError;
-    ASSERT_TRUE(RuledOracleCache::writeAtomic(
-        cachePath, QStringLiteral("https://example.test/AllPrintings.json"), QStringLiteral("2026-08-31"),
-        {{QStringLiteral("Fire // Ice"), QStringLiteral("Fire"), oracleText}}, &writeError))
-        << writeError.toStdString();
-
-    RuledPresentationResolver resolver;
-    QString loadError;
-    ASSERT_TRUE(resolver.loadForCardDatabase(cardDatabasePath, &loadError)) << loadError.toStdString();
-
     ruled::v1::PresentationRef presentation;
-    presentation.set_card_id("fire_ice");
-    presentation.set_face_id("fire");
     presentation.set_external_card_name("Fire // Ice");
     presentation.set_external_face_name("Fire");
-    presentation.set_oracle_text_sha256(RuledOracleCache::textSha256(oracleText).toStdString());
+    presentation.set_oracle_text_sha256(RuledOracleText::textSha256(oracleText).toStdString());
     presentation.add_oracle_line_indices(1);
     presentation.add_oracle_line_indices(3);
     presentation.set_fallback_text("fallback");
     EXPECT_EQ(resolver.resolve(presentation), QString::fromUtf8("Choose one —\n• Second mode"));
-
     presentation.set_oracle_text_sha256(std::string(64, '0'));
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
-    presentation.set_oracle_text_sha256(RuledOracleCache::textSha256(oracleText).toStdString());
+    presentation.set_oracle_text_sha256(RuledOracleText::textSha256(oracleText).toStdString());
     presentation.add_oracle_line_indices(99);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
 }
@@ -1004,178 +1010,134 @@ TEST(RuledPresentationResolverTest, EmptyMappingAlwaysUsesEngineFallback)
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("engine-authored fallback"));
 }
 
+TEST(RuledPresentationResolverTest, UsesDatabaseFaceTextWithoutCompanionCache)
+{
+    auto cards = readPresentationCards(R"(<cockatrice_carddatabase version="4"><cards><card><name>Forest</name>
+      <text>Ordinary display</text><ruled-oracle><face card-name="Forest" face-name="Forest">
+      <text>{T}: Add {G}.</text></face></ruled-oracle></card></cards></cockatrice_carddatabase>)");
+    RuledPresentationResolver resolver([&cards](const QString &name) { return cards.value(name); });
+    ruled::v1::PresentationRef presentation;
+    presentation.set_external_card_name("Forest");
+    presentation.set_external_face_name("Forest");
+    presentation.set_oracle_text_sha256(RuledOracleText::textSha256("{T}: Add {G}.").toStdString());
+    presentation.set_fallback_text("fallback");
+    presentation.add_oracle_line_indices(1);
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("{T}: Add {G}."));
+    // Lookup follows the loaded database, with no retained file or stale face snapshot.
+    cards.clear();
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
+    cards = readPresentationCards(R"(<cockatrice_carddatabase version="4"><cards><card><name>Forest</name>
+      <text>Ordinary display</text><ruled-oracle><face card-name="Forest" face-name="Forest">
+      <text>Changed external wording</text></face></ruled-oracle></card></cards></cockatrice_carddatabase>)");
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
+    presentation.set_oracle_text_sha256(RuledOracleText::textSha256("Changed external wording").toStdString());
+    EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("Changed external wording"));
+}
+
 TEST(RuledPresentationResolverTest, NormalizesLineEndingsWhitespaceHeadingsAndBullets)
 {
-    EXPECT_EQ(RuledOracleCache::normalizedText(
+    EXPECT_EQ(RuledOracleText::normalizedText(
                   QString::fromUtf8("  Choose two —\r\n\r\n • First mode  \r  • Second mode\n\t\nTail  ")),
               QString::fromUtf8("Choose two —\n• First mode\n• Second mode\nTail"));
 }
 
 TEST(RuledPresentationResolverTest, NormalizesMtgjsonBracketedLoyaltyLabelsForScryfallCompatibility)
 {
-    QTemporaryDir directory;
-    ASSERT_TRUE(directory.isValid());
-    const QString cardDatabasePath = directory.filePath(QStringLiteral("cards.xml"));
-    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(cardDatabasePath);
-    const QString mtgjsonText = QString::fromUtf8(
-        "Ninjutsu {1}{U}{B}\n"
-        "[+1]: You get an emblem.\n"
-        "[0]: Surveil 2.\n"
-        "[−2]: Tap target creature.");
-    const QString scryfallText = QString::fromUtf8(
-        "Ninjutsu {1}{U}{B}\n"
-        "+1: You get an emblem.\n"
-        "0: Surveil 2.\n"
-        "−2: Tap target creature.");
-    const QString legacySha = QString::fromLatin1(
-        QCryptographicHash::hash(mtgjsonText.toUtf8(), QCryptographicHash::Sha256).toHex());
-    const QJsonObject legacyCache{
-        {QStringLiteral("formatVersion"), 1},
-        {QStringLiteral("source"),
-         QJsonObject{{QStringLiteral("url"), QStringLiteral("https://example.test/AllPrintings.json")},
-                     {QStringLiteral("version"), QStringLiteral("snapshot-1")}}},
-        {QStringLiteral("faces"),
-         QJsonArray{QJsonObject{{QStringLiteral("cardName"), QStringLiteral("Kaito, Bane of Nightmares")},
-                                {QStringLiteral("faceName"), QStringLiteral("Kaito, Bane of Nightmares")},
-                                {QStringLiteral("oracleText"), mtgjsonText},
-                                {QStringLiteral("sha256"), legacySha}}}},
-    };
-    QFile cacheFile(cachePath);
-    ASSERT_TRUE(cacheFile.open(QIODevice::WriteOnly));
-    ASSERT_GT(cacheFile.write(QJsonDocument(legacyCache).toJson(QJsonDocument::Compact)), 0);
-    cacheFile.close();
-
-    RuledPresentationResolver resolver;
-    QString error;
-    ASSERT_TRUE(resolver.loadForCardDatabase(cardDatabasePath, &error)) << error.toStdString();
+    auto cards = readPresentationCards(R"(<cockatrice_carddatabase version="4"><cards><card>
+      <name>Kaito, Bane of Nightmares</name><ruled-oracle>
+      <face card-name="Kaito, Bane of Nightmares" face-name="Kaito, Bane of Nightmares"><text>Ninjutsu {1}{U}{B}
+[+1]: You get an emblem.
+[0]: Surveil 2.
+[−2]: Tap target creature.</text></face></ruled-oracle></card></cards></cockatrice_carddatabase>)");
+    RuledPresentationResolver resolver([&cards](const QString &name) { return cards.value(name); });
+    const QString scryfallText =
+        QString::fromUtf8("Ninjutsu {1}{U}{B}\n+1: You get an emblem.\n0: Surveil 2.\n−2: Tap target creature.");
     ruled::v1::PresentationRef presentation;
     presentation.set_external_card_name("Kaito, Bane of Nightmares");
     presentation.set_external_face_name("Kaito, Bane of Nightmares");
-    presentation.set_oracle_text_sha256(RuledOracleCache::textSha256(scryfallText).toStdString());
+    presentation.set_oracle_text_sha256(RuledOracleText::textSha256(scryfallText).toStdString());
     presentation.set_fallback_text("activated_02");
     presentation.add_oracle_line_indices(2);
-
-    EXPECT_EQ(RuledOracleCache::normalizedText(mtgjsonText), scryfallText);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("+1: You get an emblem."));
 }
 
-TEST(RuledPresentationResolverTest, SelectsExactSplitRoomAndTransformFaces)
+TEST(RuledPresentationResolverTest, SelectsExactSplitRoomAdventureAndTransformFaces)
 {
-    QTemporaryDir directory;
-    ASSERT_TRUE(directory.isValid());
-    const QString cardDatabasePath = directory.filePath(QStringLiteral("cards.xml"));
-    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(cardDatabasePath);
-    const QList<RuledOracleFace> faces{
+    const QList<RuledOracleTextFace> faces{
         {QStringLiteral("Fire // Ice"), QStringLiteral("Fire"), QStringLiteral("Fire deals 2 damage.")},
         {QStringLiteral("Fire // Ice"), QStringLiteral("Ice"), QStringLiteral("Tap target permanent.\nDraw a card.")},
         {QStringLiteral("Derelict Attic // Widow's Walk"), QStringLiteral("Derelict Attic"),
-         QStringLiteral("When you unlock this door, draw two cards, then lose 2 life.")},
+         QStringLiteral("Door text")},
         {QStringLiteral("Brutal Cathar // Moonrage Brute"), QStringLiteral("Moonrage Brute"),
          QStringLiteral("First strike\nWard—Pay 3 life.")},
+        {QStringLiteral("Beanstalk Giant // Fertile Footsteps"), QStringLiteral("Fertile Footsteps"),
+         QStringLiteral("Adventure text")},
+        {QStringLiteral("Æther Adept"), QStringLiteral("Æther Adept"), QStringLiteral("Adept text")},
     };
-    QString error;
-    ASSERT_TRUE(RuledOracleCache::writeAtomic(cachePath, QStringLiteral("https://example.test/source"),
-                                              QStringLiteral("snapshot-1"), faces, &error))
-        << error.toStdString();
-    RuledPresentationResolver resolver;
-    ASSERT_TRUE(resolver.loadForCardDatabase(cardDatabasePath, &error)) << error.toStdString();
-
-    const auto resolveFace = [&](const QString &card, const QString &face, std::initializer_list<quint32> lines) {
-        const auto found = std::find_if(faces.begin(), faces.end(), [&](const RuledOracleFace &candidate) {
-            return candidate.cardName == card && candidate.faceName == face;
-        });
-        EXPECT_NE(found, faces.end());
-        ruled::v1::PresentationRef presentation;
-        presentation.set_external_card_name(card.toStdString());
-        presentation.set_external_face_name(face.toStdString());
-        presentation.set_oracle_text_sha256(RuledOracleCache::textSha256(found->oracleText).toStdString());
-        presentation.set_fallback_text("fallback");
-        for (const quint32 line : lines) {
-            presentation.add_oracle_line_indices(line);
+    CardNameMap cards;
+    for (const auto &face : faces) {
+        QString name = face.cardName;
+        if (face.faceName == QStringLiteral("Moonrage Brute")) {
+            name = face.faceName;
         }
-        return resolver.resolve(presentation);
-    };
-
-    EXPECT_EQ(resolveFace(QStringLiteral("Fire // Ice"), QStringLiteral("Ice"), {1, 2}),
-              QStringLiteral("Tap target permanent.\nDraw a card."));
-    EXPECT_EQ(resolveFace(QStringLiteral("Derelict Attic // Widow's Walk"), QStringLiteral("Derelict Attic"), {1}),
-              QStringLiteral("When you unlock this door, draw two cards, then lose 2 life."));
-    EXPECT_EQ(resolveFace(QStringLiteral("Brutal Cathar // Moonrage Brute"), QStringLiteral("Moonrage Brute"), {2}),
-              QString::fromUtf8("Ward—Pay 3 life."));
+        name.replace(QStringLiteral("Æ"), QStringLiteral("AE"));
+        if (!cards.contains(name)) {
+            cards.insert(name, CardInfo::newInstance(name));
+        }
+        cards.value(name)->ruled().addFace(face.cardName, face.faceName, face.oracleText);
+    }
+    RuledPresentationResolver resolver([&cards](const QString &name) { return cards.value(name); });
+    for (const auto &face : faces) {
+        ruled::v1::PresentationRef presentation;
+        presentation.set_external_card_name(face.cardName.toStdString());
+        presentation.set_external_face_name(face.faceName.toStdString());
+        presentation.set_oracle_text_sha256(RuledOracleText::textSha256(face.oracleText).toStdString());
+        presentation.set_fallback_text("fallback");
+        presentation.add_oracle_line_indices(1);
+        EXPECT_EQ(resolver.resolve(presentation), face.oracleText.split('\n').first());
+        presentation.set_external_face_name("Wrong face");
+        EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("fallback"));
+    }
 }
 
-TEST(RuledPresentationResolverTest, RejectsMissingCorruptIncompatibleAndIncompleteCachesAsOneUnit)
+TEST(RuledPresentationResolverTest, RejectsMissingMalformedIncompatibleAndIncompleteFacesAsOneUnit)
 {
-    QTemporaryDir directory;
-    ASSERT_TRUE(directory.isValid());
-    const QString cardDatabasePath = directory.filePath(QStringLiteral("cards.xml"));
-    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(cardDatabasePath);
-    const QString text = QStringLiteral("One\nTwo");
-    QString error;
-    ASSERT_TRUE(RuledOracleCache::writeAtomic(
-        cachePath, QStringLiteral("https://example.test/source"), QStringLiteral("snapshot-1"),
-        {{QStringLiteral("Card"), QStringLiteral("Face"), text}}, &error));
-    RuledPresentationResolver resolver;
-    ASSERT_TRUE(resolver.loadForCardDatabase(cardDatabasePath, &error));
-
+    auto cards = readPresentationCards(R"(<cockatrice_carddatabase version="4"><cards><card><name>Card</name>
+      <ruled-oracle><face card-name="Card" face-name="Face"><text>One
+Two</text></face></ruled-oracle></card></cards></cockatrice_carddatabase>)");
+    RuledPresentationResolver resolver([&cards](const QString &name) { return cards.value(name); });
     ruled::v1::PresentationRef presentation;
     presentation.set_external_card_name("Missing");
     presentation.set_external_face_name("Face");
-    presentation.set_oracle_text_sha256(RuledOracleCache::textSha256(text).toStdString());
+    presentation.set_oracle_text_sha256(RuledOracleText::textSha256("One\nTwo").toStdString());
     presentation.set_fallback_text("whole fallback");
     presentation.add_oracle_line_indices(1);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
-
     presentation.set_external_card_name("Card");
     presentation.set_external_face_name("Missing");
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
     presentation.set_external_face_name("Face");
     presentation.set_oracle_text_sha256(std::string(64, 'f'));
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
-    presentation.set_oracle_text_sha256(RuledOracleCache::textSha256(text).toStdString());
+    presentation.set_oracle_text_sha256(RuledOracleText::textSha256("One\nTwo").toStdString());
     presentation.set_oracle_line_indices(0, 0);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
     presentation.set_oracle_line_indices(0, 1);
     presentation.add_oracle_line_indices(3);
     EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
-
-    QFile corrupt(cachePath);
-    ASSERT_TRUE(corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    ASSERT_EQ(corrupt.write("{not-json"), 9);
-    corrupt.close();
-    RuledPresentationResolver corruptResolver;
-    EXPECT_FALSE(corruptResolver.loadForCardDatabase(cardDatabasePath, &error));
-    EXPECT_EQ(corruptResolver.resolve(presentation), QStringLiteral("whole fallback"));
-    RuledPresentationResolver missingResolver;
-    EXPECT_FALSE(missingResolver.loadForCardDatabase(directory.filePath(QStringLiteral("missing.xml")), &error));
-    EXPECT_EQ(missingResolver.resolve(presentation), QStringLiteral("whole fallback"));
-}
-
-TEST(RuledPresentationResolverTest, AtomicCacheRefreshRetainsProvenanceAndWorksOffline)
-{
-    QTemporaryDir directory;
-    ASSERT_TRUE(directory.isValid());
-    const QString cardDatabasePath = directory.filePath(QStringLiteral("cards.xml"));
-    const QString cachePath = RuledOracleCache::cachePathForCardDatabase(cardDatabasePath);
-    QString error;
-    ASSERT_TRUE(RuledOracleCache::writeAtomic(
-        cachePath, QStringLiteral("https://example.test/source"), QStringLiteral("snapshot-1"),
-        {{QStringLiteral("Card"), QStringLiteral("Face"), QStringLiteral("Offline text")}}, &error));
-    RuledOracleCache offline;
-    ASSERT_TRUE(offline.load(cachePath, &error));
-    EXPECT_EQ(offline.sourceUrl(), QStringLiteral("https://example.test/source"));
-    EXPECT_EQ(offline.sourceVersion(), QStringLiteral("snapshot-1"));
-    EXPECT_EQ(offline.compatibleFaceText(QStringLiteral("Card"), QStringLiteral("Face"),
-                                         RuledOracleCache::textSha256(QStringLiteral("Offline text"))),
-              QStringLiteral("Offline text"));
-
-    ASSERT_TRUE(RuledOracleCache::writeAtomic(
-        cachePath, QStringLiteral("https://example.test/source"), QStringLiteral("snapshot-2"),
-        {{QStringLiteral("Card"), QStringLiteral("Face"), QStringLiteral("Longer refreshed offline text")}},
-        &error));
-    ASSERT_TRUE(offline.load(cachePath, &error));
-    EXPECT_EQ(offline.sourceVersion(), QStringLiteral("snapshot-2"));
-    EXPECT_EQ(QDir(directory.path()).entryList({QStringLiteral("cards.ruled-oracle.json*")}, QDir::Files).size(), 1);
+    presentation.clear_oracle_line_indices();
+    presentation.add_oracle_line_indices(1);
+    for (const QByteArray &block :
+         {QByteArray(""), QByteArray(R"(<ruled-oracle><face card-name="Card"><text>One</text></face></ruled-oracle>)"),
+          QByteArray(R"(<ruled-oracle><face card-name="Card" face-name="Face"><text>One</text></face>
+               <face card-name="Card" face-name="Face"><text>One</text></face></ruled-oracle>)"),
+          QByteArray(R"(<ruled-oracle><face card-name="Card" face-name="Face"/></ruled-oracle>)")}) {
+        cards = readPresentationCards("<cockatrice_carddatabase version=\"4\"><cards><card><name>Card</name>"
+                                      "<text>One</text>" +
+                                      block + "</card></cards></cockatrice_carddatabase>");
+        presentation.set_oracle_text_sha256(RuledOracleText::textSha256("One").toStdString());
+        EXPECT_EQ(resolver.resolve(presentation), QStringLiteral("whole fallback"));
+    }
 }
 
 TEST(RuledPendingTargetTest, SpellPromptUsesCardNameWithEngineGuidance)
@@ -3518,6 +3480,38 @@ TEST_F(RuledClientTest, BattlefieldAbilityIndicesPreserveAuthoredZoneGaps)
     EXPECT_EQ(state->activatedAbilityMenuLabel(203, 2), QStringLiteral("0: Surveil 2."));
     EXPECT_EQ(state->activatedAbilityMenuLabel(203, 3), QStringLiteral("-2: Tap target creature."));
     EXPECT_TRUE(state->activatedAbilityMenuLabel(203, 0).isEmpty());
+}
+
+TEST_F(RuledClientTest, DatabaseOracleTextReachesAbilityMenusAndTracksDatabaseReload)
+{
+    host.presentationCards = readPresentationCards(R"(<cockatrice_carddatabase version="4"><cards><card>
+      <name>Prodigal Sorcerer</name><text>Ordinary card display</text><ruled-oracle>
+      <face card-name="Prodigal Sorcerer" face-name="Prodigal Sorcerer">
+      <text>{T}: Prodigal Sorcerer deals 1 damage to any target.</text></face>
+      </ruled-oracle></card></cards></cockatrice_carddatabase>)");
+    const QString text = QStringLiteral("{T}: Prodigal Sorcerer deals 1 damage to any target.");
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(kLocalPlayer);
+    auto *object = view->add_battlefield_objects();
+    object->set_object_id(203);
+    auto *ability = object->add_activated_abilities();
+    ability->set_ability_index(0);
+    ability->set_text("Legacy fallback");
+    ability->set_activatable(true);
+    auto *presentation = ability->mutable_presentation();
+    presentation->set_external_card_name("Prodigal Sorcerer");
+    presentation->set_external_face_name("Prodigal Sorcerer");
+    presentation->set_oracle_text_sha256(RuledOracleText::textSha256(text).toStdString());
+    presentation->add_oracle_line_indices(1);
+    presentation->set_fallback_text("Prodigal Sorcerer — activated ability (activated_01)");
+    apply(batch);
+    EXPECT_EQ(state->activatedAbilityMenuLabel(203, 0), text);
+    EXPECT_TRUE(state->abilityActivatable(203, 0));
+    host.presentationCards.clear();
+    apply(batch);
+    EXPECT_EQ(state->activatedAbilityMenuLabel(203, 0), QString::fromStdString(presentation->fallback_text()));
+    EXPECT_TRUE(state->abilityActivatable(203, 0));
 }
 
 TEST_F(RuledClientTest, AbilityDecodingPreservesSparseSlotsAndPresentationAcrossSourceZones)

@@ -172,9 +172,9 @@ int GameEventHandler::currentActivePlayerId() const
     return game->getGameState()->getActivePlayer();
 }
 
-QString GameEventHandler::cardDatabasePath() const
+CardInfoPtr GameEventHandler::presentationCard(const QString &name) const
 {
-    return SettingsCache::instance().getCardDatabasePath();
+    return CardDatabaseManager::query()->getCardInfo(name);
 }
 
 void GameEventHandler::setActivePlayerId(int playerId)

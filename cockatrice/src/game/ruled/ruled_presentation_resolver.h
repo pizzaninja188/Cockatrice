@@ -2,8 +2,8 @@
 #define COCKATRICE_RULED_PRESENTATION_RESOLVER_H
 
 #include <QString>
-#include <QDateTime>
-#include <libcockatrice/card/ruled_oracle_cache.h>
+#include <functional>
+#include <libcockatrice/card/card_info.h>
 
 namespace ruled::v1
 {
@@ -13,15 +13,14 @@ class PresentationRef;
 class RuledPresentationResolver
 {
 public:
-    bool loadForCardDatabase(const QString &cardDatabasePath, QString *error = nullptr);
-    void refreshForCardDatabase(const QString &cardDatabasePath);
+    using CardLookup = std::function<CardInfoPtr(const QString &)>;
+    explicit RuledPresentationResolver(CardLookup lookup = {}) : lookup(std::move(lookup))
+    {
+    }
     QString resolve(const ruled::v1::PresentationRef &presentation) const;
 
 private:
-    RuledOracleCache cache;
-    QString loadedCachePath;
-    QDateTime loadedLastModified;
-    qint64 loadedSize = -1;
+    CardLookup lookup;
 };
 
 #endif

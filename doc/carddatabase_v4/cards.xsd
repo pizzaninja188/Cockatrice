@@ -43,6 +43,21 @@
         <xs:sequence>
             <xs:element type="xs:string" name="name" minOccurs="1"/>
             <xs:element type="xs:string" name="text" minOccurs="0" maxOccurs="1" />
+            <xs:element name="ruled-oracle" minOccurs="0" maxOccurs="1">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="face" minOccurs="1" maxOccurs="unbounded">
+                            <xs:complexType>
+                                <xs:sequence>
+                                    <xs:element type="xs:string" name="text" />
+                                </xs:sequence>
+                                <xs:attribute type="xs:string" name="card-name" use="required" />
+                                <xs:attribute type="xs:string" name="face-name" use="required" />
+                            </xs:complexType>
+                        </xs:element>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
             <xs:element name="prop" minOccurs="0" maxOccurs="1">
                 <xs:complexType>
                     <xs:group ref="cardPropertyGroup"/>

@@ -163,7 +163,7 @@ does not require its own presentation mapping.
 ### Token and state-marker display prerequisites
 
 Ruled-created token and state-marker artwork/details use the client's separately imported
-Magic-Token database, normally `tokens.xml`. Updating `cards.xml`, the ruled Oracle cache, or
+Magic-Token database, normally `tokens.xml`. Updating `cards.xml` (including its ruled face text) or
 engine RON does not refresh that database.
 
 For a blank or incorrect token display:
@@ -228,7 +228,7 @@ Example normalized text:
   implemented by multiple typed nodes.
 
 `OracleLines` is all-or-fallback. If any selected line, face identity, fingerprint, or external
-cache input is invalid, clients display the supplied deterministic fallback rather than a partial
+database face text is invalid, clients display the supplied deterministic fallback rather than a partial
 selection.
 
 ### Use `Fallback` deliberately

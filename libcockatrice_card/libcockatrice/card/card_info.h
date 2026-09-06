@@ -3,6 +3,7 @@
 
 #include "format/format_legality_rules.h"
 #include "printing/printing_info.h"
+#include "ruled_oracle_text.h"
 
 #include <QDate>
 #include <QHash>
@@ -73,6 +74,7 @@ private:
     QString name;                                  ///< Full name of the card.
     QString simpleName;                            ///< Simplified name for fuzzy matching.
     QString text;                                  ///< Text description or rules text of the card.
+    QSharedPointer<RuledOracleText> ruledOracle = QSharedPointer<RuledOracleText>::create();
     bool isToken;                                  ///< Whether this card is a token or not.
     QVariantHash properties;                       ///< Key-value store of dynamic card properties.
     QList<CardRelation *> relatedCards;            ///< Forward references to related cards.
@@ -85,6 +87,14 @@ private:
     ///@}
 
 public:
+    RuledOracleText &ruled()
+    {
+        return *ruledOracle;
+    }
+    const RuledOracleText &ruled() const
+    {
+        return *ruledOracle;
+    }
     /**
      * @brief Constructs a CardInfo with full initialization.
      *
@@ -115,7 +125,8 @@ public:
      */
     CardInfo(const CardInfo &other)
         : QObject(other.parent()), name(other.name), simpleName(other.simpleName), text(other.text),
-          isToken(other.isToken), properties(other.properties), relatedCards(other.relatedCards),
+          ruledOracle(QSharedPointer<RuledOracleText>::create(*other.ruledOracle)), isToken(other.isToken),
+          properties(other.properties), relatedCards(other.relatedCards),
           reverseRelatedCards(other.reverseRelatedCards), reverseRelatedCardsToMe(other.reverseRelatedCardsToMe),
           setsToPrintings(other.setsToPrintings), uiAttributes(other.uiAttributes), setsNames(other.setsNames),
           altNames(other.altNames)

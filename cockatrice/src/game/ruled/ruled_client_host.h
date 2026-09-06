@@ -18,6 +18,7 @@
 #include <QVector>
 #include <QtGlobal>
 #include <functional>
+#include <libcockatrice/card/card_info.h>
 #include <optional>
 
 namespace ruled::v1
@@ -66,8 +67,8 @@ public:
     [[nodiscard]] virtual bool fallbackCreaturePt(quint32 engineOid, int *power, int *toughness) const = 0;
     /// Display name of a battlefield permanent, for prompt text. Empty when unresolvable.
     [[nodiscard]] virtual QString battlefieldCardName(quint32 engineOid) const = 0;
-    /// Active cards.xml path; the presentation resolver watches the adjacent external cache.
-    [[nodiscard]] virtual QString cardDatabasePath() const
+    /// Presentation-only lookup in the currently loaded card database.
+    [[nodiscard]] virtual CardInfoPtr presentationCard(const QString &) const
     {
         return {};
     }

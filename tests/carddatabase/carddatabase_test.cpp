@@ -2,11 +2,53 @@
 #include "test_card_database_path_provider.h"
 
 #include "gtest/gtest.h"
+#include <QBuffer>
+#include <QFile>
+#include <QTemporaryDir>
+#include <libcockatrice/card/database/parser/cockatrice_xml_4.h>
 #include <libcockatrice/interfaces/noop_card_preference_provider.h>
 #include <libcockatrice/interfaces/noop_card_set_priority_controller.h>
 
 namespace
 {
+
+TEST(CardDatabaseTest, PreservesOracleFacesThroughXmlRoundTrip)
+{
+    QByteArray source = R"(<cockatrice_carddatabase version="4"><cards><card>
+      <name>Fire // Ice</name><text>Combined display text</text>
+      <ruled-oracle><face card-name="Fire // Ice" face-name="Fire"><text>First face</text></face>
+      <face card-name="Fire // Ice" face-name="Ice"><text>Second face</text></face></ruled-oracle>
+      </card></cards></cockatrice_carddatabase>)";
+    QBuffer input(&source);
+    ASSERT_TRUE(input.open(QIODevice::ReadOnly));
+    NoopCardPreferenceProvider preferences;
+    NoopCardSetPriorityController priorities;
+    CockatriceXml4Parser parser(&preferences, &priorities);
+    CardNameMap cards;
+    QObject::connect(&parser, &ICardDatabaseParser::addCard, [&cards](CardInfoPtr card) {
+        cards.insert(card->getName(), card->clone());
+        card->ruled().addFace("Fire // Ice", "Fire", "Changed after cloning");
+    });
+    parser.parseFile(input);
+    ASSERT_EQ(cards.size(), 1);
+    EXPECT_EQ(cards.value("Fire // Ice")->getText(), QStringLiteral("Combined display text"));
+    QTemporaryDir directory;
+    const QString path = directory.filePath("cards.xml");
+    ASSERT_TRUE(parser.saveToFile({}, {}, cards, path));
+    QFile output(path);
+    ASSERT_TRUE(output.open(QIODevice::ReadOnly));
+    const QByteArray saved = output.readAll();
+    EXPECT_TRUE(saved.contains("face-name=\"Fire\""));
+    EXPECT_TRUE(saved.contains("face-name=\"Ice\""));
+    EXPECT_TRUE(saved.contains("First face"));
+    EXPECT_TRUE(saved.contains("Second face"));
+    output.seek(0);
+    parser.parseFile(output);
+    EXPECT_EQ(cards.value("Fire // Ice")
+                  ->ruled()
+                  .compatibleFaceText("Fire // Ice", "Ice", RuledOracleText::textSha256("Second face")),
+              QStringLiteral("Second face"));
+}
 
 TEST(CardDatabaseTest, LoadXml)
 {

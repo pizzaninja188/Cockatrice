@@ -171,6 +171,9 @@ if(ORACLE_WITH_LIBLZMA)
   endif()
 endif()
 
+include("${CMAKE_SOURCE_DIR}/cmake/DeployQtRuntime.cmake")
+deploy_qt_runtime(oracle)
+
 # ------------------------
 # Install rules
 # ------------------------
