@@ -530,7 +530,14 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
 
     for (const auto &e : batch.events()) {
         if (e.has_log()) {
-            const QString logLine = QString::fromStdString(e.log().text()).trimmed();
+            QString logLine = QString::fromStdString(e.log().text());
+            if (e.log().has_ability_presentation() && e.log().ability_presentation().has_ability()) {
+                const auto &presentation = e.log().ability_presentation();
+                logLine = QString::fromStdString(presentation.prefix()) +
+                          presentationResolver.resolve(presentation.ability()) +
+                          QString::fromStdString(presentation.suffix());
+            }
+            logLine = logLine.trimmed();
             if (!logLine.isEmpty()) {
                 ctx.timeline += logLine + QLatin1Char('\n');
             }

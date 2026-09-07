@@ -329,6 +329,7 @@ impl<'a> ResolutionCtx<'a> {
                 text: text.into(),
                 visible_to_player_id: None,
                 hidden_from_player_id: None,
+                ability_presentation: None,
             })),
         });
     }

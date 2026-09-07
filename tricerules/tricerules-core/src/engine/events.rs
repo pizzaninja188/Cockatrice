@@ -818,6 +818,28 @@ pub(super) fn ev_log(text: String) -> RuledEvent {
             text,
             visible_to_player_id: None,
             hidden_from_player_id: None,
+            ability_presentation: None,
+        })),
+    }
+}
+
+/// Keep the engine's complete fallback while allowing the client to resolve the ability text.
+pub(super) fn ev_log_ability(
+    prefix: String,
+    fallback: &str,
+    ability: Option<rv1::PresentationRef>,
+    suffix: String,
+) -> RuledEvent {
+    RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::Log(rv1::LogMessage {
+            text: format!("{prefix}{fallback}{suffix}"),
+            ability_presentation: ability.map(|ability| rv1::AbilityLogPresentation {
+                prefix,
+                ability: Some(ability),
+                suffix,
+            }),
+            visible_to_player_id: None,
+            hidden_from_player_id: None,
         })),
     }
 }
@@ -828,6 +850,7 @@ pub(super) fn ev_log_private(text: String, player_id: i32) -> RuledEvent {
             text,
             visible_to_player_id: Some(player_id),
             hidden_from_player_id: None,
+            ability_presentation: None,
         })),
     }
 }
@@ -838,6 +861,7 @@ pub(super) fn ev_log_hidden_from(text: String, player_id: i32) -> RuledEvent {
             text,
             visible_to_player_id: None,
             hidden_from_player_id: Some(player_id),
+            ability_presentation: None,
         })),
     }
 }

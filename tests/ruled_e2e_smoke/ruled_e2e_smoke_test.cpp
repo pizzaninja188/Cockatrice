@@ -521,6 +521,8 @@ public:
     bool sawLibraryPermanentMoved = false;
     bool sawLibraryTargetAbsentFromBattlefield = false;
     bool sawTopPermanentDrawn = false;
+    bool sawActivatedLogPresentation = false;
+    bool sawTriggeredLogPresentation = false;
     bool devEvolvingWildsSent = false;
     bool evolvingWildsActivated = false;
     bool sawOwnLibrarySearchCandidates = false;
@@ -1758,6 +1760,15 @@ public:
                     myPool.c = mp.c();
                 }
             } else if (ev.has_log()) {
+                if (ev.log().has_ability_presentation()) {
+                    const auto &presentation = ev.log().ability_presentation();
+                    if (presentation.has_ability() && presentation.ability().oracle_line_indices_size() > 0) {
+                        sawActivatedLogPresentation = sawActivatedLogPresentation ||
+                            presentation.ability().card_id() == "evolving_wilds";
+                        sawTriggeredLogPresentation = sawTriggeredLogPresentation ||
+                            presentation.prefix().starts_with("Triggered: ");
+                    }
+                }
                 const QString text = QString::fromStdString(ev.log().text());
                 if (text == QStringLiteral("Combat damage dealt.")) {
                     batchCombatDamage = true;
@@ -4232,6 +4243,8 @@ TEST_F(RuledE2ESmokeTest, FullSeededGame)
                p2.sawLibraryPermanentMoved && p1.sawLibraryTargetAbsentFromBattlefield &&
                p2.sawLibraryTargetAbsentFromBattlefield && p2.sawTopPermanentDrawn &&
                p1.sawOwnLibrarySearchCandidates && p2.sawOpponentLibrarySearchRedacted &&
+               p1.sawActivatedLogPresentation && p2.sawActivatedLogPresentation &&
+               p1.sawTriggeredLogPresentation && p2.sawTriggeredLogPresentation &&
                p1.submittedEvolvingWildsChoice && p1.sawEvolvingWildsPermanentMoved &&
                p2.sawEvolvingWildsPermanentMoved && p1.sawEvolvingWildsPhysicalDeckToTable &&
                p2.sawEvolvingWildsPhysicalDeckToTable && p1.sawZoneScopeChoice && p1.submittedZoneScopeChoice &&

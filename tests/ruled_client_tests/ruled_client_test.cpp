@@ -6871,3 +6871,40 @@ TEST(RuledDiagnostics, CapturesLocalStagingAndLosslessIdentityWithoutChangingSta
     EXPECT_EQ(state.payment.diagnosticSnapshot().value("transactionId").toString(),
               QString::number(state.payment.transaction()));
 }
+
+TEST_F(RuledClientTest, AbilityLogResolvesOracleTextAndPreservesFallbackAndSurroundingText)
+{
+    host.presentationCards = readPresentationCards(R"(<cockatrice_carddatabase version="4"><cards><card>
+      <name>Spyglass Siren</name><text>Ordinary display</text><ruled-oracle>
+      <face card-name="Spyglass Siren" face-name="Spyglass Siren"><text>Flying
+When Spyglass Siren enters, create a Map token.</text></face>
+      </ruled-oracle></card></cards></cockatrice_carddatabase>)");
+    const QString oracle = QStringLiteral("Flying\nWhen Spyglass Siren enters, create a Map token.");
+    ruled::v1::RuledEventBatch batch;
+    auto *log = batch.add_events()->mutable_log();
+    log->set_text("Complete engine fallback");
+    auto *rendered = log->mutable_ability_presentation();
+    rendered->set_prefix("Triggered: Spyglass Siren - ");
+    rendered->set_suffix(" [target retained]");
+    auto *ability = rendered->mutable_ability();
+    ability->set_external_card_name("Spyglass Siren");
+    ability->set_external_face_name("Spyglass Siren");
+    ability->set_oracle_text_sha256(RuledOracleText::textSha256(oracle).toStdString());
+    ability->add_oracle_line_indices(2);
+    ability->set_fallback_text("Siren fallback ability");
+    QSignalSpy timeline(state, &RuledClientState::engineTimeline);
+    apply(batch);
+    ASSERT_EQ(timeline.count(), 1);
+    EXPECT_EQ(timeline.last().at(0).toString(), QStringLiteral(
+        "Triggered: Spyglass Siren - When Spyglass Siren enters, create a Map token. [target retained]\n"));
+    host.presentationCards.clear();
+    apply(batch);
+    EXPECT_EQ(timeline.last().at(0).toString(),
+              QStringLiteral("Triggered: Spyglass Siren - Siren fallback ability [target retained]\n"));
+    rendered->clear_ability();
+    apply(batch);
+    EXPECT_EQ(timeline.last().at(0).toString(), QStringLiteral("Complete engine fallback\n"));
+    log->clear_ability_presentation();
+    apply(batch);
+    EXPECT_EQ(timeline.last().at(0).toString(), QStringLiteral("Complete engine fallback\n"));
+}

@@ -1813,6 +1813,15 @@ message LogMessage {
   optional int32 visible_to_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
   // If set, the relay drops this message for that player and delivers it to everyone else.
   optional int32 hidden_from_player_id = 3 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  // Triggered and activated ability logs resolve the same text as their stack/menu presentation.
+  // `text` remains the complete deterministic fallback. Routing applies to the entire message.
+  AbilityLogPresentation ability_presentation = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message AbilityLogPresentation {
+  string prefix = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  PresentationRef ability = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  string suffix = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // A permanent left the battlefield (currently only graveyard via SBAs / destroy effects).

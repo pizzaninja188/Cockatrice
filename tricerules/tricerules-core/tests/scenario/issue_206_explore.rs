@@ -7,7 +7,7 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::{CardRegistry, CounterKind};
 use tricerules_core::{AffectedScope, ContinuousEffect, TurnStep, Zone};
-use tricerules_proto::ruled::v1::{permanent_moved, ChoiceKind};
+use tricerules_proto::ruled::v1::{permanent_moved, ruled_event, ChoiceKind};
 
 fn put_on_top(engine: &mut GameEngine, player: usize, card_id: &str) -> u32 {
     let object_id = inject_library_card(engine, player, card_id);
@@ -254,7 +254,28 @@ fn issue_206_spyglass_siren_creates_a_map_whose_atomic_activation_explores() {
     engine
         .apply_command(0, &cast_spell(slot, vec![]))
         .expect("cast Spyglass Siren");
-    pass_both_players(&mut engine);
+    engine.apply_command(0, &pass()).expect("first pass");
+    let batch = engine.apply_command(1, &pass()).expect("resolve Siren");
+    let log = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(ruled_event::Ev::Log(log))
+                if log.text.starts_with("Triggered: Spyglass Siren") =>
+            {
+                Some(log)
+            }
+            _ => None,
+        })
+        .expect("Siren trigger log");
+    let presentation = log
+        .ability_presentation
+        .as_ref()
+        .expect("trigger log must carry Oracle presentation");
+    assert_eq!(presentation.prefix, "Triggered: Spyglass Siren — ");
+    let ability = presentation.ability.as_ref().expect("ability reference");
+    assert_eq!(ability.external_card_name, "Spyglass Siren");
+    assert_eq!(ability.oracle_line_indices, vec![2]);
     let siren = battlefield_object_for_card(&engine, 0, "spyglass_siren");
     assert!(engine
         .state

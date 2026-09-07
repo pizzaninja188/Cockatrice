@@ -321,3 +321,6 @@ mod untap;
 mod x_multi_target;
 #[path = "scenario/zone_view.rs"]
 mod zone_view;
+
+#[path = "scenario/ability_logs.rs"]
+mod ability_logs;

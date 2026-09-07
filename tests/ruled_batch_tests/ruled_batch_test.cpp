@@ -4577,3 +4577,36 @@ TEST_F(RuledBatchTest, DiagnosticEmblemsRetainRuntimeMarkerIdentity)
     EXPECT_EQ(marker.value("server_card_id").toInt(), 7);
     EXPECT_FALSE(marker.contains("engine_object_id"));
 }
+
+TEST_F(RuledBatchTest, AbilityLogPresentationFollowsWholeMessageRecipientRouting)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto addLog = [&](const char *prefix) {
+        auto *log = batch.add_events()->mutable_log();
+        log->set_text("Fallback");
+        auto *presentation = log->mutable_ability_presentation();
+        presentation->set_prefix(prefix);
+        presentation->mutable_ability()->set_external_card_name("Spyglass Siren");
+        presentation->mutable_ability()->set_fallback_text("Ability fallback");
+        presentation->set_suffix("suffix");
+        return log;
+    };
+    addLog("public");
+    addLog("private")->set_visible_to_player_id(1);
+    addLog("hidden")->set_hidden_from_player_id(1);
+    for (auto *recipient : {p1, p2}) {
+        const auto filtered = redactFor(batch, recipient);
+        ASSERT_EQ(filtered.events_size(), 2);
+        for (const auto &event : filtered.events()) {
+            ASSERT_TRUE(event.has_log());
+            const auto &log = event.log();
+            ASSERT_TRUE(log.has_ability_presentation());
+            EXPECT_EQ(log.ability_presentation().ability().external_card_name(), "Spyglass Siren");
+            EXPECT_EQ(log.ability_presentation().suffix(), "suffix");
+            EXPECT_FALSE(log.has_visible_to_player_id());
+            EXPECT_FALSE(log.has_hidden_from_player_id());
+        }
+        EXPECT_EQ(filtered.events(0).log().ability_presentation().prefix(), "public");
+        EXPECT_EQ(filtered.events(1).log().ability_presentation().prefix(), recipient == p1 ? "private" : "hidden");
+    }
+}

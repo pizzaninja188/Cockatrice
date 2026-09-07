@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::events::ev_log_ability;
 use crate::engine::presentation::{child_presentation_ref, PresentationPath};
 
 impl GameEngine {
@@ -26,10 +27,12 @@ impl GameEngine {
                 return Err(EngineError::Illegal("trigger is not optional"));
             }
             let mut batch = RuledEventBatch::default();
-            batch.events.push(ev_log(format!(
-                "P{player} declines optional trigger: {}",
-                pending.ability_text
-            )));
+            batch.events.push(ev_log_ability(
+                format!("P{player} declines optional trigger: "),
+                &pending.ability_text,
+                pending.presentation.clone(),
+                String::new(),
+            ));
             self.resume_trigger_placement(&mut batch);
             fill_legal(&mut batch, self);
             return Ok(batch);

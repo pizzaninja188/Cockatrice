@@ -501,7 +501,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
         ownLegalActions.CopyFrom(ownLegalIt->second);
         hasOwnLegalActions = true;
     }
-    QHash<int, QString> routedLogText;
+    QHash<int, ruled::v1::LogMessage> routedLogs;
     QHash<int, ruled::v1::ResolutionChoiceRequired> routedChoices;
     QHash<int, ruled::v1::TriggerNeedsTarget> routedTriggerChoices;
     QHash<int, ruled::v1::HandSlotMap> ownHandSlotMaps;
@@ -509,7 +509,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
     for (int ei = 0; ei < filtered.events_size(); ++ei) {
         const auto &event = filtered.events(ei);
         if (event.has_log()) {
-            routedLogText.insert(ei, QString::fromStdString(event.log().text()));
+            routedLogs.insert(ei, event.log());
         } else if (event.has_resolution_choice_required()) {
             routedChoices.insert(ei, event.resolution_choice_required());
         } else if (event.has_trigger_needs_target() &&
@@ -526,8 +526,12 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
     if (hasOwnLegalActions) {
         (*filtered.mutable_legal_by_player())[participant->getPlayerId()] = ownLegalActions;
     }
-    for (auto logIt = routedLogText.constBegin(); logIt != routedLogText.constEnd(); ++logIt) {
-        filtered.mutable_events(logIt.key())->mutable_log()->set_text(logIt.value().toStdString());
+    for (auto logIt = routedLogs.constBegin(); logIt != routedLogs.constEnd(); ++logIt) {
+        auto *log = filtered.mutable_events(logIt.key())->mutable_log();
+        log->set_text(logIt.value().text());
+        if (logIt.value().has_ability_presentation()) {
+            log->mutable_ability_presentation()->CopyFrom(logIt.value().ability_presentation());
+        }
     }
     for (auto choiceIt = routedChoices.constBegin(); choiceIt != routedChoices.constEnd(); ++choiceIt) {
         auto *choice = filtered.mutable_events(choiceIt.key())->mutable_resolution_choice_required();

@@ -12,6 +12,7 @@ use super::targeting::{
     validate_spell_targets, TargetSourceIdentity,
 };
 use super::*;
+use crate::engine::events::ev_log_ability;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum LimitedActivationUse {
@@ -1494,9 +1495,12 @@ impl GameEngine {
         let tgt_line = format_spell_targets_log(&self.state, self.registry, &trefs);
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
         let mut batch = RuledEventBatch::default();
-        batch.events.push(ev_log(format!(
-            "P{player} activates {card_name}{paid_costs_line}: {ability_text}{tgt_line}"
-        )));
+        batch.events.push(ev_log_ability(
+            format!("P{player} activates {card_name}{paid_costs_line}: "),
+            &ability_text,
+            Some(primary_presentation.clone()),
+            tgt_line,
+        ));
         if payment.life_paid > 0 {
             batch.events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
@@ -1887,6 +1891,19 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("invalid mana option"))?;
         let activation_uses = self.limited_activation_uses(permanent_id, ability_index, ability);
 
+        let face_index = self.state.objects[&permanent_id].face_up_index;
+        let definition = self.ability_definition(permanent_id, face_index, ability_path.to_vec());
+        let face_name = self
+            .effective_face(permanent_id)
+            .map(|face| face.name.clone())
+            .unwrap_or_else(|| card_id.to_owned());
+        let primary_presentation = ability_presentation(
+            self.registry,
+            &definition,
+            &ability.presentation,
+            ability.fallback_text_with_path(&face_name, ability_path),
+        );
+
         let prepared = self.prepare_ability_costs(
             player,
             idx,
@@ -1976,9 +1993,12 @@ impl GameEngine {
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
 
         let mut batch = RuledEventBatch::default();
-        batch.events.push(ev_log(format!(
-            "P{player} activates {card_name}{paid_costs_line}: {ability_text}"
-        )));
+        batch.events.push(ev_log_ability(
+            format!("P{player} activates {card_name}{paid_costs_line}: "),
+            &ability_text,
+            Some(primary_presentation),
+            String::new(),
+        ));
         for ev in payment.move_events {
             batch.events.push(ev);
         }

@@ -6,6 +6,7 @@ use super::targeting::{
     TargetSourceIdentity,
 };
 use super::*;
+use crate::engine::events::ev_log_ability;
 
 /// One triggered ability that matched an event and is about to go on the stack (or be parked for
 /// target selection) — the unit a trigger scan yields and [`GameEngine::push_trigger`] consumes.
@@ -2394,9 +2395,12 @@ impl GameEngine {
                         },
                     )),
                 });
-                events.push(ev_log(format!(
-                    "Triggered: {card_name} — choose for: {ability_text}"
-                )));
+                events.push(ev_log_ability(
+                    format!("Triggered: {card_name} — choose for: "),
+                    &ability_text,
+                    presentation.clone(),
+                    String::new(),
+                ));
             }
         } else if needs_choice {
             // CR 603.3d: a targeted trigger with no legal target is removed from the stack. An
@@ -2453,12 +2457,17 @@ impl GameEngine {
                     chosen_mode_labels: vec![],
                     chosen_cast_cost_labels: vec![],
                     source_token_identity: None,
-                    primary_presentation: presentation,
+                    primary_presentation: presentation.clone(),
                     chosen_mode_presentations: vec![],
                     chosen_cast_cost_presentations: vec![],
                 })),
             });
-            events.push(ev_log(format!("Triggered: {card_name} — {ability_text}")));
+            events.push(ev_log_ability(
+                format!("Triggered: {card_name} — "),
+                &ability_text,
+                presentation,
+                String::new(),
+            ));
         }
     }
 }
