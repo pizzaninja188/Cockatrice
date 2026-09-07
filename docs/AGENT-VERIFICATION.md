@@ -120,6 +120,7 @@ powershell.exe -NoProfile -File tests/scripts/generator_wrapper_test.ps1
 powershell.exe -NoProfile -File tests/scripts/card_data_wrapper_test.ps1
 powershell.exe -NoProfile -File tests/scripts/update_card_data_test.ps1
 powershell.exe -NoProfile -File tests/scripts/verify_workflow_test.ps1
+powershell.exe -NoProfile -File tests/scripts/launch_ruled_game_test.ps1
 ```
 
 Also run these with `pwsh.exe` when PowerShell 7 is available. After changing orchestration, run

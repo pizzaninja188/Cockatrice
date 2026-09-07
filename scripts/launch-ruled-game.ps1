@@ -201,7 +201,12 @@ Write-Host "Building Cockatrice..." -ForegroundColor Cyan
 $buildScript = Join-Path $PSScriptRoot "build-ninja.ps1"
 $buildProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @(
     "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$buildScript`""
-) -NoNewWindow -PassThru -Wait
+) -NoNewWindow -PassThru
+# Start-Process -Wait waits for descendants too, including compiler helpers that can
+# outlive a full build. Only the build shell's exit determines whether we can launch.
+# Cache its handle before waiting so Windows PowerShell retains the exit code.
+$buildHandle = $buildProcess.Handle
+$buildProcess.WaitForExit()
 if ($buildProcess.ExitCode -ne 0) {
     throw "Build failed with exit code $($buildProcess.ExitCode); nothing was launched."
 }
