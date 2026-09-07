@@ -4,7 +4,7 @@
 
 1. **Build and test after every coherent code-change increment.** An increment may batch inseparable edits needed to reach one compilable or testable state; it does not mean every line edit needs its own build. Prove the relevant focused gate after each increment, then run the full affected-side gate once the implementation is stable. Never report completion until every required command exits 0; check the exit code rather than eyeballing logs. Read-only investigation needs no build.
 2. **Use the Windows PowerShell build and test recipes.** This checkout's active agent workflow is Windows-only.
-3. **Ruled work is end-to-end.** Unless explicitly scoped backend-only, ship engine, protobuf, Servatrice relay, and Cockatrice UI behavior together. Any `.proto` change must keep both C++ and Rust buildable.
+3. **Ruled work is end-to-end.** Trace every affected producer and consumer and implement all necessary changes across engine, protobuf, Servatrice relay, and Cockatrice UI. Leave unaffected components unchanged and explain why their gates are N/A. Any `.proto` change must keep both C++ and Rust buildable.
 4. **Do not break freeform.** Gate new UI and command paths on ruled mode.
 5. **Optimize this pre-release fork for the long term.** Prefer the simplest complete architecture over compatibility layers, speculative abstractions, or stopgaps. Large coherent changes are welcome when every increment leaves a working product.
 6. **Extract fork behavior from upstream files instead of restructuring them in place.** Upstream deltas should converge toward a member pointer, one friend declaration, and short ruled call-site guards. New fork-owned C++ files use the `ruled_` prefix (`rules_relay` predates it); client fork files live under `cockatrice/src/game/ruled/`.
@@ -24,7 +24,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before cross-component work. I
 - **Determinism** is `(seed, command log) -> state`; choices and dev commands that affect state must remain logged commands.
 - Keep `ruled_v1.proto` aligned across every Rust and C++ consumer. Treat engine `ObjectId`, tricerules `card_id`, Oracle name, `Server_Card.id`, hand slot, and face index as distinct identities.
 
-Before adding a new effect, trigger, cost, keyword, helper, state field, proto field, or legal action, name at least two real cards or two distinct mechanics it supports. Widen the parameters when only one use fits. In the plan, compare the closest existing primitive and explain why reuse, extension, or separation is correct.
+Before adding a reusable rules primitive or public protocol vocabulary, name at least two real cards or two distinct mechanics it supports. Compare the closest existing primitive and explain why reuse, extension, or separation is correct. Generalize only for demonstrated uses; if only one use fits, justify the necessary specialized behavior instead of inventing a second use or speculative parameters. Private implementation helpers and necessary state fields need a concrete purpose, not two card examples.
 
 Comprehensive Rules govern mechanics and Oracle governs card-specific behavior. Verify exact CR numbers and quotations against the current official rules, and fetch card rulings rather than coding non-obvious interactions from memory. For substantive ruled work, finish with an **MTG applicability** note stating the governed concepts and compliance or deferral; otherwise state “No MTG rules surface area.”
 
@@ -44,13 +44,15 @@ Load only the guidance relevant to the task:
 ## Verification ladder
 
 Use the exact commands and affected-side matrix in [docs/AGENT-VERIFICATION.md](docs/AGENT-VERIFICATION.md).
-Use `scripts/verify.ps1` for final affected-side verification; keep focused red/green commands on the quiet runner. Card-data verification uses `scripts/update-card-data.ps1 -Mode Check`; refresh is a separate explicit operation.
+Use `scripts/verify.ps1` for final affected-side verification; keep focused red/green commands on the quiet runner. Card-data verification uses `scripts/update-card-data.ps1 -Mode Check`. Regenerating required metadata from existing local inputs with `-Mode Refresh` is part of authorized card implementation; review its diff. Updating external source datasets requires separate authorization.
 
 1. **Red:** run the smallest regression that proves the missing or broken behavior.
 2. **Green:** apply one coherent implementation increment and rerun that regression.
 3. **Stabilize:** run the affected package or targeted CTest group while iterating.
 4. **Finish:** once stable, run the full build and full suite for every affected side, plus lint, format, generated-data checks, and `git diff --check` as applicable.
 5. **Manual:** run or recommend the real two-client flow when UI, networking, hidden information, or physical identity is material.
+
+Reuse passing final verification evidence for delivery when tested content, dependencies, and the relevant environment remain unchanged. Rerun affected gates only when changes, failures, or unresolved concerns invalidate that evidence; a later commit request alone does not invalidate it.
 
 On Windows, use `scripts/run-quiet-command.ps1` for commands with noisy successful output. It retains the complete log under `build/verification-logs`, prints a concise success line, prints the full log on failure, and preserves the exact exit code. Never suppress a failure log.
 
@@ -59,7 +61,7 @@ If a build fails only because a running executable is locked, stop the exact Coc
 ## Task discipline
 
 - Keep one task centered on one coherent outcome. Compact long histories at a stable milestone; start a separate task when the outcome changes.
-- A request should identify the goal, relevant issue or files, phase (plan or implementation), required behavior, out-of-scope work, and completion gates.
+- Infer the goal, phase, scope, and completion gates from the request and current context. A direct request to implement or fix an identified problem authorizes implementation without a separately approved plan. Ask only when unresolved information materially changes scope or correctness; continue independent authorized work meanwhile. Planning-only requests remain read-only.
 - Batch independent reads and searches. Keep successful command output concise and show detailed logs on failure.
 - Separate required work from optional polish. Do not perform unrelated cleanup while implementing an approved plan.
 - Once a decision-complete plan is approved, implement it directly without reopening settled design choices.

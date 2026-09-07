@@ -84,7 +84,11 @@ directories without running commands or creating artifacts.
 Each run retains logs and `summary.json` in a unique directory under `build/verification-logs`.
 The summary records selected gates, commands, working directories, exit codes, and log paths.
 The first failure prints its full log and stops the run with that exit code; remaining gates are
-marked `NotRun`. Previous passing results are never reused. Missing sources or tools are failures,
+marked `NotRun`. Each invocation runs all selected gates; the script does not cache prior results.
+For later delivery, reuse passing final evidence when tested content, dependencies, and the
+relevant environment remain unchanged. Rerun affected gates when changes, failures, or unresolved
+concerns invalidate that evidence. A commit request alone does not require another invocation.
+Missing sources or tools are failures,
 not permission to omit a required gate. Diagnose unrelated baseline drift before changing it.
 
 For card additions, explicitly refresh and review generated changes before final verification:
@@ -154,4 +158,4 @@ If `Enter-VsDevShell` fails because both `Path` and `PATH` exist, invoke the VS 
 
 `ruled_e2e_smoke_test` drives a real Servatrice and sidecar session. Run it after relay, protobuf, or ruled `server_game` changes and around extraction work. It skips when required binaries are absent; a skip is not proof of the end-to-end contract.
 
-Before a commit, run the full gate for each affected side even when focused iteration stayed green. Report command exit codes in the final summary.
+Before a commit, ensure passing full-gate evidence for each affected side, even when focused iteration stayed green. Reuse valid final evidence under the rule above; otherwise run the affected full gates. Report command exit codes in the final summary.

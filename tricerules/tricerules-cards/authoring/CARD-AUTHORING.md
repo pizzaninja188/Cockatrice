@@ -65,8 +65,9 @@ Use the lowest tier that completely expresses the behavior:
    mid-resolution or interdependent choices.
 
 Before adding a primitive, name at least two real cards or two distinct mechanics it supports.
-Widen the parameters if only the motivating card fits. Two cards sharing a custom algorithm are
-evidence that the algorithm belongs in a generic primitive.
+Generalize only for demonstrated uses. If only the motivating card fits, justify the necessary
+specialized behavior rather than adding speculative parameters. Two cards sharing a custom
+algorithm are evidence that the algorithm belongs in a generic primitive.
 
 `SpellEffectKind` is shared by spells, activated abilities, and triggered abilities. Prefer a
 reusable typed effect over a card-specific path. `TargetKind::Self_` binds the source without

@@ -34,7 +34,7 @@ For touched interaction paths, verify the actual context-menu action, target-arr
 
 ## Manual verification on Windows
 
-Automated tests stop at the view model. For interaction, networking, hidden-information, or cross-zone identity behavior, launch a real ruled game from the repository root:
+Automated tests cover view-model, widget, and headless end-to-end behavior, but do not establish hands-on GUI acceptance. For interaction, networking, hidden-information, or cross-zone identity behavior, use a real ruled game to check the remaining visible interaction paths, or specify those steps when manual testing is deferred. Launch from the repository root:
 
 ```powershell
 ./scripts/launch-ruled-game.ps1
@@ -55,7 +55,7 @@ move gy Serra Angel
 help
 ```
 
-`put` always conjures and is limited to hand or battlefield. `move` relocates an existing object and is the path to graveyard, exile, or library. Dev commands are accepted only when both the session and sidecar gates are enabled; they remain logged commands. `put bf` fires ETB/static registration but no cast trigger, and `put gy` deliberately does not fire dies triggers.
+`put` always conjures and is limited to hand or battlefield. `move` relocates an existing object and is the path to graveyard, exile, or library. Dev commands are accepted only when both the session and sidecar gates are enabled; they remain logged commands. `put bf` fires ETB/static registration but no cast trigger.
 
 Final summaries must distinguish manual steps actually performed from recommended steps. For privacy or identity changes, verify both seats' visible state, physical zone movement, and cross-zone identity rather than relying only on headless tests.
 

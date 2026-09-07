@@ -11,7 +11,7 @@ remains the separate interaction audit for substantive ruled changes.
 - Record the current Oracle text and relevant rulings for card-specific behavior.
 - Identify the governing CR concepts; verify exact rule numbers and quotations against the current official rules.
 - State intentional simplifications or deferred mechanics explicitly.
-- Name at least two cards or two distinct mechanics for every new reusable primitive or public vocabulary entry.
+- Name at least two cards or two distinct mechanics for every new reusable primitive or public vocabulary entry, or justify necessary specialized behavior when only one use fits. Do not invent uses or speculative parameters; private helpers and necessary state fields need a concrete purpose instead.
 
 ## 2. State ownership and identity
 

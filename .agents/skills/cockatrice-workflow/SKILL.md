@@ -1,14 +1,16 @@
 ---
 name: cockatrice-workflow
-description: Plan Cockatrice fork issues, implement an approved rules or client change, and carry out explicitly requested delivery using the repository's Windows verification and card-data workflows. Use for Cockatrice issue work, not unrelated projects or general MTG questions.
+description: Plan Cockatrice fork issues, implement requested rules or client changes, and carry out explicitly requested delivery using the repository's Windows verification and card-data workflows. Use for Cockatrice issue work, not unrelated projects or general MTG questions.
 ---
 
 # Cockatrice workflow
 
 Determine the phase from the current request and accepted plan. Carry forward the user's testing
-availability, scope, and existing delivery authorization. An accepted plan authorizes its
-implementation; it does not by itself authorize a commit, push, or issue mutation. Do not reopen
-settled design choices or ask again for actions already authorized.
+availability, scope, and existing delivery authorization. A direct implementation or fix request,
+or an accepted plan, authorizes implementation within that scope without another plan approval.
+Neither by itself authorizes a commit, push, or issue mutation. Infer routine details from current
+code and context; ask only when unresolved information materially changes scope or correctness.
+Do not reopen settled design choices or ask again for actions already authorized.
 
 The repository root is three directories above this skill. Read the root
 [AGENTS.md](../../../AGENTS.md) and only the subsystem guides relevant to the task. They own the
@@ -41,6 +43,8 @@ requirements; this skill routes the work rather than replacing them.
   final command sequence needs inspection.
 - When authored cards change generated metadata, explicitly run
   `scripts/update-card-data.ps1 -Mode Refresh` from the root and inspect the generated diff.
+  Regeneration from existing local inputs is part of authorized card implementation and needs
+  no separate approval. Updating external source datasets requires separate authorization.
   Final card verification uses the read-only Check mode through
   `scripts/verify.ps1 -Side Rust -CardData` or `-Side Both -CardData`.
   Do not silently refresh external sources or accept unrelated generated churn.
@@ -56,6 +60,8 @@ requirements; this skill routes the work rather than replacing them.
 
 - Inspect the intended diff and current verification evidence; stage only the reviewed paths,
   inspect the staged diff, and make the focused commit when authorized. Preserve unrelated edits.
+  Reuse passing final gates when tested content, dependencies, and the relevant environment
+  remain unchanged, as specified in the verification guide; a commit request alone needs no rerun.
 - For an authorized push, verify the configured remote URL and branch against the requested
   destination. Carry the exact destination and issue through the delivery operation. A generic
   implementation request is not publication authorization.
