@@ -470,14 +470,21 @@ pub enum LibraryPartitionKind {
     Look,
 }
 
-/// Who chooses cards for a discard instruction.
+/// The semantic action after choosing hand cards. Exile never counts as discarding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HandCardAction {
+    Discard,
+    Exile,
+}
+
+/// Who chooses cards for a hand instruction.
 ///
 /// CR 701.9b makes the affected player the default chooser. Coercion and Thoughtseize override
 /// that default by instructing their controller to choose, while Hymn to Tourach uses a seeded
 /// random choice. Keeping these as typed modes prevents hand visibility from being inferred by
 /// the client or relay.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DiscardChooser {
+pub enum HandCardChooser {
     #[default]
     AffectedPlayer,
     Controller,
@@ -1363,16 +1370,18 @@ pub enum SpellEffectKind {
         #[serde(default)]
         who: PlayerRecipient,
     },
-    /// CR 701.9: force `count` cards from the target player's hand to their graveyard.
+    /// Choose cards from a target hand and perform the explicit discard or direct-exile action.
+    /// Mind Rot and Coercion use Discard; Aggressive Negotiations uses Exile.
     /// `chooser` distinguishes the affected-player default (Mind Rot), controller-selected
     /// revealed cards (Coercion, Thoughtseize), and seeded random choice (Hymn to Tourach).
     /// When `count` exceeds the hand size, the player discards all remaining cards.
     /// Cards covered: Mind Rot, Hymn to Tourach, Coercion, and Thoughtseize.
-    DiscardCards {
+    ChooseHandCards {
+        action: HandCardAction,
         count: u32,
         target: TargetFilter,
         #[serde(default)]
-        chooser: DiscardChooser,
+        chooser: HandCardChooser,
         /// Optional card-type restriction on the chosen cards. The complete hand remains visible
         /// to the authorized chooser; legality is published separately.
         #[serde(default)]
@@ -1382,22 +1391,6 @@ pub enum SpellEffectKind {
         optional: bool,
         /// Whether the full hand window is chooser-private or publicly revealed while the choice
         /// remains pending. Selection legality is still carried separately by the engine.
-        #[serde(default)]
-        visibility: HandChoiceVisibility,
-    },
-    /// Choose cards from a target player's hand and exile them directly. This is deliberately
-    /// distinct from [`SpellEffectKind::DiscardCards`]: it does not perform the CR 701.9 discard
-    /// action and must not satisfy future discard triggers or replacement effects. Aggressive
-    /// Negotiations and Elite Spellbinder share the controller-chosen nonland shape.
-    ExileCardsFromHand {
-        count: u32,
-        target: TargetFilter,
-        #[serde(default)]
-        chooser: DiscardChooser,
-        #[serde(default)]
-        card_filter: Option<CardTypeFilter>,
-        #[serde(default)]
-        optional: bool,
         #[serde(default)]
         visibility: HandChoiceVisibility,
     },
@@ -1666,6 +1659,10 @@ pub enum SpellEffectKind {
     /// Intrinsic CR 310.11b Siege defeat trigger. Engine-synthesized only; it moves the exact
     /// defeated Battle to exile and offers its controller the transformed free cast.
     SiegeDefeat,
+    /// Engine-synthesized madness trigger resolution; the cost was captured at discard.
+    CastMadness {
+        cost: crate::ManaCost,
+    },
     None,
 }
 
@@ -2366,8 +2363,7 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerDraws { target, .. }
             | SpellEffectKind::DrainTarget { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
-            | SpellEffectKind::DiscardCards { target, .. }
-            | SpellEffectKind::ExileCardsFromHand { target, .. }
+            | SpellEffectKind::ChooseHandCards { target, .. }
             | SpellEffectKind::ExileUntilSourceLeaves { target }
             | SpellEffectKind::AuraAttach { target }
             | SpellEffectKind::AttachSource { target }
@@ -2434,6 +2430,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PreventAllCombatDamageTurn
             | SpellEffectKind::DamageCantBePreventedThisTurn
             | SpellEffectKind::ChangeSourceFace { .. }
+            | SpellEffectKind::CastMadness { .. }
             | SpellEffectKind::SiegeDefeat
             | SpellEffectKind::None => Vec::new(),
         }
@@ -2641,14 +2638,19 @@ impl SpellEffectKind {
                 CardResultAction::Discard => matches!(
                     effect,
                     SpellEffectKind::Discard { .. }
-                        | SpellEffectKind::DiscardCards { .. }
+                        | SpellEffectKind::ChooseHandCards {
+                            action: HandCardAction::Discard,
+                            ..
+                        }
                         | SpellEffectKind::DrawDiscard { .. }
                 ),
                 CardResultAction::Destroy => matches!(effect, SpellEffectKind::Destroy { .. }),
                 CardResultAction::Exile => matches!(
                     effect,
-                    SpellEffectKind::ExileCardsFromHand { .. }
-                        | SpellEffectKind::ExileTopWithPlayPermission { .. }
+                    SpellEffectKind::ChooseHandCards {
+                        action: HandCardAction::Exile,
+                        ..
+                    } | SpellEffectKind::ExileTopWithPlayPermission { .. }
                         | SpellEffectKind::ExileWithOwnerCastPermission { .. }
                         | SpellEffectKind::MoveGraveyardCards {
                             destination: GraveyardDestination::Exile,
@@ -3630,8 +3632,7 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::DrainTarget { target, .. }
             | SpellEffectKind::MillTargetPlayer { target, .. }
-            | SpellEffectKind::DiscardCards { target, .. }
-            | SpellEffectKind::ExileCardsFromHand { target, .. } => {
+            | SpellEffectKind::ChooseHandCards { target, .. } => {
                 if target.is_player() {
                     Ok(())
                 } else {

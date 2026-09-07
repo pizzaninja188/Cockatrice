@@ -83,6 +83,7 @@ armored_whirl_turtle	0	cast	exercised
 armored_wolf-rider	0	cast	exercised
 armory_mice	0	cast	exercised
 arrogant_vampire	0	cast	exercised
+arrogant_wurm	0	cast	exercised
 ascended_lawmage	0	cast	exercised
 ashcoat_bear	0	cast	exercised
 assault_griffin	0	cast	exercised
@@ -549,6 +550,7 @@ ferocious_zheng	0	cast	exercised
 field_creeper	0	cast	exercised
 fiery_hellhound	0	ability:0	exercised
 fiery_hellhound	0	cast	exercised
+fiery_temper	0	cast	exercised
 final_showdown	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 finishing_blow	0	cast	exercised
 firdoch_core	0	ability:0	exercised
@@ -960,6 +962,7 @@ legions_judgment	0	cast	unsupported: target group 0 needs a richer fixture
 leonin_skyhunter	0	cast	exercised
 leopard-spotted_jiao	0	cast	exercised
 library_larcenist	0	cast	exercised
+library_of_leng	0	cast	exercised
 life_goes_on	0	cast	exercised
 lightning_angel	0	cast	exercised
 lightning_bolt	0	cast	exercised
@@ -1023,6 +1026,7 @@ mass_of_ghouls	0	cast	exercised
 meandering_river	0	ability:0	exercised
 meandering_river	0	land	exercised
 mechan_shieldmate	0	cast	exercised
+megrim	0	cast	exercised
 melded_moxite	0	ability:0	exercised
 melded_moxite	0	cast	exercised
 meltstriders_gear	0	ability:0	exercised
@@ -1832,6 +1836,7 @@ wary_okapi	0	cast	exercised
 wary_thespian	0	cast	exercised
 wary_watchdog	0	cast	exercised
 wasp_lancer	0	cast	exercised
+waste_not	0	cast	exercised
 wastes	0	ability:0	exercised
 wastes	0	land	exercised
 watcher_of_the_wayside	0	cast	exercised

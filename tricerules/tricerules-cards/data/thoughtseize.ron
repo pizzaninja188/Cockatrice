@@ -4,11 +4,11 @@
   face_id: "thoughtseize",
   mana_cost: "{B}",
   types: ["Sorcery"],
-  // Oracle order. `DiscardCards(chooser: Controller)` suspends for the caster's choice;
+  // Oracle order. `ChooseHandCards(action: Discard, chooser: Controller)` suspends for the caster's choice;
   // the life loss after it runs when the choice comes back, via the resume path in
   // `complete_parked_resolution` (`PendingResolution::resume_effect_index`).
   spell_effect: [
-    DiscardCards(
+    ChooseHandCards(action: Discard,
       count: 1,
       target: (kind: AnyPlayer),
       chooser: Controller,

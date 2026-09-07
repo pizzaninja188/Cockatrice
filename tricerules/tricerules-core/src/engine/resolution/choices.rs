@@ -529,7 +529,7 @@ pub(in crate::engine) fn card_result_characteristic_sum(
     )
     .fold(0_i64, |sum, entry| {
         let (power, toughness) =
-            engine.object_power_toughness(entry.object_id, entry.zone_change_generation);
+            engine.object_power_toughness(entry.object_id, engine.card_result_generation(entry));
         let value = match characteristic {
             tricerules_cards::primitives::PowerToughnessCharacteristic::Power => power,
             tricerules_cards::primitives::PowerToughnessCharacteristic::Toughness => toughness,

@@ -7,7 +7,7 @@
   mana_cost: "{W}{B}",
   types: ["Sorcery"],
   spell_effect: [
-    DiscardCards(count: 2, target: (kind: AnyPlayer)),
+    ChooseHandCards(action: Discard, count: 2, target: (kind: AnyPlayer)),
     ChooseResolutionBranch(
       selection: FirstApplicable,
       branches: [

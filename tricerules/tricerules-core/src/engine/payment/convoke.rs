@@ -212,7 +212,10 @@ impl GameEngine {
         let (mut prepared, source, mut selection, allows_convoke) = if let Some(command) =
             &request.cast_spell
         {
-            if self.state.priority_player_id() != player || self.state.blocking_choice().is_some() {
+            if self.special_cast_method(player).is_none()
+                && (self.state.priority_player_id() != player
+                    || self.state.blocking_choice().is_some())
+            {
                 return Err(EngineError::Illegal("spell payment is not available now"));
             }
             let cast = self.prepare_spell_cast(player, command)?;

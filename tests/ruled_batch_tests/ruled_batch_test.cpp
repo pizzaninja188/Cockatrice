@@ -4610,3 +4610,113 @@ TEST_F(RuledBatchTest, AbilityLogPresentationFollowsWholeMessageRecipientRouting
         EXPECT_EQ(filtered.events(1).log().ability_presentation().prefix(), recipient == p1 ? "private" : "hidden");
     }
 }
+
+TEST_F(RuledBatchTest, DiscardReplacementChoicesAndTopDeckOrderStayPrivateToTheOwner)
+{
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    for (bool ordered : {false, true}) {
+        ruled::v1::RuledEventBatch batch;
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(1);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+        choice->set_prompt_text(ordered ? "Order discarded cards, top of library first." : "Choose the discard destination.");
+        choice->set_ordered(ordered);
+        choice->add_candidate_object_ids(ordered ? 700 : 1);
+        choice->add_candidate_object_ids(ordered ? 701 : 2);
+        choice->add_candidate_names("Put Fiery Temper on the library");
+        choice->add_candidate_names("Exile Fiery Temper with madness");
+        const auto owner = redactFor(batch, p1);
+        ASSERT_EQ(owner.events_size(), 1);
+        EXPECT_EQ(owner.events(0).resolution_choice_required().candidate_object_ids_size(), 2);
+        EXPECT_EQ(owner.events(0).resolution_choice_required().candidate_names_size(), 2);
+        EXPECT_EQ(owner.events(0).resolution_choice_required().candidate_server_card_ids_size(), ordered ? 2 : 0);
+        for (Server_AbstractParticipant *recipient : {static_cast<Server_AbstractParticipant *>(p2),
+                                                     static_cast<Server_AbstractParticipant *>(spectator)}) {
+            const auto other = redactFor(batch, recipient);
+            ASSERT_EQ(other.events_size(), 1);
+            const auto &waiting = other.events(0).resolution_choice_required();
+            EXPECT_EQ(waiting.candidate_object_ids_size(), 0);
+            EXPECT_EQ(waiting.candidate_names_size(), 0);
+            EXPECT_EQ(waiting.candidate_card_ids_size(), 0);
+            EXPECT_EQ(waiting.candidate_server_card_ids_size(), 0);
+            EXPECT_EQ(waiting.prompt_text(), "Opponent is making a resolution choice.");
+            EXPECT_EQ(other.SerializeAsString().find("Fiery Temper"), std::string::npos);
+        }
+    }
+}
+
+TEST_F(RuledBatchTest, SpecialCastReconnectRestoresExactOfferAndRecipientLegalActions)
+{
+    ruled::v1::IpcResponse seed;
+    auto *view = seed.mutable_batch()->add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(p1->getPlayerId());
+    auto *mountain = view->add_battlefield_objects();
+    mountain->set_object_id(700); mountain->set_card_id("mountain");
+    updatePendingResolutionChoiceCache(seed);
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *batch = response.mutable_batch();
+    auto *choice = batch->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+    choice->set_source_object_id(901);
+    choice->set_prompt_text("Cast Fiery Temper for its madness cost?");
+    choice->add_candidate_object_ids(501);
+    auto *offer = (*batch->mutable_legal_by_player())[p1->getPlayerId()].add_zone_cast_actions();
+    offer->set_object_id(501); offer->set_zone_change_generation(8);
+    offer->set_cast_method(ruled::v1::CAST_METHOD_MADNESS); offer->set_casting_permission_id(901);
+    offer->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE); offer->set_cost("{R}");
+    offer->set_needs_target(true);
+    auto *unchanged = batch->add_events()->mutable_zone_view();
+    unchanged->set_battlefields_unchanged(true);
+    unchanged->add_per_player()->set_player_id(p1->getPlayerId());
+    updatePendingResolutionChoiceCache(response);
+    for (Server_Player *recipient : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(recipient, reconnect, true);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 3);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        EXPECT_EQ(restored.events(0).resolution_choice_required().choice_kind(), ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+        const auto restoredView = std::find_if(restored.events().begin(), restored.events().end(), [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(restoredView, restored.events().end());
+        EXPECT_FALSE(restoredView->zone_view().battlefields_unchanged());
+        ASSERT_EQ(restoredView->zone_view().per_player(0).battlefield_objects_size(), 1);
+        EXPECT_EQ(restoredView->zone_view().per_player(0).battlefield_objects(0).object_id(), 700u);
+        if (recipient == p1) {
+            ASSERT_TRUE(restored.legal_by_player().contains(p1->getPlayerId()));
+            ASSERT_EQ(restored.legal_by_player().at(p1->getPlayerId()).zone_cast_actions_size(), 1);
+            EXPECT_EQ(restored.legal_by_player().at(p1->getPlayerId()).zone_cast_actions(0).SerializeAsString(), offer->SerializeAsString());
+        } else EXPECT_FALSE(restored.legal_by_player().contains(p1->getPlayerId()));
+    }
+}
+
+TEST_F(RuledBatchTest, ResolvingAbilityCannotBindOrMoveAnIdenticallyNamedPhysicalSpell)
+{
+    seedCardCatalog({"Fiery Temper"});
+    Server_Card *spell = addCardToHand(p1, QStringLiteral("Fiery Temper"));
+    auto *hand = p1->getZones().value(ZoneNames::HAND);
+    auto *stack = p1->getZones().value(ZoneNames::STACK);
+    hand->removeCard(spell); stack->insertCard(spell, -1, 0);
+    bindStackObject(900u, spell, p1->getPlayerId(), QStringLiteral("Fiery Temper"));
+    for (bool triggered : {true, false}) {
+        ruled::v1::IpcResponse response;
+        response.set_ok(true);
+        auto *push = response.mutable_batch()->add_events()->mutable_stack_pushed();
+        push->set_object_id(901u); push->set_description("Fiery Temper"); push->set_is_triggered(triggered);
+        auto *resolved = response.mutable_batch()->add_events()->mutable_stack_resolved();
+        resolved->set_object_id(901u); resolved->set_destination(ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD);
+        callBatchApply(response);
+        EXPECT_EQ(spell->getZone(), stack);
+        EXPECT_EQ(stack->getCards().size(), 1);
+    }
+    ruled::v1::IpcResponse spellResponse;
+    spellResponse.set_ok(true);
+    auto *resolved = spellResponse.mutable_batch()->add_events()->mutable_stack_resolved();
+    resolved->set_object_id(900u); resolved->set_destination(ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD);
+    callBatchApply(spellResponse);
+    EXPECT_EQ(spell->getZone(), p1->getZones().value(ZoneNames::GRAVE));
+}

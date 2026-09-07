@@ -5,7 +5,7 @@
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
   spell_effect: [
-    ExileCardsFromHand(
+    ChooseHandCards(action: Exile,
       count: 1,
       target: (kind: OpponentPlayer),
       chooser: Controller,

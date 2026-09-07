@@ -6414,7 +6414,7 @@ TEST_F(RuledE2ESmokeTest, EquipmentAttachmentAndMerchantGraveyardReturnReachBoth
                              [](const auto &action) { return action.card_name() == "Merchant of Many Hats"; }));
 }
 
-TEST_F(RuledE2ESmokeTest, PlaneswalkerBattleTargetsSplitCombatAndSiegeCastReachBothClients)
+TEST_F(RuledE2ESmokeTest, PlaneswalkerBattleTargetsSplitCombatAndSpecialCastReachBothClients)
 {
     const auto started = startServers();
     if (!started) {
@@ -6648,7 +6648,7 @@ TEST_F(RuledE2ESmokeTest, PlaneswalkerBattleTargetsSplitCombatAndSiegeCastReachB
     // advances directly into combat damage.
     QElapsedTimer siege;
     siege.start();
-    while ((!p1.pendingChoice.has_value() || p1.pendingChoice->choice_kind() != ruled::v1::CHOICE_KIND_SIEGE_CAST) &&
+    while ((!p1.pendingChoice.has_value() || p1.pendingChoice->choice_kind() != ruled::v1::CHOICE_KIND_SPECIAL_CAST) &&
            siege.elapsed() < 30000) {
         if (p1.priorityPlayer == p1.myId) {
             ASSERT_TRUE(pass(p1));
@@ -6660,7 +6660,7 @@ TEST_F(RuledE2ESmokeTest, PlaneswalkerBattleTargetsSplitCombatAndSiegeCastReachB
         }
     }
     ASSERT_TRUE(p1.pendingChoice.has_value());
-    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_SIEGE_CAST);
+    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_SPECIAL_CAST);
     EXPECT_FALSE(p2.pendingChoice.has_value());
     ASSERT_TRUE(p1.serverCardByEngineOid.count(battleOid));
     ASSERT_TRUE(p2.serverCardByEngineOid.count(battleOid));
@@ -6669,8 +6669,13 @@ TEST_F(RuledE2ESmokeTest, PlaneswalkerBattleTargetsSplitCombatAndSiegeCastReachB
 
     ruled::v1::RuledCommand castBack;
     auto *submission = castBack.mutable_submit_resolution_choice();
-    submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_TRANSFORMED);
+    submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_SPELL);
     auto *cast = submission->mutable_cast_spell();
+    const auto offer = std::find_if(p1.latestLegal.zone_cast_actions().begin(), p1.latestLegal.zone_cast_actions().end(),
+                                    [battleOid](const auto &action) { return action.object_id() == battleOid; });
+    ASSERT_NE(offer, p1.latestLegal.zone_cast_actions().end());
+    cast->set_casting_permission_id(offer->casting_permission_id());
+    cast->mutable_source()->set_expected_zone_change_generation(offer->zone_change_generation());
     cast->set_cast_method(ruled::v1::CAST_METHOD_SIEGE_DEFEAT);
     cast->set_face_index(1);
     cast->mutable_source()->set_exile_object_id(battleOid);
@@ -9766,4 +9771,193 @@ int main(int argc, char **argv)
     QCoreApplication app(argc, argv);
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
+}
+
+TEST_F(RuledE2ESmokeTest, DiscardReplacementPrivacyAndMadnessPaymentReachBothClients)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    SmokeClient p1(SmokeClient::Role::Aggressor, QStringLiteral("discardp1"), &transcript);
+    SmokeClient p2(SmokeClient::Role::Hoarder, QStringLiteral("discardp2"), &transcript);
+    p2.didMulligan = true;
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Mountain")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "issue 197 game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "issue 197 game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+
+    auto send = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto put = [&](int player, const char *name, ruled::v1::DevZone zone, bool ready) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(player);
+        auto *placement = dev->mutable_put_card_in_zone();
+        placement->set_card_name(name);
+        placement->set_zone(zone);
+        placement->set_ready(ready);
+        return send(p1, command, QStringLiteral("issue 197 put %1").arg(name));
+    };
+    auto pass = [&](SmokeClient &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(client, command, QStringLiteral("issue 197 pass"));
+    };
+
+    ASSERT_TRUE(put(p2.myId, "Library of Leng", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(put(p2.myId, "Mountain", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    auto choose = [&](std::initializer_list<quint32> ids) {
+        ruled::v1::RuledCommand command;
+        for (auto id : ids) command.mutable_submit_resolution_choice()->add_chosen_object_ids(id);
+        p2.pendingChoice.reset();
+        return send(p2, command, QStringLiteral("issue 197 discard choice"));
+    };
+    for (const int destination : {1, 2}) {
+        ASSERT_TRUE(put(p1.myId, "Mind Rot", ruled::v1::DEV_ZONE_HAND, false));
+        ASSERT_TRUE(put(p2.myId, "Fiery Temper", ruled::v1::DEV_ZONE_HAND, false));
+        ruled::v1::RuledCommand mana;
+        mana.mutable_dev_command()->set_target_player_id(p1.myId);
+        mana.mutable_dev_command()->mutable_add_mana()->set_b(3);
+        ASSERT_TRUE(send(p1, mana, QStringLiteral("issue 197 discard spell mana")));
+        const auto *action = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Mind Rot"));
+        ASSERT_NE(action, nullptr);
+        ruled::v1::RuledCommand spell;
+        spell.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        spell.mutable_cast_spell()->mutable_source()->set_hand_index(action->hand_index());
+        auto *target = spell.mutable_cast_spell()->add_targets();
+        target->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER); target->set_object_id(p2.myId);
+        ASSERT_TRUE(send(p1, spell, QStringLiteral("issue 197 Mind Rot")));
+        ASSERT_TRUE(pass(p1)); ASSERT_TRUE(pass(p2));
+        ASSERT_TRUE(p2.pendingChoice.has_value());
+        quint32 fiery = 0, island = 0; int physicalId = -1;
+        for (int index = 0; index < p2.pendingChoice->candidate_names_size(); ++index) {
+            const auto &name = p2.pendingChoice->candidate_names(index);
+            if (name == "Fiery Temper") {
+                fiery = p2.pendingChoice->candidate_object_ids(index);
+                physicalId = p2.pendingChoice->candidate_server_card_ids(index);
+            } else if (name == "Island") island = p2.pendingChoice->candidate_object_ids(index);
+        }
+        ASSERT_NE(fiery, 0u); ASSERT_NE(island, 0u); ASSERT_GE(physicalId, 0);
+        ASSERT_TRUE(choose({fiery, island}));
+        ASSERT_TRUE(p2.pendingChoice.has_value());
+        EXPECT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+        ASSERT_TRUE(p1.lastResolutionChoice.has_value());
+        EXPECT_EQ(p1.lastResolutionChoice->candidate_names_size(), 0);
+        EXPECT_EQ(p1.lastResolutionChoice->candidate_object_ids_size(), 0);
+        ASSERT_TRUE(choose({static_cast<quint32>(destination)}));
+        ASSERT_TRUE(choose({0}));
+        if (destination == 1) {
+            EXPECT_EQ(p1.stackDepth, 0);
+            EXPECT_TRUE(std::any_of(p2.physicalMoveEvents.begin(), p2.physicalMoveEvents.end(),
+                                    [physicalId](const auto &move) { return move.card_id() == physicalId &&
+                                        move.start_zone() == ZoneNames::HAND && move.target_zone() == ZoneNames::DECK; }));
+            continue;
+        }
+        ASSERT_TRUE(p1.serverCardByEngineOid.count(fiery));
+        ASSERT_TRUE(p2.serverCardByEngineOid.count(fiery));
+        EXPECT_EQ(p2.serverCardByEngineOid[fiery], physicalId);
+        EXPECT_EQ(p1.serverCardByEngineOid[fiery], physicalId);
+        ASSERT_TRUE(pass(p1)); ASSERT_TRUE(pass(p2));
+        ASSERT_TRUE(p2.pendingChoice.has_value());
+        EXPECT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+        ASSERT_EQ(p2.latestLegal.zone_cast_actions_size(), 1);
+        EXPECT_EQ(p1.latestLegal.zone_cast_actions_size(), 0);
+        const auto offer = p2.latestLegal.zone_cast_actions(0);
+        EXPECT_EQ(offer.cast_method(), ruled::v1::CAST_METHOD_MADNESS);
+        EXPECT_TRUE(p2.latestLegal.exile_play_permission_groups().empty());
+        const auto &permanents = p2.battlefieldByPlayer[p2.myId];
+        const auto mountain = std::find_if(permanents.begin(), permanents.end(), [](const auto &card) { return card.cardId == "mountain"; });
+        ASSERT_NE(mountain, permanents.end());
+        ruled::v1::RuledCommand accepted;
+        auto *choice = accepted.mutable_submit_resolution_choice();
+        choice->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_SPELL);
+        auto *cast = choice->mutable_cast_spell();
+        cast->set_cast_method(offer.cast_method()); cast->set_face_index(offer.face_index());
+        cast->set_casting_permission_id(offer.casting_permission_id());
+        cast->mutable_source()->set_exile_object_id(fiery);
+        cast->mutable_source()->set_expected_zone_change_generation(offer.zone_change_generation());
+        target = cast->add_targets(); target->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER); target->set_object_id(p1.myId);
+        ruled::v1::RuledCommand query;
+        auto *preview = query.mutable_preview_payment();
+        preview->set_transaction_id(197);
+        preview->set_revision(1);
+        *preview->mutable_cast_spell() = *cast;
+        preview->mutable_cast_spell()->mutable_payment();
+        int previewCount = p2.paymentPreviewCount;
+        p2.sendRuled(query, QStringLiteral("issue 197 preview madness before mana"));
+        ASSERT_TRUE(p2.pumpUntil([&] { return p2.paymentPreviewCount == previewCount + 1; }, 10000,
+                                 "madness unpaid preview"));
+        ASSERT_TRUE(p2.paymentPreview.valid()) << p2.paymentPreview.error();
+        EXPECT_FALSE(p2.paymentPreview.complete());
+        ruled::v1::RuledCommand activate;
+        p2.setBattlefieldAbilitySource(activate.mutable_activate_ability(), mountain->oid);
+        ASSERT_TRUE(send(p2, activate, QStringLiteral("issue 197 mana during madness offer")));
+        ASSERT_TRUE(p2.pendingChoice.has_value());
+        preview->set_revision(2);
+        preview->mutable_cast_spell()->mutable_payment()->mutable_mana()->set_r(1);
+        previewCount = p2.paymentPreviewCount;
+        p2.sendRuled(query, QStringLiteral("issue 197 preview selected red mana"));
+        ASSERT_TRUE(p2.pumpUntil([&] { return p2.paymentPreviewCount == previewCount + 1; }, 10000,
+                                 "madness paid preview"));
+        ASSERT_TRUE(p2.paymentPreview.valid()) << p2.paymentPreview.error();
+        ASSERT_TRUE(p2.paymentPreview.complete());
+        EXPECT_EQ(p1.paymentPreviewCount, 0);
+        *cast->mutable_payment() = p2.paymentPreview.selection();
+        p2.pendingChoice.reset();
+        ASSERT_TRUE(send(p2, accepted, QStringLiteral("issue 197 cast Fiery Temper")));
+        ASSERT_TRUE(pass(p1)); ASSERT_TRUE(pass(p2));
+        EXPECT_EQ(p1.lifeByPlayer[p1.myId], 17); EXPECT_EQ(p2.lifeByPlayer[p1.myId], 17);
+        for (SmokeClient *client : {&p1, &p2}) {
+            const auto toStack = std::find_if(client->physicalMoveEvents.begin(), client->physicalMoveEvents.end(),
+                                              [physicalId](const auto &move) { return move.card_id() == physicalId &&
+                                                  move.start_zone() == ZoneNames::EXILE && move.target_zone() == ZoneNames::STACK; });
+            ASSERT_NE(toStack, client->physicalMoveEvents.end());
+            const int stackId = toStack->new_card_id();
+            const auto toGrave = std::find_if(client->physicalMoveEvents.begin(), client->physicalMoveEvents.end(),
+                                              [stackId](const auto &move) { return move.card_id() == stackId &&
+                                                  move.start_zone() == ZoneNames::STACK && move.target_zone() == ZoneNames::GRAVE; });
+            ASSERT_NE(toGrave, client->physicalMoveEvents.end());
+            // Crossing the shared stack between seats reissues the server's seat-local id.
+            // Follow the explicit old/new id chain for the same physical card.
+            EXPECT_EQ(client->serverCardByEngineOid[fiery], toGrave->new_card_id());
+            EXPECT_EQ(toGrave->target_player_id(), p2.myId);
+        }
+    }
 }

@@ -21,6 +21,9 @@ Engine legal actions, targets, prompts, and object identities are authoritative.
 - `TabGame::refreshRuledPromptState()` owns mode selection. `TabGame` otherwise handles placement and signal connections.
 - Targeting is derived from `TargetingSources`; combat, priority, and sticky blocker errors remain orthogonal inputs.
 - Reuse existing commands and signals for UI text and actions before adding protobuf.
+- Present finite non-card alternatives (such as a discard destination) as buttons in the prompt widget. Select or order card cohorts in a custom zone with card images, using the shared image picker and engine-authored identities; do not use a text-list popup. Battlefield targeting can use the existing visible card images directly. Preserve recipient privacy, duplicate-card identity, and click order.
+- For Library of Leng's discard ordering, the last card clicked goes on top. State this in the prompt and translate click order to the engine's top-first sequence at submission.
+- A resolution-time cast offer yields the prompt to its own local targeting, cost selection, and payment while staging. Keep the exact offer available for cancellation/retry; it must not cancel its own cast as an unrelated blocking choice.
 - A valid one-of-one cast-cost group advances as soon as the option and any required object selection are complete. Do not add a redundant Confirm Costs step; retain explicit confirmation for multi-object cohorts.
 - Widget visibility tests use `isHidden()` because offscreen tests do not show the parent widget.
 

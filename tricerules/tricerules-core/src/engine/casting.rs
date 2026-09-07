@@ -154,197 +154,14 @@ impl GameEngine {
         self.state.stack[index].cast_condition_results = results;
     }
 
-    pub(super) fn cast_siege_defeat_offer(
-        &mut self,
-        player: PlayerId,
-        command: &rv1::CastSpell,
-        exiled: TriggerObjectRef,
-        expected_face_index: usize,
-        events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<(), EngineError> {
-        use rv1::cast_source::Location;
-        if command.cast_method != rv1::CastMethod::SiegeDefeat as i32
-            || command.face_index as usize != expected_face_index
-            || command.x_value != 0
-            || !command.flex_payments.is_empty()
-            || !command.cost_selections.is_empty()
-            || !command.restricted_mana.is_empty()
-            || command.payment.is_some()
-            || !command.cast_cost_group_selections.is_empty()
-        {
-            return Err(EngineError::Illegal(
-                "invalid Siege defeat cast announcement",
-            ));
-        }
-        let source_oid = command
-            .source
-            .as_ref()
-            .and_then(|source| source.location.as_ref())
-            .and_then(|location| match location {
-                Location::ExileObjectId(oid) => Some(*oid),
-                _ => None,
-            })
-            .ok_or(EngineError::Illegal(
-                "Siege defeat cast requires the offered exile object",
-            ))?;
-        let generation = self
-            .state
-            .zone_change_generation
-            .get(&source_oid)
-            .copied()
-            .unwrap_or(0);
-        let object = self
-            .state
-            .objects
-            .get(&source_oid)
-            .ok_or(EngineError::Illegal("offered Siege no longer exists"))?;
-        if source_oid != exiled.object_id
-            || generation != exiled.zone_change_generation
-            || object.zone != Zone::Exile
-            || exiled.controller_at_event != player
-        {
-            return Err(EngineError::Illegal("Siege defeat cast offer became stale"));
-        }
-        let card_id = object.card_id.clone();
-        let definition = self
-            .registry
-            .get(&card_id)
-            .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
-        if definition.layout != Layout::Transform {
-            return Err(EngineError::Illegal(
-                "offered Siege has no transformed face",
-            ));
-        }
-        let face = definition
-            .face(expected_face_index)
-            .ok_or(EngineError::Illegal("offered Siege face is missing"))?
-            .clone();
-        if face.modal_spell.is_some() || !command.selected_modes.is_empty() {
-            return Err(EngineError::Illegal(
-                "modal Siege back faces are not supported by this offer",
-            ));
-        }
-        let source = TargetSourceIdentity::spell_face(self, source_oid, expected_face_index);
-        validate_spell_targets(
-            self,
-            player,
-            source,
-            &face.spell_effect,
-            face.targeting.as_ref(),
-            &command.targets,
-        )?;
-        let public_targets = command.targets.clone();
-        let crime_events: Vec<_> = self
-            .crime_event(player, &public_targets)
-            .into_iter()
-            .collect();
-        let trefs: Vec<_> = public_targets
-            .iter()
-            .map(|target| target.object_id)
-            .collect();
-        let stack_targets: Vec<_> = public_targets
-            .iter()
-            .map(|target| capture_stack_target(self, target))
-            .collect();
-        let stack_generation = generation.saturating_add(1);
-        let mut triggers = self.collect_event_triggers(&[GameEvent::TargetsChosen {
-            controller: player,
-            source: TargetingSourceKind::SpellCast,
-            stack_object: StackObjectRef {
-                object_id: source_oid,
-                zone_change_generation: Some(stack_generation),
-            },
-            targets: stack_targets.clone(),
-        }]);
-        let stack_presentation =
-            spell_stack_presentation(self.registry, &card_id, expected_face_index, &[], &[]);
-        self.state
-            .stack_presentations
-            .insert(source_oid, stack_presentation.clone());
-        self.state.stack.push(StackItem {
-            id: source_oid,
-            controller: player,
-            card_id: card_id.clone(),
-            targets: stack_targets,
-            ability_text: None,
-            source_permanent_id: None,
-            source_owner: None,
-            source_zone_change: 0,
-            source_face_change: 0,
-            ability_index: None,
-            activated_ability: None,
-            triggered_ability: None,
-            is_triggered: false,
-            is_copy: false,
-            face_index: expected_face_index,
-            cast_method: SpellCastMethod::SiegeDefeat,
-            returned_attacker_assignment: None,
-            chosen_x: 0,
-            chosen_modes: vec![],
-            cast_condition_results: Vec::new(),
-            cast_occurrence: None,
-            cast_cost_receipts: vec![],
-            payment_result: CardResultCohort::default(),
-            search_results: Default::default(),
-            resolution_branch_choices: Default::default(),
-            blight_receipts: Vec::new(),
-            trigger_context: TriggerContext::default(),
-        });
-        super::resolution::move_object_to_zone(
-            &mut self.state,
-            self.registry,
-            source_oid,
-            Zone::Stack,
-            None,
-        )?;
-        self.state.passes_since_stack_change = 0;
-        if let Some(index) = self.state.player_idx(player) {
-            self.state.priority_idx = index;
-        }
-        let target_line = format_spell_targets_log(&self.state, self.registry, &trefs);
-        events.push(ev_log(format!(
-            "P{player} casts {} transformed without paying its mana cost{target_line}",
-            face.name
-        )));
-        events.push(rv1::RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
-                object_id: source_oid,
-                description: face.name.clone(),
-                targets: public_targets,
-                ability_annotation: "Siege defeat".into(),
-                card_id: card_id.clone(),
-                is_copy: false,
-                is_triggered: false,
-                copy_source_object_id: 0,
-                chosen_mode_indices: vec![],
-                chosen_mode_labels: vec![],
-                chosen_cast_cost_labels: vec!["Siege defeat".into()],
-                source_token_identity: None,
-                primary_presentation: stack_presentation.primary,
-                chosen_mode_presentations: stack_presentation.chosen_modes,
-                chosen_cast_cost_presentations: stack_presentation.chosen_cast_costs,
-            })),
-        });
-        let fact = self.record_spell_cast(
-            player,
-            source_oid,
-            Zone::Exile,
-            face.mana_cost.mana_value(),
-            0,
-        );
-        self.record_committed_events(&crime_events);
-        triggers.extend(self.collect_event_triggers(&crime_events));
-        self.snapshot_completed_cast(source_oid);
-        triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast { fact }]));
-        self.stage_triggers(triggers);
-        Ok(())
-    }
-
     pub(in crate::engine) fn prepare_spell_cast(
         &self,
         player: PlayerId,
         command: &rv1::CastSpell,
     ) -> Result<PreparedSpellCast, EngineError> {
+        let special_permission = self.special_cast_permission(player);
+        let special_method = self.special_cast_method(player);
+        let special = special_permission.is_some();
         let targets = command.targets.as_slice();
         let x_value = command.x_value;
         let flex_payments = command.flex_payments.as_slice();
@@ -360,16 +177,13 @@ impl GameEngine {
             Ok(rv1::CastMethod::Warp) => SpellCastMethod::Warp,
             Ok(rv1::CastMethod::Permission) => SpellCastMethod::Permission,
             Ok(rv1::CastMethod::Sneak) => SpellCastMethod::Sneak,
-            Ok(rv1::CastMethod::SiegeDefeat) => {
-                return Err(EngineError::Illegal(
-                    "Siege defeat casts require an active engine offer",
-                ));
-            }
+            Ok(rv1::CastMethod::SiegeDefeat) => SpellCastMethod::SiegeDefeat,
+            Ok(rv1::CastMethod::Madness) => SpellCastMethod::Madness,
             Ok(rv1::CastMethod::Unspecified) | Err(_) => {
                 return Err(EngineError::Illegal("missing or invalid cast method"));
             }
         };
-        if self.state.turn_step == TurnStep::Cleanup {
+        if self.state.turn_step == TurnStep::Cleanup && !special {
             return Err(EngineError::Illegal("no spells during cleanup"));
         }
         let idx = self
@@ -381,6 +195,14 @@ impl GameEngine {
             .as_ref()
             .and_then(|source| source.location.as_ref())
             .ok_or(EngineError::Illegal("missing cast source"))?;
+        if special
+            && (special_method != Some(cast_method)
+                || !matches!(source, rv1::cast_source::Location::ExileObjectId(_)))
+        {
+            return Err(EngineError::Illegal(
+                "cast does not match active resolution offer",
+            ));
+        }
         let from_hand = matches!(source, rv1::cast_source::Location::HandIndex(_));
         let (oid, exile_permission_scope) = match source {
             rv1::cast_source::Location::HandIndex(hand_index) => {
@@ -441,6 +263,8 @@ impl GameEngine {
                     .state
                     .active_exile_play_permissions
                     .iter()
+                    .filter(|_| !special)
+                    .chain(special_permission.iter())
                     .find(|permission| {
                         permission.group_id == permission_id
                             && permission.object_id == *source_oid
@@ -458,16 +282,17 @@ impl GameEngine {
                     .ok_or(EngineError::Illegal(
                         "card has no cast-from-exile permission",
                     ))?;
-                let method_matches = matches!(
-                    (&permission.cast_cost, cast_method),
-                    (
-                        crate::state::ExilePermissionCastCost::PrintedManaCost,
-                        SpellCastMethod::Normal
-                    ) | (
-                        crate::state::ExilePermissionCastCost::AlternativeManaCost(_),
-                        SpellCastMethod::Permission
-                    )
-                );
+                let method_matches = special_method == Some(cast_method)
+                    || matches!(
+                        (&permission.cast_cost, cast_method),
+                        (
+                            crate::state::ExilePermissionCastCost::PrintedManaCost,
+                            SpellCastMethod::Normal
+                        ) | (
+                            crate::state::ExilePermissionCastCost::AlternativeManaCost(_),
+                            SpellCastMethod::Permission
+                        )
+                    );
                 if !method_matches {
                     return Err(EngineError::Illegal(
                         "cast method does not match exile permission cost",
@@ -529,7 +354,8 @@ impl GameEngine {
         if matches!(
             exile_permission_scope,
             Some((ExilePlayPermissionScope::CastFace(_), _))
-        ) && !face.is_permanent()
+        ) && !special
+            && !face.is_permanent()
         {
             return Err(EngineError::Illegal(
                 "Adventure permission requires a permanent face",
@@ -568,10 +394,19 @@ impl GameEngine {
                     ));
                 }
             },
-            SpellCastMethod::SiegeDefeat => {
-                return Err(EngineError::Illegal(
-                    "Siege defeat casts require the offered resolution choice",
-                ));
+            SpellCastMethod::SiegeDefeat | SpellCastMethod::Madness => {
+                match exile_permission_scope.as_ref() {
+                    Some((_, crate::state::ExilePermissionCastCost::AlternativeManaCost(cost)))
+                        if special_method == Some(cast_method) =>
+                    {
+                        cost.clone()
+                    }
+                    _ => {
+                        return Err(EngineError::Illegal(
+                            "special cast requires active resolution offer",
+                        ))
+                    }
+                }
             }
         };
         let face_name = face.name.to_string();
@@ -594,7 +429,9 @@ impl GameEngine {
                     condition,
                 )
             });
-        if cast_method == SpellCastMethod::Sneak {
+        if special {
+            // The resolving effect supplies timing permission (CR 608.2g).
+        } else if cast_method == SpellCastMethod::Sneak {
             if !instant_ok || self.state.active_player_id() != player {
                 return Err(EngineError::Illegal("Sneak is not available now"));
             }
@@ -616,7 +453,7 @@ impl GameEngine {
         }
         // As in `pass_priority`: `dispatch_command`'s blocking gate normally catches these first;
         // this is the local refusal with a message that names casting.
-        match self.state.blocking_choice() {
+        match self.state.blocking_choice().filter(|_| !special) {
             Some(BlockingChoice::TriggerTarget) => {
                 return Err(EngineError::Illegal(
                     "must choose trigger target before casting",
@@ -1211,10 +1048,10 @@ impl GameEngine {
         let mana_option_index = command.mana_option_index;
         let cost_selections = command.cost_selections.as_slice();
         let restricted_mana = command.restricted_mana.as_slice();
-        if self.state.priority_player_id() != player {
+        if self.state.priority_player_id() != player && self.special_cast_method(player).is_none() {
             return Err(EngineError::Illegal("not your priority"));
         }
-        if self.state.turn_step == TurnStep::Cleanup {
+        if self.state.turn_step == TurnStep::Cleanup && self.special_cast_method(player).is_none() {
             return Err(EngineError::Illegal("no abilities during cleanup"));
         }
         if priority_locked_for_combat_declaration(&self.state) {
@@ -1307,7 +1144,7 @@ impl GameEngine {
                 .pending_resolution
                 .as_ref()
                 .is_some_and(|pending| {
-                    pending.continuation.mana_payment().is_some()
+                    pending.continuation.mana_window_undo_start().is_some()
                         && pending.deciding_player == player
                 });
         if resolving_mana_payment {
@@ -2027,7 +1864,7 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         let payment_undo_start = self.state.pending_resolution.as_ref().and_then(|pending| {
             (pending.deciding_player == player)
-                .then_some(pending.continuation.mana_payment()?.undo_history_start)
+                .then_some(pending.continuation.mana_window_undo_start()?)
         });
         if self.state.priority_player_id() != player && payment_undo_start.is_none() {
             return Err(EngineError::Illegal("not your priority"));
@@ -3244,35 +3081,37 @@ mod cast_snapshot_tests {
     #[test]
     fn issue_173_siege_offer_snapshots_the_cast_face() {
         let mut e = engine("spell_effect: [GainLife(amount: 1)]");
-        let siege = add(&mut e, 0, "snapshot_siege_snapshot_reverse", Zone::Hand);
-        super::super::resolution::move_object_to_zone(
-            &mut e.state,
-            e.registry,
-            siege,
-            Zone::Exile,
-            None,
-        )
-        .unwrap();
+        let siege = add(
+            &mut e,
+            0,
+            "snapshot_siege_snapshot_reverse",
+            Zone::Battlefield,
+        );
+        e.state.objects.get_mut(&siege).unwrap().counters.clear();
+        e.stage_siege_defeat_trigger(siege);
+        e.flush_staged_triggers(&mut vec![]);
+        resolve(&mut e);
         let generation = e.state.zone_change_generation[&siege];
+        let permission = e
+            .special_cast_permission(0)
+            .expect("Siege resolution cast offer");
         let command = rv1::CastSpell {
             cast_method: rv1::CastMethod::SiegeDefeat as i32,
+            casting_permission_id: Some(permission.group_id),
             source: Some(rv1::CastSource {
-                expected_zone_change_generation: None,
+                expected_zone_change_generation: Some(generation),
                 location: Some(rv1::cast_source::Location::ExileObjectId(siege)),
             }),
             face_index: 1,
             ..Default::default()
         };
-        e.cast_siege_defeat_offer(
+        e.submit_resolution_choice(
             0,
-            &command,
-            TriggerObjectRef {
-                object_id: siege,
-                zone_change_generation: generation,
-                controller_at_event: 0,
+            &rv1::SubmitResolutionChoice {
+                decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
+                cast_spell: Some(command),
+                ..Default::default()
             },
-            1,
-            &mut vec![],
         )
         .unwrap();
         assert_eq!(

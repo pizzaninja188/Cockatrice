@@ -1,0 +1,9 @@
+// Oracle and rulings checked 2026-09-07; CR 701.9 and 603.3.
+(
+ id: "megrim", name: "Megrim", face_id: "megrim", mana_cost: "{2}{B}", types: ["Enchantment"],
+ triggered_abilities: [(
+  ability_id: "triggered_01", presentation: OracleLines([1]),
+  trigger: WheneverPlayerDiscardsCard(player: Opponent),
+  effect: [DamagePlayer(amount: 2, who: AffectedPlayer)],
+ )],
+)

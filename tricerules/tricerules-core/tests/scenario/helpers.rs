@@ -1,6 +1,8 @@
 //! Shared helpers for scenario tests.
 #![allow(dead_code)]
 
+pub use tricerules_cards::primitives::HandCardAction;
+
 fn fixture_token_origin(card_id: &str) -> Option<tricerules_core::state::CopiableValues> {
     let registry = tricerules_cards::CardRegistry::global();
     if !registry.is_token(card_id) {
@@ -18,8 +20,8 @@ fn fixture_token_origin(card_id: &str) -> Option<tricerules_core::state::Copiabl
 
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
 pub(crate) use tricerules_core::state::{
-    HandCardAction, PendingLibraryLookStage, PendingLibraryPartitionKind,
-    PendingLibraryPartitionStage, PendingResolutionBranchStage, ResolutionContinuation,
+    PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
+    PendingResolutionBranchStage, ResolutionContinuation,
 };
 pub(crate) use tricerules_core::{AttachmentRecipient, GameEngine};
 use tricerules_proto::ruled::v1 as rv1;

@@ -1,0 +1,9 @@
+// Oracle/rulings checked 2026-09-07. Costs and cleanup are not effects.
+(
+ id: "library_of_leng", name: "Library of Leng", face_id: "library_of_leng",
+ mana_cost: "{1}", types: ["Artifact"],
+ static_abilities: [
+  (ability_id: "static_01", presentation: OracleLines([1]), definition: NoMaximumHandSize),
+  (ability_id: "static_02", presentation: OracleLines([2]), definition: DiscardToLibrary),
+ ],
+)

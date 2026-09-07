@@ -12,7 +12,7 @@
       (
         mode_id: "mode_01",
         presentation: OracleLines([2]),
-        effects: [DiscardCards(
+        effects: [ChooseHandCards(action: Discard,
           count: 1,
           target: (kind: OpponentPlayer),
           chooser: Controller,

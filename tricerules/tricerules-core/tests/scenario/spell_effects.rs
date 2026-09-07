@@ -2212,7 +2212,7 @@ fn draw_spell_decking_out_loses_without_erroring() {
     );
 }
 
-// ── DiscardCards tests ─────────────────────────────────────────────────────────
+// ── ChooseHandCards tests ─────────────────────────────────────────────────────────
 
 fn inject_card_into_hand(e: &mut GameEngine, player: usize, player_id: i32, card_id: &str) -> u32 {
     let id = e.state.next_object_id;
@@ -2980,7 +2980,7 @@ fn issue_143_thoughtseize_publicly_reveals_then_loses_two_life() {
     );
 }
 
-/// #36, the straight-through half: a caster-chooses `DiscardCards` against an *empty* hand does
+/// #36, the straight-through half: a caster-chooses `ChooseHandCards` against an *empty* hand does
 /// not park at all, so the life loss must still happen on the same batch. The two paths were
 /// order-of-magnitude inconsistent for the same card before the fix — this one kept its second
 /// effect while the parking path above silently dropped it.

@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-09-07; each discard is a distinct trigger.
+(
+ id: "waste_not", name: "Waste Not", face_id: "waste_not", mana_cost: "{1}{B}", types: ["Enchantment"],
+ triggered_abilities: [
+  (ability_id: "triggered_01", presentation: OracleLines([1]),
+   trigger: WheneverPlayerDiscardsCard(player: Opponent, filter: Some((card_type: Some(Creature)))),
+   effect: [CreateTokens(token: "zombie_b_2_2", count: 1)]),
+  (ability_id: "triggered_02", presentation: OracleLines([2]),
+   trigger: WheneverPlayerDiscardsCard(player: Opponent, filter: Some((card_type: Some(Land)))),
+   effect: [AddMana(amount: (b: 2), retention: EndOfStep)]),
+  (ability_id: "triggered_03", presentation: OracleLines([3]),
+   trigger: WheneverPlayerDiscardsCard(player: Opponent, filter: Some((excluded_card_types: [Creature, Land]))),
+   effect: [Draw(count: 1)]),
+ ],
+)

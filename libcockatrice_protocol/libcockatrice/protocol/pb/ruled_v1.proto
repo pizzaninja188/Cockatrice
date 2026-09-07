@@ -206,7 +206,7 @@ enum ResolutionChoiceDecision {
   RESOLUTION_CHOICE_DECISION_DECLINE = 1;
   RESOLUTION_CHOICE_DECISION_PAY_MANA = 2;
   RESOLUTION_CHOICE_DECISION_SELECT_BRANCH = 3;
-  RESOLUTION_CHOICE_DECISION_CAST_TRANSFORMED = 4;
+  RESOLUTION_CHOICE_DECISION_CAST_SPELL = 4;
 }
 
 // A player's answer to a ResolutionChoiceRequired. Object choices use chosen_object_ids (in
@@ -295,6 +295,7 @@ enum CastMethod {
   // An effect-created permission supplies the alternative mana cost and exact permission id.
   CAST_METHOD_PERMISSION = 6;
   CAST_METHOD_SNEAK = 7;
+  CAST_METHOD_MADNESS = 8;
 }
 
 message CastSpell {
@@ -1285,7 +1286,7 @@ enum ChoiceKind {
   // CR 310.11a / 704.5w-x: choose an opponent to protect a Siege.
   CHOICE_KIND_BATTLE_PROTECTOR = 17;
   // CR 310.11b: optionally cast the defeated Siege transformed from exile.
-  CHOICE_KIND_SIEGE_CAST = 18;
+  CHOICE_KIND_SPECIAL_CAST = 18;
   // CR 508.4: choose the player, planeswalker, or Battle a token enters attacking. Public domain,
   // but the exact candidate snapshot is routed only to the deciding player.
   CHOICE_KIND_ATTACKING_TOKEN_DEFENDER = 19;
@@ -1298,6 +1299,8 @@ enum ChoiceKind {
   // CR 701.4: optionally choose a matching permanent you control or reveal a matching card from
   // your hand during resolution. Private because the mixed cohort exposes hand contents.
   CHOICE_KIND_BEHOLD = 22;
+  // Opaque discard replacement applications or private library ordering. Decider-only metadata.
+  CHOICE_KIND_PRIVATE_REPLACEMENT = 23;
 }
 
 enum ChoiceCandidateSourceZone {

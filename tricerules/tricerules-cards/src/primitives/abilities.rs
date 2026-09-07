@@ -352,6 +352,13 @@ impl ActivatedAbilityDef {
 /// Condition that causes a triggered ability to fire (CR 603).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TriggerCondition {
+    /// Megrim and Waste Not observe semantic discards, including replaced destinations.
+    WheneverPlayerDiscardsCard {
+        #[serde(default)]
+        player: CastTriggerPlayer,
+        #[serde(default)]
+        filter: Option<super::ZoneCardFilter>,
+    },
     /// When this permanent enters the battlefield.
     WhenSelfEntersBattlefield,
     /// CR 714.2b: a printed Saga chapter triggers whenever lore counters cross one of these
@@ -766,6 +773,10 @@ impl TriggerCondition {
             | Self::WheneverPlayerDrawsNthCard { ordinal: 0, .. } => {
                 Err("turn-history trigger ordinal must be at least one".into())
             }
+            Self::WheneverPlayerDiscardsCard {
+                filter: Some(filter),
+                ..
+            } => filter.validate(),
             Self::WheneverPlayerCastsSpell { filter, .. } => filter.validate(),
             Self::WheneverSpellBecomesTarget { spell_filter, .. } => spell_filter.validate(),
             _ => Ok(()),
@@ -1506,6 +1517,13 @@ pub enum CounterPlacementAffected {
 /// do not use the stack, unlike triggered and activated abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// Hand-active replacement and exile trigger, used by Fiery Temper and Arrogant Wurm.
+    Madness { cost: super::super::ManaCost },
+    /// Library of Leng: optional replacement for effect-caused discards only.
+    DiscardToLibrary,
+    /// Library of Leng and Reliquary Tower establish this continuous player rule.
+    NoMaximumHandSize,
+
     /// CR 113.6g / 701.6: this spell cannot be countered while it is on the stack. Countering
     /// spells and abilities can still legally target it and any optional payment still occurs.
     /// Surrak, Elusive Hunter and Abrupt Decay share this intrinsic stack-active prohibition.

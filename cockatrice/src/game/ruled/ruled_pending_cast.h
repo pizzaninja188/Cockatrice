@@ -939,6 +939,9 @@ public:
 
     /// Pick one engine-authoritative castable face. The physical CardItem may expose only its
     /// front display name (Adventure), so menu entries come exclusively from `faces`.
+    /// Keep previews as cast proposals; bind only final submissions to the resolving offer.
+    static ruled::v1::RuledCommand submissionCommand(const ruled::v1::RuledCommand &command);
+
     static std::optional<RuledFaceOption>
     chooseFace(QWidget *parent, const QString &cardName, const QVector<RuledFaceOption> &faces);
 
@@ -952,6 +955,10 @@ public:
                           const QVector<QPair<int, QString>> &paymentContributions = {});
 
     /// Spell casts and activated abilities are mutually exclusive local UI transactions.
+    /// A parked cast offer owns the exact source, generation, face, method, and permission.
+    [[nodiscard]] static bool matchesSpecialCastOffer(const PendingRuledSpellCast &spell,
+                                                       const RuledClientState &state);
+    [[nodiscard]] bool resolutionChoiceBlocksSpell(const RuledClientState &state) const;
     PendingRuledSpellCast &beginSpell();
     PendingActivatedAbility &beginAbility();
     void clearSpell();

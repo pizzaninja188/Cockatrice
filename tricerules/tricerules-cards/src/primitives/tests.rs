@@ -1783,3 +1783,20 @@ fn simple_targeted_fallbacks_cover_map_and_granted_damage_abilities() {
         "{T}: Deal 1 damage to any target."
     );
 }
+#[test]
+fn issue_197_hand_choice_requires_an_explicit_typed_action() {
+    for action in ["Discard", "Exile"] {
+        let text =
+            format!("ChooseHandCards(action: {action}, count: 1, target: (kind: AnyPlayer))");
+        let effect = ron::from_str::<super::SpellEffectKind>(&text)
+            .expect("shared hand choice action must deserialize");
+        assert!(effect.validate(super::EffectContext::Spell).is_ok());
+    }
+    for text in [
+        "ChooseHandCards(count: 1, target: (kind: AnyPlayer))",
+        "DiscardCards(count: 1, target: (kind: AnyPlayer))",
+        "ExileCardsFromHand(count: 1, target: (kind: AnyPlayer))",
+    ] {
+        assert!(ron::from_str::<super::SpellEffectKind>(text).is_err());
+    }
+}

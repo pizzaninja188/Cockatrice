@@ -404,6 +404,18 @@ fn defeated_siege_casts_back_face_with_exact_physical_identity() {
     let (mut engine, battle, exile_generation) = siege_ready_to_choose(72_006);
     let announcement = CastSpell {
         cast_method: CastMethod::SiegeDefeat as i32,
+        casting_permission_id: Some(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .continuation
+                .stack()
+                .unwrap()
+                .item
+                .id as u64,
+        ),
         source: Some(exile_cast_source(battle, exile_generation)),
         face_index: 1,
         ..Default::default()
@@ -411,7 +423,7 @@ fn defeated_siege_casts_back_face_with_exact_physical_identity() {
     let command = RuledCommand {
         cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
             chosen_object_ids: Vec::new(),
-            decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::CastTransformed as i32,
+            decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::CastSpell as i32,
             selected_branch_index: 0,
             cast_spell: Some(announcement),
             chosen_combat_defender: None,

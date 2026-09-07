@@ -1618,12 +1618,16 @@ impl CardRegistry {
                 // for example, belongs in `spell_effect` as a one-shot `PumpAll`.
                 if (face.is_instant || face.is_sorcery)
                     && face.static_abilities.iter().any(|ability| {
-                        !matches!(ability.definition, StaticAbilityDef::SpellCannotBeCountered)
+                        !matches!(
+                            ability.definition,
+                            StaticAbilityDef::SpellCannotBeCountered
+                                | StaticAbilityDef::Madness { .. }
+                        )
                     })
                 {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
-                        reason: "only stack-active static abilities are valid on instant/sorcery"
+                        reason: "only stack-active or madness static abilities are valid on instant/sorcery"
                             .into(),
                     });
                 }

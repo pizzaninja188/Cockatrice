@@ -252,6 +252,7 @@ void RuledBatchSynchronizer::resetForNewGame()
     ruledStackObjectIdToCasterPlayerId.clear();
     ruledStackTargetsByObjectId.clear();
     ruledStackCopyObjectIds.clear();
+    ruledStackAbilityObjectIds.clear();
     ruledPendingCastVisualQueue.clear();
 }
 
@@ -362,10 +363,10 @@ void RuledBatchSynchronizer::applyStackResolvedEvent(const ruled::v1::StackResol
                                                      const QHash<quint32, int> &battlefieldDisplayPlayers)
 {
     const quint32 resolvedOid = static_cast<quint32>(stackResolved.object_id());
-    // A copy has no stack-zone Server_Card to move. Permanent spell copies materialize through an
+    // Copies and abilities have no stack-zone Server_Card to move. Permanent spell copies materialize through an
     // earlier TokenCreated event; returning here preserves that newly minted physical token and
     // also prevents the name fallback from moving the original spell with the same card_id/name.
-    if (ruledStackCopyObjectIds.remove(resolvedOid)) {
+    if (ruledStackCopyObjectIds.remove(resolvedOid) || ruledStackAbilityObjectIds.remove(resolvedOid)) {
         ruledEngineStackPushDescriptionsByObjectId.remove(resolvedOid);
         return;
     }
@@ -517,6 +518,7 @@ void RuledBatchSynchronizer::applyStackObjectCounteredEvent(const ruled::v1::Sta
 {
     const quint32 objectId = static_cast<quint32>(countered.object_id());
     ruledStackCopyObjectIds.remove(objectId);
+    ruledStackAbilityObjectIds.remove(objectId);
     ruledStackTargetsByObjectId.remove(objectId);
     ruledStackObjectIdToServerCardId.remove(objectId);
     ruledStackObjectIdToCasterPlayerId.remove(objectId);
@@ -1160,6 +1162,14 @@ void RuledBatchSynchronizer::applyPhaseStackAndZoneViews(const ruled::v1::RuledE
                         }
                     }
                     ruledEngineStackPushDescriptionsByObjectId.insert(pushedOid, copyName);
+                    continue;
+                }
+                // Abilities have no physical card. In particular, a madness trigger resolves
+                // after its identically named source has been cast onto the physical stack.
+                // Neither binding nor the resolve-time name fallback may consume that spell.
+                if (sp.is_triggered() || sp.card_id().empty()) {
+                    ruledStackAbilityObjectIds.insert(pushedOid);
+                    ruledEngineStackPushDescriptionsByObjectId.insert(pushedOid, QString::fromStdString(sp.description()));
                     continue;
                 }
                 // Physical binding matches on display names. For spells, resolve the engine

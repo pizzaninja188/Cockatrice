@@ -702,6 +702,20 @@ impl GameEngine {
                     }
                 }
             }
+            // All abilities waiting at this priority boundary are ordered together (CR 603.3b),
+            // including different discard occurrences and events during the same resolution.
+            if self.state.staged_trigger_groups.len() > 1 {
+                let mut triggers: Vec<_> = self
+                    .state
+                    .staged_trigger_groups
+                    .drain(..)
+                    .flat_map(|group| group.triggers)
+                    .collect();
+                triggers.sort_by_key(|trigger| self.state.apnap_rank(trigger.controller));
+                self.state
+                    .staged_trigger_groups
+                    .push_back(StagedTriggerGroup { triggers });
+            }
             let Some(group) = self.state.staged_trigger_groups.front_mut() else {
                 return;
             };
@@ -819,6 +833,26 @@ impl GameEngine {
                 }
                 out
             }
+            GameEvent::Discarded(receipt) => sources
+                .iter()
+                .flat_map(|source| {
+                    self.matching_snapshot_abilities(source, |condition| {
+                        let TriggerCondition::WheneverPlayerDiscardsCard { player, filter } =
+                            condition
+                        else {
+                            return false;
+                        };
+                        self.relative_player_matches(*player, receipt.player, source.controller)
+                            && filter.as_ref().is_none_or(|filter| {
+                                receipt
+                                    .known_card_id
+                                    .as_ref()
+                                    .and_then(|id| self.registry.get(id))
+                                    .is_some_and(|card| card.matches_zone_card_filter(filter))
+                            })
+                    })
+                })
+                .collect(),
             GameEvent::LibrarySearched {
                 searcher,
                 library_owner,
@@ -2244,6 +2278,7 @@ impl GameEngine {
     fn trigger_player_for(event: &GameEvent) -> Option<PlayerId> {
         match event {
             GameEvent::PhaseBegan { active_player, .. } => Some(*active_player),
+            GameEvent::Discarded(receipt) => Some(receipt.player),
             GameEvent::Sacrificed { player, .. } => Some(*player),
             GameEvent::Surveilled { player } => Some(*player),
             GameEvent::Explored { object } => Some(object.controller_at_event),

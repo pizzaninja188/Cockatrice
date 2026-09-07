@@ -99,6 +99,7 @@ private:
     QHash<quint32, int> ruledStackObjectIdToCasterPlayerId;
     QHash<quint32, QVector<quint32>> ruledStackTargetsByObjectId;
     QSet<quint32> ruledStackCopyObjectIds;
+    QSet<quint32> ruledStackAbilityObjectIds;
     QList<PendingRuledCastVisual> ruledPendingCastVisualQueue;
 };
 

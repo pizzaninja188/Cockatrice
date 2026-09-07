@@ -4,7 +4,7 @@
   face_id: "coercion",
   mana_cost: "{2}{B}",
   types: ["Sorcery"],
-  spell_effect: [DiscardCards(
+  spell_effect: [ChooseHandCards(action: Discard,
     count: 1,
     target: (kind: OpponentPlayer),
     chooser: Controller,

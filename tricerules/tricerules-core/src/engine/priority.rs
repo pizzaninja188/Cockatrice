@@ -222,7 +222,7 @@ impl GameEngine {
                         ev.push(ev_log("Game over: empty library on draw".into()));
                         return Ok(finish_with_events(self, std::mem::take(ev)));
                     }
-                    draw_card(&mut self.state.players[idx], &mut self.state.objects)?;
+                    draw_card(&mut self.state, self.registry, ap)?;
                     self.fire_card_drawn(ap);
                 }
                 self.state.passes_since_stack_change = 0;
@@ -477,7 +477,8 @@ impl GameEngine {
 
     pub(super) fn active_player_cleanup_discard_needed(&self) -> Option<PlayerId> {
         let active_player = self.state.players.get(self.state.active_player_idx)?;
-        (active_player.hand.len() > MAX_HAND_SIZE).then_some(active_player.id)
+        (active_player.hand.len() > self.maximum_hand_size(active_player.id))
+            .then_some(active_player.id)
     }
 
     pub(super) fn start_cleanup_or_roll_turn(
@@ -491,7 +492,8 @@ impl GameEngine {
             }
             self.state.passes_since_stack_change = 0;
             ev.push(ev_log(format!(
-                "P{pid}: discard to hand size ({MAX_HAND_SIZE})"
+                "P{pid}: discard to hand size ({})",
+                self.maximum_hand_size(pid)
             )));
             ev.push(ev_priority_changed(self));
             self.apply_sbas(&mut ev)?;
@@ -517,10 +519,11 @@ impl GameEngine {
             .player_idx(player)
             .ok_or(EngineError::UnknownPlayer(player))?;
         let hand_len = self.state.players[idx].hand.len();
-        if hand_len <= MAX_HAND_SIZE {
+        let maximum = self.maximum_hand_size(player);
+        if hand_len <= maximum {
             return Err(EngineError::Illegal("hand size not over max"));
         }
-        let must_discard = hand_len - MAX_HAND_SIZE;
+        let must_discard = hand_len - maximum;
         let mut positions: Vec<usize> = d.hand_card_indices.iter().map(|&i| i as usize).collect();
         if positions.len() != must_discard {
             return Err(EngineError::Illegal("wrong discard count"));
@@ -552,13 +555,14 @@ impl GameEngine {
                 .get(&oid)
                 .map(|o| o.owner)
                 .ok_or(EngineError::Illegal("no object"))?;
-            let (card_name, moved) = perform_discard(&mut self.state, self.registry, player, oid)?;
+            let (card_name, moved) =
+                perform_discard(self, player, oid, crate::state::DiscardCause::Cleanup)?;
             ev.push(ev_log(format!("P{player} discards {card_name} (cleanup)")));
             debug_assert_eq!(owner, player);
             ev.push(moved);
         }
         self.apply_sbas(&mut ev)?;
-        if self.state.players[idx].hand.len() > MAX_HAND_SIZE {
+        if self.state.players[idx].hand.len() > self.maximum_hand_size(player) {
             ev.push(ev_priority_changed(self));
             return Ok(finish_with_events(self, ev));
         }

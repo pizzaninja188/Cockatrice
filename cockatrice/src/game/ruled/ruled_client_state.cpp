@@ -582,23 +582,32 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
         return;
     }
 
-    if (pendingChoice->kind == ChoiceKind::SiegeCast) {
-        const RuledPendingChoice restore = *pendingChoice;
-        const quint32 sourceOid = pendingChoice->candidateOids.constFirst();
-        clearPendingChoiceOfKind(ChoiceKind::SiegeCast);
-        ruled::v1::RuledCommand command;
-        auto *submission = command.mutable_submit_resolution_choice();
-        if (optionIndex == 0) {
-            submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
-        } else {
-            submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_TRANSFORMED);
-            auto *cast = submission->mutable_cast_spell();
-            cast->set_cast_method(ruled::v1::CAST_METHOD_SIEGE_DEFEAT);
-            cast->set_face_index(1);
-            cast->mutable_source()->set_exile_object_id(sourceOid);
+    if (pendingChoice->kind == ChoiceKind::SpecialCast) {
+        if (optionIndex != 0) {
+            // Local targeting/payment can be cancelled without declining the engine offer.
+            emit specialCastRequested(pendingChoice->candidateOids.constFirst());
+            return;
         }
+        const RuledPendingChoice restore = *pendingChoice;
+        clearPendingChoiceOfKind(ChoiceKind::SpecialCast);
+        ruled::v1::RuledCommand command;
+        command.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
         host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
             if (!accepted && !pendingChoice.has_value()) {
+                setPendingChoice(restore);
+                emit combatStateChanged();
+            }
+        });
+        return;
+    }
+
+    if (pendingChoice->kind == ChoiceKind::ReplacementOption) {
+        const RuledPendingChoice restore = *pendingChoice;
+        clearPendingChoiceOfKind(ChoiceKind::ReplacementOption);
+        ruled::v1::RuledCommand command;
+        command.mutable_submit_resolution_choice()->add_chosen_object_ids(static_cast<quint32>(optionIndex));
+        host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
+            if (!accepted && !pendingChoice) {
                 setPendingChoice(restore);
                 emit combatStateChanged();
             }
@@ -989,6 +998,9 @@ void RuledClientState::submitResolutionHandPick()
         if (oid != 0) {
             chosen.append(oid);
         }
+    }
+    if (pendingChoice->reverseSelectionOrder) {
+        std::reverse(chosen.begin(), chosen.end());
     }
     clearPendingChoice();
     emit resolutionHandPickUiChanged(-1, -1);

@@ -22,6 +22,20 @@
 RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
 {
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    QObject::connect(state, &RuledClientState::specialCastRequested, actions, [this, state](quint32 oid) {
+        if (!actions->player->getPlayerInfo()->getLocal())
+            return;
+        const auto offers = state->zoneCastActions.faceOptionsByIndex.value(static_cast<int>(oid));
+        for (const auto &offer : offers) {
+            if (offer.castMethod == ruled::v1::CAST_METHOD_MADNESS ||
+                offer.castMethod == ruled::v1::CAST_METHOD_SIEGE_DEFEAT) {
+                actions->beginRuledSpellCast(nullptr, static_cast<int>(oid), offer.faceIndex, offer.faceName,
+                                             offer.manaCost, offer.genericCostReduction, RuledCastSource::Exile,
+                                             offer.castMethod, offer.castingPermissionId);
+                return;
+            }
+        }
+    });
     QObject::connect(state, &RuledClientState::paymentPreviewReceived, actions, [this] { received(); });
     QObject::connect(state, &RuledClientState::legalActionsChanged, actions, [this] {
         if (actions->player->getPlayerInfo()->getLocal())
@@ -31,6 +45,20 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
         suspendedPayments.clear();
         clear();
     });
+}
+
+bool RuledPaymentUi::isStagingSpecialCast(const RuledClientState &state) const
+{
+    if (RuledPendingCast::matchesSpecialCastOffer(actions->pendingRuledSpellCast, state))
+        return true;
+    return std::any_of(suspendedPayments.cbegin(), suspendedPayments.cend(), [&state](const auto &frame) {
+        return frame.spell && RuledPendingCast::matchesSpecialCastOffer(*frame.spell, state);
+    });
+}
+
+bool PlayerActions::isStagingRuledSpecialCast(const RuledClientState &state) const
+{
+    return ruledPayment->isStagingSpecialCast(state);
 }
 
 RuledPaymentUi::Context RuledPaymentUi::context() const
@@ -87,7 +115,7 @@ bool RuledPaymentUi::startOrRefresh()
 {
     const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     if (actions->player->getPlayerInfo()->getLocal() && actions->pendingRuledSpellCast.valid &&
-        (state->pendingChoice || state->choiceWaitingPlayerId >= 0)) {
+        actions->ruledPendingCast->resolutionChoiceBlocksSpell(*state)) {
         actions->cancelPendingRuledSpellCast();
         return true;
     }

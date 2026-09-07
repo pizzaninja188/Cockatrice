@@ -3,9 +3,9 @@ use tricerules_cards::primitives::{
     ActivatedAbilityDef, ArmySubtype, CardResultAction, CardSearchZone, CardTypeFilter,
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
-    DelayedTokenSacrificeTiming, EffectDuration, GameCondition, Keyword, LibraryBottomOrder,
-    LibraryPlacement, ManaAmount, ManaSpendingRestriction, PermanentTypeFilter, SearchDestination,
-    SearchSelectionSlot, SearchZoneSelection, TargetFilter, TriggeredAbilityDef,
+    DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
+    LibraryBottomOrder, LibraryPlacement, ManaAmount, ManaSpendingRestriction, PermanentTypeFilter,
+    SearchDestination, SearchSelectionSlot, SearchZoneSelection, TargetFilter, TriggeredAbilityDef,
     TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
@@ -16,6 +16,43 @@ use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
 pub type PlayerId = i32;
 pub type ObjectId = u32;
+
+/// Why the discard is performed; Library of Leng applies only to Effect.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiscardCause {
+    Effect,
+    Cost,
+    Cleanup,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct ProposedDiscard {
+    pub player: PlayerId,
+    pub object: TriggerObjectRef,
+    pub destination: Option<Zone>,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingDiscardBatch {
+    pub cards: Vec<ProposedDiscard>,
+    pub current: usize,
+    pub revealed: bool,
+    pub draw_after: Option<(PlayerId, u32)>,
+    pub library_orders: BTreeMap<PlayerId, Vec<ObjectId>>,
+}
+
+/// Event-time semantic discard facts, never inferred from the eventual destination.
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct DiscardReceipt {
+    pub player: PlayerId,
+    pub object_id: ObjectId,
+    pub before_generation: u64,
+    pub after_generation: u64,
+    pub destination: Zone,
+    pub cause: DiscardCause,
+    /// None for an unrevealed hidden-zone destination (CR 701.9c).
+    pub known_card_id: Option<String>,
+}
 
 /// Committed CR 701.68 operation. A forced instruction can complete without a recipient;
 /// optional payments always have one. Never infer payment from the surviving counter bag.
@@ -835,6 +872,9 @@ pub enum PendingLibraryLookStage {
 /// handler consumes; engine-owned string sentinels and unrelated optional fields are forbidden.
 #[derive(serde::Serialize, Debug, Clone)]
 pub enum ResolutionContinuation {
+    DiscardReplacement {
+        stack: ParkedStackResolution,
+    },
     Custom {
         stack: ParkedStackResolution,
         key: String,
@@ -995,10 +1035,13 @@ pub enum ResolutionContinuation {
         current_options: Vec<tricerules_proto::ruled::v1::CombatDefenderOption>,
         delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
     },
-    SiegeCast {
+    SpecialCast {
         stack: ParkedStackResolution,
         exiled: TriggerObjectRef,
         face_index: usize,
+        method: SpellCastMethod,
+        cost: ManaCost,
+        undo_history_start: usize,
     },
     LegendKeep,
 }
@@ -1006,7 +1049,8 @@ pub enum ResolutionContinuation {
 impl ResolutionContinuation {
     pub fn stack(&self) -> Option<&ParkedStackResolution> {
         match self {
-            Self::Custom { stack, .. }
+            Self::DiscardReplacement { stack }
+            | Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
             | Self::PermanentChoice { stack, .. }
@@ -1035,7 +1079,7 @@ impl ResolutionContinuation {
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
-            Self::SiegeCast { stack, .. } => Some(stack),
+            Self::SpecialCast { stack, .. } => Some(stack),
             Self::AuraReturn { stack, .. } => stack.as_ref(),
             Self::LegendKeep => None,
         }
@@ -1043,7 +1087,8 @@ impl ResolutionContinuation {
 
     pub fn stack_mut(&mut self) -> Option<&mut ParkedStackResolution> {
         match self {
-            Self::Custom { stack, .. }
+            Self::DiscardReplacement { stack }
+            | Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
             | Self::PermanentChoice { stack, .. }
@@ -1072,9 +1117,20 @@ impl ResolutionContinuation {
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
-            Self::SiegeCast { stack, .. } => Some(stack),
+            Self::SpecialCast { stack, .. } => Some(stack),
             Self::AuraReturn { stack, .. } => stack.as_mut(),
             Self::LegendKeep => None,
+        }
+    }
+
+    pub fn mana_window_undo_start(&self) -> Option<usize> {
+        match self {
+            Self::SpecialCast {
+                undo_history_start, ..
+            } => Some(*undo_history_start),
+            _ => self
+                .mana_payment()
+                .map(|payment| payment.undo_history_start),
         }
     }
 
@@ -1109,18 +1165,13 @@ pub struct PendingResolution {
     pub continuation: ResolutionContinuation,
 }
 
-#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HandCardAction {
-    Discard,
-    Exile,
-}
-
 #[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingHandChoice {
     pub affected_player: PlayerId,
     pub action: HandCardAction,
     pub candidate_generations: Vec<(ObjectId, u64)>,
     pub draw_after: u32,
+    pub revealed: bool,
     pub draw_only_if_discarded: bool,
 }
 
@@ -1365,6 +1416,7 @@ pub struct CastCostReceipt {
 /// than one alternative method may legally cast the same physical graveyard object.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SpellCastMethod {
+    Madness,
     #[default]
     Normal,
     Flashback,
@@ -1384,6 +1436,7 @@ impl SpellCastMethod {
 
     pub fn label(self) -> Option<&'static str> {
         match self {
+            Self::Madness => Some("Madness"),
             Self::Normal => None,
             Self::Flashback => Some("Flashback"),
             Self::Harmonize => Some("Harmonize"),
@@ -1931,6 +1984,9 @@ pub struct GameState {
     /// Internal committed tap instruction identity; shared by simultaneous transitions only.
     pub next_tap_action_id: u64,
     pub active_exile_play_permissions: Vec<ActiveExilePlayPermission>,
+    /// CR 400.7k: only discard references may follow a declined madness card from exile.
+    /// The next unrelated move clears the link; ordinary targets keep their original generation.
+    pub(crate) discard_reference_successors: BTreeMap<(ObjectId, u64), u64>,
     pub next_exile_play_permission_group_id: u64,
     pub turn_history: TurnHistory,
     /// A custom resolution may move its physical card early. Only its completed resolution

@@ -13,6 +13,7 @@
 #include "server_player.h"
 
 #include <QHash>
+#include <algorithm>
 #include <libcockatrice/protocol/pb/event_ruled_payload.pb.h>
 #include <libcockatrice/utility/zone_names.h>
 
@@ -27,6 +28,8 @@ void RuledBroadcastRouter::resetForNewGame()
     hasLastBroadcastHandSlotMap = false;
     lastBroadcastHandSlotParticipants.clear();
     pendingResolutionChoice.reset();
+    pendingResolutionState.Clear();
+    currentPublicZoneView.reset();
 }
 
 void RuledBroadcastRouter::broadcast(const ruled::v1::IpcResponse &resp, bool authoritative)
@@ -64,16 +67,44 @@ void RuledBroadcastRouter::broadcast(const ruled::v1::IpcResponse &resp, bool au
 void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::IpcResponse &response)
 {
     pendingResolutionChoice.reset();
+    pendingResolutionState.Clear();
     if (!response.has_batch()) {
         return;
     }
     for (const auto &event : response.batch().events()) {
+        if (event.has_zone_view()) {
+            auto view = event.zone_view();
+            if (view.battlefields_unchanged() && currentPublicZoneView) {
+                for (auto &player : *view.mutable_per_player()) {
+                    const auto previous = std::find_if(currentPublicZoneView->per_player().begin(), currentPublicZoneView->per_player().end(),
+                                                       [&player](const auto &value) { return value.player_id() == player.player_id(); });
+                    if (previous != currentPublicZoneView->per_player().end())
+                        *player.mutable_battlefield_objects() = previous->battlefield_objects();
+                }
+                view.set_battlefields_unchanged(false);
+            }
+            // The reconnect copy needs public abilities and characteristics. Physical hand
+            // identities come from the existing recipient-redacted server maps.
+            for (auto &player : *view.mutable_per_player()) {
+                player.clear_hand_cards(); player.clear_library_cards(); player.set_private_zones_unchanged(true);
+            }
+            currentPublicZoneView = std::move(view);
+        }
+
         if (!event.has_resolution_choice_required()) {
             continue;
         }
         const auto &choice = event.resolution_choice_required();
         pendingResolutionChoice.emplace();
         pendingResolutionChoice->CopyFrom(choice);
+    }
+    if (pendingResolutionChoice && pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
+        *pendingResolutionState.mutable_legal_by_player() = response.batch().legal_by_player();
+        if (currentPublicZoneView)
+            pendingResolutionState.add_events()->mutable_zone_view()->CopyFrom(*currentPublicZoneView);
+        for (const auto &event : response.batch().events()) {
+            if (event.has_mana_pool_updated()) pendingResolutionState.add_events()->CopyFrom(event);
+        }
     }
 }
 
@@ -83,9 +114,21 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
     if (!participant || !pendingResolutionChoice.has_value()) {
         return;
     }
-    ruled::v1::RuledEventBatch snapshot;
-    snapshot.add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingResolutionChoice);
-    const ruled::v1::RuledEventBatch filtered = redactBatchForParticipant(snapshot, participant);
+    ruled::v1::IpcResponse snapshot;
+    auto *batch = snapshot.mutable_batch();
+    batch->add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingResolutionChoice);
+    *batch->mutable_legal_by_player() = pendingResolutionState.legal_by_player();
+    for (const auto &event : pendingResolutionState.events()) batch->add_events()->CopyFrom(event);
+    if (pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
+        appendServerObjectMaps(snapshot);
+        // Reconnecting an existing seat does not change the broadcast participant set.
+        // Still restore its hand identities if the normal delta map was elided.
+        const bool hasHandMap = std::any_of(batch->events().begin(), batch->events().end(),
+                                            [](const auto &event) { return event.has_hand_slot_map(); });
+        if (!hasHandMap && hasLastBroadcastHandSlotMap)
+            batch->add_events()->mutable_hand_slot_map()->CopyFrom(lastBroadcastHandSlotMap);
+    }
+    const ruled::v1::RuledEventBatch filtered = redactBatchForParticipant(*batch, participant);
 
     Event_RuledPayload event;
     if (game->ruled()->diagnostics())
@@ -438,7 +481,8 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                            rcr->choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD ||
                            rcr->choice_kind() == ruled::v1::CHOICE_KIND_ZONE_SEARCH ||
                            rcr->choice_kind() == ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS ||
-                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_BEHOLD) {
+                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_BEHOLD ||
+                           (rcr->choice_kind() == ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT && rcr->ordered())) {
                     // Image-based concealed/mixed-zone choices assign each candidate a sequential index as its
                     // server card ID.
                     // Deck cards are not in engineOidToServerCardId (only battlefield/hand/stack are),

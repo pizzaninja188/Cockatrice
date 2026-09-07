@@ -1690,11 +1690,8 @@ impl GameEngine {
                     effect @ SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { .. } => {
                         zones::shuffle_permanents_into_owners_libraries(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::DiscardCards { .. } => {
-                        zones::discard_cards(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ExileCardsFromHand { .. } => {
-                        zones::exile_cards_from_hand(&mut cx, effect)?
+                    effect @ SpellEffectKind::ChooseHandCards { .. } => {
+                        zones::choose_hand_cards(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::MillTargetPlayer { .. } => {
                         zones::mill_target_player(&mut cx, effect)?
@@ -1796,6 +1793,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::ChangeSourceFace { .. } => {
                         misc::change_source_face(&mut cx, effect)?
                     }
+                    SpellEffectKind::CastMadness { cost } => zones::madness_cast(&mut cx, cost)?,
                     SpellEffectKind::SiegeDefeat => zones::siege_defeat(&mut cx)?,
                     effect @ SpellEffectKind::None => misc::none(&mut cx, effect)?,
                     effect @ SpellEffectKind::AuraAttach { .. } => {
@@ -2330,7 +2328,25 @@ pub(crate) fn candidate_identities(
     (card_ids, names)
 }
 
+/// Ordinary draws are zone changes, including a card discarded onto the library earlier
+/// during this same resolution. Use the shared funnel so all references and resets agree.
 pub(super) fn draw_card(
+    state: &mut GameState,
+    registry: &'static CardRegistry,
+    player: PlayerId,
+) -> Result<(), EngineError> {
+    let idx = state
+        .player_idx(player)
+        .ok_or(EngineError::UnknownPlayer(player))?;
+    let oid = *state.players[idx]
+        .library
+        .front()
+        .ok_or(EngineError::Illegal("library empty"))?;
+    move_object_to_zone(state, registry, oid, Zone::Hand, None)
+}
+
+/// Deal the initial pre-game hand before ordinary game-object references exist.
+pub(super) fn deal_opening_card(
     p: &mut PlayerState,
     objects: &mut HashMap<ObjectId, GameObject>,
 ) -> Result<(), EngineError> {
@@ -2441,33 +2457,19 @@ pub(super) fn snapshot_creature_scope(
         .collect()
 }
 
-/// The semantic discard seam. Authored discard effects, discard costs, and cleanup discards all
-/// pass through here; generic hand-to-zone movement does not. Future discard occurrences and
-/// replacement effects attach here rather than inferring discard from a graveyard destination.
+/// The semantic discard seam. Direct exile and ordinary zone moves never call it.
 pub(crate) fn perform_discard(
-    state: &mut GameState,
-    registry: &'static CardRegistry,
+    engine: &mut GameEngine,
     affected_player: PlayerId,
     object_id: ObjectId,
+    cause: crate::state::DiscardCause,
 ) -> Result<(String, rv1::RuledEvent), EngineError> {
-    let object = state
-        .objects
-        .get(&object_id)
-        .ok_or(EngineError::Illegal("discarded card object not found"))?;
-    if object.owner != affected_player || object.zone != Zone::Hand {
-        return Err(EngineError::Illegal(
-            "discarded card is not in its owner's hand",
-        ));
-    }
-    let card_name = object_display_name(state, registry, object_id);
-    move_object_to_zone(state, registry, object_id, Zone::Graveyard, None)?;
-    let moved = permanent_moved_event(
-        state,
-        object_id,
-        affected_player,
-        rv1::permanent_moved::Destination::Graveyard,
-    );
-    Ok((card_name, moved))
+    let destination = if engine.madness_ability(object_id).is_some() {
+        Zone::Exile
+    } else {
+        Zone::Graveyard
+    };
+    engine.commit_discard_to(affected_player, object_id, cause, destination, false)
 }
 
 /// Move `oid` into zone `z`, maintaining every zone list and the CR 400.7 new-object resets.
@@ -2609,6 +2611,9 @@ fn move_object_to_zone_with_entry_receipt(
     // This matters for exile permissions: exiling an already-exiled card cannot preserve an old
     // Adventure or "play it" permission merely because the destination enum is unchanged.
     if old_zone.is_some() {
+        state
+            .discard_reference_successors
+            .retain(|(object_id, _), _| *object_id != oid);
         state
             .warped_permanent_incarnations
             .retain(|&(object_id, generation)| object_id != oid || generation != prior_generation);
@@ -3503,7 +3508,7 @@ mod attached_subject_tests {
             2
         );
         let discard = engine.state.players[0].hand[0];
-        perform_discard(&mut engine.state, engine.registry, 0, discard).unwrap();
+        perform_discard(&mut engine, 0, discard, crate::state::DiscardCause::Effect).unwrap();
         assert_eq!(
             engine
                 .state
@@ -3514,7 +3519,9 @@ mod attached_subject_tests {
             3
         );
         let history = engine.state.turn_history.clone();
-        assert!(perform_discard(&mut engine.state, engine.registry, 0, discard).is_err());
+        assert!(
+            perform_discard(&mut engine, 0, discard, crate::state::DiscardCause::Effect).is_err()
+        );
         assert_eq!(engine.state.turn_history, history);
         for (card, face, method, count) in [
             ("grizzly_bears", 0, SpellCastMethod::Normal, 4),

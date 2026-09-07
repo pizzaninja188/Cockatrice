@@ -38,6 +38,9 @@ private:
     bool hasLastBroadcastHandSlotMap = false;
     QSet<int> lastBroadcastHandSlotParticipants;
     std::optional<ruled::v1::ResolutionChoiceRequired> pendingResolutionChoice;
+    // State accompanying a parked cast: replayable views and legality, never one-shot actions.
+    ruled::v1::RuledEventBatch pendingResolutionState;
+    std::optional<ruled::v1::ZoneViewSync> currentPublicZoneView;
 };
 
 #endif

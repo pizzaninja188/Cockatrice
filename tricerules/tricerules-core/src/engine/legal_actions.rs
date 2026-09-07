@@ -238,7 +238,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             .as_ref()
             .and_then(|pending| {
                 (pending.deciding_player == p.id)
-                    .then_some(pending.continuation.mana_payment()?.undo_history_start)
+                    .then_some(pending.continuation.mana_window_undo_start()?)
             })
             .unwrap_or(0);
         let undoable_mana_abilities = eng
@@ -1922,7 +1922,7 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
     };
     if eng.state.turn_step == TurnStep::Cleanup && !eng.state.cleanup_priority_active {
         if eng.state.cleanup_discard_player == Some(pid)
-            && eng.state.players[player_index].hand.len() > MAX_HAND_SIZE
+            && eng.state.players[player_index].hand.len() > eng.maximum_hand_size(pid)
         {
             return eng.state.players[player_index]
                 .hand
@@ -2095,26 +2095,33 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
 }
 
 fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZoneCastAction> {
-    if eng.state.opening.is_some()
-        || eng.state.blocking_choice().is_some()
-        || eng.state.turn_step == TurnStep::Cleanup
-        || eng.state.priority_player_id() != pid
-        || priority_locked_for_combat_declaration(&eng.state)
-        || eng.state.combat.as_ref().is_some_and(|combat| {
-            combat.blockers_declared
-                && combat.damage_assignment_needed
-                && combat.assign_combat_damage_phase
-        })
+    let special_permission = eng.special_cast_permission(pid);
+    let special = special_permission.is_some();
+    if !special
+        && (eng.state.opening.is_some()
+            || eng.state.blocking_choice().is_some()
+            || eng.state.turn_step == TurnStep::Cleanup
+            || eng.state.priority_player_id() != pid
+            || priority_locked_for_combat_declaration(&eng.state)
+            || eng.state.combat.as_ref().is_some_and(|combat| {
+                combat.blockers_declared
+                    && combat.damage_assignment_needed
+                    && combat.assign_combat_damage_phase
+            }))
     {
         return Vec::new();
     }
     let Some(player_index) = eng.state.player_idx(pid) else {
         return Vec::new();
     };
-    let instant_ok = instant_timing_step_allowed(&eng.state);
-    let sorcery_ok = sorcery_speed_available(&eng.state, pid);
+    let instant_ok = special || instant_timing_step_allowed(&eng.state);
+    let sorcery_ok = special || sorcery_speed_available(&eng.state, pid);
     let mut actions = Vec::new();
-    for &oid in &eng.state.players[player_index].graveyard {
+    for &oid in eng.state.players[player_index]
+        .graveyard
+        .iter()
+        .filter(|_| !special)
+    {
         let Some(card_id) = eng.state.objects.get(&oid).map(|object| &object.card_id) else {
             continue;
         };
@@ -2259,6 +2266,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
         .state
         .active_exile_play_permissions
         .iter()
+        .filter(|_| !special)
+        .chain(special_permission.iter())
         .filter(|permission| {
             permission.player_id == pid && permission.available_on_turn(eng.state.turn_instance)
         })
@@ -2308,6 +2317,11 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 crate::state::ExilePermissionCastCost::AlternativeManaCost(cost) => {
                     (cost.to_string(), rv1::CastMethod::Permission)
                 }
+            };
+            let cast_method = match eng.special_cast_method(pid) {
+                Some(SpellCastMethod::Madness) => rv1::CastMethod::Madness,
+                Some(SpellCastMethod::SiegeDefeat) => rv1::CastMethod::SiegeDefeat,
+                _ => cast_method,
             };
             let mut action = rv1::LegalZoneCastAction {
                 source_zone: rv1::CastSourceZone::Exile as i32,
@@ -2642,7 +2656,7 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
             }
             let idx = eng.state.player_idx(cp).unwrap();
             let hand = &eng.state.players[idx].hand;
-            if hand.len() <= MAX_HAND_SIZE {
+            if hand.len() <= eng.maximum_hand_size(cp) {
                 return v;
             }
             let mut out = Vec::new();

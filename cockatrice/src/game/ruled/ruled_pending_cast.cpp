@@ -258,3 +258,32 @@ std::optional<QVector<int>> RuledPendingCast::chooseModes(QWidget *parent,
     }
     return selectedModes;
 }
+
+ruled::v1::RuledCommand RuledPendingCast::submissionCommand(const ruled::v1::RuledCommand &command)
+{
+    if (!command.has_cast_spell() ||
+        (command.cast_spell().cast_method() != ruled::v1::CAST_METHOD_MADNESS &&
+         command.cast_spell().cast_method() != ruled::v1::CAST_METHOD_SIEGE_DEFEAT))
+        return command;
+    ruled::v1::RuledCommand result;
+    auto *choice = result.mutable_submit_resolution_choice();
+    choice->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_SPELL);
+    *choice->mutable_cast_spell() = command.cast_spell();
+    return result;
+}
+
+bool RuledPendingCast::matchesSpecialCastOffer(const PendingRuledSpellCast &spell, const RuledClientState &state)
+{
+    return spell.valid && spell.source == RuledCastSource::Exile &&
+           (spell.castMethod == ruled::v1::CAST_METHOD_MADNESS ||
+            spell.castMethod == ruled::v1::CAST_METHOD_SIEGE_DEFEAT) &&
+           state.isPendingChoiceCandidate(RuledClientState::ChoiceKind::SpecialCast,
+                                          static_cast<quint32>(spell.handIndex)) &&
+           state.isZoneCastActionLegal(static_cast<quint32>(spell.handIndex), spell.faceIndex, spell.source,
+                                       spell.castMethod, spell.castingPermissionId, spell.sourceZoneChangeGeneration);
+}
+
+bool RuledPendingCast::resolutionChoiceBlocksSpell(const RuledClientState &state) const
+{
+    return state.choiceWaitingPlayerId >= 0 || (state.pendingChoice && !matchesSpecialCastOffer(spell, state));
+}

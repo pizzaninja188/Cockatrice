@@ -4632,27 +4632,130 @@ TEST_F(RuledClientTest, ResolutionBranchesSubmitOpaqueIndexWithoutOpeningADialog
     EXPECT_EQ(submission.selected_branch_index(), 0u);
 }
 
-TEST_F(RuledClientTest, SiegeCastPromptSubmitsTransformedAnnouncementOrDecline)
+TEST_F(RuledClientTest, PrivateDiscardDestinationUsesPromptOptionsWithOpaqueIds)
 {
     ruled::v1::RuledEventBatch batch;
     auto *choice = batch.add_events()->mutable_resolution_choice_required();
     choice->set_deciding_player_id(kLocalPlayer);
-    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SIEGE_CAST);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    choice->set_prompt_text("Choose the discard destination.");
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(2);
+    choice->add_candidate_object_ids(1);
+    choice->add_candidate_names("Exile Fiery Temper (madness)");
+    choice->add_candidate_names("Discard Fiery Temper to library (Library of Leng)");
+    apply(batch);
+    EXPECT_EQ(host.dialogRequests, 0);
+    ASSERT_TRUE(state->hasPendingChoiceOptions());
+    ASSERT_EQ(state->pendingChoiceOptions().size(), 2);
+    EXPECT_EQ(state->pendingChoiceOptions()[0].index, 2);
+    state->submitPendingChoiceOption(2);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &answer = host.sentCommands[0].submit_resolution_choice();
+    EXPECT_EQ(answer.decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED);
+    ASSERT_EQ(answer.chosen_object_ids_size(), 1);
+    EXPECT_EQ(answer.chosen_object_ids(0), 2u);
+}
+
+TEST_F(RuledClientTest, PrivateDiscardOrderingUsesCardImagesAndClickOrder)
+{
+    QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    choice->set_prompt_text("Order discarded cards, top of library first.");
+    choice->set_min(2);
+    choice->set_max(2);
+    choice->set_ordered(true);
+    for (int i = 0; i < 2; ++i) {
+        choice->add_candidate_object_ids(700 + i);
+        choice->add_candidate_server_card_ids(i);
+        choice->add_candidate_names("Forest"); // Duplicate names must remain distinct cards.
+    }
+    apply(batch);
+    EXPECT_EQ(host.dialogRequests, 0);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(started.count(), 1);
+    EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Order discarded cards"));
+    EXPECT_FALSE(state->resolutionHandPickShowViewControls());
+    state->toggleResolutionHandPickCard(1);
+    state->toggleResolutionHandPickCard(0);
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &answer = host.sentCommands[0].submit_resolution_choice();
+    ASSERT_EQ(answer.chosen_object_ids_size(), 2);
+    EXPECT_EQ(answer.chosen_object_ids(0), 700u);
+    EXPECT_EQ(answer.chosen_object_ids(1), 701u);
+}
+
+TEST_F(RuledClientTest, MadnessPaymentDoesNotTreatItsOwnOfferAsABlockingChoice)
+{
+    for (const auto method : {ruled::v1::CAST_METHOD_MADNESS, ruled::v1::CAST_METHOD_SIEGE_DEFEAT}) {
+        ruled::v1::RuledEventBatch batch;
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(kLocalPlayer);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+        choice->add_candidate_object_ids(700);
+        auto *offer = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+        offer->set_object_id(700);
+        offer->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+        offer->set_zone_change_generation(3);
+        offer->set_cast_method(method);
+        offer->set_casting_permission_id(901);
+        offer->set_cost("{R}");
+        apply(batch);
+        RuledPendingCast pending;
+        auto &spell = pending.beginSpell();
+        spell.handIndex = 700;
+        spell.source = RuledCastSource::Exile;
+        spell.sourceZoneChangeGeneration = 3;
+        spell.castMethod = method;
+        spell.castingPermissionId = 901;
+        EXPECT_FALSE(pending.resolutionChoiceBlocksSpell(*state));
+        EXPECT_TRUE(RuledPendingCast::matchesSpecialCastOffer(spell, *state));
+        spell.waitingForTarget = true;
+        EXPECT_FALSE(pending.resolutionChoiceBlocksSpell(*state));
+        spell.waitingForTarget = false;
+        // The same ownership query lets the prompt yield to targeting or mana payment.
+        auto suspended = spell;
+        pending.clearSpell();
+        EXPECT_FALSE(RuledPendingCast::matchesSpecialCastOffer(pending.spell, *state));
+        EXPECT_TRUE(RuledPendingCast::matchesSpecialCastOffer(suspended, *state));
+        pending.spell = suspended;
+        spell.sourceZoneChangeGeneration = 2;
+        EXPECT_TRUE(pending.resolutionChoiceBlocksSpell(*state));
+        spell.sourceZoneChangeGeneration = 3;
+        spell.castingPermissionId = 902;
+        EXPECT_TRUE(pending.resolutionChoiceBlocksSpell(*state));
+        spell.castingPermissionId = 901;
+        state->pendingChoice->candidateOids = {701};
+        EXPECT_TRUE(pending.resolutionChoiceBlocksSpell(*state));
+        state->pendingChoice->kind = RuledClientState::ChoiceKind::ResolutionBranch;
+        EXPECT_TRUE(pending.resolutionChoiceBlocksSpell(*state));
+    }
+}
+
+TEST_F(RuledClientTest, SpecialCastKeepsOfferWhileStagingAndOnlyDeclinesExplicitly)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
     choice->set_prompt_text("Cast Grandmother Ravi Sengir transformed?");
     choice->add_candidate_object_ids(700);
     apply(batch);
 
-    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SiegeCast));
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast));
     ASSERT_EQ(state->pendingChoiceOptions().size(), 2);
+    quint32 requested = 0;
+    QObject::connect(state, &RuledClientState::specialCastRequested, state, [&requested](quint32 oid) { requested = oid; });
     host.sentCommands.clear();
     state->submitPendingChoiceOption(1);
-    ASSERT_EQ(host.sentCommands.size(), 1);
-    const auto &submission = host.sentCommands[0].submit_resolution_choice();
-    EXPECT_EQ(submission.decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_TRANSFORMED);
-    ASSERT_TRUE(submission.has_cast_spell());
-    EXPECT_EQ(submission.cast_spell().cast_method(), ruled::v1::CAST_METHOD_SIEGE_DEFEAT);
-    EXPECT_EQ(submission.cast_spell().face_index(), 1u);
-    EXPECT_EQ(submission.cast_spell().source().exile_object_id(), 700u);
+    EXPECT_EQ(requested, 700u);
+    EXPECT_TRUE(host.sentCommands.empty());
+    EXPECT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast));
 
     apply(batch);
     host.sentCommands.clear();
@@ -7077,4 +7180,23 @@ When Spyglass Siren enters, create a Map token.</text></face>
     log->clear_ability_presentation();
     apply(batch);
     EXPECT_EQ(timeline.last().at(0).toString(), QStringLiteral("Complete engine fallback\n"));
+}
+
+TEST(RuledPendingCastTest, SpecialCastSubmissionPreservesTheCompleteAnnouncement)
+{
+    ruled::v1::RuledCommand proposal;
+    auto *cast = proposal.mutable_cast_spell();
+    cast->set_cast_method(ruled::v1::CAST_METHOD_MADNESS);
+    cast->set_casting_permission_id(123456);
+    cast->mutable_source()->set_exile_object_id(70);
+    cast->mutable_source()->set_expected_zone_change_generation(6);
+    cast->add_targets()->set_object_id(12);
+    cast->mutable_payment()->set_expected_state_revision(987);
+    auto submitted = RuledPendingCast::submissionCommand(proposal);
+    ASSERT_TRUE(submitted.has_submit_resolution_choice());
+    EXPECT_EQ(submitted.submit_resolution_choice().decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_SPELL);
+    EXPECT_EQ(submitted.submit_resolution_choice().cast_spell().SerializeAsString(), cast->SerializeAsString());
+    EXPECT_TRUE(proposal.has_cast_spell());
+    cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    EXPECT_TRUE(RuledPendingCast::submissionCommand(proposal).has_cast_spell());
 }

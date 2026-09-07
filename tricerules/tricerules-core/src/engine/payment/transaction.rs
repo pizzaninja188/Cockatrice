@@ -1766,10 +1766,10 @@ impl GameEngine {
                     ..
                 } => {
                     let (card_name, moved) = crate::engine::resolution::perform_discard(
-                        &mut self.state,
-                        self.registry,
+                        self,
                         owner,
                         oid,
+                        crate::state::DiscardCause::Cost,
                     )
                     .expect("prevalidated discard cost must commit");
                     payment.move_events.push(moved);

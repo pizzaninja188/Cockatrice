@@ -2,6 +2,31 @@ use super::*;
 
 impl GameEngine {
     pub(in crate::engine) fn resolution_payment_choice_event(&self) -> Option<rv1::RuledEvent> {
+        if let Some(pending) = self.state.pending_resolution.as_ref() {
+            if let ResolutionContinuation::SpecialCast { exiled, .. } = &pending.continuation {
+                return Some(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                        rv1::ResolutionChoiceRequired {
+                            deciding_player_id: pending.deciding_player,
+                            source_object_id: pending.presentation.source_object_id,
+                            prompt_text: pending.presentation.prompt.clone(),
+                            choice_kind: rv1::ChoiceKind::SpecialCast as i32,
+                            candidate_object_ids: vec![exiled.object_id],
+                            min: 0,
+                            max: 1,
+                            candidate_names: vec![object_display_name(
+                                &self.state,
+                                self.registry,
+                                exiled.object_id,
+                            )],
+                            candidate_selectable: vec![true],
+                            ..Default::default()
+                        },
+                    )),
+                });
+            }
+        }
+
         let pending = self.state.pending_resolution.as_ref()?;
         let payment = pending.continuation.mana_payment()?;
         Some(rv1::RuledEvent {
@@ -186,7 +211,7 @@ impl GameEngine {
                     "mana payment choice cannot select a branch",
                 ));
             }
-            rv1::ResolutionChoiceDecision::CastTransformed => {
+            rv1::ResolutionChoiceDecision::CastSpell => {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal(
                     "mana payment choice cannot cast a transformed card",
@@ -648,19 +673,13 @@ impl GameEngine {
                 ));
             }
             ResolutionCost::DiscardCard { .. } => {
-                resolution::move_object_to_zone(
-                    &mut self.state,
-                    self.registry,
-                    oid,
-                    Zone::Graveyard,
-                    None,
-                )?;
-                ev.push(permanent_moved_event(
-                    &self.state,
-                    oid,
+                let (_, moved) = resolution::perform_discard(
+                    self,
                     owner,
-                    rv1::permanent_moved::Destination::Graveyard,
-                ));
+                    oid,
+                    crate::state::DiscardCause::Cost,
+                )?;
+                ev.push(moved);
                 ev.push(ev_log(format!(
                     "P{} discards {name}.",
                     pending.deciding_player

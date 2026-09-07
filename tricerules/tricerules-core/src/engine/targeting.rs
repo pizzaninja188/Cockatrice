@@ -1279,8 +1279,7 @@ fn validate_effect_targets(
         | SpellEffectKind::TargetPlayerDraws { target: filter, .. }
         | SpellEffectKind::DrainTarget { target: filter, .. }
         | SpellEffectKind::MillTargetPlayer { target: filter, .. }
-        | SpellEffectKind::DiscardCards { target: filter, .. }
-        | SpellEffectKind::ExileCardsFromHand { target: filter, .. }
+        | SpellEffectKind::ChooseHandCards { target: filter, .. }
         | SpellEffectKind::TargetPlayerSacrifices { target: filter, .. } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one player target"));
@@ -1476,6 +1475,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ChangeSourceFace { .. }
         | SpellEffectKind::ReturnTriggeredCard { .. }
         | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
+        | SpellEffectKind::CastMadness { .. }
         | SpellEffectKind::SiegeDefeat
         | SpellEffectKind::None => {
             if !targets.is_empty() {
@@ -1914,8 +1914,7 @@ fn spell_target_legality_error_with_context(
         | SpellEffectKind::TargetPlayerDraws { target: filter, .. }
         | SpellEffectKind::DrainTarget { target: filter, .. }
         | SpellEffectKind::MillTargetPlayer { target: filter, .. }
-        | SpellEffectKind::DiscardCards { target: filter, .. }
-        | SpellEffectKind::ExileCardsFromHand { target: filter, .. }
+        | SpellEffectKind::ChooseHandCards { target: filter, .. }
         | SpellEffectKind::TargetPlayerSacrifices { target: filter, .. } => {
             if !player_target_legal(&engine.state, tid) {
                 return Err(EngineError::Illegal("target must be a player in the game"));

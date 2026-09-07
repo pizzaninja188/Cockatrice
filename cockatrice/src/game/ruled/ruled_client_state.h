@@ -508,11 +508,13 @@ public:
             ResolutionPayment,
             /// An engine-authored resolution branch rendered as labeled prompt buttons.
             ResolutionBranch,
-            /// CR 310.11: cast a defeated Siege transformed without paying its mana cost or decline.
-            SiegeCast,
+            /// Cast during resolution (madness or a defeated Siege), or decline the offer.
+            SpecialCast,
             /// CR 603.3b: the order this player's simultaneous triggers go on the stack.
             /// Answered with SubmitTriggerOrder; rendered in its own window, not on the board.
             TriggerOrder,
+            /// Opaque replacement alternatives, answered with chosen_object_ids.
+            ReplacementOption,
         };
 
         Kind kind = Kind::TriggerTarget;
@@ -540,6 +542,8 @@ public:
         QSet<int> selectableServerCardIds;
         // Selected server card ids in click order.
         QList<int> selectedServerCardIds;
+        // Convert last-click-on-top UI ordering to the engine's top-first sequence.
+        bool reverseSelectionOrder = false;
         int min = 0;
         int max = 0;
         bool uniqueNames = false;
@@ -1509,7 +1513,8 @@ public:
     [[nodiscard]] bool hasPendingChoiceOptions() const
     {
         return hasPendingChoiceOfKind(ChoiceKind::TriggerMode) ||
-               hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch) || hasPendingChoiceOfKind(ChoiceKind::SiegeCast);
+               hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch) || hasPendingChoiceOfKind(ChoiceKind::SpecialCast) ||
+               hasPendingChoiceOfKind(ChoiceKind::ReplacementOption);
     }
     [[nodiscard]] QVector<RuledPermanentAction> permanentActionsForOid(quint32 oid) const
     {
@@ -1650,6 +1655,11 @@ public:
     [[nodiscard]] QVector<int> resolutionHandPickCandidateServerCardIds() const;
     void toggleResolutionHandPickCard(int serverCardId);
     void submitResolutionHandPick();
+
+    [[nodiscard]] bool isResolutionManaWindow() const
+    {
+        return isResolutionPaymentActive() || hasPendingChoiceOfKind(ChoiceKind::SpecialCast);
+    }
 
     [[nodiscard]] bool isResolutionPaymentActive() const
     {
@@ -1793,6 +1803,7 @@ public:
     }
 
 signals:
+    void specialCastRequested(quint32 objectId);
     void paymentPreviewReceived();
 
     /// Emitted when ruled game-session state is cleared (game stopped or new game started).

@@ -29,6 +29,7 @@ public:
     [[nodiscard]] int optimisticManaCounterSpendCount(int counterId) const;
     [[nodiscard]] int restrictedManaSpendCount(quint32 groupId, QChar symbol) const;
     bool applicable() const;
+    [[nodiscard]] bool isStagingSpecialCast(const RuledClientState &state) const;
     QString prompt() const;
     void clear();
     void suspendForManaAbility(quint32 oid, int abilityIndex);

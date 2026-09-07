@@ -686,6 +686,9 @@ void RuledEventDispatcher::applyPhaseChanged(const ruled::v1::PhaseChanged &pc, 
 
 void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, BatchContext &ctx)
 {
+    if (state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast) &&
+        state->pendingChoice->candidateOids.contains(sp.object_id()))
+        state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast);
     state->stackOidOrder.prepend(sp.object_id());
     // CR 603.3b: a candidate reaching the stack means the ordering prompt has been answered. The
     // deciding client already cleared it in submitTriggerOrder(); this covers every other path to
@@ -953,7 +956,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
           state->pendingChoice->paymentSourceOid == rcr.source_object_id()))
         state->clearPendingChoiceOfKind(ChoiceKind::ResolutionPayment);
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
-    state->clearPendingChoiceOfKind(ChoiceKind::SiegeCast);
+    state->clearPendingChoiceOfKind(ChoiceKind::SpecialCast);
+    state->clearPendingChoiceOfKind(ChoiceKind::ReplacementOption);
     state->clearPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender);
     if (isPublicReveal) {
         const auto &reveal = rcr.public_reveal();
@@ -1174,6 +1178,31 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
+    const bool isPrivateReplacement = rcr.choice_kind() == ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT;
+    if (isPrivateReplacement && !rcr.ordered()) {
+        if (rcr.min() != 1 || rcr.max() != 1 || rcr.candidate_object_ids_size() == 0 ||
+            rcr.candidate_object_ids_size() != rcr.candidate_names_size()) {
+            qWarning() << "Rejecting malformed replacement alternatives";
+            return;
+        }
+        PendingChoice choice;
+        choice.kind = ChoiceKind::ReplacementOption;
+        choice.promptText = QString::fromStdString(rcr.prompt_text());
+        for (int i = 0; i < rcr.candidate_names_size(); ++i)
+            choice.choiceOptions.append({static_cast<int>(rcr.candidate_object_ids(i)),
+                                         QString::fromStdString(rcr.candidate_names(i)), true});
+        state->setPendingChoice(std::move(choice));
+        emit state->combatStateChanged();
+        return;
+    }
+    const bool isPrivateCardOrder = isPrivateReplacement && rcr.ordered();
+    if (isPrivateCardOrder && (rcr.candidate_names_size() < 2 ||
+                              rcr.candidate_object_ids_size() != rcr.candidate_names_size() ||
+                              rcr.candidate_server_card_ids_size() != rcr.candidate_names_size() ||
+                              rcr.min() != rcr.candidate_names_size() || rcr.max() != rcr.min())) {
+        qWarning() << "Rejecting malformed private card order";
+        return;
+    }
     const bool isLibrarySearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH;
     const bool isLibraryLook = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_LOOK;
     const bool isManifestDread = rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANIFEST_DREAD;
@@ -1187,17 +1216,17 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_SIEGE_CAST) {
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
         if (rcr.candidate_object_ids_size() != 1) {
-            qWarning() << "Rejecting malformed Siege cast offer";
+            qWarning() << "Rejecting malformed special cast offer";
             return;
         }
         PendingChoice choice;
-        choice.kind = ChoiceKind::SiegeCast;
+        choice.kind = ChoiceKind::SpecialCast;
         choice.promptText = QString::fromStdString(rcr.prompt_text());
         choice.candidateOids.append(rcr.candidate_object_ids(0));
         choice.choiceOptions.append({0, tr("Decline"), true});
-        choice.choiceOptions.append({1, tr("Cast transformed"), true});
+        choice.choiceOptions.append({1, tr("Cast"), true});
         state->setPendingChoice(std::move(choice));
         emit state->combatStateChanged();
         return;
@@ -1215,7 +1244,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
 
     if (!isPublicReveal &&
         (isLibrarySearch || rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP || isLibraryLook ||
-         isManifestDread || isZoneSearch || isGraveyardCards || isBehold) &&
+         isManifestDread || isZoneSearch || isGraveyardCards || isBehold || isPrivateCardOrder) &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
         (rcr.candidate_names_size() > 0 || isEmptyLibrarySearch)) {
         // Image-based hidden or mixed-zone choices use a synthetic deck zone-view pick. They
@@ -1232,7 +1261,12 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         pick.uniqueNames = rcr.unique_names();
         pick.promptText = QString::fromStdString(rcr.prompt_text());
         pick.pickZone = PickZone::Deck;
-        if (isLibraryLook) {
+        if (isPrivateCardOrder) {
+            pick.viewTitle = tr("Order discarded cards");
+            pick.promptText = tr("Click cards in order; the last card clicked will be on top.");
+            pick.reverseSelectionOrder = true;
+            pick.showViewControls = false;
+        } else if (isLibraryLook) {
             pick.viewTitle = tr("Look at cards");
             pick.hasSelectableRestriction = true;
             pick.showViewControls = false;

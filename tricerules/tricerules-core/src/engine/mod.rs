@@ -10,10 +10,10 @@ use crate::state::{
     DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
     DelayedTriggerPayload, EffectResult, EntryReplacementApplication, EntryReplacementEffectId,
     EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState,
-    HandCardAction, ImmediateObserverAction, ObjectId, ObservedGameEvent, OpeningSequence,
-    ParkedStackResolution, PendingAmass, PendingBattlefieldEntry, PendingHandChoice,
-    PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
-    PendingManaPayment, PendingPlayerDiscardChoice, PendingPlayerSetDiscard, PendingResolution,
+    ImmediateObserverAction, ObjectId, ObservedGameEvent, OpeningSequence, ParkedStackResolution,
+    PendingAmass, PendingBattlefieldEntry, PendingHandChoice, PendingLibraryLookStage,
+    PendingLibraryPartitionKind, PendingLibraryPartitionStage, PendingManaPayment,
+    PendingPlayerDiscardChoice, PendingPlayerSetDiscard, PendingResolution,
     PendingResolutionBranch, PendingResolutionBranchStage, PendingResolutionPresentation,
     PendingTokenEntryBatch, PendingTrigger, PendingTriggerOrder, PendingWardPayment,
     PendingWardPaymentStage, PersistentActivationUseKey, PlayerId, PlayerState,
@@ -41,21 +41,22 @@ use tricerules_cards::primitives::{
     ConditionPlayerSet, ConditionalSearchDestination, ContinuousEffectKind, ControllerReference,
     CountExpression, CounterKind, CounterRemovalPaymentSource, CreatureEventFilter,
     CreatureScopeController, CreatureScopeFilter, DamageDivision, DamagePreventionAdditionalEffect,
-    DamagePreventionSubject, DelayedTokenSacrificeTiming, DiscardChooser, DrawDiscardOrder,
-    EffectDuration, EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost,
-    Evasion, FaceChangeAction, GameCondition, GraveyardAggregate, HandChoiceVisibility, Keyword,
-    LibraryBottomOrder, LibraryPartitionKind, LibraryPlacement, LifeAmount, LifeChangeKind,
-    ManaAmount, ManaSpendFilter, ObjectCastCostKind, ObjectContributionKind,
-    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
-    PlayerQuantifier, PlayerRecipient, PowerComparison, PowerToughnessCharacteristic,
-    PreventionAmountBasis, ProtectionCardType, ProtectionGrant, ProtectionQuality, PtScaleBasis,
-    RelativePlayerSet, ResolutionBranchDef, ResolutionCost, ReturnController, SearchDestination,
-    SearchSelectionSlot, SearchZoneSelection, SpecialActionAffected, SpecialActionKind,
-    SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin, SpellCostModifier, SpellEffectKind,
-    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, StaticDamagePreventionAmount,
-    TapTriggerCardinality, TargetController, TargetFilter, TargetKind, TargetingCostAction,
-    TargetingCostProtected, TargetingDef, TargetingSourceFilter, TriggerCondition,
-    TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
+    DamagePreventionSubject, DelayedTokenSacrificeTiming, DrawDiscardOrder, EffectDuration,
+    EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost, Evasion,
+    FaceChangeAction, GameCondition, GraveyardAggregate, HandCardAction, HandCardChooser,
+    HandChoiceVisibility, Keyword, LibraryBottomOrder, LibraryPartitionKind, LibraryPlacement,
+    LifeAmount, LifeChangeKind, ManaAmount, ManaSpendFilter, ObjectCastCostKind,
+    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
+    PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
+    PowerToughnessCharacteristic, PreventionAmountBasis, ProtectionCardType, ProtectionGrant,
+    ProtectionQuality, PtScaleBasis, RelativePlayerSet, ResolutionBranchDef, ResolutionCost,
+    ReturnController, SearchDestination, SearchSelectionSlot, SearchZoneSelection,
+    SpecialActionAffected, SpecialActionKind, SpecialActionManaPurpose, SpellCastFilter,
+    SpellCastOrigin, SpellCostModifier, SpellEffectKind, SpellManaSpentComparison,
+    StackSpellFilter, StaticAbilityDef, StaticDamagePreventionAmount, TapTriggerCardinality,
+    TargetController, TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected,
+    TargetingDef, TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef,
+    TriggeredCardReference, ZoneCardFilter,
 };
 use tricerules_cards::{
     is_creature_type, mode_fallback, CardDefinition, CardFace, CardRegistry,
@@ -171,6 +172,7 @@ mod custom_resolution;
 pub(crate) mod damage;
 mod dev;
 mod diagnostics;
+mod discard;
 mod events;
 mod history;
 #[cfg(test)]
@@ -463,6 +465,7 @@ enum TargetingSourceKind {
 }
 
 enum GameEvent {
+    Discarded(crate::state::DiscardReceipt),
     Waterbent {
         player: PlayerId,
     },
@@ -1004,7 +1007,7 @@ impl GameEngine {
             p.library = lib.into_iter().collect();
             if skip_opening_sequence {
                 for _ in 0..7 {
-                    resolution::draw_card(&mut p, &mut objects)?;
+                    resolution::deal_opening_card(&mut p, &mut objects)?;
                 }
             }
             players.push(p);
@@ -1071,6 +1074,7 @@ impl GameEngine {
             next_trigger_grant_id: 0,
             next_tap_action_id: 0,
             active_exile_play_permissions: Vec::new(),
+            discard_reference_successors: BTreeMap::new(),
             next_exile_play_permission_group_id: 1,
             turn_history: TurnHistory::default(),
             deferred_graveyard_entry: None,
@@ -1878,7 +1882,7 @@ impl GameEngine {
                             .pending_resolution
                             .as_ref()
                             .is_some_and(|pending| {
-                                pending.continuation.mana_payment().is_some()
+                                pending.continuation.mana_window_undo_start().is_some()
                                     && pending.deciding_player == player
                             })
                 }
@@ -1909,7 +1913,7 @@ impl GameEngine {
                     .state
                     .pending_resolution
                     .as_ref()
-                    .is_some_and(|pending| pending.continuation.mana_payment().is_some());
+                    .is_some_and(|pending| pending.continuation.mana_window_undo_start().is_some());
         if !preserves_payment_undo
             && !matches!(
                 cmd.cmd.as_ref(),

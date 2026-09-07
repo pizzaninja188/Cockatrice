@@ -753,13 +753,10 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
             std::sort(zones.begin(), zones.end());
             state.choiceOptions.append({option.index, option.label, option.enabled, zones});
         }
-    } else if (h->hasPendingChoiceOptions()) {
+    } else if (h->hasPendingChoiceOptions() &&
+               !(localActions && localActions->isStagingRuledSpecialCast(*h))) {
         state.mode = PromptMode::ChoiceOptions;
-        const ChoiceKind kind = h->hasPendingChoiceOfKind(ChoiceKind::TriggerMode)
-                                    ? ChoiceKind::TriggerMode
-                                    : (h->hasPendingChoiceOfKind(ChoiceKind::SiegeCast) ? ChoiceKind::SiegeCast
-                                                                                       : ChoiceKind::ResolutionBranch);
-        state.text = h->pendingChoicePromptText(kind);
+        state.text = h->pendingChoice->promptText;
         state.canDecline = h->pendingClickChoiceMayDecline();
         for (const auto &option : h->pendingChoiceOptions()) {
             state.choiceOptions.append({option.index, option.label, option.enabled});

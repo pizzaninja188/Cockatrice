@@ -1,0 +1,5 @@
+// Oracle/rulings checked 2026-09-07; CR 702.35.
+(id: "fiery_temper", name: "Fiery Temper", face_id: "fiery_temper", mana_cost: "{1}{R}{R}", types: ["Instant"],
+ spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+ static_abilities: [(ability_id: "madness", presentation: OracleLines([2]), definition: Madness(cost: "{R}"))],
+)

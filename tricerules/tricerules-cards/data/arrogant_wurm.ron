@@ -1,0 +1,5 @@
+// Oracle/rulings checked 2026-09-07; madness retains normal permanent resolution.
+(id: "arrogant_wurm", name: "Arrogant Wurm", face_id: "arrogant_wurm", mana_cost: "{3}{G}{G}", types: ["Creature", "Wurm"],
+ power: 4, toughness: 4, keywords: [Trample],
+ static_abilities: [(ability_id: "madness", presentation: OracleLines([2]), definition: Madness(cost: "{2}{G}"))],
+)

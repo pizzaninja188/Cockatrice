@@ -54,6 +54,7 @@ fn saga_chapter_label(mut chapter: u32) -> String {
 /// The event domain currently parked behind the one shared CR 616 choice channel.
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum PendingReplacementEvent {
+    Discard(Box<crate::state::PendingDiscardBatch>),
     Damage(super::damage::PendingDamageBatch),
     BattlefieldEntry(Box<PendingBattlefieldEntry>),
 }

@@ -81,7 +81,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
                 deciding_player_id: controller,
                 source_object_id: source_id,
                 prompt_text: prompt.clone(),
-                choice_kind: rv1::ChoiceKind::SiegeCast as i32,
+                choice_kind: rv1::ChoiceKind::SpecialCast as i32,
                 candidate_object_ids: vec![source_id],
                 candidate_card_ids: vec![card_id],
                 min: 0,
@@ -115,15 +115,77 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
             max: 1,
             ordered: false,
             prompt,
-            choice_kind: rv1::ChoiceKind::SiegeCast,
+            choice_kind: rv1::ChoiceKind::SpecialCast,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::SiegeCast {
+        continuation: ResolutionContinuation::SpecialCast {
             stack,
             exiled,
             face_index,
+            method: SpellCastMethod::SiegeDefeat,
+            cost: ManaCost::default(),
+            undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
         },
     });
+    Ok(EffectOutcome::Suspended)
+}
+
+pub(super) fn madness_cast(
+    cx: &mut EffectCx<'_>,
+    cost: ManaCost,
+) -> Result<EffectOutcome, EngineError> {
+    let Some(exiled) = cx.top.trigger_context.source_after_zone_change else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if !cx
+        .engine
+        .state
+        .objects
+        .get(&exiled.object_id)
+        .is_some_and(|o| o.zone == Zone::Exile)
+        || cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&exiled.object_id)
+            .copied()
+            != Some(exiled.zone_change_generation)
+    {
+        return Ok(EffectOutcome::Continue);
+    }
+    let prompt = format!(
+        "Cast {} for its madness cost {}?",
+        object_display_name(&cx.engine.state, cx.engine.registry, exiled.object_id),
+        cost
+    );
+    let mut stack = ParkedStackResolution::new(cx.top.clone());
+    stack.resume_effect_index = Some(cx.effect_index + 1);
+    cx.engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: cx.top.controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: vec![exiled.object_id],
+            min: 0,
+            max: 1,
+            ordered: false,
+            unique_names: false,
+            prompt,
+            choice_kind: rv1::ChoiceKind::SpecialCast,
+        },
+        continuation: ResolutionContinuation::SpecialCast {
+            stack,
+            exiled,
+            face_index: 0,
+            method: SpellCastMethod::Madness,
+            cost,
+            undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
+        },
+    });
+    cx.events.push(
+        cx.engine
+            .resolution_payment_choice_event()
+            .expect("special cast offer"),
+    );
     Ok(EffectOutcome::Suspended)
 }
 
@@ -483,7 +545,7 @@ pub(in crate::engine) fn draw_cards_for_player(
             decked_out = true;
             break;
         }
-        draw_card(&mut engine.state.players[idx], &mut engine.state.objects)?;
+        draw_card(&mut engine.state, engine.registry, drawer)?;
         engine.fire_card_drawn(drawer);
         drawn += 1;
     }
@@ -1040,11 +1102,12 @@ pub(super) fn shuffle_permanents_into_owners_libraries(
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn discard_cards(
+pub(super) fn choose_hand_cards(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::DiscardCards {
+    let SpellEffectKind::ChooseHandCards {
+        action,
         count,
         target: _,
         chooser,
@@ -1068,40 +1131,7 @@ pub(super) fn discard_cards(
             optional,
             visibility,
             draw_after: 0,
-            action: HandCardAction::Discard,
-        },
-    )
-}
-
-pub(super) fn exile_cards_from_hand(
-    cx: &mut EffectCx<'_>,
-    effect: SpellEffectKind,
-) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::ExileCardsFromHand {
-        count,
-        target: _,
-        chooser,
-        card_filter,
-        optional,
-        visibility,
-    } = effect
-    else {
-        return Err(EngineError::Illegal("resolution dispatch mismatch"));
-    };
-    let Some(&target) = cx.targets.first() else {
-        return Ok(EffectOutcome::Continue);
-    };
-    choose_hand_cards_for_player(
-        cx,
-        target as PlayerId,
-        HandCardChoiceSpec {
-            count,
-            chooser,
-            card_filter: card_filter.as_ref(),
-            optional,
-            visibility,
-            draw_after: 0,
-            action: HandCardAction::Exile,
+            action,
         },
     )
 }
@@ -1140,7 +1170,7 @@ pub(super) fn draw_discard(
                 player,
                 HandCardChoiceSpec {
                     count: discard_count,
-                    chooser: DiscardChooser::AffectedPlayer,
+                    chooser: HandCardChooser::AffectedPlayer,
                     card_filter: None,
                     optional: false,
                     visibility: HandChoiceVisibility::PrivateLook,
@@ -1154,7 +1184,7 @@ pub(super) fn draw_discard(
             player,
             HandCardChoiceSpec {
                 count: discard_count,
-                chooser: DiscardChooser::AffectedPlayer,
+                chooser: HandCardChooser::AffectedPlayer,
                 card_filter: None,
                 optional,
                 visibility: HandChoiceVisibility::PrivateLook,
@@ -1167,7 +1197,7 @@ pub(super) fn draw_discard(
 
 struct HandCardChoiceSpec<'a> {
     count: u32,
-    chooser: DiscardChooser,
+    chooser: HandCardChooser,
     card_filter: Option<&'a CardTypeFilter>,
     optional: bool,
     visibility: HandChoiceVisibility,
@@ -1207,7 +1237,7 @@ fn choose_hand_cards_for_player(
         .collect();
 
     if visibility == HandChoiceVisibility::PublicReveal
-        && (eligible.is_empty() || chooser == DiscardChooser::Random)
+        && (eligible.is_empty() || chooser == HandCardChooser::Random)
     {
         events.extend(super::super::reveals::reveal_cards(
             &engine.state,
@@ -1227,7 +1257,7 @@ fn choose_hand_cards_for_player(
         }
     }
 
-    if chooser == DiscardChooser::Random {
+    if chooser == HandCardChooser::Random {
         let chosen_count = (count as usize).min(eligible.len());
         if chosen_count == 0 {
             events.push(ev_log(format!(
@@ -1237,7 +1267,20 @@ fn choose_hand_cards_for_player(
         } else {
             let mut shuffled = eligible;
             shuffle_object_ids_for_current_command(&engine.state, affected_player, &mut shuffled);
-            for oid in shuffled.into_iter().take(chosen_count) {
+            let selected: Vec<_> = shuffled.into_iter().take(chosen_count).collect();
+            if action == HandCardAction::Discard
+                && engine.has_discard_library_replacement(affected_player)
+            {
+                let batch = engine.start_discard_replacements(
+                    ParkedStackResolution::new(top.clone()),
+                    selected.iter().map(|oid| (affected_player, *oid)).collect(),
+                    visibility == HandChoiceVisibility::PublicReveal,
+                    None,
+                )?;
+                events.extend(batch.events);
+                return Ok(EffectOutcome::Suspended);
+            }
+            for oid in selected {
                 let result = perform_hand_card_action(
                     engine,
                     events,
@@ -1266,14 +1309,14 @@ fn choose_hand_cards_for_player(
     let n = (eligible.len() as u32).min(count);
     let min = if optional { 0 } else { n };
     let deciding_player = match chooser {
-        DiscardChooser::AffectedPlayer => affected_player,
-        DiscardChooser::Controller => controller,
-        DiscardChooser::Random => unreachable!("handled above"),
+        HandCardChooser::AffectedPlayer => affected_player,
+        HandCardChooser::Controller => controller,
+        HandCardChooser::Random => unreachable!("handled above"),
     };
     let choice_kind = match chooser {
-        DiscardChooser::AffectedPlayer => custom::ChoiceKind::HandCards,
-        DiscardChooser::Controller => custom::ChoiceKind::OpponentHand,
-        DiscardChooser::Random => unreachable!("handled above"),
+        HandCardChooser::AffectedPlayer => custom::ChoiceKind::HandCards,
+        HandCardChooser::Controller => custom::ChoiceKind::OpponentHand,
+        HandCardChooser::Random => unreachable!("handled above"),
     };
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &hand);
     let candidate_selectable = hand
@@ -1357,6 +1400,7 @@ fn choose_hand_cards_for_player(
                     })
                     .collect(),
                 draw_after,
+                revealed: visibility == HandChoiceVisibility::PublicReveal,
                 draw_only_if_discarded: optional,
             },
         },
@@ -1379,10 +1423,10 @@ fn perform_discard_action(
     spell_label: &str,
 ) -> Result<CardResultEntry, EngineError> {
     let (card_name, moved) = perform_discard(
-        &mut engine.state,
-        engine.registry,
+        engine,
         affected_player,
         object_id,
+        crate::state::DiscardCause::Effect,
     )?;
     events.push(moved);
     events.push(ev_log(format!(
@@ -1668,7 +1712,7 @@ pub(super) fn choose_graveyard_card(
                     .card_type
                     .is_none_or(|card_type| entry.matched_card_types.contains(&card_type))
             })
-            .map(|entry| (entry.object_id, entry.zone_change_generation))
+            .map(|entry| (entry.object_id, cx.engine.card_result_generation(entry)))
             .collect::<HashSet<_>>()
     });
     let candidates: Vec<ObjectId> = cx.engine.state.players[index]

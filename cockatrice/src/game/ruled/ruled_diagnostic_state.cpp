@@ -120,8 +120,8 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
         const char *kinds[] = {
             "TriggerTarget", "TriggerMode",    "CopyTarget",        "PermanentChoice",  "CopySource",
             "LegendKeep",    "AuraPermanent",  "AuraPlayer",        "BattleProtector",  "AttackingTokenDefender",
-            "CostObjects",   "ResolutionPick", "ResolutionPayment", "ResolutionBranch", "SiegeCast",
-            "TriggerOrder"};
+            "CostObjects",   "ResolutionPick", "ResolutionPayment", "ResolutionBranch", "SpecialCast",
+            "TriggerOrder", "ReplacementOption"};
         QJsonObject choiceState{{"kind", kinds[static_cast<int>(choice.kind)]}};
 #define FIELD(name) choiceState.insert(#name, value(choice.name))
         FIELD(promptText);
@@ -134,6 +134,7 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
         FIELD(hasSelectableRestriction);
         FIELD(selectableServerCardIds);
         FIELD(selectedServerCardIds);
+        FIELD(reverseSelectionOrder);
         FIELD(min);
         FIELD(max);
         FIELD(uniqueNames);

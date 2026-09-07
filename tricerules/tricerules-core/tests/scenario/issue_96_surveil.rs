@@ -112,9 +112,10 @@ fn issue_96_cruel_truths_moves_the_chosen_card_then_resumes_its_tail() {
             .get(&kept)
             .copied()
             .unwrap_or(0),
-        kept_generation,
-        "the card retained on top never changes zones"
+        kept_generation + 1,
+        "surveil retains the library incarnation, then the following draw creates a hand incarnation"
     );
+    assert_eq!(e.state.objects[&kept].zone, Zone::Hand);
     assert!(e.state.players[0].hand.contains(&kept));
     assert!(e.state.players[0].hand.contains(&next));
     assert_eq!(e.state.players[0].life, 18);

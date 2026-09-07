@@ -118,6 +118,7 @@ public:
     /// Returns the mana-payment prompt text if a spell is pending and still needs mana, otherwise empty.
     [[nodiscard]] QString pendingRuledSpellPromptText() const;
     [[nodiscard]] bool isAwaitingRuledSpellCostSelection() const;
+    [[nodiscard]] bool isStagingRuledSpecialCast(const RuledClientState &state) const;
     [[nodiscard]] bool isAwaitingRuledCastCostObject() const;
     [[nodiscard]] bool isAwaitingRuledCastCostOption() const;
     [[nodiscard]] bool pendingRuledCastCostGroupIsOptional() const;

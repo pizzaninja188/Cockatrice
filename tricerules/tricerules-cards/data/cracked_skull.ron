@@ -11,7 +11,7 @@
       ability_id: "triggered_01",
       presentation: OracleLines([2]),
       trigger: WhenSelfEntersBattlefield,
-      effect: [DiscardCards(
+      effect: [ChooseHandCards(action: Discard,
         count: 1,
         target: (kind: AnyPlayer),
         chooser: Controller,

@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    CardTypeFilter, DiscardChooser, EffectSubject, GameCondition, PlayerRecipient,
+    CardTypeFilter, EffectSubject, GameCondition, HandCardChooser, PlayerRecipient,
     RelativePlayerSet, SpellEffectKind, StaticAbilityDef,
 };
 use tricerules_cards::{CardRegistry, Keyword, TriggerCondition};
@@ -44,9 +44,10 @@ fn issue_115_cards_and_treasure_have_exact_shared_shapes() {
     assert_eq!(skull_face.mana_cost.to_string(), "{2}{B}");
     assert!(matches!(
         skull_face.triggered_abilities[0].effect.as_slice(),
-        [SpellEffectKind::DiscardCards {
+        [SpellEffectKind::ChooseHandCards {
+            action: tricerules_cards::primitives::HandCardAction::Discard,
             count: 1,
-            chooser: DiscardChooser::Controller,
+            chooser: HandCardChooser::Controller,
             card_filter: Some(CardTypeFilter::Nonland),
             optional: true,
             ..

@@ -11,7 +11,7 @@
       ability_id: "activated_01",
       presentation: OracleLines([1]),
       costs: [Tap, SacrificeSelf],
-      effect: [DiscardCards(count: 1, target: (kind: OpponentPlayer))],
+      effect: [ChooseHandCards(action: Discard, count: 1, target: (kind: OpponentPlayer))],
       timing: SorcerySpeed,
     ),
   ],

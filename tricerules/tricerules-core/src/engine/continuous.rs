@@ -372,7 +372,10 @@ impl GameEngine {
 
         for (definition, static_ability) in statics {
             match static_ability.definition {
-                StaticAbilityDef::SpellCannotBeCountered
+                StaticAbilityDef::Madness { .. }
+                | StaticAbilityDef::DiscardToLibrary
+                | StaticAbilityDef::NoMaximumHandSize
+                | StaticAbilityDef::SpellCannotBeCountered
                 | StaticAbilityDef::Storied
                 | StaticAbilityDef::AdditionalTriggeredAbilityInstances { .. }
                 | StaticAbilityDef::ProhibitLifeGain { .. }

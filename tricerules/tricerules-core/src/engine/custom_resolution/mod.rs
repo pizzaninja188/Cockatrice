@@ -149,9 +149,9 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
-            ResolutionContinuation::SiegeCast { .. }
+            ResolutionContinuation::SpecialCast { .. }
         ) {
-            return self.finish_siege_cast_choice(pending, answer, decision);
+            return self.finish_special_cast_choice(pending, answer, decision);
         }
         if matches!(
             pending.continuation,
@@ -228,6 +228,9 @@ impl GameEngine {
         }
 
         match &pending.continuation {
+            ResolutionContinuation::DiscardReplacement { .. } => {
+                return self.finish_discard_replacement(pending, chosen)
+            }
             ResolutionContinuation::AuraReturn { .. } => {
                 return self.finish_aura_return(pending, chosen[0]);
             }
@@ -312,7 +315,7 @@ impl GameEngine {
             ResolutionContinuation::BattleProtector { .. } => {
                 return self.finish_battle_protector_choice(pending, chosen[0] as PlayerId);
             }
-            ResolutionContinuation::SiegeCast { .. } => {
+            ResolutionContinuation::SpecialCast { .. } => {
                 unreachable!("Siege-cast branch handled before object-choice validation")
             }
             ResolutionContinuation::AttackingTokenDefenders { .. } => {
@@ -564,60 +567,101 @@ impl GameEngine {
         self.complete_pending_battlefield_entry(pending, entry.event, entry.completion, events)
     }
 
-    fn finish_siege_cast_choice(
+    fn finish_special_cast_choice(
         &mut self,
         pending: PendingResolution,
         answer: &rv1::SubmitResolutionChoice,
         decision: rv1::ResolutionChoiceDecision,
     ) -> Result<RuledEventBatch, EngineError> {
-        let ResolutionContinuation::SiegeCast {
+        if !answer.chosen_object_ids.is_empty()
+            || answer.selected_branch_index != 0
+            || answer.chosen_combat_defender.is_some()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "special cast has unrelated resolution choice data",
+            ));
+        }
+        let ResolutionContinuation::SpecialCast {
             stack,
             exiled,
-            face_index,
+            method,
+            ..
         } = &pending.continuation
         else {
-            unreachable!("Siege cast continuation routed by caller")
+            unreachable!()
         };
         let stack = stack.clone();
         let exiled = *exiled;
-        let face_index = *face_index;
+        let method = *method;
         let mut events = Vec::new();
         match decision {
             rv1::ResolutionChoiceDecision::Decline => {
                 if answer.cast_spell.is_some() || !answer.chosen_object_ids.is_empty() {
                     self.state.pending_resolution = Some(pending);
                     return Err(EngineError::Illegal(
-                        "declining a Siege cast cannot include an announcement",
+                        "declining a cast cannot include an announcement",
+                    ));
+                }
+                if method == SpellCastMethod::Madness
+                    && self
+                        .state
+                        .objects
+                        .get(&exiled.object_id)
+                        .is_some_and(|o| o.zone == Zone::Exile)
+                    && self
+                        .state
+                        .zone_change_generation
+                        .get(&exiled.object_id)
+                        .copied()
+                        == Some(exiled.zone_change_generation)
+                {
+                    let owner = self.state.objects[&exiled.object_id].owner;
+                    resolution::move_object_to_zone(
+                        &mut self.state,
+                        self.registry,
+                        exiled.object_id,
+                        Zone::Graveyard,
+                        None,
+                    )?;
+                    self.state.discard_reference_successors.insert(
+                        (exiled.object_id, exiled.zone_change_generation),
+                        self.state.zone_change_generation[&exiled.object_id],
+                    );
+                    events.push(resolution::permanent_moved_event(
+                        &self.state,
+                        exiled.object_id,
+                        owner,
+                        rv1::permanent_moved::Destination::Graveyard,
                     ));
                 }
                 events.push(ev_log(format!(
-                    "P{} declines to cast the defeated Siege.",
+                    "P{} declines to cast the offered card.",
                     pending.deciding_player
                 )));
             }
-            rv1::ResolutionChoiceDecision::CastTransformed => {
+            rv1::ResolutionChoiceDecision::CastSpell => {
                 let Some(cast) = answer.cast_spell.as_ref() else {
                     self.state.pending_resolution = Some(pending);
                     return Err(EngineError::Illegal(
-                        "accepting a Siege cast requires a spell announcement",
+                        "accepting a cast requires a spell announcement",
                     ));
                 };
-                if let Err(error) = self.cast_siege_defeat_offer(
-                    pending.deciding_player,
-                    cast,
-                    exiled,
-                    face_index,
-                    &mut events,
-                ) {
-                    self.state.pending_resolution = Some(pending);
-                    return Err(error);
+                let player = pending.deciding_player;
+                self.state.pending_resolution = Some(pending);
+                match self.cast_spell(player, cast) {
+                    Ok(batch) => {
+                        events.extend(batch.events);
+                        self.state.pending_resolution = None;
+                    }
+                    Err(error) => return Err(error),
                 }
             }
             _ => {
                 self.state.pending_resolution = Some(pending);
-                return Err(EngineError::Illegal(
-                    "Siege cast choice requires cast or decline",
-                ));
+                return Err(EngineError::Illegal("cast choice requires cast or decline"));
             }
         }
         self.complete_parked_resolution_with_previous(
@@ -644,7 +688,7 @@ impl GameEngine {
     /// (CR 608.2m), which is why the `finish_*` callers do not log that themselves.
     ///
     /// Priority returns to the active player only if the tail did not park again (a second
-    /// suspending effect in the same list, e.g. a hypothetical `[Scry, DiscardCards]`).
+    /// suspending effect in the same list, e.g. a hypothetical `[Scry, ChooseHandCards]`).
     pub(super) fn complete_parked_resolution(
         &mut self,
         item: StackItem,

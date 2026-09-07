@@ -5360,7 +5360,7 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     {
         const int localId = player->getPlayerInfo()->getId();
         const int priorityId = player->getGame()->getGameState()->getPriorityPlayer();
-        if (!handler->isResolutionPaymentActive() && (priorityId < 0 || localId != priorityId)) {
+        if (!handler->isResolutionManaWindow() && (priorityId < 0 || localId != priorityId)) {
             return false;
         }
     }
@@ -5409,7 +5409,7 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     }
 
     const auto abilities = handler->activatedAbilitiesForOid(oid);
-    const bool manaAbilitiesOnly = handler->isResolutionPaymentActive() || ruledPayment->applicable();
+    const bool manaAbilitiesOnly = handler->isResolutionManaWindow() || ruledPayment->applicable();
     const auto paymentContributions = ruledPayment->contributionOptions(card);
     const auto permanentActions = battlefieldSource && !manaAbilitiesOnly ? handler->permanentActionsForOid(oid)
                                                                           : QVector<RuledPermanentAction>{};

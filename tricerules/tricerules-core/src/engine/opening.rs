@@ -1,6 +1,6 @@
 use super::events::{ev_log, ev_phase, ev_priority_changed};
 use super::legal_actions::fill_legal;
-use super::resolution::{draw_card, move_object_to_zone, permanent_moved_event};
+use super::resolution::{deal_opening_card, move_object_to_zone, permanent_moved_event};
 use super::*;
 use crate::state::next_unresolved_from;
 
@@ -60,7 +60,7 @@ fn mulligan_redraw(
             .wrapping_add(player as u64),
     );
     for _ in 0..7 {
-        draw_card(&mut state.players[idx], &mut state.objects)?;
+        deal_opening_card(&mut state.players[idx], &mut state.objects)?;
     }
     Ok(())
 }
@@ -109,7 +109,7 @@ impl GameEngine {
                 for pi in 0..self.state.players.len() {
                     let p = &mut self.state.players[pi];
                     for _ in 0..7 {
-                        draw_card(p, &mut self.state.objects)?;
+                        deal_opening_card(p, &mut self.state.objects)?;
                     }
                 }
                 events.push(ev_log(if chooser == sp {

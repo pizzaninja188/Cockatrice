@@ -52,6 +52,21 @@ impl GameEngine {
             ));
         }
 
+        if hand_choice.action == HandCardAction::Discard
+            && !chosen.is_empty()
+            && self.has_discard_library_replacement(hand_choice.affected_player)
+        {
+            return self.start_discard_replacements(
+                stack,
+                chosen
+                    .iter()
+                    .map(|oid| (hand_choice.affected_player, *oid))
+                    .collect(),
+                hand_choice.revealed,
+                (hand_choice.draw_after > 0)
+                    .then_some((hand_choice.affected_player, hand_choice.draw_after)),
+            );
+        }
         let card_name = self
             .registry
             .get(&stack.item.card_id)
@@ -193,6 +208,19 @@ impl GameEngine {
             ));
         }
 
+        if discard
+            .choices
+            .iter()
+            .any(|choice| self.has_discard_library_replacement(choice.player))
+        {
+            let selected = discard
+                .choices
+                .iter()
+                .zip(&discard.selections)
+                .flat_map(|(choice, selection)| selection.iter().map(|oid| (choice.player, *oid)))
+                .collect();
+            return self.start_discard_replacements(stack, selected, false, None);
+        }
         let card_name = self
             .registry
             .get(&stack.item.card_id)

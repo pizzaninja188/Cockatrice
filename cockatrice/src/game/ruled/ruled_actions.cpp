@@ -1,4 +1,5 @@
 #include "ruled_actions.h"
+#include "ruled_pending_cast.h"
 
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../abstract_game.h"
@@ -135,7 +136,7 @@ void sendRuledCommand(const AbstractGame *game, const ruled::v1::RuledCommand &c
     // Through the host interface, where the method is public. GameEventHandler keeps its
     // RuledClientHost overrides private so the view model is the only thing that normally sends;
     // this is the one documented exception, rather than widening that class's interface.
-    static_cast<RuledClientHost *>(handler)->sendRuledCommand(command);
+    static_cast<RuledClientHost *>(handler)->sendRuledCommand(RuledPendingCast::submissionCommand(command));
 }
 
 void sendRuledCommandExpectingAck(const AbstractGame *game,
@@ -149,7 +150,7 @@ void sendRuledCommandExpectingAck(const AbstractGame *game,
     if (!handler) {
         return;
     }
-    static_cast<RuledClientHost *>(handler)->sendRuledCommandExpectingAck(command, std::move(onFinished));
+    static_cast<RuledClientHost *>(handler)->sendRuledCommandExpectingAck(RuledPendingCast::submissionCommand(command), std::move(onFinished));
 }
 
 RuledClientState *stateForCard(const CardItem *card)
