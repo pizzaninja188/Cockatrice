@@ -1,6 +1,7 @@
 #ifndef RULED_PAYMENT_H
 #define RULED_PAYMENT_H
 
+#include <QJsonObject>
 #include <QString>
 #include <QVector>
 #include <QtGlobal>
@@ -11,6 +12,7 @@
 class RuledPayment
 {
 public:
+    [[nodiscard]] QJsonObject diagnosticSnapshot() const;
     void begin(bool guardSanitizedPayment = false);
     void clear();
     RuledPayment suspend();

@@ -78,6 +78,7 @@ add_subdirectory(movecard_tests)
 add_subdirectory(oracle)
 add_subdirectory(ruled_batch_tests)
 add_subdirectory(ruled_client_tests)
+add_subdirectory(ruled_diagnostics_tests)
 if(TARGET servatrice)
   add_subdirectory(ruled_e2e_smoke)
 endif()
@@ -106,6 +107,7 @@ if(WIN32)
       parse_cipt_test
       ruled_batch_test
       ruled_client_test
+      ruled_diagnostics_test
   )
   if(TARGET ruled_e2e_smoke_test)
     list(APPEND _cockatrice_test_names ruled_e2e_smoke_test)

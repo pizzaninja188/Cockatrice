@@ -170,6 +170,7 @@ mod counters;
 mod custom_resolution;
 pub(crate) mod damage;
 mod dev;
+mod diagnostics;
 mod events;
 mod history;
 #[cfg(test)]

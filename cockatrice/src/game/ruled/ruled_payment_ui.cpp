@@ -9,6 +9,7 @@
 #include "../player/player_info.h"
 #include "../zones/logic/card_zone_logic.h"
 #include "ruled_actions.h"
+#include "ruled_diagnostic_values.h"
 
 #include <QCursor>
 #include <QMenu>
@@ -760,4 +761,31 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(Pl
         selection->set_c(static_cast<quint32>(counts.value(QLatin1Char('C'))));
     }
     return cmd;
+}
+
+QJsonObject RuledPaymentUi::diagnosticSnapshot() const
+{
+    const auto contextName = [](Context v) {
+        switch (v) {
+            case Context::None:
+                return "None";
+            case Context::Spell:
+                return "Spell";
+            case Context::Ability:
+                return "Ability";
+            case Context::Resolution:
+                return "Resolution";
+        }
+        return "Unknown";
+    };
+    QJsonArray suspended;
+    for (const auto &entry : suspendedPayments)
+        suspended.append(QJsonObject{{"context", contextName(entry.context)},
+                                     {"spell", RuledDiagnosticValues::value(entry.spell)},
+                                     {"ability", RuledDiagnosticValues::value(entry.ability)},
+                                     {"payment", entry.payment.diagnosticSnapshot()}});
+    return {{"active_context", contextName(activeContext)},
+            {"queued", queued},
+            {"choosing_life_payment", choosingLifePayment},
+            {"suspended_payments", suspended}};
 }

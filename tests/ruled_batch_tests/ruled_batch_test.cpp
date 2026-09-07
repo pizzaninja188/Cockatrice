@@ -17,7 +17,9 @@
 #include "game/ruled_batch_synchronizer.h"
 #include "game/ruled_broadcast_router.h"
 #include "game/ruled_game_driver.h"
+#include "game/ruled_game_resume.h"
 #include "game/ruled_game_session.h"
+#include "game/ruled_server_diagnostics.h"
 #include "game/ruled_utils.h"
 #include "game/server_abstract_player.h"
 #include "game/server_card.h"
@@ -29,7 +31,10 @@
 #include "server_room.h"
 #include "server_test_helpers.h"
 
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QString>
+#include <QTemporaryDir>
 #include <algorithm>
 #include <google/protobuf/dynamic_message.h>
 #include <gtest/gtest.h>
@@ -44,6 +49,45 @@
 #include <memory>
 
 RNG_Abstract *rng = nullptr; // required by other server code
+
+TEST(RuledServerDiagnostics, CorrelatesAuthenticatedActorAndRejectedEngineRequestWithoutLeakingSnapshot)
+{
+    QTemporaryDir root;
+    RuledServerDiagnostics diagnostics(7, root.path());
+    Command_RuledPayload client;
+    client.set_diagnostic_request_id("click-1");
+    ruled::v1::RuledCommand command;
+    command.mutable_pass_priority();
+    client.set_payload(command.SerializeAsString());
+    diagnostics.clientRequest(29, client);
+    ruled::v1::IpcEnvelope envelope;
+    envelope.mutable_player_command()->set_player_id(29);
+    envelope.mutable_player_command()->set_ruled_command(command.SerializeAsString());
+    diagnostics.engineRequest(envelope);
+    ruled::v1::IpcResponse response;
+    response.set_ok(false);
+    response.set_error("not your priority");
+    response.set_diagnostic_command_index(17);
+    response.set_diagnostic_state_json("{\"hidden\":\"secret library\"}");
+    diagnostics.engineResponse(response);
+    Event_RuledPayload outgoing;
+    diagnostics.decorate(outgoing);
+    ASSERT_TRUE(outgoing.has_diagnostic_context());
+    EXPECT_EQ(outgoing.diagnostic_context().capture_id(), diagnostics.journal().id().toStdString());
+    EXPECT_EQ(outgoing.diagnostic_context().client_request_id(), "click-1");
+    EXPECT_EQ(outgoing.diagnostic_context().command_index(), 17U);
+    EXPECT_EQ(outgoing.SerializeAsString().find("secret library"), std::string::npos);
+    QFile file(diagnostics.journal().directory() + "/timeline.jsonl");
+    ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+    const auto first = QJsonDocument::fromJson(file.readLine()).object();
+    EXPECT_EQ(first.value("context").toObject().value("authenticated_player_id").toInt(), 29);
+    const auto request = QJsonDocument::fromJson(file.readLine()).object();
+    const auto result = QJsonDocument::fromJson(file.readLine()).object();
+    EXPECT_EQ(request.value("kind").toString(), QStringLiteral("engine_request"));
+    EXPECT_EQ(result.value("kind").toString(), QStringLiteral("engine_response"));
+    EXPECT_EQ(request.value("correlation_id"), result.value("correlation_id"));
+    EXPECT_FALSE(result.value("data").toObject().value("ok").toBool(true));
+}
 
 namespace
 {
@@ -180,6 +224,11 @@ protected:
     }
 
     // Privileged helpers (only callable here via the friend declaration).
+    QJsonObject diagnosticEmblemState()
+    {
+        game->ruled()->synchronizer->playerBinding(p1->getPlayerId()).staticEmblemServerCardIds.insert(42u, 7);
+        return game->ruled()->synchronizer->diagnosticSnapshot();
+    }
     void insertParticipant(int id, Server_AbstractParticipant *p)
     {
         game->ruled()->insertParticipantForTest(id, p);
@@ -4482,4 +4531,49 @@ int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
+}
+
+TEST(RuledResume, ValidatesPlanAndReservesNonconsecutiveRecordedSeats)
+{
+    QTemporaryDir root;
+    ruled::diagnostics::ResumePlan plan;
+    plan.set_format_version(1);
+    plan.set_parent_capture_id("00000000-0000-4000-8000-000000000007");
+    plan.set_engine_build("build");
+    plan.set_card_data_hash("cards");
+    plan.set_initial_state_sha256(std::string(32, 'x'));
+    auto *start = plan.mutable_session_start();
+    start->set_diagnostic_capture_enabled(true);
+    start->add_player_ids(17);
+    start->add_player_ids(29);
+    for (const auto id : {17, 29}) {
+        auto *deck = plan.add_display_decks();
+        deck->set_player_id(id);
+        deck->add_mainboard_card_name("Island");
+    }
+    QString error;
+    ASSERT_TRUE(RuledGameResume::validate(plan, &error)) << error.toStdString();
+    QFile file(root.filePath("resume.pb"));
+    ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+    file.write(QByteArray::fromStdString(plan.SerializeAsString()));
+    file.close();
+    RuledGameResume resume(file.fileName());
+    ASSERT_TRUE(resume.valid());
+    EXPECT_EQ(resume.participantId(0, false, {}), 17);
+    EXPECT_EQ(resume.participantId(18, false, {17}), 29);
+    EXPECT_GT(resume.participantId(0, true, {17}), 29);
+    start->add_player_ids(17);
+    EXPECT_FALSE(RuledGameResume::validate(plan, &error));
+}
+
+TEST_F(RuledBatchTest, DiagnosticEmblemsRetainRuntimeMarkerIdentity)
+{
+    const auto players = diagnosticEmblemState().value("players").toArray();
+    ASSERT_EQ(players.size(), 1);
+    const auto markers = players.first().toObject().value("static_emblem_identities").toArray();
+    ASSERT_EQ(markers.size(), 1);
+    const auto marker = markers.first().toObject();
+    EXPECT_EQ(marker.value("runtime_marker_id").toInt(), 42);
+    EXPECT_EQ(marker.value("server_card_id").toInt(), 7);
+    EXPECT_FALSE(marker.contains("engine_object_id"));
 }

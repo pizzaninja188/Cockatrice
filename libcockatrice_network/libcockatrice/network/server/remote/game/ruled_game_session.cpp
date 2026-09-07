@@ -3,6 +3,8 @@
 #include "ruled_game_session.h"
 
 #include "../server_abstractuserinterface.h"
+#include "ruled_game_resume.h"
+#include "ruled_server_diagnostics.h"
 #include "rules_relay.h"
 #include "server_abstract_player.h"
 #include "server_cardzone.h"
@@ -16,6 +18,7 @@
 #include <libcockatrice/deck_list/tree/deck_list_card_node.h>
 #include <libcockatrice/protocol/pb/event_game_say.pb.h>
 #include <libcockatrice/protocol/pb/event_notify_user.pb.h>
+#include <libcockatrice/protocol/pb/serverinfo_game.pb.h>
 #include <libcockatrice/protocol/pb/session_event.pb.h>
 #include <libcockatrice/utility/zone_names.h>
 
@@ -98,7 +101,8 @@ void shuffleMainDeckForRuledFallback(Server_AbstractPlayer *player)
 }
 } // namespace
 
-RuledGameSession::RuledGameSession(Server_Game *_game) : game(_game)
+RuledGameSession::RuledGameSession(Server_Game *_game)
+    : game(_game), resumePlan(std::make_unique<RuledGameResume>(qEnvironmentVariable("COCKATRICE_RULED_RESUME_PLAN")))
 {
 }
 
@@ -184,7 +188,18 @@ bool RuledGameSession::validateDecksForStart()
 RuledGameSession::StartResult RuledGameSession::start()
 {
     StartResult result;
+    if (resumePlan->enabled() && !resumePlan->valid()) {
+        failResume(resumePlan->error());
+        return result;
+    }
+    if (qEnvironmentVariable("COCKATRICE_RULED_CAPTURE") != "0") {
+        capture = std::make_unique<RuledServerDiagnostics>(static_cast<quint64>(game->getGameId()));
+        ServerInfo_Game info;
+        game->getInfo(info);
+        capture->journal().record("server_game_info", info);
+    }
     relay = std::make_unique<RulesRelay>(game);
+    relay->setDiagnostics(capture.get());
     seed = QRandomGenerator::global()->generate64();
     bool forcedOk = false;
     const quint64 forcedSeed = qEnvironmentVariable("COCKATRICE_RULED_SEED").toULongLong(&forcedOk);
@@ -206,8 +221,39 @@ RuledGameSession::StartResult RuledGameSession::start()
     const bool anyMainboard = std::any_of(result.deckByPlayer.begin(), result.deckByPlayer.end(),
                                           [](const auto &row) { return !row.second.isEmpty(); });
     const QList<QPair<int, QStringList>> *deckPtr = anyMainboard ? &result.deckByPlayer : nullptr;
-    if (!relay->sessionStart(static_cast<quint64>(game->getGameId()), seed, ids, deckPtr, devCommandsRequested,
-                             result.response)) {
+    bool started = false;
+    if (resumePlan->enabled()) {
+        const auto &plan = resumePlan->plan();
+        QSet<int> roster;
+        for (const auto id : plan.session_start().player_ids())
+            roster.insert(id);
+        if (roster != QSet<int>(ids.begin(), ids.end())) {
+            failResume("Joined players do not match the recorded roster");
+            return result;
+        }
+        seed = plan.session_start().seed();
+        result.deckByPlayer.clear();
+        for (const auto &deck : plan.display_decks()) {
+            QStringList names;
+            for (const auto &name : deck.mainboard_card_name())
+                names.append(QString::fromStdString(name));
+            result.deckByPlayer.append({deck.player_id(), names});
+        }
+        if (capture)
+            capture->journal().metadata({{"parent_capture_id", QString::fromStdString(plan.parent_capture_id())},
+                                         {"resume_stop_after", QString::number(plan.stop_after())},
+                                         {"comparison_mode", plan.comparison_mode()}});
+        started = relay->sessionStart(plan.session_start(), result.response);
+        QString error;
+        if (!started || !resumePlan->checkStartup(result.response, &error)) {
+            failResume(started ? error : "Resume sidecar connection failed");
+            return result;
+        }
+    } else {
+        started = relay->sessionStart(static_cast<quint64>(game->getGameId()), seed, ids, deckPtr, devCommandsRequested,
+                                      result.response);
+    }
+    if (!started) {
         qWarning() << "startRuledSidecarSession: tricerules connection failed";
         notifyEngineUnreachable();
         relay.reset();
@@ -245,8 +291,23 @@ RuledGameSession::StartResult RuledGameSession::start()
     return result;
 }
 
+void RuledGameSession::failResume(const QString &reason)
+{
+    if (capture)
+        capture->journal().note("resume_failed", {{"reason", reason}});
+    sendEngineNotice(QStringLiteral("Cannot resume capture"), reason);
+    abort();
+    for (auto *player : game->getPlayers())
+        player->setReadyStart(false);
+}
+
 void RuledGameSession::resetForNewGame()
 {
+    if (relay)
+        relay->setDiagnostics(nullptr);
+    if (capture)
+        capture->journal().finish();
+    capture.reset();
     autoPassPolicies.clear();
     engineConnectionLost = false;
 }
@@ -257,6 +318,8 @@ void RuledGameSession::end()
         relay->sessionEnd();
         relay.reset();
     }
+    if (capture)
+        capture->journal().finish();
 }
 
 void RuledGameSession::abort()

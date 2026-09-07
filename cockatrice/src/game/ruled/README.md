@@ -4,6 +4,11 @@ Fork-owned. All ruled-mode client logic lives here; upstream files keep 1–3-li
 For the system-wide picture (identity glossary, redaction, the life of a command) see
 [docs/ARCHITECTURE.md](../../../../docs/ARCHITECTURE.md).
 
+`ruled_client_diagnostics`, `ruled_bug_report`, and `ruled_diagnostic_viewer` own per-game capture,
+Help-menu report export, and recipient-only offline playback. `ruled_resume_client` restores local
+toolbar preferences for a captured session. See [Ruled diagnostics](../../../../docs/RULED-DIAGNOSTICS.md)
+for file schemas, maintainer tools, and the separate live-resume launcher.
+
 **The client is a mirror, not a rules engine.** Every legality question — can this be played, is
 this a legal target, is this a creature — is answered from what the engine sent in the last
 `RuledEventBatch`. Never re-derive one from the Oracle card database.

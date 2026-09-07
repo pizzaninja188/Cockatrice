@@ -24,6 +24,9 @@ SettingsCache &SettingsCache::instance()
 
 QString SettingsCache::getDataPath()
 {
+    const auto diagnosticProfile = qApp->property("ruledDiagnosticProfile").toString();
+    if (!diagnosticProfile.isEmpty())
+        return diagnosticProfile;
     if (isPortableBuild)
         return qApp->applicationDirPath() + "/data";
     else

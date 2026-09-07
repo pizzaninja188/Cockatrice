@@ -11,6 +11,7 @@
 #include <QtGlobal>
 
 class QTcpSocket;
+class RuledServerDiagnostics;
 
 /**
  * TCP client to the tricerules-server sidecar (length-prefixed protobuf frames).
@@ -33,16 +34,22 @@ public:
                       const QList<QPair<int, QStringList>> *playerDecks, bool devCommandsEnabled,
                       ruled::v1::IpcResponse &out);
     bool playerCommand(int playerId, const QByteArray &ruledCommandBytes, ruled::v1::IpcResponse &out);
+    bool sessionStart(const ruled::v1::SessionStart &start, ruled::v1::IpcResponse &out);
     /// Stateless implemented-card check (no engine session): out.ok() iff every Oracle
     /// name resolves; otherwise out.missing_card_names() lists them sorted, deduplicated.
     /// Returns false only on transport failure (sidecar unreachable / bad frame).
     bool validateDeck(const QStringList &cardNames, ruled::v1::IpcResponse &out);
     bool previewPayment(int playerId, const ruled::v1::PreviewPayment &preview, ruled::v1::IpcResponse &out);
     bool sessionEnd();
+    void setDiagnostics(RuledServerDiagnostics *value)
+    {
+        diagnostics = value;
+    }
 
 private:
     bool writeFrame(const google::protobuf::Message &msg);
     bool readFrame(QByteArray &out);
+    bool exchange(const ruled::v1::IpcEnvelope &request, ruled::v1::IpcResponse &response);
     QString engineHost() const;
     quint16 enginePort() const;
 
@@ -51,6 +58,7 @@ private:
     /// to the connection, so after this a dropped socket is unrecoverable and must not be silently
     /// reconnected — see connectIfNeeded().
     bool sessionActive = false;
+    RuledServerDiagnostics *diagnostics = nullptr;
 };
 
 #endif

@@ -3,6 +3,8 @@
 #include "ruled_broadcast_router.h"
 
 #include "ruled_batch_synchronizer.h"
+#include "ruled_game_driver.h"
+#include "ruled_server_diagnostics.h"
 #include "ruled_utils.h"
 #include "server_abstract_player.h"
 #include "server_card.h"
@@ -40,11 +42,17 @@ void RuledBroadcastRouter::broadcast(const ruled::v1::IpcResponse &resp, bool au
     toSend.set_error(resp.error());
     toSend.mutable_batch()->CopyFrom(resp.batch());
     appendServerObjectMaps(toSend);
+    if (game->ruled()->diagnostics()) {
+        game->ruled()->diagnostics()->projection(toSend);
+        game->ruled()->diagnostics()->journal().state("relay", synchronizer->diagnosticSnapshot());
+    }
     const ruled::v1::RuledEventBatch &batch = toSend.batch();
     for (auto *participant : game->getParticipants()) {
         GameEventStorage ges;
         const ruled::v1::RuledEventBatch filtered = redactBatchForParticipant(batch, participant);
         Event_RuledPayload ev;
+        if (game->ruled()->diagnostics())
+            game->ruled()->diagnostics()->decorate(ev);
         std::string bytes;
         filtered.SerializeToString(&bytes);
         ev.set_payload(bytes);
@@ -80,6 +88,8 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
     const ruled::v1::RuledEventBatch filtered = redactBatchForParticipant(snapshot, participant);
 
     Event_RuledPayload event;
+    if (game->ruled()->diagnostics())
+        game->ruled()->diagnostics()->decorate(event);
     std::string bytes;
     filtered.SerializeToString(&bytes);
     event.set_payload(bytes);
@@ -563,6 +573,8 @@ void RuledBroadcastRouter::sendPaymentPreview(int playerId, const ruled::v1::Pay
     ruled::v1::RuledEventBatch batch;
     *batch.mutable_payment_preview() = preview;
     Event_RuledPayload event;
+    if (game->ruled()->diagnostics())
+        game->ruled()->diagnostics()->decorate(event);
     event.set_payload(batch.SerializeAsString());
     GameEventStorage storage;
     storage.enqueueGameEvent(event, -1, GameEventStorageItem::SendToPrivate, playerId);

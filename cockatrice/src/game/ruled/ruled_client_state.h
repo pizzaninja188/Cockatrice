@@ -422,6 +422,7 @@ class RuledClientState : public QObject
     Q_OBJECT
 
 public:
+    [[nodiscard]] QJsonObject diagnosticSnapshot() const;
     RuledPayment payment;
 
     enum class RuledCombatPhase

@@ -27,6 +27,7 @@ class Server_AbstractParticipant;
 class RuledBatchSynchronizer;
 class RuledBroadcastRouter;
 class RuledGameSession;
+class RuledServerDiagnostics;
 
 /// One per ruled game, owned by (and friend of) Server_Game; non-null iff the game is ruled.
 class RuledGameDriver
@@ -52,6 +53,8 @@ public:
     /// mainboard. On failure notifies + un-readies the players and returns false (the
     /// start must not proceed; the pregame stays open so players can swap decks).
     bool validateDecksForStart();
+    RuledServerDiagnostics *diagnostics() const;
+    int nextParticipantId(int fallback, bool spectator) const;
     /// Clears per-game stack bookkeeping and the connection-lost flag before a (re)start.
     void resetForNewGame();
     /// Appends the sole current engine-authored resolution choice, redacted for this recipient,
@@ -76,10 +79,13 @@ public:
     QString ruledFaceDisplayName(const QString &cardId, int faceIndex) const;
 
 private:
+    Response::ResponseCode
+    processRuledPayloadImpl(int playerId, const Command_RuledPayload &cmd, GameEventStorage &ges);
     /// Handles the rules engine connection dropping during an active ruled game: notifies the
     /// players once (the game is unrecoverable) and tears down the dead relay so subsequent
     /// commands fail fast instead of re-timing-out and re-notifying. Idempotent.
     void handleRuledEngineConnectionLost();
+    bool resumeCapturedPrefix();
     /// Validate and cache one authenticated player's UI-only phase-stop preferences. The command
     /// carries no player id; `playerId` always comes from the server-side participant binding.
     bool cacheAutoPassPolicy(int playerId, const ruled::v1::SetAutoPassPolicy &policy);

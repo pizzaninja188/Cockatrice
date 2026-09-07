@@ -10,7 +10,7 @@ use std::fmt;
 
 /// One of the five colored mana symbols (W U B R G). Used inside flexible pips (hybrid,
 /// mono-hybrid, Phyrexian) so a pip can name its color(s) without nesting `ManaSymbol`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ColorPip {
     W,
     U,
@@ -56,7 +56,7 @@ impl ColorPip {
 /// A single mana symbol in a cost (CR 107.4). Snow (`{S}`) is expressible in the brace syntax
 /// but rejected at parse time until snow sources exist. Hybrid/mono-hybrid/Phyrexian pips
 /// (CR 107.4d–f) are paid as a constrained choice — see `tricerules-core` `pay_mana`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum ManaSymbol {
     W,
     U,

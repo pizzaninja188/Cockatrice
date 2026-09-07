@@ -3,6 +3,7 @@
 # provides the protobuf interfaces
 
 set(PROTO_FILES
+    ruled_diagnostics.proto
     admin_commands.proto
     card_attributes.proto
     color.proto

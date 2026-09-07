@@ -80,6 +80,7 @@ protected:
 
 class PhasesToolbar : public QObject, public QGraphicsItem
 {
+    friend class RuledResumeClient;
     Q_OBJECT
     Q_INTERFACES(QGraphicsItem)
 private:

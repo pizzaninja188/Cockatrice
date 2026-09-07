@@ -1,4 +1,5 @@
 #include "tab_game.h"
+#include "../../../game/ruled/ruled_diagnostic_viewer.h"
 
 #include "../../../client/settings/cache_settings.h"
 #include "../game/board/arrow_item.h"
@@ -20,6 +21,7 @@
 #include "../game/ruled/ruled_client_state.h"
 #include "../game/ruled/ruled_dev_command_parser.h"
 #include "../game/ruled/ruled_dev_console.h"
+#include "../game/ruled/ruled_resume_client.h"
 #include "../game/ruled/ruled_reveal_windows.h"
 #include "../game/zones/view_zone.h"
 #include "../game/zones/view_zone_widget.h"
@@ -1671,6 +1673,9 @@ Player *TabGame::addPlayer(Player *newPlayer)
 
 void TabGame::addLocalPlayer(Player *newPlayer, int playerId)
 {
+    if (RuledDiagnosticViewer::isPlayback(game)) {
+        return;
+    }
     if (game->getGameState()->getClients().size() == 1) {
         newPlayer->getPlayerMenu()->setShortcutsActive();
     }
@@ -1923,7 +1928,9 @@ void TabGame::stopGame()
         i.value()->show();
     }
 
-    mainWidget->setCurrentWidget(deckViewContainerWidget);
+    if (!RuledDiagnosticViewer::isPlayback(game)) {
+        mainWidget->setCurrentWidget(deckViewContainerWidget);
+    }
 
     playerListWidget->setActivePlayer(-1);
     playerListWidget->setGameStarted(false, false);
@@ -2231,6 +2238,9 @@ void TabGame::registerDockWidget(QMenu *_viewMenu, QDockWidget *widget, const QS
 
 void TabGame::loadLayout()
 {
+    if (RuledDiagnosticViewer::isPlayback(game)) {
+        return;
+    }
     LayoutsSettings &layouts = SettingsCache::instance().layouts();
     if (replayDock) {
         restoreGeometry(layouts.getReplayPlayAreaGeometry());
@@ -2274,6 +2284,9 @@ void TabGame::actResetLayout()
 void TabGame::createPlayAreaWidget(bool bReplay)
 {
     phasesToolbar = new PhasesToolbar;
+    if (!bReplay && RuledActions::isRuledGame(game)) {
+        RuledResumeClient::restoreToolbar(phasesToolbar, game->getPlayerManager()->getLocalPlayerId());
+    }
     if (!bReplay) {
         connect(phasesToolbar, &PhasesToolbar::sendGameCommand, game->getGameEventHandler(),
                 qOverload<const ::google::protobuf::Message &, int>(&GameEventHandler::sendGameCommand));
@@ -2490,6 +2503,10 @@ void TabGame::createMessageDock(bool bReplay)
 
 void TabGame::hideEvent(QHideEvent *event)
 {
+    if (RuledDiagnosticViewer::isPlayback(game)) {
+        Tab::hideEvent(event);
+        return;
+    }
     LayoutsSettings &layouts = SettingsCache::instance().layouts();
     if (replayDock) {
         layouts.setReplayPlayAreaState(saveState());

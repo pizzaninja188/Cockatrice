@@ -8,6 +8,9 @@ changes) and **[REFACTOR-ROADMAP.md](REFACTOR-ROADMAP.md)** (structural work, st
 rules, the trigger-gated backlog). Where they overlap, they win on their own subject: AGENTS.md
 on workflow, the roadmap on what to restructure, this file on how the pieces relate.
 
+For local structured evidence, privacy boundaries, deterministic reconstruction, and live resume,
+see [RULED-DIAGNOSTICS.md](RULED-DIAGNOSTICS.md).
+
 ---
 
 ## 1. System

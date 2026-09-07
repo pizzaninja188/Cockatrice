@@ -17,6 +17,7 @@ class QTimer;
 
 class ReplayTimelineWidget : public QWidget
 {
+    friend class RuledDiagnosticViewer;
     Q_OBJECT
 signals:
     void processNextEvent(EventProcessingOptions options);

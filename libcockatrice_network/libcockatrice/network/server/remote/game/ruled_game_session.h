@@ -16,6 +16,8 @@
 
 class RulesRelay;
 class Server_Game;
+class RuledServerDiagnostics;
+class RuledGameResume;
 
 class RuledGameSession
 {
@@ -48,6 +50,15 @@ public:
     void abort();
 
     [[nodiscard]] bool isActive() const;
+    RuledServerDiagnostics *diagnostics() const
+    {
+        return capture.get();
+    }
+    const RuledGameResume &resume() const
+    {
+        return *resumePlan;
+    }
+    void failResume(const QString &reason);
     bool playerCommand(int playerId, const QByteArray &payload, ruled::v1::IpcResponse &response);
     bool previewPayment(int playerId, const ruled::v1::PreviewPayment &preview, ruled::v1::IpcResponse &response);
     void handleConnectionLost();
@@ -62,6 +73,8 @@ private:
     void notifyEngineUnreachable();
 
     Server_Game *const game;
+    std::unique_ptr<RuledGameResume> resumePlan;
+    std::unique_ptr<RuledServerDiagnostics> capture;
     std::unique_ptr<RulesRelay> relay;
     quint64 seed = 0;
     bool engineConnectionLost = false;

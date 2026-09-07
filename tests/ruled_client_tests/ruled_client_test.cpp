@@ -22,6 +22,7 @@
 #include "game/ruled/ruled_zone_snapshot_policy.h"
 
 #include <QBuffer>
+#include <QJsonArray>
 #include <QSignalSpy>
 #include <QString>
 #include <QTest>
@@ -820,6 +821,19 @@ TEST(RuledAutoPassPolicyTest, MapsToolbarStopsAndSharesCombatDamageStop)
     EXPECT_EQ(policy.stop_on_own_turn(2), ruled::v1::PHASE_ID_COMBAT_DAMAGE);
     ASSERT_EQ(policy.stop_on_opponent_turn_size(), 1);
     EXPECT_EQ(policy.stop_on_opponent_turn(0), ruled::v1::PHASE_ID_BEGIN_COMBAT);
+}
+
+TEST(RuledAutoPassPolicyTest, RestoresEveryToolbarStopWithoutAddingDefaults)
+{
+    for (int index = 1; index < 11; ++index) {
+        std::array<bool, 11> own{};
+        std::array<bool, 11> opponent{};
+        own[index] = true;
+        opponent[11 - index] = true;
+        const auto policy = RuledAutoPassPolicy::fromToolbarStops(own, opponent);
+        EXPECT_EQ(RuledAutoPassPolicy::toToolbarStops(policy.stop_on_own_turn()), own);
+        EXPECT_EQ(RuledAutoPassPolicy::toToolbarStops(policy.stop_on_opponent_turn()), opponent);
+    }
 }
 
 TEST_F(RuledClientTest, EngineCommandPendingLocksImmediatelyAndRejectsDuplicateBegin)
@@ -6828,3 +6842,32 @@ TEST(RuledDevCommandParserTest, HelpIsHandledLocallyAndUnknownVerbsAreNot)
 }
 
 } // namespace
+
+TEST(RuledDiagnostics, CapturesLocalStagingAndLosslessIdentityWithoutChangingState)
+{
+    RuledClientState state(nullptr);
+    state.engineOidToCardId.insert(42, 7);
+    state.engineOidOwner.insert(42, 29);
+    state.battlefieldGenerationByOid.insert(42, std::numeric_limits<quint64>::max());
+    state.pendingAttackerOids.insert(42);
+    RuledClientState::RuledPendingChoice choice;
+    choice.kind = RuledClientState::RuledPendingChoice::Kind::ResolutionPick;
+    choice.selectedServerCardIds = {7};
+    choice.serverCardIdToOid.insert(7, 42);
+    choice.promptText = "Select a card";
+    state.pendingChoice = choice;
+    const auto snapshot = state.diagnosticSnapshot();
+    const auto objects = snapshot.value("battlefield_objects").toArray();
+    ASSERT_EQ(objects.size(), 1);
+    EXPECT_EQ(objects[0].toObject().value("zone_change_generation").toString(), "18446744073709551615");
+    EXPECT_EQ(objects[0].toObject().value("server_card_id").toInt(), 7);
+    EXPECT_EQ(objects[0].toObject().value("owner_player_id").toInt(), 29);
+    EXPECT_EQ(snapshot.value("pendingChoice").toObject().value("kind").toString(), "ResolutionPick");
+    EXPECT_EQ(snapshot.value("pendingAttackerOids").toArray().size(), 1);
+    EXPECT_EQ(state.battlefieldGenerationByOid.value(42), std::numeric_limits<quint64>::max());
+    EXPECT_EQ(snapshot, state.diagnosticSnapshot());
+    state.payment.begin();
+    EXPECT_TRUE(state.payment.diagnosticSnapshot().value("active").toBool());
+    EXPECT_EQ(state.payment.diagnosticSnapshot().value("transactionId").toString(),
+              QString::number(state.payment.transaction()));
+}

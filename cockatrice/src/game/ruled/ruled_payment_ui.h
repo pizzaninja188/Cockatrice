@@ -16,6 +16,7 @@ class QPainter;
 class RuledPaymentUi
 {
 public:
+    [[nodiscard]] QJsonObject diagnosticSnapshot() const;
     explicit RuledPaymentUi(PlayerActions *actions);
     static std::optional<ruled::v1::RuledCommand> buildCommand(PlayerActions *actions);
     static std::optional<ruled::v1::RuledCommand> buildActivationCommand(PlayerActions *actions);

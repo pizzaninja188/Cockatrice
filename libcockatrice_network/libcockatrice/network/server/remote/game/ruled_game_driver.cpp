@@ -4,9 +4,12 @@
 
 #include "ruled_batch_synchronizer.h"
 #include "ruled_broadcast_router.h"
+#include "ruled_game_resume.h"
 #include "ruled_game_session.h"
+#include "ruled_server_diagnostics.h"
 #include "server_game.h"
 
+#include <QUuid>
 #include <libcockatrice/protocol/pb/game_replay.pb.h>
 
 RuledGameDriver::RuledGameDriver(Server_Game *_game)
@@ -17,6 +20,17 @@ RuledGameDriver::RuledGameDriver(Server_Game *_game)
 }
 
 RuledGameDriver::~RuledGameDriver() = default;
+
+RuledServerDiagnostics *RuledGameDriver::diagnostics() const
+{
+    return session->diagnostics();
+}
+
+int RuledGameDriver::nextParticipantId(int fallback, bool spectator) const
+{
+    const auto occupied = game->participants.keys();
+    return session->resume().participantId(fallback, spectator, QSet<int>(occupied.begin(), occupied.end()));
+}
 
 int RuledGameDriver::priorityPlayer() const
 {
@@ -84,8 +98,29 @@ void RuledGameDriver::endSidecarSession()
 }
 
 Response::ResponseCode
-RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &cmd, GameEventStorage & /*ges*/)
+RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &cmd, GameEventStorage &ges)
 {
+    if (diagnostics())
+        diagnostics()->clientRequest(playerId, cmd);
+    const auto result = processRuledPayloadImpl(playerId, cmd, ges);
+    if (diagnostics())
+        diagnostics()->clientResult(result);
+    return result;
+}
+
+Response::ResponseCode
+RuledGameDriver::processRuledPayloadImpl(int playerId, const Command_RuledPayload &cmd, GameEventStorage & /*ges*/)
+{
+    if (cmd.has_diagnostic_report_id()) {
+        const auto reportId = QString::fromStdString(cmd.diagnostic_report_id());
+        if (cmd.has_payload() || reportId.size() != 36 || QUuid(reportId).isNull() ||
+            !game->getParticipants().contains(playerId))
+            return Response::RespInvalidCommand;
+        if (!diagnostics())
+            return Response::RespContextError;
+        diagnostics()->journal().markReport(reportId);
+        return Response::RespOk;
+    }
     ruled::v1::RuledCommand ruledCmd;
     if (!ruledCmd.ParseFromString(cmd.payload())) {
         return Response::RespInvalidCommand;
@@ -171,11 +206,7 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
         batchResult.battlefieldDisplayChanged) {
         game->sendGameStateToPlayers();
     }
-    // Append to deterministic replay log (concatenated RuledCommand bytes)
-    if (game->currentReplay) {
-        game->currentReplay->mutable_ruled_command_log()->append(payload.constData(),
-                                                                 static_cast<size_t>(payload.size()));
-    }
+    // The framed diagnostic engine_request/engine_response pair owns deterministic replay.
     broadcastRuledResponse(resp);
     return Response::RespOk;
 }
@@ -206,10 +237,6 @@ void RuledGameDriver::relayRuledPayloadAndBroadcast(int playerId, const QByteArr
     if ((batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged || batchResult.publicZoneOrderChanged)) ||
         batchResult.battlefieldDisplayChanged) {
         game->sendGameStateToPlayers();
-    }
-    if (game->currentReplay) {
-        game->currentReplay->mutable_ruled_command_log()->append(canonicalBytes.constData(),
-                                                                 static_cast<size_t>(canonicalBytes.size()));
     }
     broadcastRuledResponse(resp);
 }
@@ -251,5 +278,54 @@ bool RuledGameDriver::startRuledSidecarSession()
         }
     }
     broadcastRuledResponse(result.response);
+    return resumeCapturedPrefix();
+}
+
+bool RuledGameDriver::resumeCapturedPrefix()
+{
+    const auto &resume = session->resume();
+    if (!resume.enabled())
+        return true;
+    for (const auto &step : resume.plan().steps()) {
+        const auto &request = step.command();
+        if (auto *capture = diagnostics())
+            capture->journal().note("resume_source", {{"source_sequence", QString::number(step.source_sequence())}});
+        ruled::v1::IpcResponse response;
+        QString error;
+        if (!session->playerCommand(request.player_id(), QByteArray::fromStdString(request.ruled_command()),
+                                    response) ||
+            !RuledGameResume::checkState(response, step.expected_state_sha256(), &error)) {
+            session->failResume(error.isEmpty() ? "Resume transport failed" : error);
+            return false;
+        }
+        ruled::v1::RuledCommand command;
+        if (!command.ParseFromString(request.ruled_command())) {
+            session->failResume("Invalid resume command");
+            return false;
+        }
+        if (command.has_canonical_gameplay()) {
+            const auto inner = command.canonical_gameplay().command();
+            if (!command.ParseFromString(inner)) {
+                session->failResume("Invalid canonical resume command");
+                return false;
+            }
+        }
+        synchronizer->applyAcceptedCommandVisuals(request.player_id(), command);
+        const auto result = synchronizer->applyBatch(response);
+        if (result.zoneViewApplied || result.battlefieldDisplayChanged)
+            game->sendGameStateToPlayers();
+        broadcastRuledResponse(response);
+    }
+    for (const auto &policy : resume.plan().restored_auto_pass_policies()) {
+        ruled::v1::SetAutoPassPolicy restored;
+        restored.mutable_stop_on_own_turn()->CopyFrom(policy.stop_on_own_turn());
+        restored.mutable_stop_on_opponent_turn()->CopyFrom(policy.stop_on_opponent_turn());
+        if (!session->cacheAutoPassPolicy(policy.player_id(), restored)) {
+            session->failResume("Invalid restored auto-pass policy");
+            return false;
+        }
+    }
+    if (auto *capture = diagnostics())
+        capture->journal().note("resume_ready", {{"accepted_commands", QString::number(resume.plan().stop_after())}});
     return true;
 }

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pizzaninja188/Cockatrice/blob/master/docs/ruled-diagnostics-format.schema.json",
+  "title": "Ruled diagnostic capture version 1 envelope",
+  "oneOf": [{"$ref": "#/$defs/manifest"}, {"$ref": "#/$defs/timelineRecord"}],
+  "$defs": {
+    "decimal64": {"type": "string", "pattern": "^[0-9]+$"},
+    "manifest": {
+      "type": "object",
+      "required": ["format_version", "capture_id", "source", "privacy", "complete", "status"],
+      "properties": {
+        "format_version": {"const": 1},
+        "capture_id": {"type": "string", "format": "uuid"},
+        "source": {"enum": ["server", "client"]},
+        "privacy": {"enum": ["server_only", "recipient_only"]},
+        "complete": {"type": "boolean"},
+        "status": {"enum": ["recording", "closed", "incomplete"]},
+        "report_ids": {"type": "array", "items": {"type": "string"}},
+        "last_sequence": {"$ref": "#/$defs/decimal64"},
+        "engine_build": {"type": "string"},
+        "card_data_hash": {"type": "string"},
+        "effective_dev_commands_enabled": {"type": "boolean"},
+        "parent_capture_id": {"type": "string"},
+        "resume_stop_after": {"$ref": "#/$defs/decimal64"},
+        "created_utc": {"type": "string"},
+        "updated_utc": {"type": "string"},
+        "retain_until_utc": {"type": "string"},
+        "error": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "timelineRecord": {
+      "type": "object",
+      "required": ["format_version", "sequence", "kind", "utc", "data"],
+      "properties": {
+        "format_version": {"const": 1},
+        "sequence": {"$ref": "#/$defs/decimal64"},
+        "kind": {"type": "string", "minLength": 1},
+        "utc": {"type": "string"},
+        "elapsed_ms": {"$ref": "#/$defs/decimal64"},
+        "correlation_id": {"type": "string"},
+        "message_type": {"type": "string"},
+        "context": {"type": "object"},
+        "data": {"type": "object"},
+        "raw_ref": {"type": "string", "pattern": "^raw/[0-9]{12,20}\\.pb$"}
+      },
+      "additionalProperties": true
+    }
+  }
+}

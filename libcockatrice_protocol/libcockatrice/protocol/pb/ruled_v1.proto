@@ -2000,6 +2000,8 @@ message SessionStart {
   // TRICERULES_DEV_COMMANDS env var is also set, so a production sidecar cannot be talked
   // into dev mode from upstream. See DevCommand.
   bool dev_commands_enabled = 6;
+  // Trusted IPC only. Read-only diagnostic state stays on the server, outside RuledEventBatch.
+  bool diagnostic_capture_enabled = 7;
 }
 
 message PlayerCommand {
@@ -2028,4 +2030,7 @@ message IpcResponse {
   // the handshake (treated as a build-skew warning, not a refusal).
   string engine_build = 5;
   string card_data_hash = 6;
+  string diagnostic_state_json = 7 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  bool effective_dev_commands_enabled = 8 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
+  uint64 diagnostic_command_index = 9 [(field_visibility) = FIELD_VISIBILITY_SERVER_ONLY];
 }

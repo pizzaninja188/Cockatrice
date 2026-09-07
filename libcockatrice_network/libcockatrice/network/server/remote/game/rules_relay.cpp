@@ -1,13 +1,13 @@
 #include "rules_relay.h"
 
+#include "ruled_server_diagnostics.h"
 #include "version_string.h"
 
 #include <QDebug>
 #include <QHostAddress>
-#include <QtEndian>
 #include <QTcpSocket>
+#include <QtEndian>
 #include <google/protobuf/message.h>
-
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
 RulesRelay::RulesRelay(QObject *parent) : QObject(parent), socket(new QTcpSocket(this))
@@ -142,6 +142,7 @@ bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &pl
     ss->set_seed(seed);
     ss->set_servatrice_build(VERSION_STRING); // version handshake (logged by the sidecar)
     ss->set_dev_commands_enabled(devCommandsEnabled);
+    ss->set_diagnostic_capture_enabled(diagnostics != nullptr);
     for (int pid : playerIds) {
         ss->add_player_ids(pid);
     }
@@ -154,14 +155,16 @@ bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &pl
             }
         }
     }
-    if (!writeFrame(env)) {
+    return sessionStart(*ss, out);
+}
+
+bool RulesRelay::sessionStart(const ruled::v1::SessionStart &start, ruled::v1::IpcResponse &out)
+{
+    if (!connectIfNeeded())
         return false;
-    }
-    QByteArray frame;
-    if (!readFrame(frame)) {
-        return false;
-    }
-    if (!out.ParseFromArray(frame.constData(), frame.size())) {
+    ruled::v1::IpcEnvelope env;
+    env.mutable_session_start()->CopyFrom(start);
+    if (!exchange(env, out)) {
         return false;
     }
     // From here on this connection carries engine state that no reconnect can rebuild.
@@ -178,14 +181,7 @@ bool RulesRelay::playerCommand(int playerId, const QByteArray &ruledCommandBytes
     ruled::v1::PlayerCommand *pc = env.mutable_player_command();
     pc->set_player_id(playerId);
     pc->set_ruled_command(ruledCommandBytes.data(), static_cast<int>(ruledCommandBytes.size()));
-    if (!writeFrame(env)) {
-        return false;
-    }
-    QByteArray frame;
-    if (!readFrame(frame)) {
-        return false;
-    }
-    return out.ParseFromArray(frame.constData(), frame.size());
+    return exchange(env, out);
 }
 
 bool RulesRelay::previewPayment(int playerId, const ruled::v1::PreviewPayment &preview, ruled::v1::IpcResponse &out)
@@ -195,8 +191,7 @@ bool RulesRelay::previewPayment(int playerId, const ruled::v1::PreviewPayment &p
     auto *query = env.mutable_payment_query();
     query->set_player_id(playerId);
     *query->mutable_preview() = preview;
-    QByteArray frame;
-    return writeFrame(env) && readFrame(frame) && out.ParseFromArray(frame.constData(), frame.size());
+    return exchange(env, out);
 }
 
 bool RulesRelay::validateDeck(const QStringList &cardNames, ruled::v1::IpcResponse &out)
@@ -228,4 +223,19 @@ bool RulesRelay::sessionEnd()
     ruled::v1::IpcEnvelope env;
     env.mutable_session_end();
     return writeFrame(env);
+}
+
+bool RulesRelay::exchange(const ruled::v1::IpcEnvelope &request, ruled::v1::IpcResponse &response)
+{
+    if (diagnostics)
+        diagnostics->engineRequest(request);
+    QByteArray frame;
+    if (!writeFrame(request) || !readFrame(frame) || !response.ParseFromArray(frame.constData(), frame.size())) {
+        if (diagnostics)
+            diagnostics->transportError(socket->errorString());
+        return false;
+    }
+    if (diagnostics)
+        diagnostics->engineResponse(response);
+    return true;
 }

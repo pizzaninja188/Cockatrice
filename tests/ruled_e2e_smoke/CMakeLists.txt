@@ -21,10 +21,16 @@ endif()
 target_compile_definitions(
   ruled_e2e_smoke_test PRIVATE RULED_E2E_SERVATRICE_PATH="$<TARGET_FILE:servatrice>"
                                RULED_E2E_TRICERULES_PATH="${TRICERULES_BIN}"
+                               RULED_E2E_REPLAY_PATH="${CMAKE_SOURCE_DIR}/tricerules/target/release/tricerules-replay${CMAKE_EXECUTABLE_SUFFIX}"
+                               RULED_E2E_CAPTURE_TOOL_PATH="$<TARGET_FILE:ruled-capture-tool>"
+                               RULED_E2E_CLIENT_PATH="$<TARGET_FILE:cockatrice>"
+                               RULED_E2E_QT_PLATFORMS="$<TARGET_FILE_DIR:${COCKATRICE_QT_VERSION_NAME}::Core>/../plugins/platforms"
+                               RULED_E2E_REPO="${CMAKE_SOURCE_DIR}"
 )
 
 # Make sure the binaries the test spawns are up to date when the test builds.
 add_dependencies(ruled_e2e_smoke_test servatrice)
+add_dependencies(ruled_e2e_smoke_test ruled-capture-tool cockatrice)
 if(TARGET tricerules)
   add_dependencies(ruled_e2e_smoke_test tricerules)
 endif()

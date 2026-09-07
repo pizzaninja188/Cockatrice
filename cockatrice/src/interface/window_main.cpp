@@ -22,6 +22,8 @@
 #include "../client/network/update/client/client_update_checker.h"
 #include "../client/network/update/client/release_channel.h"
 #include "../client/settings/cache_settings.h"
+#include "../game/ruled/ruled_bug_report.h"
+#include "../game/ruled/ruled_diagnostic_viewer.h"
 #include "../interface/widgets/dialogs/dlg_connect.h"
 #include "../interface/widgets/dialogs/dlg_edit_tokens.h"
 #include "../interface/widgets/dialogs/dlg_forgot_password_challenge.h"
@@ -834,6 +836,7 @@ void MainWindow::createMenus()
     helpMenu->addAction(aStatusBar);
     helpMenu->addAction(aViewLog);
     helpMenu->addAction(aOpenSettingsFolder);
+    RuledBugReport::install(this, helpMenu);
 }
 
 MainWindow::MainWindow(QWidget *parent)
@@ -915,6 +918,8 @@ MainWindow::MainWindow(QWidget *parent)
 
 void MainWindow::startupConfigCheck()
 {
+    if (RuledDiagnosticViewer::isBatchPlayback())
+        return;
     if (SettingsCache::instance().debug().getLocalGameOnStartup()) {
         LocalGameOptions options;
         options.numberPlayers = SettingsCache::instance().debug().getLocalGamePlayerCount();

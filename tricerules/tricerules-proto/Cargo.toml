@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 prost.workspace = true
+prost-types.workspace = true
+serde.workspace = true
 
 [build-dependencies]
 prost-build = "0.13"

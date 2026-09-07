@@ -9,6 +9,7 @@
 #include "ruled_player_binding.h"
 
 #include <QHash>
+#include <QJsonObject>
 #include <QList>
 #include <QSet>
 #include <QString>
@@ -46,6 +47,7 @@ public:
     void revealFaceDownPermanentsOnConcede(int concedingPlayerId, GameEventStorage &events);
 
     [[nodiscard]] int priorityPlayer() const;
+    [[nodiscard]] QJsonObject diagnosticSnapshot() const;
     void setPriorityPlayer(int playerId);
     [[nodiscard]] QString cardIdForName(const QString &cardName) const;
     [[nodiscard]] QString cardNameForId(const QString &cardId) const;

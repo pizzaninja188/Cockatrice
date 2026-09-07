@@ -1,6 +1,7 @@
 #ifndef COCKATRICE_GAME_PROMPT_WIDGET_H
 #define COCKATRICE_GAME_PROMPT_WIDGET_H
 
+#include <QJsonObject>
 #include <QVector>
 #include <QWidget>
 
@@ -67,6 +68,9 @@ public:
         OpeningMulligan,
         OpeningBottom,
     };
+
+    Q_ENUM(PromptMode)
+    [[nodiscard]] QJsonObject diagnosticSnapshot() const;
 
     /// The exclusive prompt mode plus its payload, pushed as one unit.
     struct RuledPromptState

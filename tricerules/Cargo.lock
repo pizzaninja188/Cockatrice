@@ -807,6 +807,8 @@ dependencies = [
  "proptest",
  "prost",
  "rand 0.8.6",
+ "serde",
+ "serde_json",
  "thiserror",
  "tricerules-cards",
  "tricerules-proto",
@@ -818,6 +820,8 @@ version = "0.1.0"
 dependencies = [
  "prost",
  "prost-build",
+ "prost-types",
+ "serde",
 ]
 
 [[package]]
@@ -826,6 +830,9 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "prost",
+ "serde_json",
+ "sha2",
+ "tempfile",
  "tokio",
  "tricerules-cards",
  "tricerules-core",

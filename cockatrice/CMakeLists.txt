@@ -109,6 +109,11 @@ set(cockatrice_SOURCES
     src/game/ruled/ruled_reveal_state.cpp
     src/game/ruled/ruled_reveal_windows.cpp
     src/game/ruled/ruled_client_state.cpp
+    src/game/ruled/ruled_diagnostic_state.cpp
+    src/game/ruled/ruled_client_diagnostics.cpp
+    src/game/ruled/ruled_bug_report.cpp
+    src/game/ruled/ruled_diagnostic_viewer.cpp
+    src/game/ruled/ruled_resume_client.cpp
     src/game/ruled/ruled_dev_command_parser.cpp
     src/game/ruled/ruled_dev_console.cpp
     src/game/ruled/ruled_event_dispatcher.cpp

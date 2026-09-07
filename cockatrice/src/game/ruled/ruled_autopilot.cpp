@@ -76,6 +76,10 @@ void RuledAutopilot::installFromCommandLine(MainWindow *window, const QString &r
     config.gameName = envOr("COCKATRICE_AUTOPILOT_GAME", QString::fromLatin1(kDefaultGameName));
     config.hostUser = envOr("COCKATRICE_AUTOPILOT_HOST_USER", QString::fromLatin1(kDefaultHostUser));
     config.ruled = envOr("COCKATRICE_AUTOPILOT_RULED", QStringLiteral("1")) != QLatin1String("0");
+    bool validPlayerCount = false;
+    const int playerCount = qEnvironmentVariableIntValue("COCKATRICE_AUTOPILOT_PLAYERS", &validPlayerCount);
+    if (validPlayerCount && playerCount >= 2 && playerCount <= 99)
+        config.playerCount = playerCount;
 
     new RuledAutopilot(window->getTabSupervisor(), config, window);
 }
@@ -138,7 +142,7 @@ void RuledAutopilot::createGame(int roomId)
 {
     Command_CreateGame cmd;
     cmd.set_description(config.gameName.toStdString());
-    cmd.set_max_players(2);
+    cmd.set_max_players(config.playerCount);
     cmd.set_starting_life_total(20);
     cmd.set_spectators_allowed(true);
     cmd.set_spectators_can_talk(true);

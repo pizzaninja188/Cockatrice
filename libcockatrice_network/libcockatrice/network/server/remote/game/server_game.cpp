@@ -512,6 +512,8 @@ void Server_Game::addPlayer(Server_AbstractUserInterface *userInterface,
     QMutexLocker locker(&gameMutex);
 
     Server_AbstractParticipant *newParticipant;
+    if (ruledDriver)
+        nextPlayerId = ruledDriver->nextParticipantId(nextPlayerId, spectator);
     if (spectator) {
         newParticipant = new Server_Spectator(this, nextPlayerId++, userInterface->copyUserInfo(true, true, true),
                                               judge, userInterface);

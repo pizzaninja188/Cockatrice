@@ -7,4 +7,8 @@ message Command_RuledPayload {
     optional Command_RuledPayload ext = 1100;
   }
   optional bytes payload = 1;
+  // Opaque correlation only; actor identity still comes from the authenticated participant.
+  optional string diagnostic_request_id = 2;
+  // No gameplay payload accompanies this marker. It pins server evidence, never downloads it.
+  optional string diagnostic_report_id = 3;
 }

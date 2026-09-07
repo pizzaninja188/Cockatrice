@@ -2,35 +2,18 @@
 //! Framing: u32 BE length + protobuf `IpcEnvelope` / `IpcResponse`.
 
 use prost::Message;
-use std::collections::BTreeSet;
+
 use std::env;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tricerules_cards::CardRegistry;
-use tricerules_core::{GameEngine, PlayerId};
-use tricerules_proto::ruled::v1::ipc_envelope::Msg;
-use tricerules_proto::ruled::v1::{IpcEnvelope, IpcResponse, PlayerDeck};
 
-/// This sidecar's build id, reported to Servatrice in the SessionStart handshake.
-const ENGINE_BUILD: &str = env!("CARGO_PKG_VERSION");
-
-/// Whether this sidecar process was started with cheat commands permitted.
-/// Split from the env read so the gate is testable without mutating process environment.
-fn dev_commands_allowed(env_value: Option<&str>) -> bool {
-    matches!(env_value, Some("1") | Some("true"))
-}
-
-/// The dev gate, both halves (see `SessionStart.dev_commands_enabled` and `DevCommand`).
-///
-/// Servatrice must ask for dev commands *and* this sidecar process must have been started with
-/// `TRICERULES_DEV_COMMANDS` set. Requiring both means a production sidecar cannot be talked into
-/// dev mode from upstream: enabling cheats takes access to the machine running the engine.
-fn dev_commands_enabled_for_session(requested: bool, env_value: Option<&str>) -> bool {
-    requested && dev_commands_allowed(env_value)
-}
+use tricerules_proto::ruled::v1::IpcEnvelope;
+#[cfg(test)]
+use tricerules_proto::ruled::v1::IpcResponse;
+use tricerules_server::dev_commands_allowed;
 
 /// Default idle timeout once a session exists: 4 hours without a single byte from the peer.
 ///
@@ -84,42 +67,6 @@ fn idle_timeouts_from_env(env_value: Option<&str>) -> IdleTimeouts {
     IdleTimeouts {
         pre_session: (pre_session_secs > 0).then(|| Duration::from_secs(pre_session_secs)),
         session: (session_secs > 0).then(|| Duration::from_secs(session_secs)),
-    }
-}
-
-/// Failure response shared by ValidateDeck and SessionStart name resolution:
-/// `missing` must be the sorted, deduplicated unimplemented Oracle names.
-fn missing_cards_response(missing: Vec<String>) -> IpcResponse {
-    IpcResponse {
-        ok: false,
-        error: format!("unimplemented cards: {}", missing.join(", ")),
-        batch: None,
-        missing_card_names: missing,
-        engine_build: String::new(),
-        card_data_hash: String::new(),
-    }
-}
-
-/// Stateless ValidateDeck: no engine, no session — pure registry lookups.
-/// ok iff every name resolves to an implemented card id.
-fn validate_deck_response(card_names: &[String]) -> IpcResponse {
-    let registry = CardRegistry::global();
-    let missing: BTreeSet<String> = card_names
-        .iter()
-        .filter(|name| registry.id_for_name(name).is_none())
-        .map(|name| name.trim().to_string())
-        .collect();
-    if missing.is_empty() {
-        IpcResponse {
-            ok: true,
-            error: String::new(),
-            batch: None,
-            missing_card_names: vec![],
-            engine_build: String::new(),
-            card_data_hash: String::new(),
-        }
-    } else {
-        missing_cards_response(missing.into_iter().collect())
     }
 }
 
@@ -209,159 +156,33 @@ async fn handle_connection(
     mut sock: TcpStream,
     idle_timeouts: IdleTimeouts,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut engine: Option<GameEngine> = None;
-    let mut game_id: u64 = 0;
+    let mut session = tricerules_server::EngineSession::new(dev_commands_allowed(
+        env::var("TRICERULES_DEV_COMMANDS").ok().as_deref(),
+    ));
     loop {
-        // Re-read per iteration: the applicable timeout lengthens the moment a session exists.
-        let idle_timeout = idle_timeouts.for_session(engine.is_some());
-        let env = match read_envelope(&mut sock, idle_timeout).await? {
-            Some(env) => env,
-            // Idle drop is expected housekeeping, not an error: returning Ok here keeps it out of
-            // the `connection error:` log, and dropping the frame frees `engine` with its session.
+        let idle_timeout = idle_timeouts.for_session(session.engine.is_some());
+        let envelope = match read_envelope(&mut sock, idle_timeout).await? {
+            Some(envelope) => envelope,
             None => {
                 eprintln!(
                     "tricerules: connection idle for {}s, dropping session (game {})",
                     idle_timeout.map(|d| d.as_secs()).unwrap_or(0),
-                    if engine.is_some() {
-                        game_id.to_string()
+                    if session.engine.is_some() {
+                        session.game_id.to_string()
                     } else {
-                        "none".to_string()
+                        "none".into()
                     }
                 );
                 return Ok(());
             }
         };
-        let resp = match env.msg {
-            Some(Msg::SessionStart(s)) => {
-                // Server-side only (never broadcast to clients): the seed here plus the logged
-                // command stream is what reproduces a session, and the E2E smoke test asserts
-                // its forced seed reached the engine through this line.
-                eprintln!(
-                    "tricerules: session start game {} seed {} (servatrice build {})",
-                    s.game_id,
-                    s.seed,
-                    if s.servatrice_build.is_empty() {
-                        "unknown"
-                    } else {
-                        s.servatrice_build.as_str()
-                    }
-                );
-                game_id = s.game_id;
-                let pids: Vec<PlayerId> = s.player_ids;
-                match resolve_deck_names(&pids, &s.player_decks) {
-                    Err(missing) => missing_cards_response(missing),
-                    Ok(decks) => match GameEngine::new(s.seed, &pids, 20, decks, false) {
-                        Ok(mut e) => {
-                            let dev_env = env::var("TRICERULES_DEV_COMMANDS").ok();
-                            if dev_commands_enabled_for_session(
-                                s.dev_commands_enabled,
-                                dev_env.as_deref(),
-                            ) {
-                                eprintln!(
-                                    "tricerules: DEV COMMANDS ENABLED for game {} — cheat commands are accepted",
-                                    s.game_id
-                                );
-                                e.enable_dev_commands();
-                            }
-                            let batch = e.initial_response_batch();
-                            engine = Some(e);
-                            // Version handshake: stamp the sidecar build + card-data hash so
-                            // Servatrice can log skew and record the hash in the replay.
-                            IpcResponse {
-                                ok: true,
-                                error: String::new(),
-                                batch: Some(batch),
-                                missing_card_names: vec![],
-                                engine_build: ENGINE_BUILD.to_string(),
-                                card_data_hash: CardRegistry::content_hash(),
-                            }
-                        }
-                        Err(err) => IpcResponse {
-                            ok: false,
-                            error: err.to_string(),
-                            batch: None,
-                            missing_card_names: vec![],
-                            engine_build: String::new(),
-                            card_data_hash: String::new(),
-                        },
-                    },
-                }
-            }
-            Some(Msg::ValidateDeck(v)) => validate_deck_response(&v.card_names),
-            Some(Msg::PlayerCommand(pc)) => {
-                if let Some(ref mut eng) = engine {
-                    eng.player_command_ipc(pc.player_id, &pc.ruled_command)
-                } else {
-                    IpcResponse {
-                        ok: false,
-                        error: "no session".into(),
-                        batch: None,
-                        missing_card_names: vec![],
-                        engine_build: String::new(),
-                        card_data_hash: String::new(),
-                    }
-                }
-            }
-            Some(Msg::PaymentQuery(query)) => {
-                if let (Some(eng), Some(preview)) = (engine.as_ref(), query.preview.as_ref()) {
-                    IpcResponse {
-                        ok: true,
-                        batch: Some(tricerules_proto::RuledEventBatch {
-                            payment_preview: Some(eng.preview_payment(query.player_id, preview)),
-                            ..Default::default()
-                        }),
-                        ..Default::default()
-                    }
-                } else {
-                    IpcResponse {
-                        error: "payment query requires a session and proposal".into(),
-                        ..Default::default()
-                    }
-                }
-            }
-            Some(Msg::SessionEnd(_)) | None => {
-                break;
-            }
+        let Some(response) = session.process(&envelope) else {
+            break;
         };
-        write_proto(&mut sock, &resp).await?;
+        write_proto(&mut sock, &response).await?;
     }
     Ok(())
 }
-
-/// Resolves per-player decks of Oracle card names into engine card ids via the shared
-/// registry (the engine owns card identity; Servatrice never derives ids). Returns the
-/// per-player id lists aligned with `pids` (`None` when no decks were supplied), or the
-/// sorted, deduplicated list of every name the engine does not implement.
-fn resolve_deck_names(
-    pids: &[PlayerId],
-    player_decks: &[PlayerDeck],
-) -> Result<Option<Vec<Vec<String>>>, Vec<String>> {
-    if player_decks.is_empty() {
-        return Ok(None);
-    }
-    let registry = CardRegistry::global();
-    let mut out: Vec<Vec<String>> = (0..pids.len()).map(|_| vec![]).collect();
-    let mut missing: BTreeSet<String> = BTreeSet::new();
-    for pd in player_decks {
-        let Some(i) = pids.iter().position(|&x| x == pd.player_id) else {
-            continue;
-        };
-        for name in &pd.mainboard_card_name {
-            match registry.id_for_name(name) {
-                Some(id) => out[i].push(id.to_string()),
-                None => {
-                    missing.insert(name.trim().to_string());
-                }
-            }
-        }
-    }
-    if missing.is_empty() {
-        Ok(Some(out))
-    } else {
-        Err(missing.into_iter().collect())
-    }
-}
-
 /// Reads one envelope, bounded by the idle timeout. `Ok(None)` means the peer sent nothing for the
 /// whole window — a half-open connection whose session must be released, not a protocol error.
 ///
@@ -420,6 +241,12 @@ async fn write_proto<M: Message>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tricerules_core::PlayerId;
+    use tricerules_proto::{ipc_envelope::Msg, PlayerDeck};
+    use tricerules_server::{
+        dev_commands_enabled_for_session, missing_cards_response, resolve_deck_names,
+        validate_deck_response,
+    };
 
     fn deck(player_id: PlayerId, names: &[&str]) -> PlayerDeck {
         PlayerDeck {
@@ -717,6 +544,7 @@ mod tests {
                         player_decks: vec![], // engine default decks
                         servatrice_build: "test".to_string(),
                         dev_commands_enabled: false,
+                        diagnostic_capture_enabled: false,
                     },
                 )),
             }))
@@ -732,6 +560,37 @@ mod tests {
             "connection with a live session must outlive the pre-session timeout"
         );
 
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn diagnostic_session_returns_server_only_structured_state() {
+        let (mut client, server) = connect_to_handler(IdleTimeouts {
+            pre_session: Some(Duration::from_secs(5)),
+            session: Some(Duration::from_secs(5)),
+        })
+        .await;
+        let request = IpcEnvelope {
+            msg: Some(Msg::SessionStart(tricerules_proto::SessionStart {
+                game_id: 9,
+                seed: u64::MAX,
+                player_ids: vec![17, 29],
+                diagnostic_capture_enabled: true,
+                ..Default::default()
+            })),
+        };
+        client.write_all(&encode_frame(&request)).await.unwrap();
+        let response = read_response(&mut client).await;
+        assert!(response.ok);
+        let state: serde_json::Value =
+            serde_json::from_str(&response.diagnostic_state_json).unwrap();
+        assert_eq!(state["privacy"], "server_only");
+        assert_eq!(state["state"]["seed"], u64::MAX.to_string());
+        assert_eq!(response.diagnostic_command_index, 0);
+        assert!(
+            response.engine_build.len() > 32,
+            "capture must identify engine source, not just 0.1.0"
+        );
         server.abort();
     }
 

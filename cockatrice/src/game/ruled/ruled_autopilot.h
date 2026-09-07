@@ -53,6 +53,7 @@ public:
         QString hostUser;
         /// Create the game with the ruled engine enabled.
         bool ruled = true;
+        int playerCount = 2;
     };
 
     /**

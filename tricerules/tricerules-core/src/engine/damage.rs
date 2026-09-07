@@ -8,7 +8,7 @@ use super::events::{ev_log, finish_with_events, object_display_name};
 use super::targeting::TargetSourceIdentity;
 use super::*;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DamageSourceSnapshot {
     pub wither: bool,
     pub object_id: ObjectId,
@@ -18,7 +18,7 @@ pub(crate) struct DamageSourceSnapshot {
     pub types: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DamageRecipient {
     Player(PlayerId),
     Permanent(ObjectId),
@@ -33,13 +33,13 @@ impl DamageRecipient {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DamageClassification {
     Combat,
     Noncombat,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DamageEvent {
     pub source: DamageSourceSnapshot,
     pub recipient: DamageRecipient,
@@ -106,47 +106,47 @@ impl DamageEvent {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct DamageResult {
     pub attempted: u32,
     pub dealt: u32,
     pub prevented: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct DamageSpec {
     pub event: DamageEvent,
     pub source_has_deathtouch: bool,
     pub source_has_lifelink: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct DamageApplicationChoice {
     pub choice_id: u32,
     pub application: DamagePreventionApplication,
     pub event_index: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DamagePreventionApplication {
     Effect(u32),
     Protection(ProtectionQuality),
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct PendingDamageBatch {
     pub damage: Vec<PendingDamageEvent>,
     pub applications: Vec<DamageApplicationChoice>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct PendingDamageEvent {
     pub spec: DamageSpec,
     pub remaining: u32,
     pub applied_applications: Vec<DamagePreventionApplication>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct CompletedDamage {
     pub spec: DamageSpec,
     pub result: DamageResult,

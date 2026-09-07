@@ -19,7 +19,7 @@ pub type ObjectId = u32;
 
 /// Committed CR 701.68 operation. A forced instruction can complete without a recipient;
 /// optional payments always have one. Never infer payment from the surviving counter bag.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlightReceipt {
     pub player: PlayerId,
     pub count: u32,
@@ -29,7 +29,7 @@ pub struct BlightReceipt {
 /// Private rules-only snapshot of one card that was actually moved by a cost or instruction.
 /// `matched_card_types` is captured at the action boundary, so later predicates never inspect a
 /// destination zone or a newer object generation.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct CardResultEntry {
     pub action: CardResultAction,
     pub affected_player: PlayerId,
@@ -38,7 +38,7 @@ pub(crate) struct CardResultEntry {
     pub matched_card_types: Vec<CardTypeFilter>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(serde::Serialize, Debug, Clone, Default)]
 pub(crate) struct CardResultCohort {
     pub cards: Vec<CardResultEntry>,
 }
@@ -46,7 +46,7 @@ pub(crate) struct CardResultCohort {
 /// Private typed output of one primitive resolution instruction. Card cohorts and semantic
 /// receipts intentionally share this immediate-result boundary: both are consumed only by the
 /// following instruction and never serialized to clients.
-#[derive(Debug, Clone, Default)]
+#[derive(serde::Serialize, Debug, Clone, Default)]
 pub(crate) struct EffectResult {
     pub cards: Vec<CardResultEntry>,
     pub produced_objects: Vec<TriggerObjectRef>,
@@ -56,14 +56,14 @@ pub(crate) struct EffectResult {
 
 /// Private generation-bound proof that one counter instruction actually changed its recipient.
 /// It is consumed only by the immediately following instruction and never crosses protobuf.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CounterPlacementReceipt {
     pub object: TriggerObjectRef,
     pub counter: CounterKind,
     pub count: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ResolutionReceipt {
     CounterUnlessPaid { paid: bool },
 }
@@ -80,7 +80,7 @@ impl From<CardResultCohort> for EffectResult {
 }
 
 /// The exact activated ability on the exact incarnation of a permanent.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ActivationUseKey {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
@@ -90,7 +90,7 @@ pub struct ActivationUseKey {
 /// One activated ability on one CR 400.7 permanent object. Unlike [`ActivationUseKey`], this key
 /// deliberately omits turn and face-status identity: only a zone change creates a fresh object
 /// and restores a once-per-object allowance.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PersistentActivationUseKey {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
@@ -98,7 +98,7 @@ pub struct PersistentActivationUseKey {
 }
 
 /// Authored ability slot, independent of display names and flattened live ability indexes.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AbilityDefinitionId {
     pub card_id: String,
     pub face_id: tricerules_cards::CardFaceId,
@@ -107,7 +107,7 @@ pub struct AbilityDefinitionId {
 
 /// CR 113.2c identity of an ability occurrence. Infernal Scarring's static grant and
 /// Abnormal Endurance's resolving grant must remain distinct even when their text is identical.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TriggerAbilityOrigin {
     Printed(AbilityDefinitionId),
     StaticGrant {
@@ -120,7 +120,7 @@ pub enum TriggerAbilityOrigin {
 
 /// One ability on one CR 400.7 source incarnation. Control, turn and face-status generations
 /// deliberately do not participate; the authored face belongs to the ability's provenance.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TriggerUseKey {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
@@ -129,7 +129,7 @@ pub struct TriggerUseKey {
 
 /// Generation-aware identity for the distinct permanent observed by a trigger event. The
 /// controller snapshot supplies CR 608.2h last known information if that permanent is gone.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TriggerObjectRef {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
@@ -140,7 +140,7 @@ pub struct TriggerObjectRef {
 /// trigger. Physical spells may reuse their object id after leaving and being cast again, so they
 /// carry the stack-entry zone-change generation; virtual ability/copy ids are globally unique and
 /// therefore use `None`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StackObjectRef {
     pub object_id: ObjectId,
     pub zone_change_generation: Option<u64>,
@@ -148,7 +148,7 @@ pub struct StackObjectRef {
 
 /// Event-time identity and controller of the spell observed as a target. This is distinct from
 /// `targeting_stack_object`, which identifies the spell or ability that chose the target.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TriggerStackObjectRef {
     pub stack_object: StackObjectRef,
     pub controller_at_event: PlayerId,
@@ -157,7 +157,7 @@ pub struct TriggerStackObjectRef {
 /// Event-time facts carried by a triggered ability from collection through resolution. Keeping
 /// these together prevents target publication, target validation, and effect resolution from
 /// reconstructing relationships after objects detach, change controller, or leave a zone.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TriggerContext {
     /// CR 400.7e public-zone incarnation reached by a self zone-change trigger.
     /// Hoarding Recluse and Myr Retriever exclude this card, not every later incarnation.
@@ -182,13 +182,13 @@ pub struct TriggerContext {
 
 /// The game entity an Aura or Equipment is attached to. Players are represented explicitly;
 /// their numeric ids must never be confused with engine object ids.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AttachmentRecipient {
     Object(ObjectId),
     Player(PlayerId),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExilePlayPermissionScope {
     /// Cast one named face, used by Adventure (CR 715.3d).
     CastFace(usize),
@@ -198,7 +198,7 @@ pub enum ExilePlayPermissionScope {
     CastCard,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExilePlayPermissionOrigin {
     Effect,
     Warp,
@@ -207,13 +207,13 @@ pub enum ExilePlayPermissionOrigin {
 /// The base mana cost authorized by an exile permission. Ordinary permissions retain the
 /// printed face cost; effect-created alternatives replace only that base cost before the shared
 /// CR 601 additional-cost and cost-modification pipeline runs.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub enum ExilePermissionCastCost {
     PrintedManaCost,
     AlternativeManaCost(ManaCost),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ExilePlayPermissionGrant {
     pub scope: ExilePlayPermissionScope,
     pub cast_cost: ExilePermissionCastCost,
@@ -236,7 +236,7 @@ impl ExilePlayPermissionGrant {
 
 /// One deterministic, generation-aware permission entry. Entries created by one resolving
 /// spell or ability share a group id and source label for the client presentation snapshot.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ActiveExilePlayPermission {
     pub group_id: u64,
     pub player_id: PlayerId,
@@ -260,7 +260,7 @@ impl ActiveExilePlayPermission {
 }
 
 /// Turn structure for vanilla (no first-strike or trample substeps).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TurnStep {
     Untap,
     Upkeep,
@@ -281,7 +281,7 @@ pub enum TurnStep {
     Cleanup,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Zone {
     Library,
     Hand,
@@ -291,7 +291,7 @@ pub enum Zone {
     Exile,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct GameObject {
     pub id: ObjectId,
     /// CR 108.3: the player who started the game with this card in their deck. **Never changes**
@@ -366,7 +366,7 @@ pub struct GameObject {
 
 /// Owned CR 707.2 copiable values. Registry identity remains available for resolving copied
 /// abilities, while the cloned face also represents registry-backed token definitions directly.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct CopiableValues {
     /// Definition provenance when available; empty for inline or anonymous values.
     /// Rules execution uses the owned face, never requires this registry lookup.
@@ -381,7 +381,7 @@ pub struct CopiableValues {
 
 /// CR 709.5 battlefield designation state for one Room permanent. Door indexes are its stable
 /// copiable placement; the designations themselves are reset by every zone change.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct RoomState {
     pub unlocked: [bool; 2],
 }
@@ -401,7 +401,7 @@ impl RoomState {
 
 /// Runtime scope of one damage-prevention effect. Player ids use the engine's existing widened
 /// `ObjectId` convention, so `Recipient` covers both players and permanents.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DamagePreventionScope {
     Recipient(ObjectId),
     /// One exact CR 400.7 permanent generation, and only for combat damage. ObjectIds are reused
@@ -418,7 +418,7 @@ pub enum DamagePreventionScope {
 }
 
 /// How much damage one active prevention effect can prevent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DamagePreventionAmount {
     All,
     FixedPerEvent(u32),
@@ -427,7 +427,7 @@ pub enum DamagePreventionAmount {
 
 /// One independently identifiable prevention effect. IDs are opaque ordering-choice values;
 /// source identity is kept separate because several effects may come from one object.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ActiveDamagePrevention {
     pub id: u32,
     pub source_id: Option<ObjectId>,
@@ -440,7 +440,7 @@ pub struct ActiveDamagePrevention {
 
 /// A turn-scoped CR 614 replacement bound to one exact permanent generation. ObjectIds remain
 /// stable across zone changes for relay identity, so the generation is part of the rules object.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ActiveDeathReplacement {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
@@ -448,7 +448,7 @@ pub struct ActiveDeathReplacement {
 
 /// A prohibition is not a prevention effect (CR 615.12). Keeping it in a separate collection
 /// ensures prevention applications can still run without consuming finite effects.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DamagePreventionProhibition {
     pub source_id: Option<ObjectId>,
 }
@@ -519,7 +519,7 @@ impl GameObject {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct PlayerState {
     pub id: PlayerId,
     pub life: i32,
@@ -562,13 +562,13 @@ impl PlayerState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct RestrictedManaContribution {
     pub restriction_group_id: u32,
     pub amount: ManaAmount,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ManaPool {
     pub white: u32,
     pub blue: u32,
@@ -592,7 +592,7 @@ impl ManaPool {
 /// `SubmitTriggerOrder` echoes back, and it becomes this trigger's `StackItem::id` /
 /// `StackPushed.object_id` once it is finally placed. Allocation follows the deterministic APNAP
 /// collection order, so replays are unaffected.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct StagedTrigger {
     pub object_id: ObjectId,
     pub source_permanent_id: ObjectId,
@@ -620,7 +620,7 @@ pub struct StagedTrigger {
 /// The triggered abilities from *one* simultaneous event (CR 603.3b), in APNAP order and therefore
 /// contiguous per controller. Drained front-to-back by `flush_staged_triggers`, which is what turns
 /// "contiguous per controller" into "one ordering prompt per player".
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct StagedTriggerGroup {
     pub triggers: Vec<StagedTrigger>,
 }
@@ -633,7 +633,7 @@ pub struct StagedTriggerGroup {
 /// each ability's targets *as it is put on the stack*: the player names the next trigger, the engine
 /// places it and asks for its target, and only then does the next choice come up. `candidates` is
 /// therefore always the *remaining unplaced* triggers of the block, shrinking with each answer.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingTriggerOrder {
     pub deciding_player: PlayerId,
     /// Still-unplaced triggers of this player's block, in engine (APNAP-stable) order.
@@ -647,7 +647,7 @@ pub struct PendingTriggerOrder {
 
 /// Why the engine is refusing everything but one specific answer. Ordered by precedence in
 /// [`GameState::blocking_choice`]; each variant names the single command that clears it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlockingChoice {
     /// A tier-3 custom resolution is parked mid-resolution (CR 608).
     Resolution,
@@ -659,7 +659,7 @@ pub enum BlockingChoice {
 
 /// A triggered ability that has fired but is waiting for the controller to choose a target
 /// before being placed on the stack (CR 603.3d). Only one pending trigger at a time.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingTrigger {
     /// The id reserved for this trigger at collection; becomes its `StackItem::id`. See
     /// [`StagedTrigger::object_id`].
@@ -686,7 +686,7 @@ pub struct PendingTrigger {
 /// While present it blocks priority, and the deciding player's logged `SubmitResolutionChoice`
 /// command drives it forward. Domain-specific continuation state lives in
 /// [`ResolutionContinuation`], so unrelated choice families cannot accidentally coexist.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingManaPayment {
     /// Waterbending Lesson shares staged mana/object payment with activated Waterbend costs.
     pub waterbend: bool,
@@ -732,13 +732,13 @@ impl PendingManaPayment {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingWardPayment {
     pub target: StackObjectRef,
     pub stage: PendingWardPaymentStage,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub enum PendingWardPaymentStage {
     Mana(PendingManaPayment),
     Discard {
@@ -746,7 +746,7 @@ pub enum PendingWardPaymentStage {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingResolutionBranch {
     pub optional: bool,
     pub chooser: PlayerRecipient,
@@ -754,7 +754,7 @@ pub struct PendingResolutionBranch {
     pub stage: PendingResolutionBranchStage,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub enum PendingResolutionBranchStage {
     Selecting,
     PayingMana {
@@ -769,7 +769,7 @@ pub enum PendingResolutionBranchStage {
 
 /// Stack-resolution context shared only by continuation families that actually resume a stack
 /// item. Non-stack choices such as the legend rule therefore need no synthetic `StackItem`.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct ParkedStackResolution {
     pub item: StackItem,
     /// Index of the next primitive effect to execute after this choice. `None` is retained for
@@ -797,7 +797,7 @@ impl ParkedStackResolution {
 }
 
 /// Common publication and validation data carried by every resolution choice.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingResolutionPresentation {
     pub source_object_id: ObjectId,
     pub candidates: Vec<ObjectId>,
@@ -809,20 +809,20 @@ pub struct PendingResolutionPresentation {
     pub unique_names: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PendingLibraryPartitionStage {
     ChooseDestination,
     OrderTop,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PendingLibraryPartitionKind {
     Scry,
     Surveil,
     Look,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub enum PendingLibraryLookStage {
     ChooseToHand {
         looked_at: Vec<ObjectId>,
@@ -833,7 +833,7 @@ pub enum PendingLibraryLookStage {
 
 /// The exact work to resume after a resolution choice. Each variant owns only the metadata its
 /// handler consumes; engine-owned string sentinels and unrelated optional fields are forbidden.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub enum ResolutionContinuation {
     Custom {
         stack: ParkedStackResolution,
@@ -1102,20 +1102,20 @@ impl ResolutionContinuation {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingResolution {
     pub deciding_player: PlayerId,
     pub presentation: PendingResolutionPresentation,
     pub continuation: ResolutionContinuation,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HandCardAction {
     Discard,
     Exile,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingHandChoice {
     pub affected_player: PlayerId,
     pub action: HandCardAction,
@@ -1124,7 +1124,7 @@ pub struct PendingHandChoice {
     pub draw_only_if_discarded: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingPlayerDiscardChoice {
     pub player: PlayerId,
     pub candidate_generations: Vec<(ObjectId, u64)>,
@@ -1134,7 +1134,7 @@ pub struct PendingPlayerDiscardChoice {
 /// Frozen hidden-hand choices for one simultaneous player-set discard action (CR 101.4).
 /// `selections` is index-aligned with the completed prefix of `choices`; no selected identity is
 /// published or moved until every required player has answered.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct PendingPlayerSetDiscard {
     pub choices: Vec<PendingPlayerDiscardChoice>,
     pub current: usize,
@@ -1143,7 +1143,7 @@ pub struct PendingPlayerSetDiscard {
 
 /// CR 616.1 priority groups. The current card set exercises `Other`; the complete ordering
 /// vocabulary keeps entry-copy/control work from inventing a second chooser later.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[allow(dead_code)] // The non-Other classes are the CR 616 slots for tracked entry-copy/control work.
 pub(crate) enum ReplacementPriority {
     SelfReplacement,
@@ -1153,7 +1153,7 @@ pub(crate) enum ReplacementPriority {
     Other,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub enum EntryReplacementEffectId {
     Intrinsic {
         object_id: ObjectId,
@@ -1171,7 +1171,7 @@ pub enum EntryReplacementEffectId {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct BattlefieldEntryEvent {
     pub object_id: ObjectId,
     /// CR 616.1 decider: current controller, or owner when the object has no controller.
@@ -1199,37 +1199,37 @@ pub struct BattlefieldEntryEvent {
     pub applied_effects: Vec<EntryReplacementEffectId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct EntryReplacementApplication {
     pub application_id: u32,
     pub effect_id: EntryReplacementEffectId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct TokenBattlefieldEntry {
     pub event: BattlefieldEntryEvent,
     pub created: TokenCreated,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct AttackingTokenBatch {
     pub defenders: Vec<tricerules_proto::ruled::v1::CombatDefenderOption>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(serde::Serialize, Debug, Clone, Copy)]
 pub(crate) struct PendingAmass {
     pub subtype: ArmySubtype,
     pub count: u32,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(serde::Serialize, Debug, Clone, Default)]
 pub(crate) struct TokenEntryBatchOptions {
     pub attacking: Option<AttackingTokenBatch>,
     pub delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
     pub amass: Option<PendingAmass>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct PendingTokenEntryBatch {
     pub current_created: TokenCreated,
     pub ready: Vec<TokenBattlefieldEntry>,
@@ -1240,7 +1240,7 @@ pub(crate) struct PendingTokenEntryBatch {
 
 /// One simultaneous reanimation instruction, prepared fully before any member moves.
 /// Replacement choices for Zombify/Reanimate use the same continuation as larger cohorts.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct PendingZoneEntryBatch {
     pub ready: Vec<BattlefieldEntryEvent>,
     pub remaining: Vec<BattlefieldEntryEvent>,
@@ -1248,7 +1248,7 @@ pub(crate) struct PendingZoneEntryBatch {
     pub spell_label: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct LibrarySearchEntryProgress {
     pub searcher: PlayerId,
     pub remaining_object_ids: Vec<ObjectId>,
@@ -1258,7 +1258,7 @@ pub(crate) struct LibrarySearchEntryProgress {
     pub result_id: Option<SearchResultId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum BattlefieldEntryCompletion {
     LandPlay {
         player: PlayerId,
@@ -1308,7 +1308,7 @@ pub(crate) enum BattlefieldEntryCompletion {
 
 /// A proposed battlefield entry parked before any zone mutation. The parallel
 /// `pending_resolution` owns the public prompt and command validation.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct PendingBattlefieldEntry {
     pub event: BattlefieldEntryEvent,
     pub applications: Vec<EntryReplacementApplication>,
@@ -1317,14 +1317,14 @@ pub(crate) struct PendingBattlefieldEntry {
     pub completion: BattlefieldEntryCompletion,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct ChosenMode {
     /// Stable authored identity captured when the positional command coordinate is accepted.
     pub mode_id: ModeId,
     pub targets: Vec<StackTarget>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StackTarget {
     pub object_id: ObjectId,
     pub group_index: u32,
@@ -1335,7 +1335,7 @@ pub struct StackTarget {
     pub zone_change_generation: Option<u64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub enum CastCostObjectReceipt {
     RevealedHand {
         object_id: ObjectId,
@@ -1351,7 +1351,7 @@ pub enum CastCostObjectReceipt {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct CastCostReceipt {
     pub group_index: u32,
     pub option_index: u32,
@@ -1363,7 +1363,7 @@ pub struct CastCostReceipt {
 
 /// The announced procedure used to cast a spell. This is distinct from its source zone: more
 /// than one alternative method may legally cast the same physical graveyard object.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SpellCastMethod {
     #[default]
     Normal,
@@ -1395,7 +1395,7 @@ impl SpellCastMethod {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct StackItem {
     pub id: ObjectId,
     pub controller: PlayerId,
@@ -1472,7 +1472,7 @@ pub struct StackItem {
 
 /// Presentation-only metadata for a live stack item. It is keyed separately so the mechanical
 /// stack representation and its copy/resolve semantics remain unchanged.
-#[derive(Debug, Clone, Default)]
+#[derive(serde::Serialize, Debug, Clone, Default)]
 pub struct StackPresentation {
     pub primary: Option<tricerules_proto::ruled::v1::PresentationRef>,
     pub chosen_modes: Vec<tricerules_proto::ruled::v1::PresentationRef>,
@@ -1489,7 +1489,7 @@ impl StackItem {
 }
 
 /// Pre-game: choose first player, then London-style mulligans (redraw to 7, then put N on bottom).
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct OpeningSequence {
     /// Seat id chosen by RNG to pick who goes first.
     pub chooser: PlayerId,
@@ -1523,7 +1523,7 @@ pub fn next_unresolved_from(resolved: &[bool], start_idx: usize) -> Option<usize
 /// What set of permanents a continuous effect applies to (CR 613).
 /// Using a scope enum (rather than a bare ObjectId) means anthem-style effects
 /// ("all creatures get +1/+1") work correctly for permanents that enter after the effect.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub enum AffectedScope {
     Single(ObjectId),
     AllCreatures,
@@ -1558,7 +1558,7 @@ pub enum AffectedScope {
 }
 
 /// A single active continuous effect (CR 611/613).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ContinuousEffect {
     /// Present only for a granted triggered ability. Retained when unrelated effects expire;
     /// static grants use authored provenance, resolving grants a deterministic creation ID.
@@ -1577,7 +1577,7 @@ pub struct ContinuousEffect {
 
 /// A public emblem marker with no engine-zone presence. Its runtime object id gives the relay a
 /// stable table-token identity and links the marker to its separately compiled indefinite effect.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct StaticEmblemInstance {
     pub object_id: ObjectId,
     pub controller: PlayerId,
@@ -1586,7 +1586,7 @@ pub struct StaticEmblemInstance {
 }
 
 /// The stack-bound payload of a one-shot delayed triggered ability (CR 603.7).
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct DelayedTriggerPayload {
     /// Creating source, distinct from the watched object (Earthbend, delayed token sacrifice).
     pub source: TriggerObjectRef,
@@ -1601,7 +1601,7 @@ pub struct DelayedTriggerPayload {
 
 /// A closed set of event patterns observed after their underlying state transition commits.
 /// Object events compare both ObjectId and zone-change generation (CR 400.7).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub enum EventObserverMatcher {
     AtBeginningOfNextEndStep,
     AtBeginningOfControllerNextTurnEndStep {
@@ -1618,20 +1618,20 @@ pub enum EventObserverMatcher {
 /// Work performed by a matching one-shot observer. Delayed triggers use the normal trigger/APNAP
 /// queue; paired one-shot effects (CR 610.3) enqueue immediate work that is completed before the
 /// engine advances to the next resolving instruction or grants priority.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub enum EventObserverPayload {
     StageDelayedTrigger(Box<DelayedTriggerPayload>),
     ReturnExiledObject { exiled: TriggerObjectRef },
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct ActiveEventObserver {
     pub watched: TriggerObjectRef,
     pub matcher: EventObserverMatcher,
     pub payload: EventObserverPayload,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ObservedGameEvent {
     TurnBegan {
         active_player: PlayerId,
@@ -1660,26 +1660,26 @@ pub(crate) enum ObservedGameEvent {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ImmediateObserverAction {
     ReturnExiledObject { exiled: TriggerObjectRef },
 }
 
 /// During combat, after attack/block declarations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CombatDefenderTarget {
     Player(PlayerId),
     Permanent(TriggerObjectRef),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CombatAttackAssignment {
     pub attacker: TriggerObjectRef,
     pub defender: CombatDefenderTarget,
     pub defending_player: PlayerId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct CombatState {
     pub attacking: Vec<ObjectId>,
     /// One generation-bound defender designation for every attacking creature (CR 508.1b).
@@ -1721,7 +1721,7 @@ pub struct CombatState {
 /// pool removal with no mana/life/sacrifice cost to refund. The engine drops every entry the moment
 /// the float becomes consequential (mana spent, spell/ability cast, priority passed, step change),
 /// so a present entry is always safe to undo.
-#[derive(Debug, Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct UndoableManaAbility {
     /// The player who activated it (and the only one who may undo it).
     pub player: PlayerId,
@@ -1736,7 +1736,7 @@ pub struct UndoableManaAbility {
 
 /// Public, identity-free facts accumulated during one turn. Counts are retained rather than
 /// booleans because some cards ask whether anything happened while others use the exact total.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PlayerTurnRecord {
     /// Actual positive changes, retained separately even when the net life change is zero.
     pub life_gained: u64,
@@ -1753,7 +1753,7 @@ pub struct PlayerTurnRecord {
 }
 
 /// Event-time public characteristics for one committed attacker or battlefield entrant.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct TurnObjectFact {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
@@ -1773,7 +1773,7 @@ impl TurnObjectFact {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Default, PartialEq, Eq)]
 pub struct TurnRecord {
     pub nonland_permanent_left_battlefield: bool,
     pub spells_cast: u32,
@@ -1790,7 +1790,7 @@ pub struct TurnRecord {
 /// One committed occurrence, retained independently of the object's subsequent zone or types.
 /// `player` is the graveyard owner for an entry and the acting controller for a sacrifice.
 /// Entry types describe the destination card; sacrifice types describe the pre-move permanent.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct PermanentHistoryFact {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
@@ -1800,7 +1800,7 @@ pub struct PermanentHistoryFact {
 
 /// Internal CR 601.2i history, shared by Magebane Lizard and Thunder Salvo. Characteristics
 /// belong to the cast face at the event, not the card's later zone or face.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct SpellCastFact {
     pub cast_method: SpellCastMethod,
     pub occurrence: StackObjectRef,
@@ -1839,7 +1839,7 @@ impl TurnRecord {
 
 /// Engine-owned event memory. Cleanup rolls the completed turn into `previous` and opens a fresh
 /// `current` record, so turn-bound conditions share one lifecycle instead of adding ad hoc fields.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, Default, PartialEq, Eq)]
 pub struct TurnHistory {
     pub current: TurnRecord,
     pub previous: TurnRecord,
@@ -1851,7 +1851,7 @@ impl TurnHistory {
     }
 }
 
-#[derive(Debug)]
+#[derive(serde::Serialize, Debug)]
 pub struct GameState {
     pub seed: u64,
     pub players: Vec<PlayerState>,
@@ -1922,6 +1922,7 @@ pub struct GameState {
     pub activation_uses_per_object: HashMap<PersistentActivationUseKey, u32>,
     /// Persistent "triggers only once" usage. Generation-aware keys make leave-and-return a
     /// fresh object without copying or resetting usage on control changes or turn boundaries.
+    #[serde(serialize_with = "crate::diagnostic_json::serialize_set")]
     pub triggered_once: HashSet<TriggerUseKey>,
     /// Printed trigger caps for the current actual turn instance, independent of active seat.
     /// Including the instance also makes direct deterministic turn-boundary fixtures safe.
@@ -1963,6 +1964,7 @@ pub struct GameState {
     pub active_event_observers: Vec<ActiveEventObserver>,
     /// Battlefield incarnations that entered after being cast for their Warp cost. The public
     /// annotation is generation-bound so blink, bounce, and recast create an ordinary permanent.
+    #[serde(serialize_with = "crate::diagnostic_json::serialize_set")]
     pub(crate) warped_permanent_incarnations: HashSet<(ObjectId, u64)>,
     /// Exact multi-object contexts keyed by the delayed trigger's primary observed object.
     /// Mobilize keeps its whole token cohort here without making ubiquitous TriggerContext
@@ -1992,6 +1994,7 @@ pub struct GameState {
     /// untap. The generation is part of identity because relay-compatible ObjectIds survive zone
     /// changes (CR 400.7). A set intentionally coalesces repeated applications: every identical
     /// "next untap step" restriction expires during the same applicable step.
+    #[serde(serialize_with = "crate::diagnostic_json::serialize_set")]
     pub skip_next_untap: HashSet<(ObjectId, u64)>,
     /// Active CR 615 prevention effects. Healing Salve and Fog are both represented here so every
     /// producer enters one event pipeline and finite effects have stable opaque identities.

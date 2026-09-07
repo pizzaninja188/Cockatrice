@@ -1,6 +1,6 @@
 #include "game_event_handler.h"
-#include "../client/settings/cache_settings.h"
 
+#include "../client/settings/cache_settings.h"
 #include "../interface/widgets/tabs/tab_game.h"
 #include "abstract_game.h"
 #include "board/arrow_item.h"
@@ -11,7 +11,9 @@
 #include "player/player_actions.h"
 #include "player/player_manager.h"
 #include "ruled/ruled_actions.h"
+#include "ruled/ruled_client_diagnostics.h"
 #include "ruled/ruled_client_state.h"
+#include "ruled/ruled_diagnostic_viewer.h"
 #include "ruled/ruled_event_dispatcher.h"
 #include "ruled/ruled_token_display.h"
 #include "zones/logic/card_zone_logic.h"
@@ -154,7 +156,8 @@ QVector<quint32> askRuledResolutionChoice(const QString &prompt,
 
 GameEventHandler::GameEventHandler(AbstractGame *_game)
     : QObject(_game), game(_game), ruledState(new RuledClientState(this, this)),
-      ruledDispatcher(new RuledEventDispatcher(ruledState, this, this))
+      ruledDispatcher(new RuledEventDispatcher(ruledState, this, this)),
+      ruledDiagnostics(new RuledClientDiagnostics(game, this))
 {
 }
 
@@ -318,6 +321,9 @@ bool containsEngineBoundRuledCommand(const PendingCommand *pending)
         }
         ruled::v1::RuledCommand command;
         const Command_RuledPayload &payload = gameCommand.GetExtension(Command_RuledPayload::ext);
+        if (payload.has_diagnostic_report_id() && !payload.has_payload()) {
+            continue;
+        }
         if (!command.ParseFromString(payload.payload()) || !isRuledUiOnlyCommand(command)) {
             return true;
         }
@@ -347,6 +353,7 @@ void GameEventHandler::sendRuledCommand(const ruled::v1::RuledCommand &command)
 {
     AbstractClient *client = game->getClientForPlayer(-1);
     if (!client) {
+        ruledDiagnostics->blocked(command, QStringLiteral("no_client"));
         return;
     }
     std::string payload;
@@ -357,6 +364,7 @@ void GameEventHandler::sendRuledCommand(const ruled::v1::RuledCommand &command)
     cmd.set_payload(payload);
     const bool engineBound = !isRuledUiOnlyCommand(command);
     if (engineBound && !beginRuledGameplayCommand()) {
+        ruledDiagnostics->blocked(command, QStringLiteral("engine_command_pending"));
         return;
     }
     const quint64 token = engineBound ? ++ruledPendingCommandToken : 0;
@@ -376,6 +384,7 @@ void GameEventHandler::sendRuledCommandExpectingAck(const ruled::v1::RuledComman
 {
     AbstractClient *client = game->getClientForPlayer(-1);
     if (!client) {
+        ruledDiagnostics->blocked(command, QStringLiteral("no_client"));
         onFinished(false);
         return;
     }
@@ -388,6 +397,7 @@ void GameEventHandler::sendRuledCommandExpectingAck(const ruled::v1::RuledComman
     cmd.set_payload(payload);
     const bool engineBound = !isRuledUiOnlyCommand(command);
     if (engineBound && !beginRuledGameplayCommand()) {
+        ruledDiagnostics->blocked(command, QStringLiteral("engine_command_pending"));
         onFinished(false);
         return;
     }
@@ -415,6 +425,8 @@ void GameEventHandler::requestResolutionChoiceDialog(const QString &prompt,
                                                      bool ordered,
                                                      bool uniqueNames)
 {
+    if (RuledDiagnosticViewer::isPlayback(game))
+        return;
     // Defer the modal dialog until after this batch finishes processing (avoid re-entering event
     // handling while a modal loop is open).
     QPointer<GameEventHandler> self(this);
@@ -456,6 +468,7 @@ void GameEventHandler::sendGameCommand(PendingCommand *pend, int playerId)
 
     const bool engineBound = RuledActions::isRuledGame(game) && containsEngineBoundRuledCommand(pend);
     if (engineBound && !beginRuledGameplayCommand()) {
+        ruledDiagnostics->blocked(pend->getCommandContainer(), QStringLiteral("engine_command_pending"));
         delete pend;
         return;
     }
@@ -501,7 +514,9 @@ PendingCommand *GameEventHandler::prepareGameCommand(const ::google::protobuf::M
     cont.set_game_id(static_cast<google::protobuf::uint32>(game->getGameMetaInfo()->gameId()));
     GameCommand *c = cont.add_game_command();
     c->GetReflection()->MutableMessage(c, cmd.GetDescriptor()->FindExtensionByName("ext"))->CopyFrom(cmd);
-    return new PendingCommand(cont);
+    auto *pending = new PendingCommand(cont);
+    ruledDiagnostics->prepared(pending);
+    return pending;
 }
 
 PendingCommand *GameEventHandler::prepareGameCommand(const QList<const ::google::protobuf::Message *> &cmdList)
@@ -513,7 +528,9 @@ PendingCommand *GameEventHandler::prepareGameCommand(const QList<const ::google:
         c->GetReflection()->MutableMessage(c, i->GetDescriptor()->FindExtensionByName("ext"))->CopyFrom(*i);
         delete i;
     }
-    return new PendingCommand(cont);
+    auto *pending = new PendingCommand(cont);
+    ruledDiagnostics->prepared(pending);
+    return pending;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -525,6 +542,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
                                                  EventProcessingOptions options)
 {
     Q_UNUSED(client);
+    ruledDiagnostics->received(cont);
     const GameEventContext &context = cont.context();
     emit containerProcessingStarted(context);
 
@@ -607,6 +625,7 @@ void GameEventHandler::processGameEventContainer(const GameEventContainer &cont,
         }
     }
     emit containerProcessingDone();
+    ruledDiagnostics->snapshot();
 }
 
 void GameEventHandler::handleNextTurn()
@@ -894,9 +913,11 @@ void GameEventHandler::eventKicked(const Event_Kicked & /*event*/,
                                    int /*eventPlayerId*/,
                                    const GameEventContext & /*context*/)
 {
-    emit gameClosed();
+    if (!RuledDiagnosticViewer::isPlayback(game))
+        emit gameClosed();
     emit logKicked();
-    emit playerKicked();
+    if (!RuledDiagnosticViewer::isPlayback(game))
+        emit playerKicked();
     emitUserEvent();
 }
 
@@ -924,7 +945,8 @@ void GameEventHandler::eventGameClosed(const Event_GameClosed & /*event*/,
 {
     game->getGameMetaInfo()->setStarted(false);
     game->getGameState()->setGameClosed(true);
-    emit gameClosed();
+    if (!RuledDiagnosticViewer::isPlayback(game))
+        emit gameClosed();
     emit logGameClosed();
     emitUserEvent();
 }

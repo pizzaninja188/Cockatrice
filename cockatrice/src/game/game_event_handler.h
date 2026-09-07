@@ -49,6 +49,7 @@ class PendingCommand;
 class Player;
 class RuledClientState;
 class RuledEventDispatcher;
+class RuledClientDiagnostics;
 /// Defined in ruled/ruled_client_state.h; declared opaquely so this header need not include it.
 enum class RuledSessionResetScope : int;
 
@@ -64,10 +65,15 @@ inline Q_LOGGING_CATEGORY(GameEventHandlerLog, "game_event_handler");
  */
 class GameEventHandler : public QObject, public RuledClientHost
 {
+    friend class RuledDiagnosticViewer;
     Q_OBJECT
 
 public:
     explicit GameEventHandler(AbstractGame *_game);
+    RuledClientDiagnostics *diagnostics() const
+    {
+        return ruledDiagnostics;
+    }
 
     /// Client-side ruled view model. Non-null for the lifetime of the handler; consult
     /// `RuledActions::isRuledGame(game)` before treating its contents as meaningful.
@@ -200,6 +206,7 @@ private:
     AbstractGame *game;
     RuledClientState *ruledState;
     RuledEventDispatcher *ruledDispatcher;
+    RuledClientDiagnostics *ruledDiagnostics;
 
     // Synthetic CardItems inserted into the stack zone to represent ability / copy stack items.
     // QPointer auto-nullifies if the CardItem is deleted outside our cleanup path.

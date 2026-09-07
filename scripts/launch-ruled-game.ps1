@@ -76,10 +76,24 @@ param(
     [switch]$Trace,
     [switch]$Freeform,
     [switch]$NoServers,
-    [switch]$Stop
+    [switch]$Stop,
+    [string]$Capture,
+    [Nullable[uint64]]$StopAfter,
+    [switch]$AllowBuildMismatch,
+    [string]$RunDirectory
 )
 
 $ErrorActionPreference = "Stop"
+
+# Capture runs own isolated servers and process records; route before the ordinary dev-run cleanup.
+if ($Capture -or $RunDirectory) {
+    foreach ($taskConflict in @('DeckA','DeckB','Seed','Dev','Freeform','NoServers')) {
+        if ($PSBoundParameters.ContainsKey($taskConflict)) { throw "-$taskConflict cannot override a captured game." }
+    }
+    & (Join-Path $PSScriptRoot 'launch-ruled-capture.ps1') @PSBoundParameters
+    return
+}
+if ($PSBoundParameters.ContainsKey('StopAfter') -or $AllowBuildMismatch) { throw '-StopAfter and -AllowBuildMismatch require -Capture.' }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $buildDir = Join-Path $repoRoot "build\windows-ninja-all"

@@ -745,3 +745,16 @@ int main(int argc, char **argv)
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
+
+TEST_F(GamePromptWidgetTest, DiagnosticSnapshotRecordsEffectiveModeAndDisabledControls)
+{
+    widget->setPassPriorityEnabled(false);
+    EXPECT_EQ(widget->diagnosticSnapshot().value("effective_mode").toString(), "Normal");
+    EXPECT_FALSE(widget->diagnosticSnapshot()
+                     .value("buttons")
+                     .toObject()
+                     .value("passPriorityButton")
+                     .toObject()
+                     .value("enabled")
+                     .toBool(true));
+}

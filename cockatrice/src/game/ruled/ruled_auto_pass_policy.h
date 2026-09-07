@@ -11,6 +11,49 @@
 
 namespace RuledAutoPassPolicy
 {
+inline std::array<bool, 11> toToolbarStops(const google::protobuf::RepeatedField<int> &phases)
+{
+    std::array<bool, 11> stops{};
+    for (int phase : phases) {
+        switch (phase) {
+            case ruled::v1::PHASE_ID_UPKEEP:
+                stops[1] = true;
+                break;
+            case ruled::v1::PHASE_ID_DRAW:
+                stops[2] = true;
+                break;
+            case ruled::v1::PHASE_ID_MAIN1:
+                stops[3] = true;
+                break;
+            case ruled::v1::PHASE_ID_BEGIN_COMBAT:
+                stops[4] = true;
+                break;
+            case ruled::v1::PHASE_ID_DECLARE_ATTACKERS:
+                stops[5] = true;
+                break;
+            case ruled::v1::PHASE_ID_DECLARE_BLOCKERS:
+                stops[6] = true;
+                break;
+            case ruled::v1::PHASE_ID_FIRST_STRIKE_DAMAGE:
+            case ruled::v1::PHASE_ID_COMBAT_DAMAGE:
+                stops[7] = true;
+                break;
+            case ruled::v1::PHASE_ID_END_COMBAT:
+                stops[8] = true;
+                break;
+            case ruled::v1::PHASE_ID_MAIN2:
+                stops[9] = true;
+                break;
+            case ruled::v1::PHASE_ID_END_STEP:
+                stops[10] = true;
+                break;
+            default:
+                break;
+        }
+    }
+    return stops;
+}
+
 inline ruled::v1::SetAutoPassPolicy fromToolbarStops(const std::array<bool, 11> &ownTurn,
                                                      const std::array<bool, 11> &opponentTurn)
 {

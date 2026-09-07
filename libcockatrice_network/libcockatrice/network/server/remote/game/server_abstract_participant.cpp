@@ -4,6 +4,8 @@
 #include "../server_abstractuserinterface.h"
 #include "../server_database_interface.h"
 #include "../server_room.h"
+#include "ruled_game_driver.h"
+#include "ruled_server_diagnostics.h"
 #include "server_card.h"
 #include "server_game.h"
 #include "server_player.h"
@@ -30,10 +32,10 @@
 #include <libcockatrice/protocol/pb/command_mulligan.pb.h>
 #include <libcockatrice/protocol/pb/command_next_turn.pb.h>
 #include <libcockatrice/protocol/pb/command_ready_start.pb.h>
-#include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/command_reveal_cards.pb.h>
 #include <libcockatrice/protocol/pb/command_reverse_turn.pb.h>
 #include <libcockatrice/protocol/pb/command_roll_die.pb.h>
+#include <libcockatrice/protocol/pb/command_ruled_payload.pb.h>
 #include <libcockatrice/protocol/pb/command_set_active_phase.pb.h>
 #include <libcockatrice/protocol/pb/command_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/command_set_card_counter.pb.h>
@@ -578,6 +580,8 @@ void Server_AbstractParticipant::sendGameEvent(const GameEventContainer &cont)
     QMutexLocker locker(&playerMutex);
 
     if (userInterface) {
+        if (game->ruled() && game->ruled()->diagnostics())
+            game->ruled()->diagnostics()->delivered(playerId, cont);
         userInterface->sendProtocolItem(cont);
     }
 }

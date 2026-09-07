@@ -15,6 +15,7 @@ set(HEADERS
     game/ruled_batch_synchronizer.h
     game/ruled_game_driver.h
     game/ruled_game_session.h
+    game/ruled_server_diagnostics.h
     game/ruled_player_binding.h
     game/ruled_utils.h
     game/server_game.h
@@ -49,8 +50,11 @@ add_library(
   game/rules_relay.cpp
   game/ruled_broadcast_router.cpp
   game/ruled_batch_synchronizer.cpp
+  game/ruled_relay_diagnostic_state.cpp
   game/ruled_game_driver.cpp
   game/ruled_game_session.cpp
+  game/ruled_game_resume.cpp
+  game/ruled_server_diagnostics.cpp
   game/ruled_player_binding.cpp
   game/ruled_utils.cpp
   game/server_game.cpp

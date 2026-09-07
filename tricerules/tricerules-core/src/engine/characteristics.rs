@@ -27,7 +27,7 @@ use super::history::{
 use super::*;
 
 /// The complete rules-visible characteristic snapshot currently modeled for a permanent.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct Characteristics {
     /// Rules-only CR 202.3 mana value; not a new wire field.
     pub mana_value: u32,

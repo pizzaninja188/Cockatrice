@@ -2,7 +2,9 @@
 
 #include <QCheckBox>
 #include <QHBoxLayout>
+#include <QJsonArray>
 #include <QLabel>
+#include <QMetaEnum>
 #include <QObject>
 #include <QPushButton>
 #include <QSet>
@@ -966,4 +968,59 @@ void GamePromptWidget::refreshPromptLabel()
         ? tr("Cast spells, activate abilities, and play land.")
         : tr("Cast instants and activate abilities.");
     promptLabel->setText(tr("%1's %2. %3").arg(activePlayerName, phaseName, actions));
+}
+
+QJsonObject GamePromptWidget::diagnosticSnapshot() const
+{
+    const auto modeName = [](PromptMode mode) {
+        return QString::fromLatin1(QMetaEnum::fromType<PromptMode>().valueToKey(static_cast<int>(mode)));
+    };
+    QJsonObject result{{"effective_mode", modeName(effectiveMode())},
+                       {"requested_mode", modeName(promptState.mode)},
+                       {"text", promptState.text},
+                       {"required", promptState.required},
+                       {"selected", promptState.selected},
+                       {"max", promptState.max},
+                       {"can_decline", promptState.canDecline},
+                       {"payment_currently_legal", promptState.paymentCurrentlyLegal},
+                       {"generic_mana_cost", promptState.genericManaCost},
+                       {"targeting_sources", static_cast<int>(targetingSources)},
+                       {"targeting_text", targetingPromptText},
+                       {"fallback_text", fallbackPromptText},
+                       {"target_selected_count", multiTargetSelectedCount},
+                       {"target_min_count", multiTargetMinCount},
+                       {"target_max_count", multiTargetMaxCount},
+                       {"phase", currentActivePhase},
+                       {"local_has_priority", localPlayerHasPriority},
+                       {"combat_declaration_satisfied", combatDeclarationSatisfied},
+                       {"sticky_blocker_error", stickyBlockerError},
+                       {"cast_cost_confirmable", promptState.castCostSelectionConfirmable},
+                       {"cast_cost_requires_confirmation", promptState.castCostSelectionRequiresConfirmation}};
+    QJsonObject buttons;
+    for (const auto *button : findChildren<QPushButton *>()) {
+        auto key = button->objectName();
+        if (key.isEmpty())
+            key = QString("choice-%1").arg(buttons.size());
+        buttons.insert(key, QJsonObject{{"text", button->text()},
+                                        {"enabled", button->isEnabled()},
+                                        {"hidden", button->isHidden()},
+                                        {"visible", button->isVisible()}});
+    }
+    result.insert("buttons", buttons);
+    QJsonArray labels, options, seats;
+    for (const auto *label : findChildren<QLabel *>())
+        labels.append(QJsonObject{{"text", label->text()}, {"visible", label->isVisible()}});
+    for (const auto &option : promptState.choiceOptions) {
+        QJsonArray zones;
+        for (const auto zone : option.searchZones)
+            zones.append(zone);
+        options.append(QJsonObject{
+            {"index", option.index}, {"label", option.label}, {"enabled", option.enabled}, {"search_zones", zones}});
+    }
+    for (const auto seat : promptState.openingPickSeatIds)
+        seats.append(seat);
+    result.insert("labels", labels);
+    result.insert("choice_options", options);
+    result.insert("opening_seat_ids", seats);
+    return result;
 }

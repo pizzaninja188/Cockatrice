@@ -1,5 +1,6 @@
 syntax = "proto2";
 import "game_event.proto";
+import "ruled_diagnostics.proto";
 
 // Wraps a serialized ruled.v1.RuledEventBatch (proto3 bytes)
 message Event_RuledPayload {
@@ -7,4 +8,5 @@ message Event_RuledPayload {
     optional Event_RuledPayload ext = 2100;
   }
   optional bytes payload = 1;
+  optional ruled.diagnostics.Context diagnostic_context = 2;
 }

@@ -26,6 +26,7 @@
 #include "database/interface/settings_card_preference_provider.h"
 #include "game/ruled/ruled_autopilot.h"
 #include "game/ruled/ruled_dev_console.h"
+#include "game/ruled/ruled_diagnostic_viewer.h"
 #include "interface/logger.h"
 #include "interface/pixel_map_generator.h"
 #include "interface/theme_manager.h"
@@ -227,6 +228,7 @@ int main(int argc, char *argv[])
     parser.setApplicationDescription("Cockatrice");
     parser.addHelpOption();
     parser.addVersionOption();
+    RuledDiagnosticViewer::addCommandLineOptions(parser);
 
     parser.addOptions(
         {{{"c", "connect"}, QCoreApplication::translate("main", "Connect on startup"), "user:pass@host:port"},
@@ -236,6 +238,7 @@ int main(int argc, char *argv[])
          {"dev-console", QCoreApplication::translate("main", "Dev loop: show the ruled dev console")}});
 
     parser.process(app);
+    RuledDiagnosticViewer::prepareBatchPlayback(parser);
 
     if (parser.isSet("debug-output")) {
         Logger::getInstance().logToFile(true);
@@ -263,6 +266,7 @@ int main(int argc, char *argv[])
         ui.setConnectTo(parser.value("connect"));
     }
     RuledAutopilot::installFromCommandLine(&ui, parser.value("autopilot"), parser.value("autopilot-deck"));
+    RuledDiagnosticViewer::openFromCommandLine(&ui, parser);
     RuledDevConsoleWidget::setEnabledFromCommandLine(parser.isSet("dev-console"));
     qCInfo(MainLog) << "MainWindow constructor finished";
 
@@ -285,7 +289,7 @@ int main(int argc, char *argv[])
 #if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
     app.setAttribute(Qt::AA_UseHighDpiPixmaps);
 #endif
-    app.exec();
+    const int result = app.exec();
 
     qCInfo(MainLog) << "Event loop finished, terminating...";
     delete rng;
@@ -293,5 +297,5 @@ int main(int argc, char *argv[])
     CountryPixmapGenerator::clear();
     UserLevelPixmapGenerator::clear();
 
-    return 0;
+    return result;
 }

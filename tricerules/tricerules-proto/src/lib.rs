@@ -6,9 +6,15 @@ pub mod ruled {
     pub mod v1 {
         include!(concat!(env!("OUT_DIR"), "/ruled.v1.rs"));
     }
+    pub mod diagnostics {
+        include!(concat!(env!("OUT_DIR"), "/ruled.diagnostics.rs"));
+    }
 }
 
 pub use ruled::v1::*;
+pub mod diagnostic_enums;
+
+pub use ruled::diagnostics;
 
 #[cfg(test)]
 mod tests {

@@ -44,6 +44,7 @@ class RuledPaymentUi;
 class PlayerActions : public QObject
 {
     friend class RuledPaymentUi;
+    friend class RuledClientDiagnostics;
 
     Q_OBJECT
 
