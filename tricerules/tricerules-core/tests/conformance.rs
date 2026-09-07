@@ -1,472 +1,718 @@
-//! Registry conformance smoke test (Phase 4.4).
-//!
-//! For **every** card in `CardRegistry::global()` this builds a minimal 2-player game, puts the
-//! card under P0's control with ample mana and a vanilla creature on each battlefield to serve
-//! as a target, then performs the card's primary action (play a land / cast the spell with the
-//! first legal target / activate each ability) and resolves the stack.
-//!
-//! The contract is deliberately weak so it scales automatically with the corpus: an action that
-//! the engine judges `Illegal` is fine (a card may need a board this harness doesn't set up), but
-//! the engine must never **panic** and must always leave a *sane* zone layout — every object in
-//! exactly one place, and no *non-token* objects conjured or lost. Tokens (CR 111) legitimately
-//! appear when a maker resolves and may cease to exist, so they are counted separately from the
-//! fixed deck-card population. This is the safety net that makes Phase 6's bulk
-//! vanilla/french-vanilla import trustworthy without a hand-written scenario per generated card.
-
-use tricerules_cards::mana::{ColorPip, ManaSymbol};
+//! Registry execution coverage is distinct from the best-effort integrity sweep.
+#[allow(unused_imports)]
+#[path = "scenario/helpers.rs"]
+mod helpers;
+#[path = "conformance/integrity.rs"]
+mod integrity;
+#[path = "conformance/offers.rs"]
+mod offers;
+use ruled_command::Cmd;
+use ruled_event::Ev;
 use tricerules_cards::CardRegistry;
-use tricerules_core::{GameEngine, TurnStep, Zone};
-use tricerules_proto::ruled::v1::ruled_command::Cmd;
-use tricerules_proto::ruled::v1::{
-    ActivateAbility, CastSource, CastSpell, CostObjectRef, LandSource, PassPriority, PaymentMana,
-    PaymentSelection, PlayLand, ResolutionChoiceDecision, RuledCommand, SubmitResolutionChoice,
-    TargetRef,
-};
+use tricerules_core::GameEngine;
+use tricerules_proto::ruled::v1::*;
 
-fn pass() -> RuledCommand {
-    RuledCommand {
-        cmd: Some(Cmd::PassPriority(PassPriority {})),
+const SEED: u64 = 221;
+const COMMAND_BUDGET: usize = 256;
+
+#[derive(Clone, Debug)]
+struct Case {
+    card: String,
+    face: usize,
+    ability: Option<usize>,
+}
+impl Case {
+    fn key(&self) -> String {
+        format!(
+            "{}\t{}\t{}",
+            self.card,
+            self.face,
+            self.ability.map_or_else(
+                || play_kind(&self.card, self.face).into(),
+                |i| format!("ability:{i}")
+            )
+        )
     }
 }
-
-fn play_land(hand_card_index: u32) -> RuledCommand {
-    play_land_face(hand_card_index, 0)
-}
-
-fn play_land_face(hand_card_index: u32, face_index: u32) -> RuledCommand {
-    RuledCommand {
-        cmd: Some(Cmd::PlayLand(PlayLand {
-            source: Some(LandSource {
-                location: Some(
-                    tricerules_proto::ruled::v1::land_source::Location::HandIndex(hand_card_index),
-                ),
-                ..Default::default()
-            }),
-            face_index,
-        })),
-    }
-}
-
-fn cast_spell(hand_card_index: u32, targets: Vec<TargetRef>) -> RuledCommand {
-    cast_spell_face(hand_card_index, targets, 0)
-}
-
-fn cast_spell_face(hand_card_index: u32, targets: Vec<TargetRef>, face_index: u32) -> RuledCommand {
-    RuledCommand {
-        cmd: Some(Cmd::CastSpell(CastSpell {
-            cast_method: tricerules_proto::ruled::v1::CastMethod::Normal as i32,
-            source: Some(CastSource {
-                expected_zone_change_generation: None,
-                location: Some(
-                    tricerules_proto::ruled::v1::cast_source::Location::HandIndex(hand_card_index),
-                ),
-            }),
-            targets,
-            x_value: 0,
-            face_index,
-            ..Default::default()
-        })),
-    }
-}
-
-fn activate_ability(
-    permanent_id: u32,
-    ability_index: u32,
-    targets: Vec<TargetRef>,
-) -> RuledCommand {
-    RuledCommand {
-        cmd: Some(Cmd::ActivateAbility(ActivateAbility {
-            source_object_id: permanent_id,
-            ability_index,
-            targets,
-            ..Default::default()
-        })),
-    }
-}
-
-fn tref(object_id: u32) -> TargetRef {
-    TargetRef {
-        object_id,
-        damage_amount: 0,
-        group_index: 0,
-        kind: 0,
-    }
-}
-
-/// Drive a freshly created game to P0's first main phase, where both sorcery- and instant-speed
-/// actions are legal with an empty stack.
-fn advance_to_main1(e: &mut GameEngine) {
-    // upkeep -> draw -> main1 (active player + opponent both pass each step).
-    for _ in 0..2 {
-        let ap = e.state.priority_player_id();
-        let nap = other_player(e, ap);
-        let _ = e.apply_command(ap, &pass());
-        let _ = e.apply_command(nap, &pass());
-    }
-    assert_eq!(
-        e.state.turn_step,
-        TurnStep::Main1,
-        "expected to reach main1"
-    );
-}
-
-fn other_player(e: &GameEngine, p: i32) -> i32 {
-    if p == e.state.players[0].id {
-        e.state.players[1].id
+fn play_kind(card: &str, face: usize) -> &'static str {
+    if CardRegistry::global()
+        .get(card)
+        .unwrap()
+        .face(face)
+        .unwrap()
+        .is_land
+    {
+        "land"
     } else {
-        e.state.players[0].id
+        "cast"
     }
 }
-
-/// Pull a card from P0's library into hand (direct state edit), returning the new hand slot.
-fn put_card_in_hand(e: &mut GameEngine, card_id: &str) -> u32 {
-    let pos = e.state.players[0]
-        .library
-        .iter()
-        .position(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some(card_id))
-        .unwrap_or_else(|| panic!("card {card_id} not in P0 library (deck too small?)"));
-    let oid = e.state.players[0].library.remove(pos).expect("oid");
-    e.state.objects.get_mut(&oid).expect("obj").zone = Zone::Hand;
-    e.state.players[0].hand.push(oid);
-    (e.state.players[0].hand.len() - 1) as u32
-}
-
-/// Put a card from `player`'s library onto the battlefield, untapped and not summoning-sick.
-fn deploy(e: &mut GameEngine, player: usize, card_id: &str) -> u32 {
-    let pos = e.state.players[player]
-        .library
-        .iter()
-        .position(|oid| e.state.objects.get(oid).map(|o| o.card_id.as_str()) == Some(card_id))
-        .unwrap_or_else(|| panic!("card {card_id} not in P{player} library"));
-    let oid = e.state.players[player].library.remove(pos).expect("oid");
-    e.state.players[player].battlefield.push(oid);
-    let obj = e.state.objects.get_mut(&oid).expect("obj");
-    obj.zone = Zone::Battlefield;
-    obj.tapped = false;
-    obj.summoning_sick = false;
-    oid
-}
-
-/// Refill P0's pool so a failed cast attempt never starves the next attempt.
-fn grant_ample_mana(e: &mut GameEngine) {
-    let pool = &mut e.state.players[0].mana_pool;
-    pool.white = 99;
-    pool.blue = 99;
-    pool.black = 99;
-    pool.red = 99;
-    pool.green = 99;
-    pool.colorless = 99;
-}
-
-fn exact_resolution_payment(
-    e: &GameEngine,
-    payment: &tricerules_core::state::PendingManaPayment,
-    source_object_id: u32,
-) -> PaymentSelection {
-    fn add_color(mana: &mut PaymentMana, color: ColorPip) {
-        match color {
-            ColorPip::W => mana.w += 1,
-            ColorPip::U => mana.u += 1,
-            ColorPip::B => mana.b += 1,
-            ColorPip::R => mana.r += 1,
-            ColorPip::G => mana.g += 1,
-        }
-    }
-    let mut mana = PaymentMana {
-        c: payment.generic_mana_cost,
-        ..Default::default()
-    };
-    for pip in &payment.mana_cost.pips {
-        match pip {
-            ManaSymbol::W => mana.w += 1,
-            ManaSymbol::U => mana.u += 1,
-            ManaSymbol::B => mana.b += 1,
-            ManaSymbol::R => mana.r += 1,
-            ManaSymbol::G => mana.g += 1,
-            ManaSymbol::C => mana.c += 1,
-            ManaSymbol::Generic(amount) | ManaSymbol::MonoHybrid(amount, _) => mana.c += *amount,
-            ManaSymbol::Hybrid(color, _) | ManaSymbol::Phyrexian(color) => {
-                add_color(&mut mana, *color)
-            }
-            ManaSymbol::X => {}
-        }
-    }
-    PaymentSelection {
-        expected_state_revision: e.state.command_index,
-        source: Some(CostObjectRef {
-            object_id: source_object_id,
-            zone_change_generation: e
-                .state
-                .zone_change_generation
-                .get(&source_object_id)
-                .copied()
-                .unwrap_or(0),
-        }),
-        mana: Some(mana),
-        ..Default::default()
-    }
-}
-
-/// Resolve whatever sits on the stack, bounded so a target-prompt stall can't hang the test.
-fn try_drain_stack(e: &mut GameEngine) {
-    for _ in 0..40 {
-        if let Some(pending) = e.state.pending_resolution.as_ref() {
-            let deciding_player = pending.deciding_player;
-            let pick_count = (pending
-                .presentation
-                .min
-                .max(u32::from(!pending.presentation.candidates.is_empty())))
-            .min(pending.presentation.max)
-            .min(pending.presentation.candidates.len() as u32)
-                as usize;
-            let chosen_object_ids = pending
-                .presentation
-                .candidates
-                .iter()
-                .copied()
-                .take(pick_count)
-                .collect();
-            let payment = pending.continuation.mana_payment().map(|payment| {
-                exact_resolution_payment(e, payment, pending.presentation.source_object_id)
+fn cases() -> Vec<Case> {
+    let mut result = vec![];
+    for def in CardRegistry::global().definitions() {
+        for (face, data) in def.faces_iter().enumerate() {
+            result.push(Case {
+                card: def.id.clone(),
+                face,
+                ability: None,
             });
-            let answer = RuledCommand {
-                cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
-                    chosen_object_ids,
-                    decision: if pending.continuation.mana_payment().is_some() {
-                        ResolutionChoiceDecision::PayMana as i32
-                    } else if matches!(
-                        pending.continuation,
-                        tricerules_core::state::ResolutionContinuation::AuthoredBranch { .. }
-                            | tricerules_core::state::ResolutionContinuation::AmassChoice { .. }
-                            | tricerules_core::state::ResolutionContinuation::OwnerLibraryPlacement { .. }
-                            | tricerules_core::state::ResolutionContinuation::SearchZoneScope { .. }
-                    ) {
-                        ResolutionChoiceDecision::SelectBranch as i32
-                    } else {
-                        ResolutionChoiceDecision::Unspecified as i32
-                    },
-                    selected_branch_index: 0,
-                    cast_spell: None,
-                    chosen_combat_defender: None,
-                    payment,
-                    restricted_mana: vec![],
-                })),
-            };
-            if e.apply_command(deciding_player, &answer).is_err() {
+            for ability in 0..data.activated_abilities.len() {
+                result.push(Case {
+                    card: def.id.clone(),
+                    face,
+                    ability: Some(ability),
+                });
+            }
+        }
+    }
+    result.sort_by_key(Case::key);
+    result
+}
+fn settled(e: &GameEngine) -> bool {
+    e.state.stack.is_empty()
+        && e.state.pending_resolution.is_none()
+        && e.state.pending_triggers.is_empty()
+        && e.state.pending_trigger_order.is_none()
+}
+fn diagnostic(e: &GameEngine, context: &str, error: impl std::fmt::Display) -> String {
+    format!("{context}; seed={SEED}; error={error}; stack={:?}; pending_resolution={:?}; pending_triggers={:?}; pending_order={:?}", e.state.stack, e.state.pending_resolution, e.state.pending_triggers, e.state.pending_trigger_order)
+}
+fn apply(
+    e: &mut GameEngine,
+    actor: i32,
+    command: &RuledCommand,
+) -> Result<RuledEventBatch, String> {
+    e.apply_command(actor, command)
+        .map_err(|err| diagnostic(e, &format!("actor={actor}; command={command:?}"), err))
+}
+fn resolution_answer(choice: &ResolutionChoiceRequired) -> Result<RuledCommand, String> {
+    let mut answer = SubmitResolutionChoice::default();
+    if !choice.resolution_branches.is_empty() {
+        let branch = choice
+            .resolution_branches
+            .iter()
+            .find(|b| b.selectable)
+            .ok_or("no selectable resolution branch")?;
+        answer.decision = ResolutionChoiceDecision::SelectBranch as i32;
+        answer.selected_branch_index = branch.branch_index;
+    } else if choice.choice_kind == ChoiceKind::ManaPayment as i32 {
+        if !choice.payment_currently_legal {
+            return Err("mana choice needs funded deciding-player fixture".into());
+        }
+        answer.decision = ResolutionChoiceDecision::PayMana as i32;
+    } else {
+        if !choice.combat_defender_options.is_empty() {
+            return Err("specialized resolution selection shape".into());
+        }
+        let desired = choice.min.max(u32::from(
+            choice.max > 0 && !choice.candidate_object_ids.is_empty(),
+        ));
+        let mut names = std::collections::BTreeSet::new();
+        let mut used_slots = std::collections::BTreeSet::new();
+        for (i, &oid) in choice.candidate_object_ids.iter().enumerate() {
+            if answer.chosen_object_ids.len() == desired as usize {
                 break;
             }
-            continue;
+            if !choice.candidate_selectable.is_empty()
+                && !choice.candidate_selectable.get(i).copied().unwrap_or(false)
+            {
+                continue;
+            }
+            let name = if choice.unique_names {
+                let name = choice
+                    .candidate_names
+                    .get(i)
+                    .ok_or("unique-name offer omitted names")?;
+                if names.contains(name) {
+                    continue;
+                }
+                Some(name)
+            } else {
+                None
+            };
+            if !choice.selection_slots.is_empty() {
+                let slot = choice
+                    .selection_slots
+                    .iter()
+                    .enumerate()
+                    .find(|(slot, offer)| {
+                        !used_slots.contains(slot) && offer.candidate_indices.contains(&(i as u32))
+                    });
+                let Some((slot, _)) = slot else { continue };
+                used_slots.insert(slot);
+            }
+            if let Some(name) = name {
+                names.insert(name);
+            }
+            answer.chosen_object_ids.push(oid);
         }
-        if e.state.stack.is_empty() {
-            break;
-        }
-        let p = e.state.priority_player_id();
-        if e.apply_command(p, &pass()).is_err() {
-            break;
+        if answer.chosen_object_ids.len() < choice.min as usize {
+            return Err("not enough selectable resolution candidates".into());
         }
     }
+    Ok(RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(answer)),
+    })
 }
-
-/// Sanity invariant: every object lives in exactly one place, and the fixed deck-card population
-/// is unchanged. `expected_objects` is the non-token baseline; tokens (CR 111) created by a
-/// resolving maker are counted on top of it, since they legitimately appear and vanish.
-fn assert_zone_integrity(e: &GameEngine, expected_objects: usize, ctx: &str) {
-    let token_count = e.state.objects.values().filter(|o| o.is_token()).count();
-    assert_eq!(
-        e.state.objects.len(),
-        expected_objects + token_count,
-        "{ctx}: non-token object count changed (deck cards conjured or lost)"
-    );
-    let mut seen: std::collections::HashSet<u32> = std::collections::HashSet::new();
-    let mut count_in_zones = 0usize;
-    for p in &e.state.players {
-        for oid in p
-            .library
-            .iter()
-            .chain(p.hand.iter())
-            .chain(p.battlefield.iter())
-            .chain(p.graveyard.iter())
-            .chain(p.exile.iter())
+fn drain(e: &mut GameEngine, mut batch: RuledEventBatch, budget: usize) -> Result<(), String> {
+    for _ in 0..budget {
+        if settled(e) {
+            return Ok(());
+        }
+        let (actor, mut command) = if e.state.pending_resolution.is_some() {
+            let choice = batch
+                .events
+                .iter()
+                .rev()
+                .find_map(|event| match &event.ev {
+                    Some(Ev::ResolutionChoiceRequired(c)) => Some(c),
+                    _ => None,
+                })
+                .ok_or_else(|| {
+                    diagnostic(e, "drain", "pending resolution omitted published offer")
+                })?;
+            (choice.deciding_player_id, resolution_answer(choice)?)
+        } else if !e.state.pending_triggers.is_empty() {
+            let choice = batch
+                .events
+                .iter()
+                .rev()
+                .find_map(|event| match &event.ev {
+                    Some(Ev::TriggerNeedsTarget(c)) => Some(c),
+                    _ => None,
+                })
+                .ok_or_else(|| diagnostic(e, "drain", "pending trigger omitted published offer"))?;
+            (
+                choice.controller_player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::ChooseTriggerTarget(ChooseTriggerTarget {
+                        decline: false,
+                        targets: offers::targets(
+                            e,
+                            choice.controller_player_id,
+                            choice.targets.as_ref(),
+                        )?,
+                        selected_modes: offers::modes(
+                            e,
+                            choice.controller_player_id,
+                            choice.min_modes,
+                            &choice.modes,
+                        )?,
+                    })),
+                },
+            )
+        } else if e.state.pending_trigger_order.is_some() {
+            let choice = batch
+                .events
+                .iter()
+                .rev()
+                .find_map(|event| match &event.ev {
+                    Some(Ev::TriggerOrderRequired(c)) => Some(c),
+                    _ => None,
+                })
+                .ok_or_else(|| {
+                    diagnostic(e, "drain", "pending trigger order omitted published offer")
+                })?;
+            (
+                choice.deciding_player_id,
+                RuledCommand {
+                    cmd: Some(Cmd::SubmitTriggerOrder(SubmitTriggerOrder {
+                        trigger_object_id: choice
+                            .candidates
+                            .first()
+                            .ok_or("empty trigger order")?
+                            .trigger_object_id,
+                    })),
+                },
+            )
+        } else {
+            (e.state.priority_player_id(), helpers::pass())
+        };
+        if matches!(&command.cmd, Some(Cmd::SubmitResolutionChoice(c)) if c.decision == ResolutionChoiceDecision::PayMana as i32)
         {
-            assert!(seen.insert(*oid), "{ctx}: object {oid} is in two zones");
-            count_in_zones += 1;
+            offers::pay(e, actor, &mut command)?;
         }
+        batch = apply(e, actor, &command)?;
     }
-    for item in &e.state.stack {
-        assert!(
-            seen.insert(item.id) || item.ability_text.is_some(),
-            "{ctx}: stack object {} also in a zone",
-            item.id
-        );
-        if item.ability_text.is_none() {
-            count_in_zones += 1; // a spell on the stack is a real object
-        }
+    if settled(e) {
+        Ok(())
+    } else {
+        Err(diagnostic(e, "drain", "command budget exhausted"))
     }
-    // Every real object (deck cards + live tokens) is in some zone or is a spell on the stack.
-    assert_eq!(
-        count_in_zones,
-        expected_objects + token_count,
-        "{ctx}: some objects are not in any zone"
-    );
 }
-
-/// Play or cast one face of `card_id` (CR 709/712/715) in a fresh game and assert zone integrity.
-/// Used to exercise the non-front faces of a multi-face card, which the front-face sweep skips.
-fn exercise_face_in_fresh_game(card_id: &str, face_index: u32) {
-    let mut p0_deck: Vec<String> = std::iter::repeat_n(card_id.to_string(), 20).collect();
-    p0_deck.extend(std::iter::repeat_n("grizzly_bears".to_string(), 10));
-    p0_deck.extend(std::iter::repeat_n("forest".to_string(), 10));
-    let p1_deck: Vec<String> = std::iter::repeat_n("grizzly_bears".to_string(), 30).collect();
-    let decks = Some(vec![p0_deck, p1_deck]);
-    let mut e = GameEngine::new(901, &[0, 1], 20, decks, true)
-        .unwrap_or_else(|err| panic!("{card_id}: engine init failed: {err:?}"));
-    advance_to_main1(&mut e);
-    let my_creature = deploy(&mut e, 0, "grizzly_bears");
-    let their_creature = deploy(&mut e, 1, "grizzly_bears");
-    let opp = e.state.players[1].id as u32;
-    let me = e.state.players[0].id as u32;
+fn fixture(case: &Case) -> GameEngine {
+    let deck = helpers::deck_with(
+        "forest",
+        &[
+            &case.card,
+            "grizzly_bears",
+            "grizzly_bears",
+            "grizzly_bears",
+            "island",
+            "explosive_apparatus",
+        ],
+    );
+    let mut e = GameEngine::new(SEED, &[0, 1], 20, Some(vec![deck.clone(), deck]), true).unwrap();
+    helpers::advance_to_main1_from_game_start(&mut e);
+    for player in 0..e.state.players.len() {
+        helpers::relocate_to_battlefield(&mut e, player, "grizzly_bears", false);
+        helpers::relocate_to_battlefield(&mut e, player, "explosive_apparatus", false);
+        helpers::relocate_to_hand(&mut e, player, "grizzly_bears");
+        helpers::relocate_to_battlefield(&mut e, player, "forest", false);
+        helpers::relocate_to_battlefield(&mut e, player, "island", false);
+        let dead = helpers::take_oid_from_library_or_hand(&mut e, player, "grizzly_bears");
+        e.state.players[player].graveyard.push(dead);
+        e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
+        helpers::grant_pool(&mut e, player);
+    }
+    e
+}
+#[derive(Debug, PartialEq, Eq)]
+enum Outcome {
+    Exercised,
+    UnsupportedFixture(String),
+    IntentionalUncastable,
+}
+impl Outcome {
+    fn label(&self) -> String {
+        match self {
+            Self::Exercised => "exercised".into(),
+            Self::UnsupportedFixture(reason) => format!("unsupported: {reason}"),
+            Self::IntentionalUncastable => "intentional: face unavailable from hand".into(),
+        }
+    }
+}
+fn exercise(case: &Case) -> Result<(), String> {
+    match evaluate(case)? {
+        Outcome::Exercised => Ok(()),
+        other => Err(other.label()),
+    }
+}
+fn evaluate(case: &Case) -> Result<Outcome, String> {
+    let def = CardRegistry::global().get(&case.card).unwrap();
+    if case.ability.is_none() && !def.face_available_from_hand(case.face) {
+        return Ok(Outcome::IntentionalUncastable);
+    }
+    let mut e = fixture(case);
     let baseline = e.state.objects.len();
-    let slot = put_card_in_hand(&mut e, card_id);
-    let is_land = CardRegistry::global()
-        .get(card_id)
-        .and_then(|def| def.face(face_index as usize))
-        .is_some_and(|face| face.is_land);
-    if is_land {
-        // A land face is played, not cast; a per-turn-limit rejection is acceptable.
-        let _ = e.apply_command(0, &play_land_face(slot, face_index));
-        assert_zone_integrity(&e, baseline, &format!("{card_id} face {face_index} (land)"));
-        return;
+    let actor = e.state.players[0].id;
+    let prepared = (|| -> Result<RuledCommand, String> {
+        let mut command = if let Some(index) = case.ability {
+            if !def.face(case.face).unwrap().is_permanent() {
+                return Err("nonbattlefield activated ability needs a zone fixture".into());
+            }
+            let oid = helpers::relocate_to_battlefield(&mut e, 0, &case.card, false);
+            e.state.objects.get_mut(&oid).unwrap().face_up_index = case.face;
+            let batch = e.initial_response_batch();
+            let legal = &batch.legal_by_player[&actor];
+            let key = (u64::from(oid) << 32) | index as u64;
+            let costs = legal
+                .cost_choices_by_ability
+                .get(&key)
+                .ok_or("ability not offered by generic battlefield fixture")?;
+            RuledCommand {
+                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                    source_object_id: oid,
+                    ability_index: index as u32,
+                    targets: offers::targets(&e, actor, legal.valid_targets_by_ability.get(&key))?,
+                    cost_selections: offers::costs(Some(costs))?,
+                    ..Default::default()
+                })),
+            }
+        } else {
+            let oid = helpers::relocate_to_hand(&mut e, 0, &case.card);
+            let slot = e.state.players[0]
+                .hand
+                .iter()
+                .position(|&id| id == oid)
+                .unwrap() as u32;
+            let batch = e.initial_response_batch();
+            let legal = &batch.legal_by_player[&actor];
+            let offer = legal
+                .hand_actions
+                .iter()
+                .find(|a| {
+                    a.hand_index == slot
+                        && a.face_index == case.face as u32
+                        && a.cast_method == CastMethod::Normal as i32
+                })
+                .ok_or("face not offered by generic hand fixture")?;
+            if offer.kind == HandActionKind::HandActionPlayLand as i32 {
+                helpers::play_land_face(slot as usize, case.face)
+            } else {
+                RuledCommand {
+                    cmd: Some(Cmd::CastSpell(CastSpell {
+                        source: Some(helpers::hand_cast_source(slot as usize)),
+                        face_index: case.face as u32,
+                        cast_method: offer.cast_method,
+                        targets: offers::targets(
+                            &e,
+                            actor,
+                            legal
+                                .valid_targets_by_hand_slot
+                                .get(&((slot << 8) | case.face as u32)),
+                        )?,
+                        selected_modes: offers::modes(&e, actor, offer.min_modes, &offer.modes)?,
+                        cost_selections: offers::costs(offer.cost_choices.as_ref())?,
+                        ..Default::default()
+                    })),
+                }
+            }
+        };
+        if !matches!(command.cmd, Some(Cmd::PlayLand(_))) {
+            offers::pay(&e, actor, &mut command)?;
+        }
+        Ok(command)
+    })();
+    let command = match prepared {
+        Ok(command) => command,
+        Err(reason) => return Ok(Outcome::UnsupportedFixture(reason)),
+    };
+    let result =
+        apply(&mut e, actor, &command).and_then(|batch| drain(&mut e, batch, COMMAND_BUDGET));
+    integrity::assert_zone_integrity(&e, baseline, &case.key());
+    result
+        .map(|()| Outcome::Exercised)
+        .map_err(|err| diagnostic(&e, &case.key(), err))
+}
+
+#[test]
+fn registry_execution_matches_reviewed_baseline() {
+    let mut rows = vec![];
+    for case in cases() {
+        let outcome = evaluate(&case)
+            .unwrap_or_else(|err| panic!("{err}"))
+            .label();
+        rows.push(format!("{}\t{outcome}", case.key()));
     }
-    let candidates: Vec<Vec<TargetRef>> = vec![
-        vec![],
-        vec![tref(opp)],
-        vec![tref(me)],
-        vec![tref(their_creature)],
-        vec![tref(my_creature)],
-    ];
-    for targets in candidates {
-        grant_ample_mana(&mut e);
-        if e.apply_command(0, &cast_spell_face(slot, targets, face_index))
-            .is_ok()
-        {
-            try_drain_stack(&mut e);
-            break;
+    let actual = rows.join("\n") + "\n";
+    let expected = include_str!("conformance/baseline.tsv").replace("\r\n", "\n");
+    compare_baseline(&actual, &expected).unwrap_or_else(|err| panic!("{err}"));
+}
+#[test]
+fn drain_rejects_exhaustion_and_rejected_progression() {
+    let case = Case {
+        card: "grizzly_bears".into(),
+        face: 0,
+        ability: None,
+    };
+    let mut e = fixture(&case);
+    let slot = helpers::hand_index_for_card(&e, 0, "grizzly_bears");
+    let batch = apply(&mut e, 0, &helpers::cast_spell(slot, vec![])).unwrap();
+    assert!(drain(&mut e, batch.clone(), 0)
+        .unwrap_err()
+        .contains("budget exhausted"));
+    e.state.winner = Some(0);
+    assert!(drain(&mut e, batch, COMMAND_BUDGET).is_err());
+}
+#[test]
+fn shared_fixture_families_complete() {
+    for (card, ability) in [
+        ("grizzly_bears", None),
+        ("forest", Some(0)),
+        ("boros_charm", None),
+        ("cryptic_command", None),
+        ("thrill_of_possibility", None),
+        ("village_rites", None),
+        ("explosive_apparatus", Some(0)),
+        ("hungry_ghoul", Some(0)),
+        ("aangs_journey", None),
+        ("gravedigger", None),
+        ("crypt_lurker", None),
+        ("prey_upon", None),
+        ("brainstorm", None),
+        ("demonic_tutor", None),
+    ] {
+        let case = Case {
+            card: card.into(),
+            face: 0,
+            ability,
+        };
+        exercise(&case).unwrap_or_else(|err| panic!("{}: {err}", case.key()));
+    }
+}
+
+#[test]
+#[ignore = "prints candidate coverage for manual review; never writes the baseline"]
+fn report_registry_execution() {
+    for case in cases() {
+        let outcome = evaluate(&case)
+            .unwrap_or_else(|err| panic!("{err}"))
+            .label();
+        println!("COVERAGE\t{}\t{outcome}", case.key());
+    }
+}
+
+#[test]
+fn preserves_completed_legacy_cases_and_zone_integrity() {
+    let completed = integrity::observed_completed_cases();
+    let mut regressions = vec![];
+    for case in cases()
+        .into_iter()
+        .filter(|case| completed.contains(&case.key()))
+    {
+        if let Err(reason) = exercise(&case) {
+            regressions.push(format!("{}: {reason}", case.key()));
         }
     }
-    assert_zone_integrity(
-        &e,
-        baseline,
-        &format!("{card_id} face {face_index} (spell)"),
+    assert!(
+        regressions.is_empty(),
+        "previously completed cases regressed:\n{}",
+        regressions.join("\n")
     );
 }
 
 #[test]
-fn every_registered_card_resolves_without_panic() {
-    let registry = CardRegistry::global();
-    // Deterministic order so a failure is reproducible.
-    let mut card_ids: Vec<&str> = registry.definitions().map(|d| d.id.as_str()).collect();
-    card_ids.sort_unstable();
+fn parked_choice_with_empty_stack_is_not_completion_and_rejects_bad_answer() {
+    let case = Case {
+        card: "brainstorm".into(),
+        face: 0,
+        ability: None,
+    };
+    let mut e = fixture(&case);
+    helpers::relocate_to_hand(&mut e, 0, &case.card);
+    let slot = helpers::hand_index_for_card(&e, 0, &case.card);
+    apply(&mut e, 0, &helpers::cast_spell(slot, vec![])).unwrap();
+    apply(&mut e, 0, &helpers::pass()).unwrap();
+    let batch = apply(&mut e, 1, &helpers::pass()).unwrap();
+    assert!(e.state.stack.is_empty());
+    assert!(e.state.pending_resolution.is_some());
+    let baseline = e.state.objects.len();
+    integrity::assert_zone_integrity(&e, baseline, "parked Brainstorm");
+    assert!(drain(&mut e, batch.clone(), 0).is_err());
+    let invalid = RuledCommand {
+        cmd: Some(Cmd::SubmitResolutionChoice(SubmitResolutionChoice {
+            chosen_object_ids: vec![u32::MAX],
+            ..Default::default()
+        })),
+    };
+    let error = apply(&mut e, 0, &invalid).unwrap_err();
+    for field in [
+        "actor=0",
+        "SubmitResolutionChoice",
+        "error=",
+        "pending_resolution=",
+    ] {
+        assert!(error.contains(field), "{error}");
+    }
+    drain(&mut e, batch, COMMAND_BUDGET).unwrap();
+    assert!(settled(&e));
+    integrity::assert_zone_integrity(&e, baseline, "completed Brainstorm");
+}
 
-    for card_id in card_ids {
-        let def = registry.get(card_id).expect("definition");
+#[test]
+fn rejected_initial_cast_land_and_activation_never_complete() {
+    let case = Case {
+        card: "grizzly_bears".into(),
+        face: 0,
+        ability: None,
+    };
+    let mut e = fixture(&case);
+    for command in [
+        helpers::cast_spell(usize::MAX, vec![]),
+        helpers::play_land(usize::MAX),
+        RuledCommand {
+            cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                source_object_id: u32::MAX,
+                ..Default::default()
+            })),
+        },
+    ] {
+        let before = e.state.command_index;
+        let error = apply(&mut e, 0, &command).unwrap_err();
+        assert!(error.contains("command="));
+        assert!(error.contains("error="));
+        assert_eq!(e.state.command_index, before);
+        assert!(settled(&e));
+    }
+}
 
-        // P0 deck: 20 copies of the card under test padded with basics for castability targets;
-        // P1 deck: grizzly_bears so we can deploy an enemy creature to target.
-        let mut p0_deck: Vec<String> = std::iter::repeat_n(card_id.to_string(), 20).collect();
-        p0_deck.extend(std::iter::repeat_n("grizzly_bears".to_string(), 10));
-        p0_deck.extend(std::iter::repeat_n("forest".to_string(), 10));
-        let p1_deck: Vec<String> = std::iter::repeat_n("grizzly_bears".to_string(), 30).collect();
-        let decks = Some(vec![p0_deck, p1_deck]);
+#[test]
+fn driver_completes_trigger_order_and_resolution_payment() {
+    let case = Case {
+        card: "grizzly_bears".into(),
+        face: 0,
+        ability: None,
+    };
+    let mut e = fixture(&case);
+    helpers::inject_creature_on_battlefield(&mut e, 0, "soul_warden");
+    helpers::inject_creature_on_battlefield(&mut e, 0, "soul_warden");
+    let slot = helpers::hand_index_for_card(&e, 0, "grizzly_bears");
+    apply(&mut e, 0, &helpers::cast_spell(slot, vec![])).unwrap();
+    apply(&mut e, 0, &helpers::pass()).unwrap();
+    let batch = apply(&mut e, 1, &helpers::pass()).unwrap();
+    assert!(e.state.pending_trigger_order.is_some());
+    drain(&mut e, batch, COMMAND_BUDGET).unwrap();
+    assert_eq!(e.state.players[0].life, 22);
+    assert!(settled(&e));
 
-        let mut e = GameEngine::new(900, &[0, 1], 20, decks, true)
-            .unwrap_or_else(|err| panic!("{card_id}: engine init failed: {err:?}"));
-        advance_to_main1(&mut e);
+    let mut e = fixture(&case);
+    helpers::inject_creature_on_battlefield(&mut e, 1, "marauding_sphinx");
+    helpers::inject_card_into_hand(&mut e, 0, "lightning_bolt");
+    let target = helpers::battlefield_object_for_card(&e, 1, "marauding_sphinx");
+    let slot = helpers::hand_index_for_card(&e, 0, "lightning_bolt");
+    apply(
+        &mut e,
+        0,
+        &helpers::cast_spell(slot, helpers::target_object(target)),
+    )
+    .unwrap();
+    apply(&mut e, 0, &helpers::pass()).unwrap();
+    let batch = apply(&mut e, 1, &helpers::pass()).unwrap();
+    assert_eq!(
+        e.state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .choice_kind,
+        ChoiceKind::ManaPayment
+    );
+    drain(&mut e, batch, COMMAND_BUDGET).unwrap();
+    assert!(settled(&e));
+}
 
-        // Vanilla creatures on each side serve as creature/permanent targets.
-        let my_creature = deploy(&mut e, 0, "grizzly_bears");
-        let their_creature = deploy(&mut e, 1, "grizzly_bears");
-        let opp = e.state.players[1].id as u32;
-        let me = e.state.players[0].id as u32;
-
-        let baseline = e.state.objects.len();
-
-        // CR 712.4a: a card in hand shows its front face, so front-face characteristics decide
-        // how this sweep exercises it. Each additional face gets its own fresh game below.
-        let front = def.primary_face();
-
-        // CR 709/712/715: the sweep here plays/casts the front face (index 0); exercise every
-        // other face of a multi-face card (split half / MDFC face) separately.
-        for face_index in 1..def.face_count() as u32 {
-            exercise_face_in_fresh_game(card_id, face_index);
-        }
-
-        if front.is_land {
-            let slot = put_card_in_hand(&mut e, card_id);
-            // play_land never needs a target; a per-turn-limit rejection is acceptable.
-            let _ = e.apply_command(0, &play_land(slot));
-            assert_zone_integrity(&e, baseline, &format!("{card_id} (land)"));
-            continue;
-        }
-
-        // Spell: try the empty target set, then each candidate, taking the first the engine
-        // accepts. Re-grant mana before each attempt (a rejected cast may have paid nothing,
-        // but X-costs and partial failures shouldn't starve later tries).
-        let slot = put_card_in_hand(&mut e, card_id);
-        let candidates: Vec<Vec<TargetRef>> = vec![
-            vec![],
-            vec![tref(opp)],
-            vec![tref(me)],
-            vec![tref(their_creature)],
-            vec![tref(my_creature)],
-        ];
-        let mut cast_ok = false;
-        for targets in candidates {
-            grant_ample_mana(&mut e);
-            if e.apply_command(0, &cast_spell(slot, targets)).is_ok() {
-                cast_ok = true;
-                break;
+fn compare_baseline(actual: &str, expected: &str) -> Result<(), String> {
+    fn parse(text: &str) -> Result<std::collections::BTreeMap<String, String>, String> {
+        let mut result = std::collections::BTreeMap::new();
+        let mut previous = None;
+        for line in text.lines() {
+            let fields: Vec<_> = line.split('\t').collect();
+            if fields.len() != 4 || fields.iter().any(|f| f.trim().is_empty()) {
+                return Err(format!("malformed coverage row: {line}"));
             }
-        }
-        if cast_ok {
-            try_drain_stack(&mut e);
-        }
-        assert_zone_integrity(&e, baseline, &format!("{card_id} (spell)"));
-
-        // Activated abilities: exercise each on a battlefield copy of the card (permanents only).
-        if front.is_permanent() && !front.activated_abilities.is_empty() {
-            let deck = Some(vec![
-                std::iter::repeat_n(card_id.to_string(), 20)
-                    .chain(std::iter::repeat_n("grizzly_bears".to_string(), 10))
-                    .collect::<Vec<_>>(),
-                std::iter::repeat_n("grizzly_bears".to_string(), 30).collect(),
-            ]);
-            let mut ae = GameEngine::new(902, &[0, 1], 20, deck, true)
-                .unwrap_or_else(|err| panic!("{card_id}: engine init failed: {err:?}"));
-            advance_to_main1(&mut ae);
-            let src = deploy(&mut ae, 0, card_id);
-            let my_c = deploy(&mut ae, 0, "grizzly_bears");
-            let their_c = deploy(&mut ae, 1, "grizzly_bears");
-            let opp_a = ae.state.players[1].id as u32;
-            let base = ae.state.objects.len();
-            for ai in 0..front.activated_abilities.len() as u32 {
-                let candidates: Vec<Vec<TargetRef>> = vec![
-                    vec![],
-                    vec![tref(their_c)],
-                    vec![tref(my_c)],
-                    vec![tref(opp_a)],
-                ];
-                for targets in candidates {
-                    grant_ample_mana(&mut ae);
-                    if ae
-                        .apply_command(0, &activate_ability(src, ai, targets))
-                        .is_ok()
-                    {
-                        try_drain_stack(&mut ae);
-                        break;
-                    }
-                }
+            let key = fields[..3].join("\t");
+            let outcome = fields[3];
+            if outcome != "exercised"
+                && outcome != "intentional: face unavailable from hand"
+                && outcome
+                    .strip_prefix("unsupported: ")
+                    .is_none_or(|reason| reason.trim().is_empty())
+            {
+                return Err(format!("missing or unknown coverage outcome: {line}"));
             }
-            assert_zone_integrity(&ae, base, &format!("{card_id} (ability)"));
+            if previous.as_ref().is_some_and(|last| last >= &key) {
+                return Err(format!("duplicate or unsorted coverage key: {key}"));
+            }
+            previous = Some(key.clone());
+            result.insert(key, outcome.to_owned());
+        }
+        Ok(result)
+    }
+    let actual = parse(actual)?;
+    let expected = parse(expected)?;
+    let mut changes = vec![];
+    for (key, outcome) in &actual {
+        match expected.get(key) {
+            None => changes.push(format!("unclassified {key}: {outcome}")),
+            Some(old) if old != outcome => {
+                changes.push(format!("changed {key}: {old} -> {outcome}"))
+            }
+            _ => {}
         }
     }
+    for key in expected.keys().filter(|key| !actual.contains_key(*key)) {
+        changes.push(format!("stale baseline entry {key}"));
+    }
+    if changes.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "coverage changed; review each case before editing baseline.tsv:\n{}",
+            changes.join("\n")
+        ))
+    }
+}
+
+#[test]
+fn baseline_rejects_regressions_unclassified_cases_stale_entries_and_duplicates() {
+    let exercised = "bear\t0\tcast\texercised\n";
+    let unsupported = "bear\t0\tcast\tunsupported: no target fixture\n";
+    assert!(compare_baseline(unsupported, exercised).is_err());
+    assert!(compare_baseline(exercised, "").is_err());
+    assert!(compare_baseline("", exercised).is_err());
+    assert!(compare_baseline(exercised, &(exercised.to_owned() + exercised)).is_err());
+    assert!(compare_baseline("bear\t0\tcast\tunsupported: \n", unsupported).is_err());
+    assert!(compare_baseline(exercised, exercised).is_ok());
+    assert!(compare_baseline(unsupported, unsupported).is_ok());
+}
+
+#[test]
+fn fresh_fixtures_cover_each_land_ability_and_nonfront_face() {
+    for (card, face, ability) in [
+        ("escape_tunnel", 0, Some(0)),
+        ("escape_tunnel", 0, Some(1)),
+        ("barkchannel_pathway_tidechannel_pathway", 1, Some(0)),
+        ("barkchannel_pathway_tidechannel_pathway", 1, None),
+    ] {
+        let case = Case {
+            card: card.into(),
+            face,
+            ability,
+        };
+        assert!(cases().iter().any(|entry| entry.key() == case.key()));
+        exercise(&case).unwrap_or_else(|err| panic!("{}: {err}", case.key()));
+    }
+    let case = Case {
+        card: "reckless_waif_merciless_predator".into(),
+        face: 1,
+        ability: None,
+    };
+    assert_eq!(evaluate(&case).unwrap(), Outcome::IntentionalUncastable);
+}
+
+#[test]
+fn grouped_offer_choices_are_typed_and_stale_payment_is_rejected() {
+    let case = Case {
+        card: "prey_upon".into(),
+        face: 0,
+        ability: None,
+    };
+    let mut e = fixture(&case);
+    let oid = helpers::relocate_to_hand(&mut e, 0, &case.card);
+    let slot = helpers::hand_index_for_card(&e, 0, &case.card) as u32;
+    let batch = e.initial_response_batch();
+    let offer = &batch.legal_by_player[&0].valid_targets_by_hand_slot[&(slot << 8)];
+    let chosen = offers::targets(&e, 0, Some(offer)).unwrap();
+    assert_eq!(chosen.len(), 2);
+    assert_ne!(chosen[0].object_id, chosen[1].object_id);
+    assert_eq!(chosen[0].kind, TargetRefKind::Permanent as i32);
+    assert_eq!(chosen[1].kind, TargetRefKind::Permanent as i32);
+    assert_ne!(chosen[0].group_index, chosen[1].group_index);
+    let mut command = helpers::cast_spell(slot as usize, chosen);
+    offers::pay(&e, 0, &mut command).unwrap();
+    *e.state.zone_change_generation.entry(oid).or_default() += 1;
+    assert!(apply(&mut e, 0, &command).is_err());
+    assert!(settled(&e));
+    exercise(&case).unwrap();
+}
+
+#[test]
+fn choice_driver_is_deterministic_and_integrity_detects_duplicates() {
+    fn run() -> serde_json::Value {
+        let case = Case {
+            card: "brainstorm".into(),
+            face: 0,
+            ability: None,
+        };
+        let mut e = fixture(&case);
+        helpers::relocate_to_hand(&mut e, 0, &case.card);
+        let slot = helpers::hand_index_for_card(&e, 0, &case.card);
+        let batch = apply(&mut e, 0, &helpers::cast_spell(slot, vec![])).unwrap();
+        drain(&mut e, batch, COMMAND_BUDGET).unwrap();
+        e.diagnostic_snapshot().unwrap()
+    }
+    assert_eq!(run(), run());
+    let case = Case {
+        card: "grizzly_bears".into(),
+        face: 0,
+        ability: None,
+    };
+    let mut e = fixture(&case);
+    let oid = e.state.players[0].hand[0];
+    e.state.players[0].graveyard.push(oid);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        integrity::assert_zone_integrity(&e, e.state.objects.len(), "duplicate fixture")
+    }))
+    .is_err());
 }

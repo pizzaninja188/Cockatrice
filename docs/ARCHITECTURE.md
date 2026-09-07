@@ -447,7 +447,7 @@ widened primitive.
 
 | Layer | Where | Runs |
 |---|---|---|
-| Rules | `tricerules-core/tests/scenario/` (+ `conformance.rs` resolving every registry card) | `cargo test` |
+| Rules | `tricerules-core/tests/scenario/` (+ `conformance.rs` checking explicit execution coverage and zone integrity) | `cargo test` |
 | Server translation | `tests/ruled_batch_tests/` | `ctest -R ruled_batch_test` |
 | Server helpers | `tests/ruled_utils_test.cpp` | `ctest -R ruled_utils_test` |
 | Client translation | `tests/ruled_client_tests/` (headless: dispatcher + state + a `FakeHost`) | `ctest -R ruled_client_test` |

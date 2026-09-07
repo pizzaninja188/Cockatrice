@@ -643,7 +643,7 @@ touching the 870+ RON files:
 - Migrate residual direct `def.types` / `def.mana_cost` reads to `def.face(i)` first
   (mechanical PR), then flip storage.
 
-Best-tested code in the repo (registry validation + conformance resolves every card + full
+Best-tested code in the repo (registry validation + explicit conformance execution coverage + full
 scenario suite), so medium risk despite the width.
 
 ### Step 12 — Docs & agent navigability (after the dust settles; pull the identity glossary forward if agents struggle sooner)
