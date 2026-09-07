@@ -3535,13 +3535,19 @@ TEST_F(RuledClientTest, ZoneViewParsesDamageAndPipeDelimitedAbilities)
     apply(batch);
 
     EXPECT_EQ(state->markedDamageForEngineOid(100), 3);
-    EXPECT_EQ(state->activatedAbilitiesForOid(100),
-              QStringList({QStringLiteral("Add {G}."), QStringLiteral("Sacrifice this: draw a card.")}));
-    EXPECT_EQ(state->activatedAbilityManaCostsForOid(100), QStringList({QString(), QStringLiteral("1")}));
+    const auto abilities = state->activatedAbilitiesForOid(100);
+    ASSERT_EQ(abilities.size(), 2);
+    ASSERT_TRUE(abilities[0]);
+    ASSERT_TRUE(abilities[1]);
+    EXPECT_EQ(abilities[0]->text, QStringLiteral("Add {G}."));
+    EXPECT_EQ(abilities[1]->text, QStringLiteral("Sacrifice this: draw a card."));
+    EXPECT_TRUE(abilities[0]->manaCost.isEmpty());
+    EXPECT_EQ(abilities[1]->manaCost, QStringLiteral("1"));
     // CR 605: an empty produced entry marks a non-mana ability.
-    EXPECT_EQ(state->activatedAbilityManaProducedForOid(100), QStringList({QStringLiteral("G"), QString()}));
-    EXPECT_EQ(state->activatedAbilityCostLabelsForOid(100),
-              QStringList({QStringLiteral("{T}"), QStringLiteral("Sacrifice this")}));
+    EXPECT_EQ(abilities[0]->manaProduced, QStringLiteral("G"));
+    EXPECT_TRUE(abilities[1]->manaProduced.isEmpty());
+    EXPECT_EQ(abilities[0]->costLabel, QStringLiteral("{T}"));
+    EXPECT_EQ(abilities[1]->costLabel, QStringLiteral("Sacrifice this"));
 
     EXPECT_TRUE(state->isFirstStrikeStepPending());
     ASSERT_EQ(fsSpy.count(), 1);
@@ -3637,10 +3643,15 @@ TEST_F(RuledClientTest, AbilityDecodingPreservesSparseSlotsAndPresentationAcross
     apply(batch);
 
     for (quint32 oid : {203u, 204u}) {
-        EXPECT_EQ(state->activatedAbilitiesForOid(oid), QStringList({{}, {}, QStringLiteral("Presented ability")}));
-        EXPECT_EQ(state->activatedAbilityManaCostsForOid(oid), QStringList({{}, {}, QStringLiteral("{1}")}));
-        EXPECT_EQ(state->activatedAbilityManaProducedForOid(oid), QStringList({{}, {}, QStringLiteral("G")}));
-        EXPECT_EQ(state->activatedAbilityCostLabelsForOid(oid), QStringList({{}, {}, QStringLiteral("{1}, {T}")}));
+        const auto entries = state->activatedAbilitiesForOid(oid);
+        ASSERT_EQ(entries.size(), 3);
+        EXPECT_FALSE(entries[0]);
+        EXPECT_FALSE(entries[1]);
+        ASSERT_TRUE(entries[2]);
+        EXPECT_EQ(entries[2]->text, QStringLiteral("Presented ability"));
+        EXPECT_EQ(entries[2]->manaCost, QStringLiteral("{1}"));
+        EXPECT_EQ(entries[2]->manaProduced, QStringLiteral("G"));
+        EXPECT_EQ(entries[2]->costLabel, QStringLiteral("{1}, {T}"));
         EXPECT_FALSE(state->abilityActivatable(oid, 0));
         EXPECT_TRUE(state->abilityActivatable(oid, 2));
     }
@@ -3656,6 +3667,149 @@ TEST_F(RuledClientTest, AbilityDecodingPreservesSparseSlotsAndPresentationAcross
         EXPECT_EQ(state->activatedAbilityMenuLabel(oid, 2), QStringLiteral("Updated ability"));
         EXPECT_FALSE(state->abilityActivatable(oid, 2));
     }
+}
+
+TEST_F(RuledClientTest, AbilitySnapshotsRetainBattlefieldButExpireZoneOffersAndResetTogether)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *object = batch.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    object->set_object_id(203);
+    object->set_zone_change_generation(4);
+    auto *ability = object->add_activated_abilities();
+    ability->set_ability_index(2);
+    ability->set_text("{T}: Add {G}.");
+    ability->set_mana_produced("G");
+    ability->set_cost_label("{T}");
+    ability->set_activatable(true);
+    auto *zone = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_ability_actions();
+    zone->set_object_id(204);
+    zone->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    zone->set_hand_index(5);
+    zone->set_zone_change_generation(7);
+    zone->set_ability_index(2);
+    *zone->mutable_ability() = *ability;
+    apply(batch);
+
+    EXPECT_FALSE(state->abilityActivatable(203, 0)); // a sparse gap is disabled
+    EXPECT_TRUE(state->abilityActivatable(203, 3));  // preserve the unknown-index fallback
+    EXPECT_TRUE(state->abilityActivatable(999, 0));
+    EXPECT_TRUE(state->abilityActivatable(203, -1));
+    state->abilityCostData[RuledClientState::abilityTargetKey(203, 2)].nonManaCostsPayable = false;
+    EXPECT_FALSE(state->abilityActivatable(203, 2));
+
+    apply(ruled::v1::RuledEventBatch{});
+    EXPECT_EQ(state->activatedAbilityIndicesForOid(203), QList<int>({2}));
+    EXPECT_EQ(state->abilitySourceGeneration(203), 4u);
+    EXPECT_TRUE(state->abilityActivatable(203, 2)); // per-batch cost data expired
+    EXPECT_TRUE(state->activatedAbilityIndicesForOid(204).isEmpty());
+    EXPECT_EQ(state->zoneAbilityOidForHandSlot(5), 0u);
+
+    ruled::v1::RuledEventBatch unchanged;
+    unchanged.add_events()->mutable_zone_view()->set_battlefields_unchanged(true);
+    apply(unchanged);
+    EXPECT_EQ(state->activatedAbilityMenuLabel(203, 2), QStringLiteral("{T}: Add {G}."));
+
+    ruled::v1::RuledEventBatch empty;
+    empty.add_events()->mutable_zone_view();
+    apply(empty);
+    EXPECT_TRUE(state->activatedAbilityIndicesForOid(203).isEmpty());
+
+    apply(batch);
+    state->clearSessionState(RuledSessionResetScope::KeepCurrentBatch);
+    EXPECT_EQ(state->activatedAbilityIndicesForOid(203), QList<int>({2}));
+    EXPECT_EQ(state->activatedAbilityIndicesForOid(204), QList<int>({2}));
+    EXPECT_EQ(state->zoneAbilityOidForHandSlot(5), 204u);
+    EXPECT_EQ(state->abilitySourceGeneration(204), 7u);
+    state->clearSessionState();
+    EXPECT_TRUE(state->activatedAbilityIndicesForOid(203).isEmpty());
+    EXPECT_TRUE(state->activatedAbilityIndicesForOid(204).isEmpty());
+    EXPECT_EQ(state->zoneAbilityOidForHandSlot(5), 0u);
+}
+
+TEST_F(RuledClientTest, AbilityZoneTransitionReplacesPresentationAndSourceIdentity)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *zone = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_ability_actions();
+    zone->set_object_id(204);
+    zone->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    zone->set_hand_index(5);
+    zone->set_zone_change_generation(7);
+    zone->set_ability_index(2);
+    zone->mutable_ability()->set_text("Hand action");
+    apply(batch);
+
+    ruled::v1::RuledEventBatch battlefield;
+    auto *object = battlefield.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    object->set_object_id(204);
+    object->set_zone_change_generation(8);
+    auto *ability = object->add_activated_abilities();
+    ability->set_ability_index(0);
+    ability->set_text("Battlefield action");
+    ability->set_activatable(true);
+    apply(battlefield);
+    EXPECT_EQ(state->activatedAbilityIndicesForOid(204), QList<int>({0}));
+    EXPECT_EQ(state->activatedAbilityMenuLabel(204, 0), QStringLiteral("Battlefield action"));
+    EXPECT_EQ(state->abilitySourceZone(204), ruled::v1::ABILITY_SOURCE_ZONE_BATTLEFIELD);
+    EXPECT_EQ(state->abilitySourceGeneration(204), 8u);
+    EXPECT_EQ(state->zoneAbilityOidForHandSlot(5), 0u);
+
+    batch.add_events()->mutable_zone_view(); // full empty battlefield snapshot
+    zone->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+    zone->clear_hand_index();
+    zone->set_zone_change_generation(9);
+    zone->mutable_ability()->set_text("Graveyard action");
+    apply(batch);
+    EXPECT_EQ(state->activatedAbilityIndicesForOid(204), QList<int>({2}));
+    EXPECT_TRUE(state->activatedAbilityMenuLabel(204, 0).isEmpty());
+    EXPECT_EQ(state->activatedAbilityMenuLabel(204, 2), QStringLiteral("Graveyard action"));
+    EXPECT_EQ(state->abilitySourceZone(204), ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
+    EXPECT_EQ(state->abilitySourceGeneration(204), 9u);
+}
+
+TEST_F(RuledClientTest, AbilityDiagnosticsDescribeEntriesAndDropExpiredPrivateOffers)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *object = batch.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    object->set_object_id(203);
+    auto *ability = object->add_activated_abilities();
+    ability->set_ability_index(2);
+    ability->set_text("{1}, {T}: Add {G}.");
+    ability->set_mana_cost("{1}");
+    ability->set_mana_produced("G");
+    ability->set_cost_label("{1}, {T}");
+    ability->set_activatable(true);
+    auto *zone = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_ability_actions();
+    zone->set_object_id(204);
+    zone->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    zone->set_hand_index(5);
+    zone->set_zone_change_generation(7);
+    zone->set_ability_index(2);
+    *zone->mutable_ability() = *ability;
+    zone->mutable_ability()->set_text("Private hand action");
+    apply(batch);
+
+    const auto snapshot = state->diagnosticSnapshot();
+    const auto abilities = snapshot.value("activatedAbilitiesByOid").toArray();
+    ASSERT_EQ(abilities.size(), 2);
+    EXPECT_EQ(abilities[0].toObject().value("key").toInt(), 203);
+    const auto entries = abilities[0].toObject().value("value").toArray();
+    ASSERT_EQ(entries.size(), 3);
+    EXPECT_TRUE(entries[0].isNull());
+    EXPECT_TRUE(entries[1].isNull());
+    const QJsonObject expected{{"text", "{1}, {T}: Add {G}."},
+                               {"manaCost", "{1}"},
+                               {"manaProduced", "G"},
+                               {"costLabel", "{1}, {T}"},
+                               {"activatable", true}};
+    EXPECT_EQ(entries[2].toObject(), expected);
+    EXPECT_EQ(snapshot, state->diagnosticSnapshot());
+
+    apply(ruled::v1::RuledEventBatch{});
+    const auto expired = state->diagnosticSnapshot().value("activatedAbilitiesByOid").toArray();
+    ASSERT_EQ(expired.size(), 1);
+    EXPECT_EQ(expired[0].toObject().value("key").toInt(), 203);
+    state->clearSessionState();
+    EXPECT_TRUE(state->diagnosticSnapshot().value("activatedAbilitiesByOid").toArray().isEmpty());
 }
 
 TEST_F(RuledClientTest, ParsesSpellCostChoicesForHandAndPublicZoneCasts)
@@ -3769,8 +3923,10 @@ TEST_F(RuledClientTest, BattlefieldOmissionRetainsStateWhileOtherZoneViewFieldsU
     EXPECT_EQ(state->markedDamageForEngineOid(100), 2);
     EXPECT_EQ(state->combatPowerForCreatureOid(100), 4);
     EXPECT_EQ(state->combatToughnessForCreatureOid(100), 5);
-    EXPECT_EQ(state->activatedAbilitiesForOid(100), QStringList({QStringLiteral("Draw a card.")}));
-    EXPECT_EQ(state->activatedAbilityCostLabelsForOid(100), QStringList({QStringLiteral("{T}")}));
+    const auto parsedAbility = state->activatedAbilityForOid(100, 0);
+    ASSERT_TRUE(parsedAbility);
+    EXPECT_EQ(parsedAbility->text, QStringLiteral("Draw a card."));
+    EXPECT_EQ(parsedAbility->costLabel, QStringLiteral("{T}"));
     EXPECT_TRUE(state->abilityActivatable(100, 0));
     EXPECT_TRUE(state->isFirstStrikeStepPending()) << "non-battlefield fields in an omitted view still apply";
 
@@ -4165,8 +4321,10 @@ TEST_F(RuledClientTest, ZoneAbilityActionsBindHandSlotsAndGraveyardObjectsWithou
     EXPECT_EQ(state->zoneAbilityOidForHandSlot(3), 7101u);
     EXPECT_EQ(state->abilitySourceZone(7101u), ruled::v1::ABILITY_SOURCE_ZONE_HAND);
     EXPECT_EQ(state->abilitySourceGeneration(7101u), 4u);
-    EXPECT_EQ(state->activatedAbilitiesForOid(7101u).value(0), QString("Plainscycling {2}"));
-    EXPECT_EQ(state->activatedAbilityManaCostsForOid(7101u).value(0), QString("{2}"));
+    const auto handAbility = state->activatedAbilityForOid(7101u, 0);
+    ASSERT_TRUE(handAbility);
+    EXPECT_EQ(handAbility->text, QString("Plainscycling {2}"));
+    EXPECT_EQ(handAbility->manaCost, QString("{2}"));
     EXPECT_TRUE(state->abilityActivatable(7101u, 0));
     EXPECT_EQ(state->abilitySourceZone(7201u), ruled::v1::ABILITY_SOURCE_ZONE_GRAVEYARD);
     EXPECT_EQ(state->activatedAbilityIndicesForOid(7201u), QList<int>({2}));
@@ -4221,8 +4379,9 @@ TEST_F(RuledClientTest, CastAndCycleAreCombinedIntoOneCardActionMenuModel)
     RuledFaceOption face;
     face.faceIndex = 0;
     face.faceName = QStringLiteral("Shepherding Spirits");
-    const auto options = RuledPendingCast::cardActionMenuOptions(
-        {face}, {0}, {QStringLiteral("{2}, Discard this card: Plainscycling {2}")}, {{0, true}});
+    state->activatedAbilitiesByOid[203] = {
+        RuledAbilityEntry{QStringLiteral("{2}, Discard this card: Plainscycling {2}"), "{2}", {}, {}, true}};
+    const auto options = RuledPendingCast::cardActionMenuOptions({face}, *state, 203);
 
     ASSERT_EQ(options.size(), 2);
     EXPECT_EQ(options.at(0).kind, RuledCardActionMenuOption::Kind::CastFace);
@@ -4235,11 +4394,12 @@ TEST_F(RuledClientTest, CastAndCycleAreCombinedIntoOneCardActionMenuModel)
     EXPECT_TRUE(options.at(1).enabled);
 }
 
-TEST(RuledPendingCastTest, ManaPaymentMenuRetainsEveryEngineOptionAndItsIndex)
+TEST_F(RuledClientTest, ManaPaymentMenuRetainsEveryEngineOptionAndItsIndex)
 {
-    const auto options = RuledPendingCast::cardActionMenuOptions(
-        {}, {0, 2}, {"Tap another permanent: Add one mana of any color.", "", "Add blue or green."},
-        {{0, true}, {2, false}}, {"W/U/B/R/G", "", "U/G"});
+    state->activatedAbilitiesByOid[203] = {
+        RuledAbilityEntry{"Tap another permanent: Add one mana of any color.", {}, "W/U/B/R/G", {}, true}, std::nullopt,
+        RuledAbilityEntry{"Add blue or green.", {}, "U/G", {}, false}};
+    const auto options = RuledPendingCast::cardActionMenuOptions({}, *state, 203);
     ASSERT_EQ(options.size(), 7);
     for (int i = 0; i < 5; ++i) {
         EXPECT_EQ(options.at(i).index, 0);
@@ -4250,15 +4410,26 @@ TEST(RuledPendingCastTest, ManaPaymentMenuRetainsEveryEngineOptionAndItsIndex)
     EXPECT_EQ(options.at(6).index, 2);
     EXPECT_EQ(options.at(6).manaOptionIndex, 1);
     EXPECT_FALSE(options.at(6).enabled);
+
+    state->abilityCostData[RuledClientState::abilityTargetKey(203, 0)].nonManaCostsPayable = false;
+    const auto blocked = RuledPendingCast::cardActionMenuOptions({}, *state, 203);
+    ASSERT_EQ(blocked.size(), options.size());
+    for (const auto &option : blocked)
+        EXPECT_FALSE(option.enabled);
+    EXPECT_FALSE(state->activatedAbilityForOid(203, 1));
+    EXPECT_FALSE(state->activatedAbilityForOid(203, -1));
+    EXPECT_FALSE(state->activatedAbilityForOid(203, 3));
+    EXPECT_FALSE(state->activatedAbilityForOid(999, 0));
 }
 
-TEST(RuledPendingCastTest, NestedPaymentMenuOffersOnlyEnginePublishedManaAbilities)
+TEST_F(RuledClientTest, NestedPaymentMenuOffersOnlyEnginePublishedManaAbilities)
 {
     RuledFaceOption face;
     face.faceName = QStringLiteral("Test spell");
-    const auto options = RuledPendingCast::cardActionMenuOptions(
-        {face}, {0, 1, 2}, {"Waterbend {5}: Put a counter.", "{T}: Add {G}.", "{T}: Add {U} or {G}."},
-        {{0, true}, {1, true}, {2, false}}, {"", "G", "U/G"}, true);
+    state->activatedAbilitiesByOid[203] = {RuledAbilityEntry{"Waterbend {5}: Put a counter.", {}, {}, {}, true},
+                                           RuledAbilityEntry{"{T}: Add {G}.", {}, "G", {}, true},
+                                           RuledAbilityEntry{"{T}: Add {U} or {G}.", {}, "U/G", {}, false}};
+    const auto options = RuledPendingCast::cardActionMenuOptions({face}, *state, 203, true);
     ASSERT_EQ(options.size(), 3);
     EXPECT_EQ(options.at(0).kind, RuledCardActionMenuOption::Kind::ActivateAbility);
     EXPECT_EQ(options.at(0).index, 1);
@@ -4268,12 +4439,12 @@ TEST(RuledPendingCastTest, NestedPaymentMenuOffersOnlyEnginePublishedManaAbiliti
     EXPECT_FALSE(options.at(2).enabled);
 }
 
-TEST(RuledPendingCastTest, PaymentCandidateAndManaAbilityShareOneCardMenu)
+TEST_F(RuledClientTest, PaymentCandidateAndManaAbilityShareOneCardMenu)
 {
+    state->activatedAbilitiesByOid[203] = {RuledAbilityEntry{"{T}: Add {G}.", {}, "G", {}, true}};
     const QVector<QPair<int, QString>> waterbend = {
         {ruled::v1::OBJECT_PAYMENT_KIND_WATERBEND, QStringLiteral("Waterbend — pay {1}")}};
-    const auto waterbendOptions = RuledPendingCast::cardActionMenuOptions(
-        {}, {0}, {QStringLiteral("{T}: Add {G}.")}, {{0, true}}, {QStringLiteral("G")}, true, waterbend);
+    const auto waterbendOptions = RuledPendingCast::cardActionMenuOptions({}, *state, 203, true, waterbend);
     ASSERT_EQ(waterbendOptions.size(), 2);
     EXPECT_EQ(waterbendOptions.at(0).kind, RuledCardActionMenuOption::Kind::PaymentContribution);
     EXPECT_EQ(waterbendOptions.at(0).index, ruled::v1::OBJECT_PAYMENT_KIND_WATERBEND);
@@ -4282,8 +4453,7 @@ TEST(RuledPendingCastTest, PaymentCandidateAndManaAbilityShareOneCardMenu)
     const QVector<QPair<int, QString>> convoke = {
         {ruled::v1::OBJECT_PAYMENT_KIND_GREEN, QStringLiteral("Convoke — pay {G}")},
         {ruled::v1::OBJECT_PAYMENT_KIND_GENERIC, QStringLiteral("Convoke — pay {1}")}};
-    const auto convokeOptions = RuledPendingCast::cardActionMenuOptions(
-        {}, {0}, {QStringLiteral("{T}: Add {G}.")}, {{0, true}}, {QStringLiteral("G")}, true, convoke);
+    const auto convokeOptions = RuledPendingCast::cardActionMenuOptions({}, *state, 203, true, convoke);
     ASSERT_EQ(convokeOptions.size(), 3);
     EXPECT_EQ(convokeOptions.at(0).kind, RuledCardActionMenuOption::Kind::PaymentContribution);
     EXPECT_EQ(convokeOptions.at(1).kind, RuledCardActionMenuOption::Kind::PaymentContribution);
@@ -4679,7 +4849,7 @@ TEST_F(RuledClientTest, NormalWarpAndSneakHandOffersKeepDistinctMethodsAndCostCh
     EXPECT_EQ(options[1].castMethod, ruled::v1::CAST_METHOD_WARP);
     EXPECT_EQ(options[2].castMethod, ruled::v1::CAST_METHOD_SNEAK);
     EXPECT_EQ(options[1].manaCost, QStringLiteral("{1}{W}"));
-    const auto menu = RuledPendingCast::cardActionMenuOptions(options, {}, {}, {});
+    const auto menu = RuledPendingCast::cardActionMenuOptions(options, *state, 0);
     EXPECT_EQ(menu[1].label, QStringLiteral("Warp Knight Luminary ({1}{W})"));
     EXPECT_EQ(menu[1].castMethod, ruled::v1::CAST_METHOD_WARP);
     EXPECT_EQ(menu[2].label, QStringLiteral("Sneak Knight Luminary ({2}{W})"));
@@ -4744,7 +4914,7 @@ TEST_F(RuledClientTest, ExilePermissionOffersKeepOpaqueIdentityCostAndSourceLabe
     EXPECT_EQ(state->zoneActionCost(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_PERMISSION, 41),
               QStringLiteral("{2}"));
     EXPECT_TRUE(state->zoneActionCost(77, 0, RuledCastSource::Exile, ruled::v1::CAST_METHOD_PERMISSION, 42).isEmpty());
-    const auto menu = RuledPendingCast::cardActionMenuOptions(faces, {}, {}, {});
+    const auto menu = RuledPendingCast::cardActionMenuOptions(faces, *state, 0);
     ASSERT_EQ(menu.size(), 2);
     EXPECT_EQ(menu[0].label, QStringLiteral("Cast Grizzly Bears — Airbending Lesson ({2})"));
     EXPECT_EQ(menu[1].label, QStringLiteral("Cast Grizzly Bears — Release to the Wind"));

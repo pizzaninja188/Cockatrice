@@ -329,9 +329,10 @@ bool RuledPaymentUi::click(CardItem *card, bool leftClick)
         return false;
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     const auto oid = state->engineOidForCardId(card->getOwner()->getPlayerInfo()->getId(), card->getId());
-    const QStringList manaProduced = state->activatedAbilityManaProducedForOid(oid);
-    const bool hasManaAbility =
-        std::any_of(manaProduced.cbegin(), manaProduced.cend(), [](const QString &mana) { return !mana.isEmpty(); });
+    const auto abilities = state->activatedAbilitiesForOid(oid);
+    const bool hasManaAbility = std::any_of(abilities.cbegin(), abilities.cend(), [](const auto &ability) {
+        return ability && !ability->manaProduced.isEmpty();
+    });
     // A candidate with a mana ability needs one combined menu on either mouse button. Candidates
     // without that ambiguity retain the fast left-click contribution toggle.
     if (!leftClick || hasManaAbility)
@@ -463,7 +464,8 @@ void RuledPaymentUi::suspendForManaAbility(quint32 oid, int abilityIndex)
     if (!applicable())
         return;
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
-    if (state->activatedAbilityManaProducedForOid(oid).value(abilityIndex).isEmpty())
+    const auto ability = state->activatedAbilityForOid(oid, abilityIndex);
+    if (!ability || ability->manaProduced.isEmpty())
         return;
     SuspendedPayment frame;
     frame.payment = state->payment.suspend();

@@ -946,10 +946,8 @@ public:
     /// Castable faces precede zone abilities so a cycler in hand exposes both Cast and Cycle.
     static QVector<RuledCardActionMenuOption>
     cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
-                          const QList<int> &abilityIndices,
-                          const QStringList &abilityLabels,
-                          const QHash<int, bool> &abilityEnabled,
-                          const QStringList &manaProduced = {},
+                          const RuledClientState &state,
+                          quint32 sourceOid,
                           bool manaAbilitiesOnly = false,
                           const QVector<QPair<int, QString>> &paymentContributions = {});
 

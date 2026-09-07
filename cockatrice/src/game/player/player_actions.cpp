@@ -1551,16 +1551,16 @@ Command_RuledPayload *PlayerActions::newRuledPayloadActivateManaAbilityForLand(C
     }
     // CR 605: pick this permanent's first mana ability (non-empty produced entry) and, when the
     // ability offers multiple options (a dual land), the option that makes the wanted color.
-    const QStringList produced = handler->activatedAbilityManaProducedForOid(oid);
+    const auto abilities = handler->activatedAbilitiesForOid(oid);
     int abilityIndex = -1;
     int optionIndex = 0;
-    for (int i = 0; i < produced.size(); ++i) {
-        if (produced.at(i).isEmpty()) {
+    for (int i = 0; i < abilities.size(); ++i) {
+        if (!abilities.at(i) || abilities.at(i)->manaProduced.isEmpty()) {
             continue;
         }
         abilityIndex = i;
         if (!desiredColor.isNull()) {
-            const QStringList options = produced.at(i).split(QChar('/'));
+            const QStringList options = abilities.at(i)->manaProduced.split(QChar('/'));
             for (int o = 0; o < options.size(); ++o) {
                 if (options.at(o).contains(desiredColor.toUpper())) {
                     optionIndex = o;
@@ -5408,12 +5408,12 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         return false;
     }
 
-    const QStringList abilityTexts = handler->activatedAbilitiesForOid(oid);
+    const auto abilities = handler->activatedAbilitiesForOid(oid);
     const bool manaAbilitiesOnly = handler->isResolutionPaymentActive() || ruledPayment->applicable();
     const auto paymentContributions = ruledPayment->contributionOptions(card);
     const auto permanentActions = battlefieldSource && !manaAbilitiesOnly ? handler->permanentActionsForOid(oid)
                                                                           : QVector<RuledPermanentAction>{};
-    if (abilityTexts.isEmpty() && permanentActions.isEmpty() && paymentContributions.isEmpty()) {
+    if (abilities.isEmpty() && permanentActions.isEmpty() && paymentContributions.isEmpty()) {
         return false;
     }
 
@@ -5423,17 +5423,16 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     //     full menu (keeps the existing "right-click = see text" behavior).
     //   • Multiple options (dual land): both left and right click show a compact color-picker menu
     //     so the player can choose which color to produce.
-    const QStringList manaProduced = handler->activatedAbilityManaProducedForOid(oid);
-    const QStringList costLabels = handler->activatedAbilityCostLabelsForOid(oid);
+    const auto firstAbility = abilities.value(0);
     // A tapped (or summoning-sick) mana source has nothing to offer: skip the fast path rather
     // than firing an activation the engine will reject.
-    if (battlefieldSource && paymentContributions.isEmpty() && abilityTexts.size() == 1 &&
-        !manaProduced.value(0).isEmpty() && handler->abilityActivatable(oid, 0) &&
+    if (battlefieldSource && paymentContributions.isEmpty() && abilities.size() == 1 && firstAbility &&
+        !firstAbility->manaProduced.isEmpty() && handler->abilityActivatable(oid, 0) &&
         handler->abilityCostChoices(oid, 0).isEmpty()) {
-        const QStringList colorOptions = manaProduced.value(0).split(QChar('/'));
+        const QStringList colorOptions = firstAbility->manaProduced.split(QChar('/'));
         if (colorOptions.size() > 1) {
             // Dual land: show a compact color-picker on both left and right click.
-            const QString costPrefix = costLabels.value(0);
+            const QString costPrefix = firstAbility->costLabel;
             QMenu colorMenu;
             colorMenu.setTitle(card->getName());
             for (const QString &opt : colorOptions) {
@@ -5484,19 +5483,6 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         QAction *action = menu.addAction(permanentAction.label);
         permanentMenuActions.insert(action, permanentAction);
     }
-    QList<int> menuAbilityIndices;
-    QStringList menuAbilityLabels = abilityTexts;
-    QHash<int, bool> menuAbilityEnabled;
-    for (const int i : handler->activatedAbilityIndicesForOid(oid)) {
-        const QString label = handler->activatedAbilityMenuLabel(oid, i);
-        while (menuAbilityLabels.size() <= i) {
-            menuAbilityLabels.append(QString{});
-        }
-        menuAbilityLabels[i] = label;
-        menuAbilityIndices.append(i);
-        menuAbilityEnabled.insert(i, handler->abilityActivatable(oid, i));
-    }
-
     int castHandIndex = -1;
     QVector<RuledFaceOption> castFaces;
     if (handSource && !manaAbilitiesOnly) {
@@ -5507,8 +5493,7 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     }
 
     const auto cardOptions =
-        RuledPendingCast::cardActionMenuOptions(castFaces, menuAbilityIndices, menuAbilityLabels, menuAbilityEnabled,
-                                                manaProduced, manaAbilitiesOnly, paymentContributions);
+        RuledPendingCast::cardActionMenuOptions(castFaces, *handler, oid, manaAbilitiesOnly, paymentContributions);
     QVector<QAction *> cardMenuActions;
     cardMenuActions.reserve(cardOptions.size());
     for (const auto &option : cardOptions) {
@@ -5584,8 +5569,8 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 
     // Look up the mana cost from the engine-supplied cost string (e.g. "4", "R", "").
     // This comes directly from AbilityCost in the tricerules registry — no text parsing.
-    const QStringList manaCostStrings = handler->activatedAbilityManaCostsForOid(oid);
-    const QString manaCostStr = (abilityIndex < manaCostStrings.size()) ? manaCostStrings.at(abilityIndex) : QString{};
+    const auto selectedAbility = handler->activatedAbilityForOid(oid, abilityIndex);
+    const QString manaCostStr = selectedAbility ? selectedAbility->manaCost : QString{};
     const QMap<QChar, int> manaCost = parseSimpleManaCost(manaCostStr);
     // CR 107.4d–f: flexible pips ({G/U}, {2/W}, {B/P}) in the ability cost are front-loaded via
     // the choice dialog before mana payment, just like a spell cast (see resolvePendingAbility...).

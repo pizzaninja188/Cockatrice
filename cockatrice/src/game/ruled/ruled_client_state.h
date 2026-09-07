@@ -44,6 +44,22 @@
 
 class RuledClientHost;
 
+/// One engine-published activation's presentation and public availability. Targeting, source
+/// identity and recipient-specific payment legality remain in their existing state tables.
+struct RuledAbilityEntry
+{
+    QString text;
+    QString manaCost;
+    /// Empty for non-mana abilities; otherwise engine options separated by "/" (e.g. "W/U").
+    QString manaProduced;
+    /// Used for generated mana-picker labels; text already contains the ordinary menu's cost.
+    QString costLabel;
+    bool activatable = false;
+};
+
+/// Positions are authoritative ability indices. Unpublished sparse slots are empty.
+using RuledAbilityEntries = QVector<std::optional<RuledAbilityEntry>>;
+
 /// How much of the session state a teardown may destroy. The two transitions that tear a session
 /// down are *not* symmetric, because of the order the server sends things in `doStartGameIfReady`:
 /// the new session's first `RuledEventBatch` is broadcast **before** the `Event_GameStateChanged`
@@ -800,21 +816,9 @@ public:
     QHash<quint32, int> syntheticAbilityControllerPid;
 
     // -----------------------------------------------------------------------------------
-    // Activated abilities on battlefield permanents (parallel lists, ability-index order).
+    // Engine-published abilities from battlefield snapshots and local zone-action offers.
     // -----------------------------------------------------------------------------------
-    QHash<quint32, QStringList> engineOidToActivatedAbilityTexts;
-    QHash<quint32, QStringList> engineOidToActivatedAbilityManaCosts;
-    // Each entry is empty for a non-mana ability, or its options joined by "/" (each a symbol run
-    // like "G", "WU"), so the client can identify mana abilities and their colors without Oracle.
-    QHash<quint32, QStringList> engineOidToActivatedAbilityManaProduced;
-    // Display strings like "{T}", "{4}", "{T}, {4}", "Sacrifice this". Used to prefix ability text
-    // in the context menu so the player sees the full "cost: text" Oracle format.
-    QHash<quint32, QStringList> engineOidToActivatedAbilityCostLabels;
-    /// Per ability index: whether the engine will currently accept this activation. False for a
-    /// tap cost that cannot be paid (tapped, or CR 302.6 summoning sickness) and for equip
-    /// outside a sorcery-speed window (CR 702.6a). The menu greys these out instead of
-    /// collecting mana for a command the engine rejects.
-    QHash<quint32, QVector<bool>> engineOidToActivatedAbilityActivatable;
+    QHash<quint32, RuledAbilityEntries> activatedAbilitiesByOid;
     /// Exact CR 106.6 groups the engine permits for one activated ability, keyed by
     /// `(source oid << 32 | ability index)`.
     QHash<quint64, QSet<quint32>> eligibleRestrictedManaByAbility;
@@ -1203,9 +1207,13 @@ public:
     {
         return validTargetsByAbility.value(abilityTargetKey(permanentOid, abilityIndex)).canTargetOpponent;
     }
-    [[nodiscard]] QStringList activatedAbilitiesForOid(quint32 oid) const
+    [[nodiscard]] RuledAbilityEntries activatedAbilitiesForOid(quint32 oid) const
     {
-        return engineOidToActivatedAbilityTexts.value(oid);
+        return activatedAbilitiesByOid.value(oid);
+    }
+    [[nodiscard]] std::optional<RuledAbilityEntry> activatedAbilityForOid(quint32 oid, int abilityIndex) const
+    {
+        return activatedAbilitiesByOid.value(oid).value(abilityIndex);
     }
     [[nodiscard]] QList<int> activatedAbilityIndicesForOid(quint32 oid) const
     {
@@ -1215,46 +1223,30 @@ public:
             return indices;
         }
         QList<int> indices;
-        const QStringList texts = engineOidToActivatedAbilityTexts.value(oid);
-        for (int index = 0; index < texts.size(); ++index) {
-            if (!texts.at(index).isEmpty()) {
+        const auto abilities = activatedAbilitiesForOid(oid);
+        for (int index = 0; index < abilities.size(); ++index) {
+            if (abilities.at(index) && !abilities.at(index)->text.isEmpty()) {
                 indices.append(index);
             }
         }
         return indices;
-    }
-    /// Mana cost strings per activated ability, in ability-index order. Each entry is a raw cost
-    /// string like "4", "R", or "" (for Tap/Sacrifice costs).
-    [[nodiscard]] QStringList activatedAbilityManaCostsForOid(quint32 oid) const
-    {
-        return engineOidToActivatedAbilityManaCosts.value(oid);
-    }
-    /// Mana produced per activated ability (CR 605), in ability-index order. Empty entry = not a
-    /// mana ability; otherwise the producible options joined by "/" (each a symbol run, e.g. "G",
-    /// "W/U" for a dual). Used to drive "tap land for mana" from engine data.
-    [[nodiscard]] QStringList activatedAbilityManaProducedForOid(quint32 oid) const
-    {
-        return engineOidToActivatedAbilityManaProduced.value(oid);
-    }
-    /// Cost-label strings per activated ability, in ability-index order.
-    [[nodiscard]] QStringList activatedAbilityCostLabelsForOid(quint32 oid) const
-    {
-        return engineOidToActivatedAbilityCostLabels.value(oid);
     }
     /// User-facing label for one entry in the ordinary activation context menu. AbilityInfo.text
     /// already carries the complete Oracle-style "cost: effect" text; cost_label remains separate
     /// for generated labels such as the dual-land color picker.
     [[nodiscard]] QString activatedAbilityMenuLabel(quint32 oid, int abilityIndex) const
     {
-        return engineOidToActivatedAbilityTexts.value(oid).value(abilityIndex);
+        const auto ability = activatedAbilityForOid(oid, abilityIndex);
+        return ability ? ability->text : QString{};
     }
     /// Whether the engine will currently accept activating `abilityIndex` on this permanent.
     /// Defaults to true for an ability the engine never described, so an unknown ability is
     /// still offered rather than silently disabled.
     [[nodiscard]] bool abilityActivatable(quint32 oid, int abilityIndex) const
     {
-        const QVector<bool> flags = engineOidToActivatedAbilityActivatable.value(oid);
-        const bool publicGate = abilityIndex < 0 || abilityIndex >= flags.size() || flags.at(abilityIndex);
+        const auto abilities = activatedAbilitiesForOid(oid);
+        const bool publicGate = abilityIndex < 0 || abilityIndex >= abilities.size() ||
+                                (abilities.at(abilityIndex) && abilities.at(abilityIndex)->activatable);
         const auto it = abilityCostData.constFind(abilityTargetKey(oid, abilityIndex));
         return publicGate && (it == abilityCostData.constEnd() || it->nonManaCostsPayable);
     }

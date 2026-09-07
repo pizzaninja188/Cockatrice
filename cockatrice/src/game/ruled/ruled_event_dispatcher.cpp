@@ -375,35 +375,13 @@ parseSpellModes(const google::protobuf::RepeatedPtrField<ruled::v1::LegalSpellMo
     return modes;
 }
 
-// Both source-zone paths use the same indexed presentation lists. Their callers retain
-// ownership of replacing a battlefield snapshot versus updating one published zone action.
-struct AbilityListRefs
+// Callers own the authoritative index and snapshot lifetime for their source-zone path.
+RuledAbilityEntry parseAbilityInfo(const ruled::v1::AbilityInfo &ability, const RuledPresentationResolver &resolver)
 {
-    QStringList &texts;
-    QStringList &manaCosts;
-    QStringList &manaProduced;
-    QStringList &costLabels;
-    QVector<bool> &activatable;
-};
-
-void copyAbilityInfo(AbilityListRefs lists,
-                     int abilityIndex,
-                     const ruled::v1::AbilityInfo &ability,
-                     const RuledPresentationResolver &resolver)
-{
-    while (lists.texts.size() <= abilityIndex) {
-        lists.texts.append(QString{});
-        lists.manaCosts.append(QString{});
-        lists.manaProduced.append(QString{});
-        lists.costLabels.append(QString{});
-        lists.activatable.append(false);
-    }
-    lists.texts[abilityIndex] =
-        ability.has_presentation() ? resolver.resolve(ability.presentation()) : QString::fromStdString(ability.text());
-    lists.manaCosts[abilityIndex] = QString::fromStdString(ability.mana_cost());
-    lists.manaProduced[abilityIndex] = QString::fromStdString(ability.mana_produced());
-    lists.costLabels[abilityIndex] = QString::fromStdString(ability.cost_label());
-    lists.activatable[abilityIndex] = ability.activatable();
+    return {ability.has_presentation() ? resolver.resolve(ability.presentation())
+                                       : QString::fromStdString(ability.text()),
+            QString::fromStdString(ability.mana_cost()), QString::fromStdString(ability.mana_produced()),
+            QString::fromStdString(ability.cost_label()), ability.activatable()};
 }
 
 /// Copies the engine's structured hand-action contract into the generic client-side indexes.
@@ -486,11 +464,7 @@ bool RuledEventDispatcher::processPayload(const std::string &payload, bool suppr
 void RuledEventDispatcher::resetPerBatchLegalActions()
 {
     for (const quint32 oid : state->zoneAbilitySourceByOid.keys()) {
-        state->engineOidToActivatedAbilityTexts.remove(oid);
-        state->engineOidToActivatedAbilityManaCosts.remove(oid);
-        state->engineOidToActivatedAbilityManaProduced.remove(oid);
-        state->engineOidToActivatedAbilityCostLabels.remove(oid);
-        state->engineOidToActivatedAbilityActivatable.remove(oid);
+        state->activatedAbilitiesByOid.remove(oid);
     }
     state->handAbilityOidBySlot.clear();
     state->zoneAbilitySourceByOid.clear();
@@ -1562,11 +1536,7 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
         state->engineOidLoyalty.clear();
         state->engineOidDefense.clear();
         state->engineOidBattleProtector.clear();
-        state->engineOidToActivatedAbilityTexts.clear();
-        state->engineOidToActivatedAbilityManaCosts.clear();
-        state->engineOidToActivatedAbilityManaProduced.clear();
-        state->engineOidToActivatedAbilityCostLabels.clear();
-        state->engineOidToActivatedAbilityActivatable.clear();
+        state->activatedAbilitiesByOid.clear();
         state->battlefieldGenerationByOid.clear();
     }
     bool anyFirstStrikePending = false;
@@ -1587,25 +1557,18 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
                 continue;
             }
             state->battlefieldGenerationByOid.insert(oid, battlefieldObject.zone_change_generation());
-            QStringList texts;
-            QStringList manaCosts;
-            QStringList manaProduced;
-            QStringList costLabels;
-            QVector<bool> activatable;
+            RuledAbilityEntries abilities;
             for (const auto &ability : battlefieldObject.activated_abilities()) {
                 const int abilityIndex = static_cast<int>(ability.ability_index());
                 if (abilityIndex < 0) {
                     continue;
                 }
-                copyAbilityInfo({texts, manaCosts, manaProduced, costLabels, activatable}, abilityIndex, ability,
-                                presentationResolver);
+                if (abilities.size() <= abilityIndex)
+                    abilities.resize(abilityIndex + 1);
+                abilities[abilityIndex] = parseAbilityInfo(ability, presentationResolver);
             }
-            if (!texts.isEmpty()) {
-                state->engineOidToActivatedAbilityTexts.insert(oid, texts);
-                state->engineOidToActivatedAbilityManaCosts.insert(oid, manaCosts);
-                state->engineOidToActivatedAbilityManaProduced.insert(oid, manaProduced);
-                state->engineOidToActivatedAbilityCostLabels.insert(oid, costLabels);
-                state->engineOidToActivatedAbilityActivatable.insert(oid, activatable);
+            if (!abilities.isEmpty()) {
+                state->activatedAbilitiesByOid.insert(oid, abilities);
             }
             state->engineOidBattlefieldPower.insert(oid, static_cast<int>(battlefieldObject.power()));
             state->engineOidBattlefieldToughness.insert(oid, static_cast<int>(battlefieldObject.toughness()));
@@ -1923,13 +1886,10 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
             state->handAbilityOidBySlot.insert(static_cast<int>(action.hand_index()), oid);
         }
         const auto &ability = action.ability();
-        auto &texts = state->engineOidToActivatedAbilityTexts[oid];
-        auto &manaCosts = state->engineOidToActivatedAbilityManaCosts[oid];
-        auto &manaProduced = state->engineOidToActivatedAbilityManaProduced[oid];
-        auto &costLabels = state->engineOidToActivatedAbilityCostLabels[oid];
-        auto &activatable = state->engineOidToActivatedAbilityActivatable[oid];
-        copyAbilityInfo({texts, manaCosts, manaProduced, costLabels, activatable}, abilityIndex, ability,
-                        presentationResolver);
+        auto &abilities = state->activatedAbilitiesByOid[oid];
+        if (abilities.size() <= abilityIndex)
+            abilities.resize(abilityIndex + 1);
+        abilities[abilityIndex] = parseAbilityInfo(ability, presentationResolver);
     }
 
     state->openingUiKind = RuledOpeningUiKind::None;

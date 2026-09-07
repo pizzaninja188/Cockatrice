@@ -53,6 +53,7 @@ QJsonValue value(const RuledTargetedCostReductionApplication &v);
 QJsonValue value(const RuledTargetCastCostRequirement &v);
 QJsonValue value(const RuledSpellTargetData &v);
 QJsonValue value(const RuledChoiceOption &v);
+QJsonValue value(const RuledAbilityEntry &v);
 QJsonValue value(const RuledPermanentAction &v);
 QJsonValue value(const RuledCounterRemovalOption &v);
 QJsonValue value(const RuledCostChoice &v);

@@ -67,10 +67,7 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     FIELD(stackTargetsByStackOid);
     FIELD(stackAnnotationByOid);
     FIELD(stackSourceOidByStackOid);
-    FIELD(engineOidToActivatedAbilityTexts);
-    FIELD(engineOidToActivatedAbilityManaCosts);
-    FIELD(engineOidToActivatedAbilityActivatable);
-    FIELD(engineOidToActivatedAbilityCostLabels);
+    FIELD(activatedAbilitiesByOid);
     FIELD(engineOidMarkedDamage);
     FIELD(engineOidBattlefieldPower);
     FIELD(engineOidBattlefieldToughness);
@@ -106,7 +103,6 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     FIELD(stackTargetKindByStackAndTargetOid);
     FIELD(syntheticAbilityFakeIds);
     FIELD(syntheticAbilityControllerPid);
-    FIELD(engineOidToActivatedAbilityManaProduced);
     FIELD(eligibleRestrictedManaByAbility);
     FIELD(waterbendAbilities);
     FIELD(restrictedManaByPlayer);
@@ -281,6 +277,14 @@ QJsonValue value(const RuledChoiceOption &v)
     result.insert("targets", value(v.targets));
     result.insert("searchZones", value(v.searchZones));
     return result;
+}
+QJsonValue value(const RuledAbilityEntry &v)
+{
+    return QJsonObject{{"text", value(v.text)},
+                       {"manaCost", value(v.manaCost)},
+                       {"manaProduced", value(v.manaProduced)},
+                       {"costLabel", value(v.costLabel)},
+                       {"activatable", value(v.activatable)}};
 }
 QJsonValue value(const RuledPermanentAction &v)
 {

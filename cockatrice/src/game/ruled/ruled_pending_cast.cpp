@@ -110,13 +110,12 @@ static QString ruledCastOptionLabel(const RuledFaceOption &face)
 
 QVector<RuledCardActionMenuOption>
 RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFaces,
-                                        const QList<int> &abilityIndices,
-                                        const QStringList &abilityLabels,
-                                        const QHash<int, bool> &abilityEnabled,
-                                        const QStringList &manaProduced,
+                                        const RuledClientState &state,
+                                        quint32 sourceOid,
                                         bool manaAbilitiesOnly,
                                         const QVector<QPair<int, QString>> &paymentContributions)
 {
+    const auto abilityIndices = state.activatedAbilityIndicesForOid(sourceOid);
     QVector<RuledCardActionMenuOption> options;
     options.reserve(paymentContributions.size() + castFaces.size() + abilityIndices.size());
     for (const auto &[kind, label] : paymentContributions)
@@ -128,16 +127,16 @@ RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFace
                         face.castMethod});
     }
     for (const int abilityIndex : abilityIndices) {
-        if (manaAbilitiesOnly && manaProduced.value(abilityIndex).isEmpty())
+        const auto ability = state.activatedAbilityForOid(sourceOid, abilityIndex);
+        if (!ability || (manaAbilitiesOnly && ability->manaProduced.isEmpty()))
             continue;
-        const QStringList manaOptions = manaProduced.value(abilityIndex).split(QLatin1Char('/'));
+        const QStringList manaOptions = ability->manaProduced.split(QLatin1Char('/'));
         for (int optionIndex = 0; optionIndex < manaOptions.size(); ++optionIndex) {
-            const QString label =
-                manaOptions.size() > 1
-                    ? QObject::tr("%1 — Add {%2}").arg(abilityLabels.value(abilityIndex), manaOptions.at(optionIndex))
-                    : abilityLabels.value(abilityIndex);
+            const QString label = manaOptions.size() > 1
+                                      ? QObject::tr("%1 — Add {%2}").arg(ability->text, manaOptions.at(optionIndex))
+                                      : ability->text;
             options.append({RuledCardActionMenuOption::Kind::ActivateAbility, abilityIndex, label,
-                            abilityEnabled.value(abilityIndex, false), optionIndex});
+                            state.abilityActivatable(sourceOid, abilityIndex), optionIndex});
         }
     }
     return options;
