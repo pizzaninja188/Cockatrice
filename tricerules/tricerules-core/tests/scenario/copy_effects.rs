@@ -115,6 +115,86 @@ fn cast_copy(engine: &mut GameEngine, source: u32) -> (u32, RuledEventBatch) {
     (tokens[0].object_id, batch)
 }
 
+#[test]
+fn issue_237_copy_double_faced_permanent_preserves_active_face() {
+    for (face, name, power) in [(0, "Reckless Waif", 1), (1, "Merciless Predator", 3)] {
+        let (mut engine, source) = token_copy_game("reckless_waif_merciless_predator");
+        engine.state.objects.get_mut(&source).unwrap().face_up_index = face;
+        let (token, batch) = cast_copy(&mut engine, source);
+        assert_eq!(engine.state.objects[&token].face_up_index, face);
+        assert_eq!(engine.effective_power(token), Some(power));
+        assert_eq!(
+            token_created_events(&batch)[0]
+                .identity
+                .as_ref()
+                .unwrap()
+                .name,
+            name
+        );
+    }
+}
+
+#[test]
+fn issue_237_double_faced_tokens_transform_and_populate_independently() {
+    let (mut engine, source) = token_copy_game("reckless_waif_merciless_predator");
+    let (token, _) = cast_copy(&mut engine, source);
+    begin_populate(&mut engine);
+    let batch = engine
+        .apply_command(0, &submit_resolution_choice(vec![token]))
+        .unwrap();
+    let populated = token_created_events(&batch)[0].object_id;
+    // Move the actual card away: both remaining Werewolf triggers must come from token faces.
+    engine.enable_dev_commands();
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: 0,
+                    dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                        card_name: "Reckless Waif".into(),
+                        zone: DevZone::Graveyard as i32,
+                        ready: false,
+                    })),
+                })),
+            },
+        )
+        .unwrap();
+    assert!(!engine.state.players[0].battlefield.contains(&source));
+    engine.state.turn_history.current.spells_cast = 0;
+    let starting_active = engine.state.active_player_id();
+    for _ in 0..96 {
+        if engine.state.active_player_id() != starting_active
+            && engine.state.turn_step == tricerules_core::TurnStep::Upkeep
+        {
+            break;
+        }
+        let player = engine.state.priority_player_id();
+        let command = if engine.state.cleanup_discard_player == Some(player) {
+            let index = engine.state.player_idx(player).unwrap();
+            discard_cleanup((engine.state.players[index].hand.len() - 1) as u32)
+        } else {
+            pass()
+        };
+        engine.apply_command(player, &command).unwrap();
+    }
+    answer_trigger_order_in_engine_order(&mut engine);
+    assert_eq!(engine.state.stack.len(), 2);
+    let generation = engine.state.zone_change_generation[&token];
+    pass_both_players(&mut engine);
+    assert_ne!(
+        engine.state.objects[&token].face_up_index,
+        engine.state.objects[&populated].face_up_index
+    );
+    resolve_entire_stack_two_player(&mut engine);
+    for oid in [token, populated] {
+        assert_eq!(engine.state.objects[&oid].face_up_index, 1);
+        assert_eq!(engine.effective_power(oid), Some(3));
+        assert_eq!(engine.characteristics(oid).unwrap().mana_value, 1);
+    }
+    assert_eq!(engine.state.zone_change_generation[&token], generation);
+}
+
 fn begin_populate(engine: &mut GameEngine) {
     ensure_in_hand(engine, 0, "wake_the_reflections");
     grant_pool(engine, 0);
@@ -1240,4 +1320,61 @@ fn leaving_the_battlefield_clears_copy_values_and_restores_clone() {
     assert_eq!(object.copy_revision, 0);
     assert_eq!(engine.effective_power(clone), Some(0));
     assert_eq!(engine.effective_toughness(clone), Some(0));
+}
+
+#[test]
+fn issue_237_double_faced_entry_choice_freezes_both_faces_before_suspending() {
+    let (mut engine, source) = token_copy_game("reckless_waif_merciless_predator");
+    let registry = tricerules_cards::CardRegistry::global();
+    let mut face = registry
+        .get("reckless_waif_merciless_predator")
+        .unwrap()
+        .primary_face()
+        .clone();
+    face.static_abilities = registry
+        .get("clone")
+        .unwrap()
+        .primary_face()
+        .static_abilities
+        .clone();
+    engine
+        .state
+        .objects
+        .get_mut(&source)
+        .unwrap()
+        .copiable_values = Some(tricerules_core::state::CopiableValues {
+        source_card_id: "reckless_waif_merciless_predator".into(),
+        source_face_index: 0,
+        display_name: face.name.clone(),
+        face,
+        room_faces: None,
+    });
+    ensure_in_hand(&mut engine, 0, "cackling_counterpart");
+    grant_pool(&mut engine, 0);
+    let slot = hand_index_for_card(&engine, 0, "cackling_counterpart");
+    engine
+        .apply_command(0, &cast_spell(slot, target_object(source)))
+        .unwrap();
+    pass_both_players(&mut engine);
+    assert!(engine.state.pending_resolution.is_some());
+    // Mutate the source while entry is parked: the token already owns its complete snapshot.
+    engine
+        .state
+        .objects
+        .get_mut(&source)
+        .unwrap()
+        .copiable_values
+        .as_mut()
+        .unwrap()
+        .face
+        .power = Some(9);
+    let batch = engine
+        .apply_command(0, &submit_resolution_choice(vec![]))
+        .unwrap();
+    let token = token_created_events(&batch)[0].object_id;
+    assert_eq!(engine.effective_power(token), Some(1));
+    let faces = engine.state.objects[&token].token_faces.as_ref().unwrap();
+    assert_eq!(faces.faces[0].face.power, Some(1));
+    assert_eq!(faces.faces[1].face.power, Some(1));
+    assert_eq!(faces.faces[1].face.static_abilities.len(), 1);
 }

@@ -20,7 +20,7 @@ pub(super) fn amass(
         let (entries, logs) = cx.engine.prepare_token_entries(
             TokenCreationRequest {
                 token_id: subtype.token_id(),
-                values: None,
+                copy: None,
                 count: 1,
                 recipients: vec![cx.controller],
                 spell_label: cx.spell_label,

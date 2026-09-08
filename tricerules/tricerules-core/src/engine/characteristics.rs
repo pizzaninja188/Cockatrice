@@ -167,6 +167,20 @@ impl CharacteristicsEvaluator<'_> {
             // CR 202.3b/710.2: original transformed/flip cards retain front mana value.
             // A copy of a transforming back face has that face's (normally absent) mana cost.
             mana_value: if object.copiable_values.is_none()
+                && object
+                    .token_faces
+                    .as_ref()
+                    .is_some_and(|faces| faces.layout == Layout::Transform)
+            {
+                object
+                    .token_faces
+                    .as_ref()
+                    .expect("checked token faces")
+                    .faces[0]
+                    .face
+                    .mana_cost
+                    .mana_value()
+            } else if object.copiable_values.is_none()
                 && object.token_origin.is_none()
                 && definition
                     .is_some_and(|def| matches!(def.layout, Layout::Transform | Layout::Flip))
@@ -1559,6 +1573,7 @@ mod tests {
                 controller: 0,
                 card_id: "cavalry_drillmaster".to_string(),
                 token_origin: None,
+                token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -1668,6 +1683,7 @@ mod tests {
                 controller: 0,
                 card_id: "grizzly_bears".to_string(),
                 token_origin: None,
+                token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -1735,6 +1751,7 @@ mod tests {
                 controller: 0,
                 card_id: "grizzly_bears".to_string(),
                 token_origin: None,
+                token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -1785,6 +1802,7 @@ mod tests {
             controller: owner,
             card_id: "grizzly_bears".to_string(),
             token_origin: None,
+            token_faces: None,
             copiable_values: None,
             copy_revision: 0,
             zone: Zone::Battlefield,
@@ -1866,6 +1884,7 @@ mod tests {
                 controller: 0,
                 card_id: "grizzly_bears".to_string(),
                 token_origin: None,
+                token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -1918,6 +1937,7 @@ mod tests {
             controller,
             card_id: card_id.to_string(),
             token_origin: None,
+            token_faces: None,
             copiable_values: None,
             copy_revision: 0,
             zone: Zone::Battlefield,

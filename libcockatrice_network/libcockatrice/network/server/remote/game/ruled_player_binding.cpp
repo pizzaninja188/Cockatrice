@@ -872,6 +872,30 @@ Server_Card *RuledPlayerBinding::findExileCardByEngineOid(const Server_Player *p
     return nullptr;
 }
 
+bool RuledPlayerBinding::updateTokenIdentity(Server_Card *card, const ruled::v1::TokenIdentity &identity)
+{
+    if (!card) {
+        return false;
+    }
+    const QString color = QString::fromStdString(identity.color());
+    const QString basePt = QString::fromStdString(identity.pt());
+    QStringList keywords;
+    for (const auto &keyword : identity.keywords()) {
+        keywords.append(QString::fromStdString(keyword));
+    }
+    QStringList texts;
+    for (const auto &text : identity.ability_texts()) {
+        texts.append(QString::fromStdString(text));
+    }
+    const bool changed = card->getColor() != color || card->getTokenBasePt() != basePt ||
+                         card->getTokenAbilityKeywords() != keywords || card->getTokenAbilityTexts() != texts;
+    card->setColor(color);
+    card->setTokenBasePt(basePt);
+    card->setTokenAbilityKeywords(keywords);
+    card->setTokenAbilityTexts(texts);
+    return changed;
+}
+
 void RuledPlayerBinding::createRuledToken(Server_Player *player,
                                           quint32 engineOid,
                                           const ruled::v1::TokenIdentity &identity,
@@ -895,21 +919,8 @@ void RuledPlayerBinding::createRuledToken(Server_Player *player,
 
     auto *card = new Server_Card({name, QString()}, player->newCardId(), x, y);
     card->moveToThread(player->thread());
-    card->setColor(QString::fromStdString(identity.color()));
+    updateTokenIdentity(card, identity);
     card->setPT(QString::fromStdString(identity.pt()));
-    card->setTokenBasePt(QString::fromStdString(identity.pt()));
-    QStringList keywords;
-    keywords.reserve(identity.keywords_size());
-    for (const auto &kw : identity.keywords()) {
-        keywords.append(QString::fromStdString(kw));
-    }
-    card->setTokenAbilityKeywords(keywords);
-    QStringList abilityTexts;
-    abilityTexts.reserve(identity.ability_texts_size());
-    for (const auto &text : identity.ability_texts()) {
-        abilityTexts.append(QString::fromStdString(text));
-    }
-    card->setTokenAbilityTexts(abilityTexts);
     card->setAnnotation(QStringLiteral("Token"));
     card->setTapped(entersTapped);
     // CR 111.7: when the engine later moves the token off the battlefield it ceases to exist;

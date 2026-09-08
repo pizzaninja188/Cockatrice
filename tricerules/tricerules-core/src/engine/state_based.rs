@@ -687,6 +687,7 @@ mod sba_tests {
                 controller: owner,
                 card_id: "walking_corpse".to_string(),
                 token_origin: None,
+                token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,

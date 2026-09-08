@@ -1,0 +1,39 @@
+// Oracle and rulings checked 2026-09-08. CR 608.2h / 707.2: Opus copies current
+// copiable source values or its last battlefield values, never the temporary pump.
+(
+  id: "colorstorm_stallion",
+  name: "Colorstorm Stallion",
+  face_id: "colorstorm_stallion",
+  mana_cost: "{1}{U}{R}",
+  types: ["Creature", "Elemental", "Horse"],
+  power: 3,
+  toughness: 3,
+  keywords: [Haste],
+  triggered_abilities: [
+    (
+      ability_id: "ward",
+      presentation: OracleLines([1]),
+      trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+      effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{1}"))],
+    ),
+    (
+      ability_id: "opus",
+      presentation: OracleLines([2]),
+      trigger: WheneverPlayerCastsSpell(
+        caster: Controller,
+        filter: (card_type: Some(InstantOrSorcery)),
+      ),
+      effect: [
+        PumpTarget(power: 1, toughness: 1, subject: Source),
+        CreateTokenCopies(
+          count: Conditional(
+            condition: TriggeringSpellManaSpent(comparison: AtLeast(5)),
+            when_true: 1,
+            otherwise: 0,
+          ),
+          source: Source,
+        ),
+      ],
+    ),
+  ],
+)

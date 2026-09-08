@@ -337,6 +337,19 @@ impl ActivatedAbilityDef {
         {
             return Err("exile-self cost requires a battlefield or graveyard source".into());
         }
+        if self.source_zone != AbilitySourceZone::Battlefield
+            && self.effect.iter().any(|effect| {
+                matches!(
+                    effect,
+                    SpellEffectKind::CreateTokenCopies {
+                        source: super::TokenCopySource::Source,
+                        ..
+                    }
+                )
+            })
+        {
+            return Err("source token copies require a battlefield ability source".into());
+        }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;
         }
@@ -1795,4 +1808,21 @@ pub enum StaticAbilityDef {
     /// CR 305.1 / 611.3: the controller may play lands from their own graveyard while this
     /// permanent is on the battlefield. Icetill Explorer, Crucible of Worlds.
     PlayLandsFromOwnGraveyard,
+}
+
+#[cfg(test)]
+mod source_copy_tests {
+    use super::*;
+    #[test]
+    fn issue_237_source_copy_rejects_nonbattlefield_activated_sources() {
+        for source_zone in ["Hand", "Graveyard"] {
+            let ability: ActivatedAbilityDef = ron::from_str(&format!(
+                r#"(ability_id: "copy", presentation: Fallback, costs: [], source_zone: {source_zone}, effect: [CreateTokenCopies(count: 1, source: Source)])"#
+            )).unwrap();
+            assert!(
+                ability.validate_shape().is_err(),
+                "source copy needs battlefield identity"
+            );
+        }
+    }
 }

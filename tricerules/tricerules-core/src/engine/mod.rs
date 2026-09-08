@@ -23,6 +23,7 @@ use crate::state::{
     TriggerContext, TriggerObjectRef, TriggerStackObjectRef, TriggerUseKey, TurnHistory,
     TurnObjectFact, TurnStep, UndoableManaAbility, Zone,
 };
+use crate::state::{DoubleFacedToken, TokenCopySnapshot};
 use prost::Message;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
@@ -32,6 +33,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
 use tricerules_cards::mana::{ColorPip, ManaCost, ManaSymbol};
+use tricerules_cards::primitives::TokenCopySource;
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivatedCostModifier, AdditionalCost,
     Amount, AttachmentFilter, AttachmentKind, BasePowerToughnessValue, BattlefieldAggregate,
@@ -167,6 +169,7 @@ mod casting;
 mod characteristics;
 mod combat;
 mod continuous;
+mod copying;
 mod counters;
 mod custom_resolution;
 pub(crate) mod damage;
@@ -353,6 +356,144 @@ mod face_change_tests {
     }
 
     #[test]
+    fn issue_237_intrinsic_faces_are_distinct_from_copy_provenance() {
+        let mut engine = engine_with(&["reckless_waif_merciless_predator", "clone"]);
+        let waif = put_on_battlefield(&mut engine, "reckless_waif_merciless_predator");
+        let clone = put_on_battlefield(&mut engine, "clone");
+        let values = engine.copiable_values_for(waif).unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&clone)
+            .unwrap()
+            .copiable_values = Some(values);
+        let snapshot =
+            copying::token_copy_snapshot_from(&engine.state, engine.registry, clone).unwrap();
+        assert!(
+            snapshot.faces.is_none(),
+            "single-faced Clone does not acquire intrinsic faces"
+        );
+        let object = engine.state.objects.get_mut(&clone).unwrap();
+        object.token_origin = Some(snapshot.values);
+        object.copiable_values = None;
+        assert!(!engine
+            .change_permanent_face(clone, FaceChangeAction::Transform, &mut vec![])
+            .unwrap());
+
+        engine.state.objects.get_mut(&waif).unwrap().face_down = true;
+        let hidden =
+            copying::token_copy_snapshot_from(&engine.state, engine.registry, waif).unwrap();
+        assert!(hidden.faces.is_none());
+        assert_eq!(hidden.token_id, "anonymous_creature_token");
+        assert!(hidden.values.source_card_id.is_empty());
+    }
+
+    #[test]
+    fn issue_237_owned_modal_faces_and_copy_overlay_obey_transform_rules() {
+        let mut engine = engine_with(&["cragcrown_pathway_timbercrown_pathway", "grizzly_bears"]);
+        let token = put_on_battlefield(&mut engine, "cragcrown_pathway_timbercrown_pathway");
+        let bear = put_on_battlefield(&mut engine, "grizzly_bears");
+        let snapshot =
+            copying::token_copy_snapshot_from(&engine.state, engine.registry, token).unwrap();
+        let object = engine.state.objects.get_mut(&token).unwrap();
+        object.token_faces = snapshot.faces;
+        object.token_origin = Some(snapshot.values);
+        object.card_id = "owned_modal_token".into();
+        let mut events = vec![];
+        assert!(engine
+            .change_permanent_face(token, FaceChangeAction::Transform, &mut events)
+            .unwrap());
+        assert_eq!(
+            engine.effective_face(token).unwrap().name,
+            "Timbercrown Pathway"
+        );
+        assert_eq!(
+            events.len(),
+            1,
+            "transform emits only FaceChanged, never entry"
+        );
+        let bear_values = engine.copiable_values_for(bear).unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&token)
+            .unwrap()
+            .copiable_values = Some(bear_values);
+        let copied =
+            copying::token_copy_snapshot_from(&engine.state, engine.registry, token).unwrap();
+        let faces = copied.faces.unwrap();
+        assert_eq!(
+            faces.faces[0].face.name, faces.faces[1].face.name,
+            "source copy effect applies to both copied faces"
+        );
+        assert_eq!(faces.faces[0].face.name, "Grizzly Bears");
+        assert!(engine
+            .change_permanent_face(token, FaceChangeAction::Transform, &mut events)
+            .unwrap());
+        assert_eq!(
+            engine.effective_power(token),
+            Some(2),
+            "later overlay survives transformation"
+        );
+        let object = engine.state.objects.get_mut(&token).unwrap();
+        let forbidden = &mut object.token_faces.as_mut().unwrap().faces[1].face;
+        forbidden.types = vec!["Sorcery".into()];
+        forbidden.is_land = false;
+        forbidden.is_sorcery = true;
+        assert!(
+            !engine
+                .change_permanent_face(token, FaceChangeAction::Transform, &mut events)
+                .unwrap(),
+            "copy overlay cannot permit transformation into a nonpermanent face"
+        );
+        assert_eq!(engine.state.objects[&token].face_up_index, 0);
+    }
+
+    #[test]
+    fn issue_237_token_transform_refreshes_statics_without_resetting_identity() {
+        let mut engine = engine_with(&["reckless_waif_merciless_predator", "grizzly_bears"]);
+        let token = put_on_battlefield(&mut engine, "reckless_waif_merciless_predator");
+        let bear = put_on_battlefield(&mut engine, "grizzly_bears");
+        let snapshot =
+            copying::token_copy_snapshot_from(&engine.state, engine.registry, token).unwrap();
+        let statics = engine
+            .registry
+            .get("glorious_anthem")
+            .unwrap()
+            .primary_face()
+            .static_abilities
+            .clone();
+        let object = engine.state.objects.get_mut(&token).unwrap();
+        object.token_origin = Some(snapshot.values);
+        object.token_faces = snapshot.faces;
+        object.token_faces.as_mut().unwrap().faces[1]
+            .face
+            .static_abilities = statics;
+        object.set_counter(CounterKind::PlusOnePlusOne, 2);
+        object.damage = 1;
+        let generation = engine.state.zone_change_generation[&token];
+        let mut events = vec![];
+        assert!(engine
+            .change_permanent_face(token, FaceChangeAction::Transform, &mut events)
+            .unwrap());
+        assert_eq!(engine.effective_power(bear), Some(3));
+        assert_eq!(
+            engine.state.objects[&token].counter_count(CounterKind::PlusOnePlusOne),
+            2
+        );
+        assert_eq!(engine.state.objects[&token].damage, 1);
+        assert_eq!(engine.state.zone_change_generation[&token], generation);
+        assert!(engine
+            .change_permanent_face(token, FaceChangeAction::Transform, &mut events)
+            .unwrap());
+        assert_eq!(engine.effective_power(bear), Some(2));
+        assert_eq!(events.len(), 2);
+        assert!(events
+            .iter()
+            .all(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::FaceChanged(_)))));
+    }
+
+    #[test]
     fn leaving_battlefield_resets_face_status() {
         let mut engine = engine_with(&["reckless_waif_merciless_predator"]);
         let oid = put_on_battlefield(&mut engine, "reckless_waif_merciless_predator");
@@ -400,6 +541,7 @@ pub enum EngineError {
 /// (CR 603.2). Each variant carries the minimum data needed to identify which triggers match.
 #[derive(Clone, Debug)]
 struct TriggerSourceSnapshot {
+    copy_snapshot: Option<Box<TokenCopySnapshot>>,
     counters: BTreeMap<CounterKind, u32>,
     /// Derived event-time types, captured before any member of a simultaneous departure moves.
     types: Vec<String>,
@@ -910,6 +1052,7 @@ fn new_object_from_card(
         controller: owner,
         card_id: card_id.to_string(),
         token_origin: None,
+        token_faces: None,
         copiable_values: None,
         copy_revision: 0,
         zone,
@@ -1046,6 +1189,7 @@ impl GameEngine {
             last_known_controller_by_generation: HashMap::new(),
             last_known_counters_by_generation: HashMap::new(),
             last_known_pt_by_generation: HashMap::new(),
+            last_known_copy_by_generation: HashMap::new(),
             last_known_attached_object_by_generation: HashMap::new(),
             zone_change_generation: HashMap::new(),
             face_change_generation: HashMap::new(),
@@ -1166,46 +1310,7 @@ impl GameEngine {
     /// Capture the source's CR 707.2 values. Existing copy-layer values are copied directly;
     /// counters, damage, attachments, status, and later continuous effects live outside this data.
     pub(super) fn copiable_values_for(&self, oid: ObjectId) -> Option<CopiableValues> {
-        let object = self.state.objects.get(&oid)?;
-        // CR 707.2: layer 1b values are public and copied even when the underlying card is not.
-        if object.face_down && object.zone == Zone::Battlefield {
-            return Some(CopiableValues {
-                source_card_id: String::new(),
-                source_face_index: 0,
-                face: CardFace {
-                    types: vec!["Creature".into()],
-                    is_creature: true,
-                    power: Some(2),
-                    toughness: Some(2),
-                    ..Default::default()
-                },
-                room_faces: None,
-                display_name: "Face-down creature".into(),
-            });
-        }
-        if let Some(values) = object
-            .copiable_values
-            .as_ref()
-            .or(object.token_origin.as_ref())
-        {
-            return Some(values.clone());
-        }
-        let definition = self.registry.get(&object.card_id)?;
-        let mut face = definition.face(object.face_up_index)?.clone();
-        if definition.layout == Layout::Flip && object.face_up_index > 0 {
-            // Flipping replaces only the alternative characteristics; mana cost is retained.
-            face.mana_cost = definition.primary_face().mana_cost.clone();
-            face.colors_override = Some(definition.primary_face().colors());
-        }
-        Some(CopiableValues {
-            source_card_id: object.card_id.clone(),
-            source_face_index: object.face_up_index,
-            face,
-            room_faces: (definition.layout == Layout::Room).then(|| definition.faces.clone()),
-            display_name: definition
-                .face_display_name(object.face_up_index)?
-                .to_string(),
-        })
+        copying::copiable_values_from(&self.state, self.registry, oid)
     }
 
     /// CR 400.7: determine whether a stack item's source is still the same game object. The
@@ -1241,36 +1346,57 @@ impl GameEngine {
         if obj.zone != Zone::Battlefield {
             return Ok(false);
         }
-        let card_id = obj.card_id.clone();
         let controller = obj.controller;
         let current_face = obj.face_up_index;
-        let Some(def) = self.registry.get(&card_id) else {
-            return Err(EngineError::MissingCard(card_id));
+        let definition = self.registry.get(&obj.card_id);
+        let intrinsic_layout = if obj.is_token() {
+            obj.token_faces.as_ref().map(|faces| faces.layout)
+        } else {
+            definition.map(|def| def.layout)
         };
         let new_face = match action {
             FaceChangeAction::Transform
-                if matches!(def.layout, Layout::Transform | Layout::ModalDfc) =>
+                if matches!(intrinsic_layout, Some(Layout::Transform | Layout::ModalDfc)) =>
             {
-                let candidate = if current_face == 0 { 1 } else { 0 };
-                match def.face(candidate) {
-                    Some(face) if face.is_permanent() => candidate,
-                    _ => return Ok(false),
+                if current_face == 0 {
+                    1
+                } else {
+                    0
                 }
             }
-            FaceChangeAction::Flip if def.layout == Layout::Flip && current_face == 0 => 1,
+            FaceChangeAction::Flip
+                if definition.is_some_and(|def| def.layout == Layout::Flip)
+                    && current_face == 0 =>
+            {
+                1
+            }
             _ => return Ok(false),
         };
-        let new_face_values = def
-            .face(new_face)
-            .map(|face| {
-                (
-                    face.power,
-                    face.toughness,
-                    face.must_attack_if_able,
-                    face.must_block_if_able,
-                )
-            })
-            .expect("validated face index");
+        let intrinsic_face = obj
+            .token_faces
+            .as_ref()
+            .and_then(|faces| faces.faces.get(new_face).map(|values| &values.face))
+            .or_else(|| definition.and_then(|def| def.face(new_face)));
+        // CR 701.27d examines the destination face, even while a copy effect overrides it.
+        if action == FaceChangeAction::Transform
+            && !intrinsic_face.is_some_and(CardFace::is_permanent)
+        {
+            return Ok(false);
+        }
+        let Some(face) = obj
+            .copiable_values
+            .as_ref()
+            .map(|values| &values.face)
+            .or(intrinsic_face)
+        else {
+            return Ok(false);
+        };
+        let new_face_values = (
+            face.power,
+            face.toughness,
+            face.must_attack_if_able,
+            face.must_block_if_able,
+        );
 
         // Drain static abilities from the old face, then flip, then emit for the new face.
         self.state.continuous_effects.retain(|e| {
@@ -1286,6 +1412,9 @@ impl GameEngine {
         });
         if let Some(o) = self.state.objects.get_mut(&permanent_id) {
             o.face_up_index = new_face;
+            if let Some(faces) = &o.token_faces {
+                o.token_origin = Some(faces.faces[new_face].clone());
+            }
             o.power = new_face_values.0;
             o.toughness = new_face_values.1;
             o.must_attack_if_able = new_face_values.2;

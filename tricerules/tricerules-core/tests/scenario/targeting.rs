@@ -849,6 +849,7 @@ fn mind_sculpt_rejects_self_target() {
                 controller: 0,
                 card_id: "mind_sculpt".into(),
                 token_origin: None,
+                token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: tricerules_core::Zone::Hand,

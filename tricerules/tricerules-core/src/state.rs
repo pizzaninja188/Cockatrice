@@ -358,6 +358,8 @@ pub struct GameObject {
     /// copy effects. Ordinary token makers and copy-token makers both populate this snapshot.
     /// It remains present after a zone change until the token ceases to exist.
     pub token_origin: Option<CopiableValues>,
+    /// Intrinsic CR 707.8a token faces, independent of subsequently installed copy effects.
+    pub token_faces: Option<Box<DoubleFacedToken>>,
     /// Incremented whenever a copy snapshot is installed. Intrinsic replacement identity uses
     /// this revision so abilities acquired from the copied face are evaluated once.
     pub copy_revision: u64,
@@ -418,6 +420,23 @@ pub struct CopiableValues {
     /// designations are status, not copiable values, so they live in [`GameState::room_states`].
     pub room_faces: Option<Vec<CardFace>>,
     pub display_name: String,
+}
+
+/// Owned intrinsic faces for a double-faced token. The object's face_up_index selects a face;
+/// token_origin mirrors that face so ordinary copied-ability consumers share the same values.
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct DoubleFacedToken {
+    pub layout: tricerules_cards::Layout,
+    pub faces: [CopiableValues; 2],
+}
+
+/// CR 608.2h / 707.8a token construction snapshot, also retained for a departed source.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct TokenCopySnapshot {
+    pub token_id: String,
+    pub values: CopiableValues,
+    pub faces: Option<Box<DoubleFacedToken>>,
+    pub face_up_index: usize,
 }
 
 /// CR 709.5 battlefield designation state for one Room permanent. Door indexes are its stable
@@ -1960,6 +1979,7 @@ pub struct GameState {
         HashMap<(ObjectId, u64), BTreeMap<CounterKind, u32>>,
     /// Signed departure P/T for source-relative quantities (CR 608.2h).
     pub(crate) last_known_pt_by_generation: HashMap<(ObjectId, u64), (Option<i64>, Option<i64>)>,
+    pub(crate) last_known_copy_by_generation: HashMap<(ObjectId, u64), TokenCopySnapshot>,
     /// The object an Aura or Equipment source was attached to as that source last left the
     /// battlefield, keyed by the source generation. The value carries the attached object's
     /// generation so an old ability cannot affect a card that left and returned under the same

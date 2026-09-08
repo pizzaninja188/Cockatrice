@@ -3765,6 +3765,78 @@ TEST_F(RuledBatchTest, ApplyRuledBatchCreatesTokenOnControllerTable)
     EXPECT_EQ(p2->getZones().value(ZoneNames::TABLE)->getCards().size(), 0);
 }
 
+TEST_F(RuledBatchTest, Issue237TokenFaceSnapshotRefreshesIdentityInPlaceAndOnReconnect)
+{
+    ruled::v1::IpcResponse created;
+    created.set_ok(true);
+    auto *tokenEvent = created.mutable_batch()->add_events()->mutable_token_created();
+    tokenEvent->set_object_id(501u);
+    tokenEvent->set_controller_player_id(1);
+    tokenEvent->set_card_id("reckless_waif_merciless_predator");
+    auto *identity = tokenEvent->mutable_identity();
+    identity->set_name("Reckless Waif");
+    identity->set_pt("1/1");
+    identity->set_color("r");
+    identity->set_is_creature(true);
+    identity->add_ability_texts("Reckless Waif — triggered ability (triggered_01)");
+    callBatchApply(created);
+    Server_Card *token = findCardByEngineOid(p1, 501u);
+    ASSERT_NE(token, nullptr);
+    const int serverId = token->getId();
+
+    ruled::v1::IpcResponse changed;
+    changed.set_ok(true);
+    auto view = buildPerPlayerView(p1, {501u}, {false});
+    auto *object = view.mutable_battlefield_objects(0);
+    object->set_card_id("reckless_waif_merciless_predator");
+    object->set_face_up_index(1);
+    object->set_effective_display_name("Merciless Predator");
+    object->set_is_creature(true);
+    object->set_power(5); // two counters must not become the token's printed identity
+    object->set_toughness(4);
+    ruled::v1::TokenIdentity back;
+    back.set_name("Merciless Predator");
+    back.set_pt("3/2");
+    back.set_color("r");
+    back.set_is_creature(true);
+    back.add_ability_texts("Merciless Predator — triggered ability (triggered_01)");
+    *object->mutable_token_identity() = back;
+    auto *zone = changed.mutable_batch()->add_events()->mutable_zone_view();
+    *zone->add_per_player() = view;
+    *zone->add_per_player() = buildPerPlayerView(p2, {}, {});
+    EXPECT_TRUE(callBatchApply(changed).battlefieldDisplayChanged);
+    EXPECT_EQ(findCardByEngineOid(p1, 501u), token);
+    EXPECT_EQ(token->getId(), serverId);
+    EXPECT_EQ(token->getName(), QStringLiteral("Merciless Predator"));
+    EXPECT_EQ(token->getPT(), QStringLiteral("5/4"));
+    EXPECT_EQ(token->getTokenBasePt(), QStringLiteral("3/2"));
+    EXPECT_TRUE(token->getDestroyOnZoneChange());
+
+    ServerInfo_Card reconnect;
+    token->getInfo(&reconnect);
+    EXPECT_EQ(reconnect.name(), "Merciless Predator");
+    EXPECT_EQ(reconnect.token_base_pt(), "3/2");
+    ASSERT_EQ(reconnect.ability_texts_size(), 1);
+    EXPECT_EQ(reconnect.ability_texts(0), back.ability_texts(0));
+    EXPECT_FALSE(callBatchApply(changed).battlefieldDisplayChanged)
+        << "an identical snapshot must not request another full-state refresh";
+    EXPECT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards().size(), 1);
+
+    // Same-name copy changes still replace metadata, including clearing old ability lists.
+    auto *updated = zone->mutable_per_player(0)->mutable_battlefield_objects(0)->mutable_token_identity();
+    updated->clear_ability_texts();
+    updated->set_color("u");
+    updated->set_pt("2/2");
+    EXPECT_TRUE(callBatchApply(changed).battlefieldDisplayChanged);
+    reconnect.Clear();
+    token->getInfo(&reconnect);
+    EXPECT_EQ(reconnect.name(), "Merciless Predator");
+    EXPECT_EQ(reconnect.color(), "u");
+    EXPECT_EQ(reconnect.token_base_pt(), "2/2");
+    EXPECT_EQ(reconnect.ability_texts_size(), 0);
+    EXPECT_EQ(token->getId(), serverId);
+}
+
 TEST_F(RuledBatchTest, MobilizeTokenEntersTappedAndJoinsExistingAttackers)
 {
     Server_Card *bear = addCardToTable(p1, "Grizzly Bears");

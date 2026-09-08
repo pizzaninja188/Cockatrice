@@ -1,5 +1,7 @@
 # Token copies and Populate
 
+Double-faced construction and source-copy support were subsequently added by [issue #237](ISSUE-237-COLORSTORM-STALLION.md). The record below describes the original #46 implementation and acceptance.
+
 Bounded implementation of [issue #46](https://github.com/pizzaninja188/Cockatrice/issues/46): Cackling Counterpart, including Flashback, and Wake the Reflections. Existing targeting, copy-source selection, token display, and physical binding are reused. No new UI controls or wire fields are added.
 
 ## Rules interaction checklist

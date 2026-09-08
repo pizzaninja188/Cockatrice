@@ -1357,6 +1357,15 @@ void RuledBatchSynchronizer::applyFaceDisplays(const ruled::v1::RuledEventBatch 
                 applyName(static_cast<quint32>(object.object_id()), view.player_id(),
                           QString::fromStdString(object.card_id()), static_cast<int>(object.face_up_index()),
                           QString::fromStdString(object.effective_display_name()));
+                if (object.has_token_identity()) {
+                    Server_Card *card = findBattlefieldCardByEngineOid(object.object_id(), view.player_id());
+                    if (card && card->getDestroyOnZoneChange() &&
+                        RuledPlayerBinding::updateTokenIdentity(card, object.token_identity())) {
+                        // Full-state delivery refreshes CardItem's existing token display seam,
+                        // including same-name copy changes and reconnect metadata.
+                        result.battlefieldDisplayChanged = true;
+                    }
+                }
             }
         }
     }

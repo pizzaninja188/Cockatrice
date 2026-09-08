@@ -1782,6 +1782,10 @@ message BattlefieldObject {
   optional int32 battle_protector_player_id = 27 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   optional int32 controller_player_id = 28 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   PreparationState preparation = 29 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Current copiable token face, replaced with each full battlefield snapshot. Effective P/T
+  // remains above; this identity supplies printed stats and abilities for token display/art.
+  // Absent for nontokens. Face-down tokens contain only anonymous public characteristics.
+  TokenIdentity token_identity = 30 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message RoomDoorState {

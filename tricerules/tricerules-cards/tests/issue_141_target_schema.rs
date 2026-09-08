@@ -1,4 +1,4 @@
-use tricerules_cards::primitives::{SpellEffectKind, TargetSchema, TargetingDef};
+use tricerules_cards::primitives::{SpellEffectKind, TargetSchema, TargetingDef, TokenCopySource};
 use tricerules_cards::{CardRegistry, ModalDef};
 
 #[test]
@@ -6,15 +6,15 @@ fn token_copy_requires_one_permanent_source() {
     use tricerules_cards::primitives::{EffectContext, TargetFilter, TargetGroupDef, TargetKind};
     let effect = SpellEffectKind::CreateTokenCopies {
         count: 1.into(),
-        target: TargetFilter {
+        source: TokenCopySource::Chosen(Box::new(TargetFilter {
             kind: TargetKind::AnyPlayer,
             ..Default::default()
-        },
+        })),
     };
     assert!(effect.validate(EffectContext::Spell).is_err());
     let effect = SpellEffectKind::CreateTokenCopies {
         count: 2.into(),
-        target: TargetFilter::default_creature(),
+        source: TokenCopySource::Chosen(Box::new(TargetFilter::default_creature())),
     };
     let targeting = TargetingDef {
         groups: vec![TargetGroupDef {

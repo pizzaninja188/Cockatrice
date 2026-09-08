@@ -122,6 +122,14 @@ pub enum EffectSubject {
     Chosen(Box<TargetFilter>),
 }
 
+/// CR 707: Colorstorm Stallion copies its untargeted source, while Cackling Counterpart
+/// copies one chosen permanent. Keep these distinct so source references never acquire targets.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TokenCopySource {
+    Source,
+    Chosen(Box<TargetFilter>),
+}
+
 /// Additional legality applied to a public battlefield-permanent choice. The ordinary
 /// [`TargetFilter`] still owns characteristics and controller scope; constraints compose facts
 /// involving another object already bound to the resolving stack item.
@@ -1460,13 +1468,12 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_creature")]
         kind: TargetFilter,
     },
-    /// CR 111 / 707: create `count` tokens copying one targeted permanent under the
-    /// resolving object's controller (Cackling Counterpart, Quasiduplicate).
+    /// CR 111 / 707: create `count` tokens copying the specified permanent under the
+    /// resolving object's controller (Cackling Counterpart, Colorstorm Stallion).
     /// Copies use the source's copiable values, not later continuous modifications.
     CreateTokenCopies {
         count: Amount,
-        #[serde(default = "TargetFilter::default_creature")]
-        target: TargetFilter,
+        source: TokenCopySource,
     },
     /// CR 701.36: choose a creature token you control during resolution, then copy it.
     /// Untargeted (Wake the Reflections, Rootborn Defenses).
@@ -2396,8 +2403,11 @@ impl SpellEffectKind {
                 CombatRestrictionScope::Chosen(target) => vec![TargetRole::Filtered(target)],
                 CombatRestrictionScope::Source | CombatRestrictionScope::Matching(_) => Vec::new(),
             },
+            SpellEffectKind::CreateTokenCopies {
+                source: TokenCopySource::Chosen(target),
+                ..
+            } => vec![TargetRole::Filtered(target)],
             SpellEffectKind::DamageTarget { target, .. }
-            | SpellEffectKind::CreateTokenCopies { target, .. }
             | SpellEffectKind::ExileIfWouldDieThisTurn { target }
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyAttached { target, .. }
@@ -2431,6 +2441,10 @@ impl SpellEffectKind {
                 vec![TargetRole::GraveyardCard(filter)]
             }
             SpellEffectKind::DamagePlayer { .. }
+            | SpellEffectKind::CreateTokenCopies {
+                source: TokenCopySource::Source,
+                ..
+            }
             | SpellEffectKind::CopyNextSpellThisTurn
             | SpellEffectKind::CopyCapturedSpell
             | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
@@ -2975,9 +2989,15 @@ impl SpellEffectKind {
                 }
             }
         }
-        if let SpellEffectKind::CreateTokenCopies { target, .. } = self {
-            if !target.is_permanent_only() {
-                return Err("CreateTokenCopies requires a permanent source".into());
+        if let SpellEffectKind::CreateTokenCopies { source, .. } = self {
+            match source {
+                TokenCopySource::Chosen(target) if !target.is_permanent_only() => {
+                    return Err("CreateTokenCopies requires a permanent source".into());
+                }
+                TokenCopySource::Source if context == EffectContext::Spell => {
+                    return Err("source token copies require an ability source".into());
+                }
+                _ => {}
             }
         }
         if let SpellEffectKind::Exile { subject }

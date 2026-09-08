@@ -6,5 +6,5 @@
   mana_cost: "{1}{U}{U}",
   flashback_cost: Some("{5}{U}{U}"),
   types: ["Instant"],
-  spell_effect: [CreateTokenCopies(count: 1, target: (kind: Creature, controller: You))],
+  spell_effect: [CreateTokenCopies(count: 1, source: Chosen((kind: Creature, controller: You)))],
 )

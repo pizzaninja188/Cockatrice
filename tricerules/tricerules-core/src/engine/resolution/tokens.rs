@@ -4,7 +4,7 @@ pub(super) fn create_token_copies(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::CreateTokenCopies { count, .. } = effect else {
+    let SpellEffectKind::CreateTokenCopies { count, source } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let count = cx.engine.resolve_amount(
@@ -12,6 +12,20 @@ pub(super) fn create_token_copies(
         AmountContext::for_stack_item(cx.top, cx.controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
+    if source == TokenCopySource::Source {
+        if let Some(snapshot) = cx.engine.source_token_copy_snapshot(cx.top) {
+            if cx.engine.create_tokens_from_copy(
+                &snapshot,
+                count,
+                cx.top,
+                cx.spell_label,
+                cx.events,
+            )? {
+                return Ok(EffectOutcome::Suspended);
+            }
+        }
+        return Ok(EffectOutcome::Continue);
+    }
     for source in cx.targets {
         if cx
             .engine
@@ -121,42 +135,31 @@ impl GameEngine {
         label: &str,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
-        let Some(object) = self
-            .state
-            .objects
-            .get(&source)
-            .filter(|object| object.zone == Zone::Battlefield)
+        let Some(object) = self.state.objects.get(&source) else {
+            return Ok(false);
+        };
+        if object.zone != Zone::Battlefield {
+            return Ok(false);
+        }
+        let Some(snapshot) = copying::token_copy_snapshot_from(&self.state, self.registry, source)
         else {
             return Ok(false);
         };
-        // #46 explicitly defers CR 707.8a double-faced token construction. Never silently
-        // flatten a physical DFC. A single-faced Clone's installed snapshot is supported.
-        if !object.face_down
-            && object.copiable_values.is_none()
-            && self
-                .registry
-                .get(&object.card_id)
-                .is_some_and(|definition| {
-                    matches!(definition.layout, Layout::Transform | Layout::ModalDfc)
-                })
-        {
-            events.push(ev_log(
-                "Token copy not created: double-faced tokens are not implemented.".into(),
-            ));
-            return Ok(false);
-        }
-        let token_id = if object.face_down {
-            "anonymous_creature_token".to_string()
-        } else {
-            object.card_id.clone()
-        };
-        let values = self
-            .copiable_values_for(source)
-            .ok_or(EngineError::Illegal("missing token copy values"))?;
+        self.create_tokens_from_copy(&snapshot, count, item, label, events)
+    }
+
+    fn create_tokens_from_copy(
+        &mut self,
+        snapshot: &TokenCopySnapshot,
+        count: u32,
+        item: &StackItem,
+        label: &str,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
         self.create_tokens(
             TokenCreationRequest {
-                token_id: &token_id,
-                values: Some(&values),
+                token_id: &snapshot.token_id,
+                copy: Some(snapshot),
                 count,
                 recipients: vec![item.controller],
                 spell_label: label,
@@ -240,7 +243,7 @@ pub(super) fn create_tokens(
     if engine.create_tokens(
         TokenCreationRequest {
             token_id: &token,
-            values: None,
+            copy: None,
             count,
             recipients,
             spell_label,
@@ -287,7 +290,7 @@ pub(super) fn create_attacking_tokens(
     let (entries, logs) = cx.engine.prepare_token_entries(
         TokenCreationRequest {
             token_id: &token,
-            values: None,
+            copy: None,
             count,
             recipients: vec![controller],
             spell_label: cx.spell_label,

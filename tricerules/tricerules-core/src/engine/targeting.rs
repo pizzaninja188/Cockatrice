@@ -1163,11 +1163,16 @@ fn validate_effect_targets(
                 return Err(EngineError::Illegal("illegal target for damage effect"));
             }
         }
-        SpellEffectKind::CreateTokenCopies { target: filter, .. } => {
+        SpellEffectKind::CreateTokenCopies { source: TokenCopySource::Chosen(filter), .. } => {
             if targets.len() != 1 || !target_filter_legal_with_context(
                 engine, filter, targets[0].object_id, caster, source, trigger_context,
             ) {
                 return Err(EngineError::Illegal("illegal token copy target"));
+            }
+        }
+        SpellEffectKind::CreateTokenCopies { source: TokenCopySource::Source, .. } => {
+            if !targets.is_empty() {
+                return Err(EngineError::Illegal("source token copy does not target"));
             }
         }
         SpellEffectKind::ExileIfWouldDieThisTurn { target: filter } => {

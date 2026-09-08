@@ -629,6 +629,12 @@ impl GameEngine {
                     );
                 }
                 GameEvent::LeavesBattlefield { source } => {
+                    if let Some(snapshot) = &source.copy_snapshot {
+                        self.state.last_known_copy_by_generation.insert(
+                            (source.object_id, source.zone_change_generation),
+                            snapshot.as_ref().clone(),
+                        );
+                    }
                     // All members of a simultaneous departure set were captured before any move.
                     // Restore that snapshot over the individual move's sequential bookkeeping.
                     self.state.last_known_pt_by_generation.insert(

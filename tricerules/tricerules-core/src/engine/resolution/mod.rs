@@ -163,6 +163,8 @@ impl GameEngine {
             new_object_from_card(item.id, item.controller, &item.card_id, Zone::Stack, face);
         object.face_up_index = item.face_index;
         object.token_origin = Some(values);
+        // CR 707.10g: a copy of a double-faced permanent spell also has both faces.
+        object.token_faces = copying::double_faced_values(definition);
         self.state.objects.insert(item.id, object);
         true
     }
@@ -298,7 +300,7 @@ fn target_roles_by_group<'a>(
 
 pub(super) struct TokenCreationRequest<'a> {
     token_id: &'a str,
-    values: Option<&'a CopiableValues>,
+    copy: Option<&'a TokenCopySnapshot>,
     count: u32,
     recipients: Vec<PlayerId>,
     spell_label: &'a str,
@@ -2259,15 +2261,15 @@ impl GameEngine {
     ) -> Result<(Vec<TokenBattlefieldEntry>, Vec<String>), EngineError> {
         let TokenCreationRequest {
             token_id,
-            values,
+            copy,
             count,
             recipients,
             spell_label,
             item: _,
         } = request;
         let registry = self.registry;
-        let values = if let Some(values) = values {
-            values.clone()
+        let values = if let Some(copy) = copy {
+            copy.values.clone()
         } else {
             let def = registry
                 .get(token_id)
@@ -2307,6 +2309,7 @@ impl GameEngine {
                         controller: pid,
                         card_id: token_id.to_string(),
                         token_origin: Some(values.clone()),
+                        token_faces: copy.and_then(|snapshot| snapshot.faces.clone()),
                         copiable_values: None,
                         copy_revision: 0,
                         // Proposed tokens live in no player's zone until entry replacements finish.
@@ -2323,7 +2326,7 @@ impl GameEngine {
                         regeneration_shields: 0,
                         must_attack_if_able: false,
                         must_block_if_able: false,
-                        face_up_index: 0,
+                        face_up_index: copy.map_or(0, |snapshot| snapshot.face_up_index),
                         face_down: false,
                     },
                 );
@@ -2341,7 +2344,7 @@ impl GameEngine {
                         deciding_player: pid,
                         destination_controller: pid,
                         battle_protector: None,
-                        face_index: 0,
+                        face_index: copy.map_or(0, |snapshot| snapshot.face_up_index),
                         unlock_room_door: None,
                         chosen_x: 0,
                         cast_cost_receipts: Vec::new(),
@@ -2610,6 +2613,13 @@ fn move_object_to_zone_with_entry_receipt(
     let last_known_characteristics = leaving_battlefield
         .then(|| super::characteristics::characteristics_from(state, registry, oid))
         .flatten();
+    if leaving_battlefield {
+        if let Some(snapshot) = copying::token_copy_snapshot_from(state, registry, oid) {
+            state
+                .last_known_copy_by_generation
+                .insert((oid, prior_generation), snapshot);
+        }
+    }
     let last_known_attached_object = leaving_battlefield
         .then(|| {
             state
@@ -3144,6 +3154,7 @@ mod anthem_scope_tests {
                 controller,
                 card_id: "grizzly_bears".to_string(),
                 token_origin: None,
+                token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -3233,6 +3244,7 @@ mod attached_subject_tests {
                 controller,
                 card_id: card_id.to_string(),
                 token_origin: None,
+                token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -5438,6 +5450,7 @@ mod source_keyword_tests {
                 controller,
                 card_id: "hill_giant".to_string(),
                 token_origin: None,
+                token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,
@@ -5476,6 +5489,7 @@ mod source_keyword_tests {
                 controller: 0,
                 card_id: "prodigal_sorcerer".to_string(),
                 token_origin: None,
+                token_faces: None,
                 copiable_values: None,
                 copy_revision: 0,
                 zone: Zone::Battlefield,

@@ -1976,6 +1976,8 @@ impl GameEngine {
             AttachmentRecipient::Player(player_id) => AttachmentSnapshot::Player(player_id),
         });
         Some(TriggerSourceSnapshot {
+            copy_snapshot: copying::token_copy_snapshot_from(&self.state, self.registry, source_id)
+                .map(Box::new),
             counters: object.counters.clone(),
             owner: object.owner,
             is_token: object.is_token(),
@@ -3124,6 +3126,7 @@ mod tests {
             .triggered_abilities[0]
             .clone();
         let source = TriggerSourceSnapshot {
+            copy_snapshot: None,
             counters: BTreeMap::new(),
             owner: 0,
             is_token: false,
@@ -3215,6 +3218,7 @@ mod tests {
             .triggered_abilities[0]
             .clone();
         let watcher = TriggerSourceSnapshot {
+            copy_snapshot: None,
             counters: BTreeMap::new(),
             owner: 1,
             is_token: false,
@@ -3680,6 +3684,7 @@ mod tests {
     fn attached_player_attack_trigger_fires_once_for_the_declaration_group() {
         let engine = GameEngine::new(6303, &[0, 1], 20, None, true).expect("engine");
         let source = TriggerSourceSnapshot {
+            copy_snapshot: None,
             counters: BTreeMap::new(),
             owner: 0,
             is_token: false,

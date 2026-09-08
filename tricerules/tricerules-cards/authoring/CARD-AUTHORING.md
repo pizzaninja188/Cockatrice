@@ -590,3 +590,14 @@ that presentation transport, visibility, physical identity, and client behavior 
 - [ ] Genuine deferrals are recorded in `partial-cards.tsv`, not runtime RON.
 - [ ] `CARDS.md`, generator checks, Rust gates, and `git diff --check` pass as applicable.
 - [ ] The final report includes the governed MTG concepts and compliance or deferral note.
+
+### Token copy sources
+
+`CreateTokenCopies(count: 1, source: Chosen((kind: Creature, controller: You)))`
+uses one chosen permanent target (Cackling Counterpart). `source: Source` is untargeted
+and requires a battlefield ability source (Colorstorm Stallion). It uses the current
+source generation or its last battlefield copy values after departure. Populate uses
+the same owned snapshot and token-entry pipeline with a resolution-time choice.
+Actual Transform and ModalDfc sources produce tokens owning both faces and retaining
+the active face. Copy provenance cannot turn a single-faced Clone into a double-faced
+object. New copy-with-modification effects still require explicit implementation.

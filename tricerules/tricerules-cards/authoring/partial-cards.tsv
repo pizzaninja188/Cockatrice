@@ -3,11 +3,11 @@ rooftop_percher	Target selection incorrectly requires a single graveyard; Oracle
 sorcerer_of_the_fang	Activated ability omits the tap cost and incorrectly limits planeswalker targets to opponents' planeswalkers.
 soul-shackled_zombie	The conditional opponent life loss is implemented as damage rather than loss of life.
 anti-venom,_horrifying_healer	Cast-conditioned ETB creature reanimation trigger is not implemented
-cackling_counterpart	Double-faced token copies and copy-with-modifications remain unsupported.
+cackling_counterpart	Copy-with-modifications remain unsupported.
 firdoch_core	{4}: Firdoch Core becomes a 4/4 Shapeshifter artifact creature until end of turn is unsupported
 gifts_ungiven	1v1 opponent is the automatic target (no separate target step for multi-player)
 juggernaut	can't be blocked by Walls not enforced
 mossbridge_troll	The automatic destruction replacement that creates a regeneration shield is not implemented
 akki_lavarunner_tok-tok,_volcano_born	Tok-Tok's protection from red and damage-replacement ability are unsupported
 sulfuric_vortex	the lifegain-prevention clause (a CR 614 replacement effect) is not implemented
-wake_the_reflections	Double-faced token copies and copy-with-modifications remain unsupported.
+wake_the_reflections	Copy-with-modifications remain unsupported.

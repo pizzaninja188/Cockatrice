@@ -157,6 +157,8 @@ struct RuledPlayerBinding
                           int battlefieldGridY,
                           bool entersTapped,
                           GameEventStorage &ges);
+    // Replace current copiable face metadata without changing token status or effective P/T.
+    static bool updateTokenIdentity(Server_Card *card, const ruled::v1::TokenIdentity &identity);
     /// Materialize the public enduring-story designation as an ordinary battlefield token.
     /// Returns true only when a new token was created. `ges` may be null during startup
     /// restoration, when inserting the card before the full-state sync is enough.

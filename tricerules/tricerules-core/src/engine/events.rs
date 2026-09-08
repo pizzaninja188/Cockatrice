@@ -616,6 +616,12 @@ impl GameEngine {
                                 .copied(),
                             controller_player_id: Some(object.controller),
                             preparation: self.preparation_view(oid),
+                            token_identity: object
+                                .is_token()
+                                .then(|| self.copiable_values_for(oid))
+                                .flatten()
+                                .as_ref()
+                                .map(super::resolution::token_identity),
                         }
                     })
                     .collect()
