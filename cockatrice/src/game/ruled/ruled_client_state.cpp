@@ -521,8 +521,14 @@ void RuledClientState::declinePendingClickChoice()
         return;
     }
     const ChoiceKind kind = pendingChoice->kind;
+    if (kind == ChoiceKind::ResolutionPick) {
+        pendingChoice->selectedServerCardIds.clear();
+        submitResolutionHandPick();
+        return;
+    }
     if (kind == ChoiceKind::CopySource || kind == ChoiceKind::CopyTarget || kind == ChoiceKind::ResolutionPick ||
-        kind == ChoiceKind::CostObjects) {
+        kind == ChoiceKind::CostObjects || kind == ChoiceKind::PermanentChoice || kind == ChoiceKind::AuraPermanent ||
+        kind == ChoiceKind::AuraPlayer) {
         clearPendingChoiceOfKind(kind);
         sendResolutionChoice({});
         return;

@@ -747,6 +747,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.paymentCurrentlyLegal = h->resolutionPaymentCurrentlyLegal();
     } else if (h->hasPendingZoneScopeChoice()) {
         state.mode = PromptMode::ZoneSelection;
+        state.canDecline = h->pendingClickChoiceMayDecline();
         state.text = h->pendingChoicePromptText(ChoiceKind::ResolutionBranch);
         for (const auto &option : h->pendingChoiceOptions()) {
             QVector<int> zones(option.searchZones.cbegin(), option.searchZones.cend());
@@ -776,6 +777,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         }
     } else if (h->isResolutionHandPickActive()) {
         state.mode = PromptMode::ResolutionPick;
+        state.canDecline = h->pendingClickChoiceMayDecline();
         state.required = h->resolutionHandPickRequired();
         state.selected = h->resolutionHandPickSelected();
         state.text = h->resolutionHandPickPromptText();
@@ -810,10 +812,12 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
     } else if (h->hasPendingChoiceOfKind(ChoiceKind::CopyTarget)) {
         // CR 707.10c: a spell copy is waiting for the local player to choose new targets.
         state.mode = PromptMode::ClickChoice;
+        state.canDecline = h->pendingClickChoiceMayDecline();
         state.text = h->pendingChoicePromptText(ChoiceKind::CopyTarget) +
                      tr("\nClick a target, or click the original target to keep it.");
     } else if (h->hasPendingChoiceOfKind(ChoiceKind::PermanentChoice)) {
         state.mode = PromptMode::ClickChoice;
+        state.canDecline = h->pendingClickChoiceMayDecline();
         state.text = formatRuledPermanentChoicePrompt(h->pendingChoicePromptText(ChoiceKind::PermanentChoice));
     } else if (h->hasPendingChoiceOfKind(ChoiceKind::CopySource)) {
         state.mode = PromptMode::ClickChoice;
@@ -826,10 +830,12 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
                      tr("\nClick the permanent to keep on the battlefield.");
     } else if (h->hasPendingChoiceOfKind(ChoiceKind::AuraPermanent)) {
         state.mode = PromptMode::ClickChoice;
+        state.canDecline = h->pendingClickChoiceMayDecline();
         state.text = h->pendingChoicePromptText(ChoiceKind::AuraPermanent) +
                      tr("\nClick a legal permanent for the Aura to enchant.");
     } else if (h->hasPendingChoiceOfKind(ChoiceKind::AuraPlayer)) {
         state.mode = PromptMode::ClickChoice;
+        state.canDecline = h->pendingClickChoiceMayDecline();
         state.text = h->pendingChoicePromptText(ChoiceKind::AuraPlayer) +
                      tr("\nClick a legal player for the Aura to enchant.");
     } else if (h->hasPendingTriggerTarget()) {
@@ -842,6 +848,8 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.text = h->pendingTriggerTargetDisplayText();
     } else if (localActions && localActions->isAwaitingRuledCastCostObject()) {
         state.mode = PromptMode::CastCostObject;
+        state.canDecline = localActions->pendingRuledCastCostGroupIsOptional();
+        state.castCostSkipLabel = localActions->pendingRuledCastCostSkipLabel();
         state.text = localActions->pendingRuledSpellPromptText();
         state.required = localActions->pendingRuledCastCostMinimum();
         state.selected = localActions->pendingRuledCastCostSelectedCount();
@@ -851,6 +859,8 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
             localActions->pendingRuledCastCostObjectUsesExplicitConfirmation();
     } else if (localActions && localActions->isAwaitingRuledCastCostOption()) {
         state.mode = PromptMode::CastCostOptions;
+        state.canDecline = localActions->pendingRuledCastCostGroupIsOptional();
+        state.castCostSkipLabel = localActions->pendingRuledCastCostSkipLabel();
         state.text = localActions->pendingRuledSpellPromptText();
         state.required = localActions->pendingRuledCastCostMinimum();
         state.selected = localActions->pendingRuledCastCostSelectedCount();
@@ -862,7 +872,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.text = localActions->pendingRuledSpellPromptText();
         if (localActions->isAwaitingRuledGraveyardCostSelection()) {
             state.mode = PromptMode::CostSelection;
-            state.canDecline = true; // Cancel the unsubmitted local cast.
+            state.canCancel = true; // Cancel the unsubmitted local cast.
             state.required = 1;
             state.selected = 0;
             (void)localActions->getRuledGraveyardCostSelectionProgress(state.required, state.selected);
@@ -871,7 +881,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         }
     } else if (localActions && localActions->isAwaitingRuledGraveyardCostSelection()) {
         state.mode = PromptMode::CostSelection;
-        state.canDecline = true; // Cancel the unsubmitted local activation.
+        state.canCancel = true; // Cancel the unsubmitted local activation.
         state.text = localActions->pendingRuledAbilityCostPromptText();
         // Reconstruct from the pending engine-authored choice on every refresh. A rejected click,
         // mana action, or unrelated UI refresh must not reset this to 0/0 and enable Confirm.

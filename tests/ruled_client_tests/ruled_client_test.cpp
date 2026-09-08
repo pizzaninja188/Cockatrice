@@ -1401,6 +1401,45 @@ TEST(RuledPendingTargetTest, HarmonizeCostIsNotFinalizedWhileItsOptionChoiceIsPe
     EXPECT_EQ(ruledFinalGenericCost(spell.remainingCost.value(QLatin1Char('X')), 0, spell.castCostGenericReduction), 3);
 }
 
+TEST(RuledPendingTargetTest, OptionalGroupCanSkipButDoesNotAutoAdvanceWithoutASelection)
+{
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    RuledCastCostGroup group;
+    group.groupIndex = 7;
+    group.min = 0;
+    group.max = 1;
+    spell.castCostGroups = {group};
+    EXPECT_TRUE(ruledCastCostGroupCanConfirm(spell, group));
+    EXPECT_FALSE(ruledCastCostGroupSelectionCompletesImmediately(spell, group));
+    EXPECT_FALSE(ruledCastCostGroupsComplete(spell));
+    spell.nextCastCostGroup = 1;
+    EXPECT_TRUE(ruledCastCostGroupsComplete(spell));
+}
+
+TEST(RuledPendingPaymentTest, ClearingAnInteractionRemovesItsSubmissionAndCostStaging)
+{
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.submissionPending = true;
+    spell.waitingForCastCostObject = true;
+    spell.castingPermissionId = 77;
+    spell.castCostSelections.append({2, 3});
+    pending.clearSpell();
+    EXPECT_EQ(pending.activeInteraction(), RuledPendingCast::InteractionKind::None);
+    EXPECT_FALSE(pending.spell.submissionPending);
+    EXPECT_FALSE(pending.spell.waitingForCastCostObject);
+    EXPECT_TRUE(pending.spell.castCostSelections.isEmpty());
+    EXPECT_EQ(pending.spell.castingPermissionId, 0u);
+    auto &ability = pending.beginAbility();
+    ability.waitingForCost = true;
+    ability.costSelections.append({4, RuledCostChoiceZone::Battlefield, {42}, {9}});
+    pending.clearAbility();
+    EXPECT_FALSE(pending.ability.waitingForCost);
+    EXPECT_TRUE(pending.ability.costSelections.isEmpty());
+    EXPECT_EQ(pending.activeInteraction(), RuledPendingCast::InteractionKind::None);
+}
+
 TEST(RuledPendingTargetTest, BoundedCastCostGroupStaysOpenUntilItsSelectionCountIsConfirmed)
 {
     PendingRuledSpellCast spell;
@@ -7199,4 +7238,190 @@ TEST(RuledPendingCastTest, SpecialCastSubmissionPreservesTheCompleteAnnouncement
     EXPECT_TRUE(proposal.has_cast_spell());
     cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
     EXPECT_TRUE(RuledPendingCast::submissionCommand(proposal).has_cast_spell());
+}
+
+TEST_F(RuledClientTest, PaymentReconciliationRebindsHandCostsAndRejectsMissingCards)
+{
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.handIndex = 3;
+    auto &offers = state->handActions[ruled::v1::HAND_ACTION_CAST_SPELL];
+    offers.faceOptionsByIndex[3] = {RuledFaceOption{}};
+    const auto key = RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_NORMAL);
+    RuledCostChoice discard;
+    discard.costIndex = 4;
+    discard.zone = RuledCostChoiceZone::Hand;
+    discard.kind = RuledCostChoiceKind::Discard;
+    discard.min = discard.max = 1;
+    discard.candidateIds = {7};
+    offers.costDataByCastKey[key].choices = {discard};
+    // Physical card 91 has changed hand slot; the retained selection is not slot 91.
+    state->ownedCardToEngineHandSlot[RuledClientState::makeOwnedCardKey(8, 91)] = 7;
+    spell.costSelections = {{4, RuledCostChoiceZone::Hand, {91}}};
+    EXPECT_TRUE(pending.reconcileSpellCosts(*state, 8));
+    EXPECT_EQ(spell.costChoices.front().candidateIds, QSet<quint32>({7}));
+    EXPECT_FALSE(pending.reconcileSpellCosts(*state, 19));
+    state->ownedCardToEngineHandSlot.remove(RuledClientState::makeOwnedCardKey(8, 91));
+    EXPECT_FALSE(pending.reconcileSpellCosts(*state, 8));
+    EXPECT_TRUE(spell.valid); // The UI owns cancellation and its signals, not this decision helper.
+}
+
+TEST_F(RuledClientTest, PaymentReconciliationPreservesIncompleteCohortsButRejectsChangedGenerations)
+{
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.handIndex = 3;
+    spell.waitingForCastCostObject = true;
+    spell.activeCastCostOption = 5;
+    RuledCastCostOption option;
+    option.optionIndex = 5;
+    option.kind = RuledCastCostOptionKind::TapPermanents;
+    option.selectable = true;
+    option.objectMin = 1;
+    option.objectMax = 2;
+    option.aggregateMinimum = 4;
+    option.validPermanentIds = {900};
+    option.validPermanentGenerations[900] = 12;
+    option.candidateContributions[900] = 3;
+    RuledCastCostGroup group;
+    group.groupIndex = 2;
+    group.options = {option};
+    spell.castCostGroups = {group};
+    RuledPendingCastCostSelection selection;
+    selection.groupIndex = 2;
+    selection.optionIndex = 5;
+    selection.objectKind = RuledPendingCastCostSelection::ObjectKind::Permanent;
+    selection.selectedObjectIds = {900};
+    selection.selectedObjectGenerations[900] = 12;
+    selection.selectedObjectContributions[900] = 3;
+    spell.castCostSelections = {selection};
+    auto &offers = state->handActions[ruled::v1::HAND_ACTION_CAST_SPELL];
+    offers.faceOptionsByIndex[3] = {RuledFaceOption{}};
+    const auto key = RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_NORMAL);
+    offers.costDataByCastKey[key].castCostGroups = {group};
+    EXPECT_TRUE(pending.reconcileSpellCosts(*state, 8));
+    EXPECT_FALSE(pending.pendingRuledCastCostObjectCanConfirm());
+    EXPECT_TRUE(pending.pendingRuledCastCostObjectUsesExplicitConfirmation());
+    EXPECT_TRUE(pending.pendingRuledSpellPromptText().contains(QStringLiteral("total power: 3 / 4")));
+    spell.waitingForCastCostObject = false;
+    EXPECT_FALSE(pending.reconcileSpellCosts(*state, 8));
+    spell.waitingForCastCostObject = true;
+    offers.costDataByCastKey[key].castCostGroups[0].options[0].validPermanentGenerations[900] = 13;
+    EXPECT_FALSE(pending.reconcileSpellCosts(*state, 8));
+    offers.costDataByCastKey[key].castCostGroups[0].options[0].validPermanentGenerations[900] = 12;
+    offers.costDataByCastKey[key].castCostGroups[0].options[0].candidateContributions[900] = 4;
+    EXPECT_FALSE(pending.reconcileSpellCosts(*state, 8));
+}
+
+TEST(RuledPendingPaymentTest, PaymentPromptKeepsTheExistingTextAndTargetingPrecedence)
+{
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.cardName = QStringLiteral("Example");
+    spell.remainingCost = RuledPendingCast::parseSimpleManaCost("{2}{U}");
+    EXPECT_EQ(pending.pendingRuledSpellPromptText(),
+              QStringLiteral("Pay mana for Example: {2}{U} remaining (click mana counters)."));
+    spell.waitingForTarget = true;
+    EXPECT_TRUE(pending.pendingRuledSpellPromptText().isEmpty());
+    spell.waitingForTarget = false;
+    spell.inDamageAllocationMode = true;
+    EXPECT_TRUE(pending.pendingRuledSpellPromptText().isEmpty());
+    auto &ability = pending.beginAbility();
+    ability.cardName = QStringLiteral("Example");
+    ability.remainingCost = RuledPendingCast::parseSimpleManaCost("{2}{U}");
+    EXPECT_TRUE(pending.pendingRuledAbilityPromptText().isEmpty());
+    ability.waitingForMana = true;
+    EXPECT_EQ(pending.pendingRuledAbilityPromptText(),
+              QStringLiteral("Pay mana for Example: {2}{U} remaining (click mana counters)."));
+}
+
+TEST_F(RuledClientTest, OptionalHandPickDeclinesWithEmptySelectionAndClosesThePicker)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(101);
+    choice->add_candidate_server_card_ids(10);
+    apply(batch);
+    EXPECT_TRUE(state->pendingClickChoiceMayDecline());
+    QSignalSpy closed(state, &RuledClientState::resolutionHandPickUiChanged);
+    state->declinePendingClickChoice();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 0);
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    ASSERT_GT(closed.count(), 0);
+    EXPECT_EQ(closed.last().at(0).toInt(), -1);
+}
+
+TEST_F(RuledClientTest, OptionalPermanentChoiceDeclinesButMandatoryChoiceDoesNot)
+{
+    for (int minimum : {0, 1}) {
+        ruled::v1::RuledEventBatch batch;
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(kLocalPlayer);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+        choice->set_min(minimum);
+        choice->set_max(1);
+        choice->add_candidate_object_ids(101);
+        apply(batch);
+        host.sentCommands.clear();
+        state->declinePendingClickChoice();
+        EXPECT_EQ(host.sentCommands.size(), minimum == 0 ? 1 : 0);
+        EXPECT_EQ(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::PermanentChoice), minimum != 0);
+    }
+}
+
+TEST(RuledPendingCastTest, DeclineOptionalCostClearsOnlyItsStagedPaymentsAndContinuesCasting)
+{
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    RuledCastCostGroup group;
+    group.groupIndex = 4;
+    group.min = 0;
+    group.max = 2;
+    RuledCastCostOption mana;
+    mana.optionIndex = 7;
+    mana.kind = RuledCastCostOptionKind::Mana;
+    mana.additionalManaCost = "{2}{R}";
+    group.options = {mana};
+    spell.castCostGroups = {group};
+    spell.remainingCost = RuledPendingCast::parseSimpleManaCost("{5}{R}{U}");
+    spell.castCostGenericReduction = 3;
+    spell.castCostSelections = {{9, 1, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 1},
+                                {4, 7, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 2}};
+    spell.waitingForCastCostObject = true;
+    spell.activeCastCostOption = 8;
+    EXPECT_TRUE(pending.pendingRuledCastCostGroupIsOptional());
+    EXPECT_TRUE(pending.declineCastCostGroup());
+    EXPECT_TRUE(spell.valid);
+    EXPECT_EQ(spell.nextCastCostGroup, 1);
+    EXPECT_FALSE(spell.waitingForCastCostObject);
+    EXPECT_EQ(spell.activeCastCostOption, -1);
+    EXPECT_EQ(spell.castCostGenericReduction, 1);
+    EXPECT_EQ(RuledPendingCast::totalRemainingForCost(spell.remainingCost, spell.flexPips), 4);
+    ASSERT_EQ(spell.castCostSelections.size(), 1);
+    EXPECT_EQ(spell.castCostSelections.front().groupIndex, 9);
+    EXPECT_FALSE(pending.declineCastCostGroup());
+}
+
+TEST(RuledPendingCastTest, DeclineCannotBypassMandatoryOrModeLinkedCastCosts)
+{
+    for (bool linked : {false, true}) {
+        RuledPendingCast pending;
+        auto &spell = pending.beginSpell();
+        RuledCastCostGroup group;
+        group.groupIndex = 4;
+        group.min = linked ? 0 : 1;
+        group.max = 1;
+        spell.castCostGroups = {group};
+        if (linked)
+            spell.selectedModeLinkedCastCosts.append({4, 0});
+        EXPECT_FALSE(pending.pendingRuledCastCostGroupIsOptional());
+        EXPECT_FALSE(pending.declineCastCostGroup());
+        EXPECT_TRUE(spell.valid);
+        EXPECT_EQ(spell.nextCastCostGroup, 0);
+    }
 }

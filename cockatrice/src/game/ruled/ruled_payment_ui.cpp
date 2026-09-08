@@ -29,9 +29,9 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
         for (const auto &offer : offers) {
             if (offer.castMethod == ruled::v1::CAST_METHOD_MADNESS ||
                 offer.castMethod == ruled::v1::CAST_METHOD_SIEGE_DEFEAT) {
-                actions->beginRuledSpellCast(nullptr, static_cast<int>(oid), offer.faceIndex, offer.faceName,
-                                             offer.manaCost, offer.genericCostReduction, RuledCastSource::Exile,
-                                             offer.castMethod, offer.castingPermissionId);
+                beginRuledSpellCast(nullptr, static_cast<int>(oid), offer.faceIndex, offer.faceName, offer.manaCost,
+                                    offer.genericCostReduction, RuledCastSource::Exile, offer.castMethod,
+                                    offer.castingPermissionId);
                 return;
             }
         }
@@ -116,7 +116,7 @@ bool RuledPaymentUi::startOrRefresh()
     const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     if (actions->player->getPlayerInfo()->getLocal() && actions->pendingRuledSpellCast.valid &&
         actions->ruledPendingCast->resolutionChoiceBlocksSpell(*state)) {
-        actions->cancelPendingRuledSpellCast();
+        cancelPendingRuledSpellCast();
         return true;
     }
     const auto nextContext = context();
@@ -154,12 +154,12 @@ bool RuledPaymentUi::startOrRefresh()
             const auto transaction = model.transaction();
             QScopedValueRollback<bool> guard(choosingLifePayment, true);
             QVector<bool> alternatives;
-            const bool accepted = PlayerActions::promptFlexiblePipChoices(
+            const bool accepted = promptFlexiblePipChoices(
                 nextContext == Context::Spell
-                    ? PlayerActions::formatRemainingCost(actions->pendingRuledSpellCast.remainingCost,
-                                                         actions->pendingRuledSpellCast.flexPips)
-                    : PlayerActions::formatRemainingCost(actions->pendingActivatedAbility.remainingCost,
-                                                         actions->pendingActivatedAbility.flexPips),
+                    ? RuledPendingCast::formatRemainingCost(actions->pendingRuledSpellCast.remainingCost,
+                                                            actions->pendingRuledSpellCast.flexPips)
+                    : RuledPendingCast::formatRemainingCost(actions->pendingActivatedAbility.remainingCost,
+                                                            actions->pendingActivatedAbility.flexPips),
                 nextContext == Context::Spell ? actions->pendingRuledSpellCast.cardName
                                               : actions->pendingActivatedAbility.cardName,
                 lifeChoices, alternatives);
@@ -167,9 +167,9 @@ bool RuledPaymentUi::startOrRefresh()
                 return true;
             if (!accepted) {
                 if (nextContext == Context::Spell)
-                    actions->cancelPendingRuledSpellCast();
+                    cancelPendingRuledSpellCast();
                 else
-                    actions->cancelPendingActivatedAbility();
+                    cancelPendingActivatedAbility();
                 return true;
             }
             for (int i = 0; i < lifeChoices.size(); ++i)
@@ -207,9 +207,9 @@ void RuledPaymentUi::query()
     const auto proposed = buildPaymentCommand();
     if (!proposed) {
         if (context() == Context::Ability)
-            actions->cancelPendingActivatedAbility();
+            cancelPendingActivatedAbility();
         else if (context() == Context::Spell)
-            actions->cancelPendingRuledSpellCast();
+            cancelPendingRuledSpellCast();
         return;
     }
     ruled::v1::RuledCommand queryCommand;
@@ -264,7 +264,7 @@ void RuledPaymentUi::received()
                     return;
                 if (accepted) {
                     if (submittingContext == Context::Spell) {
-                        actions->clearPendingRuledSpellCast();
+                        clearPendingRuledSpellCast();
                     } else {
                         actions->ruledPendingCast->clearAbility();
                         clear();

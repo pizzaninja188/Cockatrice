@@ -93,7 +93,7 @@ public:
         QString text;
         /// OpeningChooseFirst only: [local seat id, opponent seat id].
         QVector<int> openingPickSeatIds;
-        /// ClickChoice only: the engine permits an empty answer, so the prompt offers Decline.
+        /// The engine permits declining this choice; distinct from cancelling a local cast.
         /// New fields go at the *end* — callers and tests use positional aggregate init, so
         /// inserting in the middle silently rebinds their arguments (or fails to compile).
         bool canDecline = false;
@@ -107,6 +107,9 @@ public:
         bool castCostSelectionConfirmable = false;
         /// CastCostObject only: a multi-object cohort stays open until the player confirms it.
         bool castCostSelectionRequiresConfirmation = false;
+        /// CostSelection only: cancel an unsubmitted local cast or activation.
+        bool canCancel = false;
+        QString castCostSkipLabel;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into
@@ -221,6 +224,7 @@ private:
     QPushButton *confirmSpellDamageButton = nullptr;
     QPushButton *cancelTargetingButton;
     QPushButton *declineClickChoiceButton = nullptr;
+    QPushButton *castCostDeclineButton = nullptr;
     QPushButton *confirmTargetsButton = nullptr;
     QPushButton *undoLandTapButton;
     /// The exclusive mode + payload, and the OR-set that derives PromptMode::Targeting.

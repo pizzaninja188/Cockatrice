@@ -5,7 +5,7 @@
  *
  * This is UI state, not authoritative rules state. The engine supplies every legal action and
  * target set, and validates the completed command. PlayerActions owns one instance and keeps the
- * existing click/payment orchestration as thin access to this fork-owned state holder.
+ * entry points as thin access to this state holder and the RuledPaymentUi progression bridge.
  */
 
 #ifndef COCKATRICE_RULED_PENDING_CAST_H
@@ -925,6 +925,43 @@ public:
     };
 
     RuledPendingCast();
+    bool isAwaitingRuledCastCostOption() const;
+    bool pendingRuledCastCostGroupIsOptional() const;
+    bool declineCastCostGroup();
+    QString pendingRuledCastCostSkipLabel() const;
+    QVector<RuledCastCostOption> pendingRuledCastCostOptions() const;
+    int pendingRuledCastCostSelectedCount() const;
+    int pendingRuledCastCostMinimum() const;
+    int pendingRuledCastCostMaximum() const;
+    bool pendingRuledCastCostObjectCanConfirm() const;
+    bool pendingRuledCastCostObjectUsesExplicitConfirmation() const;
+    bool isAwaitingRuledSpellCostSelection() const;
+    bool isAwaitingRuledCastCostObject() const;
+    bool isAwaitingRuledAbilityCostSelection() const;
+    QString pendingRuledAbilityCostPromptText() const;
+    bool isAwaitingRuledGraveyardCostSelection() const;
+    bool isRuledGraveyardCostObjectSelected(quint32 objectId) const;
+    bool getRuledGraveyardCostSelectionProgress(int &required, int &selected) const;
+    QString pendingRuledSpellPromptText() const;
+    QString pendingRuledAbilityPromptText() const;
+
+    // Headless cost staging and display helpers; engine choices remain authoritative.
+    static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
+    static QString formatSimpleManaCost(const QMap<QChar, int> &cost);
+    static QVector<RuledFlexPip> parseFlexPips(const QString &manaCost);
+    static bool flexPipMatchesColor(const RuledFlexPip &pip, QChar color);
+    static void applyFlexChoicesToCost(QMap<QChar, int> &fixed,
+                                       QVector<quint32> &lifePipIndices,
+                                       QVector<RuledFlexPip> &flex,
+                                       const QVector<bool> &choiceIsAlternative);
+    static bool applyManaPipToFlexibleCost(QMap<QChar, int> &fixed,
+                                           QVector<RuledFlexPip> &flex,
+                                           bool colorlessMana,
+                                           QChar coloredMana);
+    static QString formatRemainingCost(const QMap<QChar, int> &fixed, const QVector<RuledFlexPip> &flex);
+    static int totalRemainingForCost(const QMap<QChar, int> &fixed, const QVector<RuledFlexPip> &flex);
+    bool reconcileSpellCosts(const RuledClientState &state, int localPlayerId);
+    bool reconcileAbilityCosts(const RuledClientState &state, int localPlayerId);
 
     /// Collect only engine-authored counter choices. Cancellation never submits payment.
     static bool chooseCounterCosts(QWidget *parent, PendingActivatedAbility &pending);

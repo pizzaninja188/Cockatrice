@@ -363,40 +363,6 @@ private:
     bool storeCurrentModalTargetsAndAdvance();
     bool storeCurrentTargetGroupAndAdvance();
     void loadCurrentTargetGroup();
-    static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
-    static QVector<RuledFlexPip> parseFlexPips(const QString &manaCost);
-    static QString formatSimpleManaCost(const QMap<QChar, int> &cost);
-    // Render the still-unpaid cost, fixed pips plus any flexible pips ({G/U}, {2/W}, {B/P}).
-    static QString formatRemainingCost(const QMap<QChar, int> &fixed, const QVector<RuledFlexPip> &flex);
-    // Total pips still owed (fixed + flexible). Zero means the cost is fully paid.
-    static int totalRemainingForCost(const QMap<QChar, int> &fixed, const QVector<RuledFlexPip> &flex);
-    // True if `color` can satisfy `pip`'s colored alternative (either side of a hybrid, the
-    // single color of a mono-hybrid/Phyrexian pip).
-    static bool flexPipMatchesColor(const RuledFlexPip &pip, QChar color);
-    // CR 107.4d–f: front-load the flexible-pip choice. Shows a modal dialog displaying the full
-    // cost plus one dropdown per flexible pip (hybrid {G/U} → either color; mono-hybrid {2/W} →
-    // the color or N generic; Phyrexian {C/P} → the color or 2 life). On confirm, fills
-    // `choiceIsAlternative` index-aligned to `flex` (false = primary color `colorA`, true = the
-    // alternative). Returns false if the player cancelled.
-    static bool promptFlexiblePipChoices(const QString &fullCost,
-                                         const QString &cardName,
-                                         const QVector<RuledFlexPip> &flex,
-                                         QVector<bool> &choiceIsAlternative);
-    // Fold the player's per-pip choices into the fixed cost: a color choice adds a fixed colored
-    // pip, a mono-hybrid generic choice adds N to the generic bucket, a Phyrexian life choice
-    // records the pip index in `lifePipIndices`. Clears `flex` once everything is folded so the
-    // remaining cost (and the widget prompt) reflects only the resolved mana.
-    static void applyFlexChoicesToCost(QMap<QChar, int> &fixed,
-                                       QVector<quint32> &lifePipIndices,
-                                       QVector<RuledFlexPip> &flex,
-                                       const QVector<bool> &choiceIsAlternative);
-    // CR 107.4d–f: route one tapped mana into the cheapest still-open demand — a fixed colored
-    // pip, an untouched flexible pip's color, fixed generic, or a mono-hybrid generic alternative.
-    // Returns false if the mana can't be used (caller leaves it unspent). Mutates fixed + flex.
-    static bool applyManaPipToFlexibleCost(QMap<QChar, int> &fixed,
-                                           QVector<RuledFlexPip> &flex,
-                                           bool colorlessMana,
-                                           QChar coloredMana);
     void clearPendingRuledSpellCast();
     // Called after all targets are chosen for the pending cast. Handles the X prompt,
     // DamageTargets allocation dialog, flex-pip resolution, and mana payment.
@@ -408,26 +374,8 @@ private:
     // clamped by the total damage, since each target needs >= 1 damage (Fireball = X targets max).
     // Reaching it auto-advances from targeting to damage allocation (like Fire's 2-target cap).
     [[nodiscard]] int effectiveDamageTargetsMax() const;
-    // Prompts for the value of X when the pending spell's cost has X pips, tops up the generic
-    // mana bucket, and records xValue. Returns false if the player cancelled (cast is aborted).
-    bool promptForRuledSpellXIfNeeded();
-    // CR 107.4d–f: front-load the pending spell's flexible-pip choices via promptFlexiblePipChoices,
-    // folding them into the fixed cost. No-op (returns true) when the cost has no flexible pips.
-    // Returns false if the player cancelled the dialog (cast is aborted).
-    bool resolvePendingSpellFlexiblePips();
-    // Same as resolvePendingSpellFlexiblePips for the pending activated ability.
-    bool resolvePendingAbilityFlexiblePips();
-    bool completePendingRuledSpellCast();
-    bool promptForNextRuledCastCostGroup();
-    void continuePendingSpellAfterCastCostGroups();
     void continuePendingSpellAfterChoice();
-    bool tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
-    void finishPendingSpellManaPaymentStep();
-    bool completeActivateAbility();
     void continuePendingActivatedAbilityAfterChoice();
-    bool tryReducePendingAbilityRemainingCostOnePip(bool colorlessMana, QChar coloredMana);
-    void finishPendingAbilityManaPaymentStep();
-    [[nodiscard]] QSet<quint32> eligibleRestrictedManaForPendingAbility() const;
 
     void reconcilePendingRuledTargetSelections();
 

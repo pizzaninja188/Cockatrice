@@ -56,6 +56,14 @@ values and converted back to the latest engine hand slot only when the command i
 Starting one transaction cancels the other; a genuine engine-blocking choice removes the cast
 action and therefore cancels local staging. Freeform never enters this controller.
 
+Cost reconciliation and prompt calculations live in `ruled_pending_costs.cpp`, as methods of
+`RuledPendingCast`, and run in the headless client tests. Menu-only test targets can link the
+original menu implementation without linking the client-state query implementation.
+Reconciliation returns whether staging can survive the latest legal snapshot; it does not emit
+UI signals or cancel the transaction itself. The payment bridge performs those effects in the
+existing order after target reconciliation. Mana text is engine-authored presentation input, never
+an independent source of casting legality.
+
 Two writer groups, and they must not be confused:
 
 - **`RuledEventDispatcher` is the only writer of engine-authoritative fields.**
@@ -71,6 +79,15 @@ payments. It owns object highlights, mana contribution clicks, and nested suspen
 abilities. Rust supplies all candidates and remaining costs; previews never tap cards or spend
 mana. See
 [Waterbend acceptance](../../../../docs/ISSUE-146-WATERBEND.md).
+
+`ruled_payment_progression.cpp` implements the same `RuledPaymentUi` bridge's cast/activation
+initialization, cost-group progression, cost-object clicks, X/flexible-mana dialogs, cancellation,
+submission, and resolution-payment integration. `PlayerActions` retains thin entry points and
+host signals; it does not own a second progression controller. The two cost-click hooks remain
+on either side of the existing trigger/permanent-choice handlers to preserve their precedence.
+`RuledTargetUi` still owns target reconciliation and eligibility, while `TabGame` selects prompt
+modes. The bridge keeps `PlayerActions` as the QObject connection context and preserves existing
+translation contexts, acknowledgement behavior, and nested-payment lifetimes.
 
 ### `ruled_event_dispatcher.{h,cpp}` — `RuledEventDispatcher`
 
@@ -278,3 +295,9 @@ Three grammar rules worth knowing before extending it:
 Adding a primitive is a proto arm, a `parse` case, and an engine handler — no new UI.
 
 Public reveals use the shared contract documented in [the reveal audit](../../../../docs/REVEAL-AUDIT.md). Private look/search choices never publish public reveal metadata.
+
+Optional choices use engine-authored bounds or decline flags. `Decline` submits an empty
+resolution answer or removes the active optional cast-cost group's staged payments;
+`Cancel` abandons an unsubmitted cast/activation, and `Back` returns from cost-object selection.
+Mode/target-linked required costs cannot be declined. `ruled_resolution_choice_dialog.cpp`
+owns the fallback picker and follows the same explicit-decline rule for a zero minimum.

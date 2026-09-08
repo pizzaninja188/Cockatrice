@@ -1,10 +1,15 @@
+#include "game/ruled/ruled_resolution_choice_dialog.h"
 #include "game_prompt_widget.h"
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QLabel>
+#include <QListWidget>
 #include <QPushButton>
 #include <QSignalSpy>
+#include <QTimer>
 #include <gtest/gtest.h>
 
 class GamePromptWidgetTest : public ::testing::Test
@@ -360,7 +365,7 @@ TEST_F(GamePromptWidgetTest, GraveyardCostSelectionRequiresExactCountAndCanCance
     state.required = 2;
     state.selected = 1;
     state.text = "Choose two graveyard cards.";
-    state.canDecline = true;
+    state.canCancel = true;
     widget->setRuledPromptState(state);
 
     EXPECT_EQ(widget->effectiveMode(), PromptMode::CostSelection);
@@ -392,7 +397,7 @@ TEST_F(GamePromptWidgetTest, MandatoryResolutionCostSelectionDoesNotOfferCancel)
     state.selected = 1;
     widget->setRuledPromptState(state);
     EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isEnabled());
-    state.canDecline = true;
+    state.canCancel = true;
     widget->setRuledPromptState(state);
     EXPECT_FALSE(btn("openingBottomCancelButton")->isHidden());
 }
@@ -435,7 +440,8 @@ TEST_F(GamePromptWidgetTest, CastCostOptionsUseTheirOwnButtonRouteAndSuppressPri
     GamePromptWidget::RuledPromptState state;
     state.mode = PromptMode::CastCostOptions;
     state.text = "Behold a Dragon or pay {1}.";
-    state.choiceOptions = {{-1, "Cast normally", true}, {0, "Behold a Dragon", true}, {1, "Pay {1}", true}};
+    state.canDecline = true;
+    state.choiceOptions = {{0, "Behold a Dragon", true}, {1, "Pay {1}", true}};
     widget->setRuledPromptState(state);
 
     EXPECT_EQ(widget->effectiveMode(), PromptMode::CastCostOptions);
@@ -538,12 +544,14 @@ TEST_F(GamePromptWidgetTest, HarmonizeShowsFullCostAndCreatureBranchesWithBackAn
     GamePromptWidget::RuledPromptState state;
     state.mode = PromptMode::CastCostOptions;
     state.text = "Harmonize: you may tap an untapped creature you control.";
-    state.choiceOptions = {{-1, "Pay full Harmonize cost", true}, {0, "Tap a creature", true}};
+    state.canDecline = true;
+    state.castCostSkipLabel = "Pay full Harmonize cost";
+    state.choiceOptions = {{0, "Tap a creature", true}};
     widget->setRuledPromptState(state);
 
-    ASSERT_NE(btn("ruledChoiceOptionButton_-1"), nullptr);
+    ASSERT_NE(btn("castCostDeclineButton"), nullptr);
     ASSERT_NE(btn("ruledChoiceOptionButton_0"), nullptr);
-    EXPECT_EQ(btn("ruledChoiceOptionButton_-1")->text(), "Pay full Harmonize cost");
+    EXPECT_EQ(btn("castCostDeclineButton")->text(), "Decline — Pay full Harmonize cost");
     EXPECT_EQ(btn("ruledChoiceOptionButton_0")->text(), "Tap a creature");
     btn("ruledChoiceOptionButton_0")->click();
     ASSERT_EQ(optionSpy.count(), 1);
@@ -757,4 +765,75 @@ TEST_F(GamePromptWidgetTest, DiagnosticSnapshotRecordsEffectiveModeAndDisabledCo
                      .toObject()
                      .value("enabled")
                      .toBool(true));
+}
+
+TEST_F(GamePromptWidgetTest, OptionalCastCostHasExplicitDeclineWithoutCancellingTheSpell)
+{
+    QSignalSpy optionSpy(widget.get(), &GamePromptWidget::ruledCastCostOptionRequested);
+    QSignalSpy cancelSpy(widget.get(), &GamePromptWidget::cancelTargetingRequested);
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::CastCostOptions;
+    state.required = 0;
+    state.max = 1;
+    state.canDecline = true;
+    state.choiceOptions = {{0, "Blight 1", true}};
+    widget->setRuledPromptState(state);
+    auto *decline = btn("castCostDeclineButton");
+    ASSERT_NE(decline, nullptr);
+    EXPECT_FALSE(decline->isHidden());
+    EXPECT_EQ(decline->text(), "Decline");
+    decline->click();
+    ASSERT_EQ(optionSpy.count(), 1);
+    EXPECT_EQ(optionSpy.takeFirst().at(0).toInt(), -1);
+    EXPECT_EQ(cancelSpy.count(), 0);
+
+    state.mode = PromptMode::CastCostObject;
+    widget->setRuledPromptState(state);
+    EXPECT_FALSE(decline->isHidden());
+    EXPECT_EQ(btn("declineClickChoiceButton")->text(), "Back");
+    state.canDecline = false;
+    widget->setRuledPromptState(state);
+    EXPECT_TRUE(decline->isHidden());
+}
+
+TEST_F(GamePromptWidgetTest, OptionalResolutionPickAndCostExposeDecline)
+{
+    for (auto mode : {PromptMode::ResolutionPick, PromptMode::CostSelection, PromptMode::ZoneSelection}) {
+        GamePromptWidget::RuledPromptState state;
+        state.mode = mode;
+        state.canDecline = true;
+        widget->setRuledPromptState(state);
+        EXPECT_FALSE(btn("declineClickChoiceButton")->isHidden());
+        EXPECT_EQ(btn("declineClickChoiceButton")->text(), "Decline");
+        EXPECT_TRUE(btn("openingBottomCancelButton")->isHidden());
+        state.canDecline = false;
+        widget->setRuledPromptState(state);
+        EXPECT_TRUE(btn("declineClickChoiceButton")->isHidden());
+    }
+}
+
+TEST(RuledResolutionChoiceDialogTest, DeclineClearsSelectionOnlyWhenEmptyAnswerIsLegal)
+{
+    for (int minimum : {0, 1}) {
+        QTimer::singleShot(0, [minimum]() {
+            auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            ASSERT_NE(dialog, nullptr);
+            auto *list = dialog->findChild<QListWidget *>();
+            ASSERT_NE(list, nullptr);
+            list->itemClicked(list->item(0));
+            auto *decline = dialog->findChild<QPushButton *>("resolutionChoiceDeclineButton");
+            if (minimum == 0) {
+                EXPECT_NE(decline, nullptr);
+                if (decline) {
+                    decline->click();
+                    return;
+                }
+            } else {
+                EXPECT_EQ(decline, nullptr);
+            }
+            dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+        });
+        const auto result = askRuledResolutionChoice("Choose a card", {101}, {"Test card"}, minimum, 1, false, false);
+        EXPECT_EQ(result.size(), minimum);
+    }
 }

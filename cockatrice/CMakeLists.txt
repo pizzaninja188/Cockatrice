@@ -118,8 +118,11 @@ set(cockatrice_SOURCES
     src/game/ruled/ruled_dev_console.cpp
     src/game/ruled/ruled_event_dispatcher.cpp
     src/game/ruled/ruled_pending_cast.cpp
+    src/game/ruled/ruled_pending_costs.cpp
     src/game/ruled/ruled_payment.cpp
     src/game/ruled/ruled_payment_ui.cpp
+    src/game/ruled/ruled_payment_progression.cpp
+    src/game/ruled/ruled_resolution_choice_dialog.cpp
     src/game/ruled/ruled_presentation_resolver.cpp
     src/game/ruled/ruled_restricted_mana_display.cpp
     src/game/ruled/ruled_target_ui.cpp

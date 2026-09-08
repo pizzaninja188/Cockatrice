@@ -1004,6 +1004,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         pick.pickZone = PickZone::Revealed;
         pick.publicReveal = true;
         pick.min = static_cast<int>(rcr.min());
+        pick.mayDecline = rcr.min() == 0;
         pick.max = static_cast<int>(rcr.max());
         pick.uniqueNames = rcr.unique_names();
         pick.promptText = QString::fromStdString(rcr.prompt_text());
@@ -1158,6 +1159,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         PendingChoice pick;
         pick.kind = ChoiceKind::ResolutionPick;
         pick.min = static_cast<int>(rcr.min());
+        pick.mayDecline = rcr.min() == 0;
         pick.max = static_cast<int>(rcr.max());
         pick.promptText = QString::fromStdString(rcr.prompt_text());
         pick.pickZone = PickZone::Hand;
@@ -1257,6 +1259,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         PendingChoice pick;
         pick.kind = ChoiceKind::ResolutionPick;
         pick.min = static_cast<int>(rcr.min());
+        pick.mayDecline = rcr.min() == 0;
         pick.max = static_cast<int>(rcr.max());
         pick.uniqueNames = rcr.unique_names();
         pick.promptText = QString::fromStdString(rcr.prompt_text());
@@ -1374,6 +1377,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         PendingChoice pick;
         pick.kind = ChoiceKind::ResolutionPick;
         pick.min = static_cast<int>(rcr.min());
+        pick.mayDecline = rcr.min() == 0;
         pick.max = static_cast<int>(rcr.max());
         pick.promptText = QString::fromStdString(rcr.prompt_text());
         pick.pickZone = PickZone::Revealed;
