@@ -2991,6 +2991,9 @@ pub(super) fn look_choose_to_hand(
         count,
         filter,
         bottom_order,
+        min,
+        max,
+        reveal,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -3016,7 +3019,7 @@ pub(super) fn look_choose_to_hand(
 
     let selectable: Vec<bool> = looked
         .iter()
-        .map(|&oid| zone_card_matches_filter(&engine.state, engine.registry, oid, Some(&filter)))
+        .map(|&oid| zone_card_matches_filter(&engine.state, engine.registry, oid, filter.as_ref()))
         .collect();
     let legal: Vec<ObjectId> = looked
         .iter()
@@ -3026,9 +3029,15 @@ pub(super) fn look_choose_to_hand(
         .collect();
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &looked);
     let n = looked.len() as u32;
-    let prompt = format!(
-        "Look at the top {n} cards. Click up to one matching card image to reveal and put into your hand."
-    );
+    let min = min.min(legal.len() as u32);
+    let max = max.min(legal.len() as u32);
+    let selection = if min == max {
+        format!("exactly {min}")
+    } else {
+        format!("{min} to {max}")
+    };
+    let reveal_text = if reveal { "reveal and " } else { "" };
+    let prompt = format!("Look at the top {n} cards. Choose {selection} matching cards to {reveal_text}put into your hand.");
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -3039,8 +3048,8 @@ pub(super) fn look_choose_to_hand(
                 candidate_object_ids: looked.clone(),
                 candidate_card_ids,
                 candidate_names: candidate_names.clone(),
-                min: 0,
-                max: 1,
+                min,
+                max,
                 ordered: false,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
@@ -3071,8 +3080,8 @@ pub(super) fn look_choose_to_hand(
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: legal,
-            min: 0,
-            max: 1,
+            min,
+            max,
             ordered: false,
             unique_names: false,
             prompt,
@@ -3080,9 +3089,24 @@ pub(super) fn look_choose_to_hand(
         },
         continuation: ResolutionContinuation::LibraryLook {
             stack: ParkedStackResolution::new(cx.top.clone()),
+            candidates: looked
+                .iter()
+                .map(|&oid| {
+                    (
+                        oid,
+                        engine
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0),
+                    )
+                })
+                .collect(),
             stage: PendingLibraryLookStage::ChooseToHand {
                 looked_at: looked,
                 bottom_order,
+                reveal,
             },
         },
     });

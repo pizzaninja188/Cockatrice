@@ -64,12 +64,13 @@ fn issue_110_search_and_look_cards_use_the_shared_primitives() {
         ability.effect.as_slice(),
         [SpellEffectKind::LookChooseToHand {
             count: 5,
-            filter: ZoneCardFilter {
+            filter: Some(ZoneCardFilter {
                 card_type: Some(CardTypeFilter::Creature),
                 printed_power: Some(PowerComparison::AtMost(2)),
                 ..
-            },
+            }),
             bottom_order: LibraryBottomOrder::Random,
+            ..
         }]
     )));
 }

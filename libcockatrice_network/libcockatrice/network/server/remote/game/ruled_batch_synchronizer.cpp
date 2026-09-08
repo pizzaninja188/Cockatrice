@@ -783,6 +783,23 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
                 }
             }
         }
+        if (!card) {
+            // The private library binding is separate from preBatchOidMaps. Resolve its
+            // intrinsic physical id only inside the deck; HiddenZone::getCard takes a
+            // position, and a same-name fallback can move an unselected duplicate.
+            const auto &libraryBindings = playerBinding(ownerId).libraryEngineOidToServerCardId;
+            const auto libraryId = libraryBindings.constFind(oid);
+            if (libraryId != libraryBindings.constEnd()) {
+                if (Server_CardZone *deck = owner->getZones().value(ZoneNames::DECK)) {
+                    for (Server_Card *candidate : deck->getCards()) {
+                        if (candidate->getId() == *libraryId) {
+                            card = candidate;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         if (!card && pm.has_source_library_position()) {
             Server_CardZone *deck = owner->getZones().value(ZoneNames::DECK);
             const int position = static_cast<int>(pm.source_library_position());
@@ -965,6 +982,11 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
                     binding.graveyardEngineOidToServerCardId.insert(oid, card->getId());
                 } else if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_EXILE) {
                     binding.exileEngineOidToServerCardId.insert(oid, card->getId());
+                } else if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_HAND) {
+                    // Library identities use a separate reverse map. Once this exact card is
+                    // in hand, bind it in the destination map before the private-zone reconcile;
+                    // otherwise name matching can exchange it with an unselected duplicate.
+                    binding.registerEngineOid(oid, card->getId());
                 }
             }
             // A cross-player move reissues Server_Card::id from the destination player's space

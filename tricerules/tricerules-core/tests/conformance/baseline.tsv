@@ -586,6 +586,7 @@ flight-deck_coordinator	0	cast	exercised
 floodpits_drowner	0	ability:0	unsupported: target group 0 needs a richer fixture
 floodpits_drowner	0	cast	exercised
 flow_of_knowledge	0	cast	exercised
+flow_state	0	cast	exercised
 flying_dolphin-fish	0	cast	exercised
 flying_men	0	cast	exercised
 focus_the_mind	0	cast	exercised
@@ -1505,6 +1506,7 @@ skyswirl_harrier	0	cast	exercised
 slash_panther	0	cast	exercised
 slavering_branchsnapper	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 slavering_branchsnapper	0	cast	exercised
+sleight_of_hand	0	cast	exercised
 slippery_bogle	0	cast	exercised
 sliver_construct	0	cast	exercised
 slumbering_keepguard	0	ability:0	exercised

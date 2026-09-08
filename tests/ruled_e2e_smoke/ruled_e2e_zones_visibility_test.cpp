@@ -1952,5 +1952,173 @@ TEST_F(RuledE2ESmokeTest, EsperOriginsFlashbackReturnsTransformedRevealsPublicly
     EXPECT_EQ(transformed(), nullptr);
 }
 
+TEST_F(RuledE2ESmokeTest, FlowStateSelectsPrivateCardsAndPreservesChosenBottomOrder)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+    OpeningDriver p1(true, QStringLiteral("flowp1"), &transcript);
+    OpeningDriver p2(false, QStringLiteral("flowp2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    // Three cards remain after the starting player's opening hand. Duplicate names must
+    // retain distinct identities through both the picker and the physical hand moves.
+    ASSERT_TRUE(p1.selectDeck(deckXml({{10, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "Flow State start p1"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "Flow State start p2"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    auto send = [&](OpeningDriver &sender, const ruled::v1::RuledCommand &command) {
+        const auto before1 = p1.stateVersion;
+        const auto before2 = p2.stateVersion;
+        sender.sendRuled(command, QStringLiteral("Flow State scenario"));
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto putHand = [&](const char *name) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        dev->mutable_put_card_in_zone()->set_card_name(name);
+        dev->mutable_put_card_in_zone()->set_zone(ruled::v1::DEV_ZONE_HAND);
+        return send(p1, command);
+    };
+    auto pass = [&](OpeningDriver &sender) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(sender, command);
+    };
+    auto choose = [&](const std::vector<quint32> &oids) {
+        ruled::v1::RuledCommand command;
+        for (quint32 oid : oids) {
+            command.mutable_submit_resolution_choice()->add_chosen_object_ids(oid);
+        }
+        p1.pendingChoice.reset();
+        return send(p1, command);
+    };
+    auto observerIsPrivate = [&] {
+        if (!p2.lastResolutionChoice.has_value()) {
+            return false;
+        }
+        const auto &choice = *p2.lastResolutionChoice;
+        return choice.candidate_names_size() == 0 && choice.candidate_card_ids_size() == 0 &&
+               choice.candidate_object_ids_size() == 0 && choice.candidate_server_card_ids_size() == 0 &&
+               choice.candidate_selectable_size() == 0 && !choice.has_public_reveal();
+    };
+    std::vector<quint32> expectedBottom;
+    std::set<int> selectedPhysicalIds;
+    for (int required : {1, 2}) {
+        ASSERT_TRUE(putHand("Flow State"));
+        if (required == 2) {
+            // The first Flow State already supplies the sorcery card.
+            ASSERT_TRUE(putHand("Lightning Bolt"));
+            ruled::v1::RuledCommand move;
+            auto *dev = move.mutable_dev_command();
+            dev->set_target_player_id(p1.myId);
+            dev->mutable_move_card()->set_card_name("Lightning Bolt");
+            dev->mutable_move_card()->set_zone(ruled::v1::DEV_ZONE_GRAVEYARD);
+            ASSERT_TRUE(send(p1, move));
+        }
+        ruled::v1::RuledCommand mana;
+        auto *dev = mana.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        dev->mutable_add_mana()->set_u(1);
+        dev->mutable_add_mana()->set_c(1);
+        ASSERT_TRUE(send(p1, mana));
+        const auto *action = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Flow State"));
+        ASSERT_NE(action, nullptr);
+        ruled::v1::RuledCommand cast;
+        cast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        cast.mutable_cast_spell()->mutable_source()->set_hand_index(action->hand_index());
+        ASSERT_TRUE(send(p1, cast));
+        ASSERT_TRUE(pass(p1));
+        ASSERT_TRUE(pass(p2));
+        ASSERT_TRUE(p1.pendingChoice.has_value());
+        const auto choice = *p1.pendingChoice;
+        ASSERT_EQ(choice.choice_kind(), ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+        EXPECT_EQ(choice.min(), static_cast<unsigned>(required));
+        EXPECT_EQ(choice.max(), static_cast<unsigned>(required));
+        EXPECT_FALSE(choice.has_public_reveal());
+        ASSERT_TRUE(observerIsPrivate());
+        std::vector<quint32> selected;
+        if (required == 1) {
+            ASSERT_EQ(choice.candidate_object_ids_size(), 3);
+            selected = {choice.candidate_object_ids(1)};
+            expectedBottom = {choice.candidate_object_ids(2), choice.candidate_object_ids(0)};
+        } else {
+            ASSERT_EQ(choice.candidate_object_ids_size(), 2);
+            EXPECT_EQ(choice.candidate_object_ids(0), expectedBottom[0]);
+            EXPECT_EQ(choice.candidate_object_ids(1), expectedBottom[1]);
+            selected = expectedBottom;
+        }
+        const int oldHandSize = p1.handSizeByPlayer[p1.myId];
+        p1.physicalMoveEvents.clear();
+        p2.physicalMoveEvents.clear();
+        ASSERT_TRUE(choose(selected));
+        EXPECT_EQ(p1.handSizeByPlayer[p1.myId], oldHandSize + required);
+        // Hand OIDs and the other seat's hand-slot map are intentionally not published.
+        // Verify the physical moves each recipient actually receives instead.
+        for (const OpeningDriver *client : {&p1, &p2}) {
+            int handMoves = 0;
+            for (const auto &move : client->physicalMoveEvents) {
+                if (move.start_zone() != ZoneNames::DECK || move.target_zone() != ZoneNames::HAND) {
+                    continue;
+                }
+                ++handMoves;
+                if (client == &p1) {
+                    EXPECT_EQ(move.card_name(), "Forest");
+                    EXPECT_TRUE(selectedPhysicalIds.insert(move.new_card_id()).second);
+                    EXPECT_TRUE(std::any_of(p1.handServerCardBySlot.begin(), p1.handServerCardBySlot.end(),
+                                            [&](const auto &entry) { return entry.second == move.new_card_id(); }));
+                } else {
+                    EXPECT_TRUE(move.card_name().empty());
+                }
+            }
+            EXPECT_EQ(handMoves, required);
+        }
+        EXPECT_TRUE(p1.revealEvents.empty());
+        EXPECT_TRUE(p2.revealEvents.empty());
+        EXPECT_TRUE(p1.physicalRevealEvents.empty());
+        EXPECT_TRUE(p2.physicalRevealEvents.empty());
+        if (required == 1) {
+            ASSERT_TRUE(p1.pendingChoice.has_value());
+            EXPECT_TRUE(p1.pendingChoice->ordered());
+            ASSERT_TRUE(observerIsPrivate());
+            ASSERT_TRUE(choose(expectedBottom));
+        }
+        EXPECT_FALSE(p1.pendingChoice.has_value());
+        EXPECT_EQ(p1.stackDepth, 0);
+        EXPECT_EQ(p2.stackDepth, 0);
+    }
+    EXPECT_EQ(selectedPhysicalIds.size(), 3u);
+    EXPECT_TRUE(p1.libraryDetailsStayedConcealed);
+    EXPECT_TRUE(p2.libraryDetailsStayedConcealed);
+}
+
 } // namespace
 } // namespace ruled_e2e

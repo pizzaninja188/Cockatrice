@@ -1220,7 +1220,9 @@ TEST_F(RuledBatchTest, LibraryLookChoiceKeepsImagesAndEligibilityPrivate)
     auto *choice = batch.add_events()->mutable_resolution_choice_required();
     choice->set_deciding_player_id(1);
     choice->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
-    choice->set_prompt_text("Look at the top five cards. Choose a creature card.");
+    choice->set_min(2);
+    choice->set_max(2);
+    choice->set_prompt_text("Look at three cards. Choose two matching cards.");
     for (const quint32 oid : {81u, 82u, 83u}) {
         choice->add_candidate_object_ids(oid);
     }
@@ -1231,7 +1233,7 @@ TEST_F(RuledBatchTest, LibraryLookChoiceKeepsImagesAndEligibilityPrivate)
     for (const char *name : {"Forest", "Grizzly Bears", "Island"}) {
         choice->add_candidate_names(name);
     }
-    choice->add_candidate_selectable(false);
+    choice->add_candidate_selectable(true);
     choice->add_candidate_selectable(true);
     choice->add_candidate_selectable(false);
 
@@ -1240,12 +1242,14 @@ TEST_F(RuledBatchTest, LibraryLookChoiceKeepsImagesAndEligibilityPrivate)
                                          [](const auto &event) { return event.has_resolution_choice_required(); });
     ASSERT_NE(p1ChoiceIt, forP1.events().end());
     const auto &p1Choice = p1ChoiceIt->resolution_choice_required();
+    EXPECT_EQ(p1Choice.min(), 2u);
+    EXPECT_EQ(p1Choice.max(), 2u);
     ASSERT_EQ(p1Choice.candidate_server_card_ids_size(), 3);
     EXPECT_EQ(p1Choice.candidate_server_card_ids(0), 0);
     EXPECT_EQ(p1Choice.candidate_server_card_ids(1), 1);
     EXPECT_EQ(p1Choice.candidate_server_card_ids(2), 2);
     ASSERT_EQ(p1Choice.candidate_selectable_size(), 3);
-    EXPECT_FALSE(p1Choice.candidate_selectable(0));
+    EXPECT_TRUE(p1Choice.candidate_selectable(0));
     EXPECT_TRUE(p1Choice.candidate_selectable(1));
     EXPECT_FALSE(p1Choice.candidate_selectable(2));
 
@@ -1260,6 +1264,20 @@ TEST_F(RuledBatchTest, LibraryLookChoiceKeepsImagesAndEligibilityPrivate)
     EXPECT_EQ(p2Choice.candidate_server_card_ids_size(), 0);
     EXPECT_EQ(p2Choice.candidate_selectable_size(), 0);
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
+
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    const auto forSpectator = redactFor(batch, spectator);
+    const auto spectatorChoice = std::find_if(forSpectator.events().begin(), forSpectator.events().end(),
+                                            [](const auto &event) { return event.has_resolution_choice_required(); });
+    ASSERT_NE(spectatorChoice, forSpectator.events().end());
+    const auto &hidden = spectatorChoice->resolution_choice_required();
+    EXPECT_EQ(hidden.candidate_object_ids_size(), 0);
+    EXPECT_EQ(hidden.candidate_card_ids_size(), 0);
+    EXPECT_EQ(hidden.candidate_names_size(), 0);
+    EXPECT_EQ(hidden.candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(hidden.candidate_selectable_size(), 0);
+    EXPECT_EQ(hidden.prompt_text(), "Opponent is making a resolution choice.");
 }
 
 TEST_F(RuledBatchTest, MultiZoneSearchMetadataAndTransientIdsAreDeciderPrivate)
@@ -4179,6 +4197,56 @@ TEST_F(RuledBatchTest, FaceChangedRenamesPermanentInPlace)
     EXPECT_EQ(card->getY(), 1);
     EXPECT_TRUE(card->getTapped());
     EXPECT_EQ(findCardByEngineOid(p1, 701u), card);
+}
+
+TEST_F(RuledBatchTest, LibrarySelectionsKeepTheExactDuplicateCardsWhenReconciledIntoHand)
+{
+    Server_Card *first = addCardToDeck(p1, "Grizzly Bears");
+    Server_Card *second = addCardToDeck(p1, "Grizzly Bears");
+    Server_Card *third = addCardToDeck(p1, "Grizzly Bears");
+    ruled::v1::RuledPerPlayerView initial;
+    initial.set_player_id(1);
+    for (quint32 oid : {701u, 702u, 703u}) {
+        auto *card = initial.add_library_cards();
+        card->set_object_id(oid);
+        card->set_card_id("grizzly_bears");
+    }
+    applyZoneView(p1, initial, nullptr);
+    ASSERT_EQ(findCardByEngineOid(p1, 702u), second);
+    ASSERT_EQ(findCardByEngineOid(p1, 703u), third);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    for (quint32 oid : {703u, 702u}) {
+        auto *move = response.mutable_batch()->add_events()->mutable_permanent_moved();
+        move->set_object_id(oid);
+        move->set_owner_player_id(1);
+        move->set_controller_player_id(1);
+        move->set_destination(ruled::v1::PermanentMoved::DESTINATION_HAND);
+        move->set_card_id("grizzly_bears");
+    }
+    // Inspect the move pass before a zone snapshot could hide a wrong physical move by
+    // silently rearranging identical cards back into the requested logical order.
+    callBatchApply(response);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::HAND)->getCards(), QList<Server_Card *>({third, second}));
+    EXPECT_EQ(p1->getZones().value(ZoneNames::DECK)->getCards(), QList<Server_Card *>({first}));
+    response.mutable_batch()->clear_events();
+    auto *view = response.mutable_batch()->add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(1);
+    for (quint32 oid : {703u, 702u}) {
+        auto *card = view->add_hand_cards();
+        card->set_object_id(oid);
+        card->set_card_id("grizzly_bears");
+    }
+    auto *remaining = view->add_library_cards();
+    remaining->set_object_id(701u);
+    remaining->set_card_id("grizzly_bears");
+    ASSERT_TRUE(callBatchApply(response).zoneViewApplied);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::HAND)->getCards(), QList<Server_Card *>({third, second}));
+    EXPECT_EQ(p1->getZones().value(ZoneNames::DECK)->getCards(), QList<Server_Card *>({first}));
+    EXPECT_EQ(findCardByEngineOid(p1, 701u), first);
+    EXPECT_EQ(findCardByEngineOid(p1, 702u), second);
+    EXPECT_EQ(findCardByEngineOid(p1, 703u), third);
 }
 
 TEST_F(RuledBatchTest, IndexedLibraryMoveUsesTheExactDuplicateAndEntersFaceDown)

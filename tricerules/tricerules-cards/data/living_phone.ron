@@ -13,7 +13,7 @@
     trigger: WhenSelfDies,
     effect: [LookChooseToHand(
       count: 5,
-      filter: (card_type: Some(Creature), printed_power: Some(AtMost(2))),
+      filter: Some((card_type: Some(Creature), printed_power: Some(AtMost(2)))),
       bottom_order: Random,
     )],
   )],

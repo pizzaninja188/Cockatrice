@@ -11,7 +11,7 @@
       ability_id: "activated_01",
       presentation: OracleLines([1]),
       costs: [Mana("{5}{G}"), Tap],
-      effect: [LookChooseToHand(count: 4, filter: (card_type: Some(Creature)), bottom_order: Random)],
+      effect: [LookChooseToHand(count: 4, filter: Some((card_type: Some(Creature))), bottom_order: Random)],
     ),
   ],
 )

@@ -3303,6 +3303,104 @@ mod attached_subject_tests {
     }
 
     #[test]
+    fn issue_228_dual_type_card_and_third_seat_resume_the_tail_once() {
+        for dual_type in [false, true] {
+            let mut engine = GameEngine::new(
+                22803,
+                &[10, 20],
+                20,
+                Some(vec![vec!["forest".into(); 12]; 2]),
+                true,
+            )
+            .unwrap();
+            engine.state.players.push(PlayerState::new(30, 20));
+            engine.state.active_player_idx = 1;
+            let mut effects = engine
+                .registry
+                .get("flow_state")
+                .unwrap()
+                .primary_face()
+                .spell_effect
+                .clone();
+            effects.push(SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            });
+            // A single fixture card with both printed types must satisfy both graveyard
+            // predicates. It is deliberately not a new supported real card.
+            engine.registry = Box::leak(Box::new(CardRegistry::from_chunks_and_tokens(&[
+                r#"(id: "forest", name: "Forest", face_id: "forest", types: ["Basic", "Land", "Forest"])"#,
+                r#"(id: "dual", name: "Dual", face_id: "dual", mana_cost: "{U}", types: ["Instant", "Sorcery"])"#,
+                r#"(id: "source", name: "Source", face_id: "source", types: ["Creature"], power: 1, toughness: 1)"#,
+            ], &[]).unwrap()));
+            let source = add_battlefield_object(&mut engine, 30, "source");
+            let mut library = Vec::new();
+            for _ in 0..3 {
+                let oid = add_battlefield_object(&mut engine, 30, "forest");
+                move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Library, None)
+                    .unwrap();
+                library.push(oid);
+            }
+            if dual_type {
+                let dual = add_battlefield_object(&mut engine, 30, "dual");
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    dual,
+                    Zone::Graveyard,
+                    None,
+                )
+                .unwrap();
+            }
+            let mut item = quantity_item(source, effects);
+            item.controller = 30;
+            item.source_owner = Some(30);
+            item.card_id = "source".into();
+            let (effects, label) = engine.build_resolution_effects(&item);
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+                .unwrap();
+            let pending = engine.state.pending_resolution.as_ref().unwrap();
+            assert_eq!(pending.deciding_player, 30);
+            let count = if dual_type { 2 } else { 1 };
+            assert_eq!(
+                (pending.presentation.min, pending.presentation.max),
+                (count, count)
+            );
+            assert_eq!(engine.state.players[2].life, 20);
+            let answer = rv1::SubmitResolutionChoice {
+                chosen_object_ids: library[..count as usize].to_vec(),
+                ..Default::default()
+            };
+            assert!(engine.submit_resolution_choice(10, &answer).is_err());
+            engine.submit_resolution_choice(30, &answer).unwrap();
+            if !dual_type {
+                assert_eq!(
+                    engine.state.players[2].life, 20,
+                    "tail waits for bottom ordering"
+                );
+                engine
+                    .submit_resolution_choice(
+                        30,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![library[2], library[1]],
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+            }
+            assert!(engine.state.pending_resolution.is_none());
+            assert_eq!(engine.state.players[2].life, 22);
+            assert_eq!(engine.state.players[0].life, 20);
+            assert_eq!(engine.state.players[1].life, 20);
+            assert!(engine.submit_resolution_choice(30, &answer).is_err());
+            assert_eq!(
+                engine.state.players[2].life, 22,
+                "duplicate submission cannot replay the tail"
+            );
+        }
+    }
+
+    #[test]
     fn issue_227_whole_hand_discard_preserves_player_sets_and_runs_the_tail() {
         for who in [PlayerRecipient::EachPlayer, PlayerRecipient::EachOpponent] {
             let mut engine = GameEngine::new(227_003, &[10, 20], 20, None, true).unwrap();

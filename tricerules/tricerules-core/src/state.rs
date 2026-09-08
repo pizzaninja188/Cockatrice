@@ -878,6 +878,7 @@ pub enum PendingLibraryLookStage {
     ChooseToHand {
         looked_at: Vec<ObjectId>,
         bottom_order: LibraryBottomOrder,
+        reveal: bool,
     },
     OrderBottom,
 }
@@ -997,6 +998,8 @@ pub enum ResolutionContinuation {
     LibraryLook {
         stack: ParkedStackResolution,
         stage: PendingLibraryLookStage,
+        /// Exact private library cohort, reduced to the remainder before bottom ordering.
+        candidates: Vec<(ObjectId, u64)>,
     },
     Explore {
         stack: ParkedStackResolution,

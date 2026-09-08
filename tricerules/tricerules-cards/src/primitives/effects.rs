@@ -983,15 +983,24 @@ pub enum SpellEffectKind {
     /// graveyard. The choice is private, logged, and resumable through the engine's library
     /// picker. Bashful Beastie, Innocuous Rat, Manifest Dread, and Twist Reality.
     ManifestDread,
-    /// Look at the top `count` cards, optionally reveal one matching `filter` and put it into the
-    /// controller's hand, then put the rest on the bottom. All looked-at cards are displayed in
-    /// the private card-image picker; the engine separately publishes which images match.
+    /// Look at the top `count` cards, choose `min..=max` matching cards for the controller's
+    /// hand, and put the rest on the bottom. Omit `filter` for any card; selection bounds clamp
+    /// to available matches (CR 609.3). This puts cards into hand without drawing (CR 121.5).
+    /// All candidates are private; only `reveal` publishes the selected cards.
     ///
     /// Brightwood Tracker (`count: 4`, creature, random) and Commune with Nature (`count: 5`,
-    /// creature, chosen) share this resumable primitive.
+    /// creature, chosen) use the optional revealed defaults. Sleight of Hand and Flow State
+    /// require one or two unrevealed cards, using the same resumable picker.
     LookChooseToHand {
         count: u32,
-        filter: ZoneCardFilter,
+        #[serde(default)]
+        filter: Option<ZoneCardFilter>,
+        #[serde(default)]
+        min: u32,
+        #[serde(default = "default_one")]
+        max: u32,
+        #[serde(default = "default_true")]
+        reveal: bool,
         bottom_order: LibraryBottomOrder,
     },
     /// CR 701.7: destroy `subject`. Chosen subjects are CR 115 targets; source, attachment, and
@@ -4200,11 +4209,20 @@ impl SpellEffectKind {
                 }
                 Ok(())
             }
-            SpellEffectKind::LookChooseToHand { count, filter, .. } => {
-                if *count == 0 {
-                    return Err("LookChooseToHand requires a positive count".into());
+            SpellEffectKind::LookChooseToHand {
+                count,
+                filter,
+                min,
+                max,
+                ..
+            } => {
+                if *count == 0 || *max == 0 || min > max || max > count {
+                    return Err(
+                        "LookChooseToHand requires 0 <= min <= max <= count and positive max"
+                            .into(),
+                    );
                 }
-                filter.validate()
+                filter.as_ref().map_or(Ok(()), ZoneCardFilter::validate)
             }
             SpellEffectKind::ChooseGraveyardCard {
                 filter,

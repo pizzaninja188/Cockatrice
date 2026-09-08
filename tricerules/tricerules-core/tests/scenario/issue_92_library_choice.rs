@@ -35,6 +35,273 @@ fn green_mana() -> ManaGift {
 }
 
 #[test]
+fn issue_228_sleight_requires_one_private_card() {
+    let mut e =
+        GameEngine::new(22801, &[0, 1], 20, green_deck_with("sleight_of_hand"), true).unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    ensure_in_hand(&mut e, 0, "sleight_of_hand");
+    let top = seat_on_top(&mut e, 0, &["forest", "island", "mountain"]);
+    let batch = cast_instant_and_resolve(
+        &mut e,
+        0,
+        "sleight_of_hand",
+        ManaGift {
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let choice = find_resolution_choice(&batch).unwrap();
+    assert_eq!((choice.min, choice.max), (1, 1));
+    assert!(e
+        .apply_command(0, &submit_resolution_choice(vec![]))
+        .is_err());
+    let batch = e
+        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .unwrap();
+    assert!(!batch.events.iter().any(|event| matches!(
+        &event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::CardsRevealed(
+            _
+        ))
+    )));
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e.state.players[0].hand.contains(&top[0]));
+    assert_eq!(e.state.players[0].library.back(), Some(&top[1]));
+    assert_eq!(e.state.players[0].library.front(), Some(&top[2]));
+}
+
+fn issue_228_engine(card: &str) -> GameEngine {
+    let mut e = GameEngine::new(22802, &[0, 1], 20, green_deck_with(card), true).unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    ensure_in_hand(&mut e, 0, card);
+    e
+}
+
+fn issue_228_resolve(e: &mut GameEngine, card: &str) -> RuledEventBatch {
+    cast_instant_and_resolve(
+        e,
+        0,
+        card,
+        ManaGift {
+            u: 1,
+            c: 1,
+            ..Default::default()
+        },
+    )
+}
+
+fn assert_no_public_library_names(batch: &RuledEventBatch) {
+    use tricerules_proto::ruled::v1::ruled_event::Ev;
+    for event in &batch.events {
+        match &event.ev {
+            Some(Ev::CardsRevealed(_)) => panic!("selection is not a reveal"),
+            Some(Ev::Log(log)) if log.visible_to_player_id.is_none() => {
+                for name in ["Forest", "Island", "Mountain"] {
+                    assert!(!log.text.contains(name), "public name leak: {}", log.text);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+#[test]
+fn issue_228_flow_state_checks_each_graveyard_type_and_orders_the_remaining_cards() {
+    for (instant, sorcery) in [(false, false), (true, false), (false, true), (true, true)] {
+        let mut e = issue_228_engine("flow_state");
+        if instant {
+            inject_graveyard_card(&mut e, 0, "lightning_bolt");
+        }
+        if sorcery {
+            inject_graveyard_card(&mut e, 0, "divination");
+        }
+        // The opponent's types never satisfy "your graveyard".
+        inject_graveyard_card(&mut e, 1, "lightning_bolt");
+        inject_graveyard_card(&mut e, 1, "divination");
+        let top = seat_on_top(&mut e, 0, &["forest", "island", "mountain", "forest"]);
+        let batch = issue_228_resolve(&mut e, "flow_state");
+        let choice = find_resolution_choice(&batch).unwrap();
+        let count = if instant && sorcery { 2 } else { 1 };
+        assert_eq!((choice.min, choice.max), (count, count));
+        assert_eq!(choice.candidate_object_ids, top[..3]);
+        assert_eq!(choice.candidate_selectable, [true; 3]);
+        assert_no_public_library_names(&batch);
+        let selected = top[..count as usize].to_vec();
+        let batch = e
+            .apply_command(0, &submit_resolution_choice(selected.clone()))
+            .unwrap();
+        assert_no_public_library_names(&batch);
+        let remainder: Vec<_> = top[count as usize..3].iter().rev().copied().collect();
+        if remainder.len() > 1 {
+            let order = find_resolution_choice(&batch).unwrap();
+            assert!(order.ordered);
+            assert_eq!((order.min, order.max), (2, 2));
+            let batch = e
+                .apply_command(0, &submit_resolution_choice(remainder.clone()))
+                .unwrap();
+            assert_no_public_library_names(&batch);
+        }
+        assert!(e.state.pending_resolution.is_none());
+        assert!(e.state.stack.is_empty());
+        for oid in selected {
+            assert!(e.state.players[0].hand.contains(&oid));
+        }
+        let library: Vec<_> = e.state.players[0].library.iter().copied().collect();
+        assert_eq!(library[0], top[3]);
+        assert_eq!(&library[library.len() - remainder.len()..], remainder);
+    }
+}
+
+#[test]
+fn issue_228_short_libraries_do_as_much_as_possible_without_drawing() {
+    for card in ["sleight_of_hand", "flow_state"] {
+        for size in 0..=3 {
+            let mut e = issue_228_engine(card);
+            inject_graveyard_card(&mut e, 0, "lightning_bolt");
+            inject_graveyard_card(&mut e, 0, "divination");
+            let top = seat_on_top(&mut e, 0, &["forest", "island", "mountain"][..size]);
+            // Remove surplus library objects consistently from this focused fixture.
+            let surplus: Vec<_> = e.state.players[0]
+                .library
+                .iter()
+                .copied()
+                .filter(|oid| !top.contains(oid))
+                .collect();
+            for oid in surplus {
+                e.state.objects.remove(&oid);
+            }
+            e.state.players[0].library.retain(|oid| top.contains(oid));
+            let drawn_before = e.state.turn_history.current.player(0).cards_drawn;
+            let batch = issue_228_resolve(&mut e, card);
+            assert_no_public_library_names(&batch);
+            let desired = if card == "flow_state" { 2 } else { 1 };
+            if size == 0 {
+                assert!(find_resolution_choice(&batch).is_none());
+            } else {
+                let choice = find_resolution_choice(&batch).unwrap();
+                let required = desired.min(size) as u32;
+                assert_eq!((choice.min, choice.max), (required, required));
+                let batch = e
+                    .apply_command(
+                        0,
+                        &submit_resolution_choice(top[..required as usize].to_vec()),
+                    )
+                    .unwrap();
+                assert_no_public_library_names(&batch);
+            }
+            assert!(e.state.pending_resolution.is_none());
+            assert!(e.state.stack.is_empty());
+            assert_eq!(
+                e.state.turn_history.current.player(0).cards_drawn,
+                drawn_before
+            );
+            assert!(
+                e.state.players.iter().all(|player| !player.has_lost),
+                "empty library selection does not cause a loss"
+            );
+        }
+    }
+}
+
+#[test]
+fn issue_228_flow_state_condition_is_evaluated_at_resolution_and_then_locked() {
+    let mut e = issue_228_engine("flow_state");
+    let top = seat_on_top(&mut e, 0, &["forest", "island", "mountain"]);
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let index = hand_index_for_card(&e, 0, "flow_state");
+    e.apply_command(0, &cast_spell(index, vec![])).unwrap();
+    inject_graveyard_card(&mut e, 0, "lightning_bolt");
+    inject_graveyard_card(&mut e, 0, "divination");
+    e.apply_command(0, &pass()).unwrap();
+    let batch = e.apply_command(1, &pass()).unwrap();
+    assert_eq!(find_resolution_choice(&batch).unwrap().min, 2);
+    // Simulate changing information after the resolution instruction was already applied.
+    e.state.players[0].graveyard.clear();
+    e.apply_command(0, &submit_resolution_choice(top[..2].to_vec()))
+        .unwrap();
+    assert!(e.state.pending_resolution.is_none());
+    assert!(top[..2]
+        .iter()
+        .all(|oid| e.state.players[0].hand.contains(oid)));
+}
+
+#[test]
+fn issue_228_illegal_and_stale_choices_are_atomic_in_both_stages() {
+    let mut e = issue_228_engine("flow_state");
+    let top = seat_on_top(&mut e, 0, &["forest", "island", "mountain"]);
+    issue_228_resolve(&mut e, "flow_state");
+    let mut decline = submit_resolution_choice(vec![]);
+    let Some(Cmd::SubmitResolutionChoice(answer)) = &mut decline.cmd else {
+        unreachable!()
+    };
+    answer.decision = tricerules_proto::ruled::v1::ResolutionChoiceDecision::Decline as i32;
+    let before = serde_json::to_string(&e.state).unwrap();
+    assert!(e.apply_command(0, &decline).is_err());
+    assert_eq!(serde_json::to_string(&e.state).unwrap(), before);
+    for chosen in [vec![], vec![top[0], top[1]], vec![u32::MAX]] {
+        let before = serde_json::to_string(&e.state).unwrap();
+        assert!(e
+            .apply_command(0, &submit_resolution_choice(chosen))
+            .is_err());
+        assert_eq!(serde_json::to_string(&e.state).unwrap(), before);
+    }
+    // Even an unselected card cannot change generation before the cohort is committed.
+    *e.state.zone_change_generation.entry(top[2]).or_default() += 1;
+    let before = serde_json::to_string(&e.state).unwrap();
+    assert!(e
+        .apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .is_err());
+    assert_eq!(serde_json::to_string(&e.state).unwrap(), before);
+    *e.state.zone_change_generation.get_mut(&top[2]).unwrap() -= 1;
+    e.apply_command(0, &submit_resolution_choice(vec![top[0]]))
+        .unwrap();
+    for chosen in [vec![top[1]], vec![top[1], top[1]], vec![top[0], top[2]]] {
+        let before = serde_json::to_string(&e.state).unwrap();
+        assert!(e
+            .apply_command(0, &submit_resolution_choice(chosen))
+            .is_err());
+        assert_eq!(serde_json::to_string(&e.state).unwrap(), before);
+    }
+    *e.state.zone_change_generation.entry(top[2]).or_default() += 1;
+    let before = serde_json::to_string(&e.state).unwrap();
+    assert!(e
+        .apply_command(0, &submit_resolution_choice(vec![top[1], top[2]]))
+        .is_err());
+    assert_eq!(serde_json::to_string(&e.state).unwrap(), before);
+}
+
+#[test]
+fn issue_228_two_card_selection_rejects_duplicates_and_replays_deterministically() {
+    fn play() -> serde_json::Value {
+        let mut e = issue_228_engine("flow_state");
+        inject_graveyard_card(&mut e, 0, "lightning_bolt");
+        inject_graveyard_card(&mut e, 0, "divination");
+        let top = seat_on_top(&mut e, 0, &["forest", "forest", "forest"]);
+        issue_228_resolve(&mut e, "flow_state");
+        let before = serde_json::to_value(&e.state).unwrap();
+        assert!(e
+            .apply_command(0, &submit_resolution_choice(vec![top[0], top[0]]))
+            .is_err());
+        assert_eq!(serde_json::to_value(&e.state).unwrap(), before);
+        e.apply_command(0, &submit_resolution_choice(vec![top[2], top[0]]))
+            .unwrap();
+        assert!(e.state.players[0].hand.contains(&top[2]));
+        assert!(e.state.players[0].hand.contains(&top[0]));
+        assert_eq!(e.state.players[0].library.back(), Some(&top[1]));
+        serde_json::to_value(&e.state).unwrap()
+    }
+    assert_eq!(play(), play());
+}
+
+#[test]
 fn commune_uses_images_for_all_looked_cards_then_orders_the_remainder() {
     let mut e = GameEngine::new(
         9201,

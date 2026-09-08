@@ -1,0 +1,9 @@
+// Oracle and rulings checked 2026-09-08. CR 121.5, 401.4, 609.3.
+(
+  id: "sleight_of_hand",
+  name: "Sleight of Hand",
+  face_id: "sleight_of_hand",
+  mana_cost: "{U}",
+  types: ["Sorcery"],
+  spell_effect: [LookChooseToHand(count: 2, min: 1, max: 1, reveal: false, bottom_order: Chosen)],
+)

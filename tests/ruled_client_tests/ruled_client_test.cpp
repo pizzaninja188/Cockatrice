@@ -6312,6 +6312,43 @@ TEST_F(RuledClientTest, LibraryLookChoiceShowsEveryCardImageButOnlyMatchingCards
     EXPECT_EQ(state->resolutionHandPickClickOrderFor(3), 1);
 }
 
+TEST_F(RuledClientTest, MandatoryLibraryLookRequiresTwoDistinctImagesAndCannotDecline)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    choice->set_min(2);
+    choice->set_max(2);
+    for (int i = 0; i < 3; ++i) {
+        choice->add_candidate_object_ids(71u + i);
+        choice->add_candidate_server_card_ids(i);
+        choice->add_candidate_names("Forest");
+        choice->add_candidate_selectable(true);
+    }
+    apply(batch);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickRequired(), 2);
+    EXPECT_FALSE(state->pendingClickChoiceMayDecline());
+    host.sentCommands.clear();
+    state->declinePendingClickChoice();
+    state->submitResolutionHandPick();
+    EXPECT_TRUE(host.sentCommands.empty());
+    state->toggleResolutionHandPickCard(2);
+    state->submitResolutionHandPick();
+    EXPECT_TRUE(host.sentCommands.empty());
+    state->toggleResolutionHandPickCard(0);
+    state->toggleResolutionHandPickCard(1);
+    EXPECT_EQ(state->resolutionHandPickSelected(), 2);
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &submission = host.sentCommands[0].submit_resolution_choice();
+    ASSERT_EQ(submission.chosen_object_ids_size(), 2);
+    EXPECT_EQ(submission.chosen_object_ids(0), 73u);
+    EXPECT_EQ(submission.chosen_object_ids(1), 71u);
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+}
+
 TEST_F(RuledClientTest, PublicExploreLibraryLookIsInteractiveOnlyForItsController)
 {
     QSignalSpy publicReveal(&state->reveals, &RuledRevealState::changed);
