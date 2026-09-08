@@ -201,6 +201,10 @@ impl GameEngine {
                     targets: published_targets,
                     ability_annotation: "(copy)".to_string(),
                     card_id: card_id.clone(),
+                    is_prepare_spell: self
+                        .registry
+                        .get(&card_id)
+                        .is_some_and(|d| d.layout == Layout::Preparation && face_index == 1),
                     is_copy: true,
                     is_triggered: false,
                     copy_source_object_id,

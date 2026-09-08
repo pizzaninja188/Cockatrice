@@ -1549,8 +1549,16 @@ impl GameEngine {
 
     pub(in crate::engine) fn commit_cost_transaction(
         &mut self,
-        mut plan: CostTransactionPlan,
+        plan: CostTransactionPlan,
     ) -> Result<CostPaymentReceipt, EngineError> {
+        let plan = self.prepare_cost_transaction_commit(plan)?;
+        self.commit_prevalidated_cost_transaction(plan)
+    }
+
+    pub(in crate::engine) fn prepare_cost_transaction_commit(
+        &self,
+        mut plan: CostTransactionPlan,
+    ) -> Result<CostTransactionPlan, EngineError> {
         let mut debits = Vec::new();
         for debit in plan.debits {
             match debit {
@@ -1566,7 +1574,13 @@ impl GameEngine {
         }
         plan.debits = debits;
         self.revalidate_cost_transaction(&plan)?;
+        Ok(plan)
+    }
 
+    pub(in crate::engine) fn commit_prevalidated_cost_transaction(
+        &mut self,
+        mut plan: CostTransactionPlan,
+    ) -> Result<CostPaymentReceipt, EngineError> {
         // Counter placement is nonconsuming. Complete it before any selected zone departure,
         // including when the same creature also pays a sacrifice cost (CR 601.2h).
         if plan.debits.iter().any(|debit| {

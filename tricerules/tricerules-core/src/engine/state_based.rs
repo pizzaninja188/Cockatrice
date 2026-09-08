@@ -323,6 +323,49 @@ impl GameEngine {
         }
 
         // CR 111.7/111.8: tokens that have left the battlefield cease to exist.
+        // CR 722.3c exempts the linked preparation copy in exile, not a spent or displaced copy.
+        let spent_copies: Vec<_> = self
+            .state
+            .prepare_spell_sources
+            .keys()
+            .copied()
+            .filter(|id| {
+                let linked_exile_copy = self
+                    .state
+                    .prepared_permanents
+                    .values()
+                    .any(|copy| copy == id)
+                    && self
+                        .state
+                        .objects
+                        .get(id)
+                        .is_some_and(|copy| copy.zone == Zone::Exile)
+                    && self
+                        .state
+                        .zone_change_generation
+                        .get(id)
+                        .copied()
+                        .unwrap_or(0)
+                        == 0;
+                let on_stack = self.state.stack.iter().any(|item| item.id == *id);
+                !(on_stack || linked_exile_copy)
+            })
+            .collect();
+        for id in spent_copies {
+            self.state.prepare_spell_sources.remove(&id);
+            self.state.zone_change_generation.remove(&id);
+            self.state.objects.remove(&id);
+            self.state
+                .active_exile_play_permissions
+                .retain(|permission| permission.object_id != id);
+            for player in &mut self.state.players {
+                player.hand.retain(|&oid| oid != id);
+                player.library.retain(|&oid| oid != id);
+                player.exile.retain(|&oid| oid != id);
+                player.graveyard.retain(|&oid| oid != id);
+            }
+            changed = true;
+        }
         let vanished: Vec<ObjectId> = self
             .state
             .objects

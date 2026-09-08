@@ -284,6 +284,10 @@ impl GameEngine {
             if let Some(face) = self.battlefield_entry_face(event) {
                 for (ability_index, ability) in face.static_abilities.iter().enumerate() {
                     let (priority, label) = match &ability.definition {
+                        StaticAbilityDef::EntersPrepared if !event.prepared => (
+                            ReplacementPriority::Other,
+                            Some(format!("{} — enters prepared", face.name)),
+                        ),
                         StaticAbilityDef::EntersAsCopy { .. } => (
                             ReplacementPriority::EntryCopy,
                             Some(format!("{} — enters as a copy", face.name)),
@@ -801,6 +805,7 @@ impl GameEngine {
                     .and_then(|face| face.static_abilities.get(*ability_index))
                     .map(|ability| &ability.definition);
                 match ability {
+                    Some(StaticAbilityDef::EntersPrepared) => event.prepared = true,
                     Some(StaticAbilityDef::EntersAsCopy { .. }) => {
                         debug_assert!(false, "copy source choice must be completed before apply")
                     }
@@ -1255,6 +1260,9 @@ impl GameEngine {
             ) {
                 trigger_events.push(placed);
             }
+        }
+        if event.prepared {
+            self.prepare_permanent(event.object_id);
         }
         if let Some(protector) = battle_protector {
             self.state
@@ -2124,6 +2132,7 @@ mod tests {
         let object_id = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&object_id).unwrap().card_id = "tatterkite".into();
         let event = BattlefieldEntryEvent {
+            prepared: false,
             object_id,
             deciding_player: 0,
             destination_controller: 0,
@@ -2163,6 +2172,7 @@ mod tests {
         let snapshot = engine.player_life_snapshot();
         engine.state.players[1].life = 1;
         let event = BattlefieldEntryEvent {
+            prepared: false,
             object_id: 999,
             deciding_player: 0,
             destination_controller: 0,
@@ -2230,6 +2240,7 @@ mod tests {
         engine.state.objects.get_mut(&globe).unwrap().zone = Zone::Stack;
         engine.state.objects.get_mut(&dragon).unwrap().zone = Zone::Stack;
         let event = BattlefieldEntryEvent {
+            prepared: false,
             object_id: dragon,
             deciding_player: 0,
             destination_controller: 0,

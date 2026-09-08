@@ -255,14 +255,19 @@ fn try_drain_stack(e: &mut GameEngine) -> bool {
 }
 
 /// Sanity invariant: every object lives in exactly one place, and the fixed deck-card population
-/// is unchanged. `expected_objects` is the non-token baseline; tokens (CR 111) created by a
-/// resolving maker are counted on top of it, since they legitimately appear and vanish.
+/// is unchanged. `expected_objects` is the physical deck-card baseline; tokens (CR 111) and
+/// preparation copies (CR 722) are counted on top, since they legitimately appear and vanish.
 pub(super) fn assert_zone_integrity(e: &GameEngine, expected_objects: usize, ctx: &str) {
-    let token_count = e.state.objects.values().filter(|o| o.is_token()).count();
+    let noncard_count = e
+        .state
+        .objects
+        .values()
+        .filter(|o| o.is_token() || e.state.prepare_spell_sources.contains_key(&o.id))
+        .count();
     assert_eq!(
         e.state.objects.len(),
-        expected_objects + token_count,
-        "{ctx}: non-token object count changed (deck cards conjured or lost)"
+        expected_objects + noncard_count,
+        "{ctx}: physical card count changed (deck cards conjured or lost)"
     );
     let mut seen: std::collections::HashSet<u32> = std::collections::HashSet::new();
     let mut count_in_zones = 0usize;
@@ -302,10 +307,10 @@ pub(super) fn assert_zone_integrity(e: &GameEngine, expected_objects: usize, ctx
             count_in_zones += 1; // a spell on the stack is a real object
         }
     }
-    // Every real object (deck cards + live tokens) is in some zone or is a spell on the stack.
+    // Every object (deck cards, tokens, and preparation copies) occupies a zone or the stack.
     assert_eq!(
         count_in_zones,
-        expected_objects + token_count,
+        expected_objects + noncard_count,
         "{ctx}: some objects are not in any zone"
     );
 }

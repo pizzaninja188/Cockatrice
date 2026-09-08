@@ -709,6 +709,9 @@ void CardItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 
 void CardItem::playCard(bool faceDown)
 {
+    if (RuledActions::tryHandlePublicZonePlay(this)) {
+        return;
+    }
     // Do nothing if the card belongs to another player
     if (!owner->getPlayerInfo()->getLocalOrJudge())
         return;
@@ -801,6 +804,10 @@ void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         return;
     }
     if (event->button() == Qt::RightButton) {
+        if (RuledActions::tryHandlePublicZonePlay(this, true)) {
+            AbstractCardItem::mouseReleaseEvent(event);
+            return;
+        }
         if (RuledActions::tryHandleCombatRightClick(this)) {
             update();
             AbstractCardItem::mouseReleaseEvent(event);

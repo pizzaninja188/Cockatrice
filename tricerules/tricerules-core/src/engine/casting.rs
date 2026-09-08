@@ -268,7 +268,7 @@ impl GameEngine {
                     .find(|permission| {
                         permission.group_id == permission_id
                             && permission.object_id == *source_oid
-                            && permission.player_id == player
+                            && self.exile_permission_controller(permission) == Some(player)
                             && permission.zone_change_generation == generation
                             && permission.available_on_turn(self.state.turn_instance)
                             && match permission.scope {
@@ -341,11 +341,12 @@ impl GameEngine {
         if from_hand && !def.face_available_from_hand(face_index) {
             return Err(EngineError::Illegal("face cannot be cast from hand"));
         }
-        if exile_permission_scope
-            .as_ref()
-            .map(|permission| permission.0)
-            == Some(ExilePlayPermissionScope::CastCard)
-            && !def.face_available_from_hand(face_index)
+        if matches!(
+            exile_permission_scope
+                .as_ref()
+                .map(|permission| permission.0),
+            Some(ExilePlayPermissionScope::CastCard | ExilePlayPermissionScope::PlayCard)
+        ) && !def.face_available_from_hand(face_index)
         {
             return Err(EngineError::Illegal(
                 "face cannot be cast with this permission",
@@ -355,6 +356,7 @@ impl GameEngine {
             exile_permission_scope,
             Some((ExilePlayPermissionScope::CastFace(_), _))
         ) && !special
+            && !self.state.prepare_spell_sources.contains_key(&oid)
             && !face.is_permanent()
         {
             return Err(EngineError::Illegal(
@@ -786,7 +788,20 @@ impl GameEngine {
             .collect();
         let origin = self.state.objects[&oid].zone;
         let cast_departure = (origin == Zone::Graveyard).then(|| self.snapshot_zone_event());
-        let payment = self.commit_cost_transaction(payment_plan)?;
+        let prepare_source = self.state.prepare_spell_sources.get(&oid).cloned();
+        let payment_plan = self.prepare_cost_transaction_commit(payment_plan)?;
+        // The copy must be on the stack before costs can sacrifice its prepared source.
+        // All fallible payment validation precedes this first committed state change.
+        if prepare_source.is_some() {
+            super::resolution::move_object_to_zone(
+                &mut self.state,
+                self.registry,
+                oid,
+                Zone::Stack,
+                None,
+            )?;
+        }
+        let payment = self.commit_prevalidated_cost_transaction(payment_plan)?;
         let returned_attacker_assignment = payment.returned_attacker_assignment;
         let life_paid = payment.life_paid;
         let mana_spent = payment.mana_spent;
@@ -838,7 +853,7 @@ impl GameEngine {
             activated_ability: None,
             triggered_ability: None,
             is_triggered: false,
-            is_copy: false,
+            is_copy: prepare_source.is_some(),
             chosen_x,
             face_index,
             chosen_modes,
@@ -854,13 +869,31 @@ impl GameEngine {
             cast_method,
             returned_attacker_assignment,
         });
-        super::resolution::move_object_to_zone(
-            &mut self.state,
-            self.registry,
-            oid,
-            Zone::Stack,
-            None,
-        )?;
+        if let Some(source) = &prepare_source {
+            if self
+                .state
+                .zone_change_generation
+                .get(&source.object_id)
+                .copied()
+                .unwrap_or(0)
+                == source.zone_change_generation
+            {
+                super::preparation::unprepare_permanent(&mut self.state, source.object_id);
+            }
+            if let Some(copy) = self.state.objects.get_mut(&oid) {
+                copy.owner = player;
+                copy.controller = player;
+                copy.base_controller = player;
+            }
+        } else {
+            super::resolution::move_object_to_zone(
+                &mut self.state,
+                self.registry,
+                oid,
+                Zone::Stack,
+                None,
+            )?;
+        }
         if let Some(snapshot) = cast_departure {
             let event = self.finish_single_zone_event(snapshot, oid);
             target_triggers.extend(self.collect_event_triggers(&[event]));
@@ -933,7 +966,8 @@ impl GameEngine {
                 targets: public_targets,
                 ability_annotation: stack_annotation,
                 card_id: cast_card_id.clone(),
-                is_copy: false,
+                is_prepare_spell: prepare_source.is_some(),
+                is_copy: prepare_source.is_some(),
                 is_triggered: false,
                 copy_source_object_id: 0,
                 chosen_mode_indices,
@@ -953,6 +987,7 @@ impl GameEngine {
         );
         target_triggers.extend(payment.expend_triggers);
         self.snapshot_completed_cast(oid);
+        target_triggers.extend(self.collect_delayed_copy_triggers(&fact));
         target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast { fact }]));
         // Both kinds of triggers are waiting when the cast completes, so they form one CR 603.3b
         // ordering group rather than forcing an artificial target-trigger/cast-trigger order.
@@ -1361,6 +1396,7 @@ impl GameEngine {
                 targets: targets.to_vec(),
                 ability_annotation: ability_text,
                 card_id: String::new(),
+                is_prepare_spell: false,
                 is_copy: false,
                 is_triggered: false,
                 copy_source_object_id: 0,
@@ -2087,6 +2123,7 @@ impl GameEngine {
         match self.begin_battlefield_entry(
             item,
             BattlefieldEntryEvent {
+                prepared: false,
                 object_id: oid,
                 deciding_player: player,
                 destination_controller: player,

@@ -1,0 +1,27 @@
+(
+  id: "infirmary_healer_stream_of_life",
+  name: "Infirmary Healer // Stream of Life",
+  layout: Preparation,
+  faces: [
+    (
+      face_id: "infirmary_healer",
+      name: "Infirmary Healer",
+      mana_cost: "{1}{G}",
+      types: ["Creature", "Cat", "Cleric"],
+      power: 2,
+      toughness: 3,
+      static_abilities: [(
+        ability_id: "enters_prepared",
+        presentation: OracleLines([1]),
+        definition: EntersPrepared,
+      )],
+    ),
+    (
+      face_id: "stream_of_life",
+      name: "Stream of Life",
+      mana_cost: "{X}{G}",
+      types: ["Sorcery"],
+      spell_effect: [TargetPlayerGainsLife(amount: "X", target: (kind: AnyPlayer))],
+    ),
+  ],
+)

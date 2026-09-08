@@ -1861,6 +1861,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     restrictedManaByPlayer.clear();
     eligibleRestrictedManaByAbility.clear();
     battlefieldGenerationByOid.clear();
+    preparedCopyBySourceOid.clear();
     engineOidMarkedDamage.clear();
     engineOidBattlefieldPower.clear();
     engineOidBattlefieldToughness.clear();
@@ -1909,6 +1910,8 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
         clearHandActions();
         zoneCastActions = {};
         zoneCastSourceByOid.clear();
+        preparationCastCopyBySourceOid.clear();
+        preparationCastGenerationBySourceOid.clear();
         zoneCastCostsByCastKey.clear();
         zoneLandFacesByOid.clear();
         zoneLandSourceByOid.clear();

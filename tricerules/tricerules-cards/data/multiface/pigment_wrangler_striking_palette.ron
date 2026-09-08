@@ -1,0 +1,18 @@
+(
+  id: "pigment_wrangler_striking_palette",
+  name: "Pigment Wrangler // Striking Palette",
+  layout: Preparation,
+  faces: [
+    (
+      face_id: "pigment_wrangler", name: "Pigment Wrangler", mana_cost: "{4}{R}",
+      types: ["Creature", "Orc", "Sorcerer"], power: 4, toughness: 4, keywords: [Flying],
+      static_abilities: [(
+        ability_id: "enters_prepared", presentation: OracleLines([2]), definition: EntersPrepared,
+      )],
+    ),
+    (
+      face_id: "striking_palette", name: "Striking Palette", mana_cost: "{R}",
+      types: ["Sorcery"], spell_effect: [CopyNextSpellThisTurn],
+    ),
+  ],
+)

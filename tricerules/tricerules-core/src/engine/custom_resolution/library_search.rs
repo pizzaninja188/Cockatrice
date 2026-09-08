@@ -56,6 +56,7 @@ impl GameEngine {
             match self.begin_battlefield_entry(
                 stack.item.clone(),
                 BattlefieldEntryEvent {
+                    prepared: false,
                     object_id: oid,
                     deciding_player: controller,
                     destination_controller: controller,
@@ -426,6 +427,7 @@ impl GameEngine {
                 match self.begin_battlefield_entry(
                     stack.item.clone(),
                     BattlefieldEntryEvent {
+                        prepared: false,
                         object_id: oid,
                         deciding_player: controller,
                         destination_controller: controller,

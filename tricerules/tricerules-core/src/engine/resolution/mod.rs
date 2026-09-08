@@ -977,6 +977,7 @@ impl GameEngine {
                 match self.begin_battlefield_entry(
                     top.clone(),
                     BattlefieldEntryEvent {
+                        prepared: false,
                         object_id: top.id,
                         deciding_player: top.controller,
                         destination_controller: top.controller,
@@ -1183,7 +1184,9 @@ impl GameEngine {
 
         self.state.stack.retain(|item| item.id != top.id);
         let is_resolved_omen = exit == DeferredStackExit::Resolved && is_omen_spell;
-        let physical_owner = self.state.objects.get(&top.id).map(|object| object.owner);
+        let physical_owner = (!top.is_copy)
+            .then(|| self.state.objects.get(&top.id).map(|object| object.owner))
+            .flatten();
         let shuffle_player = physical_owner.unwrap_or(top.controller);
         let destination = if is_resolved_omen {
             rv1::StackResolveDestination::Library
@@ -1384,7 +1387,21 @@ impl GameEngine {
 
         if !top.resolution_branch_choices.is_empty() {
             let mut expanded = Vec::new();
-            for (effect_index, entry) in resolution_effects.into_iter().enumerate() {
+            for (effect_index, mut entry) in resolution_effects.into_iter().enumerate() {
+                if let SpellEffectKind::TapOrUntap { target } = &entry.effect {
+                    if let Some(choice) = top.resolution_branch_choices.get(&(effect_index as u32))
+                    {
+                        entry.effect = match choice {
+                            Some(0) => SpellEffectKind::Tap {
+                                subject: EffectSubject::Chosen(Box::new(target.clone())),
+                            },
+                            Some(1) => SpellEffectKind::Untap {
+                                subject: EffectSubject::Chosen(Box::new(target.clone())),
+                            },
+                            _ => continue,
+                        };
+                    }
+                }
                 if let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &entry.effect {
                     if let Some(choice) = top.resolution_branch_choices.get(&(effect_index as u32))
                     {
@@ -1700,11 +1717,38 @@ impl GameEngine {
                     effect @ SpellEffectKind::TargetPlayerSacrifices { .. } => {
                         zones::target_player_sacrifices(&mut cx, effect)?
                     }
+                    SpellEffectKind::TapOrUntap { .. } => {
+                        use tricerules_cards::primitives::{ResolutionBranchDef, ResolutionCost};
+                        let branches = [("tap", "Tap"), ("untap", "Untap")]
+                            .into_iter()
+                            .map(|(id, label)| ResolutionBranchDef {
+                                branch_id: tricerules_cards::ChoiceId::new(id)
+                                    .expect("static branch id"),
+                                presentation: tricerules_cards::AbilityPresentation::Fallback,
+                                runtime_fallback: Some(label.into()),
+                                cost: ResolutionCost::None,
+                                requirement: Default::default(),
+                                effects: Vec::new(),
+                            })
+                            .collect();
+                        choices::park_resolution_branches(&mut cx, true, branches)?
+                    }
                     effect @ SpellEffectKind::Tap { .. } => misc::tap(&mut cx, effect)?,
                     effect @ SpellEffectKind::SkipNextUntap { .. } => {
                         misc::skip_next_untap(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Untap { .. } => misc::untap(&mut cx, effect)?,
+                    effect @ SpellEffectKind::SetPrepared { .. } => {
+                        misc::set_prepared(&mut cx, effect)?
+                    }
+                    SpellEffectKind::CopyNextSpellThisTurn => {
+                        cx.engine
+                            .register_next_spell_copy(cx.top, cx.controller, cx.spell_label);
+                        EffectOutcome::Continue
+                    }
+                    effect @ SpellEffectKind::CopyCapturedSpell => {
+                        stack_ops::copy_target_spell(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::GainControlUntilEndOfTurn { .. } => {
                         misc::gain_control_until_end_of_turn(&mut cx, effect)?
                     }
@@ -2038,6 +2082,7 @@ impl GameEngine {
                 return Ok(true);
             }
             let entry = BattlefieldEntryEvent {
+                prepared: false,
                 object_id: exiled.object_id,
                 deciding_player: owner,
                 destination_controller: owner,
@@ -2272,6 +2317,7 @@ impl GameEngine {
                 };
                 entries.push(TokenBattlefieldEntry {
                     event: BattlefieldEntryEvent {
+                        prepared: false,
                         object_id: oid,
                         deciding_player: pid,
                         destination_controller: pid,
@@ -2590,6 +2636,7 @@ fn move_object_to_zone_with_entry_receipt(
         .flatten();
     if leaving_battlefield {
         state.room_states.remove(&oid);
+        super::preparation::unprepare_permanent(state, oid);
         state.battle_protectors.remove(&oid);
         if let Some(old_controller) = state.objects.get(&oid).map(|object| object.controller) {
             let object = TriggerObjectRef {
@@ -3984,7 +4031,7 @@ mod attached_subject_tests {
             ),
             (
                 SpellEffectKind::TargetPlayerGainsLife {
-                    amount: 3,
+                    amount: 3.into(),
                     target: player_target.clone(),
                 },
                 vec![0],

@@ -1086,14 +1086,16 @@ fn validate_effect_targets(
                 ));
             }
         }
-        SpellEffectKind::SkipNextUntap { target: _ }
+        SpellEffectKind::TapOrUntap { target: _ }
+        | SpellEffectKind::SkipNextUntap { target: _ }
         | SpellEffectKind::GainControlUntilEndOfTurn { target: _ }
         | SpellEffectKind::Tap {
             subject: EffectSubject::Chosen(_),
         }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Chosen(_),
-        } => {
+        }
+        | SpellEffectKind::SetPrepared { subject: EffectSubject::Chosen(_), .. } => {
             let roles = effect.target_roles();
             let [TargetRole::Filtered(filter)] = roles.as_slice() else {
                 return Err(EngineError::Illegal("effect requires one filtered target role"));
@@ -1392,6 +1394,8 @@ fn validate_effect_targets(
         | SpellEffectKind::DamageAll { .. }
         | SpellEffectKind::TapAll { .. }
         | SpellEffectKind::UntapAll { .. }
+        | SpellEffectKind::CopyNextSpellThisTurn
+        | SpellEffectKind::CopyCapturedSpell
         | SpellEffectKind::Untap {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
@@ -1399,6 +1403,11 @@ fn validate_effect_targets(
                 | EffectSubject::PreviousEffectObject
                 | EffectSubject::SearchedObject(_),
         }
+        | SpellEffectKind::SetPrepared { subject: EffectSubject::Source
+                | EffectSubject::AttachedObject
+                | EffectSubject::TriggerObject
+                | EffectSubject::PreviousEffectObject
+                | EffectSubject::SearchedObject(_), .. }
         | SpellEffectKind::Tap {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject
@@ -1766,6 +1775,7 @@ fn spell_target_legality_error_with_context(
         | SpellEffectKind::DamageTarget { target: _, .. }
         | SpellEffectKind::ExileIfWouldDieThisTurn { target: _ }
         | SpellEffectKind::DamageTargets { target: _, .. }
+        | SpellEffectKind::TapOrUntap { target: _ }
         | SpellEffectKind::SkipNextUntap { target: _ }
         | SpellEffectKind::GainControlUntilEndOfTurn { target: _ }
         | SpellEffectKind::Tap {
@@ -1773,6 +1783,10 @@ fn spell_target_legality_error_with_context(
         }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Chosen(_),
+        }
+        | SpellEffectKind::SetPrepared {
+            subject: EffectSubject::Chosen(_),
+            ..
         }
         | SpellEffectKind::PumpTarget {
             subject: EffectSubject::Chosen(_),
@@ -1877,6 +1891,10 @@ fn spell_target_legality_error_with_context(
         }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
+        }
+        | SpellEffectKind::SetPrepared {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            ..
         }
         | SpellEffectKind::Exile {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
@@ -2706,7 +2724,7 @@ mod tests {
         let engine = GameEngine::new(73_001, &[10, 20], 20, None, true).expect("new");
         let effects = vec![
             SpellEffectKind::TargetPlayerGainsLife {
-                amount: 1,
+                amount: 1.into(),
                 target: TargetFilter {
                     kind: TargetKind::AnyPlayer,
                     ..TargetFilter::default()

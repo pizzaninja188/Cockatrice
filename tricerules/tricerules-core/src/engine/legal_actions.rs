@@ -2165,6 +2165,7 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                     has_convoke: face.keywords.contains(&Keyword::Convoke),
                     casting_permission_id: None,
                     all_modes_cast_cost: None,
+                    preparation_source: None,
                 };
                 if !cost_choices.non_mana_costs_payable {
                     continue;
@@ -2249,7 +2250,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
         .filter(|_| !special)
         .chain(special_permission.iter())
         .filter(|permission| {
-            permission.player_id == pid && permission.available_on_turn(eng.state.turn_instance)
+            eng.exile_permission_controller(permission) == Some(pid)
+                && permission.available_on_turn(eng.state.turn_instance)
         })
     {
         let Some(object) = eng.state.objects.get(&permission.object_id) else {
@@ -2269,8 +2271,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
         };
         let face_indices: Vec<_> = match permission.scope {
             ExilePlayPermissionScope::CastFace(face_index) => vec![face_index],
-            ExilePlayPermissionScope::PlayCard => (0..definition.faces_iter().count()).collect(),
-            ExilePlayPermissionScope::CastCard => (0..definition.faces_iter().count())
+            ExilePlayPermissionScope::PlayCard | ExilePlayPermissionScope::CastCard => (0
+                ..definition.faces_iter().count())
                 .filter(|&face| definition.face_available_from_hand(face))
                 .collect(),
         };
@@ -2328,6 +2330,16 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                 has_convoke: face.keywords.contains(&Keyword::Convoke),
                 casting_permission_id: Some(permission.group_id),
                 all_modes_cast_cost: None,
+                preparation_source: match permission.origin {
+                    crate::state::ExilePlayPermissionOrigin::Preparation {
+                        source_object_id,
+                        source_generation,
+                    } => Some(rv1::PreparationSource {
+                        object_id: source_object_id,
+                        zone_change_generation: source_generation,
+                    }),
+                    _ => None,
+                },
             };
             if !cost_choices.non_mana_costs_payable {
                 continue;
@@ -2504,7 +2516,7 @@ fn exile_play_permission_groups(
         .state
         .active_exile_play_permissions
         .iter()
-        .filter(|permission| permission.player_id == pid)
+        .filter(|permission| eng.exile_permission_controller(permission) == Some(pid))
     {
         let Some(object) = eng.state.objects.get(&permission.object_id) else {
             continue;

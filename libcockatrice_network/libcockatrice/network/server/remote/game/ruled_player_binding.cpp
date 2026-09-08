@@ -736,6 +736,7 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         }
     }
 
+    result.publicZoneOrderChanged = reconcilePreparationCopies(player, v);
     // Move passes can reach a public pile in a different order from engine resolution
     // (Lightning Bolt and its victim, or simultaneous mill/discard). Preserve recorded
     // identities, then arrange the physical pile newest-first from the engine's order.
@@ -959,6 +960,50 @@ bool RuledPlayerBinding::ensureEnduringStoryToken(Server_Player *player, int bat
         player->sendCreateTokenEvents(table, card, x, battlefieldGridY, *ges);
     }
     return true;
+}
+
+bool RuledPlayerBinding::reconcilePreparationCopies(Server_Player *player,
+                                                     const ruled::v1::RuledPerPlayerView &view)
+{
+    Server_CardZone *exile = player->getZones().value(ZoneNames::EXILE);
+    if (!exile) {
+        return false;
+    }
+    QSet<quint32> desired;
+    for (const auto &copy : view.prepare_spell_copies()) {
+        desired.insert(copy.object_id());
+    }
+    bool changed = false;
+    for (auto it = preparationCopyServerCardIds.begin(); it != preparationCopyServerCardIds.end();) {
+        if (desired.contains(it.key())) {
+            ++it;
+            continue;
+        }
+        if (Server_Card *card = exile->getCard(it.value(), nullptr, false)) {
+            exile->removeCard(card);
+            card->deleteLater();
+        }
+        exileEngineOidToServerCardId.remove(it.key());
+        it = preparationCopyServerCardIds.erase(it);
+        changed = true;
+    }
+    for (const auto &copy : view.prepare_spell_copies()) {
+        const quint32 oid = copy.object_id();
+        const int existing = preparationCopyServerCardIds.value(oid, -1);
+        if (existing >= 0 && exile->getCard(existing, nullptr, false)) {
+            continue;
+        }
+        auto *card = new Server_Card({QString::fromStdString(copy.display_name()), QString()}, player->newCardId(), 0, 0);
+        card->moveToThread(player->thread());
+        card->setAnnotation(QStringLiteral("Prepare spell copy"));
+        card->setDestroyOnZoneChange(true);
+        exile->insertCard(card, 0, 0);
+        preparationCopyServerCardIds.insert(oid, card->getId());
+        exileEngineOidToServerCardId.insert(oid, card->getId());
+        changed = true;
+    }
+    // The caller sends the changed public-zone snapshot, including explicit removal.
+    return changed;
 }
 
 bool RuledPlayerBinding::reconcileStaticEmblemTokens(Server_Player *player,

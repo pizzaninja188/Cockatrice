@@ -386,7 +386,7 @@ impl GameEngine {
                     // CR 614.12 / 707.5 entry replacement, handled before zone commitment in
                     // `engine::replacement`; there is no post-entry continuous effect to emit.
                 }
-                StaticAbilityDef::EntersTapped { .. } => {
+                StaticAbilityDef::EntersPrepared | StaticAbilityDef::EntersTapped { .. } => {
                     // CR 614.12 entry replacements are evaluated against the proposed event in
                     // `engine::replacement`; there is no post-entry continuous effect to emit.
                 }
@@ -1034,7 +1034,11 @@ impl GameEngine {
             .continuous_effects
             .retain(|effect| effect.duration != EffectDuration::UntilEndOfTurn);
         self.state.active_event_observers.retain(|observer| {
-            observer.matcher != EventObserverMatcher::WhenWatchedObjectDiesThisTurn
+            !matches!(
+                observer.matcher,
+                EventObserverMatcher::WhenWatchedObjectDiesThisTurn
+                    | EventObserverMatcher::NextInstantOrSorceryThisTurn { .. }
+            )
         });
     }
 

@@ -154,6 +154,11 @@ pub(super) fn target_player_gains_life(
     let SpellEffectKind::TargetPlayerGainsLife { amount, .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let amount = cx.engine.resolve_amount(
+        &amount,
+        AmountContext::for_stack_item(cx.top, cx.controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let targets = cx.targets;

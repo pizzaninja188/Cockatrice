@@ -1,0 +1,19 @@
+(
+  id: "elite_interceptor_rejoinder", name: "Elite Interceptor // Rejoinder", layout: Preparation,
+  faces: [
+    (
+      face_id: "elite_interceptor", name: "Elite Interceptor", mana_cost: "{W}",
+      types: ["Creature", "Human", "Wizard"], power: 1, toughness: 2,
+      static_abilities: [(
+        ability_id: "enters_prepared", presentation: OracleLines([1]), definition: EntersPrepared,
+      )],
+    ),
+    (
+      face_id: "rejoinder", name: "Rejoinder", mana_cost: "{1}{W}", types: ["Sorcery"],
+      spell_effect: [
+        TapOrUntap(target: (kind: Creature)),
+        Draw(count: 1),
+      ],
+    ),
+  ],
+)

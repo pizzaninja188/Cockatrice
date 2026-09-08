@@ -1856,6 +1856,7 @@ pub(super) fn move_graveyard_cards(
         let entries = targets
             .into_iter()
             .map(|oid| BattlefieldEntryEvent {
+                prepared: false,
                 object_id: oid,
                 deciding_player: cx.engine.state.objects[&oid].owner,
                 destination_controller: cx.controller,
@@ -1998,6 +1999,7 @@ pub(super) fn return_triggered_card(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            prepared: false,
             object_id: source_id,
             deciding_player: destination_controller,
             destination_controller,
@@ -2077,6 +2079,7 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            prepared: false,
             object_id: source_id,
             deciding_player: cx.controller,
             destination_controller: cx.controller,
@@ -2211,6 +2214,7 @@ pub(super) fn exile_source_then_return_transformed(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            prepared: false,
             object_id: source_id,
             deciding_player: destination_controller,
             destination_controller,
@@ -2745,6 +2749,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
         match engine.begin_battlefield_entry(
             cx.top.clone(),
             BattlefieldEntryEvent {
+                prepared: false,
                 object_id,
                 deciding_player: controller,
                 destination_controller: controller,

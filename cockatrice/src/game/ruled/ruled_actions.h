@@ -41,6 +41,8 @@ namespace RuledActions
 {
 bool isReplacementEffectCard(const CardItem *card);
 bool tryHandleReplacementEffectClick(CardItem *card, bool select);
+// Public-zone permission belongs to the local actor, independently of the zone owner.
+bool tryHandlePublicZonePlay(CardItem *card, bool contextMenu = false);
 
 // ---------------------------------------------------------------------------------------
 // Mode predicate — the one place that reads the ruled_game flag.

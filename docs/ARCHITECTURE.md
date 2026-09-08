@@ -187,6 +187,34 @@ public-pile order requires a full recipient-filtered game-state refresh.
 genuine ids of cards in hand and on the battlefield. Every id-keyed pick query must therefore be
 gated on `RuledActions::isResolutionPickZoneCard` first.
 
+### Preparation copies
+
+CR 722 preparation belongs to the permanent's current battlefield incarnation. The engine links
+that designation to a distinct noncard object in exile and snapshots the inset through the copied
+definition's immutable provenance. Later ability loss, face-down status, or copy changes do not
+rewrite an existing inset copy. Leaving the battlefield or unpreparing retires the linked copy;
+casting consumes the designation only after all costs have committed. Copies are excluded from
+card-only predicates and graveyard-card history.
+
+`PrepareSpellCopyView` is a full public replacement on every zone snapshot, even when battlefield
+objects are omitted. `BattlefieldObject.preparation` carries the designation; the recipient-private
+`LegalZoneCastAction.preparation_source` links the current controller's action to the source's
+ObjectId and generation. The permanent menu and exile entry submit that same action through shared
+targeting and payment. Servatrice maintains dedicated synthetic exile bindings and never moves
+those display objects as physical cards. `StackPushed.is_prepare_spell` preserves inset naming
+and classification for both cast copies and subsequent spell copies.
+
+Physical deck aliases exclude preparation inset names: implementing Infirmary Healer does not
+implement the separately printed Stream of Life. The inset name remains in the face definition
+for rules and presentation. Striking Palette's next-spell trigger uses the existing one-shot event
+observer and APNAP pipeline, captures the triggering spell, and shares ordinary copy/retargeting
+execution; this primitive also fits Doublecast. Rejoinder's optional tap/untap choice uses the
+existing resolution-branch prompt and preserves its originally chosen target (also needed by Twiddle).
+
+Phasing is not implemented. When added, prepared permanents must lose their exile copy on phasing
+out and create a fresh one when phasing in prepared, as specified by CR 722.3c; do not model this as
+an ordinary zone change or loss of the prepared designation.
+
 ### Naming convention
 
 In new and touched code, name the variable after the id: `oid` (engine `ObjectId`), `cardId`

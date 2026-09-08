@@ -123,6 +123,8 @@ pub enum Layout {
     /// CR 720: cast either the normal permanent characteristics or the inset instant/sorcery
     /// characteristics; a resolving Omen is shuffled into its owner's library.
     Omen,
+    /// CR 722: only the base face is castable; preparing creates an inset-face copy in exile.
+    Preparation,
     /// CR 710: one card, two states stacked on one face (older Kamigawa flip cards).
     Flip,
 }
@@ -963,15 +965,33 @@ pub struct CardDefinition {
 }
 
 impl CardDefinition {
+    /// Accepted physical-card names for deck input and display-database coverage. A preparation
+    /// inset remains available as a rules name, but is not an alias for the physical card:
+    /// Infirmary Healer's inset shares its name with the independently printed Stream of Life.
+    pub fn deck_input_names(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.name.as_str()).chain(
+            self.faces
+                .iter()
+                .enumerate()
+                .filter(|(index, face)| {
+                    face.name != self.name && (self.layout != Layout::Preparation || *index == 0)
+                })
+                .map(|(_, face)| face.name.as_str()),
+        )
+    }
+
     /// Display-database identity for `face_index`. Cockatrice stores transform, flip, and MDFC
     /// faces as separate entries, while split, Adventure, and Omen cards retain the whole-card entry.
     pub fn face_display_name(&self, face_index: usize) -> Option<&str> {
         let face = self.face(face_index)?;
         Some(match self.layout {
             Layout::Transform | Layout::Flip | Layout::ModalDfc => face.name.as_str(),
-            Layout::Normal | Layout::Split | Layout::Room | Layout::Adventure | Layout::Omen => {
-                self.name.as_str()
-            }
+            Layout::Normal
+            | Layout::Split
+            | Layout::Room
+            | Layout::Adventure
+            | Layout::Omen
+            | Layout::Preparation => self.name.as_str(),
         })
     }
 
@@ -1226,7 +1246,9 @@ impl CardDefinition {
     /// independent of timing, costs, targets, and whether the chosen face is a spell or land.
     pub fn face_available_from_hand(&self, face_index: usize) -> bool {
         match self.layout {
-            Layout::Normal | Layout::Transform | Layout::Flip => face_index == 0,
+            Layout::Normal | Layout::Transform | Layout::Flip | Layout::Preparation => {
+                face_index == 0
+            }
             Layout::Split | Layout::Room | Layout::ModalDfc | Layout::Adventure | Layout::Omen => {
                 face_index < self.face_count()
             }
@@ -1254,6 +1276,26 @@ mod tests {
             layout,
             faces,
         }
+    }
+
+    #[test]
+    fn preparation_only_base_characteristics_are_available_on_the_card() {
+        let layout: Layout = ron::from_str("Preparation").expect("preparation layout");
+        let mut base = face(&["Creature"]);
+        base.name = "Infirmary Healer".into();
+        base.mana_cost = ManaCost::parse("{1}{G}").unwrap();
+        let mut inset = face(&["Sorcery"]);
+        inset.name = "Stream of Life".into();
+        inset.mana_cost = ManaCost::parse("{X}{G}").unwrap();
+        let card = definition(layout, vec![base, inset]);
+        assert!(card.face_available_from_hand(0));
+        assert!(!card.face_available_from_hand(1));
+        assert!(card.matches_card_type_outside_stack(CardTypeFilter::Creature));
+        assert!(!card.matches_card_type_outside_stack(CardTypeFilter::Sorcery));
+        assert_eq!(card.mana_value_outside_stack(), 2);
+        assert!(card.has_name_outside_stack("Infirmary Healer"));
+        assert!(!card.has_name_outside_stack("Stream of Life"));
+        assert_eq!(card.face_display_name(1), Some("Test Card"));
     }
 
     #[test]

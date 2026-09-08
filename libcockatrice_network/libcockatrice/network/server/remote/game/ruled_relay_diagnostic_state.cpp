@@ -50,6 +50,7 @@ QJsonObject RuledBatchSynchronizer::diagnosticSnapshot() const
                                    {"public_and_hand_identities", identities(binding.engineOidToServerCardId)},
                                    {"library_identities", identities(binding.libraryEngineOidToServerCardId)},
                                    {"graveyard_identities", identities(binding.graveyardEngineOidToServerCardId)},
+                                   {"preparation_copy_identities", identities(binding.preparationCopyServerCardIds)},
                                    {"exile_identities", identities(binding.exileEngineOidToServerCardId)},
                                    {"static_emblem_identities", emblems},
                                    {"hand_engine_oids_in_order", hand},

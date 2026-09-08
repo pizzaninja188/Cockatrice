@@ -239,6 +239,10 @@ pub enum ExilePlayPermissionScope {
 pub enum ExilePlayPermissionOrigin {
     Effect,
     Warp,
+    Preparation {
+        source_object_id: ObjectId,
+        source_generation: u64,
+    },
 }
 
 /// The base mana cost authorized by an exile permission. Ordinary permissions retain the
@@ -1252,6 +1256,7 @@ pub struct BattlefieldEntryEvent {
     /// same snapshot, so replacement ordering cannot retroactively change an entry predicate.
     pub player_life_snapshot: BTreeMap<PlayerId, i32>,
     pub tapped: bool,
+    pub prepared: bool,
     /// CR 611.2e type-setting effect supplied by the instruction putting this object onto the
     /// battlefield. Entry replacement predicates and ETB triggers must see these types.
     pub set_types: Option<TypeLineReplacement>,
@@ -1666,6 +1671,9 @@ pub struct DelayedTriggerPayload {
 /// Object events compare both ObjectId and zone-change generation (CR 400.7).
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub enum EventObserverMatcher {
+    NextInstantOrSorceryThisTurn {
+        controller: PlayerId,
+    },
     AtBeginningOfNextEndStep,
     AtBeginningOfControllerNextTurnEndStep {
         controller: PlayerId,
@@ -1696,6 +1704,10 @@ pub struct ActiveEventObserver {
 
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ObservedGameEvent {
+    SpellCast {
+        controller: PlayerId,
+        instant_or_sorcery: bool,
+    },
     TurnBegan {
         active_player: PlayerId,
         turn_instance: u64,
@@ -1959,6 +1971,12 @@ pub struct GameState {
     /// Public CR 709.5 designations for battlefield Rooms. Absence means the object is not a
     /// Room permanent; the zone-change funnel removes entries on departure under CR 400.7.
     pub room_states: HashMap<ObjectId, RoomState>,
+    /// CR 722.3: permanent -> linked exile copy. A designation is not a copiable value.
+    pub prepared_permanents: BTreeMap<ObjectId, ObjectId>,
+    /// Copies keep their prepare-spell classification on the stack, independently of the source.
+    pub prepare_spell_sources: BTreeMap<ObjectId, TriggerObjectRef>,
+    /// Event-time spell choices for delayed copy triggers, keyed by the trigger's unique id.
+    pub captured_spell_copies: BTreeMap<ObjectId, StackItem>,
     /// CR 310.11a: public protector chosen for each battlefield Siege. The zone-change funnel
     /// removes this mapping so a returned Battle must choose again.
     pub battle_protectors: HashMap<ObjectId, PlayerId>,
@@ -2092,6 +2110,14 @@ pub struct GameState {
 }
 
 impl GameState {
+    /// Tokens and persistent preparation copies are objects, but never cards (CR 108.2).
+    pub(crate) fn is_card_object(&self, oid: ObjectId) -> bool {
+        self.objects
+            .get(&oid)
+            .is_some_and(|object| !object.is_token())
+            && !self.prepare_spell_sources.contains_key(&oid)
+    }
+
     pub(crate) fn allocate_trigger_grant_origin(&mut self) -> TriggerAbilityOrigin {
         let origin = TriggerAbilityOrigin::ResolvingGrant(self.next_trigger_grant_id);
         self.next_trigger_grant_id += 1;
@@ -2216,6 +2242,13 @@ impl GameState {
             };
             let mut expired = false;
             let matched = match (&mut observer.matcher, event) {
+                (
+                    EventObserverMatcher::NextInstantOrSorceryThisTurn { controller },
+                    ObservedGameEvent::SpellCast {
+                        controller: caster,
+                        instant_or_sorcery,
+                    },
+                ) => *controller == caster && instant_or_sorcery,
                 (
                     EventObserverMatcher::WhenWatchedObjectDiesOrIsExiled,
                     ObservedGameEvent::BattlefieldDeparture {

@@ -441,6 +441,7 @@ impl GameEngine {
 
         let label = object_display_name(&self.state, self.registry, exiled.object_id);
         let entry = BattlefieldEntryEvent {
+            prepared: false,
             object_id: exiled.object_id,
             deciding_player: owner,
             destination_controller: owner,

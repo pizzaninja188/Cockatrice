@@ -1033,6 +1033,10 @@ pub enum SpellEffectKind {
     /// untap step. The restriction follows the permanent's current controller, is consumed by
     /// that untap step even if the permanent is already untapped, and does not survive a zone
     /// change. Crippling Chill and Frost Breath share this primitive.
+    /// Rejoinder and Twiddle choose tap, untap, or neither during resolution.
+    TapOrUntap {
+        target: TargetFilter,
+    },
     SkipNextUntap {
         target: TargetFilter,
     },
@@ -1051,6 +1055,11 @@ pub enum SpellEffectKind {
     Untap {
         #[serde(default)]
         subject: EffectSubject,
+    },
+    /// CR 722.3: the same designation transition serves prepared entry and later instructions.
+    SetPrepared {
+        subject: EffectSubject,
+        prepared: bool,
     },
     /// CR 701.26: untap every permanent matching `filter` controlled by `players`. Untargeted, and
     /// snapshots the battlefield as it resolves, like [`Self::TapAll`]. Controller scope
@@ -1111,6 +1120,11 @@ pub enum SpellEffectKind {
         #[serde(default)]
         spell_filter: StackSpellFilter,
     },
+    /// Striking Palette and Doublecast: a one-shot delayed copy trigger, expiring this turn.
+    CopyNextSpellThisTurn,
+    /// Engine-created delayed trigger instruction; its captured spell is stored with the trigger.
+    #[serde(skip_deserializing)]
+    CopyCapturedSpell,
     /// CR 613.4 layer 7c: give every creature matching `filter` +power/+toughness until end of
     /// turn (the mass, one-shot sibling of [`Self::PumpTarget`]). Untargeted — `filter` selects
     /// the set the same way a static anthem does. Glorious Charge / Inspired Charge
@@ -1283,7 +1297,7 @@ pub enum SpellEffectKind {
         who: PlayerRecipient,
     },
     TargetPlayerGainsLife {
-        amount: u32,
+        amount: Amount,
         target: TargetFilter,
     },
     TargetPlayerLosesLife {
@@ -2128,6 +2142,9 @@ impl SpellEffectKind {
                 subject: EffectSubject::AttachedObject,
             } | SpellEffectKind::Untap {
                 subject: EffectSubject::AttachedObject,
+            } | SpellEffectKind::SetPrepared {
+                subject: EffectSubject::AttachedObject,
+                ..
             } | SpellEffectKind::Regenerate {
                 subject: EffectSubject::AttachedObject,
             } | SpellEffectKind::Fight {
@@ -2189,6 +2206,9 @@ impl SpellEffectKind {
                 subject: EffectSubject::TriggerObject,
             } | SpellEffectKind::Untap {
                 subject: EffectSubject::TriggerObject,
+            } | SpellEffectKind::SetPrepared {
+                subject: EffectSubject::TriggerObject,
+                ..
             } | SpellEffectKind::Regenerate {
                 subject: EffectSubject::TriggerObject,
             } | SpellEffectKind::Fight {
@@ -2324,6 +2344,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PumpTarget { subject, .. }
             | SpellEffectKind::Tap { subject }
             | SpellEffectKind::Untap { subject }
+            | SpellEffectKind::SetPrepared { subject, .. }
             | SpellEffectKind::GrantKeywords { subject, .. }
             | SpellEffectKind::RemoveAllAbilities { subject, .. }
             | SpellEffectKind::GrantKeywordChoice { subject, .. }
@@ -2356,6 +2377,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ExileIfWouldDieThisTurn { target }
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyAttached { target, .. }
+            | SpellEffectKind::TapOrUntap { target }
             | SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
@@ -2385,6 +2407,8 @@ impl SpellEffectKind {
                 vec![TargetRole::GraveyardCard(filter)]
             }
             SpellEffectKind::DamagePlayer { .. }
+            | SpellEffectKind::CopyNextSpellThisTurn
+            | SpellEffectKind::CopyCapturedSpell
             | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
             | SpellEffectKind::CreateStaticEmblem { .. }
             | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
@@ -2474,6 +2498,7 @@ impl SpellEffectKind {
             | Self::DamageAttackedPlayerOrPlaneswalker { amount }
             | Self::Draw { count: amount, .. }
             | Self::GainLife { amount }
+            | Self::TargetPlayerGainsLife { amount, .. }
             | Self::Mill { count: amount, .. }
             | Self::PutCounters { count: amount, .. }
             | Self::Amass { count: amount, .. }
@@ -2613,6 +2638,7 @@ impl SpellEffectKind {
                 | SpellEffectKind::PumpTarget { subject: value, .. }
                 | SpellEffectKind::Tap { subject: value }
                 | SpellEffectKind::Untap { subject: value }
+                | SpellEffectKind::SetPrepared { subject: value, .. }
                 | SpellEffectKind::GrantKeywords { subject: value, .. }
                 | SpellEffectKind::RemoveAllAbilities { subject: value, .. }
                 | SpellEffectKind::GrantKeywordChoice { subject: value, .. }
@@ -2730,6 +2756,7 @@ impl SpellEffectKind {
                 | SpellEffectKind::DamagePlayer { amount, .. }
                 | SpellEffectKind::Draw { count: amount, .. }
                 | SpellEffectKind::GainLife { amount }
+                | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
                 | SpellEffectKind::Mill { count: amount, .. }
                 | SpellEffectKind::PutCounters { count: amount, .. }
                 | SpellEffectKind::Amass { count: amount, .. }
@@ -3060,6 +3087,7 @@ impl SpellEffectKind {
             }
             | SpellEffectKind::Draw { count: amount, .. }
             | SpellEffectKind::GainLife { amount }
+            | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
             | SpellEffectKind::Mill { count: amount, .. }
             | SpellEffectKind::PutCounters { count: amount, .. }
             | SpellEffectKind::Amass { count: amount, .. }
@@ -3562,6 +3590,11 @@ impl SpellEffectKind {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
+            } | SpellEffectKind::SetPrepared {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
+                ..
             } | SpellEffectKind::Tap {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
@@ -3644,7 +3677,8 @@ impl SpellEffectKind {
             }
             // CR 701.19/701.20: tapping and chosen-subject untapping act on permanents, never
             // players. A source subject is already constrained to a permanent ability above.
-            SpellEffectKind::SkipNextUntap { target }
+            SpellEffectKind::TapOrUntap { target }
+            | SpellEffectKind::SkipNextUntap { target }
             | SpellEffectKind::GainControlUntilEndOfTurn { target } => {
                 if !target.is_permanent_only() {
                     Err(format!(
@@ -3660,6 +3694,10 @@ impl SpellEffectKind {
             }
             | SpellEffectKind::Untap {
                 subject: EffectSubject::Chosen(target),
+            }
+            | SpellEffectKind::SetPrepared {
+                subject: EffectSubject::Chosen(target),
+                ..
             }
             | SpellEffectKind::ReturnToOwnersHand {
                 subject: EffectSubject::Chosen(target),
@@ -4303,6 +4341,7 @@ impl SpellEffectKind {
             | Self::DamageAttackedPlayerOrPlaneswalker { amount }
             | Self::Draw { count: amount, .. }
             | Self::GainLife { amount }
+            | Self::TargetPlayerGainsLife { amount, .. }
             | Self::Mill { count: amount, .. }
             | Self::PutCounters { count: amount, .. }
             | Self::Amass { count: amount, .. }

@@ -5280,6 +5280,46 @@ TEST_F(RuledClientTest, ExilePermissionOffersKeepOpaqueIdentityCostAndSourceLabe
     EXPECT_EQ(menu[1].label, QStringLiteral("Cast Grizzly Bears — Release to the Wind"));
 }
 
+TEST_F(RuledClientTest, PreparationMenuUsesTheSameGenerationBoundExileAction)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view();
+    auto *player = view->add_per_player();
+    player->set_player_id(kLocalPlayer);
+    auto *permanent = player->add_battlefield_objects();
+    permanent->set_object_id(42);
+    permanent->set_zone_change_generation(7);
+    permanent->mutable_preparation()->set_copy_object_id(77);
+    auto *action = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
+    action->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
+    action->set_object_id(77);
+    action->set_face_index(1);
+    action->set_card_name("Stream of Life");
+    action->set_cost("{X}{G}");
+    action->set_casting_permission_id(91);
+    action->mutable_preparation_source()->set_object_id(42);
+    action->mutable_preparation_source()->set_zone_change_generation(7);
+    apply(batch);
+    EXPECT_EQ(state->preparationCastCopy(42), 77u);
+    const auto faces = state->zoneActionFaceOptions(77, RuledCastSource::Exile);
+    ASSERT_EQ(faces.size(), 1);
+    const auto menu = RuledPendingCast::cardActionMenuOptions(faces, *state, 42, false, {});
+    ASSERT_EQ(menu.size(), 1);
+    EXPECT_EQ(menu.first().label, QStringLiteral("Cast Stream of Life ({X}{G})"));
+    EXPECT_EQ(menu.first().castingPermissionId, 91u);
+    EXPECT_EQ(faces.first().castingPermissionId, 91u);
+    permanent->set_zone_change_generation(8);
+    apply(batch);
+    EXPECT_EQ(state->preparationCastCopy(42), 0u);
+    permanent->set_zone_change_generation(7);
+    apply(batch);
+    EXPECT_EQ(state->preparationCastCopy(42), 77u);
+    batch.clear_legal_by_player();
+    view->set_battlefields_unchanged(true);
+    apply(batch);
+    EXPECT_EQ(state->preparationCastCopy(42), 0u);
+}
+
 TEST_F(RuledClientTest, PublicCastGenerationRejectsAnOldSelectionAfterReexile)
 {
     ruled::v1::RuledEventBatch batch;

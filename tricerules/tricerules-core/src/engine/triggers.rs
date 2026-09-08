@@ -15,6 +15,7 @@ use crate::engine::events::ev_log_ability;
 /// granted by continuous effects, which can disappear before the trigger reaches the stack.
 #[derive(Clone)]
 pub(super) struct CollectedTrigger {
+    pub captured_spell: Option<Box<StackItem>>,
     pub source_id: ObjectId,
     pub card_id: String,
     pub face_index: usize,
@@ -196,6 +197,7 @@ impl GameEngine {
             .copied()
             .unwrap_or(0);
         let mut trigger = CollectedTrigger {
+            captured_spell: None,
             source_id,
             card_id: card_id.clone(),
             face_index,
@@ -306,6 +308,7 @@ impl GameEngine {
         collected.extend(delayed.into_iter().map(|(watched, delayed)| {
             let ability_text = delayed.ability.fallback_text(&delayed.card_name);
             CollectedTrigger {
+                captured_spell: None,
                 source_id: delayed.source.object_id,
                 card_id: delayed.card_id,
                 face_index: delayed.source_face_index,
@@ -529,30 +532,35 @@ impl GameEngine {
             .map(|trigger| {
                 let object_id = self.state.next_object_id;
                 self.state.next_object_id += 1;
+                if let Some(snapshot) = trigger.captured_spell {
+                    self.state
+                        .captured_spell_copies
+                        .insert(object_id, *snapshot);
+                }
                 let def = self.registry.get(&trigger.card_id);
                 let card_name = def
                     .and_then(|definition| definition.face_display_name(trigger.face_index))
                     .map(str::to_owned)
                     .unwrap_or_default();
                 let may = trigger.ability.may;
-                let ability_definition = trigger
-                    .ability_origin
-                    .as_ref()
-                    .and_then(|origin| match origin {
-                        TriggerAbilityOrigin::Printed(definition)
-                        | TriggerAbilityOrigin::StaticGrant { definition, .. } => {
-                            Some(definition.clone())
-                        }
-                        TriggerAbilityOrigin::ResolvingGrant(_) => None,
-                    })
-                    .unwrap_or_else(|| {
-                        self.ability_definition(
-                            trigger.source_id,
-                            trigger.face_index,
-                            vec![trigger.ability.ability_id.clone()],
-                        )
-                    });
                 let presentation = trigger.presentation.or_else(|| {
+                    let ability_definition = trigger
+                        .ability_origin
+                        .as_ref()
+                        .and_then(|origin| match origin {
+                            TriggerAbilityOrigin::Printed(definition)
+                            | TriggerAbilityOrigin::StaticGrant { definition, .. } => {
+                                Some(definition.clone())
+                            }
+                            TriggerAbilityOrigin::ResolvingGrant(_) => None,
+                        })
+                        .unwrap_or_else(|| {
+                            self.ability_definition(
+                                trigger.source_id,
+                                trigger.face_index,
+                                vec![trigger.ability.ability_id.clone()],
+                            )
+                        });
                     Some(ability_presentation(
                         self.registry,
                         &ability_definition,
@@ -963,6 +971,7 @@ impl GameEngine {
                                     )
                                 })
                                 .map(|(ability_index, ability)| CollectedTrigger {
+                                    captured_spell: None,
                                     source_id: source.object_id,
                                     card_id: source.card_id.clone(),
                                     face_index: *face_index,
@@ -1885,6 +1894,7 @@ impl GameEngine {
                 self.intervening_if_holds(source_id, controller, ta.intervening_if.as_ref())
             })
             .map(|(idx, ta, origin)| CollectedTrigger {
+                captured_spell: None,
                 source_id,
                 card_id: card_id.to_string(),
                 face_index,
@@ -2158,6 +2168,7 @@ impl GameEngine {
                     )
             })
             .map(|(ability_index, ability, origin)| CollectedTrigger {
+                captured_spell: None,
                 source_id: source.object_id,
                 card_id: source.card_id.clone(),
                 face_index: source.face_index,
@@ -2485,6 +2496,7 @@ impl GameEngine {
                     targets: vec![],
                     ability_annotation: ability_text.clone(),
                     card_id: String::new(),
+                    is_prepare_spell: false,
                     is_copy: false,
                     is_triggered: true,
                     copy_source_object_id: 0,

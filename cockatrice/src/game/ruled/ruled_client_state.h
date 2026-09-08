@@ -648,6 +648,18 @@ public:
     QHash<RuledHandActionKind, RuledHandActionSet> handActions;
     // Public-zone casts use the engine ObjectId as their index and share the hand cast shape.
     RuledHandActionSet zoneCastActions;
+    QHash<quint32, quint32> preparedCopyBySourceOid;
+    QHash<quint32, quint32> preparationCastCopyBySourceOid;
+    QHash<quint32, quint64> preparationCastGenerationBySourceOid;
+    [[nodiscard]] quint32 preparationCastCopy(quint32 sourceOid) const
+    {
+        const quint32 copy = preparationCastCopyBySourceOid.value(sourceOid);
+        return copy != 0 && preparedCopyBySourceOid.value(sourceOid) == copy &&
+                       battlefieldGenerationByOid.contains(sourceOid) &&
+                       battlefieldGenerationByOid.value(sourceOid) == preparationCastGenerationBySourceOid.value(sourceOid) &&
+                       isZoneActionLegal(copy, RuledCastSource::Exile)
+                   ? copy : 0;
+    }
     QHash<int, RuledCastSource> zoneCastSourceByOid;
     QMap<RuledCastActionKey, QString> zoneCastCostsByCastKey;
     QHash<quint32, QVector<RuledFaceOption>> zoneLandFacesByOid;

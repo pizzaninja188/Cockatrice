@@ -1428,7 +1428,7 @@ impl CardRegistry {
                 .map_err(|reason| RegistryError::InvalidCard { id, reason })?;
             // Type flags are derived from `types`/`supertypes`, not authored in RON (per face).
             card.derive_type_flags();
-            if card.layout == Layout::Adventure {
+            if matches!(card.layout, Layout::Adventure | Layout::Preparation) {
                 let valid_roles = card.faces.len() == 2
                     && card.faces[0].is_permanent()
                     && (card.faces[1].is_instant || card.faces[1].is_sorcery)
@@ -1436,8 +1436,7 @@ impl CardRegistry {
                 if !valid_roles {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
-                        reason: "Adventure requires exactly two faces: permanent face 0 and instant/sorcery face 1"
-                            .into(),
+                        reason: format!("{:?} requires exactly two faces: permanent face 0 and instant/sorcery face 1", card.layout),
                     });
                 }
             }
@@ -1977,16 +1976,12 @@ impl CardRegistry {
                 }
             }
             let id = card.id.clone();
-            // Index the whole-card name (what decks/`cards.xml` reference) and, for multi-face
-            // cards, each face name, so `id_for_name` resolves either half to the one card id.
-            let mut names: Vec<String> = vec![card.name.clone()];
-            if card.is_multiface() {
-                names.extend(card.faces.iter().map(|f| f.name.clone()));
-            }
-            for name in names {
+            // Only physical-card aliases belong in deck admission. Inset spell names may
+            // collide with separately printed cards and must not claim those cards' support.
+            for name in card.deck_input_names() {
                 if reg
                     .by_name
-                    .insert(normalize_name(&name), id.clone())
+                    .insert(normalize_name(name), id.clone())
                     .is_some()
                 {
                     return Err(RegistryError::InvalidCard {
@@ -3417,6 +3412,24 @@ mod tests {
     /// CR 709/712/715: a multi-face card loads with a `faces` vec, resolves to the card id by
     /// either its whole-card `//` name or either face name, and each face exposes its own
     /// characteristics. The slug invariant (tested above) covers the `//` whole-card name.
+    #[test]
+    fn preparation_inset_name_is_not_an_alias_for_a_physical_deck_card() {
+        let registry = CardRegistry::from_embedded().unwrap();
+        assert_eq!(
+            registry.id_for_name("Infirmary Healer"),
+            Some("infirmary_healer_stream_of_life")
+        );
+        assert_eq!(
+            registry.id_for_name("Infirmary Healer // Stream of Life"),
+            Some("infirmary_healer_stream_of_life")
+        );
+        assert_eq!(
+            registry.id_for_name("Stream of Life"),
+            None,
+            "the independently printed Stream of Life is not implemented by implementing Healer"
+        );
+    }
+
     #[test]
     fn multiface_card_loads_and_resolves_by_face_name() {
         let reg = CardRegistry::from_embedded().unwrap();

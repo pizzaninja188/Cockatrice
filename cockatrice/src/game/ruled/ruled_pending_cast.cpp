@@ -124,7 +124,7 @@ RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFace
         if (manaAbilitiesOnly)
             break;
         options.append({RuledCardActionMenuOption::Kind::CastFace, face.faceIndex, ruledCastOptionLabel(face), true, 0,
-                        face.castMethod});
+                        face.castMethod, face.castingPermissionId});
     }
     for (const int abilityIndex : abilityIndices) {
         const auto ability = state.activatedAbilityForOid(sourceOid, abilityIndex);

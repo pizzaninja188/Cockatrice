@@ -70,6 +70,7 @@ public:
     void confirmRuledGraveyardCostSelection();
     void cancelRuledGraveyardCostSelection();
     void resumePendingRuledPaymentAfterEngineCommand();
+    static bool startPublicZoneCast(PlayerActions *actions, CardItem *card, bool contextMenu);
     bool tryStartRuledSpellCast(CardItem *card);
     bool tryRuledSpellCastFaceMenu(CardItem *card);
     bool beginRuledSpellCast(CardItem *card,

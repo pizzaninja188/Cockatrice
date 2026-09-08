@@ -60,6 +60,8 @@ struct RuledPlayerBinding
     QVector<quint32> graveyardEngineOidsOldestFirst;
     // Public exile identity for Adventure and other engine-authorized casts from exile.
     QHash<quint32, int> exileEngineOidToServerCardId;
+    // Dedicated noncard display identities; never used for accepted physical cast moves.
+    QHash<quint32, int> preparationCopyServerCardIds;
     // Whether a zone view has ever reconciled this player's hand and library. The engine omits
     // those two zones while they are unchanged (RuledPerPlayerView::private_zones_unchanged), so
     // an omission is only meaningful once a full snapshot has actually landed here — an
@@ -165,6 +167,7 @@ struct RuledPlayerBinding
                                      const ruled::v1::RuledPerPlayerView &view,
                                      int battlefieldGridY,
                                      GameEventStorage *ges);
+    bool reconcilePreparationCopies(Server_Player *player, const ruled::v1::RuledPerPlayerView &view);
     // Mint a physical Server_Card for a dev-conjured card (see DevCardConjured) into the hand or
     // the table, binding it to `engineOid` the same way createRuledToken does — the zone-view sync
     // later in this batch must find a physical card for the engine's new slot, or it abandons the

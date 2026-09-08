@@ -10,6 +10,15 @@ impl GameEngine {
         face: Option<&CardFace>,
     ) -> Vec<String> {
         let mut labels = Vec::new();
+        if self.state.prepared_permanents.contains_key(&oid) {
+            labels.push("Prepared".into());
+        } else if self.copiable_values_for(oid).is_some_and(|v| {
+            self.registry
+                .get(&v.source_card_id)
+                .is_some_and(|d| d.layout == Layout::Preparation && v.source_face_index == 0)
+        }) {
+            labels.push("Unprepared".into());
+        }
         if super::characteristics::latest_remove_all_abilities_timestamp(&self.state, oid).is_some()
         {
             labels.push("Loses all abilities".to_string());
@@ -190,7 +199,11 @@ impl GameEngine {
                         Layout::Transform | Layout::Flip | Layout::ModalDfc => {
                             def.faces.iter().map(|f| f.name.clone()).collect()
                         }
-                        Layout::Split | Layout::Room | Layout::Adventure | Layout::Omen => {
+                        Layout::Split
+                        | Layout::Room
+                        | Layout::Adventure
+                        | Layout::Omen
+                        | Layout::Preparation => {
                             vec![def.name.clone(); def.faces.len()]
                         }
                         Layout::Normal => Vec::new(),
@@ -602,6 +615,7 @@ impl GameEngine {
                                 .get(&oid)
                                 .copied(),
                             controller_player_id: Some(object.controller),
+                            preparation: self.preparation_view(oid),
                         }
                     })
                     .collect()
@@ -615,6 +629,34 @@ impl GameEngine {
             graveyard_object_ids: p.graveyard.clone(),
             // Engine ObjectIds for each card in this player's public exile zone.
             exile_object_ids: p.exile.clone(),
+            prepare_spell_copies: p
+                .exile
+                .iter()
+                .filter_map(|id| {
+                    let source = self.state.prepare_spell_sources.get(id)?;
+                    let object = self.state.objects.get(id)?;
+                    let face = self
+                        .registry
+                        .get(&object.card_id)?
+                        .face(object.face_up_index)?;
+                    Some(rv1::PrepareSpellCopyView {
+                        object_id: *id,
+                        zone_change_generation: self
+                            .state
+                            .zone_change_generation
+                            .get(id)
+                            .copied()
+                            .unwrap_or(0),
+                        source: Some(rv1::PreparationSource {
+                            object_id: source.object_id,
+                            zone_change_generation: source.zone_change_generation,
+                        }),
+                        display_name: face.name.clone(),
+                        card_id: object.card_id.clone(),
+                        face_index: object.face_up_index as u32,
+                    })
+                })
+                .collect(),
         }
     }
 
@@ -631,6 +673,7 @@ impl GameEngine {
                     .iter()
                     .filter_map(|oid| self.state.objects.get(oid))
                     .map(|object| BattlefieldObjectSnapshot {
+                        preparation: self.state.prepared_permanents.get(&object.id).copied(),
                         object_id: object.id,
                         card_id: object.card_id.clone(),
                         owner: object.owner,

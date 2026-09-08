@@ -1293,7 +1293,7 @@ fn player_effect_accepts_player_spec() {
 #[test]
 fn player_effect_rejects_nonplayer_spec() {
     assert!(SpellEffectKind::TargetPlayerGainsLife {
-        amount: 3,
+        amount: 3.into(),
         target: TargetFilter {
             kind: TargetKind::Creature,
             ..Default::default()
@@ -1554,7 +1554,7 @@ fn controller_relative_target_filter_requires_a_permanent_kind() {
 fn source_exclusion_requires_an_object_capable_target_kind() {
     for kind in [TargetKind::AnyPlayer, TargetKind::OpponentPlayer] {
         let effect = SpellEffectKind::TargetPlayerGainsLife {
-            amount: 1,
+            amount: 1.into(),
             target: TargetFilter {
                 kind,
                 excluded_objects: vec![crate::TargetObjectExclusion::Source],

@@ -1689,6 +1689,57 @@ TEST_F(RuledBatchTest, EnduringStoryViewCreatesOneOrdinaryUnboundBattlefieldToke
     EXPECT_EQ(findCardByEngineOid(p1, 184u), bear) << "the helper token must stay outside battlefield reconciliation";
 }
 
+TEST_F(RuledBatchTest, PreparationCopiesHaveDedicatedExileIdentityAndFullReplacementCleanup)
+{
+    seedCardCatalog({"Infirmary Healer // Stream of Life"});
+    Server_Card *source = addCardToTable(p1, "Infirmary Healer // Stream of Life");
+    Server_Card *physicalExile = addCardToExile(p1, "Infirmary Healer // Stream of Life");
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *zoneView = response.mutable_batch()->add_events()->mutable_zone_view();
+    auto view = buildPerPlayerView(p1, {203u}, {false});
+    view.add_exile_object_ids(204u);
+    view.add_exile_object_ids(9001u);
+    auto *copy = view.add_prepare_spell_copies();
+    copy->set_object_id(9001u);
+    copy->set_display_name("Stream of Life");
+    copy->mutable_source()->set_object_id(203u);
+    copy->mutable_source()->set_zone_change_generation(2u);
+    view.mutable_battlefield_objects(0)->mutable_preparation()->set_copy_object_id(9001u);
+    *zoneView->add_per_player() = view;
+    *zoneView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    EXPECT_TRUE(callBatchApply(response).zoneViewApplied);
+    auto *exile = p1->getZones().value(ZoneNames::EXILE);
+    ASSERT_EQ(exile->getCards().size(), 2);
+    const auto *synthetic = bindingFor(p1).findExileCardByEngineOid(p1, 9001u);
+    ASSERT_NE(synthetic, nullptr);
+    EXPECT_NE(synthetic, physicalExile);
+    EXPECT_EQ(synthetic->getName(), QStringLiteral("Stream of Life"));
+    EXPECT_EQ(bindingFor(p1).findExileCardByEngineOid(p1, 204u), physicalExile);
+    EXPECT_EQ(findCardByEngineOid(p1, 203u), source);
+    const int copyCardId = synthetic->getId();
+    callBatchApply(response);
+    EXPECT_EQ(bindingFor(p1).findExileCardByEngineOid(p1, 9001u)->getId(), copyCardId);
+
+    ruled::v1::RuledCommand cast;
+    cast.mutable_cast_spell()->mutable_source()->set_exile_object_id(9001u);
+    cast.mutable_cast_spell()->set_face_index(1u);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), cast);
+    EXPECT_TRUE(p1->getZones().value(ZoneNames::STACK)->getCards().isEmpty());
+    EXPECT_EQ(findCardByEngineOid(p1, 203u), source);
+
+    zoneView->set_battlefields_unchanged(true);
+    auto *cleared = zoneView->mutable_per_player(0);
+    cleared->clear_prepare_spell_copies();
+    cleared->clear_exile_object_ids();
+    cleared->add_exile_object_ids(204u);
+    EXPECT_TRUE(callBatchApply(response).zoneViewApplied);
+    ASSERT_EQ(exile->getCards().size(), 1);
+    EXPECT_EQ(exile->getCards().first(), physicalExile);
+    EXPECT_EQ(bindingFor(p1).findExileCardByEngineOid(p1, 9001u), nullptr);
+    EXPECT_EQ(findCardByEngineOid(p1, 203u), source);
+}
+
 TEST_F(RuledBatchTest, StaticEmblemSnapshotReconcilesPresentationOnlyTableTokens)
 {
     Server_Card *bear = addCardToTable(p1, "Grizzly Bears");

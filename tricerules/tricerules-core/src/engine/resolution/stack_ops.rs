@@ -392,6 +392,7 @@ pub(crate) fn counter_stack_object(
         return Ok(None);
     }
     let st = engine.state.stack.remove(pos);
+    engine.state.captured_spell_copies.remove(&target_id);
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::StackObjectCountered(
             rv1::StackObjectCountered {
@@ -452,12 +453,21 @@ pub(super) fn copy_target_spell(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::CopyTargetSpell { count, .. } = effect else {
-        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    let (count, original) = match effect {
+        SpellEffectKind::CopyTargetSpell { count, .. } => (
+            count,
+            cx.targets
+                .first()
+                .and_then(|id| cx.engine.state.stack.iter().find(|spell| spell.id == *id))
+                .cloned(),
+        ),
+        SpellEffectKind::CopyCapturedSpell => {
+            (1, cx.engine.state.captured_spell_copies.remove(&cx.top.id))
+        }
+        _ => return Err(EngineError::Illegal("resolution dispatch mismatch")),
     };
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
-    let targets = cx.targets;
     let controller = cx.controller;
     let spell_label = cx.spell_label;
 
@@ -468,290 +478,291 @@ pub(super) fn copy_target_spell(
     // new targets for each copy; if the copied spell has targets, we prompt before
     // placing the copy on the stack. Only the first copy that needs targets is
     // handled via pending_resolution (count=1 covers Twincast/Fork/Reverberate).
-    if let Some(&tid) = targets.first() {
-        if let Some(src) = engine.state.stack.iter().find(|s| s.id == tid).cloned() {
-            let copied_name = engine
-                .registry
-                .get(&src.card_id)
-                .and_then(|d| d.face(src.face_index))
-                .map(|f| f.name.to_string())
-                .unwrap_or_else(|| src.card_id.clone());
-            let src_effects = engine
-                .registry
-                .get(&src.card_id)
-                .and_then(|d| d.face(src.face_index))
-                .map(|f| f.spell_effect.to_vec())
+    if let Some(src) = original {
+        let copied_name = engine
+            .registry
+            .get(&src.card_id)
+            .and_then(|d| d.face(src.face_index))
+            .map(|f| f.name.to_string())
+            .unwrap_or_else(|| src.card_id.clone());
+        let src_effects = engine
+            .registry
+            .get(&src.card_id)
+            .and_then(|d| d.face(src.face_index))
+            .map(|f| f.spell_effect.to_vec())
+            .unwrap_or_default();
+        let target_count = if src.chosen_modes.is_empty() {
+            src.targets.len()
+        } else {
+            src.chosen_modes.iter().map(|mode| mode.targets.len()).sum()
+        };
+        let needs_target_choice = target_count > 0;
+        let copied_face = engine
+            .registry
+            .get(&src.card_id)
+            .and_then(|definition| definition.face(src.face_index));
+        let copied_modal = copied_face.and_then(|face| face.modal_spell.as_ref());
+        let (chosen_mode_indices, chosen_mode_labels) = if src.chosen_modes.is_empty() {
+            (Vec::new(), Vec::new())
+        } else {
+            let modal = copied_modal.ok_or(EngineError::Illegal(
+                "copied modal spell has no mode definition",
+            ))?;
+            let indices = src
+                .chosen_modes
+                .iter()
+                .map(|chosen| {
+                    modal
+                        .mode_index(&chosen.mode_id)
+                        .map(|index| index as u32)
+                        .ok_or(EngineError::Illegal("copied modal mode no longer exists"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let labels = src
+                .chosen_modes
+                .iter()
+                .map(|chosen| {
+                    modal
+                        .mode_by_id(&chosen.mode_id)
+                        .map(|mode| mode_fallback(&copied_name, &mode.mode_id))
+                        .ok_or(EngineError::Illegal("copied modal mode no longer exists"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            (indices, labels)
+        };
+        for copy_num in 0..count {
+            let copy_id = engine.state.next_object_id;
+            engine.state.next_object_id += 1;
+            let copy_presentation = engine
+                .state
+                .stack_presentations
+                .get(&src.id)
+                .cloned()
                 .unwrap_or_default();
-            let target_count = if src.chosen_modes.is_empty() {
-                src.targets.len()
-            } else {
-                src.chosen_modes.iter().map(|mode| mode.targets.len()).sum()
+            engine
+                .state
+                .stack_presentations
+                .insert(copy_id, copy_presentation.clone());
+            let copy_template = StackItem {
+                id: copy_id,
+                controller,
+                card_id: src.card_id.clone(),
+                targets: src.targets.clone(),
+                ability_text: None,
+                source_permanent_id: None,
+                source_owner: None,
+                source_zone_change: 0,
+                source_face_change: 0,
+                ability_index: None,
+                activated_ability: None,
+                triggered_ability: None,
+                is_triggered: false,
+                is_copy: true,
+                chosen_x: src.chosen_x,
+                face_index: src.face_index,
+                chosen_modes: src.chosen_modes.clone(),
+                cast_condition_results: Vec::new(),
+                cast_occurrence: None,
+                cast_cost_receipts: src.cast_cost_receipts.clone(),
+                payment_result: src.payment_result.clone(),
+                search_results: Default::default(),
+                resolution_branch_choices: Default::default(),
+                blight_receipts: src.blight_receipts.clone(),
+                // CR 707.2: the copy has the original's characteristics and choices. `None`
+                // for every spell today, but copying inherits it rather than dropping it.
+                trigger_context: src.trigger_context,
+                // CR 707.10 copies the Warp choice; Flashback/Harmonize stack-exit
+                // replacements still belong only to the spell actually cast that way.
+                cast_method: if matches!(
+                    src.cast_method,
+                    SpellCastMethod::Warp | SpellCastMethod::Sneak
+                ) {
+                    src.cast_method
+                } else {
+                    SpellCastMethod::Normal
+                },
+                returned_attacker_assignment: src.returned_attacker_assignment,
             };
-            let needs_target_choice = target_count > 0;
-            let copied_face = engine
-                .registry
-                .get(&src.card_id)
-                .and_then(|definition| definition.face(src.face_index));
-            let copied_modal = copied_face.and_then(|face| face.modal_spell.as_ref());
-            let (chosen_mode_indices, chosen_mode_labels) = if src.chosen_modes.is_empty() {
-                (Vec::new(), Vec::new())
-            } else {
-                let modal = copied_modal.ok_or(EngineError::Illegal(
-                    "copied modal spell has no mode definition",
-                ))?;
-                let indices = src
-                    .chosen_modes
-                    .iter()
-                    .map(|chosen| {
-                        modal
-                            .mode_index(&chosen.mode_id)
-                            .map(|index| index as u32)
-                            .ok_or(EngineError::Illegal("copied modal mode no longer exists"))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let labels = src
-                    .chosen_modes
-                    .iter()
-                    .map(|chosen| {
-                        modal
-                            .mode_by_id(&chosen.mode_id)
-                            .map(|mode| mode_fallback(&copied_name, &mode.mode_id))
-                            .ok_or(EngineError::Illegal("copied modal mode no longer exists"))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                (indices, labels)
-            };
-            for copy_num in 0..count {
-                let copy_id = engine.state.next_object_id;
-                engine.state.next_object_id += 1;
-                let copy_presentation = engine
-                    .state
-                    .stack_presentations
-                    .get(&src.id)
-                    .cloned()
-                    .unwrap_or_default();
-                engine
-                    .state
-                    .stack_presentations
-                    .insert(copy_id, copy_presentation.clone());
-                let copy_template = StackItem {
-                    id: copy_id,
-                    controller,
-                    card_id: src.card_id.clone(),
-                    targets: src.targets.clone(),
-                    ability_text: None,
-                    source_permanent_id: None,
-                    source_owner: None,
-                    source_zone_change: 0,
-                    source_face_change: 0,
-                    ability_index: None,
-                    activated_ability: None,
-                    triggered_ability: None,
-                    is_triggered: false,
-                    is_copy: true,
-                    chosen_x: src.chosen_x,
-                    face_index: src.face_index,
-                    chosen_modes: src.chosen_modes.clone(),
-                    cast_condition_results: Vec::new(),
-                    cast_occurrence: None,
-                    cast_cost_receipts: src.cast_cost_receipts.clone(),
-                    payment_result: src.payment_result.clone(),
-                    search_results: Default::default(),
-                    resolution_branch_choices: Default::default(),
-                    blight_receipts: src.blight_receipts.clone(),
-                    // CR 707.2: the copy has the original's characteristics and choices. `None`
-                    // for every spell today, but copying inherits it rather than dropping it.
-                    trigger_context: src.trigger_context,
-                    // CR 707.10 copies the Warp choice; Flashback/Harmonize stack-exit
-                    // replacements still belong only to the spell actually cast that way.
-                    cast_method: if matches!(
-                        src.cast_method,
-                        SpellCastMethod::Warp | SpellCastMethod::Sneak
-                    ) {
-                        src.cast_method
+            // CR 707.10c: prompt for new targets on the first copy; push any
+            // additional copies immediately with the original targets.
+            if needs_target_choice && copy_num == 0 {
+                let mut candidates = Vec::new();
+                let candidate_effect_groups: Vec<Vec<SpellEffectKind>> =
+                    if src.chosen_modes.is_empty() {
+                        vec![src_effects.clone()]
                     } else {
-                        SpellCastMethod::Normal
-                    },
-                    returned_attacker_assignment: src.returned_attacker_assignment,
-                };
-                // CR 707.10c: prompt for new targets on the first copy; push any
-                // additional copies immediately with the original targets.
-                if needs_target_choice && copy_num == 0 {
-                    let mut candidates = Vec::new();
-                    let candidate_effect_groups: Vec<Vec<SpellEffectKind>> =
-                        if src.chosen_modes.is_empty() {
-                            vec![src_effects.clone()]
-                        } else {
-                            src.chosen_modes
-                                .iter()
-                                .filter_map(|chosen| {
-                                    engine
-                                        .registry
-                                        .get(&src.card_id)
-                                        .and_then(|definition| definition.face(src.face_index))
-                                        .and_then(|face| face.modal_spell.as_ref())
-                                        .and_then(|modal| modal.mode_by_id(&chosen.mode_id))
-                                        .map(|mode| mode.effects.clone())
-                                })
-                                .collect()
-                        };
-                    for effects in candidate_effect_groups {
-                        let sp = compute_spell_targets(
-                            engine,
-                            controller,
-                            TargetSourceIdentity::for_stack_item(engine, &copy_template),
-                            &effects,
-                            None,
-                            &[],
-                        );
-                        for group in sp.groups {
-                            candidates.extend(group.valid_permanent_ids);
-                            candidates.extend(group.valid_stack_ids);
-                            candidates.extend(group.valid_graveyard_ids);
-                            for p in &engine.state.players {
-                                if (group.can_target_self && p.id == controller)
-                                    || (group.can_target_opponent
-                                        && engine.state.are_opponents(p.id, controller))
-                                {
-                                    candidates.push(p.id as ObjectId);
-                                }
+                        src.chosen_modes
+                            .iter()
+                            .filter_map(|chosen| {
+                                engine
+                                    .registry
+                                    .get(&src.card_id)
+                                    .and_then(|definition| definition.face(src.face_index))
+                                    .and_then(|face| face.modal_spell.as_ref())
+                                    .and_then(|modal| modal.mode_by_id(&chosen.mode_id))
+                                    .map(|mode| mode.effects.clone())
+                            })
+                            .collect()
+                    };
+                for effects in candidate_effect_groups {
+                    let sp = compute_spell_targets(
+                        engine,
+                        controller,
+                        TargetSourceIdentity::for_stack_item(engine, &copy_template),
+                        &effects,
+                        None,
+                        &[],
+                    );
+                    for group in sp.groups {
+                        candidates.extend(group.valid_permanent_ids);
+                        candidates.extend(group.valid_stack_ids);
+                        candidates.extend(group.valid_graveyard_ids);
+                        for p in &engine.state.players {
+                            if (group.can_target_self && p.id == controller)
+                                || (group.can_target_opponent
+                                    && engine.state.are_opponents(p.id, controller))
+                            {
+                                candidates.push(p.id as ObjectId);
                             }
                         }
                     }
-                    candidates.sort_unstable();
-                    candidates.dedup();
-                    // CR 707.10c: may keep original targets even if now illegal.
-                    for target in &src.targets {
-                        let ot = target.object_id;
-                        if !candidates.contains(&ot) {
-                            candidates.push(ot);
-                        }
+                }
+                candidates.sort_unstable();
+                candidates.dedup();
+                // CR 707.10c: may keep original targets even if now illegal.
+                for target in &src.targets {
+                    let ot = target.object_id;
+                    if !candidates.contains(&ot) {
+                        candidates.push(ot);
                     }
-                    let candidate_card_ids: Vec<String> = candidates
-                        .iter()
-                        .map(|&oid| {
+                }
+                let candidate_card_ids: Vec<String> = candidates
+                    .iter()
+                    .map(|&oid| {
+                        engine
+                            .state
+                            .objects
+                            .get(&oid)
+                            .map(|o| o.card_id.clone())
+                            .unwrap_or_default()
+                    })
+                    .collect();
+                let candidate_names: Vec<String> = candidates
+                    .iter()
+                    .map(|&oid| {
+                        if engine.state.player_idx(oid as i32).is_some() {
+                            format!("Player {oid}")
+                        } else {
                             engine
                                 .state
                                 .objects
                                 .get(&oid)
-                                .map(|o| o.card_id.clone())
-                                .unwrap_or_default()
-                        })
-                        .collect();
-                    let candidate_names: Vec<String> = candidates
-                        .iter()
-                        .map(|&oid| {
-                            if engine.state.player_idx(oid as i32).is_some() {
-                                format!("Player {oid}")
-                            } else {
-                                engine
-                                    .state
-                                    .objects
-                                    .get(&oid)
-                                    .and_then(|o| engine.registry.get(&o.card_id))
-                                    .map(|d| d.name.clone())
-                                    .unwrap_or_else(|| format!("[object {oid}]"))
-                            }
-                        })
-                        .collect();
-                    let prompt = format!("Choose new targets for {copied_name} (copy)");
-                    events.push(rv1::RuledEvent {
-                        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-                            rv1::ResolutionChoiceRequired {
-                                deciding_player_id: controller,
-                                source_object_id: copy_id,
-                                prompt_text: prompt.clone(),
-                                // TargetObjects: client uses click-to-target
-                                // instead of a list dialog.
-                                choice_kind: custom::ChoiceKind::TargetObjects as i32,
-                                candidate_object_ids: candidates.clone(),
-                                candidate_card_ids,
-                                candidate_names,
-                                min: target_count as u32,
-                                max: target_count as u32,
-                                ordered: false,
-                                unique_names: false,
-                                candidate_server_card_ids: Vec::new(),
-                                candidate_selectable: Vec::new(),
-                                resolution_branches: Vec::new(),
-                                mana_cost: String::new(),
-                                generic_mana_cost: 0,
-                                payment_currently_legal: false,
-                                public_reveal: None,
-                                candidate_source_zones: Vec::new(),
-                                combat_defender_options: Vec::new(),
-                                waterbend: false,
-                                selection_slots: Vec::new(),
-                                replacement_options: Vec::new(),
-                            },
-                        )),
-                    });
-                    events.push(ev_log(prompt.clone()));
-                    engine.state.pending_resolution = Some(PendingResolution {
-                        deciding_player: controller,
-                        presentation: PendingResolutionPresentation {
+                                .and_then(|o| engine.registry.get(&o.card_id))
+                                .map(|d| d.name.clone())
+                                .unwrap_or_else(|| format!("[object {oid}]"))
+                        }
+                    })
+                    .collect();
+                let prompt = format!("Choose new targets for {copied_name} (copy)");
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                        rv1::ResolutionChoiceRequired {
+                            deciding_player_id: controller,
                             source_object_id: copy_id,
-                            candidates,
-                            min: 1,
-                            max: 1,
+                            prompt_text: prompt.clone(),
+                            // TargetObjects: client uses click-to-target
+                            // instead of a list dialog.
+                            choice_kind: custom::ChoiceKind::TargetObjects as i32,
+                            candidate_object_ids: candidates.clone(),
+                            candidate_card_ids,
+                            candidate_names,
+                            min: target_count as u32,
+                            max: target_count as u32,
                             ordered: false,
-                            prompt,
-                            choice_kind: custom::ChoiceKind::TargetObjects,
                             unique_names: false,
+                            candidate_server_card_ids: Vec::new(),
+                            candidate_selectable: Vec::new(),
+                            resolution_branches: Vec::new(),
+                            mana_cost: String::new(),
+                            generic_mana_cost: 0,
+                            payment_currently_legal: false,
+                            public_reveal: None,
+                            candidate_source_zones: Vec::new(),
+                            combat_defender_options: Vec::new(),
+                            waterbend: false,
+                            selection_slots: Vec::new(),
+                            replacement_options: Vec::new(),
                         },
-                        continuation: ResolutionContinuation::CopyTargets {
-                            stack: ParkedStackResolution::new(copy_template),
-                            copy_source_object_id: src.id,
-                        },
-                    });
-                    // Copy will be pushed to the stack after target is submitted.
-                } else {
-                    engine.state.stack.push(copy_template);
-                    events.push(rv1::RuledEvent {
-                        ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
-                            object_id: copy_id,
-                            description: copied_name.clone(),
-                            targets: src
-                                .targets
-                                .iter()
-                                .map(|target| rv1::TargetRef {
-                                    object_id: target.object_id,
-                                    damage_amount: target.damage_amount,
-                                    group_index: target.group_index,
-                                    kind: target.kind,
-                                })
-                                .collect(),
-                            ability_annotation: "(copy)".to_string(),
-                            card_id: src.card_id.clone(),
-                            is_copy: true,
-                            is_triggered: false,
-                            copy_source_object_id: src.id,
-                            chosen_mode_indices: chosen_mode_indices.clone(),
-                            chosen_mode_labels: chosen_mode_labels.clone(),
-                            chosen_cast_cost_labels: src
-                                .cast_cost_receipts
-                                .iter()
-                                .map(|receipt| receipt.label.clone())
-                                .collect(),
-                            source_token_identity: None,
-                            primary_presentation: copy_presentation.primary,
-                            chosen_mode_presentations: copy_presentation.chosen_modes,
-                            chosen_cast_cost_presentations: copy_presentation.chosen_cast_costs,
-                        })),
-                    });
-                    events.push(ev_log(format!(
-                        "{spell_label} copies {copied_name} (P{controller})"
-                    )));
-                    engine.fire_triggers(&[GameEvent::TargetsChosen {
-                        controller,
-                        source: TargetingSourceKind::SpellCopy,
-                        stack_object: StackObjectRef {
-                            object_id: copy_id,
-                            zone_change_generation: None,
-                        },
-                        targets: src.targets.clone(),
-                    }]);
-                }
+                    )),
+                });
+                events.push(ev_log(prompt.clone()));
+                engine.state.pending_resolution = Some(PendingResolution {
+                    deciding_player: controller,
+                    presentation: PendingResolutionPresentation {
+                        source_object_id: copy_id,
+                        candidates,
+                        min: 1,
+                        max: 1,
+                        ordered: false,
+                        prompt,
+                        choice_kind: custom::ChoiceKind::TargetObjects,
+                        unique_names: false,
+                    },
+                    continuation: ResolutionContinuation::CopyTargets {
+                        stack: ParkedStackResolution::new(copy_template),
+                        copy_source_object_id: src.id,
+                    },
+                });
+                // Copy will be pushed to the stack after target is submitted.
+            } else {
+                engine.state.stack.push(copy_template);
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
+                        object_id: copy_id,
+                        description: copied_name.clone(),
+                        targets: src
+                            .targets
+                            .iter()
+                            .map(|target| rv1::TargetRef {
+                                object_id: target.object_id,
+                                damage_amount: target.damage_amount,
+                                group_index: target.group_index,
+                                kind: target.kind,
+                            })
+                            .collect(),
+                        ability_annotation: "(copy)".to_string(),
+                        card_id: src.card_id.clone(),
+                        is_prepare_spell: engine.registry.get(&src.card_id).is_some_and(|d| {
+                            d.layout == Layout::Preparation && src.face_index == 1
+                        }),
+                        is_copy: true,
+                        is_triggered: false,
+                        copy_source_object_id: src.id,
+                        chosen_mode_indices: chosen_mode_indices.clone(),
+                        chosen_mode_labels: chosen_mode_labels.clone(),
+                        chosen_cast_cost_labels: src
+                            .cast_cost_receipts
+                            .iter()
+                            .map(|receipt| receipt.label.clone())
+                            .collect(),
+                        source_token_identity: None,
+                        primary_presentation: copy_presentation.primary,
+                        chosen_mode_presentations: copy_presentation.chosen_modes,
+                        chosen_cast_cost_presentations: copy_presentation.chosen_cast_costs,
+                    })),
+                });
+                events.push(ev_log(format!(
+                    "{spell_label} copies {copied_name} (P{controller})"
+                )));
+                engine.fire_triggers(&[GameEvent::TargetsChosen {
+                    controller,
+                    source: TargetingSourceKind::SpellCopy,
+                    stack_object: StackObjectRef {
+                        object_id: copy_id,
+                        zone_change_generation: None,
+                    },
+                    targets: src.targets.clone(),
+                }]);
             }
         }
     }

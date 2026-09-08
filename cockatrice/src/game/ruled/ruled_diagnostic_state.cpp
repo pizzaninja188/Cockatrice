@@ -83,6 +83,9 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     FIELD(handActions);
     FIELD(zoneCastActions);
     FIELD(zoneCastSourceByOid);
+    FIELD(preparedCopyBySourceOid);
+    FIELD(preparationCastCopyBySourceOid);
+    FIELD(preparationCastGenerationBySourceOid);
     FIELD(zoneCastCostsByCastKey);
     FIELD(zoneLandFacesByOid);
     FIELD(zoneLandSourceByOid);

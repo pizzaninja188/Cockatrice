@@ -47,6 +47,7 @@ impl GameEngine {
 
         let mut events = Vec::new();
         let entry = BattlefieldEntryEvent {
+            prepared: false,
             object_id: chosen,
             deciding_player: controller,
             destination_controller: controller,

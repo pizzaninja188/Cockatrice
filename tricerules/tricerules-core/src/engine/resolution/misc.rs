@@ -287,6 +287,23 @@ pub(super) fn untap(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn set_prepared(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::SetPrepared { subject, prepared } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    if let Some(id) = cx.resolve_battlefield_subject(&subject) {
+        if prepared {
+            cx.engine.prepare_permanent(id);
+        } else {
+            crate::engine::preparation::unprepare_permanent(&mut cx.engine.state, id);
+        }
+    }
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn gain_control_until_end_of_turn(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

@@ -183,7 +183,7 @@ impl GameEngine {
             .filter_map(|object| {
                 let fact = match object.zone {
                     Zone::Battlefield => self.event_object_fact(object.id)?,
-                    Zone::Graveyard if !object.is_token() => {
+                    Zone::Graveyard if self.state.is_card_object(object.id) => {
                         let definition = self.registry.get(&object.card_id)?;
                         let faces: Vec<_> =
                             if matches!(definition.layout, Layout::Split | Layout::Room) {

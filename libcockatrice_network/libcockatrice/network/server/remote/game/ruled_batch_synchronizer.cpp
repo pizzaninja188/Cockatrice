@@ -310,6 +310,11 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId, const rul
                     if (!owner) {
                         continue;
                     }
+                    if (!fromGraveyard && playerBinding(owner->getPlayerId()).preparationCopyServerCardIds.contains(oid)) {
+                        // The engine will publish a synthetic stack copy. Its exile display is
+                        // retired by the next full copy snapshot, never moved as a physical card.
+                        break;
+                    }
                     card = fromGraveyard ? playerBinding(owner->getPlayerId()).findGraveyardCardByEngineOid(owner, oid)
                                          : playerBinding(owner->getPlayerId()).findExileCardByEngineOid(owner, oid);
                     if (card) {
@@ -1155,7 +1160,7 @@ void RuledBatchSynchronizer::applyPhaseStackAndZoneViews(const ruled::v1::RuledE
                 if (sp.is_copy()) {
                     ruledStackCopyObjectIds.insert(pushedOid);
                     QString copyName = QString::fromStdString(sp.description());
-                    if (!sp.card_id().empty()) {
+                    if (!sp.is_prepare_spell() && !sp.card_id().empty()) {
                         const QString catalogName = cardNameForId(QString::fromStdString(sp.card_id()));
                         if (!catalogName.isEmpty()) {
                             copyName = catalogName;

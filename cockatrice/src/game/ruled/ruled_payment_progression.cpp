@@ -1932,7 +1932,8 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     const auto paymentContributions = contributionOptions(card);
     const auto permanentActions = battlefieldSource && !manaAbilitiesOnly ? handler->permanentActionsForOid(oid)
                                                                           : QVector<RuledPermanentAction>{};
-    if (abilities.isEmpty() && permanentActions.isEmpty() && paymentContributions.isEmpty()) {
+    const quint32 preparationCopy = battlefieldSource && !manaAbilitiesOnly ? handler->preparationCastCopy(oid) : 0;
+    if (abilities.isEmpty() && permanentActions.isEmpty() && paymentContributions.isEmpty() && preparationCopy == 0) {
         return false;
     }
 
@@ -1945,7 +1946,7 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     const auto firstAbility = abilities.value(0);
     // A tapped (or summoning-sick) mana source has nothing to offer: skip the fast path rather
     // than firing an activation the engine will reject.
-    if (battlefieldSource && paymentContributions.isEmpty() && abilities.size() == 1 && firstAbility &&
+    if (battlefieldSource && preparationCopy == 0 && paymentContributions.isEmpty() && abilities.size() == 1 && firstAbility &&
         !firstAbility->manaProduced.isEmpty() && handler->abilityActivatable(oid, 0) &&
         handler->abilityCostChoices(oid, 0).isEmpty()) {
         const QStringList colorOptions = firstAbility->manaProduced.split(QChar('/'));
@@ -2003,7 +2004,13 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
         permanentMenuActions.insert(action, permanentAction);
     }
     int castHandIndex = -1;
+    RuledCastSource castSource = RuledCastSource::Hand;
     QVector<RuledFaceOption> castFaces;
+    if (preparationCopy != 0) {
+        castSource = RuledCastSource::Exile;
+        castHandIndex = static_cast<int>(preparationCopy);
+        castFaces = handler->zoneActionFaceOptions(preparationCopy, castSource);
+    }
     if (handSource && !manaAbilitiesOnly) {
         castHandIndex = RuledActions::resolveHandActionIndex(handler, ruled::v1::HAND_ACTION_CAST_SPELL, card);
         if (castHandIndex >= 0) {
@@ -2073,9 +2080,10 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     }
     if (selectedOption.kind == RuledCardActionMenuOption::Kind::CastFace) {
         for (const auto &face : castFaces) {
-            if (face.faceIndex == selectedOption.index && face.castMethod == selectedOption.castMethod) {
+            if (face.faceIndex == selectedOption.index && face.castMethod == selectedOption.castMethod &&
+                face.castingPermissionId == selectedOption.castingPermissionId) {
                 beginRuledSpellCast(card, castHandIndex, face.faceIndex, face.faceName, face.manaCost,
-                                    face.genericCostReduction, RuledCastSource::Hand, face.castMethod);
+                                    face.genericCostReduction, castSource, face.castMethod, face.castingPermissionId);
                 return true;
             }
         }
@@ -2212,6 +2220,27 @@ bool RuledPaymentUi::tryUndoManaAbility()
     }
 
     return false;
+}
+
+bool RuledPaymentUi::startPublicZoneCast(PlayerActions *actions, CardItem *card, bool contextMenu)
+{
+    if (!contextMenu) {
+        return actions->ruledPayment->tryStartRuledSpellCast(card);
+    }
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    const auto source = card->getZone()->getName() == ZoneNames::EXILE ? RuledCastSource::Exile : RuledCastSource::Graveyard;
+    const quint32 oid = RuledActions::resolvePublicZoneObjectId(state, card);
+    const auto options = state->zoneActionFaceOptions(oid, source);
+    if (options.isEmpty()) {
+        return false;
+    }
+    const auto choice = RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), options);
+    if (choice) {
+        actions->ruledPayment->beginRuledSpellCast(card, static_cast<int>(oid), choice->faceIndex, choice->faceName,
+                                                   choice->manaCost, choice->genericCostReduction, source,
+                                                   choice->castMethod, choice->castingPermissionId);
+    }
+    return true;
 }
 
 bool RuledPaymentUi::tryStartRuledSpellCast(CardItem *card)

@@ -485,6 +485,8 @@ eldrazi_devastator	0	cast	exercised
 elephant-rat	0	cast	exercised
 elfhame_wurm	0	cast	exercised
 elfsworn_giant	0	cast	exercised
+elite_interceptor_rejoinder	0	cast	exercised
+elite_interceptor_rejoinder	1	cast	intentional: face unavailable from hand
 elite_vanguard	0	cast	exercised
 elven_passage	0	ability:0	exercised
 elven_passage	0	land	exercised
@@ -843,6 +845,8 @@ indomitable_ancients	0	cast	exercised
 infectious_horror	0	cast	exercised
 infernal_scarring	0	cast	exercised
 infestation_sage	0	cast	exercised
+infirmary_healer_stream_of_life	0	cast	exercised
+infirmary_healer_stream_of_life	1	cast	intentional: face unavailable from hand
 infuriate	0	cast	exercised
 innocuous_rat	0	cast	exercised
 insatiable_harpy	0	cast	exercised
@@ -1195,6 +1199,8 @@ pheres-band_centaurs	0	cast	exercised
 phyrexian_arena	0	cast	exercised
 phyrexian_walker	0	cast	exercised
 phytoburst	0	cast	exercised
+pigment_wrangler_striking_palette	0	cast	exercised
+pigment_wrangler_striking_palette	1	cast	intentional: face unavailable from hand
 pilgrim_of_the_fires	0	cast	exercised
 pillarfield_ox	0	cast	exercised
 pincher_beetles	0	cast	exercised
@@ -1258,6 +1264,8 @@ quick-draw_katana	0	ability:0	exercised
 quick-draw_katana	0	cast	exercised
 quick_study	0	cast	exercised
 quicksilver,_pietro_maximoff	0	cast	exercised
+quill-blade_laureate_twofold_intent	0	cast	exercised
+quill-blade_laureate_twofold_intent	1	cast	intentional: face unavailable from hand
 quilled_slagwurm	0	cast	exercised
 rabid_bite	0	cast	exercised
 radiant_strike	0	cast	exercised

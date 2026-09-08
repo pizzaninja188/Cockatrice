@@ -185,10 +185,10 @@ fn main() -> ExitCode {
         };
         let composite = def.name.trim().to_string();
         implemented.insert(composite.clone(), status.clone());
-        // Multi-face cards (e.g. "A // B") may be stored in Oracle with each face as a separate
-        // entry (MDFCs), so also register each face name so the checklist marks both implemented.
-        for face in def.faces_iter() {
-            let face_name = face.name.trim().to_string();
+        // Use the same physical-card aliases as deck admission. Preparation insets do not
+        // implement unrelated normal cards that happen to share the inset's name.
+        for name in def.deck_input_names() {
+            let face_name = name.trim().to_string();
             if face_name != composite {
                 implemented
                     .entry(face_name.clone())

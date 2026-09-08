@@ -1,5 +1,6 @@
 #include "ruled_actions.h"
 #include "ruled_pending_cast.h"
+#include "ruled_payment_ui.h"
 
 #include "../../interface/widgets/tabs/tab_game.h"
 #include "../abstract_game.h"
@@ -625,6 +626,24 @@ bool tryHandleCombatClick(CardItem *card)
     }
 
     return false;
+}
+
+bool tryHandlePublicZonePlay(CardItem *card, bool contextMenu)
+{
+    if (!card || !card->getOwner() || !card->getZone() || !isRuledGameForCard(card)) {
+        return false;
+    }
+    if (card->getZone()->getName() != ZoneNames::EXILE && card->getZone()->getName() != ZoneNames::GRAVE) {
+        return false;
+    }
+    PlayerActions *actions = localPlayerActions(card->getOwner()->getGame());
+    if (!actions || !isSingleClickPlayLegal(card)) {
+        return false;
+    }
+    if (gameplayInputLocked(card->getOwner()->getGame())) {
+        return true;
+    }
+    return RuledPaymentUi::startPublicZoneCast(actions, card, contextMenu);
 }
 
 bool isSingleClickPlayLegal(const CardItem *card)

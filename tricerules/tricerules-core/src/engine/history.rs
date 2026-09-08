@@ -180,7 +180,7 @@ pub(super) fn graveyard_entry_fact(
     oid: ObjectId,
 ) -> Option<crate::state::PermanentHistoryFact> {
     let object = state.objects.get(&oid)?;
-    if object.zone != Zone::Graveyard || object.is_token() {
+    if object.zone != Zone::Graveyard || !state.is_card_object(oid) {
         return None;
     }
     let types: Vec<String> = registry
@@ -412,7 +412,7 @@ pub(super) fn graveyard_aggregate_value(
         .flat_map(|player| player.graveyard.iter().copied())
         .filter(|oid| Some(*oid) != resolving_spell_id)
         .filter_map(|oid| state.objects.get(&oid))
-        .filter(|object| object.zone == Zone::Graveyard && !object.is_token())
+        .filter(|object| object.zone == Zone::Graveyard && state.is_card_object(object.id))
         .filter(|object| {
             super::card_predicates::zone_card_matches_filter(state, registry, object.id, filter)
         })
@@ -1611,7 +1611,7 @@ impl GameEngine {
                     .filter_map(|oid| self.state.objects.get(&oid))
                     .filter(|object| {
                         object.zone == Zone::Graveyard
-                            && !object.is_token()
+                            && self.state.is_card_object(object.id)
                             && self
                                 .registry
                                 .get(&object.card_id)

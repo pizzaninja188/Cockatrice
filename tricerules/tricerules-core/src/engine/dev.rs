@@ -170,6 +170,7 @@ impl GameEngine {
             return match self.begin_battlefield_entry(
                 item,
                 BattlefieldEntryEvent {
+                    prepared: false,
                     object_id: oid,
                     deciding_player: target,
                     destination_controller: target,

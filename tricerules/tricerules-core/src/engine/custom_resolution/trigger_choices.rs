@@ -222,6 +222,7 @@ impl GameEngine {
                 targets: public_targets.clone(),
                 ability_annotation: ability_text,
                 card_id: String::new(),
+                is_prepare_spell: false,
                 is_copy: false,
                 is_triggered: true,
                 copy_source_object_id: 0,

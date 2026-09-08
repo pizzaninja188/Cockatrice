@@ -1517,6 +1517,8 @@ pub enum CounterPlacementAffected {
 /// do not use the stack, unlike triggered and activated abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// CR 722.3: Infirmary Healer and Elite Interceptor enter with a prepared designation.
+    EntersPrepared,
     /// Hand-active replacement and exile trigger, used by Fiery Temper and Arrogant Wurm.
     Madness { cost: super::super::ManaCost },
     /// Library of Leng: optional replacement for effect-caused discards only.

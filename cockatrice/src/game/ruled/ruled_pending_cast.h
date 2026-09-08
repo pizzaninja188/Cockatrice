@@ -46,6 +46,7 @@ struct RuledCardActionMenuOption
     bool enabled = true;
     int manaOptionIndex = 0;
     ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL;
+    quint64 castingPermissionId = 0;
 };
 
 struct RuledFlexPip
@@ -168,6 +169,7 @@ struct PendingActivatedAbility
     quint32 permanentOid = 0;
     int abilityIndex = -1;
     int manaOptionIndex = 0;
+    quint64 castingPermissionId = 0;
     QString abilityText;
     QString cardName;
     bool needsTarget = false;

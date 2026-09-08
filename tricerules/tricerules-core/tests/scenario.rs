@@ -155,6 +155,8 @@ mod issue_177_multi_option_cast_costs;
 mod issue_178_aggregate_object_payments;
 #[path = "scenario/issue_179_sneak.rs"]
 mod issue_179_sneak;
+#[path = "scenario/issue_180_preparation.rs"]
+mod issue_180_preparation;
 #[path = "scenario/issue_181_spell_mana_spent.rs"]
 mod issue_181_spell_mana_spent;
 #[path = "scenario/issue_182_teamwork.rs"]

@@ -473,6 +473,8 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->clearHandActions();
     state->zoneCastActions = {};
     state->zoneCastSourceByOid.clear();
+    state->preparationCastCopyBySourceOid.clear();
+    state->preparationCastGenerationBySourceOid.clear();
     state->zoneCastCostsByCastKey.clear();
     state->zoneLandFacesByOid.clear();
     state->zoneLandSourceByOid.clear();
@@ -1607,6 +1609,7 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
         state->engineOidBattleProtector.clear();
         state->activatedAbilitiesByOid.clear();
         state->battlefieldGenerationByOid.clear();
+        state->preparedCopyBySourceOid.clear();
     }
     bool anyFirstStrikePending = false;
     for (const auto &p : view.per_player()) {
@@ -1626,6 +1629,9 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
                 continue;
             }
             state->battlefieldGenerationByOid.insert(oid, battlefieldObject.zone_change_generation());
+            if (battlefieldObject.has_preparation()) {
+                state->preparedCopyBySourceOid.insert(oid, battlefieldObject.preparation().copy_object_id());
+            }
             RuledAbilityEntries abilities;
             for (const auto &ability : battlefieldObject.activated_abilities()) {
                 const int abilityIndex = static_cast<int>(ability.ability_index());
@@ -1853,6 +1859,11 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
              action.zone_change_generation(), castingPermissionId,
              permissionGroups.value(castingPermissionId).sourceLabel});
         state->zoneCastSourceByOid.insert(objectId, source);
+        if (source == RuledCastSource::Exile && action.has_preparation_source()) {
+            const auto &preparedSource = action.preparation_source();
+            state->preparationCastCopyBySourceOid.insert(preparedSource.object_id(), action.object_id());
+            state->preparationCastGenerationBySourceOid.insert(preparedSource.object_id(), preparedSource.zone_change_generation());
+        }
         if (action.needs_target()) {
             state->zoneCastActions.needsTargetIndices.insert(objectId);
         }

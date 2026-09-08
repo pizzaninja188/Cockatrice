@@ -1,13 +1,16 @@
 use super::*;
 
 /// Resolve the printed card definition for library searches, hand costs, and graveyard counts.
-/// The caller supplies the zone cohort and handles tokens, visibility, and generation checks.
+/// The caller supplies the zone cohort and handles visibility and generation checks.
 pub(super) fn zone_card_matches_filter(
     state: &GameState,
     registry: &CardRegistry,
     oid: ObjectId,
     filter: Option<&ZoneCardFilter>,
 ) -> bool {
+    if !state.is_card_object(oid) {
+        return false;
+    }
     let Some(filter) = filter else {
         return true;
     };

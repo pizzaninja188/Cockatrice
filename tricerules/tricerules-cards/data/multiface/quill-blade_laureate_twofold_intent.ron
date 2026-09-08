@@ -1,0 +1,19 @@
+(
+  id: "quill-blade_laureate_twofold_intent", name: "Quill-Blade Laureate // Twofold Intent", layout: Preparation,
+  faces: [
+    (
+      face_id: "quill_blade_laureate", name: "Quill-Blade Laureate", mana_cost: "{1}{W}",
+      types: ["Creature", "Human", "Cleric"], power: 1, toughness: 1, keywords: [DoubleStrike],
+      static_abilities: [(
+        ability_id: "enters_prepared", presentation: OracleLines([2]), definition: EntersPrepared,
+      )],
+    ),
+    (
+      face_id: "twofold_intent", name: "Twofold Intent", mana_cost: "{1}{W}", types: ["Sorcery"],
+      spell_effect: [
+        PumpTarget(power: 1, toughness: 0),
+        GrantKeywords(subject: Chosen((kind: Creature)), keywords: [DoubleStrike]),
+      ],
+    ),
+  ],
+)

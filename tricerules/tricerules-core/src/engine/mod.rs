@@ -170,6 +170,7 @@ mod continuous;
 mod counters;
 mod custom_resolution;
 pub(crate) mod damage;
+mod delayed_copy;
 mod dev;
 mod diagnostics;
 mod discard;
@@ -180,6 +181,7 @@ mod issue_169_taps;
 mod legal_actions;
 mod opening;
 mod payment;
+mod preparation;
 mod presentation;
 mod priority;
 pub(crate) mod replacement;
@@ -698,6 +700,7 @@ struct PlayerBattlefieldSnapshot {
 
 #[derive(Clone, PartialEq, Eq)]
 struct BattlefieldObjectSnapshot {
+    preparation: Option<ObjectId>,
     object_id: ObjectId,
     card_id: String,
     owner: PlayerId,
@@ -1047,6 +1050,9 @@ impl GameEngine {
             zone_change_generation: HashMap::new(),
             face_change_generation: HashMap::new(),
             room_states: HashMap::new(),
+            prepared_permanents: Default::default(),
+            prepare_spell_sources: Default::default(),
+            captured_spell_copies: Default::default(),
             battle_protectors: HashMap::new(),
             stack: Vec::new(),
             stack_presentations: HashMap::new(),

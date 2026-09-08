@@ -454,6 +454,7 @@ impl GameEngine {
             "Madness".into(),
         );
         let trigger = CollectedTrigger {
+            captured_spell: None,
             source_id: oid,
             card_id,
             face_index: 0,
