@@ -1,0 +1,30 @@
+// Oracle and rulings checked 2026-09-08. CR 701.9, 608.2c, and 715.
+(
+    id: "hearth_elemental_stoke_genius",
+    name: "Hearth Elemental // Stoke Genius",
+    layout: Adventure,
+    faces: [
+        (
+            name: "Hearth Elemental",
+            face_id: "hearth_elemental",
+            mana_cost: "{5}{R}",
+            types: ["Creature", "Elemental"],
+            power: 4,
+            toughness: 5,
+            cost_modifiers: [GenericReduction(amount: Count(GraveyardCards(
+                owners: Controller,
+                filter: Some((any_of: Some([
+                    (card_type: Some(InstantOrSorcery)),
+                    (has_adventure: Some(true)),
+                ]))),
+            )))],
+        ),
+        (
+            name: "Stoke Genius",
+            face_id: "stoke_genius",
+            mana_cost: "{1}{R}",
+            types: ["Sorcery", "Adventure"],
+            spell_effect: [Discard(who: Controller, quantity: All), Draw(count: 2)],
+        ),
+    ],
+)

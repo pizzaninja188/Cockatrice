@@ -502,6 +502,13 @@ pub enum HandChoiceVisibility {
     PublicReveal,
 }
 
+/// Untargeted discard quantity, shared by Stoke Genius and Dangerous Wager.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DiscardQuantity {
+    Exact(u32),
+    All,
+}
+
 /// Written order for a draw/discard sequence whose discard may suspend resolution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DrawDiscardOrder {
@@ -889,13 +896,13 @@ pub enum SpellEffectKind {
         count: u32,
         target: TargetFilter,
     },
-    /// CR 701.9: each affected player chooses and discards `count` cards without targeting.
+    /// CR 701.9: each affected player discards a fixed quantity or their entire hand without targeting.
     /// Player-set recipients make their hidden choices in APNAP order before the complete discard
     /// action is applied. Cards: Fanatic of the Harrowing, Burglar Rat, and Macabre Waltz.
     Discard {
         #[serde(default)]
         who: PlayerRecipient,
-        count: u32,
+        quantity: DiscardQuantity,
     },
     /// Draw and discard as one resumable instruction. This is intentionally untargeted: `who`
     /// identifies the affected player and that player chooses from their private hand.
@@ -3539,7 +3546,11 @@ impl SpellEffectKind {
             }
         }
 
-        if let SpellEffectKind::Discard { count: 0, .. } = self {
+        if let SpellEffectKind::Discard {
+            quantity: crate::primitives::DiscardQuantity::Exact(0),
+            ..
+        } = self
+        {
             return Err("Discard count must be at least 1".into());
         }
 

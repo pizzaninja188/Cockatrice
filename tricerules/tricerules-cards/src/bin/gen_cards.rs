@@ -557,7 +557,7 @@ fn parse_etb_recipe(
         (
             SpellEffectKind::Discard {
                 who: PlayerRecipient::EachOpponent,
-                count: 1,
+                quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
             },
             "ETB opponent discard",
         )
@@ -887,8 +887,8 @@ fn render_generated_effect(effect: &SpellEffectKind) -> String {
         }
         SpellEffectKind::Discard {
             who: PlayerRecipient::EachOpponent,
-            count,
-        } => format!("Discard(who: EachOpponent, count: {count})"),
+            quantity: tricerules_cards::primitives::DiscardQuantity::Exact(count),
+        } => format!("Discard(who: EachOpponent, quantity: Exact({count}))"),
         SpellEffectKind::ProduceMana {
             options,
             restriction: None,

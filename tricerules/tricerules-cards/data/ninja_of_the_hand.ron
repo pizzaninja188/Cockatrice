@@ -19,7 +19,7 @@
       min: Some(1),
     ))],
     effect: [
-      Discard(who: EachOpponent, count: 1),
+      Discard(who: EachOpponent, quantity: Exact(1)),
       PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source),
     ],
     activation_limit: Some(PerObject(max_activations: 1)),

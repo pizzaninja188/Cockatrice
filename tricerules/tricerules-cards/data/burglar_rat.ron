@@ -11,6 +11,6 @@
     ability_id: "triggered_01",
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
-    effect: [Discard(who: EachOpponent, count: 1)],
+    effect: [Discard(who: EachOpponent, quantity: Exact(1))],
   )],
 )

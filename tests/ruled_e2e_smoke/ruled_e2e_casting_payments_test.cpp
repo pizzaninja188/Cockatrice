@@ -2684,6 +2684,81 @@ TEST_F(RuledE2ESmokeTest, DiscardReplacementPrivacyAndMadnessPaymentReachBothCli
             EXPECT_EQ(toGrave->target_player_id(), p2.myId);
         }
     }
+
+    // Issue 227: a whole-hand Adventure pauses only for discard replacements. Its physical
+    // stack card must remain until those choices and the two draws have completed.
+    ASSERT_TRUE(put(p1.myId, "Library of Leng", ruled::v1::DEV_ZONE_BATTLEFIELD, true));
+    ASSERT_TRUE(put(p1.myId, "Hearth Elemental // Stoke Genius", ruled::v1::DEV_ZONE_HAND, false));
+    ruled::v1::RuledCommand stokeMana;
+    stokeMana.mutable_dev_command()->set_target_player_id(p1.myId);
+    stokeMana.mutable_dev_command()->mutable_add_mana()->set_r(2);
+    ASSERT_TRUE(send(p1, stokeMana, QStringLiteral("issue 227 Stoke mana")));
+    const auto *stoke = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Stoke Genius"));
+    ASSERT_NE(stoke, nullptr);
+    const int physicalHearth = p1.handServerCardBySlot.at(stoke->hand_index());
+    ruled::v1::RuledCommand stokeCast;
+    stokeCast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    stokeCast.mutable_cast_spell()->mutable_source()->set_hand_index(stoke->hand_index());
+    stokeCast.mutable_cast_spell()->set_face_index(stoke->face_index());
+    ASSERT_TRUE(send(p1, stokeCast, QStringLiteral("issue 227 cast Stoke Genius")));
+    const auto stackMove = std::find_if(p1.physicalMoveEvents.begin(), p1.physicalMoveEvents.end(),
+                                       [physicalHearth](const auto &move) {
+                                           return move.card_id() == physicalHearth &&
+                                                  move.start_zone() == ZoneNames::HAND &&
+                                                  move.target_zone() == ZoneNames::STACK;
+                                       });
+    ASSERT_NE(stackMove, p1.physicalMoveEvents.end());
+    const int stackCard = stackMove->new_card_id();
+    const int discardCount = p1.handSizeByPlayer[p1.myId];
+    ASSERT_GT(discardCount, 0);
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    auto hearthLeftStack = [stackCard](const OpeningDriver &client) {
+        return std::any_of(client.physicalMoveEvents.begin(), client.physicalMoveEvents.end(),
+                           [stackCard](const auto &move) {
+                               return move.card_id() == stackCard && move.start_zone() == ZoneNames::STACK &&
+                                      move.target_zone() == ZoneNames::EXILE;
+                           });
+    };
+    auto physicalDiscards = [&](const OpeningDriver &client) {
+        return std::count_if(client.physicalMoveEvents.begin(), client.physicalMoveEvents.end(),
+                             [&](const auto &move) {
+                                 return move.start_player_id() == p1.myId && move.start_zone() == ZoneNames::HAND &&
+                                        move.target_zone() == ZoneNames::GRAVE;
+                             });
+    };
+    const auto discardsBefore1 = physicalDiscards(p1);
+    const auto discardsBefore2 = physicalDiscards(p2);
+    for (int index = 0; index < discardCount; ++index) {
+        ASSERT_TRUE(p1.pendingChoice.has_value());
+        EXPECT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+        ASSERT_TRUE(p2.lastResolutionChoice.has_value());
+        EXPECT_EQ(p2.lastResolutionChoice->candidate_names_size(), 0);
+        EXPECT_EQ(p2.lastResolutionChoice->candidate_object_ids_size(), 0);
+        for (auto *client : {&p1, &p2}) {
+            EXPECT_FALSE(hearthLeftStack(*client));
+        }
+        // HandSlotMap is private to its owner; observe public discards through physical events.
+        EXPECT_EQ(p1.handSizeByPlayer[p1.myId], discardCount);
+        EXPECT_EQ(physicalDiscards(p1), discardsBefore1);
+        EXPECT_EQ(physicalDiscards(p2), discardsBefore2);
+        ruled::v1::RuledCommand destination;
+        destination.mutable_submit_resolution_choice()->add_chosen_object_ids(0);
+        p1.pendingChoice.reset();
+        ASSERT_TRUE(send(p1, destination, QStringLiteral("issue 227 discard to graveyard")));
+    }
+    for (auto *client : {&p1, &p2}) {
+        EXPECT_EQ(client->stackDepth, 0);
+        EXPECT_TRUE(hearthLeftStack(*client));
+    }
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], 2);
+    EXPECT_EQ(physicalDiscards(p1), discardsBefore1 + discardCount);
+    EXPECT_EQ(physicalDiscards(p2), discardsBefore2 + discardCount);
+    ASSERT_TRUE(std::any_of(p1.latestLegal.zone_cast_actions().begin(), p1.latestLegal.zone_cast_actions().end(),
+                            [](const auto &action) {
+                                return action.card_name() == "Hearth Elemental" && action.face_index() == 0;
+                            }));
+
 }
 
 TEST_F(RuledE2ESmokeTest, PerTargetDamageMetadataAndResolutionReachBothSeats)

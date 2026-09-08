@@ -208,6 +208,25 @@ impl GameEngine {
             ));
         }
 
+        let mut events = Vec::new();
+        let Some(result) = self.apply_player_set_discard(stack.clone(), &discard, &mut events)?
+        else {
+            return Ok(finish_with_events(self, events));
+        };
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            result.into(),
+            events,
+        )
+    }
+    /// Commit a fully selected cohort, or park its discard replacements without finishing the tail.
+    pub(in crate::engine) fn apply_player_set_discard(
+        &mut self,
+        stack: ParkedStackResolution,
+        discard: &PendingPlayerSetDiscard,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Option<CardResultCohort>, EngineError> {
         if discard
             .choices
             .iter()
@@ -219,7 +238,9 @@ impl GameEngine {
                 .zip(&discard.selections)
                 .flat_map(|(choice, selection)| selection.iter().map(|oid| (choice.player, *oid)))
                 .collect();
-            return self.start_discard_replacements(stack, selected, false, None);
+            let batch = self.start_discard_replacements(stack, selected, false, None)?;
+            events.extend(batch.events);
+            return Ok(None);
         }
         let card_name = self
             .registry
@@ -227,7 +248,6 @@ impl GameEngine {
             .and_then(|definition| definition.face(stack.item.face_index))
             .map(|face| face.name.to_string())
             .unwrap_or_else(|| stack.item.card_id.clone());
-        let mut events = Vec::new();
         let mut result = CardResultCohort::default();
         for (choice, selection) in discard.choices.iter().zip(&discard.selections) {
             for object_id in selection {
@@ -235,7 +255,7 @@ impl GameEngine {
                     .cards
                     .push(resolution::zones::perform_hand_card_action(
                         self,
-                        &mut events,
+                        events,
                         choice.player,
                         *object_id,
                         HandCardAction::Discard,
@@ -243,11 +263,6 @@ impl GameEngine {
                     )?);
             }
         }
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            result.into(),
-            events,
-        )
+        Ok(Some(result))
     }
 }

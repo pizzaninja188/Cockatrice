@@ -326,7 +326,7 @@ pub(super) fn discard(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::Discard { who, count } = effect else {
+    let SpellEffectKind::Discard { who, quantity } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let recipients = player_recipients(cx, who);
@@ -336,7 +336,12 @@ pub(super) fn discard(
             continue;
         };
         let hand = cx.engine.state.players[player_index].hand.clone();
-        let required = count.min(hand.len() as u32);
+        let required = match quantity {
+            tricerules_cards::primitives::DiscardQuantity::Exact(count) => {
+                count.min(hand.len() as u32)
+            }
+            tricerules_cards::primitives::DiscardQuantity::All => hand.len() as u32,
+        };
         if required == 0 {
             cx.events.push(ev_log(format!(
                 "P{player} has no cards to discard ({}).",
@@ -365,6 +370,35 @@ pub(super) fn discard(
     }
     if choices.is_empty() {
         return Ok(EffectOutcome::Continue);
+    }
+
+    if quantity == tricerules_cards::primitives::DiscardQuantity::All {
+        let selections = choices
+            .iter()
+            .map(|choice| {
+                choice
+                    .candidate_generations
+                    .iter()
+                    .map(|(oid, _)| *oid)
+                    .collect()
+            })
+            .collect();
+        let discard = PendingPlayerSetDiscard {
+            choices,
+            current: 0,
+            selections,
+        };
+        let stack = ParkedStackResolution::new(cx.top.clone());
+        return match cx
+            .engine
+            .apply_player_set_discard(stack, &discard, cx.events)?
+        {
+            Some(result) => {
+                *cx.effect_result = result.into();
+                Ok(EffectOutcome::Continue)
+            }
+            None => Ok(EffectOutcome::Suspended),
+        };
     }
 
     park_player_set_discard_choice(

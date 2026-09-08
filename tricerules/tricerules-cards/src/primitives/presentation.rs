@@ -165,12 +165,16 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                 } => format!("Each player loses {amount} life."),
                 SpellEffectKind::Discard {
                     who: PlayerRecipient::Controller,
-                    count: 1,
+                    quantity: crate::primitives::DiscardQuantity::Exact(1),
                 } => "Discard a card.".into(),
                 SpellEffectKind::Discard {
                     who: PlayerRecipient::Controller,
-                    count,
+                    quantity: super::DiscardQuantity::Exact(count),
                 } => format!("Discard {count} cards."),
+                SpellEffectKind::Discard {
+                    who: PlayerRecipient::Controller,
+                    quantity: super::DiscardQuantity::All,
+                } => "Discard your hand.".into(),
                 SpellEffectKind::Blight { count } => format!("Blight {count}."),
                 SpellEffectKind::Sacrifice {
                     subject: EffectSubject::Source,

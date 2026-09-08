@@ -6,5 +6,5 @@
   mana_cost: "{3}{U}{U}",
   types: ["Instant"],
   keywords: [Convoke],
-  spell_effect: [Draw(count: 3), Discard(who: Controller, count: 1)],
+  spell_effect: [Draw(count: 3), Discard(who: Controller, quantity: Exact(1))],
 )

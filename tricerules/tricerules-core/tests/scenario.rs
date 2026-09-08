@@ -330,5 +330,7 @@ mod zone_view;
 
 #[path = "scenario/ability_logs.rs"]
 mod ability_logs;
+#[path = "scenario/issue_227_whole_hand_discard.rs"]
+mod issue_227_whole_hand_discard;
 #[path = "scenario/spellementals.rs"]
 mod spellementals;

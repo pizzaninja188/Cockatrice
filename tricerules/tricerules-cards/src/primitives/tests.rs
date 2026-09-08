@@ -1814,3 +1814,25 @@ fn exile_graveyards_is_untargeted_and_validates_printed_card_filters() {
     );
     assert!(crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[]).is_err());
 }
+#[test]
+fn issue_227_discard_quantity_accepts_whole_hand() {
+    let effect = ron::from_str::<super::SpellEffectKind>("Discard(who: Controller, quantity: All)");
+    assert!(
+        effect.is_ok(),
+        "whole-hand discard must be expressible: {effect:?}"
+    );
+    let definition = |quantity| {
+        format!(
+            r#"(id: "test", name: "Test", face_id: "test", mana_cost: "{{R}}", types: ["Sorcery"], spell_effect: [Discard(quantity: {quantity})])"#,
+        )
+    };
+    for quantity in ["All", "Exact(1)", "Exact(300)"] {
+        let card = definition(quantity);
+        let registry = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[]).unwrap();
+        assert!(registry.get("test").unwrap().primary_face().spell_effect[0]
+            .target_roles()
+            .is_empty());
+    }
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[&definition("Exact(0)")], &[]).is_err());
+    assert!(ron::from_str::<super::SpellEffectKind>("Discard(count: 1)").is_err());
+}

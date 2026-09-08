@@ -925,10 +925,10 @@ impl GameEngine {
             // A data-driven instant or sorcery may suspend for a mid-resolution choice. Keep its
             // physical card on the stack until the whole effect list completes; immediate
             // resolutions still publish the same final batch, while parked resolutions now keep
-            // the visible stack faithful to CR 608.2m. Adventure and tier-3 custom spells retain
-            // their specialized exit ownership below.
+            // the visible stack faithful to the resolution boundary. This includes Adventure;
+            // tier-3 custom spells retain their specialized exit ownership below.
             let defer_authored_nonpermanent_exit =
-                !resolves_to_battlefield_raw && !is_adventure_spell && custom_key.is_none();
+                !resolves_to_battlefield_raw && custom_key.is_none();
             // CR 303.4f: an aura whose enchant target is no longer on the battlefield at resolution
             // is countered (goes to owner's graveyard) rather than entering the battlefield orphaned.
             let is_aura =
@@ -1049,21 +1049,11 @@ impl GameEngine {
                     move_object_to_zone(&mut self.state, self.registry, top.id, zone, None)?;
                 }
             }
-            if adventure_resolves_to_exile {
-                let source_label = self
-                    .registry
-                    .get(&card_id)
-                    .map(|definition| definition.name.clone())
-                    .unwrap_or_else(|| "Adventure".to_string());
-                self.grant_exile_play_permission(
-                    top.controller,
-                    top.id,
-                    &source_label,
-                    crate::state::ExilePlayPermissionGrant::printed(
-                        ExilePlayPermissionScope::CastFace(0),
-                        false,
-                    ),
-                )?;
+            if adventure_resolves_to_exile
+                && !defer_authored_nonpermanent_exit
+                && !defer_soft_counter_exit
+            {
+                self.grant_adventure_play_permission(&top)?;
             }
             if !resolves_to_battlefield && is_aura {
                 let aura_name = self
@@ -1154,7 +1144,7 @@ impl GameEngine {
 
     /// Complete a stack exit deferred until the data-driven effect list finishes. This keeps an
     /// instant or sorcery visible on the physical stack throughout any resolution-time choice.
-    /// Permanent, Adventure, and tier-3 custom spells retain their specialized exit paths and
+    /// Permanent and tier-3 custom spells retain their specialized exit paths and
     /// make this a no-op after they have already moved.
     fn finish_deferred_stack_exit(
         &mut self,
@@ -1184,13 +1174,18 @@ impl GameEngine {
 
         self.state.stack.retain(|item| item.id != top.id);
         let is_resolved_omen = exit == DeferredStackExit::Resolved && is_omen_spell;
+        let is_resolved_adventure = exit == DeferredStackExit::Resolved
+            && top.ability_text.is_none()
+            && self.registry.get(&top.card_id).is_some_and(|definition| {
+                definition.layout == Layout::Adventure && top.face_index == 1
+            });
         let physical_owner = (!top.is_copy)
             .then(|| self.state.objects.get(&top.id).map(|object| object.owner))
             .flatten();
         let shuffle_player = physical_owner.unwrap_or(top.controller);
         let destination = if is_resolved_omen {
             rv1::StackResolveDestination::Library
-        } else if top.cast_method.exiles_on_leave_stack() {
+        } else if top.cast_method.exiles_on_leave_stack() || is_resolved_adventure {
             rv1::StackResolveDestination::Exile
         } else {
             rv1::StackResolveDestination::Graveyard
@@ -1209,13 +1204,16 @@ impl GameEngine {
                 top.id,
                 if is_resolved_omen {
                     Zone::Library
-                } else if top.cast_method.exiles_on_leave_stack() {
+                } else if top.cast_method.exiles_on_leave_stack() || is_resolved_adventure {
                     Zone::Exile
                 } else {
                     Zone::Graveyard
                 },
                 None,
             )?;
+            if is_resolved_adventure {
+                self.grant_adventure_play_permission(top)?;
+            }
         }
         if is_resolved_omen {
             shuffle_player_library_for_current_command(&mut self.state, shuffle_player);
@@ -1224,6 +1222,24 @@ impl GameEngine {
                 top.controller, shuffle_player
             )));
         }
+        Ok(())
+    }
+
+    fn grant_adventure_play_permission(&mut self, top: &StackItem) -> Result<(), EngineError> {
+        let source_label = self
+            .registry
+            .get(&top.card_id)
+            .map(|definition| definition.name.clone())
+            .unwrap_or_else(|| "Adventure".to_string());
+        self.grant_exile_play_permission(
+            top.controller,
+            top.id,
+            &source_label,
+            crate::state::ExilePlayPermissionGrant::printed(
+                ExilePlayPermissionScope::CastFace(0),
+                false,
+            ),
+        )?;
         Ok(())
     }
 
@@ -3285,6 +3301,60 @@ mod attached_subject_tests {
     }
 
     #[test]
+    fn issue_227_whole_hand_discard_preserves_player_sets_and_runs_the_tail() {
+        for who in [PlayerRecipient::EachPlayer, PlayerRecipient::EachOpponent] {
+            let mut engine = GameEngine::new(227_003, &[10, 20], 20, None, true).unwrap();
+            // Exercise a third nonconsecutive seat below the two-player session admission gate.
+            engine.state.players.push(PlayerState::new(30, 20));
+            let third_card = add_battlefield_object(&mut engine, 30, "island");
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                third_card,
+                Zone::Hand,
+                None,
+            )
+            .unwrap();
+            engine.state.active_player_idx = 1;
+            let source = add_battlefield_object(&mut engine, 10, "tatterkite");
+            let hands: Vec<_> = engine
+                .state
+                .players
+                .iter()
+                .map(|p| (p.id, p.hand.clone()))
+                .collect();
+            let mut item = quantity_item(
+                source,
+                vec![
+                    SpellEffectKind::Discard {
+                        who,
+                        quantity: tricerules_cards::primitives::DiscardQuantity::All,
+                    },
+                    SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(2),
+                    },
+                ],
+            );
+            item.controller = 10;
+            let (effects, label) = engine.build_resolution_effects(&item);
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+                .unwrap();
+            for (pid, hand) in hands {
+                let player = &engine.state.players[engine.state.player_idx(pid).unwrap()];
+                if pid == 10 && who == PlayerRecipient::EachOpponent {
+                    assert_eq!(player.hand, hand);
+                } else {
+                    assert!(player.hand.is_empty());
+                    assert!(hand.iter().all(|oid| player.graveyard.contains(oid)));
+                }
+            }
+            assert_eq!(engine.state.players[0].life, 22);
+            assert!(engine.state.pending_resolution.is_none());
+        }
+    }
+
+    #[test]
     fn issue_157_blossombind_prohibition_precedes_stun_and_expires_on_departure() {
         let mut engine = GameEngine::new_with_default_decks(15705, &[0, 1], 20).unwrap();
         let target = add_battlefield_object(&mut engine, 0, "hill_giant");
@@ -4471,7 +4541,7 @@ mod attached_subject_tests {
                 SpellEffectKind::Blight { count: 2 },
                 SpellEffectKind::Discard {
                     who: PlayerRecipient::EachOpponent,
-                    count: 1,
+                    quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
                 },
             ],
         );

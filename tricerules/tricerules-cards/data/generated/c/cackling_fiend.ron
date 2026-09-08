@@ -7,5 +7,5 @@
   types: ["Creature", "Zombie"],
   power: 2,
   toughness: 1,
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Discard(who: EachOpponent, count: 1)])],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [Discard(who: EachOpponent, quantity: Exact(1))])],
 )

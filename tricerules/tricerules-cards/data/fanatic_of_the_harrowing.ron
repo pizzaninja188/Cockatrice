@@ -13,7 +13,7 @@
     presentation: OracleLines([1]),
     trigger: WhenSelfEntersBattlefield,
     effect: [
-      Discard(who: EachPlayer, count: 1),
+      Discard(who: EachPlayer, quantity: Exact(1)),
       ChooseResolutionBranch(
         selection: FirstApplicable,
         branches: [

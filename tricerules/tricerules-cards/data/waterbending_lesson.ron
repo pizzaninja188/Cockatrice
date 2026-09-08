@@ -9,7 +9,7 @@
     Draw(count: 3),
     ChooseResolutionBranch(optional: false, branches: [
       (branch_id: "waterbend_2", presentation: Fallback, cost: Waterbend("{2}"), effects: []),
-      (branch_id: "discard_a_card", presentation: Fallback, cost: None, effects: [Discard(count: 1)]),
+      (branch_id: "discard_a_card", presentation: Fallback, cost: None, effects: [Discard(quantity: Exact(1))]),
     ]),
   ],
 )

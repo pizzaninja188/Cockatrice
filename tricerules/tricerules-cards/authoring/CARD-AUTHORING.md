@@ -450,6 +450,11 @@ checks it both before staging the reflexive trigger and again when that trigger 
 
 Only add vocabulary after confirming existing data cannot express the behavior.
 
+Use `Discard(quantity: Exact(2))` for a fixed untargeted discard and
+`Discard(quantity: All)` for an entire hand, as on Stoke Genius. Whole-hand discard selects
+the complete hand automatically while preserving discard replacements and madness. Follow it
+with `Draw(count: 2)` for a mandatory discard-then-draw sequence, including an empty hand.
+
 1. Name two real cards or two mechanics supported by the proposed shape.
 2. Put the variant in the appropriate `tricerules-cards/src/primitives/` module.
 3. Add registry validation for authoring constraints and reject ambiguous or invalid shapes.

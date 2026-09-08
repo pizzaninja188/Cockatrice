@@ -11,7 +11,7 @@
       filter: (owner: Controller, card: Some((card_type: Some(Creature)))),
       destination: Hand,
     ),
-    Discard(who: Controller, count: 1),
+    Discard(who: Controller, quantity: Exact(1)),
   ],
   targeting: Some((groups: [(
     min: 0,

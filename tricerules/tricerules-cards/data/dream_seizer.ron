@@ -8,7 +8,7 @@
     trigger: WhenSelfEntersBattlefield,
     effect: [ChooseResolutionBranch(optional: true, branches: [(
       branch_id: "blight_1", presentation: Fallback, cost: Blight(count: 1),
-      effects: [Discard(who: EachOpponent, count: 1)],
+      effects: [Discard(who: EachOpponent, quantity: Exact(1))],
     )])],
   )],
 )

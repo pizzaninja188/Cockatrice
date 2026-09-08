@@ -4,6 +4,6 @@
   types: ["Instant"],
   spell_effect: [
     Draw(count: Count(BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Island"])))),
-    Discard(count: 2),
+    Discard(quantity: Exact(2)),
   ],
 )
