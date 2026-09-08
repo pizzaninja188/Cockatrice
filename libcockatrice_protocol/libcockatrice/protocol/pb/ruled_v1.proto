@@ -592,10 +592,10 @@ message PresentationRef {
 // sole source of truth; clients must not replicate this logic from Oracle card text.
 message SpellTargets {
   reserved 1 to 6;
-  // DamageTargets spells only: fixed total damage to distribute among chosen targets.
+  // DamageTargets spells only: fixed damage amount; a total or per-target amount according to damage_division.
   // 0 when the amount is determined by {X} chosen at cast time; client uses its chosen x_value instead.
   uint32 fixed_damage = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  // True when this spell uses DamageTargets (requires per-target damage_amount on TargetRef).
+  // True when this spell uses DamageTargets; damage_division determines whether allocation is needed.
   bool is_damage_targets = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // DamageTargets spells only: extra generic mana per target beyond the first (CR 601.2f).
   // Fireball = 1 ("{1} more for each target beyond the first"); Fire = 0. The client adds
@@ -668,6 +668,8 @@ enum DamageDivision {
   // on TargetRef is ignored. The client must not prompt for an allocation, must not require one
   // damage per target, and may offer a zero-target cast.
   DAMAGE_DIVISION_EVEN_AT_RESOLUTION = 1;
+  // Deal fixed_damage (or X) independently to each legal target; ignore submitted allocations.
+  DAMAGE_DIVISION_PER_TARGET = 2;
 }
 
 // Authoritative legal data for one printed mode of a modal spell.

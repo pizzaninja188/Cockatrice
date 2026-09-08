@@ -268,10 +268,21 @@ pub(super) fn damage_targets(
     } else {
         0
     };
+    let per_target_damage = if matches!(division, DamageDivision::PerTarget) {
+        engine.resolve_amount(
+            &amount,
+            AmountContext::for_stack_item(cx.top, controller)
+                .with_previous_effect_result(cx.previous_effect_result),
+        )
+    } else {
+        0
+    };
     let mut damage = Vec::new();
     for (i, &tid) in targets.iter().enumerate() {
         let damage_amount = if matches!(division, DamageDivision::EvenAtResolution) {
             even_damage
+        } else if matches!(division, DamageDivision::PerTarget) {
+            per_target_damage
         } else {
             cx.target_damage.get(i).copied().unwrap_or(0)
         };

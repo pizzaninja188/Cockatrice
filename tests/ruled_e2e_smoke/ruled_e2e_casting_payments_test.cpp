@@ -2686,5 +2686,145 @@ TEST_F(RuledE2ESmokeTest, DiscardReplacementPrivacyAndMadnessPaymentReachBothCli
     }
 }
 
+TEST_F(RuledE2ESmokeTest, PerTargetDamageMetadataAndResolutionReachBothSeats)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+    OpeningDriver p1(true, QStringLiteral("pertargetp1"), &transcript);
+    OpeningDriver p2(false, QStringLiteral("pertargetp2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "per-target start p1"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "per-target start p2"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+    auto send = [&](OpeningDriver &sender, const ruled::v1::RuledCommand &command) {
+        const auto before1 = p1.stateVersion;
+        const auto before2 = p2.stateVersion;
+        sender.sendRuled(command, QStringLiteral("per-target damage scenario"));
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto pass = [&](OpeningDriver &sender) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(sender, command);
+    };
+    auto put = [&](int owner, const char *name, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(owner);
+        dev->mutable_put_card_in_zone()->set_card_name(name);
+        dev->mutable_put_card_in_zone()->set_zone(zone);
+        dev->mutable_put_card_in_zone()->set_ready(true);
+        return send(p1, command);
+    };
+    ASSERT_TRUE(put(p1.myId, "Prismari Charm", ruled::v1::DEV_ZONE_HAND));
+    ruled::v1::RuledCommand mana;
+    mana.mutable_dev_command()->set_target_player_id(p1.myId);
+    mana.mutable_dev_command()->mutable_add_mana()->set_u(1);
+    mana.mutable_dev_command()->mutable_add_mana()->set_r(3);
+    ASSERT_TRUE(send(p1, mana));
+    const auto *charm = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Prismari Charm"));
+    ASSERT_NE(charm, nullptr);
+    ASSERT_EQ(charm->modes_size(), 3);
+    const auto &damage = charm->modes(1).targets();
+    EXPECT_EQ(damage.damage_division(), ruled::v1::DAMAGE_DIVISION_PER_TARGET);
+    EXPECT_EQ(damage.fixed_damage(), 1u);
+    ASSERT_EQ(damage.groups_size(), 1);
+    EXPECT_EQ(damage.groups(0).min(), 1u);
+    EXPECT_EQ(damage.groups(0).max(), 2u);
+    EXPECT_EQ(p2.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Prismari Charm")), nullptr);
+    ruled::v1::RuledCommand cast;
+    cast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    cast.mutable_cast_spell()->mutable_source()->set_hand_index(charm->hand_index());
+    auto *mode = cast.mutable_cast_spell()->add_selected_modes();
+    mode->set_mode_index(charm->modes(1).mode_index());
+    for (int player : {p1.myId, p2.myId}) {
+        auto *target = mode->add_targets();
+        target->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+        target->set_object_id(player);
+    }
+    ASSERT_TRUE(send(p1, cast));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    for (auto *client : {&p1, &p2}) {
+        EXPECT_EQ(client->lifeByPlayer[p1.myId], 19);
+        EXPECT_EQ(client->lifeByPlayer[p2.myId], 19);
+        EXPECT_EQ(client->stackDepth, 0);
+    }
+    ASSERT_TRUE(put(p2.myId, "Llanowar Elves", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(put(p2.myId, "Llanowar Elves", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(put(p1.myId, "Dual Shot", ruled::v1::DEV_ZONE_HAND));
+    const auto *dual = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Dual Shot"));
+    ASSERT_NE(dual, nullptr);
+    const auto found = p1.latestLegal.valid_targets_by_hand_slot().find(dual->hand_index() << 8);
+    ASSERT_NE(found, p1.latestLegal.valid_targets_by_hand_slot().end());
+    EXPECT_EQ(found->second.damage_division(), ruled::v1::DAMAGE_DIVISION_PER_TARGET);
+    ASSERT_EQ(found->second.groups_size(), 1);
+    const auto &group = found->second.groups(0);
+    EXPECT_EQ(group.min(), 0u);
+    EXPECT_EQ(group.max(), 2u);
+    ASSERT_EQ(group.valid_permanent_ids_size(), 2);
+    std::vector<quint32> targets(group.valid_permanent_ids().begin(), group.valid_permanent_ids().end());
+    cast.Clear();
+    cast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    cast.mutable_cast_spell()->mutable_source()->set_hand_index(dual->hand_index());
+    for (auto oid : targets) {
+        auto *target = cast.mutable_cast_spell()->add_targets();
+        target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        target->set_object_id(oid);
+    }
+    ASSERT_TRUE(send(p1, cast));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    for (auto *client : {&p1, &p2}) {
+        EXPECT_EQ(client->stackDepth, 0);
+        for (auto oid : targets) {
+            ASSERT_NE(client->graveyardOwnerByEngineOid.find(oid), client->graveyardOwnerByEngineOid.end());
+            EXPECT_EQ(client->graveyardOwnerByEngineOid.at(oid), p2.myId);
+        }
+    }
+    ASSERT_TRUE(put(p1.myId, "Dual Shot", ruled::v1::DEV_ZONE_HAND));
+    dual = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Dual Shot"));
+    ASSERT_NE(dual, nullptr);
+    cast.Clear();
+    cast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    cast.mutable_cast_spell()->mutable_source()->set_hand_index(dual->hand_index());
+    ASSERT_TRUE(send(p1, cast));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    EXPECT_EQ(p1.stackDepth, 0);
+    EXPECT_EQ(p2.stackDepth, 0);
+}
+
 } // namespace
 } // namespace ruled_e2e

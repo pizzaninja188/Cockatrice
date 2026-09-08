@@ -1706,15 +1706,15 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
     if (actions->pendingRuledSpellCast.activeModePosition >= 0) {
         const auto &targetData = selectedModes.at(actions->pendingRuledSpellCast.activeModePosition).targets;
         actions->pendingRuledSpellCast.isDamageTargets = targetData.isDamageTargets;
-        actions->pendingRuledSpellCast.damageDividedEvenly = targetData.damageDividedEvenly;
+        actions->pendingRuledSpellCast.damageDivision = targetData.damageDivision;
         actions->pendingRuledSpellCast.maxTargets = targetData.maxTargets;
         actions->pendingRuledSpellCast.minTargets = targetData.minTargets;
         actions->pendingRuledSpellCast.fixedDamage = targetData.fixedDamage;
         actions->pendingRuledSpellCast.extraManaPerTarget = targetData.extraManaPerTarget;
     } else {
         actions->pendingRuledSpellCast.isDamageTargets = geh->spellIsDamageTargets(ruledHandIndex, faceIndex, source);
-        actions->pendingRuledSpellCast.damageDividedEvenly =
-            geh->spellTargetData(ruledHandIndex, faceIndex, source).damageDividedEvenly;
+        actions->pendingRuledSpellCast.damageDivision =
+            geh->spellTargetData(ruledHandIndex, faceIndex, source).damageDivision;
         actions->pendingRuledSpellCast.maxTargets = geh->spellMaxTargets(ruledHandIndex, faceIndex, source);
         actions->pendingRuledSpellCast.minTargets = geh->spellTargetData(ruledHandIndex, faceIndex, source).minTargets;
         actions->pendingRuledSpellCast.fixedDamage = geh->spellFixedDamage(ruledHandIndex, faceIndex, source);

@@ -1,0 +1,30 @@
+// Oracle and rulings verified 2026-09-08; CR 115.3, 120.4, 608.2b.
+(
+  id: "prismari_charm",
+  name: "Prismari Charm",
+  face_id: "prismari_charm",
+  mana_cost: "{U}{R}",
+  types: ["Instant"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
+        effects: [LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil), Draw(count: 1)],
+      ),
+      (
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
+        effects: [DamageTargets(amount: 1, target: (kind: AnyTarget), division: PerTarget)],
+        targeting: Some((groups: [(min: 1, max: 2, prompt: "Choose one or two targets", effect_indices: [0])])),
+      ),
+      (
+        mode_id: "mode_03",
+        presentation: OracleLines([4]),
+        effects: [ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land])))],
+      ),
+    ],
+  ),
+)

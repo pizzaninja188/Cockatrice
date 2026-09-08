@@ -6,9 +6,9 @@ RuledPendingCast::DamageAllocationStep RuledPendingCast::prepareSpellDamageAlloc
 {
     const int total = pendingDamageTargetsTotal();
     const int numTargets = spell.selectedTargetOids.size();
-    // Evenly divided damage is calculated by the engine on resolution, so the submitted amounts
+    // Automatic damage is calculated by the engine on resolution, so the submitted amounts
     // are zero and there is no interactive allocation or minimum of one damage per target.
-    if (spell.damageDividedEvenly) {
+    if (spell.damageDivision != ruled::v1::DAMAGE_DIVISION_CHOOSE_AT_CAST) {
         spell.selectedTargetDamages.clear();
         for (int i = 0; i < numTargets; ++i)
             spell.selectedTargetDamages.append(0);
@@ -66,9 +66,9 @@ int RuledPendingCast::effectiveDamageTargetsMax() const
     if (!spell.isDamageTargets) {
         return spell.maxTargets;
     }
-    // "Divided evenly" has no per-target minimum — Fireball may legally target more creatures
+    // Automatic damage has no allocation minimum — Fireball may legally target more creatures
     // than X (they simply each take 0). Only the engine's own cap applies, if any.
-    if (spell.damageDividedEvenly) {
+    if (spell.damageDivision != ruled::v1::DAMAGE_DIVISION_CHOOSE_AT_CAST) {
         return spell.maxTargets;
     }
     const int total = pendingDamageTargetsTotal();
@@ -97,6 +97,8 @@ int RuledPendingCast::spellDamageAllocationForOid(quint32 oid) const
     const int idx = spell.selectedTargetOids.indexOf(oid);
     if (idx < 0)
         return 0;
+    if (spell.damageDivision == ruled::v1::DAMAGE_DIVISION_PER_TARGET)
+        return pendingDamageTargetsTotal();
     // While interactively allocating, show the in-progress split; once confirmed (and through
     // mana payment) show the amount that will actually be sent with the cast.
     if (spell.inDamageAllocationMode) {
@@ -210,6 +212,7 @@ bool RuledPendingCast::storeCurrentModalTargetsAndAdvance(const RuledClientState
             spell.selectedTargetDamagesByGroup.append(QVector<quint32>{});
         }
         spell.isDamageTargets = nextMode.targets.isDamageTargets;
+        spell.damageDivision = nextMode.targets.damageDivision;
         spell.fixedDamage = nextMode.targets.fixedDamage;
         spell.extraManaPerTarget = nextMode.targets.extraManaPerTarget;
         loadCurrentTargetGroup(state);

@@ -161,10 +161,9 @@ struct RuledSpellTargetData : RuledTargetGroupData
     int fixedDamage = 0;
     bool isDamageTargets = false;
     int extraManaPerTarget = 0;
-    /// True for "divided evenly, rounded down" (Fireball): the engine splits the damage on
-    /// resolution among the targets still legal then, so the client must not prompt for an
-    /// allocation, must not demand one damage per target, and may send zero targets.
-    bool damageDividedEvenly = false;
+    /// Only ChooseAtCast collects an allocation. Automatic modes use the engine target bounds
+    /// without imposing a one-damage-per-target allocation minimum.
+    ruled::v1::DamageDivision damageDivision = ruled::v1::DAMAGE_DIVISION_CHOOSE_AT_CAST;
     QVector<RuledTargetingCostApplication> targetingCostApplications;
     QVector<RuledTargetedCostReductionApplication> targetedCostReductionApplications;
     QVector<RuledTargetCastCostRequirement> castCostRequirements;

@@ -2075,6 +2075,41 @@ mod tests {
     };
 
     #[test]
+    fn per_target_damage_cards_have_complete_modes_and_presentation() {
+        use crate::primitives::DamageDivision;
+        use crate::AbilityPresentation;
+        let registry = CardRegistry::from_embedded().unwrap();
+        let charm = registry.get("prismari_charm").unwrap().primary_face();
+        let modes = &charm.modal_spell.as_ref().unwrap().modes;
+        assert_eq!(modes.len(), 3);
+        for (index, mode) in modes.iter().enumerate() {
+            assert_eq!(mode.mode_id.as_str(), format!("mode_{:02}", index + 1));
+            assert_eq!(
+                mode.presentation,
+                AbilityPresentation::OracleLines(vec![index as u16 + 2])
+            );
+        }
+        assert_eq!(modes[0].effects.len(), 2);
+        assert!(matches!(
+            modes[1].effects[0],
+            SpellEffectKind::DamageTargets {
+                division: DamageDivision::PerTarget,
+                ..
+            }
+        ));
+        let dual = registry.get("dual_shot").unwrap().primary_face();
+        assert!(matches!(
+            dual.spell_effect[0],
+            SpellEffectKind::DamageTargets {
+                division: DamageDivision::PerTarget,
+                ..
+            }
+        ));
+        assert_eq!(dual.targeting.as_ref().unwrap().groups[0].min, 0);
+        assert_eq!(dual.targeting.as_ref().unwrap().groups[0].max, 2);
+    }
+
+    #[test]
     fn embedded_registry_loads() {
         CardRegistry::from_embedded().unwrap();
     }

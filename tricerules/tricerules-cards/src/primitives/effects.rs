@@ -864,13 +864,12 @@ pub enum SpellEffectKind {
     DamageAttackedPlayerOrPlaneswalker {
         amount: Amount,
     },
-    /// Divide `amount` damage among any number of targets (CR 601.2d). Costs
-    /// `extra_mana_per_target` additional generic mana per target beyond the first (Fireball = 1,
-    /// Fire = 0). Target cardinality is declared by the sibling [`TargetingDef`](crate::TargetingDef).
-    /// At cast time the player submits `(target, damage_amount)` pairs via `TargetRef`; the sum
-    /// must equal the amount resolved from `x_value`. Covers Fireball (X divided unlimited) and Fire
-    /// (fixed 2 divided among ≤ 2 targets). CR 608.2b: if some targets become illegal at
-    /// resolution, damage is applied only to the remaining legal targets (partial fizzle).
+    /// Damage each chosen target using the declared division mode. ChooseAtCast distributes a
+    /// total (Fire); EvenAtResolution divides a total among legal targets (Fireball); PerTarget
+    /// deals the amount independently to each legal target (Prismari Charm and Dual Shot).
+    /// Only ChooseAtCast uses submitted TargetRef allocations (CR 601.2d).
+    /// Target cardinality belongs to the sibling TargetingDef; extra_mana_per_target adds generic
+    /// mana for each target beyond the first (CR 601.2f). All recipients share one damage batch.
     DamageTargets {
         amount: Amount,
         target: TargetFilter,
@@ -3119,10 +3118,7 @@ impl SpellEffectKind {
             SpellEffectKind::DamageTargets { amount, .. } => {
                 amount.validate()?;
                 if amount.requires_game_state() {
-                    return Err(
-                        "DamageTargets cannot use a game-state amount because its allocation is chosen at cast time"
-                            .into(),
-                    );
+                    return Err("DamageTargets requires an unconditional fixed or X amount".into());
                 }
             }
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target }

@@ -602,6 +602,8 @@ pub enum DamageDivision {
     #[default]
     ChooseAtCast,
     EvenAtResolution,
+    /// The authored amount is dealt independently to each legal target (Prismari Charm, Dual Shot).
+    PerTarget,
 }
 
 /// How much life a [`SpellEffectKind::LoseLife`] causes each recipient to lose.

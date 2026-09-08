@@ -310,9 +310,8 @@ struct PendingRuledSpellCast
     ruled::v1::CastMethod castMethod = ruled::v1::CAST_METHOD_NORMAL;
     quint64 sourceZoneChangeGeneration = 0;
     quint64 castingPermissionId = 0;
-    /// Fireball's "divided evenly, rounded down": the engine splits on resolution, so there is no
-    /// allocation to collect, no one-damage-per-target cap, and zero targets is a legal cast.
-    bool damageDividedEvenly = false;
+    /// Mirrors the current spell or modal option; only ChooseAtCast collects allocations.
+    ruled::v1::DamageDivision damageDivision = ruled::v1::DAMAGE_DIVISION_CHOOSE_AT_CAST;
     int faceIndex = 0;
     QString cardName;
     QMap<QChar, int> remainingCost;

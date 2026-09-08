@@ -1158,7 +1158,7 @@ fn validate_effect_targets(
             division,
             ..
         } => {
-            if targets.is_empty() && !matches!(division, DamageDivision::EvenAtResolution) {
+            if targets.is_empty() && matches!(division, DamageDivision::ChooseAtCast) {
                 return Err(EngineError::Illegal("requires at least one target"));
             }
             let mut seen = std::collections::HashSet::new();
@@ -2109,15 +2109,16 @@ fn compute_targets_with_context(
         } = effect
         {
             is_damage_targets = true;
-            // Resolving with X=0 gives the fixed total for literal amounts; X amounts become 0
+            // Resolving with X=0 gives the fixed amount for literal amounts; X amounts become 0
             // (the client will use the player's chosen x_value instead).
             fixed_damage = amount.resolve_unconditional(0).unwrap_or(0);
             extra_mana_per_target = *empt;
-            // Fireball divides on resolution, so the client must not prompt for a split it would
-            // only discard (CR 601.2d applies to "divided as you choose", not "divided evenly").
+            // Only ChooseAtCast needs allocation UI (CR 601.2d). Other modes determine
+            // their amounts in the engine at resolution.
             damage_division = match division {
                 DamageDivision::ChooseAtCast => rv1::DamageDivision::ChooseAtCast,
                 DamageDivision::EvenAtResolution => rv1::DamageDivision::EvenAtResolution,
+                DamageDivision::PerTarget => rv1::DamageDivision::PerTarget,
             };
         }
     }

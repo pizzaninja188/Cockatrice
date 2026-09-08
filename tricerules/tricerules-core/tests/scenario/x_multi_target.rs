@@ -5,6 +5,50 @@
 
 use crate::helpers::*;
 
+#[test]
+fn per_target_prismari_charm_damages_both_players_without_allocation() {
+    let mut e = GameEngine::new(232_001, &[0, 1], 20, None, true).unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    inject_card_into_hand(&mut e, 0, "prismari_charm");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 1,
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let slot = hand_index_for_card(&e, 0, "prismari_charm");
+    e.apply_command(
+        0,
+        &cast_modal_spell(slot, vec![(1, targets_with_damage(vec![(0, 0), (1, 0)]))]),
+    )
+    .unwrap();
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.players[0].life, 19);
+    assert_eq!(e.state.players[1].life, 19);
+}
+
+#[test]
+fn per_target_dual_shot_allows_zero_targets() {
+    let mut e = GameEngine::new(232_002, &[0, 1], 20, None, true).unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    inject_card_into_hand(&mut e, 0, "dual_shot");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let slot = hand_index_for_card(&e, 0, "dual_shot");
+    e.apply_command(0, &cast_spell(slot, vec![])).unwrap();
+    resolve_entire_stack_two_player(&mut e);
+    assert!(e.state.stack.is_empty());
+}
+
 fn fireball_deck() -> Option<Vec<Vec<String>>> {
     Some(vec![
         vec![
@@ -407,4 +451,261 @@ fn fireball_with_more_targets_than_damage_deals_nothing() {
         e.state.players[0].life, p0_life,
         "1 / 2 targets rounds to 0"
     );
+}
+
+fn per_target_engine(card: &str) -> GameEngine {
+    let mut e = GameEngine::new(232_010, &[0, 1], 20, None, true).unwrap();
+    advance_to_main1_from_game_start(&mut e);
+    inject_card_into_hand(&mut e, 0, card);
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            u: 5,
+            r: 5,
+            ..Default::default()
+        },
+    );
+    e
+}
+
+#[test]
+fn per_target_single_target_ignores_submitted_amount() {
+    let mut e = per_target_engine("prismari_charm");
+    let slot = hand_index_for_card(&e, 0, "prismari_charm");
+    e.apply_command(
+        0,
+        &cast_modal_spell(slot, vec![(1, target_player_damage(1, 99))]),
+    )
+    .unwrap();
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.players[1].life, 19);
+}
+
+#[test]
+fn per_target_cardinality_and_types_reject_invalid_casts() {
+    for card in ["prismari_charm", "dual_shot"] {
+        let mut e = per_target_engine(card);
+        let a = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+        let b = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+        let c = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+        let slot = hand_index_for_card(&e, 0, card);
+        let mut invalid = vec![vec![(a, 0), (a, 0)], vec![(a, 0), (b, 0), (c, 0)]];
+        invalid.push(if card == "prismari_charm" {
+            vec![]
+        } else {
+            vec![(1, 0)]
+        });
+        for pairs in invalid {
+            let targets = targets_with_damage(pairs);
+            let cmd = if card == "prismari_charm" {
+                cast_modal_spell(slot, vec![(1, targets)])
+            } else {
+                cast_spell(slot, targets)
+            };
+            let mana = e.state.players[0].mana_pool;
+            let hand = e.state.players[0].hand.clone();
+            let command_index = e.state.command_index;
+            assert!(e.apply_command(0, &cmd).is_err());
+            assert!(e.state.stack.is_empty());
+            assert_eq!(e.state.command_index, command_index);
+            assert_eq!(e.state.players[0].hand, hand);
+            assert_eq!(e.state.players[0].mana_pool, mana);
+        }
+    }
+}
+
+#[test]
+fn per_target_dual_shot_damages_one_or_two_creatures() {
+    for count in 1..=2 {
+        let mut e = per_target_engine("dual_shot");
+        let a = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+        let b = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+        let slot = hand_index_for_card(&e, 0, "dual_shot");
+        let ids = [a, b];
+        e.apply_command(
+            0,
+            &cast_spell(
+                slot,
+                targets_with_damage(ids[..count].iter().map(|&id| (id, 99)).collect()),
+            ),
+        )
+        .unwrap();
+        resolve_entire_stack_two_player(&mut e);
+        assert_eq!(e.state.objects[&a].damage, 1);
+        assert_eq!(e.state.objects[&b].damage, if count == 2 { 1 } else { 0 });
+    }
+}
+
+#[test]
+fn per_target_partial_illegality_does_not_redistribute() {
+    let mut e = per_target_engine("prismari_charm");
+    let a = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    inject_card_into_hand(&mut e, 0, "lightning_bolt");
+    let slot = hand_index_for_card(&e, 0, "prismari_charm");
+    e.apply_command(
+        0,
+        &cast_modal_spell(slot, vec![(1, targets_with_damage(vec![(a, 0), (1, 0)]))]),
+    )
+    .unwrap();
+    let bolt = hand_index_for_card(&e, 0, "lightning_bolt");
+    e.apply_command(0, &cast_spell(bolt, target_object(a)))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.objects[&a].zone, tricerules_core::Zone::Graveyard);
+    assert_eq!(e.state.players[1].life, 19);
+}
+
+#[test]
+fn per_target_all_illegal_targets_do_not_deal_damage() {
+    let mut e = per_target_engine("dual_shot");
+    let a = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    inject_card_into_hand(&mut e, 0, "unsummon");
+    let slot = hand_index_for_card(&e, 0, "dual_shot");
+    e.apply_command(0, &cast_spell(slot, target_object(a)))
+        .unwrap();
+    let bounce = hand_index_for_card(&e, 0, "unsummon");
+    e.apply_command(0, &cast_spell(bounce, target_object(a)))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.objects[&a].zone, tricerules_core::Zone::Hand);
+    assert_eq!(e.state.objects[&a].damage, 0);
+    assert!(e.state.stack.is_empty());
+}
+
+#[test]
+fn per_target_charm_surveils_before_drawing() {
+    let mut e = per_target_engine("prismari_charm");
+    let slot = hand_index_for_card(&e, 0, "prismari_charm");
+    e.apply_command(0, &cast_modal_spell(slot, vec![(0, vec![])]))
+        .unwrap();
+    let hand = e.state.players[0].hand.len();
+    pass_both_players(&mut e);
+    let pending = e.state.pending_resolution.as_ref().expect("surveil parks");
+    let candidates = pending.presentation.candidates.clone();
+    assert_eq!(pending.deciding_player, 0);
+    assert_eq!(candidates.len(), 2);
+    assert_eq!(e.state.players[0].hand.len(), hand);
+    assert!(e
+        .apply_command(1, &submit_resolution_choice(candidates.clone()))
+        .is_err());
+    e.apply_command(0, &submit_resolution_choice(candidates.clone()))
+        .unwrap();
+    assert!(candidates
+        .iter()
+        .all(|id| e.state.players[0].graveyard.contains(id)));
+    assert_eq!(e.state.players[0].hand.len(), hand + 1);
+    assert!(e.state.pending_resolution.is_none());
+}
+
+#[test]
+fn per_target_charm_return_mode_excludes_lands() {
+    let mut e = per_target_engine("prismari_charm");
+    let a = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let land = inject_permanent_on_battlefield(&mut e, 0, "forest");
+    let slot = hand_index_for_card(&e, 0, "prismari_charm");
+    assert!(e
+        .apply_command(0, &cast_modal_spell(slot, vec![(2, target_object(land))]))
+        .is_err());
+    e.apply_command(0, &cast_modal_spell(slot, vec![(2, target_object(a))]))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut e);
+    assert!(e.state.players[1].hand.contains(&a));
+}
+
+#[test]
+fn per_target_prevention_choice_resumes_the_whole_batch_once() {
+    let mut e = per_target_engine("dual_shot");
+    let a = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let b = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    e.state.add_damage_prevention_shield(a, 1);
+    e.state.add_damage_prevention_shield(a, 1);
+    let slot = hand_index_for_card(&e, 0, "dual_shot");
+    e.apply_command(
+        0,
+        &cast_spell(slot, targets_with_damage(vec![(a, 0), (b, 0)])),
+    )
+    .unwrap();
+    pass_both_players(&mut e);
+    let pending = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("competing prevention parks damage");
+    let choice = pending.presentation.candidates[0];
+    assert_eq!(pending.deciding_player, 1);
+    assert_eq!(
+        e.state.objects[&b].damage, 0,
+        "batch not committed before choice"
+    );
+    assert!(e
+        .apply_command(0, &submit_resolution_choice(vec![choice]))
+        .is_err());
+    e.apply_command(1, &submit_resolution_choice(vec![choice]))
+        .unwrap();
+    assert_eq!(e.state.objects[&a].damage, 0);
+    assert_eq!(e.state.objects[&b].damage, 1);
+    assert_eq!(e.state.remaining_damage_prevention(a), 1);
+    assert!(e.state.pending_resolution.is_none());
+    assert!(e
+        .apply_command(1, &submit_resolution_choice(vec![choice]))
+        .is_err());
+    assert_eq!(e.state.objects[&b].damage, 1);
+}
+
+#[test]
+fn per_target_returned_object_is_not_the_original_target() {
+    use tricerules_proto::ruled::v1::{dev_command::Dev, DevCommand, DevMoveCard, DevZone};
+    let mut e = per_target_engine("dual_shot");
+    let a = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let slot = hand_index_for_card(&e, 0, "dual_shot");
+    e.apply_command(0, &cast_spell(slot, target_object(a)))
+        .unwrap();
+    e.enable_dev_commands();
+    for zone in [DevZone::Hand, DevZone::Battlefield] {
+        e.apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DevCommand(DevCommand {
+                    target_player_id: 1,
+                    dev: Some(Dev::MoveCard(DevMoveCard {
+                        card_name: "Grizzly Bears".into(),
+                        zone: zone as i32,
+                        ready: true,
+                    })),
+                })),
+            },
+        )
+        .unwrap();
+    }
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.objects[&a].zone, tricerules_core::Zone::Battlefield);
+    assert_eq!(e.state.objects[&a].damage, 0);
+}
+
+#[test]
+fn per_target_damage_triggers_wait_until_both_recipients_are_damaged() {
+    let mut e = per_target_engine("dual_shot");
+    let a = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let b = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    inject_card_into_hand(&mut e, 0, "cryoshatter");
+    let aura = hand_index_for_card(&e, 0, "cryoshatter");
+    e.apply_command(0, &cast_spell(aura, target_object(a)))
+        .unwrap();
+    resolve_entire_stack_two_player(&mut e);
+    let slot = hand_index_for_card(&e, 0, "dual_shot");
+    e.apply_command(
+        0,
+        &cast_spell(slot, targets_with_damage(vec![(a, 0), (b, 0)])),
+    )
+    .unwrap();
+    pass_both_players(&mut e);
+    assert_eq!(e.state.objects[&a].damage, 1);
+    assert_eq!(e.state.objects[&b].damage, 1);
+    assert_eq!(e.state.stack.len(), 1, "damage trigger waits on the stack");
+    assert!(e.state.stack[0].is_triggered);
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.objects[&a].zone, tricerules_core::Zone::Graveyard);
+    assert_eq!(e.state.objects[&b].zone, tricerules_core::Zone::Battlefield);
+    assert_eq!(e.state.objects[&b].damage, 1);
 }

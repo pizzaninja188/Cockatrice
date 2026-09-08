@@ -1,0 +1,10 @@
+// Oracle and rulings verified 2026-09-08; CR 115.3, 120.4, 608.2b.
+(
+  id: "dual_shot",
+  name: "Dual Shot",
+  face_id: "dual_shot",
+  mana_cost: "{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTargets(amount: 1, target: (kind: Creature), division: PerTarget)],
+  targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two creatures", effect_indices: [0])])),
+)

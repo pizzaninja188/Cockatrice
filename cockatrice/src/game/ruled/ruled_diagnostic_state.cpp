@@ -278,7 +278,7 @@ QJsonValue value(const RuledSpellTargetData &v)
     result.insert("fixedDamage", value(v.fixedDamage));
     result.insert("isDamageTargets", value(v.isDamageTargets));
     result.insert("extraManaPerTarget", value(v.extraManaPerTarget));
-    result.insert("damageDividedEvenly", value(v.damageDividedEvenly));
+    result.insert("damageDivision", value(v.damageDivision));
     result.insert("targetingCostApplications", value(v.targetingCostApplications));
     result.insert("targetedCostReductionApplications", value(v.targetedCostReductionApplications));
     result.insert("castCostRequirements", value(v.castCostRequirements));
@@ -558,7 +558,7 @@ QJsonValue value(const PendingRuledSpellCast &v)
     result.insert("castMethod", value(v.castMethod));
     result.insert("sourceZoneChangeGeneration", value(v.sourceZoneChangeGeneration));
     result.insert("castingPermissionId", value(v.castingPermissionId));
-    result.insert("damageDividedEvenly", value(v.damageDividedEvenly));
+    result.insert("damageDivision", value(v.damageDivision));
     result.insert("faceIndex", value(v.faceIndex));
     result.insert("cardName", value(v.cardName));
     result.insert("remainingCost", value(v.remainingCost));

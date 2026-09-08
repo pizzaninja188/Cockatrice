@@ -2048,6 +2048,7 @@ TEST_F(RuledClientTest, ParsesTargetingTablesForHandSlotsAndAbilities)
     auto &slotTargets = (*actions.mutable_valid_targets_by_hand_slot())[(1u << 8) | 0u];
     slotTargets.set_is_damage_targets(true);
     slotTargets.set_fixed_damage(4);
+    slotTargets.set_damage_division(ruled::v1::DAMAGE_DIVISION_PER_TARGET);
     slotTargets.set_extra_mana_per_target(1);
     auto *group = slotTargets.add_groups();
     group->set_group_index(0);
@@ -2078,6 +2079,7 @@ TEST_F(RuledClientTest, ParsesTargetingTablesForHandSlotsAndAbilities)
 
     EXPECT_FALSE(state->isValidSpellTarget(1, 0, 100));
     EXPECT_TRUE(state->isValidSpellTarget(1, 0, 101));
+    EXPECT_EQ(state->spellTargetData(1, 0).damageDivision, ruled::v1::DAMAGE_DIVISION_PER_TARGET);
     EXPECT_EQ(state->spellTargetData(1, 0).minTargets, 0);
     EXPECT_EQ(state->spellTargetData(1, 0).maxTargets, 2);
     EXPECT_EQ(state->spellTargetData(1, 0).promptText, "Choose up to two target creatures");
@@ -2525,11 +2527,11 @@ TEST(RuledPendingTargetProgressionTest, DamageDisplaySurvivesPaymentAndRespectsA
     EXPECT_EQ(pending.effectiveDamageTargetsMax(), 2);
     spell.maxTargets = 1;
     EXPECT_EQ(pending.effectiveDamageTargetsMax(), 1);
-    spell.damageDividedEvenly = true;
+    spell.damageDivision = ruled::v1::DAMAGE_DIVISION_EVEN_AT_RESOLUTION;
     spell.maxTargets = 0;
     EXPECT_EQ(pending.effectiveDamageTargetsMax(), 0);
 
-    spell.damageDividedEvenly = false;
+    spell.damageDivision = ruled::v1::DAMAGE_DIVISION_CHOOSE_AT_CAST;
     spell.fixedDamage = 0;
     spell.selectedTargetOids = {101, 205};
     EXPECT_EQ(pending.prepareSpellDamageAllocation(), RuledPendingCast::DamageAllocationStep::Allocating);
@@ -2575,7 +2577,7 @@ TEST(RuledPendingTargetProgressionTest, DamagePreparationPreservesAutomaticAndIn
     EXPECT_FALSE(spell.inDamageAllocationMode);
     EXPECT_TRUE(spell.valid); // The UI owns cancellation and its notifications.
 
-    spell.damageDividedEvenly = true;
+    spell.damageDivision = ruled::v1::DAMAGE_DIVISION_EVEN_AT_RESOLUTION;
     EXPECT_EQ(pending.prepareSpellDamageAllocation(), RuledPendingCast::DamageAllocationStep::Ready);
     EXPECT_EQ(spell.selectedTargetDamages, QVector<quint32>({0, 0, 0}));
     EXPECT_FALSE(spell.inDamageAllocationMode);
@@ -2609,6 +2611,7 @@ TEST(RuledPendingTargetProgressionTest, StoresGroupsAndModesBeforePaymentWithout
     lastMode.groups = {first};
     lastMode.isDamageTargets = true;
     lastMode.fixedDamage = 3;
+    lastMode.damageDivision = ruled::v1::DAMAGE_DIVISION_PER_TARGET;
     spell.selectedModes = {{4, QStringLiteral("first"), true, firstMode, {}, {}},
                            {8, QStringLiteral("untargeted"), false, {}, {}, {}},
                            {12, QStringLiteral("last"), true, lastMode, {}, {}}};
@@ -2641,6 +2644,7 @@ TEST(RuledPendingTargetProgressionTest, StoresGroupsAndModesBeforePaymentWithout
     EXPECT_TRUE(spell.waitingForTarget);
     EXPECT_TRUE(spell.isDamageTargets);
     EXPECT_EQ(spell.fixedDamage, 3);
+    EXPECT_EQ(spell.damageDivision, ruled::v1::DAMAGE_DIVISION_PER_TARGET);
     EXPECT_TRUE(spell.selectedTargetOids.isEmpty());
 
     spell.selectedTargetOids = {401};
@@ -7756,4 +7760,31 @@ TEST(RuledPendingCastTest, DeclineCannotBypassMandatoryOrModeLinkedCastCosts)
         EXPECT_TRUE(spell.valid);
         EXPECT_EQ(spell.nextCastCostGroup, 0);
     }
+}
+
+TEST(RuledPendingTargetProgressionTest, PerTargetDamageSkipsAllocationAndDisplaysEachAmount)
+{
+    RuledPendingCast pending;
+    auto &spell = pending.spell;
+    spell.valid = true;
+    spell.isDamageTargets = true;
+    spell.damageDivision = ruled::v1::DAMAGE_DIVISION_PER_TARGET;
+    spell.fixedDamage = 1;
+    spell.minTargets = 1;
+    spell.maxTargets = 2;
+    spell.selectedTargetOids = {101, 205};
+    EXPECT_EQ(pending.effectiveDamageTargetsMax(), 2);
+    EXPECT_EQ(pending.prepareSpellDamageAllocation(), RuledPendingCast::DamageAllocationStep::Ready);
+    EXPECT_FALSE(spell.inDamageAllocationMode);
+    EXPECT_EQ(spell.selectedTargetDamages, QVector<quint32>({0, 0}));
+    EXPECT_EQ(pending.spellDamageAllocationForOid(101), 1);
+    EXPECT_EQ(pending.spellDamageAllocationForOid(205), 1);
+    EXPECT_EQ(pending.spellDamageAllocationForOid(999), 0);
+    spell.minTargets = 0;
+    spell.selectedTargetOids.clear();
+    EXPECT_EQ(pending.prepareSpellDamageAllocation(), RuledPendingCast::DamageAllocationStep::Ready);
+    EXPECT_TRUE(spell.selectedTargetDamages.isEmpty());
+    pending.clearSpell();
+    EXPECT_FALSE(pending.isSpellDamageAllocationDisplayActive());
+    EXPECT_EQ(spell.damageDivision, ruled::v1::DAMAGE_DIVISION_CHOOSE_AT_CAST);
 }

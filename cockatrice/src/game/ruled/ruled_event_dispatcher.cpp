@@ -143,7 +143,7 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
     data.fixedDamage = static_cast<int>(src.fixed_damage());
     data.isDamageTargets = src.is_damage_targets();
     data.extraManaPerTarget = static_cast<int>(src.extra_mana_per_target());
-    data.damageDividedEvenly = src.damage_division() == ruled::v1::DAMAGE_DIVISION_EVEN_AT_RESOLUTION;
+    data.damageDivision = src.damage_division();
     for (const auto &application : src.targeting_cost_applications()) {
         RuledTargetingCostApplication parsed;
         parsed.applicationId = static_cast<quint64>(application.application_id());

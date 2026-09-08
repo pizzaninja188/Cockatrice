@@ -14,6 +14,12 @@
 
 namespace RuledDiagnosticValues
 {
+inline QJsonValue value(ruled::v1::DamageDivision v)
+{
+    if (ruled::v1::DamageDivision_IsValid(v))
+        return QString::fromStdString(ruled::v1::DamageDivision_Name(v));
+    return QJsonObject{{"unknown_enum_value", static_cast<int>(v)}};
+}
 inline QJsonValue value(bool v)
 {
     return v;
