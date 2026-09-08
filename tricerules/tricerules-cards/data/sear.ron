@@ -1,0 +1,6 @@
+// Oracle and rulings checked 2026-09-08; existing engine primitives only.
+(
+  id: "sear", name: "Sear", face_id: "sear",
+  mana_cost: "{1}{R}", types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 4, target: (any_of: Some([(kind: Creature), (kind: AnyPermanent, permanent_types: [Planeswalker])])))],
+)

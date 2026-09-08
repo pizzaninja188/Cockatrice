@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-09-08; existing engine primitives only.
+(
+  id: "eddymurk_crab", name: "Eddymurk Crab", face_id: "eddymurk_crab",
+  mana_cost: "{5}{U}{U}", types: ["Creature", "Elemental", "Crab"],
+  power: 5, toughness: 5, keywords: [Flash],
+  cost_modifiers: [GenericReduction(amount: Count(GraveyardCards(owners: Controller, filter: Some((card_type: Some(InstantOrSorcery))))))],
+  static_abilities: [(ability_id: "enters_tapped", presentation: OracleLines([3]), definition: EntersTapped(affected: Self_, condition: Some(ActivePlayer(players: Opponents))))],
+  triggered_abilities: [(ability_id: "tap_creatures", presentation: OracleLines([4]), trigger: WhenSelfEntersBattlefield,
+    targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target creatures", effect_indices: [0])])),
+    effect: [Tap(subject: Chosen((kind: Creature)))])],
+)

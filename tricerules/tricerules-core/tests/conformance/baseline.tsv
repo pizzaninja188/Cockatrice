@@ -223,6 +223,7 @@ brightclimb_pathway_grimclimb_pathway	1	land	exercised
 brightwood_tracker	0	ability:0	exercised
 brightwood_tracker	0	cast	exercised
 brilliant_plan	0	cast	exercised
+broadside_barrage	0	cast	exercised
 broken_wings	0	cast	exercised
 bronze_sable	0	cast	exercised
 broodhunter_wurm	0	cast	exercised
@@ -235,6 +236,7 @@ bump_in_the_night	0	cast	exercised
 burglar_rat	0	cast	exercised
 burn,_burn,_tree_and_fern	0	cast	exercised
 burning_curiosity	0	cast	exercised
+burst_lightning	0	cast	exercised
 bushwhack	0	cast	exercised
 cabal_evangel	0	cast	exercised
 cackling_counterpart	0	cast	exercised
@@ -479,6 +481,7 @@ eagle_of_the_watch	0	cast	exercised
 earth_elemental	0	cast	exercised
 earthbender_ascension	0	cast	exercised
 earthshaking_si	0	cast	exercised
+eddymurk_crab	0	cast	exercised
 ekundu_griffin	0	cast	exercised
 elderfang_disciple	0	cast	exercised
 eldrazi_devastator	0	cast	exercised
@@ -838,6 +841,7 @@ illvoi_light_jammer	0	cast	exercised
 impale	0	cast	exercised
 imperial_outrider	0	cast	exercised
 impossible_inferno	0	cast	exercised
+impractical_joke	0	cast	exercised
 incurable_ogre	0	cast	exercised
 independent_troops	0	cast	exercised
 indestructibility	0	cast	exercised
@@ -1338,6 +1342,9 @@ riverglide_pathway_lavaglide_pathway	0	ability:0	exercised
 riverglide_pathway_lavaglide_pathway	0	land	exercised
 riverglide_pathway_lavaglide_pathway	1	ability:0	exercised
 riverglide_pathway_lavaglide_pathway	1	land	exercised
+riverpyre_verge	0	ability:0	exercised
+riverpyre_verge	0	ability:1	exercised
+riverpyre_verge	0	land	exercised
 riverwalk_technique	0	cast	exercised
 roc_hunter	0	cast	exercised
 rooftop_assassin	0	cast	exercised
@@ -1410,6 +1417,7 @@ scrubland	0	land	exercised
 sea_eagle	0	cast	exercised
 seacoast_drake	0	cast	exercised
 seagraf_skaab	0	cast	exercised
+sear	0	cast	exercised
 seat_of_the_synod	0	ability:0	exercised
 seat_of_the_synod	0	land	exercised
 sedge_scorpion	0	cast	exercised
@@ -1531,6 +1539,8 @@ spineseeker_centipede	0	cast	exercised
 spiral_into_solitude	0	ability:0	exercised
 spiral_into_solitude	0	cast	exercised
 spire_monitor	0	cast	exercised
+spirebluff_canal	0	ability:0	exercised
+spirebluff_canal	0	land	exercised
 spirited_companion	0	cast	exercised
 sporecap_spider	0	cast	exercised
 spring_of_eternal_peace	0	cast	exercised
@@ -1553,6 +1563,8 @@ staunch_shieldmate	0	cast	exercised
 steadfast_guard	0	cast	exercised
 steadfast_paladin	0	cast	exercised
 steadfast_sentry	0	cast	exercised
+steam_vents	0	ability:0	exercised
+steam_vents	0	land	exercised
 steeple_roc	0	cast	exercised
 steer_clear	0	cast	unsupported: target group 0 needs a richer fixture
 steward_of_valeron	0	ability:0	exercised
@@ -1564,6 +1576,8 @@ stone-throwing_devils	0	cast	exercised
 stone_golem	0	cast	exercised
 stonework_puma	0	cast	exercised
 storm_crow	0	cast	exercised
+stormcarved_coast	0	ability:0	exercised
+stormcarved_coast	0	land	exercised
 stormcloud_spirit	0	cast	exercised
 stormfront_pegasus	0	cast	exercised
 stormplain_detainment	0	cast	exercised
@@ -1692,6 +1706,7 @@ tranquil_expanse	0	ability:0	exercised
 tranquil_expanse	0	land	exercised
 tranquility	0	cast	exercised
 trapped_in_the_screen	0	cast	exercised
+traumatic_critique	0	cast	exercised
 traveling_philosopher	0	cast	exercised
 tree_monkey	0	cast	exercised
 tree_of_tales	0	ability:0	exercised

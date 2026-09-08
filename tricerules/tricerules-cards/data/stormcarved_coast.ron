@@ -1,0 +1,6 @@
+// Oracle and rulings checked 2026-09-08. CR 614.12; inspect other lands before entry.
+(
+  id: "stormcarved_coast", name: "Stormcarved Coast", face_id: "stormcarved_coast", mana_cost: "", types: ["Land"],
+  activated_abilities: [(ability_id: "mana", presentation: OracleLines([2]), costs: [Tap], effect: [ProduceMana(options: [(u: 1), (r: 1)])])],
+  static_abilities: [(ability_id: "enters_tapped", presentation: OracleLines([1]), definition: EntersTapped(affected: Self_, condition: Some(BattlefieldAggregate(filter: (controllers: Controller, card_type: Some(Land), exclude_source: true), aggregate: Count, min: None, max: Some(1)))))],
+)

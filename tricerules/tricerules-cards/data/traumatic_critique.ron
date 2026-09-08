@@ -1,0 +1,6 @@
+// Oracle and rulings checked 2026-09-08; existing engine primitives only.
+(
+  id: "traumatic_critique", name: "Traumatic Critique", face_id: "traumatic_critique",
+  mana_cost: "{X}{U}{R}", types: ["Instant"],
+  spell_effect: [DamageTarget(amount: "X", target: (kind: AnyTarget)), DrawDiscard(draw_count: 2, discard_count: 1, order: DrawThenDiscard)],
+)

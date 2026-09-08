@@ -328,3 +328,5 @@ mod zone_view;
 
 #[path = "scenario/ability_logs.rs"]
 mod ability_logs;
+#[path = "scenario/spellementals.rs"]
+mod spellementals;

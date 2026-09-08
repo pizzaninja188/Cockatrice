@@ -1,0 +1,7 @@
+// Oracle and rulings checked 2026-09-08; existing engine primitives only.
+(
+  id: "impractical_joke", name: "Impractical Joke", face_id: "impractical_joke",
+  mana_cost: "{R}", types: ["Sorcery"],
+  targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target creature or planeswalker", effect_indices: [1])])),
+  spell_effect: [DamageCantBePreventedThisTurn, DamageTarget(amount: 3, target: (any_of: Some([(kind: Creature), (kind: AnyPermanent, permanent_types: [Planeswalker])])))],
+)
