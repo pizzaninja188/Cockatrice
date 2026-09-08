@@ -23,9 +23,9 @@ TEST_F(RuledE2ESmokeTest, DiagnosticCaptureReconstructsAndResumesPendingOpeningC
     ASSERT_TRUE(original2.pumpUntil([&] { return original2.stateVersion > 0; }, 20000, "captured observer"));
     ruled::v1::RuledCommand choose;
     choose.mutable_choose_starting_player()->set_starting_player_id(original1.myId);
-    auto &chooser = original1.labels.contains("You start (opening pick)") ? original1 : original2;
+    auto &chooser = !original1.latestLegal.opening().eligible_starting_player_ids().empty() ? original1 : original2;
     chooser.sendRuled(choose, "captured starting player choice");
-    ASSERT_TRUE(original1.pumpUntil([&] { return original1.labels.contains("Keep opening hand (opening)"); }, 10000,
+    ASSERT_TRUE(original1.pumpUntil([&] { return original1.latestLegal.opening().can_keep(); }, 10000,
                                     "captured mulligan choice"));
     ASSERT_TRUE(original2.pumpUntil([&] { return original2.stateVersion == original1.stateVersion; }, 10000,
                                     "captured observer choice state"));
@@ -141,8 +141,8 @@ TEST_F(RuledE2ESmokeTest, DiagnosticCaptureReconstructsAndResumesPendingOpeningC
     ASSERT_TRUE(
         resumed2.pumpUntil([&] { return resumed2.stateVersion == expectedVersion; }, 20000, "resumed observer prefix"));
     EXPECT_EQ(resumed1.latestLegal.SerializeAsString(), expectedLegal);
-    EXPECT_TRUE(resumed1.labels.contains("Keep opening hand (opening)"));
-    EXPECT_FALSE(resumed2.labels.contains("Keep opening hand (opening)"));
+    EXPECT_TRUE(resumed1.latestLegal.opening().can_keep());
+    EXPECT_FALSE(resumed2.latestLegal.opening().can_keep());
     ruled::v1::RuledCommand keep;
     keep.mutable_mulligan()->set_keep(true);
     resumed1.sendRuled(keep, "continue resumed opening choice");

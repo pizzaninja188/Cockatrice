@@ -5,17 +5,22 @@ bool OpeningDriver::actOpening()
 {
     if (myId < 0 || !gameStarted || stateVersion == 0 || lastActedVersion == stateVersion)
         return false;
-    // --- Opening sequence (display labels plus structured hand actions; no priority yet) ---
-    if (labelMatching(QRegularExpression(QStringLiteral("^You start \\(opening pick\\)$")))) {
+    // Opening legality is entirely structured; labels are display-only.
+    const auto &opening = latestLegal.opening();
+    if (opening.stage() == ruled::v1::OPENING_STAGE_CHOOSE_STARTING_PLAYER &&
+        std::find(opening.eligible_starting_player_ids().begin(), opening.eligible_starting_player_ids().end(),
+                  starts ? myId : oppId) != opening.eligible_starting_player_ids().end()) {
         ruled::v1::RuledCommand cmd;
         // Both seats select the configured starting seat.
         cmd.mutable_choose_starting_player()->set_starting_player_id(starts ? myId : oppId);
         sendRuled(cmd, QStringLiteral("choose starting player -> %1").arg(starts ? myId : oppId));
         return true;
     }
-    if (labelMatching(QRegularExpression(QStringLiteral("^Keep opening hand \\(opening\\)$")))) {
+    if (opening.stage() == ruled::v1::OPENING_STAGE_MULLIGAN && (opening.can_keep() || opening.can_redraw())) {
         ruled::v1::RuledCommand cmd;
-        const bool takeMulligan = mulliganOnce && !didMulligan;
+        const bool takeMulligan = opening.can_redraw() && (mulliganOnce && !didMulligan);
+        if (!takeMulligan && !opening.can_keep())
+            return false;
         cmd.mutable_mulligan()->set_keep(!takeMulligan);
         if (takeMulligan) {
             didMulligan = true;

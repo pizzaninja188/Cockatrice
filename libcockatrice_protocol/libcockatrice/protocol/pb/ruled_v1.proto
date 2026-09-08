@@ -949,8 +949,26 @@ message LegalZoneAbilityAction {
   AbilityInfo ability = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
+// Recipient-specific opening snapshot. Commands and hand-slot actions remain unchanged.
+enum OpeningStage {
+  OPENING_STAGE_UNSPECIFIED = 0;
+  OPENING_STAGE_CHOOSE_STARTING_PLAYER = 1;
+  OPENING_STAGE_MULLIGAN = 2;
+  OPENING_STAGE_BOTTOM = 3;
+}
+message OpeningActions {
+  OpeningStage stage = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  int32 deciding_player_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated int32 eligible_starting_player_ids = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool can_keep = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool can_redraw = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 mulligans_taken = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Recipient's remaining quota, not their original mulligan count.
+  uint32 bottom_cards_remaining = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
 message LegalActions {
-  // Display-only prompt feed. Gameplay consumes hand_actions, never these strings.
+  // Display-only prompt feed. Gameplay consumes structured actions, never these strings.
   repeated string labels = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Valid targets per castable face of a hand card that needs a target. Key encodes both the
   // engine hand slot and the face index: key = (hand_slot << 8) | face_index. Single-face cards
@@ -1008,6 +1026,7 @@ message LegalActions {
   // edge per staged attacker and never infers Battle protection or planeswalker control.
   repeated AttackAssignment legal_attack_assignments = 22
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  OpeningActions opening = 23 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,

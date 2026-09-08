@@ -756,6 +756,11 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
 
     auto &p1Legal = (*batch.mutable_legal_by_player())[1];
     p1Legal.add_labels("P1 legal");
+    auto *opening = p1Legal.mutable_opening();
+    opening->set_stage(ruled::v1::OPENING_STAGE_BOTTOM);
+    opening->set_deciding_player_id(1);
+    opening->set_mulligans_taken(2);
+    opening->set_bottom_cards_remaining(1);
     auto *faceUp = p1Legal.add_permanent_actions();
     faceUp->set_kind(ruled::v1::PERMANENT_ACTION_KIND_TURN_FACE_UP);
     faceUp->set_object_id(129u);
@@ -817,6 +822,8 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     p1ExilePermission->add_object_ids(401);
     auto &p2Legal = (*batch.mutable_legal_by_player())[2];
     p2Legal.add_labels("P2 legal");
+    p2Legal.mutable_opening()->set_stage(ruled::v1::OPENING_STAGE_BOTTOM);
+    p2Legal.mutable_opening()->set_deciding_player_id(1);
     auto *p2Cast = p2Legal.add_hand_actions();
     p2Cast->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
     p2Cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
@@ -852,9 +859,15 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     choice->add_candidate_card_ids("secret_hand_card");
     choice->add_candidate_names("Secret Hand Card");
 
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    const auto forSpectator = redactFor(batch, spectator);
+    EXPECT_TRUE(forSpectator.legal_by_player().empty());
+
     const auto forP1 = redactFor(batch, p1);
     ASSERT_EQ(forP1.legal_by_player_size(), 1);
     EXPECT_TRUE(forP1.legal_by_player().contains(1));
+    EXPECT_EQ(forP1.legal_by_player().at(1).opening().SerializeAsString(), opening->SerializeAsString());
     ASSERT_EQ(forP1.legal_by_player().at(1).permanent_actions_size(), 1);
     const auto &privateAction = forP1.legal_by_player().at(1).permanent_actions(0);
     EXPECT_EQ(privateAction.object_id(), 129u);
@@ -901,6 +914,8 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     const auto forP2 = redactFor(batch, p2);
     ASSERT_EQ(forP2.legal_by_player_size(), 1);
     EXPECT_TRUE(forP2.legal_by_player().contains(2));
+    EXPECT_EQ(forP2.legal_by_player().at(2).opening().bottom_cards_remaining(), 0u);
+    EXPECT_FALSE(forP2.legal_by_player().at(2).opening().can_keep());
     EXPECT_TRUE(forP2.legal_by_player().at(2).cost_choices_by_ability().empty());
     EXPECT_EQ(forP2.legal_by_player().at(2).permanent_actions_size(), 0);
     EXPECT_EQ(forP2.legal_by_player().at(2).hand_actions(0).cost_choices().choices(0).candidate_ids(0), 9u);
@@ -4644,6 +4659,50 @@ TEST_F(RuledBatchTest, DiscardReplacementChoicesAndTopDeckOrderStayPrivateToTheO
             EXPECT_EQ(other.SerializeAsString().find("Fiery Temper"), std::string::npos);
         }
     }
+}
+
+TEST_F(RuledBatchTest, OpeningReconnectRestoresRemainingQuotaAndClearsOnCompletion)
+{
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *batch = response.mutable_batch();
+    auto &legal = (*batch->mutable_legal_by_player())[p1->getPlayerId()];
+    auto *opening = legal.mutable_opening();
+    opening->set_stage(ruled::v1::OPENING_STAGE_BOTTOM);
+    opening->set_deciding_player_id(p1->getPlayerId());
+    opening->set_mulligans_taken(2);
+    opening->set_bottom_cards_remaining(1);
+    legal.add_hand_actions()->set_kind(ruled::v1::HAND_ACTION_OPENING_BOTTOM);
+    auto &waiting = (*batch->mutable_legal_by_player())[p2->getPlayerId()];
+    waiting.mutable_opening()->set_stage(ruled::v1::OPENING_STAGE_BOTTOM);
+    waiting.mutable_opening()->set_deciding_player_id(p1->getPlayerId());
+    updatePendingResolutionChoiceCache(response);
+    ruled::v1::IpcResponse preview;
+    preview.set_ok(true);
+    preview.mutable_batch()->add_events()->mutable_attackers_preview();
+    game->ruled()->broadcastRuledResponse(preview, false);
+    for (Server_Player *recipient : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(recipient, reconnect, true);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 3);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        ASSERT_EQ(restored.legal_by_player_size(), 1);
+        const auto &own = restored.legal_by_player().at(recipient->getPlayerId());
+        EXPECT_EQ(own.SerializeAsString(), batch->legal_by_player().at(recipient->getPlayerId()).SerializeAsString());
+    }
+    game->ruled()->resetForNewGame();
+    ResponseContainer reset(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, reset);
+    EXPECT_TRUE(reset.getPostResponseQueue().isEmpty());
+    updatePendingResolutionChoiceCache(response);
+    response.mutable_batch()->clear_legal_by_player();
+    updatePendingResolutionChoiceCache(response);
+    ResponseContainer finished(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, finished);
+    EXPECT_TRUE(finished.getPostResponseQueue().isEmpty());
 }
 
 TEST_F(RuledBatchTest, SpecialCastReconnectRestoresExactOfferAndRecipientLegalActions)

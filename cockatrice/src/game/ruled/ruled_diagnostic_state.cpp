@@ -25,6 +25,9 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     FIELD(choiceWaitingPlayerId);
     FIELD(openingPickSeatIds);
     FIELD(openingMulliganCount);
+    FIELD(openingBottomRemaining);
+    FIELD(openingCanKeep);
+    FIELD(openingCanRedraw);
     FIELD(cleanupDiscardSelectedIndices);
     FIELD(openingBottomSelectedIndices);
     FIELD(ownerCardIdToEngineOid);

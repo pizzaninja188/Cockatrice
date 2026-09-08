@@ -91,7 +91,7 @@ public:
         /// wrote it); on Normal it overrides the composed phase/priority line; the other modes
         /// compose their own translated text and ignore it.
         QString text;
-        /// OpeningChooseFirst only: [local seat id, opponent seat id].
+        /// OpeningChooseFirst only: engine-provided eligible player IDs, in engine order.
         QVector<int> openingPickSeatIds;
         /// The engine permits declining this choice; distinct from cancelling a local cast.
         /// New fields go at the *end* — callers and tests use positional aggregate init, so
@@ -110,6 +110,9 @@ public:
         /// CostSelection only: cancel an unsubmitted local cast or activation.
         bool canCancel = false;
         QString castCostSkipLabel;
+        QVector<QString> openingPickSeatNames;
+        bool openingCanKeep = false;
+        bool openingCanRedraw = false;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into
@@ -255,8 +258,8 @@ private:
     /// Shown instead of the normal "Choose blockers." text; cleared when the player successfully
     /// submits legal blocks or leaves the declare-blockers state.
     QString stickyBlockerError;
-    QPushButton *openingPickSeatButton1 = nullptr;
-    QPushButton *openingPickSeatButton2 = nullptr;
+    QVector<QPushButton *> openingPickSeatButtons;
+    QHBoxLayout *openingSeatLayout = nullptr;
     QPushButton *openingKeepButton = nullptr;
     QPushButton *openingMulliganButton = nullptr;
     QPushButton *openingBottomCancelButton = nullptr;

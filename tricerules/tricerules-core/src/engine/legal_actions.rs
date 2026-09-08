@@ -285,6 +285,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         batch.legal_by_player.insert(
             p.id,
             LegalActions {
+                opening: opening_actions(eng, p.id),
                 labels,
                 valid_targets_by_hand_slot,
                 valid_targets_by_ability,
@@ -2554,6 +2555,34 @@ fn exile_play_permission_groups(
             },
         )
         .collect()
+}
+
+fn opening_actions(eng: &GameEngine, pid: PlayerId) -> Option<rv1::OpeningActions> {
+    let op = eng.state.opening.as_ref()?;
+    let idx = eng.state.player_idx(pid)?;
+    let mut actions = rv1::OpeningActions {
+        mulligans_taken: op.mulligans_taken[idx],
+        ..Default::default()
+    };
+    if op.starting_player.is_none() {
+        actions.stage = rv1::OpeningStage::ChooseStartingPlayer as i32;
+        actions.deciding_player_id = op.chooser;
+        if pid == op.chooser {
+            actions.eligible_starting_player_ids = eng.state.players.iter().map(|p| p.id).collect();
+        }
+    } else if let Some((actor, remaining)) = op.bottom {
+        actions.stage = rv1::OpeningStage::Bottom as i32;
+        actions.deciding_player_id = actor;
+        if pid == actor {
+            actions.bottom_cards_remaining = remaining;
+        }
+    } else if let Some(actor) = op.mulligan_actor {
+        actions.stage = rv1::OpeningStage::Mulligan as i32;
+        actions.deciding_player_id = actor;
+        actions.can_keep = pid == actor;
+        actions.can_redraw = pid == actor;
+    }
+    Some(actions)
 }
 
 fn opening_legal_labels(eng: &GameEngine, pid: PlayerId, op: &OpeningSequence) -> Vec<String> {

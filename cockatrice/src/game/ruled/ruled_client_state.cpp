@@ -318,9 +318,18 @@ void RuledClientState::pruneCleanupDiscardSelectionAndEmitUi()
 // Opening sequence
 // ---------------------------------------------------------------------------------------
 
+QVector<int> RuledClientState::getOpeningPickSeatIds() const
+{
+    auto seats = openingPickSeatIds;
+    const auto local = std::find(seats.begin(), seats.end(), host->localPlayerId());
+    if (local != seats.end())
+        std::rotate(seats.begin(), local, seats.end());
+    return seats;
+}
+
 int RuledClientState::openingBottomRequiredCount() const
 {
-    return openingMulliganCount;
+    return openingBottomRemaining;
 }
 
 int RuledClientState::openingBottomSelectedCount() const
@@ -1439,6 +1448,8 @@ void RuledClientState::skipBlockers()
 
 void RuledClientState::openingPickFirstSeat(int seatId)
 {
+    if (openingUiKind != RuledOpeningUiKind::ChooseFirst || !openingPickSeatIds.contains(seatId))
+        return;
     ruled::v1::RuledCommand ruledCommand;
     ruledCommand.mutable_choose_starting_player()->set_starting_player_id(seatId);
     host->sendRuledCommand(ruledCommand);
@@ -1446,6 +1457,8 @@ void RuledClientState::openingPickFirstSeat(int seatId)
 
 void RuledClientState::openingMulliganKeep()
 {
+    if (!openingCanKeep)
+        return;
     ruled::v1::RuledCommand ruledCommand;
     ruledCommand.mutable_mulligan()->set_keep(true);
     host->sendRuledCommand(ruledCommand);
@@ -1453,7 +1466,8 @@ void RuledClientState::openingMulliganKeep()
 
 void RuledClientState::openingMulliganRedraw()
 {
-    ++openingMulliganCount;
+    if (!openingCanRedraw)
+        return;
     ruled::v1::RuledCommand ruledCommand;
     ruledCommand.mutable_mulligan()->set_keep(false);
     host->sendRuledCommand(ruledCommand);
@@ -1865,6 +1879,9 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
         validTargetsByZoneObject.clear();
         openingUiKind = RuledOpeningUiKind::None;
         openingMulliganCount = 0;
+        openingBottomRemaining = 0;
+        openingCanKeep = false;
+        openingCanRedraw = false;
         openingPickSeatIds.clear();
         openingBottomSelectedIndices.clear();
     }

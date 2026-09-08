@@ -486,6 +486,10 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
+    state->openingMulliganCount = 0;
+    state->openingBottomRemaining = 0;
+    state->openingCanKeep = false;
+    state->openingCanRedraw = false;
     state->choiceWaitingPlayerId = -1;
 }
 
@@ -1933,26 +1937,41 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     state->openingUiKind = RuledOpeningUiKind::None;
     state->openingPickSeatIds.clear();
     state->openingBottomSelectedIndices.clear();
-    if (!state->handActionSet(ruled::v1::HAND_ACTION_OPENING_BOTTOM).handIndices.isEmpty()) {
-        state->openingUiKind = RuledOpeningUiKind::BottomLibrary;
-    } else {
-        for (const auto &l : actions.labels()) {
-            if (QString::fromStdString(l) == QLatin1String("Keep opening hand (opening)")) {
-                state->openingUiKind = RuledOpeningUiKind::MulliganChoice;
+    state->openingMulliganCount = 0;
+    state->openingBottomRemaining = 0;
+    state->openingCanKeep = false;
+    state->openingCanRedraw = false;
+    if (actions.has_opening()) {
+        const auto &opening = actions.opening();
+        const bool localActor = opening.deciding_player_id() == host->localPlayerId();
+        state->openingMulliganCount = static_cast<int>(opening.mulligans_taken());
+        switch (opening.stage()) {
+            case ruled::v1::OPENING_STAGE_CHOOSE_STARTING_PLAYER:
+                if (localActor && !opening.eligible_starting_player_ids().empty()) {
+                    state->openingUiKind = RuledOpeningUiKind::ChooseFirst;
+                    for (const int seat : opening.eligible_starting_player_ids())
+                        state->openingPickSeatIds.append(seat);
+                }
                 break;
-            }
-        }
-    }
-    if (state->openingUiKind == RuledOpeningUiKind::None) {
-        for (const auto &l : actions.labels()) {
-            const QString qs = QString::fromStdString(l);
-            if (qs == QLatin1String("You start (opening pick)") ||
-                qs == QLatin1String("Opponent starts (opening pick)")) {
-                state->openingUiKind = RuledOpeningUiKind::ChooseFirst;
-                state->openingMulliganCount = 0;
+            case ruled::v1::OPENING_STAGE_MULLIGAN:
+                state->openingCanKeep = localActor && opening.can_keep();
+                state->openingCanRedraw = localActor && opening.can_redraw();
+                if (state->openingCanKeep || state->openingCanRedraw)
+                    state->openingUiKind = RuledOpeningUiKind::MulliganChoice;
                 break;
-            }
+            case ruled::v1::OPENING_STAGE_BOTTOM:
+                if (localActor && opening.bottom_cards_remaining() > 0 &&
+                    !state->handActionSet(ruled::v1::HAND_ACTION_OPENING_BOTTOM).handIndices.isEmpty()) {
+                    state->openingBottomRemaining = static_cast<int>(opening.bottom_cards_remaining());
+                    state->openingUiKind = RuledOpeningUiKind::BottomLibrary;
+                }
+                break;
+            default:
+                break;
         }
+        if (!localActor && opening.stage() != ruled::v1::OPENING_STAGE_UNSPECIFIED &&
+            ruled::v1::OpeningStage_IsValid(opening.stage()))
+            state->choiceWaitingPlayerId = opening.deciding_player_id();
     }
 
     ctx.promptFeed += tr("Legal actions:\n");
@@ -1992,6 +2011,10 @@ void RuledEventDispatcher::applyNoLegalActions()
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;
+    state->openingMulliganCount = 0;
+    state->openingBottomRemaining = 0;
+    state->openingCanKeep = false;
+    state->openingCanRedraw = false;
     state->permanentActionsByOid.clear();
     // NB: do NOT clear the required or selectable combat sets here. Servatrice-synthesized
     // combat preview batches (AttackersPreview / BlockersPreview, emitted while the local player

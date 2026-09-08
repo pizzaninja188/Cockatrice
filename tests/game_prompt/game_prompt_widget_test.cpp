@@ -674,6 +674,36 @@ TEST_F(GamePromptWidgetTest, OpeningBottomDoneAppearsOnlyOnAnExactSelection)
     EXPECT_FALSE(btn("openingBottomDoneButton")->isHidden());
 }
 
+TEST_F(GamePromptWidgetTest, OpeningMulliganButtonsUseEnginePermissions)
+{
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode = PromptMode::OpeningMulligan;
+    prompt.openingCanKeep = true;
+    widget->setRuledPromptState(prompt);
+    EXPECT_FALSE(btn("openingKeepButton")->isHidden());
+    EXPECT_TRUE(btn("openingMulliganButton")->isHidden());
+    prompt.openingCanKeep = false;
+    prompt.openingCanRedraw = true;
+    widget->setRuledPromptState(prompt);
+    EXPECT_TRUE(btn("openingKeepButton")->isHidden());
+    EXPECT_FALSE(btn("openingMulliganButton")->isHidden());
+}
+
+TEST_F(GamePromptWidgetTest, OpeningChooseFirstRendersEveryOfferedSeat)
+{
+    GamePromptWidget::RuledPromptState prompt{PromptMode::OpeningChooseFirst, 0, 0, {}, QVector<int>({7, 19, 42})};
+    prompt.openingPickSeatNames = {"Alice", "Bob", "Charlie"};
+    widget->setRuledPromptState(prompt);
+    auto *third = widget->findChild<QPushButton *>("openingPickSeatButton3");
+    ASSERT_NE(third, nullptr);
+    EXPECT_FALSE(third->isHidden());
+    EXPECT_EQ(third->text(), "Charlie");
+    QSignalSpy spy(widget.get(), &GamePromptWidget::ruledOpeningPickSeatRequested);
+    third->click();
+    ASSERT_EQ(spy.count(), 1);
+    EXPECT_EQ(spy.takeFirst().at(0).toInt(), 42);
+}
+
 TEST_F(GamePromptWidgetTest, OpeningChooseFirstEmitsTheSeatIdItWasGiven)
 {
     widget->setRuledPromptState({PromptMode::OpeningChooseFirst, 0, 0, {}, QVector<int>({3, 7})});

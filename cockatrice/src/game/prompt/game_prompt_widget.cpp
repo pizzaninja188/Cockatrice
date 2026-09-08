@@ -124,20 +124,15 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
 
     auto *openingRowLayout = new QHBoxLayout;
     openingRowLayout->setSpacing(4);
-    openingPickSeatButton1 = new QPushButton(this);
-    openingPickSeatButton1->setObjectName("openingPickSeatButton1");
-    openingPickSeatButton2 = new QPushButton(this);
-    openingPickSeatButton2->setObjectName("openingPickSeatButton2");
+    openingSeatLayout = new QHBoxLayout;
+    openingSeatLayout->setSpacing(4);
+    openingRowLayout->addLayout(openingSeatLayout);
     openingKeepButton = new QPushButton(this);
     openingKeepButton->setObjectName("openingKeepButton");
     openingMulliganButton = new QPushButton(this);
     openingMulliganButton->setObjectName("openingMulliganButton");
-    openingPickSeatButton1->hide();
-    openingPickSeatButton2->hide();
     openingKeepButton->hide();
     openingMulliganButton->hide();
-    openingRowLayout->addWidget(openingPickSeatButton1);
-    openingRowLayout->addWidget(openingPickSeatButton2);
     openingRowLayout->addWidget(openingKeepButton);
     openingRowLayout->addWidget(openingMulliganButton);
     openingBottomCancelButton = new QPushButton(this);
@@ -319,10 +314,6 @@ void GamePromptWidget::retranslateUi()
     openingMulliganButton->setText(tr("Mulligan"));
     openingBottomCancelButton->setText(tr("Cancel"));
     openingBottomDoneButton->setText(tr("Done"));
-    if (promptState.mode == PromptMode::OpeningChooseFirst && promptState.openingPickSeatIds.size() >= 2) {
-        openingPickSeatButton1->setText(tr("You"));
-        openingPickSeatButton2->setText(tr("Opponent"));
-    }
     resolutionHandPickConfirmButton->setText(tr("Confirm"));
     resolutionPaymentDeclineButton->setText(tr("Decline"));
     zoneSelectionHandCheckBox->setText(tr("Hand"));
@@ -402,18 +393,21 @@ void GamePromptWidget::setRuledPromptState(RuledPromptState newState)
         zoneSelectionGraveyardCheckBox->setChecked(false);
         zoneSelectionLibraryCheckBox->setChecked(false);
     }
-    // The seat buttons carry the seat ids in their click handlers, so rewire them on entry.
-    openingPickSeatButton1->disconnect();
-    openingPickSeatButton2->disconnect();
-    if (promptState.mode == PromptMode::OpeningChooseFirst && promptState.openingPickSeatIds.size() >= 2) {
-        openingPickSeatButton1->setText(tr("You"));
-        openingPickSeatButton2->setText(tr("Opponent"));
-        const int selfSeatId = promptState.openingPickSeatIds[0];
-        const int opponentSeatId = promptState.openingPickSeatIds[1];
-        QObject::connect(openingPickSeatButton1, &QPushButton::clicked, this,
-                         [this, selfSeatId] { emit ruledOpeningPickSeatRequested(selfSeatId); });
-        QObject::connect(openingPickSeatButton2, &QPushButton::clicked, this,
-                         [this, opponentSeatId] { emit ruledOpeningPickSeatRequested(opponentSeatId); });
+    // Keep one button per engine-authored seat, including synthetic multi-seat offers.
+    qDeleteAll(openingPickSeatButtons);
+    openingPickSeatButtons.clear();
+    if (promptState.mode == PromptMode::OpeningChooseFirst) {
+        for (int i = 0; i < promptState.openingPickSeatIds.size(); ++i) {
+            const int seatId = promptState.openingPickSeatIds[i];
+            const QString name = promptState.openingPickSeatNames.value(i);
+            auto *button = new QPushButton(name.isEmpty() ? tr("Player %1").arg(seatId) : name, this);
+            button->setObjectName(QStringLiteral("openingPickSeatButton%1").arg(i + 1));
+            openingSeatLayout->addWidget(button);
+            openingPickSeatButtons.append(button);
+            connect(button, &QPushButton::clicked, this, [this, seatId] {
+                emit ruledOpeningPickSeatRequested(seatId);
+            });
+        }
     }
     applyPromptStateText();
     updateCombatButtonsVisibility();
@@ -759,11 +753,10 @@ void GamePromptWidget::updateCombatButtonsVisibility()
 
     // Mode-owned buttons: shown by exactly one mode each, hidden everywhere else.
     const bool showSeatPicks = mode == PromptMode::OpeningChooseFirst && !promptState.openingPickSeatIds.isEmpty();
-    openingPickSeatButton1->setVisible(showSeatPicks);
-    openingPickSeatButton2->setVisible(showSeatPicks && promptState.openingPickSeatIds.size() >= 2);
-    openingKeepButton->setVisible(mode == PromptMode::OpeningMulligan);
-    // No mulligan below a zero-card hand.
-    openingMulliganButton->setVisible(mode == PromptMode::OpeningMulligan && (7 - promptState.required) - 1 >= 0);
+    for (auto *button : openingPickSeatButtons)
+        button->setVisible(showSeatPicks);
+    openingKeepButton->setVisible(mode == PromptMode::OpeningMulligan && promptState.openingCanKeep);
+    openingMulliganButton->setVisible(mode == PromptMode::OpeningMulligan && promptState.openingCanRedraw);
     openingBottomCancelButton->setVisible((mode == PromptMode::OpeningBottom && promptState.selected >= 1) ||
                                           (mode == PromptMode::CostSelection && promptState.canCancel));
     openingBottomDoneButton->setVisible(mode == PromptMode::OpeningBottom && promptState.required > 0 &&

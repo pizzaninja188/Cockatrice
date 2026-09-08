@@ -301,3 +301,12 @@ resolution answer or removes the active optional cast-cost group's staged paymen
 `Cancel` abandons an unsubmitted cast/activation, and `Back` returns from cost-object selection.
 Mode/target-linked required costs cannot be declined. `ruled_resolution_choice_dialog.cpp`
 owns the fallback picker and follows the same explicit-decline rule for a zero minimum.
+
+### Opening actions
+
+`LegalActions.opening` supplies recipient-specific starting-seat eligibility, keep/redraw
+permissions, mulligan count, and remaining bottoming quota. The dispatcher never parses
+opening labels or counts button clicks. Seat buttons use the published player IDs; bottoming
+continues to use `HAND_ACTION_OPENING_BOTTOM` and the existing acknowledged command sequence.
+Waiting seats receive no actionable permissions. The relay retains opening snapshots for
+reconnect and clears them when opening ends; session reset clears the client mirror.

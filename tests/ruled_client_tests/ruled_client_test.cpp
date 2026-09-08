@@ -1946,39 +1946,98 @@ TEST_F(RuledClientTest, AppliesStructuredCleanupDiscardActionsAndRequiredCount)
     EXPECT_EQ(state->cleanupDiscardSelectedCount(), 0);
 }
 
-TEST_F(RuledClientTest, ParsesOpeningLabelsIntoTheThreeOpeningModes)
+TEST_F(RuledClientTest, OpeningLabelsAloneNeverAuthorizeActions)
 {
-    {
-        ruled::v1::RuledEventBatch batch;
-        auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-        actions.add_labels("You start (opening pick)");
-        actions.add_labels("Opponent starts (opening pick)");
-        apply(batch);
-        EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::ChooseFirst);
-    }
-    {
-        ruled::v1::RuledEventBatch batch;
-        auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-        actions.add_labels("Keep opening hand (opening)");
-        apply(batch);
-        EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::MulliganChoice);
-    }
-    {
-        ruled::v1::RuledEventBatch batch;
-        auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-        actions.add_labels("Keep opening hand (opening)");
-        addHandAction(actions, ruled::v1::HAND_ACTION_OPENING_BOTTOM, 0, "Forest");
-        addHandAction(actions, ruled::v1::HAND_ACTION_OPENING_BOTTOM, 5, "Mountain");
-        apply(batch);
-        // The bottoming step wins over the mulligan prompt when both labels are present.
-        EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::BottomLibrary);
-        constexpr auto kBottom = ruled::v1::HAND_ACTION_OPENING_BOTTOM;
-        EXPECT_TRUE(state->isHandActionLegal(kBottom, 0));
-        EXPECT_TRUE(state->isHandActionLegal(kBottom, 5));
-        EXPECT_EQ(state->handActionLegalIndicesSorted(kBottom), QList<int>({0, 5}));
-        // The label's card name is captured too, so a name-keyed lookup works for every kind.
-        EXPECT_EQ(state->handActionIndicesForCardName(kBottom, "Mountain"), QList<int>({5}));
-    }
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    actions.add_labels("You start (opening pick)");
+    actions.add_labels("Keep opening hand (opening)");
+    apply(batch);
+    EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::None);
+    state->openingPickFirstSeat(kOpponent);
+    state->openingMulliganKeep();
+    state->openingMulliganRedraw();
+    EXPECT_TRUE(host.sentCommands.empty());
+    EXPECT_EQ(state->getOpeningMulliganCount(), 0);
+}
+
+TEST_F(RuledClientTest, StructuredOpeningSurvivesEmptyLabelsAndRefresh)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *opening = actions.mutable_opening();
+    opening->set_stage(ruled::v1::OPENING_STAGE_CHOOSE_STARTING_PLAYER);
+    opening->set_deciding_player_id(kLocalPlayer);
+    for (int seat : {7, 19, 42})
+        opening->add_eligible_starting_player_ids(seat);
+    apply(batch);
+    EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::ChooseFirst);
+    EXPECT_EQ(state->getOpeningPickSeatIds(), QVector<int>({7, 19, 42}));
+    state->openingPickFirstSeat(42);
+    state->openingPickFirstSeat(99);
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands.back().choose_starting_player().starting_player_id(), 42);
+
+    opening->Clear();
+    opening->set_stage(ruled::v1::OPENING_STAGE_MULLIGAN);
+    opening->set_deciding_player_id(kLocalPlayer);
+    opening->set_can_keep(true);
+    opening->set_can_redraw(true);
+    opening->set_mulligans_taken(2);
+    actions.add_labels("Wording may change freely");
+    apply(batch);
+    EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::MulliganChoice);
+    state->openingMulliganRedraw();
+    EXPECT_EQ(state->getOpeningMulliganCount(), 2);
+    apply(batch); // rejected redraw or reconnect: use the same authoritative count
+    EXPECT_EQ(state->getOpeningMulliganCount(), 2);
+    opening->set_can_redraw(false);
+    apply(batch);
+    host.sentCommands.clear();
+    state->openingMulliganRedraw();
+    EXPECT_TRUE(host.sentCommands.empty());
+    state->openingMulliganKeep();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+
+    opening->set_stage(ruled::v1::OPENING_STAGE_BOTTOM);
+    opening->set_bottom_cards_remaining(1); // a reconnect after the first bottom command
+    addHandAction(actions, ruled::v1::HAND_ACTION_OPENING_BOTTOM, 0, "Forest");
+    apply(batch);
+    EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::BottomLibrary);
+    EXPECT_EQ(state->openingBottomRequiredCount(), 1);
+    EXPECT_EQ(state->getOpeningMulliganCount(), 2);
+
+    opening->set_deciding_player_id(kOpponent);
+    apply(batch);
+    EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::None);
+    EXPECT_TRUE(state->isWaitingForChoice());
+    EXPECT_EQ(state->choiceWaitingPlayer(), kOpponent);
+    opening->set_stage(static_cast<ruled::v1::OpeningStage>(999));
+    apply(batch);
+    EXPECT_FALSE(state->isWaitingForChoice());
+    EXPECT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::None);
+    actions.clear_opening();
+    apply(batch);
+    EXPECT_EQ(state->getOpeningMulliganCount(), 0);
+    EXPECT_EQ(state->openingBottomRequiredCount(), 0);
+}
+
+TEST_F(RuledClientTest, OpeningSeatDisplayStartsWithYouAndFollowsEngineTurnOrder)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *opening = (*batch.mutable_legal_by_player())[kLocalPlayer].mutable_opening();
+    opening->set_stage(ruled::v1::OPENING_STAGE_CHOOSE_STARTING_PLAYER);
+    opening->set_deciding_player_id(kLocalPlayer);
+    for (const int seat : {7, kLocalPlayer, 19})
+        opening->add_eligible_starting_player_ids(seat);
+    apply(batch);
+    EXPECT_EQ(state->getOpeningPickSeatIds(), QVector<int>({kLocalPlayer, 19, 7}));
+    for (const int seat : state->getOpeningPickSeatIds())
+        state->openingPickFirstSeat(seat);
+    ASSERT_EQ(host.sentCommands.size(), 3);
+    EXPECT_EQ(host.sentCommands[0].choose_starting_player().starting_player_id(), kLocalPlayer);
+    EXPECT_EQ(host.sentCommands[1].choose_starting_player().starting_player_id(), 19);
+    EXPECT_EQ(host.sentCommands[2].choose_starting_player().starting_player_id(), 7);
 }
 
 TEST_F(RuledClientTest, ParsesTargetingTablesForHandSlotsAndAbilities)
@@ -6810,20 +6869,17 @@ TEST_F(RuledClientTest, OpeningBottomSendsIndicesAdjustedForPriorRemovals)
 {
     ruled::v1::RuledEventBatch batch;
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-    actions.add_labels("Keep opening hand (opening)");
+    auto *opening = actions.mutable_opening();
+    opening->set_stage(ruled::v1::OPENING_STAGE_BOTTOM);
+    opening->set_deciding_player_id(kLocalPlayer);
+    opening->set_mulligans_taken(1);
+    opening->set_bottom_cards_remaining(1);
     for (int i = 0; i < 7; ++i) {
         addHandAction(actions, ruled::v1::HAND_ACTION_OPENING_BOTTOM, i, "Card");
     }
     apply(batch);
     ASSERT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::BottomLibrary);
 
-    // One mulligan taken → one card must go on the bottom (London mulligan).
-    host.sentCommands.clear();
-    state->openingMulliganRedraw();
-    ASSERT_EQ(host.sentCommands.size(), 1);
-    EXPECT_TRUE(host.sentCommands[0].has_mulligan());
-    EXPECT_FALSE(host.sentCommands[0].mulligan().keep());
-    apply(batch); // engine re-offers the bottoming labels after the redraw
     ASSERT_EQ(state->openingBottomRequiredCount(), 1);
 
     state->toggleOpeningBottomHandIndex(2);
@@ -6838,12 +6894,14 @@ TEST_F(RuledClientTest, OpeningBottomAdjustsLaterIndicesForEarlierRemovals)
 {
     ruled::v1::RuledEventBatch batch;
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *opening = actions.mutable_opening();
+    opening->set_stage(ruled::v1::OPENING_STAGE_BOTTOM);
+    opening->set_deciding_player_id(kLocalPlayer);
+    opening->set_mulligans_taken(2);
+    opening->set_bottom_cards_remaining(2);
     for (int i = 0; i < 7; ++i) {
         addHandAction(actions, ruled::v1::HAND_ACTION_OPENING_BOTTOM, i, "Card");
     }
-    apply(batch);
-    state->openingMulliganRedraw();
-    state->openingMulliganRedraw();
     apply(batch);
     ASSERT_EQ(state->openingBottomRequiredCount(), 2);
 
@@ -6857,16 +6915,6 @@ TEST_F(RuledClientTest, OpeningBottomAdjustsLaterIndicesForEarlierRemovals)
     host.answerPendingAck(true);
     ASSERT_EQ(host.sentCommands.size(), 2);
     EXPECT_EQ(host.sentCommands[1].put_opening_hand_on_bottom().hand_card_index(), 3u);
-}
-
-TEST_F(RuledClientTest, ChooseStartingPlayerAndKeepSendTheirCommands)
-{
-    host.sentCommands.clear();
-    state->openingPickFirstSeat(kOpponent);
-    state->openingMulliganKeep();
-    ASSERT_EQ(host.sentCommands.size(), 2);
-    EXPECT_EQ(host.sentCommands[0].choose_starting_player().starting_player_id(), kOpponent);
-    EXPECT_TRUE(host.sentCommands[1].mulligan().keep());
 }
 
 // ---------------------------------------------------------------------------------------
@@ -6929,8 +6977,10 @@ TEST_F(RuledClientTest, GameStartResetKeepsTheIncomingSessionsOpeningPrompt)
     batch.add_events()->mutable_stack_pushed()->set_object_id(900);
     // …alongside the incoming session's opening prompt, which must survive.
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-    actions.add_labels("You start (opening pick)");
-    actions.add_labels("Opponent starts (opening pick)");
+    actions.mutable_opening()->set_stage(ruled::v1::OPENING_STAGE_CHOOSE_STARTING_PLAYER);
+    actions.mutable_opening()->set_deciding_player_id(kLocalPlayer);
+    actions.mutable_opening()->add_eligible_starting_player_ids(kLocalPlayer);
+    actions.mutable_opening()->add_eligible_starting_player_ids(kOpponent);
     apply(batch);
     ASSERT_EQ(state->getOpeningUiKind(), RuledClientState::RuledOpeningUiKind::ChooseFirst);
 

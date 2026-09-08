@@ -41,6 +41,8 @@ private:
     // State accompanying a parked cast: replayable views and legality, never one-shot actions.
     ruled::v1::RuledEventBatch pendingResolutionState;
     std::optional<ruled::v1::ZoneViewSync> currentPublicZoneView;
+    // Opening legality/progress only; never replay one-shot logs or movement events.
+    ruled::v1::RuledEventBatch pendingOpeningState;
 };
 
 #endif

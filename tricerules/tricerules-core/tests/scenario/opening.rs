@@ -271,3 +271,86 @@ fn engine_rejects_any_player_count_but_two() {
         "two players is still accepted"
     );
 }
+
+#[test]
+fn structured_opening_actions_follow_authority_and_remaining_progress() {
+    use tricerules_proto::ruled::v1::{
+        ruled_command::Cmd, ChooseStartingPlayer, MulliganDecision, OpeningStage,
+        PutOpeningHandOnBottom, RuledCommand,
+    };
+    let mut e = GameEngine::new(100, &[7, 19], 20, None, false).unwrap();
+    let chooser = e.state.opening.as_ref().unwrap().chooser;
+    let other = if chooser == 7 { 19 } else { 7 };
+    let initial = e.initial_response_batch();
+    let offer = initial.legal_by_player[&chooser].opening.as_ref().unwrap();
+    assert_eq!(offer.stage(), OpeningStage::ChooseStartingPlayer);
+    assert_eq!(offer.eligible_starting_player_ids, [7, 19]);
+    let waiting = initial.legal_by_player[&other].opening.as_ref().unwrap();
+    assert_eq!(waiting.deciding_player_id, chooser);
+    assert!(waiting.eligible_starting_player_ids.is_empty());
+    let choose = RuledCommand {
+        cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+            starting_player_id: 7,
+        })),
+    };
+    let before = e.state.command_index;
+    assert!(e.apply_command(other, &choose).is_err());
+    assert_eq!(e.state.command_index, before);
+    e.apply_command(chooser, &choose).unwrap();
+    assert!(e.apply_command(chooser, &choose).is_err());
+    let redraw = RuledCommand {
+        cmd: Some(Cmd::Mulligan(MulliganDecision { keep: false })),
+    };
+    let keep = RuledCommand {
+        cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+    };
+    let first = e.apply_command(7, &redraw).unwrap();
+    let waiting = first.legal_by_player[&7].opening.as_ref().unwrap();
+    assert_eq!(waiting.mulligans_taken, 1);
+    assert!(!waiting.can_keep && !waiting.can_redraw);
+    assert!(
+        first.legal_by_player[&19]
+            .opening
+            .as_ref()
+            .unwrap()
+            .can_keep
+    );
+    assert!(e.apply_command(7, &redraw).is_err());
+    e.apply_command(19, &keep).unwrap();
+    e.apply_command(7, &redraw).unwrap();
+    let bottom = e.apply_command(7, &keep).unwrap();
+    let offer = bottom.legal_by_player[&7].opening.as_ref().unwrap();
+    assert_eq!(offer.stage(), OpeningStage::Bottom);
+    assert_eq!(offer.bottom_cards_remaining, 2);
+    assert!(!offer.can_keep && !offer.can_redraw);
+    assert!(e.apply_command(7, &redraw).is_err());
+    let put = RuledCommand {
+        cmd: Some(Cmd::PutOpeningHandOnBottom(PutOpeningHandOnBottom {
+            hand_card_index: 0,
+        })),
+    };
+    assert!(e.apply_command(19, &put).is_err());
+    let partial = e.apply_command(7, &put).unwrap();
+    let refreshed = e.initial_response_batch();
+    assert_eq!(
+        partial.legal_by_player[&7].opening,
+        refreshed.legal_by_player[&7].opening
+    );
+    let offer = refreshed.legal_by_player[&7].opening.as_ref().unwrap();
+    assert_eq!(offer.mulligans_taken, 2);
+    assert_eq!(offer.bottom_cards_remaining, 1);
+    assert_eq!(
+        refreshed.legal_by_player[&19]
+            .opening
+            .as_ref()
+            .unwrap()
+            .bottom_cards_remaining,
+        0
+    );
+    let finished = e.apply_command(7, &put).unwrap();
+    assert!(finished
+        .legal_by_player
+        .values()
+        .all(|a| a.opening.is_none()));
+    assert!(e.apply_command(7, &put).is_err());
+}

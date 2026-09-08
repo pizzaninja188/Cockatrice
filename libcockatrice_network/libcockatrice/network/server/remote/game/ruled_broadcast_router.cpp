@@ -30,6 +30,7 @@ void RuledBroadcastRouter::resetForNewGame()
     pendingResolutionChoice.reset();
     pendingResolutionState.Clear();
     currentPublicZoneView.reset();
+    pendingOpeningState.Clear();
 }
 
 void RuledBroadcastRouter::broadcast(const ruled::v1::IpcResponse &resp, bool authoritative)
@@ -68,8 +69,17 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
 {
     pendingResolutionChoice.reset();
     pendingResolutionState.Clear();
+    pendingOpeningState.Clear();
     if (!response.has_batch()) {
         return;
+    }
+    const auto &legal = response.batch().legal_by_player();
+    if (std::any_of(legal.begin(), legal.end(), [](const auto &entry) { return entry.second.has_opening(); })) {
+        *pendingOpeningState.mutable_legal_by_player() = legal;
+        for (const auto &event : response.batch().events()) {
+            if (event.has_phase_changed() || event.has_priority_changed())
+                pendingOpeningState.add_events()->CopyFrom(event);
+        }
     }
     for (const auto &event : response.batch().events()) {
         if (event.has_zone_view()) {
@@ -111,15 +121,20 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
 void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_AbstractParticipant *participant,
                                                                         ResponseContainer &rc)
 {
-    if (!participant || !pendingResolutionChoice.has_value()) {
+    const bool opening = !pendingOpeningState.legal_by_player().empty();
+    if (!participant || (!opening && !pendingResolutionChoice.has_value())) {
         return;
     }
     ruled::v1::IpcResponse snapshot;
     auto *batch = snapshot.mutable_batch();
-    batch->add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingResolutionChoice);
-    *batch->mutable_legal_by_player() = pendingResolutionState.legal_by_player();
-    for (const auto &event : pendingResolutionState.events()) batch->add_events()->CopyFrom(event);
-    if (pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
+    if (opening) {
+        batch->CopyFrom(pendingOpeningState);
+    } else {
+        batch->add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingResolutionChoice);
+        *batch->mutable_legal_by_player() = pendingResolutionState.legal_by_player();
+        for (const auto &event : pendingResolutionState.events()) batch->add_events()->CopyFrom(event);
+    }
+    if (opening || pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
         appendServerObjectMaps(snapshot);
         // Reconnecting an existing seat does not change the broadcast participant set.
         // Still restore its hand identities if the normal delta map was elided.

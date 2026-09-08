@@ -641,6 +641,9 @@ public:
     /// controls while the engine is parked without exposing private candidates or prompt details.
     int choiceWaitingPlayerId = -1;
     int openingMulliganCount = 0;
+    int openingBottomRemaining = 0;
+    bool openingCanKeep = false;
+    bool openingCanRedraw = false;
     ruled::v1::PhaseId lastEnginePhaseId = ruled::v1::PHASE_ID_UNSPECIFIED;
 
     // -----------------------------------------------------------------------------------
@@ -1745,14 +1748,14 @@ public:
     {
         return openingUiKind;
     }
-    [[nodiscard]] QVector<int> getOpeningPickSeatIds() const
-    {
-        return openingPickSeatIds;
-    }
+    /// Display order starts with the local player and wraps in engine-provided turn order.
+    [[nodiscard]] QVector<int> getOpeningPickSeatIds() const;
     [[nodiscard]] int getOpeningMulliganCount() const
     {
         return openingMulliganCount;
     }
+    [[nodiscard]] bool canKeepOpeningHand() const { return openingCanKeep; }
+    [[nodiscard]] bool canRedrawOpeningHand() const { return openingCanRedraw; }
     [[nodiscard]] int openingBottomRequiredCount() const;
     [[nodiscard]] int openingBottomSelectedCount() const;
     [[nodiscard]] bool isOpeningBottomHandIndexSelected(int handIndex) const;

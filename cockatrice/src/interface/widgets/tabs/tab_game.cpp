@@ -782,20 +782,16 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.selected = h->resolutionHandPickSelected();
         state.text = h->resolutionHandPickPromptText();
     } else if (opening == OpeningKind::ChooseFirst) {
-        const int localId = game->getPlayerManager()->getLocalPlayerId();
-        int opponentId = -1;
-        for (int pid : game->getPlayerManager()->getPlayers().keys()) {
-            if (pid != localId) {
-                opponentId = pid;
-                break;
-            }
-        }
-        if (opponentId >= 0) {
-            state.mode = PromptMode::OpeningChooseFirst;
-            state.openingPickSeatIds = {localId, opponentId};
+        state.mode = PromptMode::OpeningChooseFirst;
+        state.openingPickSeatIds = h->getOpeningPickSeatIds();
+        for (const int seatId : state.openingPickSeatIds) {
+            const Player *seat = game->getPlayerManager()->getPlayer(seatId);
+            state.openingPickSeatNames.append(seat ? seat->getPlayerInfo()->getName() : tr("Player %1").arg(seatId));
         }
     } else if (opening == OpeningKind::MulliganChoice) {
         state.mode = PromptMode::OpeningMulligan;
+        state.openingCanKeep = h->canKeepOpeningHand();
+        state.openingCanRedraw = h->canRedrawOpeningHand();
         state.required = h->getOpeningMulliganCount();
     } else if (opening == OpeningKind::BottomLibrary) {
         state.mode = PromptMode::OpeningBottom;
