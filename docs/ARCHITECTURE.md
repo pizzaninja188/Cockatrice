@@ -69,13 +69,14 @@ the engine entry point differ.
 `if (RuledActions::tryHandle…(this)) return;`. `RuledActions::resolveHandActionIndex(state,
 HAND_ACTION_CAST_SPELL, card)` maps the clicked `CardItem` to an **engine hand slot** using the
 `RuledHandActionSet` the last batch delivered. `handActionNeedsTarget(kind, slot)` says Bolt
-needs a target, so `PlayerActions` enters its pending-cast state machine and asks
-`RuledClientState::isValidSpellTarget(slot, face, oid)` about every click — the legal target set
+needs a target, so `PlayerActions` delegates entry to `RuledPaymentUi`, with `RuledPendingCast`
+owning the transaction. `RuledTargetUi` handles target clicks and checks
+`currentRuledSpellTargetGroup` against the latest client state — the legal target set
 is engine-supplied (`LegalActions.valid_targets_by_hand_slot`), never re-derived from Oracle text.
 
 **2 — Pay and send (client).** Tapping a land is itself a ruled command (`ActivateAbility` on a
 mana ability), relayed and broadcast the same way; the mana pool the client shows is the engine's
-`ManaPoolUpdated` snapshot, not a local tally. On confirm, `PlayerActions` builds
+`ManaPoolUpdated` snapshot, not a local tally. On confirm, `RuledPaymentUi` builds
 `ruled::v1::RuledCommand{ cast_spell: { hand_card_index, targets, x_value, flex_payments,
 face_index } }`, and `GameEventHandler::sendRuledCommand` wraps the serialized bytes in
 `Command_RuledPayload` (a `GameCommand` extension).

@@ -1571,7 +1571,7 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
         if (ruledTargetRangeUsesExplicitConfirmation(actions->pendingRuledSpellCast.minTargets,
                                                      actions->pendingRuledSpellCast.maxTargets) &&
             actions->pendingRuledSpellCast.selectedTargetOids.size() >= actions->pendingRuledSpellCast.minTargets) {
-            return actions->finalizeTargetSelectionAndContinue();
+            return RuledTargetUi::finalizeTargetSelectionAndContinue(actions);
         }
         cancelPendingRuledSpellCast();
         return true;
@@ -1728,7 +1728,7 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
             actions->pendingRuledSpellCast.selectedTargetOidsByGroup.append(QVector<quint32>{});
             actions->pendingRuledSpellCast.selectedTargetDamagesByGroup.append(QVector<quint32>{});
         }
-        actions->loadCurrentTargetGroup();
+        RuledTargetUi::loadCurrentTargetGroup(actions);
     }
     emit actions->landTapUndoAvailableChanged(false);
     emit actions->ruledSpellCastPendingChanged(true);
@@ -2212,4 +2212,131 @@ bool RuledPaymentUi::tryUndoManaAbility()
     }
 
     return false;
+}
+
+bool RuledPaymentUi::tryStartRuledSpellCast(CardItem *card)
+{
+    if (!card || !RuledActions::isRuledGame(actions->player->getGame())) {
+        return false;
+    }
+    if (RuledActions::gameplayInputLocked(actions->player->getGame())) {
+        return true;
+    }
+    const bool fromHand = card->getZone()->getName() == ZoneNames::HAND;
+    const bool fromPublicZone =
+        card->getZone()->getName() == ZoneNames::GRAVE || card->getZone()->getName() == ZoneNames::EXILE;
+    if (!fromHand && !fromPublicZone) {
+        return false;
+    }
+    RuledClientState *const geh = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (fromPublicZone) {
+        const RuledCastSource source =
+            card->getZone()->getName() == ZoneNames::GRAVE ? RuledCastSource::Graveyard : RuledCastSource::Exile;
+        const quint32 objectId = RuledActions::resolvePublicZoneObjectId(geh, card);
+        if (objectId == 0 || !geh->isZoneActionLegal(objectId, source)) {
+            return false;
+        }
+        const QVector<RuledFaceOption> options = geh->zoneActionFaceOptions(objectId, source);
+        if (options.isEmpty()) {
+            return false;
+        }
+        RuledFaceOption option = options.first();
+        if (options.size() > 1) {
+            const auto chosen =
+                RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), options);
+            if (!chosen.has_value()) {
+                return true;
+            }
+            option = *chosen;
+        }
+        const QString cost =
+            geh->zoneActionCost(objectId, option.faceIndex, source, option.castMethod, option.castingPermissionId);
+        if (cost.isEmpty()) {
+            return false;
+        }
+        return beginRuledSpellCast(card, static_cast<int>(objectId), option.faceIndex, option.faceName, cost,
+                                   option.genericCostReduction, source, option.castMethod, option.castingPermissionId);
+    }
+
+    const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
+    if (ruledHandIndex < 0) {
+        return false;
+    }
+    const QVector<RuledFaceOption> faces =
+        geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex);
+    if (faces.size() > 1) {
+        return tryRuledSpellCastFaceMenu(card);
+    }
+    if (faces.isEmpty()) {
+        return false;
+    }
+    const auto &face = faces.first();
+    return beginRuledSpellCast(card, ruledHandIndex, face.faceIndex, face.faceName, face.manaCost,
+                               face.genericCostReduction, RuledCastSource::Hand, face.castMethod,
+                               face.castingPermissionId);
+}
+
+bool RuledPaymentUi::tryRuledSpellCastFaceMenu(CardItem *card)
+{
+    if (!card || !card->getZone()) {
+        return false;
+    }
+    if (!RuledActions::isRuledGame(actions->player->getGame())) {
+        return false;
+    }
+    if (RuledActions::gameplayInputLocked(actions->player->getGame())) {
+        return false; // preserve the ordinary right-click inspection menu
+    }
+    const bool fromHand = card->getZone()->getName() == ZoneNames::HAND;
+    const bool fromPublicZone =
+        card->getZone()->getName() == ZoneNames::GRAVE || card->getZone()->getName() == ZoneNames::EXILE;
+    if (!fromHand && !fromPublicZone) {
+        return false;
+    }
+    RuledClientState *const geh = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (!geh) {
+        return false;
+    }
+    const int sourceIndex = fromHand
+                                ? RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card)
+                                : static_cast<int>(RuledActions::resolvePublicZoneObjectId(geh, card));
+    const RuledCastSource publicSource =
+        card->getZone()->getName() == ZoneNames::GRAVE ? RuledCastSource::Graveyard : RuledCastSource::Exile;
+    if (sourceIndex < 0 ||
+        (fromPublicZone &&
+         (sourceIndex == 0 || !geh->isZoneActionLegal(static_cast<quint32>(sourceIndex), publicSource)))) {
+        return false;
+    }
+    const QVector<RuledFaceOption> faces =
+        fromHand ? geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, sourceIndex)
+                 : geh->zoneActionFaceOptions(static_cast<quint32>(sourceIndex), publicSource);
+    if (faces.isEmpty()) {
+        return false;
+    }
+    if (faces.size() == 1) {
+        const auto actionIt = geh->handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
+        const int faceIndex = faces.first().faceIndex;
+        const auto castKey =
+            fromHand ? RuledClientState::handCastActionKey(sourceIndex, faceIndex, faces.first().castMethod)
+                     : RuledClientState::zoneCastActionKey(sourceIndex, faceIndex, publicSource,
+                                                           faces.first().castMethod, faces.first().castingPermissionId);
+        const RuledHandActionSet *actionSet = fromHand && actionIt != geh->handActions.constEnd() ? &actionIt.value()
+                                              : fromPublicZone ? &geh->zoneCastActions
+                                                               : nullptr;
+        if (!actionSet || !actionSet->modalOptionsByCastKey.contains(castKey)) {
+            return false;
+        }
+        const auto &face = faces.first();
+        return beginRuledSpellCast(card, sourceIndex, face.faceIndex, face.faceName, face.manaCost,
+                                   face.genericCostReduction, fromHand ? RuledCastSource::Hand : publicSource,
+                                   face.castMethod, face.castingPermissionId);
+    }
+    const auto chosen = RuledPendingCast::chooseFace(actions->player->getGame()->getTab(), card->getName(), faces);
+    if (!chosen.has_value()) {
+        return true; // menu was shown, player cancelled
+    }
+    beginRuledSpellCast(card, sourceIndex, chosen->faceIndex, chosen->faceName, chosen->manaCost,
+                        chosen->genericCostReduction, fromHand ? RuledCastSource::Hand : publicSource,
+                        chosen->castMethod, chosen->castingPermissionId);
+    return true;
 }

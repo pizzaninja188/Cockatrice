@@ -2512,6 +2512,165 @@ TEST(RuledTargetGroupConfirmationTest, OptionalSingleTargetNeedsAnExplicitZeroTa
     EXPECT_TRUE(ruledPendingTargetSelectionCanConfirm(pending));
 }
 
+TEST(RuledPendingTargetProgressionTest, DamageDisplaySurvivesPaymentAndRespectsAllocationCaps)
+{
+    RuledPendingCast pending;
+    auto &spell = pending.spell;
+    spell.valid = true;
+    spell.isDamageTargets = true;
+    spell.xValue = 5;
+    spell.maxTargets = 0;
+    EXPECT_EQ(pending.effectiveDamageTargetsMax(), 5);
+    spell.fixedDamage = 2;
+    EXPECT_EQ(pending.effectiveDamageTargetsMax(), 2);
+    spell.maxTargets = 1;
+    EXPECT_EQ(pending.effectiveDamageTargetsMax(), 1);
+    spell.damageDividedEvenly = true;
+    spell.maxTargets = 0;
+    EXPECT_EQ(pending.effectiveDamageTargetsMax(), 0);
+
+    spell.damageDividedEvenly = false;
+    spell.fixedDamage = 0;
+    spell.selectedTargetOids = {101, 205};
+    EXPECT_EQ(pending.prepareSpellDamageAllocation(), RuledPendingCast::DamageAllocationStep::Allocating);
+    EXPECT_FALSE(pending.spellDamageAllocationIsLegal());
+    EXPECT_FALSE(pending.confirmSpellDamageAllocation());
+    EXPECT_EQ(pending.bumpSpellDamageAllocation(101, -1), RuledPendingCast::DamageAllocationChange::Unchanged);
+    EXPECT_EQ(pending.bumpSpellDamageAllocation(101, 1), RuledPendingCast::DamageAllocationChange::Changed);
+    EXPECT_EQ(pending.bumpSpellDamageAllocation(205, 2), RuledPendingCast::DamageAllocationChange::Changed);
+    EXPECT_EQ(pending.bumpSpellDamageAllocation(205, 1), RuledPendingCast::DamageAllocationChange::Unchanged);
+    EXPECT_EQ(pending.bumpSpellDamageAllocation(999, 1), RuledPendingCast::DamageAllocationChange::Unavailable);
+    EXPECT_TRUE(pending.spellDamageAllocationIsLegal());
+    EXPECT_EQ(pending.spellDamageAllocationForOid(205), 3);
+    EXPECT_EQ(pending.spellDamageAllocationForOid(999), 0);
+
+    // Confirmation leaves the submitted split visible throughout payment.
+    EXPECT_TRUE(pending.confirmSpellDamageAllocation());
+    EXPECT_FALSE(pending.confirmSpellDamageAllocation());
+    spell.waitingForTarget = false;
+    spell.remainingCost[QChar('R')] = 1;
+    spell.targetDamageAllocations.clear();
+    EXPECT_EQ(pending.spellDamageAllocationForOid(101), 2);
+    EXPECT_EQ(pending.spellDamageAllocationForOid(205), 3);
+    EXPECT_FALSE(pending.spellDamageAllocationIsLegal());
+    pending.clearSpell();
+    EXPECT_FALSE(pending.isSpellDamageAllocationDisplayActive());
+    EXPECT_EQ(pending.spellDamageAllocationForOid(205), 0);
+}
+
+TEST(RuledPendingTargetProgressionTest, DamagePreparationPreservesAutomaticAndInvalidPaths)
+{
+    RuledPendingCast pending;
+    auto &spell = pending.spell;
+    spell.valid = true;
+    spell.isDamageTargets = true;
+    spell.fixedDamage = 2;
+    spell.selectedTargetOids = {101};
+    EXPECT_EQ(pending.prepareSpellDamageAllocation(), RuledPendingCast::DamageAllocationStep::Ready);
+    EXPECT_EQ(spell.selectedTargetDamages, QVector<quint32>({2}));
+    EXPECT_FALSE(spell.inDamageAllocationMode);
+
+    spell.selectedTargetOids = {101, 205, 309};
+    EXPECT_EQ(pending.prepareSpellDamageAllocation(), RuledPendingCast::DamageAllocationStep::Invalid);
+    EXPECT_FALSE(spell.inDamageAllocationMode);
+    EXPECT_TRUE(spell.valid); // The UI owns cancellation and its notifications.
+
+    spell.damageDividedEvenly = true;
+    EXPECT_EQ(pending.prepareSpellDamageAllocation(), RuledPendingCast::DamageAllocationStep::Ready);
+    EXPECT_EQ(spell.selectedTargetDamages, QVector<quint32>({0, 0, 0}));
+    EXPECT_FALSE(spell.inDamageAllocationMode);
+    spell.selectedTargetOids.clear();
+    EXPECT_EQ(pending.prepareSpellDamageAllocation(), RuledPendingCast::DamageAllocationStep::Ready);
+    EXPECT_TRUE(spell.selectedTargetDamages.isEmpty());
+}
+
+TEST(RuledPendingTargetProgressionTest, StoresGroupsAndModesBeforePaymentWithoutLosingSelections)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    RuledPendingCast pending;
+    auto &spell = pending.spell;
+    spell.valid = true;
+    spell.handIndex = 3;
+    spell.activeModePosition = 0;
+    spell.activeTargetGroupPosition = 0;
+
+    RuledTargetGroupData first;
+    first.groupIndex = 2;
+    first.minTargets = 1;
+    first.maxTargets = 1;
+    RuledTargetGroupData second;
+    second.groupIndex = 7;
+    second.minTargets = 0;
+    second.maxTargets = 2;
+    RuledSpellTargetData firstMode;
+    firstMode.groups = {first, second};
+    RuledSpellTargetData lastMode;
+    lastMode.groups = {first};
+    lastMode.isDamageTargets = true;
+    lastMode.fixedDamage = 3;
+    spell.selectedModes = {{4, QStringLiteral("first"), true, firstMode, {}, {}},
+                           {8, QStringLiteral("untargeted"), false, {}, {}, {}},
+                           {12, QStringLiteral("last"), true, lastMode, {}, {}}};
+    state.handActions[ruled::v1::HAND_ACTION_CAST_SPELL]
+        .modalOptionsByCastKey[RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_NORMAL)] = {
+        {4, QStringLiteral("first"), true, true, firstMode},
+        {8, QStringLiteral("untargeted"), true, false, {}},
+        {12, QStringLiteral("last"), true, true, lastMode}};
+
+    pending.loadCurrentTargetGroup(state);
+    EXPECT_EQ(spell.minTargets, 1);
+    spell.selectedTargetOids = {101};
+    spell.selectedTargetDamages = {2};
+    ASSERT_TRUE(pending.storeCurrentTargetGroupAndAdvance(state));
+    EXPECT_EQ(spell.activeTargetGroupPosition, 1);
+    EXPECT_EQ(spell.minTargets, 0);
+    EXPECT_EQ(spell.maxTargets, 2);
+    EXPECT_TRUE(spell.selectedTargetOids.isEmpty());
+    EXPECT_TRUE(pending.isTargetSelectedForPendingSpell(101));
+    spell.selectedTargetOids = {205, 309};
+    spell.selectedTargetDamages = {1, 1};
+    EXPECT_FALSE(pending.storeCurrentTargetGroupAndAdvance(state));
+    EXPECT_EQ(spell.selectedTargetOidsByGroup.at(1), QVector<quint32>({205, 309}));
+
+    ASSERT_TRUE(pending.storeCurrentModalTargetsAndAdvance(state));
+    EXPECT_EQ(spell.activeModePosition, 2); // Skip the untargeted mode, retain authored indices.
+    EXPECT_EQ(spell.selectedModes.at(0).modeIndex, 4);
+    EXPECT_EQ(spell.selectedModes.at(0).selectedTargetOidsByGroup.at(0), QVector<quint32>({101}));
+    EXPECT_EQ(spell.selectedModes.at(0).selectedTargetDamagesByGroup.at(0), QVector<quint32>({2}));
+    EXPECT_TRUE(spell.waitingForTarget);
+    EXPECT_TRUE(spell.isDamageTargets);
+    EXPECT_EQ(spell.fixedDamage, 3);
+    EXPECT_TRUE(spell.selectedTargetOids.isEmpty());
+
+    spell.selectedTargetOids = {401};
+    spell.selectedTargetDamages = {3};
+    EXPECT_FALSE(pending.storeCurrentTargetGroupAndAdvance(state));
+    EXPECT_FALSE(pending.storeCurrentModalTargetsAndAdvance(state));
+    EXPECT_EQ(spell.activeModePosition, -1);
+    EXPECT_EQ(spell.selectedModes.at(2).selectedTargetOids, QVector<quint32>({401}));
+    EXPECT_EQ(spell.selectedModes.at(2).selectedTargetDamagesByGroup.at(0), QVector<quint32>({3}));
+}
+
+TEST(RuledPendingTargetProgressionTest, MissingOrRemovedGroupDoesNotAdvanceOrOverwriteStaging)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    RuledPendingCast pending;
+    pending.spell.valid = true;
+    pending.spell.handIndex = 3;
+    pending.spell.activeTargetGroupPosition = 4;
+    pending.spell.selectedTargetOids = {101};
+    pending.spell.selectedTargetDamages = {2};
+    pending.loadCurrentTargetGroup(state);
+    EXPECT_FALSE(pending.storeCurrentTargetGroupAndAdvance(state));
+    EXPECT_FALSE(pending.storeCurrentModalTargetsAndAdvance(state));
+    EXPECT_EQ(pending.spell.activeTargetGroupPosition, 4);
+    EXPECT_EQ(pending.spell.selectedTargetOids, QVector<quint32>({101}));
+    EXPECT_EQ(pending.spell.selectedTargetDamages, QVector<quint32>({2}));
+    EXPECT_TRUE(pending.spell.selectedTargetOidsByGroup.isEmpty());
+}
+
 TEST(RuledRestrictedManaModelTest, FullyStagedGroupConsumesNoLayoutColumn)
 {
     RuledRestrictedManaGroup group;

@@ -1002,6 +1002,36 @@ public:
     void clearAbility();
     [[nodiscard]] InteractionKind activeInteraction() const;
 
+    // Local target staging only; authoritative candidates remain in RuledClientState.
+    enum class DamageAllocationStep
+    {
+        Ready,
+        Invalid,
+        Allocating
+    };
+    enum class DamageAllocationChange
+    {
+        Unavailable,
+        Unchanged,
+        Changed
+    };
+    DamageAllocationStep prepareSpellDamageAllocation();
+    DamageAllocationChange bumpSpellDamageAllocation(quint32 oid, int delta);
+    bool confirmSpellDamageAllocation();
+    int pendingDamageTargetsTotal() const;
+    int effectiveDamageTargetsMax() const;
+    bool isInSpellDamageAllocationMode() const;
+    bool isSpellDamageAllocationDisplayActive() const;
+    int spellDamageAllocationForOid(quint32 oid) const;
+    int spellDamageAllocationAssignedTotal() const;
+    int spellDamageAllocationMaxTotal() const;
+    bool spellDamageAllocationIsLegal() const;
+    bool isTargetSelectedForPendingSpell(quint32 oid) const;
+    bool isCastCostPermanentSelected(quint32 oid) const;
+    void loadCurrentTargetGroup(const RuledClientState &state);
+    bool storeCurrentTargetGroupAndAdvance(const RuledClientState &state);
+    bool storeCurrentModalTargetsAndAdvance(const RuledClientState &state);
+
     PendingRuledSpellCast spell;
     PendingActivatedAbility ability;
 };
@@ -1011,6 +1041,23 @@ public:
 class RuledTargetUi
 {
 public:
+    static bool tryHandleRuledSpellTargetClick(PlayerActions *actions, CardItem *card);
+    static bool isPlayerSelectedAsPendingSpellTarget(const PlayerActions *actions, int playerId);
+    static void confirmMultiTargetSelection(PlayerActions *actions);
+    static bool isAwaitingRuledPlayerTargetSelection(const PlayerActions *actions);
+    static bool isAwaitingRuledAbilityOrTriggerPlayerTarget(const PlayerActions *actions);
+    static bool tryHandleRuledSpellTargetPlayerClick(PlayerActions *actions, Player *targetPlayer);
+    static void loadCurrentTargetGroup(PlayerActions *actions);
+    static bool storeCurrentTargetGroupAndAdvance(PlayerActions *actions);
+    static bool storeCurrentModalTargetsAndAdvance(PlayerActions *actions);
+    static bool finalizeTargetSelectionAndContinue(PlayerActions *actions);
+    static int spellDamageAllocationForPlayerId(const PlayerActions *actions, int playerId);
+    static bool tryBumpSpellDamageAllocationForOid(PlayerActions *actions, quint32 oid, int delta);
+    static bool tryBumpSpellDamageAllocationForCard(PlayerActions *actions, CardItem *card, int delta);
+    static bool tryBumpSpellDamageAllocationForPlayer(PlayerActions *actions, Player *targetPlayer, int delta);
+    static void confirmSpellDamageAllocation(PlayerActions *actions);
+    static bool tryHandleRuledAbilityTargetClick(PlayerActions *actions, CardItem *card);
+    static bool tryHandleRuledAbilityTargetPlayerClick(PlayerActions *actions, Player *targetPlayer);
     static void ensureRefreshConnection(PlayerActions *actions);
     static void reconcile(PlayerActions *actions);
     [[nodiscard]] static RuledTargetClickEligibility cardEligibility(const PlayerActions *actions, CardItem *card);

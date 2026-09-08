@@ -64,6 +64,10 @@ UI signals or cancel the transaction itself. The payment bridge performs those e
 existing order after target reconciliation. Mana text is engine-authored presentation input, never
 an independent source of casting legality.
 
+`ruled_pending_targets.cpp` implements the same transaction owner's headless target-group and
+selected-mode progression, damage allocation, and selection-display queries. State transitions
+return their result to the UI bridge; they never send commands or emit UI notifications.
+
 Two writer groups, and they must not be confused:
 
 - **`RuledEventDispatcher` is the only writer of engine-authoritative fields.**
@@ -81,13 +85,16 @@ mana. See
 [Waterbend acceptance](../../../../docs/ISSUE-146-WATERBEND.md).
 
 `ruled_payment_progression.cpp` implements the same `RuledPaymentUi` bridge's cast/activation
-initialization, cost-group progression, cost-object clicks, X/flexible-mana dialogs, cancellation,
-submission, and resolution-payment integration. `PlayerActions` retains thin entry points and
+entry and face/cast-method selection, initialization, cost-group progression, cost-object clicks,
+X/flexible-mana dialogs, cancellation, submission, and resolution-payment integration.
+`PlayerActions` retains thin entry points and
 host signals; it does not own a second progression controller. The two cost-click hooks remain
 on either side of the existing trigger/permanent-choice handlers to preserve their precedence.
-`RuledTargetUi` still owns target reconciliation and eligibility, while `TabGame` selects prompt
-modes. The bridge keeps `PlayerActions` as the QObject connection context and preserves existing
-translation contexts, acknowledgement behavior, and nested-payment lifetimes.
+`RuledTargetUi` owns target reconciliation, eligibility, card/player click dispatch, target-group
+and mode prompt progression, and damage-allocation UI notifications. It hands completed staging
+directly to `RuledPaymentUi`; `TabGame` selects prompt modes. The bridges keep `PlayerActions`
+as the QObject connection context and preserve existing translation contexts, acknowledgement
+behavior, and nested-payment lifetimes.
 
 ### `ruled_replacement_picker.{h,cpp}`
 

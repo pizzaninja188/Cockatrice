@@ -70,6 +70,8 @@ public:
     void confirmRuledGraveyardCostSelection();
     void cancelRuledGraveyardCostSelection();
     void resumePendingRuledPaymentAfterEngineCommand();
+    bool tryStartRuledSpellCast(CardItem *card);
+    bool tryRuledSpellCastFaceMenu(CardItem *card);
     bool beginRuledSpellCast(CardItem *card,
                              int ruledHandIndex,
                              int faceIndex,

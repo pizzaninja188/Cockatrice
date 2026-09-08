@@ -120,6 +120,7 @@ set(cockatrice_SOURCES
     src/game/ruled/ruled_event_dispatcher.cpp
     src/game/ruled/ruled_pending_cast.cpp
     src/game/ruled/ruled_pending_costs.cpp
+    src/game/ruled/ruled_pending_targets.cpp
     src/game/ruled/ruled_payment.cpp
     src/game/ruled/ruled_payment_ui.cpp
     src/game/ruled/ruled_payment_progression.cpp

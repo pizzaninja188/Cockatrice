@@ -684,65 +684,7 @@ bool PlayerActions::sendRuledCleanupDiscardBatchIfComplete()
 
 bool PlayerActions::tryStartRuledSpellCast(CardItem *card)
 {
-    if (!card || !RuledActions::isRuledGame(player->getGame())) {
-        return false;
-    }
-    if (RuledActions::gameplayInputLocked(player->getGame())) {
-        return true;
-    }
-    const bool fromHand = card->getZone()->getName() == ZoneNames::HAND;
-    const bool fromPublicZone =
-        card->getZone()->getName() == ZoneNames::GRAVE || card->getZone()->getName() == ZoneNames::EXILE;
-    if (!fromHand && !fromPublicZone) {
-        return false;
-    }
-    RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
-    if (fromPublicZone) {
-        const RuledCastSource source = card->getZone()->getName() == ZoneNames::GRAVE
-                                           ? RuledCastSource::Graveyard
-                                           : RuledCastSource::Exile;
-        const quint32 objectId = RuledActions::resolvePublicZoneObjectId(geh, card);
-        if (objectId == 0 || !geh->isZoneActionLegal(objectId, source)) {
-            return false;
-        }
-        const QVector<RuledFaceOption> options = geh->zoneActionFaceOptions(objectId, source);
-        if (options.isEmpty()) {
-            return false;
-        }
-        RuledFaceOption option = options.first();
-        if (options.size() > 1) {
-            const auto chosen = RuledPendingCast::chooseFace(player->getGame()->getTab(), card->getName(), options);
-            if (!chosen.has_value()) {
-                return true;
-            }
-            option = *chosen;
-        }
-        const QString cost = geh->zoneActionCost(objectId, option.faceIndex, source, option.castMethod,
-                                                 option.castingPermissionId);
-        if (cost.isEmpty()) {
-            return false;
-        }
-        return beginRuledSpellCast(card, static_cast<int>(objectId), option.faceIndex, option.faceName, cost,
-                                   option.genericCostReduction, source, option.castMethod,
-                                   option.castingPermissionId);
-    }
-
-    const int ruledHandIndex = RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card);
-    if (ruledHandIndex < 0) {
-        return false;
-    }
-    const QVector<RuledFaceOption> faces =
-        geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, ruledHandIndex);
-    if (faces.size() > 1) {
-        return tryRuledSpellCastFaceMenu(card);
-    }
-    if (faces.isEmpty()) {
-        return false;
-    }
-    const auto &face = faces.first();
-    return beginRuledSpellCast(card, ruledHandIndex, face.faceIndex, face.faceName, face.manaCost,
-                               face.genericCostReduction, RuledCastSource::Hand, face.castMethod,
-                               face.castingPermissionId);
+    return ruledPayment->tryStartRuledSpellCast(card);
 }
 
 bool PlayerActions::beginRuledSpellCast(CardItem *card,
@@ -761,71 +703,7 @@ bool PlayerActions::beginRuledSpellCast(CardItem *card,
 
 bool PlayerActions::tryRuledSpellCastFaceMenu(CardItem *card)
 {
-    if (!card || !card->getZone()) {
-        return false;
-    }
-    if (!RuledActions::isRuledGame(player->getGame())) {
-        return false;
-    }
-    if (RuledActions::gameplayInputLocked(player->getGame())) {
-        return false; // preserve the ordinary right-click inspection menu
-    }
-    const bool fromHand = card->getZone()->getName() == ZoneNames::HAND;
-    const bool fromPublicZone = card->getZone()->getName() == ZoneNames::GRAVE ||
-                                card->getZone()->getName() == ZoneNames::EXILE;
-    if (!fromHand && !fromPublicZone) {
-        return false;
-    }
-    RuledClientState *const geh = player->getGame()->getGameEventHandler()->ruled();
-    if (!geh) {
-        return false;
-    }
-    const int sourceIndex = fromHand
-                                ? RuledActions::resolveHandActionIndex(geh, ruled::v1::HAND_ACTION_CAST_SPELL, card)
-                                : static_cast<int>(RuledActions::resolvePublicZoneObjectId(geh, card));
-    const RuledCastSource publicSource = card->getZone()->getName() == ZoneNames::GRAVE
-                                             ? RuledCastSource::Graveyard
-                                             : RuledCastSource::Exile;
-    if (sourceIndex < 0 ||
-        (fromPublicZone &&
-         (sourceIndex == 0 || !geh->isZoneActionLegal(static_cast<quint32>(sourceIndex), publicSource)))) {
-        return false;
-    }
-    const QVector<RuledFaceOption> faces =
-        fromHand ? geh->handActionFaceOptions(ruled::v1::HAND_ACTION_CAST_SPELL, sourceIndex)
-                 : geh->zoneActionFaceOptions(static_cast<quint32>(sourceIndex), publicSource);
-    if (faces.isEmpty()) {
-        return false;
-    }
-    if (faces.size() == 1) {
-        const auto actionIt = geh->handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
-        const int faceIndex = faces.first().faceIndex;
-        const auto castKey = fromHand
-                                 ? RuledClientState::handCastActionKey(sourceIndex, faceIndex, faces.first().castMethod)
-                                 : RuledClientState::zoneCastActionKey(sourceIndex, faceIndex, publicSource,
-                                                                      faces.first().castMethod,
-                                                                      faces.first().castingPermissionId);
-        const RuledHandActionSet *actionSet = fromHand && actionIt != geh->handActions.constEnd()
-                                                  ? &actionIt.value()
-                                                  : fromPublicZone ? &geh->zoneCastActions : nullptr;
-        if (!actionSet || !actionSet->modalOptionsByCastKey.contains(castKey)) {
-            return false;
-        }
-        const auto &face = faces.first();
-        return beginRuledSpellCast(card, sourceIndex, face.faceIndex, face.faceName, face.manaCost,
-                                   face.genericCostReduction,
-                                   fromHand ? RuledCastSource::Hand : publicSource,
-                                   face.castMethod, face.castingPermissionId);
-    }
-    const auto chosen = RuledPendingCast::chooseFace(player->getGame()->getTab(), card->getName(), faces);
-    if (!chosen.has_value()) {
-        return true; // menu was shown, player cancelled
-    }
-    beginRuledSpellCast(card, sourceIndex, chosen->faceIndex, chosen->faceName, chosen->manaCost,
-                        chosen->genericCostReduction,
-                        fromHand ? RuledCastSource::Hand : publicSource, chosen->castMethod,
-                        chosen->castingPermissionId);
-    return true;
+    return ruledPayment->tryRuledSpellCastFaceMenu(card);
 }
 
 RuledTargetClickEligibility PlayerActions::ruledCardTargetEligibility(CardItem *card) const
@@ -850,106 +728,7 @@ RuledTargetClickEligibility PlayerActions::ruledPlayerTargetEligibility(Player *
 
 bool PlayerActions::tryHandleRuledSpellTargetClick(CardItem *card)
 {
-    if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget) {
-        return false;
-    }
-    if (RuledActions::gameplayInputLocked(player->getGame())) {
-        return true;
-    }
-    if (!card || !card->getZone()) {
-        return true;
-    }
-    if (!RuledActions::isRuledGame(player->getGame())) {
-        clearPendingRuledSpellCast();
-        return false;
-    }
-
-    const QString zoneName = card->getZone()->getName();
-    const bool isOnBattlefield = (zoneName == ZoneNames::TABLE);
-    const bool isOnStack = (zoneName == ZoneNames::STACK);
-    const bool isOnGraveyard = (zoneName == ZoneNames::GRAVE);
-    if (!isOnBattlefield && !isOnStack && !isOnGraveyard) {
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("Select a target on the battlefield, stack, or a graveyard, or press Cancel."));
-        return true;
-    }
-
-    RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-
-    const int ownerPlayerId = card && card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-    quint32 targetOid = 0;
-    if (isOnGraveyard) {
-        // Graveyard cards are tracked via the GraveyardObjectMap (not the battlefield OID map),
-        // and that map is keyed by owner: Server_Card ids repeat across players' zones, so a
-        // spell that can read any graveyard (Reanimate) needs the owner to disambiguate.
-        targetOid = handler ? handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId()) : 0;
-    } else {
-        targetOid = handler ? handler->engineOidForCardId(ownerPlayerId, card->getId()) : 0;
-    }
-    if (targetOid == 0) {
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("That target is not selectable yet. Select another target or cancel %1.")
-                .arg(pendingRuledSpellCast.cardName));
-        return true;
-    }
-    const auto activeGroup = currentRuledSpellTargetGroup(pendingRuledSpellCast, *handler);
-    const bool valid =
-        activeGroup.has_value() && ruledTargetDataContains(*activeGroup,
-                                                           isOnBattlefield ? RuledTargetCandidateKind::Battlefield
-                                                           : isOnGraveyard ? RuledTargetCandidateKind::Graveyard
-                                                                           : RuledTargetCandidateKind::Stack,
-                                                           targetOid, player->getPlayerInfo()->getId());
-    if (!valid) {
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("That is not a legal target for %1.").arg(pendingRuledSpellCast.cardName));
-        return true;
-    }
-    for (const int otherGroup : activeGroup->distinctFromGroupIndices) {
-        if (pendingRuledSpellCast.selectedTargetOidsByGroup.value(otherGroup).contains(targetOid)) {
-            handler->emitLocalLog(tr("That object is already selected in a distinct target group."));
-            return true;
-        }
-    }
-
-    if (ruledPayment->tryRequireSpellTargetCost(isOnBattlefield ? ruled::v1::TARGET_REF_KIND_PERMANENT
-                                                : isOnGraveyard ? ruled::v1::TARGET_REF_KIND_GRAVEYARD
-                                                                : ruled::v1::TARGET_REF_KIND_STACK,
-                                                targetOid, activeGroup->groupIndex))
-        return true;
-
-    if (pendingRuledSpellCast.selectedTargetOids.contains(targetOid)) {
-        pendingRuledSpellCast.selectedTargetOids.removeOne(targetOid);
-        const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("Target deselected. %1 target(s) chosen for %2.").arg(chosen).arg(pendingRuledSpellCast.cardName));
-        emit ruledMultiTargetSelectionUpdated(chosen, pendingRuledSpellCast.minTargets, effectiveDamageTargetsMax());
-        player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
-        return true;
-    }
-
-    pendingRuledSpellCast.selectedTargetOids.append(targetOid);
-
-    // For DamageTargets with room for more targets, stay in targeting mode.
-    // CR 601.2d: each target must receive >= 1 damage, so the true cap is the total damage (or
-    // the engine's max_targets, whichever is smaller). Reaching it auto-advances to damage
-    // allocation — matching Fire's fixed 2-target cap, so Fireball no longer needs a re-click.
-    const int effMax = effectiveDamageTargetsMax();
-    const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
-    // effMax == 0 means "no cap" — reachable only for evenly-divided damage, where no per-target
-    // minimum bounds the count. There is nothing to auto-advance on, so the player confirms
-    // explicitly (click the spell again, or the Confirm Targets button).
-    if (pendingRuledSpellCast.maxTargets != 1 && (effMax <= 0 || chosen < effMax)) {
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("Target %1%2 chosen for %3. Click another target, or click %3 again to confirm.")
-                .arg(chosen)
-                .arg(effMax > 0 ? QStringLiteral("/%1").arg(effMax) : QString())
-                .arg(pendingRuledSpellCast.cardName));
-        emit ruledMultiTargetSelectionUpdated(chosen, pendingRuledSpellCast.minTargets, effMax);
-        player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
-        return true;
-    }
-
-    return finalizeTargetSelectionAndContinue();
+    return RuledTargetUi::tryHandleRuledSpellTargetClick(this, card);
 }
 
 namespace
@@ -958,336 +737,67 @@ namespace
 
 bool PlayerActions::isTargetSelectedForPendingSpell(quint32 oid) const
 {
-    if (!pendingRuledSpellCast.valid) {
-        return false;
-    }
-    return pendingRuledSpellCast.selectedTargetOids.contains(oid) ||
-           std::any_of(pendingRuledSpellCast.selectedTargetOidsByGroup.cbegin(),
-                       pendingRuledSpellCast.selectedTargetOidsByGroup.cend(),
-                       [oid](const auto &group) { return group.contains(oid); });
+    return ruledPendingCast->isTargetSelectedForPendingSpell(oid);
 }
 
 bool PlayerActions::isCastCostPermanentSelected(quint32 oid) const
 {
-    return pendingRuledSpellCast.valid &&
-           std::any_of(pendingRuledSpellCast.castCostSelections.cbegin(),
-                       pendingRuledSpellCast.castCostSelections.cend(), [oid](const auto &selection) {
-                           return selection.objectKind == RuledPendingCastCostSelection::ObjectKind::Permanent &&
-                                  (selection.selectedId == oid || selection.selectedObjectIds.contains(oid));
-                       });
+    return ruledPendingCast->isCastCostPermanentSelected(oid);
 }
 
 bool PlayerActions::isPlayerSelectedAsPendingSpellTarget(int playerId) const
 {
-    return isTargetSelectedForPendingSpell(static_cast<quint32>(playerId));
+    return RuledTargetUi::isPlayerSelectedAsPendingSpellTarget(this, playerId);
 }
 
 void PlayerActions::confirmMultiTargetSelection()
 {
-    if (!ruledPendingTargetSelectionCanConfirm(pendingRuledSpellCast)) {
-        return;
-    }
-    finalizeTargetSelectionAndContinue();
+    RuledTargetUi::confirmMultiTargetSelection(this);
 }
 
 bool PlayerActions::isAwaitingRuledPlayerTargetSelection() const
 {
-    if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget) {
-        return false;
-    }
-    RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-    if (!handler) {
-        return false;
-    }
-    const auto group = currentRuledSpellTargetGroup(pendingRuledSpellCast, *handler);
-    return group.has_value() && (group->canTargetSelf || group->canTargetOpponent);
+    return RuledTargetUi::isAwaitingRuledPlayerTargetSelection(this);
 }
 
 bool PlayerActions::isAwaitingRuledAbilityOrTriggerPlayerTarget() const
 {
-    if (pendingActivatedAbility.valid && pendingActivatedAbility.waitingForTarget) {
-        return true;
-    }
-    RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-    return handler && (handler->hasPendingTriggerTarget() ||
-                       handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget));
+    return RuledTargetUi::isAwaitingRuledAbilityOrTriggerPlayerTarget(this);
 }
 
 bool PlayerActions::tryHandleRuledSpellTargetPlayerClick(Player *targetPlayer)
 {
-    if (!pendingRuledSpellCast.valid || !pendingRuledSpellCast.waitingForTarget) {
-        return false;
-    }
-    if (RuledActions::gameplayInputLocked(player->getGame())) {
-        return true;
-    }
-    if (!targetPlayer || !RuledActions::isRuledGame(player->getGame())) {
-        clearPendingRuledSpellCast();
-        return false;
-    }
-
-    if (!isAwaitingRuledPlayerTargetSelection()) {
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("%1 does not target players.").arg(pendingRuledSpellCast.cardName));
-        return true;
-    }
-
-    const int targetPlayerId = targetPlayer->getPlayerInfo()->getId();
-    if (targetPlayerId < 0) {
-        return true;
-    }
-
-    RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-    const bool isSelf = (targetPlayerId == player->getPlayerInfo()->getId());
-    const auto activeGroup = currentRuledSpellTargetGroup(pendingRuledSpellCast, *handler);
-    const bool canTargetSelf = activeGroup.has_value() && activeGroup->canTargetSelf;
-    const bool canTargetOpponent = activeGroup.has_value() && activeGroup->canTargetOpponent;
-    if (isSelf && !canTargetSelf) {
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("%1 must target an opponent.").arg(pendingRuledSpellCast.cardName));
-        return true;
-    }
-    if (!isSelf && !canTargetOpponent) {
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("%1 cannot target opponents.").arg(pendingRuledSpellCast.cardName));
-        return true;
-    }
-
-    const quint32 targetOid = static_cast<quint32>(targetPlayerId);
-    for (const int otherGroup : activeGroup->distinctFromGroupIndices) {
-        if (pendingRuledSpellCast.selectedTargetOidsByGroup.value(otherGroup).contains(targetOid)) {
-            handler->emitLocalLog(tr("That player is already selected in a distinct target group."));
-            return true;
-        }
-    }
-    if (pendingRuledSpellCast.selectedTargetOids.contains(targetOid)) {
-        pendingRuledSpellCast.selectedTargetOids.removeOne(targetOid);
-        const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("Target deselected. %1 target(s) chosen for %2.").arg(chosen).arg(pendingRuledSpellCast.cardName));
-        emit ruledMultiTargetSelectionUpdated(chosen, pendingRuledSpellCast.minTargets, effectiveDamageTargetsMax());
-        player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
-        return true;
-    }
-
-    pendingRuledSpellCast.selectedTargetOids.append(targetOid);
-
-    // CR 601.2d: each target must receive >= 1 damage, so the true cap is the total damage (or
-    // the engine's max_targets, whichever is smaller). Reaching it auto-advances to damage
-    // allocation — matching Fire's fixed 2-target cap, so Fireball no longer needs a re-click.
-    const int effMax = effectiveDamageTargetsMax();
-    const int chosen = pendingRuledSpellCast.selectedTargetOids.size();
-    // effMax == 0 means "no cap" — reachable only for evenly-divided damage, where no per-target
-    // minimum bounds the count. There is nothing to auto-advance on, so the player confirms
-    // explicitly (click the spell again, or the Confirm Targets button).
-    if (pendingRuledSpellCast.maxTargets != 1 && (effMax <= 0 || chosen < effMax)) {
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-            tr("Target %1%2 chosen for %3. Click another target, or click %3 again to confirm.")
-                .arg(chosen)
-                .arg(effMax > 0 ? QStringLiteral("/%1").arg(effMax) : QString())
-                .arg(pendingRuledSpellCast.cardName));
-        emit ruledMultiTargetSelectionUpdated(chosen, pendingRuledSpellCast.minTargets, effMax);
-        player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
-        return true;
-    }
-
-    return finalizeTargetSelectionAndContinue();
+    return RuledTargetUi::tryHandleRuledSpellTargetPlayerClick(this, targetPlayer);
 }
 
 int PlayerActions::pendingDamageTargetsTotal() const
 {
-    return pendingRuledSpellCast.fixedDamage > 0 ? pendingRuledSpellCast.fixedDamage : pendingRuledSpellCast.xValue;
+    return ruledPendingCast->pendingDamageTargetsTotal();
 }
 
 int PlayerActions::effectiveDamageTargetsMax() const
 {
-    if (!pendingRuledSpellCast.isDamageTargets) {
-        return pendingRuledSpellCast.maxTargets;
-    }
-    // "Divided evenly" has no per-target minimum — Fireball may legally target more creatures
-    // than X (they simply each take 0). Only the engine's own cap applies, if any.
-    if (pendingRuledSpellCast.damageDividedEvenly) {
-        return pendingRuledSpellCast.maxTargets;
-    }
-    const int total = pendingDamageTargetsTotal();
-    // CR 601.2d: at least 1 damage per target caps the count at the total damage. Fire caps at
-    // min(2, total).
-    if (pendingRuledSpellCast.maxTargets > 0) {
-        return qMin(pendingRuledSpellCast.maxTargets, total);
-    }
-    return total;
+    return ruledPendingCast->effectiveDamageTargetsMax();
 }
 
 void PlayerActions::loadCurrentTargetGroup()
 {
-    RuledClientState *const state = player->getGame()->getGameEventHandler()->ruled();
-    const auto data = state ? currentRuledSpellTargetData(pendingRuledSpellCast, *state) : std::nullopt;
-    if (!data.has_value() || pendingRuledSpellCast.activeTargetGroupPosition < 0 ||
-        pendingRuledSpellCast.activeTargetGroupPosition >= data->groups.size()) {
-        return;
-    }
-    const auto &group = data->groups.at(pendingRuledSpellCast.activeTargetGroupPosition);
-    pendingRuledSpellCast.minTargets = group.minTargets;
-    pendingRuledSpellCast.maxTargets = group.maxTargets;
-    pendingRuledSpellCast.selectedTargetOids =
-        pendingRuledSpellCast.selectedTargetOidsByGroup.value(pendingRuledSpellCast.activeTargetGroupPosition);
-    pendingRuledSpellCast.selectedTargetDamages =
-        pendingRuledSpellCast.selectedTargetDamagesByGroup.value(pendingRuledSpellCast.activeTargetGroupPosition);
+    RuledTargetUi::loadCurrentTargetGroup(this);
 }
 
 bool PlayerActions::storeCurrentTargetGroupAndAdvance()
 {
-    const int current = pendingRuledSpellCast.activeTargetGroupPosition;
-    RuledClientState *const state = player->getGame()->getGameEventHandler()->ruled();
-    const auto data = state ? currentRuledSpellTargetData(pendingRuledSpellCast, *state) : std::nullopt;
-    if (!data.has_value() || current < 0 || current >= data->groups.size()) {
-        return false;
-    }
-    while (pendingRuledSpellCast.selectedTargetOidsByGroup.size() < data->groups.size()) {
-        pendingRuledSpellCast.selectedTargetOidsByGroup.append(QVector<quint32>{});
-    }
-    while (pendingRuledSpellCast.selectedTargetDamagesByGroup.size() < data->groups.size()) {
-        pendingRuledSpellCast.selectedTargetDamagesByGroup.append(QVector<quint32>{});
-    }
-    pendingRuledSpellCast.selectedTargetOidsByGroup[current] = pendingRuledSpellCast.selectedTargetOids;
-    pendingRuledSpellCast.selectedTargetDamagesByGroup[current] = pendingRuledSpellCast.selectedTargetDamages;
-
-    if (current + 1 >= data->groups.size()) {
-        return false;
-    }
-    pendingRuledSpellCast.activeTargetGroupPosition = current + 1;
-    loadCurrentTargetGroup();
-    pendingRuledSpellCast.waitingForTarget = true;
-    const auto &next = data->groups.at(current + 1);
-    const QString prompt = ruledPendingSpellTargetPrompt(pendingRuledSpellCast, *state);
-    emit ruledSpellTargetingChanged(true, prompt);
-    emit ruledMultiTargetSelectionUpdated(pendingRuledSpellCast.selectedTargetOids.size(), next.minTargets,
-                                          ruledTargetSelectionDisplayMaximum(next));
-    RuledActions::updateGraveyardTargetHint(player, pendingRuledSpellCast.handIndex, pendingRuledSpellCast.faceIndex);
-    state->emitLocalLog(prompt);
-    state->emitSpellTargetSelectionChanged();
-    player->getGameScene()->update();
-    return true;
+    return RuledTargetUi::storeCurrentTargetGroupAndAdvance(this);
 }
 
 bool PlayerActions::storeCurrentModalTargetsAndAdvance()
 {
-    const int current = pendingRuledSpellCast.activeModePosition;
-    if (current < 0 || current >= pendingRuledSpellCast.selectedModes.size()) {
-        return false;
-    }
-    auto &mode = pendingRuledSpellCast.selectedModes[current];
-    mode.selectedTargetOids = pendingRuledSpellCast.selectedTargetOids;
-    mode.selectedTargetDamages = pendingRuledSpellCast.selectedTargetDamages;
-    mode.selectedTargetOidsByGroup = pendingRuledSpellCast.selectedTargetOidsByGroup;
-    mode.selectedTargetDamagesByGroup = pendingRuledSpellCast.selectedTargetDamagesByGroup;
-
-    for (int next = current + 1; next < pendingRuledSpellCast.selectedModes.size(); ++next) {
-        const auto &nextMode = pendingRuledSpellCast.selectedModes.at(next);
-        if (!nextMode.needsTarget) {
-            continue;
-        }
-        pendingRuledSpellCast.activeModePosition = next;
-        pendingRuledSpellCast.activeTargetGroupPosition = 0;
-        pendingRuledSpellCast.selectedTargetOidsByGroup = nextMode.selectedTargetOidsByGroup;
-        pendingRuledSpellCast.selectedTargetDamagesByGroup = nextMode.selectedTargetDamagesByGroup;
-        while (pendingRuledSpellCast.selectedTargetOidsByGroup.size() < nextMode.targets.groups.size()) {
-            pendingRuledSpellCast.selectedTargetOidsByGroup.append(QVector<quint32>{});
-        }
-        while (pendingRuledSpellCast.selectedTargetDamagesByGroup.size() < nextMode.targets.groups.size()) {
-            pendingRuledSpellCast.selectedTargetDamagesByGroup.append(QVector<quint32>{});
-        }
-        pendingRuledSpellCast.isDamageTargets = nextMode.targets.isDamageTargets;
-        pendingRuledSpellCast.fixedDamage = nextMode.targets.fixedDamage;
-        pendingRuledSpellCast.extraManaPerTarget = nextMode.targets.extraManaPerTarget;
-        loadCurrentTargetGroup();
-        pendingRuledSpellCast.waitingForTarget = true;
-        const QString prompt = ruledPendingSpellTargetPrompt(
-            pendingRuledSpellCast, *player->getGame()->getGameEventHandler()->ruled());
-        emit ruledSpellTargetingChanged(true, prompt);
-        if (!nextMode.targets.groups.isEmpty()) {
-            const auto &group = nextMode.targets.groups.first();
-            emit ruledMultiTargetSelectionUpdated(pendingRuledSpellCast.selectedTargetOids.size(), group.minTargets,
-                                                  ruledTargetSelectionDisplayMaximum(group));
-        }
-        RuledActions::updateGraveyardTargetHint(player, pendingRuledSpellCast.handIndex,
-                                                pendingRuledSpellCast.faceIndex);
-        player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(prompt);
-        player->getGame()->getGameEventHandler()->ruled()->emitSpellTargetSelectionChanged();
-        player->getGameScene()->update();
-        return true;
-    }
-    pendingRuledSpellCast.activeModePosition = -1;
-    return false;
+    return RuledTargetUi::storeCurrentModalTargetsAndAdvance(this);
 }
 
 bool PlayerActions::finalizeTargetSelectionAndContinue()
 {
-    if (!pendingRuledSpellCast.isDamageTargets && storeCurrentTargetGroupAndAdvance()) {
-        return true;
-    }
-
-    pendingRuledSpellCast.waitingForTarget = false;
-    emit ruledSpellTargetingChanged(false, {});
-    emit ruledMultiTargetSelectionUpdated(0, 0, -1);
-    player->getGameScene()->update();
-
-    // CR 601.2f cost increases are finalized after every group and selected mode is stored below.
-    // DamageTargets: allocate damage among chosen targets interactively.
-    if (pendingRuledSpellCast.isDamageTargets) {
-        const int total =
-            pendingRuledSpellCast.fixedDamage > 0 ? pendingRuledSpellCast.fixedDamage : pendingRuledSpellCast.xValue;
-        const int numTargets = pendingRuledSpellCast.selectedTargetOids.size();
-        // "Divided evenly, rounded down" involves no choice, so there is nothing to allocate: the
-        // engine divides on resolution among the targets still legal then and ignores whatever
-        // damage_amount we send. Targeting more creatures than the total is legal here — they each
-        // simply take 0 — so neither the min-1-per-target rejection nor the interactive allocation
-        // below applies. Send explicit zeros so the wire value matches what the engine will use.
-        if (pendingRuledSpellCast.damageDividedEvenly) {
-            pendingRuledSpellCast.selectedTargetDamages.clear();
-            for (int i = 0; i < numTargets; ++i)
-                pendingRuledSpellCast.selectedTargetDamages.append(0);
-        } else if (numTargets > total) {
-            player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-                tr("Cannot assign at least 1 damage to each target (%1 targets, %2 total). Cast cancelled.")
-                    .arg(numTargets)
-                    .arg(total));
-            clearPendingRuledSpellCast();
-            return true;
-        } else if (numTargets == 1) {
-            pendingRuledSpellCast.selectedTargetDamages.clear();
-            pendingRuledSpellCast.selectedTargetDamages.append(static_cast<quint32>(total));
-            // Single target: skip interactive allocation, fall through to mana payment.
-        } else {
-            // Multiple targets: initialize each to 1 and enter interactive allocation mode.
-            pendingRuledSpellCast.targetDamageAllocations.clear();
-            for (int i = 0; i < numTargets; ++i)
-                pendingRuledSpellCast.targetDamageAllocations.append(1);
-            pendingRuledSpellCast.damageAllocationTotal = total;
-            pendingRuledSpellCast.inDamageAllocationMode = true;
-            player->getGame()->getGameEventHandler()->ruled()->emitSpellDamageAllocationUiChanged();
-            player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-                tr("Assign %1 damage among %2 targets (min 1 each). "
-                   "Click to add, right-click to reduce. Confirm when done.")
-                    .arg(total)
-                    .arg(numTargets));
-            return true; // wait for the player to confirm via the prompt button
-        }
-        if (storeCurrentTargetGroupAndAdvance()) {
-            return true;
-        }
-    }
-
-    pendingRuledSpellCast.activeTargetGroupPosition = -1;
-
-    if (storeCurrentModalTargetsAndAdvance()) {
-        return true;
-    }
-
-    // CR 107.4d–f: front-load hybrid/Phyrexian choices.
-    finalizePendingSpellManaCost();
-    continuePendingSpellAfterChoice();
-    return true;
+    return RuledTargetUi::finalizeTargetSelectionAndContinue(this);
 }
 
 void PlayerActions::autoApplyRestrictedManaToPendingCost(quint32 groupId, QChar symbol, int amount)
@@ -1302,114 +812,57 @@ void PlayerActions::finalizePendingSpellManaCost()
 
 bool PlayerActions::isInSpellDamageAllocationMode() const
 {
-    return pendingRuledSpellCast.valid && pendingRuledSpellCast.inDamageAllocationMode;
+    return ruledPendingCast->isInSpellDamageAllocationMode();
 }
 
 bool PlayerActions::isSpellDamageAllocationDisplayActive() const
 {
-    return pendingRuledSpellCast.valid && pendingRuledSpellCast.isDamageTargets &&
-           !pendingRuledSpellCast.selectedTargetOids.isEmpty();
+    return ruledPendingCast->isSpellDamageAllocationDisplayActive();
 }
 
 int PlayerActions::spellDamageAllocationForOid(quint32 oid) const
 {
-    if (!isSpellDamageAllocationDisplayActive())
-        return 0;
-    const int idx = pendingRuledSpellCast.selectedTargetOids.indexOf(oid);
-    if (idx < 0)
-        return 0;
-    // While interactively allocating, show the in-progress split; once confirmed (and through
-    // mana payment) show the amount that will actually be sent with the cast.
-    if (pendingRuledSpellCast.inDamageAllocationMode) {
-        return idx < pendingRuledSpellCast.targetDamageAllocations.size()
-                   ? pendingRuledSpellCast.targetDamageAllocations.at(idx)
-                   : 0;
-    }
-    return idx < pendingRuledSpellCast.selectedTargetDamages.size()
-               ? static_cast<int>(pendingRuledSpellCast.selectedTargetDamages.at(idx))
-               : 0;
+    return ruledPendingCast->spellDamageAllocationForOid(oid);
 }
 
 int PlayerActions::spellDamageAllocationForPlayerId(int playerId) const
 {
-    return spellDamageAllocationForOid(static_cast<quint32>(playerId));
+    return RuledTargetUi::spellDamageAllocationForPlayerId(this, playerId);
 }
 
 int PlayerActions::spellDamageAllocationAssignedTotal() const
 {
-    int sum = 0;
-    for (int v : pendingRuledSpellCast.targetDamageAllocations)
-        sum += v;
-    return sum;
+    return ruledPendingCast->spellDamageAllocationAssignedTotal();
 }
 
 int PlayerActions::spellDamageAllocationMaxTotal() const
 {
-    return pendingRuledSpellCast.damageAllocationTotal;
+    return ruledPendingCast->spellDamageAllocationMaxTotal();
 }
 
 bool PlayerActions::spellDamageAllocationIsLegal() const
 {
-    return isInSpellDamageAllocationMode() &&
-           spellDamageAllocationAssignedTotal() == pendingRuledSpellCast.damageAllocationTotal;
+    return ruledPendingCast->spellDamageAllocationIsLegal();
 }
 
 bool PlayerActions::tryBumpSpellDamageAllocationForOid(quint32 oid, int delta)
 {
-    if (!isInSpellDamageAllocationMode())
-        return false;
-    const int idx = pendingRuledSpellCast.selectedTargetOids.indexOf(oid);
-    if (idx < 0 || idx >= pendingRuledSpellCast.targetDamageAllocations.size())
-        return false;
-    const int cur = pendingRuledSpellCast.targetDamageAllocations.at(idx);
-    const int total = pendingRuledSpellCast.damageAllocationTotal;
-    const int othersSum = spellDamageAllocationAssignedTotal() - cur;
-    const int next = qBound(1, cur + delta, total - othersSum);
-    if (next == cur)
-        return true; // legal target but no change possible
-    pendingRuledSpellCast.targetDamageAllocations[idx] = next;
-    player->getGame()->getGameEventHandler()->ruled()->emitSpellDamageAllocationUiChanged();
-    return true;
+    return RuledTargetUi::tryBumpSpellDamageAllocationForOid(this, oid, delta);
 }
 
 bool PlayerActions::tryBumpSpellDamageAllocationForCard(CardItem *card, int delta)
 {
-    if (!isInSpellDamageAllocationMode() || !card)
-        return false;
-    RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-    if (!handler)
-        return false;
-    const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-    const quint32 oid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-    if (oid == 0)
-        return false;
-    return tryBumpSpellDamageAllocationForOid(oid, delta);
+    return RuledTargetUi::tryBumpSpellDamageAllocationForCard(this, card, delta);
 }
 
 bool PlayerActions::tryBumpSpellDamageAllocationForPlayer(Player *targetPlayer, int delta)
 {
-    if (!isInSpellDamageAllocationMode() || !targetPlayer)
-        return false;
-    return tryBumpSpellDamageAllocationForOid(static_cast<quint32>(targetPlayer->getPlayerInfo()->getId()), delta);
+    return RuledTargetUi::tryBumpSpellDamageAllocationForPlayer(this, targetPlayer, delta);
 }
 
 void PlayerActions::confirmSpellDamageAllocation()
 {
-    if (!spellDamageAllocationIsLegal())
-        return;
-    pendingRuledSpellCast.selectedTargetDamages.clear();
-    for (int v : pendingRuledSpellCast.targetDamageAllocations)
-        pendingRuledSpellCast.selectedTargetDamages.append(static_cast<quint32>(v));
-    pendingRuledSpellCast.inDamageAllocationMode = false;
-    player->getGame()->getGameEventHandler()->ruled()->emitSpellDamageAllocationUiChanged();
-
-    if (storeCurrentTargetGroupAndAdvance())
-        return;
-    pendingRuledSpellCast.activeTargetGroupPosition = -1;
-    if (storeCurrentModalTargetsAndAdvance())
-        return;
-    finalizePendingSpellManaCost();
-    continuePendingSpellAfterChoice();
+    RuledTargetUi::confirmSpellDamageAllocation(this);
 }
 
 void PlayerActions::playCard(CardItem *card, bool faceDown)
@@ -3405,267 +2858,12 @@ bool PlayerActions::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
 
 bool PlayerActions::tryHandleRuledAbilityTargetClick(CardItem *card)
 {
-    RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-    if (handler && handler->isEngineCommandPending()) {
-        return true;
-    }
-
-    if (ruledPayment->tryHandlePriorityCostClick(card))
-        return true;
-
-    // CR 614.12 / 707.5: Clone's entering-as-copy choice is untargeted but uses the existing
-    // engine-authoritative board click path.
-    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::PermanentChoice)) {
-        if (!card || !card->getZone()) {
-            return false;
-        }
-        if (card->getZone()->getName() != ZoneNames::TABLE) {
-            handler->emitLocalLog(tr("Choose a permanent on the battlefield."));
-            return true;
-        }
-        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-        const quint32 chosenOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-        if (chosenOid == 0 ||
-            !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::PermanentChoice, chosenOid)) {
-            handler->emitLocalLog(tr("That permanent is not a legal choice."));
-            return true;
-        }
-        handler->submitPendingChoiceObject(chosenOid);
-        return true;
-    }
-
-    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopySource)) {
-        if (!card || !card->getZone()) {
-            return false;
-        }
-        if (card->getZone()->getName() != ZoneNames::TABLE) {
-            handler->emitLocalLog(tr("Choose a creature on the battlefield for Clone to copy."));
-            return true;
-        }
-        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-        const quint32 sourceOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-        if (sourceOid == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopySource, sourceOid)) {
-            handler->emitLocalLog(tr("That is not a creature Clone can copy."));
-            return true;
-        }
-        handler->submitPendingChoiceObject(sourceOid);
-        return true;
-    }
-
-    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AuraPermanent)) {
-        if (!card || !card->getZone()) {
-            return false;
-        }
-        if (card->getZone()->getName() != ZoneNames::TABLE) {
-            handler->emitLocalLog(tr("Choose a permanent on the battlefield for the Aura to enchant."));
-            return true;
-        }
-        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-        const quint32 recipientOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-        if (recipientOid == 0 ||
-            !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::AuraPermanent, recipientOid)) {
-            handler->emitLocalLog(tr("That permanent cannot be enchanted by the returning Aura."));
-            return true;
-        }
-        handler->submitPendingChoiceObject(recipientOid);
-        return true;
-    }
-
-    // Check pending copy target choice first (CR 707.10c: redirect targets for a spell copy).
-    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget)) {
-        if (!card || !card->getZone()) {
-            return false;
-        }
-        const QString zoneName = card->getZone()->getName();
-        if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK) {
-            handler->emitLocalLog(tr("Select a target on the battlefield or stack for the copy."));
-            return true;
-        }
-        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-        const quint32 targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-        if (targetOid == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, targetOid)) {
-            handler->emitLocalLog(tr("That is not a valid target for the copy."));
-            return true;
-        }
-        handler->submitPendingChoiceObject(targetOid);
-        return true;
-    }
-
-    // Check pending legend-rule keep choice (CR 704.5j: click the legend to keep on the battlefield).
-    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::LegendKeep)) {
-        if (!card || !card->getZone()) {
-            return false;
-        }
-        if (card->getZone()->getName() != ZoneNames::TABLE) {
-            handler->emitLocalLog(tr("Click the legendary permanent to keep on the battlefield."));
-            return true;
-        }
-        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-        const quint32 keepOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-        if (keepOid == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::LegendKeep, keepOid)) {
-            handler->emitLocalLog(tr("That is not one of the legends you must choose between."));
-            return true;
-        }
-        handler->submitPendingChoiceObject(keepOid);
-        return true;
-    }
-
-    // Check pending trigger first (higher priority).
-    if (handler && handler->hasPendingTriggerTarget()) {
-        if (!card || !card->getZone()) {
-            return false;
-        }
-        const QString zoneName = card->getZone()->getName();
-        const bool triggerIsGraveyard = (zoneName == ZoneNames::GRAVE);
-        if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK && !triggerIsGraveyard) {
-            return false;
-        }
-        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-        quint32 targetOid = 0;
-        if (triggerIsGraveyard) {
-            targetOid = handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId());
-        } else {
-            targetOid = handler->engineOidForCardId(ownerPlayerId, card->getId());
-        }
-        if (targetOid == 0) {
-            return false;
-        }
-        const auto kind = triggerIsGraveyard             ? ruled::v1::TARGET_REF_KIND_GRAVEYARD
-                          : zoneName == ZoneNames::STACK ? ruled::v1::TARGET_REF_KIND_STACK
-                                                         : ruled::v1::TARGET_REF_KIND_PERMANENT;
-        if (!handler->stagePendingTriggerTarget(kind, targetOid, ownerPlayerId)) {
-            handler->emitLocalLog(tr("That is not a legal target for the current target group."));
-        }
-        return true;
-    }
-
-    if (ruledPayment->tryHandleAdditionalCostClick(card))
-        return true;
-
-    // Check pending activated ability target.
-    if (!pendingActivatedAbility.valid || !pendingActivatedAbility.waitingForTarget) {
-        return false;
-    }
-    if (!card || !card->getZone()) {
-        return false;
-    }
-    const QString zoneName = card->getZone()->getName();
-    const bool isGraveyard = zoneName == ZoneNames::GRAVE;
-    if (zoneName != ZoneNames::TABLE && zoneName != ZoneNames::STACK && !isGraveyard) {
-        return true;
-    }
-    const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
-    const quint32 targetOid = isGraveyard ? handler->graveyardEngineOidForOwnedCard(ownerPlayerId, card->getId())
-                                          : handler->engineOidForCardId(ownerPlayerId, card->getId());
-    if (targetOid == 0) {
-        return true;
-    }
-    const RuledTargetCandidateKind kind = isGraveyard                    ? RuledTargetCandidateKind::Graveyard
-                                          : zoneName == ZoneNames::STACK ? RuledTargetCandidateKind::Stack
-                                                                         : RuledTargetCandidateKind::Battlefield;
-    const auto targetData =
-        handler->abilityTargetData(pendingActivatedAbility.permanentOid, pendingActivatedAbility.abilityIndex);
-    if (!ruledTargetDataContains(targetData, kind, targetOid, player->getPlayerInfo()->getId())) {
-        return true;
-    }
-
-    pendingActivatedAbility.selectedTargetOid = targetOid;
-    pendingActivatedAbility.waitingForTarget = false;
-    emit ruledActivatedAbilityTargetPendingChanged(false, {});
-    continuePendingActivatedAbilityAfterChoice();
-    return true;
+    return RuledTargetUi::tryHandleRuledAbilityTargetClick(this, card);
 }
 
 bool PlayerActions::tryHandleRuledAbilityTargetPlayerClick(Player *targetPlayer)
 {
-    RuledClientState *handler = player->getGame()->getGameEventHandler()->ruled();
-    if (handler && handler->isEngineCommandPending()) {
-        return true;
-    }
-
-    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AttackingTokenDefender)) {
-        if (!targetPlayer) {
-            return false;
-        }
-        const int playerId = targetPlayer->getPlayerInfo()->getId();
-        if (!handler->isLegalAttackPlayerDefender(playerId)) {
-            handler->emitLocalLog(tr("That player is not a legal defender for the entering token."));
-            return true;
-        }
-        handler->chooseAttackPlayerDefender(playerId);
-        return true;
-    }
-
-    // Check pending copy target choice first (CR 707.10c: redirect targets for a spell copy).
-    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget)) {
-        if (!targetPlayer) {
-            return false;
-        }
-        const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
-        if (!handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::CopyTarget, targetOid)) {
-            handler->emitLocalLog(tr("That player is not a valid target for the copy."));
-            return true;
-        }
-        handler->submitPendingChoiceObject(targetOid);
-        return true;
-    }
-
-    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AuraPlayer)) {
-        if (!targetPlayer) {
-            return false;
-        }
-        const quint32 playerId = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
-        if (!handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::AuraPlayer, playerId)) {
-            handler->emitLocalLog(tr("That player cannot be enchanted by the returning Aura."));
-            return true;
-        }
-        handler->submitPendingChoiceObject(playerId);
-        return true;
-    }
-
-    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::BattleProtector)) {
-        if (!targetPlayer) {
-            return false;
-        }
-        const quint32 playerId = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
-        if (!handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::BattleProtector, playerId)) {
-            handler->emitLocalLog(tr("That player cannot protect this Battle."));
-            return true;
-        }
-        handler->submitPendingChoiceObject(playerId);
-        return true;
-    }
-
-    if (handler && handler->hasPendingTriggerTarget()) {
-        if (!targetPlayer) {
-            return false;
-        }
-        const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
-        if (!handler->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PLAYER, targetOid,
-                                                targetPlayer->getPlayerInfo()->getId())) {
-            handler->emitLocalLog(tr("That player is not a legal target for the current target group."));
-        }
-        return true;
-    }
-
-    if (!pendingActivatedAbility.valid || !pendingActivatedAbility.waitingForTarget) {
-        return false;
-    }
-    if (!targetPlayer) {
-        return false;
-    }
-    const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
-    const quint32 permOid = pendingActivatedAbility.permanentOid;
-    const int abilityIdx = pendingActivatedAbility.abilityIndex;
-    if (!ruledTargetDataContains(handler->abilityTargetData(permOid, abilityIdx), RuledTargetCandidateKind::Player,
-                                 targetOid, player->getPlayerInfo()->getId())) {
-        return true;
-    }
-    pendingActivatedAbility.selectedTargetOid = targetOid;
-    pendingActivatedAbility.waitingForTarget = false;
-    emit ruledActivatedAbilityTargetPendingChanged(false, {});
-    continuePendingActivatedAbilityAfterChoice();
-    return true;
+    return RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(this, targetPlayer);
 }
 
 void PlayerActions::sendGameCommand(const google::protobuf::Message &command)
