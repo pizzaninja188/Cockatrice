@@ -601,6 +601,8 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
         choice->mutable_candidate_server_card_ids()->CopyFrom(choiceIt.value().candidate_server_card_ids());
         choice->mutable_candidate_selectable()->CopyFrom(choiceIt.value().candidate_selectable());
         choice->mutable_candidate_source_zones()->CopyFrom(choiceIt.value().candidate_source_zones());
+        if (choiceIt.value().choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT)
+            choice->mutable_replacement_options()->CopyFrom(choiceIt.value().replacement_options());
         if (choiceIt.value().deciding_player_id() == participant->getPlayerId()) {
             choice->set_waterbend(choiceIt.value().waterbend());
             choice->mutable_resolution_branches()->CopyFrom(choiceIt.value().resolution_branches());

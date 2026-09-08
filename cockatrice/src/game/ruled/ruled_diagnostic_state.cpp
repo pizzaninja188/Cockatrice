@@ -121,10 +121,10 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     if (pendingChoice) {
         const auto &choice = *pendingChoice;
         const char *kinds[] = {
-            "TriggerTarget", "TriggerMode",    "CopyTarget",        "PermanentChoice",  "CopySource",
-            "LegendKeep",    "AuraPermanent",  "AuraPlayer",        "BattleProtector",  "AttackingTokenDefender",
-            "CostObjects",   "ResolutionPick", "ResolutionPayment", "ResolutionBranch", "SpecialCast",
-            "TriggerOrder", "ReplacementOption"};
+            "TriggerTarget", "TriggerMode",       "CopyTarget",        "PermanentChoice",  "CopySource",
+            "LegendKeep",    "AuraPermanent",     "AuraPlayer",        "BattleProtector",  "AttackingTokenDefender",
+            "CostObjects",   "ResolutionPick",    "ResolutionPayment", "ResolutionBranch", "SpecialCast",
+            "TriggerOrder",  "ReplacementOption", "ReplacementEffect"};
         QJsonObject choiceState{{"kind", kinds[static_cast<int>(choice.kind)]}};
 #define FIELD(name) choiceState.insert(#name, value(choice.name))
         FIELD(promptText);
@@ -159,6 +159,16 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
         FIELD(selectedTriggerTargetsByGroup);
         FIELD(activeTriggerTargetGroupPosition);
         FIELD(orderCardIdToOid);
+        FIELD(replacementSubmitting);
+        QJsonArray replacements;
+        for (const auto &option : choice.replacementOptions) {
+            replacements.append(QJsonObject{{"applicationId", value(option.application_id())},
+                                            {"sourceCardName", QString::fromStdString(option.source_card_name())},
+                                            {"effectSummary", QString::fromStdString(option.effect_summary())},
+                                            {"sourceObjectId", value(option.source_object_id())},
+                                            {"sourceGeneration", value(option.source_zone_change_generation())}});
+        }
+        choiceState.insert("replacementOptions", replacements);
 #undef FIELD
         QJsonArray options;
         for (const auto &option : choice.choiceOptions)

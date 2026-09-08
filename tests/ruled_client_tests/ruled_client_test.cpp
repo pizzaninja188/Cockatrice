@@ -6827,7 +6827,7 @@ TEST_F(RuledClientTest, UnrecognisedChoiceKindFallsBackToTheModalDialog)
     EXPECT_EQ(host.lastDialogPrompt, QStringLiteral("Choose one."));
 }
 
-TEST_F(RuledClientTest, ReplacementEffectChoiceUsesModalFallbackAndSubmitsOpaqueApplicationId)
+TEST_F(RuledClientTest, ReplacementEffectChoiceNeverUsesModalFallback)
 {
     host.autoSubmitDialogChoice = true;
     ruled::v1::RuledEventBatch batch;
@@ -6839,12 +6839,95 @@ TEST_F(RuledClientTest, ReplacementEffectChoiceUsesModalFallbackAndSubmitsOpaque
     rcr->set_max(1);
     rcr->add_candidate_object_ids(7001);
     rcr->add_candidate_names("Orb of Dreams - permanents enter tapped");
+    auto *option = rcr->add_replacement_options();
+    option->set_application_id(7001);
+    option->set_source_card_name("Orb of Dreams");
+    option->set_effect_summary("Permanents enter tapped");
     apply(batch);
 
-    EXPECT_EQ(host.dialogRequests, 1);
+    EXPECT_EQ(host.dialogRequests, 0);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    ASSERT_TRUE(state->hasPendingReplacementEffect());
+    ASSERT_EQ(state->pendingChoice->replacementOptions.size(), 1);
+    EXPECT_EQ(state->pendingChoice->replacementOptions[0].source_card_name(), "Orb of Dreams");
+    EXPECT_EQ(state->pendingChoice->replacementOptions[0].effect_summary(), "Permanents enter tapped");
+    const auto images = state->replacementEffectImages();
+    ASSERT_EQ(images.size(), 1);
+    EXPECT_EQ(images[0].tileIndex, 0);
+    EXPECT_EQ(images[0].cardName, "Orb of Dreams");
+    EXPECT_EQ(images[0].annotation, "Permanents enter tapped");
+    const auto revision = state->pendingChoiceRevision;
+    state->submitReplacementEffect(0, revision - 1);
+    state->submitReplacementEffect(1, revision);
+    state->submitReplacementEffect(7001, revision); // Application and physical ids are not tile indices.
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    state->submitReplacementEffect(0, revision);
+    state->submitReplacementEffect(0, revision);
     ASSERT_EQ(host.sentCommands.size(), 1);
-    ASSERT_TRUE(host.sentCommands[0].has_submit_resolution_choice());
     EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids(0), 7001u);
+    EXPECT_TRUE(state->pendingChoice->replacementSubmitting);
+    host.answerPendingAck(false);
+    EXPECT_FALSE(state->pendingChoice->replacementSubmitting);
+    state->submitReplacementEffect(0, revision);
+    ASSERT_EQ(host.sentCommands.size(), 2);
+    ruled::v1::RuledEventBatch preview;
+    preview.add_events()->mutable_attackers_preview()->set_declaring_player_id(kLocalPlayer);
+    apply(preview);
+    EXPECT_TRUE(state->hasPendingReplacementEffect());
+    EXPECT_EQ(state->pendingChoiceRevision, revision);
+    apply(batch);
+    const auto refreshedRevision = state->pendingChoiceRevision;
+    EXPECT_NE(refreshedRevision, revision);
+    host.answerPendingAck(false);
+    EXPECT_EQ(state->pendingChoiceRevision, refreshedRevision);
+    state->submitReplacementEffect(0, revision);
+    EXPECT_EQ(host.sentCommands.size(), 2);
+    apply(ruled::v1::RuledEventBatch{});
+    EXPECT_FALSE(state->hasPendingReplacementEffect());
+    apply(batch);
+    state->submitReplacementEffect(0, state->pendingChoiceRevision);
+    state->clearSessionState();
+    host.answerPendingAck(false);
+    EXPECT_FALSE(state->hasPendingReplacementEffect());
+    EXPECT_TRUE(state->replacementEffectImages().isEmpty());
+}
+
+TEST_F(RuledClientTest, ReplacementImagesPreserveDuplicateSourcesAndRejectMalformedSnapshots)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+    choice->set_min(1);
+    choice->set_max(1);
+    for (quint32 id : {7001u, 7002u}) {
+        choice->add_candidate_object_ids(id);
+        auto *option = choice->add_replacement_options();
+        option->set_application_id(id);
+        option->set_source_card_name("Dragonstorm Globe");
+        option->set_effect_summary("Enters with counters");
+    }
+    apply(batch);
+    ASSERT_TRUE(state->hasPendingReplacementEffect());
+    EXPECT_EQ(state->pendingChoice->replacementOptions.size(), 2);
+    state->submitReplacementEffect(1, state->pendingChoiceRevision);
+    EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids(0), 7002u);
+    host.answerPendingAck(true);
+    choice->mutable_replacement_options(0)->clear_source_card_name();
+    apply(batch);
+    ASSERT_TRUE(state->hasPendingReplacementEffect());
+    EXPECT_TRUE(state->pendingChoice->replacementOptions[0].source_card_name().empty());
+    EXPECT_EQ(state->replacementEffectImages()[0].cardName, "Replacement effect");
+    EXPECT_EQ(state->replacementEffectImages()[0].annotation, "Enters with counters");
+    choice->mutable_replacement_options(1)->set_application_id(7001);
+    apply(batch);
+    EXPECT_FALSE(state->hasPendingReplacementEffect());
+    EXPECT_EQ(host.dialogRequests, 0);
+    choice->mutable_replacement_options(1)->set_application_id(7002);
+    choice->set_deciding_player_id(kOpponent);
+    apply(batch);
+    EXPECT_FALSE(state->hasPendingReplacementEffect());
+    EXPECT_EQ(state->choiceWaitingPlayerId, kOpponent);
 }
 
 TEST_F(RuledClientTest, ChoicesForAnotherPlayerNeverPromptUs)

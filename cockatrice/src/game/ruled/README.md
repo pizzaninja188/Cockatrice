@@ -89,6 +89,16 @@ on either side of the existing trigger/permanent-choice handlers to preserve the
 modes. The bridge keeps `PlayerActions` as the QObject connection context and preserves existing
 translation contexts, acknowledgement behavior, and nested-payment lifetimes.
 
+### `ruled_replacement_picker.{h,cpp}`
+
+Owns the public replacement/prevention image window. `ReplacementEffectOption` supplies each
+opaque application ID, source display snapshot, and summary; `RuledClientState` holds the one
+pending choice and produces the image rows. A click submits one application, then the engine
+recalculates applicability. The picker refreshes in place and remains non-closeable until the
+choice ends. Its zone marker and choice revision distinguish synthetic tile indices from every
+physical card and from stale snapshots. Rejections unlock the current choice; late acknowledgements
+cannot restore an obsolete one. Private discard replacement options keep their existing buttons.
+
 ### `ruled_event_dispatcher.{h,cpp}` — `RuledEventDispatcher`
 
 `processPayload(bytes)` → parse → `resetPerBatchLegalActions()` → one private `apply*` method per

@@ -100,6 +100,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
                 combat_defender_options: Vec::new(),
                 waterbend: false,
                 selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
             },
         )),
     });
@@ -421,6 +422,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
                 combat_defender_options: Vec::new(),
                 waterbend: false,
                 selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
             },
         )),
     });
@@ -942,6 +944,7 @@ pub(super) fn put_in_owners_library(
                         combat_defender_options: Vec::new(),
                         waterbend: false,
                         selection_slots: Vec::new(),
+                        replacement_options: Vec::new(),
                     },
                 )),
             });
@@ -1364,6 +1367,7 @@ fn choose_hand_cards_for_player(
                 combat_defender_options: Vec::new(),
                 waterbend: false,
                 selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
             },
         )),
     });
@@ -1649,6 +1653,7 @@ pub(super) fn target_player_sacrifices(
                             combat_defender_options: Vec::new(),
                             waterbend: false,
                             selection_slots: Vec::new(),
+                            replacement_options: Vec::new(),
                         },
                     )),
                 });
@@ -1780,6 +1785,7 @@ pub(super) fn choose_graveyard_card(
                 combat_defender_options: Vec::new(),
                 waterbend: false,
                 selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
             },
         )),
     });
@@ -2496,6 +2502,7 @@ pub(super) fn explore(
                 combat_defender_options: Vec::new(),
                 waterbend: false,
                 selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
             },
         )),
     });
@@ -2668,6 +2675,7 @@ fn begin_library_partition(
                 combat_defender_options: Vec::new(),
                 waterbend: false,
                 selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
             },
         )),
     });
@@ -2806,6 +2814,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 combat_defender_options: Vec::new(),
                 waterbend: false,
                 selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
             },
         )),
     });
@@ -2911,6 +2920,7 @@ pub(super) fn look_choose_to_hand(
                 combat_defender_options: Vec::new(),
                 waterbend: false,
                 selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
             },
         )),
     });
@@ -3170,6 +3180,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                 combat_defender_options: Vec::new(),
                 waterbend: false,
                 selection_slots,
+                replacement_options: Vec::new(),
             },
         )),
     });
@@ -3288,6 +3299,7 @@ pub(in crate::engine) fn begin_search_request(
                         combat_defender_options: Vec::new(),
                         waterbend: false,
                         selection_slots: Vec::new(),
+                        replacement_options: Vec::new(),
                     },
                 )),
             });
@@ -3395,6 +3407,7 @@ pub(super) fn search_library(
                     combat_defender_options: Vec::new(),
                     waterbend: false,
                     selection_slots: Vec::new(),
+                    replacement_options: Vec::new(),
                 },
             )),
         });

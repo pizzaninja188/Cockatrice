@@ -108,6 +108,7 @@ set(cockatrice_SOURCES
     src/game/ruled/ruled_autopilot.cpp
     src/game/ruled/ruled_reveal_state.cpp
     src/game/ruled/ruled_reveal_windows.cpp
+    src/game/ruled/ruled_replacement_picker.cpp
     src/game/ruled/ruled_client_state.cpp
     src/game/ruled/ruled_diagnostic_state.cpp
     src/game/ruled/ruled_client_diagnostics.cpp

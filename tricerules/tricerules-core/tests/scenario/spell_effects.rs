@@ -486,7 +486,29 @@ fn healing_salve_double_shield_partially_consumed_by_bolt() {
     e.apply_command(0, &cast_spell(bolt_idx, target_player(1)))
         .expect("cast bolt on P1");
     e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass resolves bolt");
+    let batch = e.apply_command(1, &pass()).expect("p1 pass resolves bolt");
+    let choice = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(
+                choice,
+            )) => Some(choice),
+            _ => None,
+        })
+        .expect("prevention choice");
+    assert_eq!(choice.replacement_options.len(), 2);
+    for option in &choice.replacement_options {
+        assert_eq!(option.source_card_name, "Healing Salve");
+        assert_eq!(
+            e.state.objects[&option.source_object_id].zone,
+            tricerules_core::state::Zone::Graveyard
+        );
+        assert!(
+            e.state.zone_change_generation[&option.source_object_id]
+                > option.source_zone_change_generation
+        );
+    }
     let application = e
         .state
         .pending_resolution

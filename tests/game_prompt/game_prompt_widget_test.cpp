@@ -658,6 +658,18 @@ TEST_F(GamePromptWidgetTest, TriggerOrderHidesPriorityAndCombatButtons)
     EXPECT_FALSE(btn("passPriorityButton")->isHidden());
 }
 
+TEST_F(GamePromptWidgetTest, ReplacementImagesOwnThePromptWithoutConfirmationButtons)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setSpellCastPending(true);
+    widget->setRuledPromptState({PromptMode::ReplacementEffect, 0, 0, "Click an effect's image to apply it next.", {}});
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::ReplacementEffect);
+    EXPECT_TRUE(label("promptLabel")->text().contains("apply it next"));
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isHidden());
+    EXPECT_TRUE(btn("declineClickChoiceButton")->isHidden());
+}
+
 TEST_F(GamePromptWidgetTest, OpeningBottomDoneAppearsOnlyOnAnExactSelection)
 {
     widget->setLocalPlayerHasPriority(true);

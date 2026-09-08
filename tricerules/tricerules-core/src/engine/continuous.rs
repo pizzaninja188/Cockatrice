@@ -436,12 +436,14 @@ impl GameEngine {
                     let id = self.state.next_damage_prevention_effect_id;
                     self.state.next_damage_prevention_effect_id = id.saturating_add(1);
                     let source_label = effective_name.clone().unwrap_or_else(|| card_id.clone());
+                    let source_presentation = self.replacement_source_presentation(object_id);
                     self.state
                         .damage_prevention_effects
                         .push(ActiveDamagePrevention {
                             id,
                             source_id: Some(object_id),
                             source_label,
+                            source_presentation,
                             scope,
                             amount,
                             duration: EffectDuration::WhileSourceOnBattlefield,

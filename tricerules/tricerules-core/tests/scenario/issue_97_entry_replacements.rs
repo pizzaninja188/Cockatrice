@@ -38,6 +38,45 @@ fn dev_put(player: i32, card_name: &str) -> RuledCommand {
 }
 
 #[test]
+fn replacement_images_identify_each_duplicate_source() {
+    let mut engine = engine_with_p0_cards(220_001, &["mountain"]);
+    engine.enable_dev_commands();
+    engine
+        .apply_command(0, &dev_put(0, "Dragonstorm Globe"))
+        .unwrap();
+    engine
+        .apply_command(0, &dev_put(0, "Dragonstorm Globe"))
+        .unwrap();
+    let batch = engine
+        .apply_command(0, &dev_put(0, "Sparktongue Dragon"))
+        .unwrap();
+    let choice = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(
+                choice,
+            )) => Some(choice),
+            _ => None,
+        })
+        .expect("replacement choice");
+    assert_eq!(choice.replacement_options.len(), 2);
+    assert_ne!(
+        choice.replacement_options[0].source_object_id,
+        choice.replacement_options[1].source_object_id
+    );
+    for (id, option) in choice
+        .candidate_object_ids
+        .iter()
+        .zip(&choice.replacement_options)
+    {
+        assert_eq!(*id, option.application_id);
+        assert_eq!(option.source_card_name, "Dragonstorm Globe");
+        assert!(!option.effect_summary.is_empty());
+    }
+}
+
+#[test]
 fn threshold_land_uses_every_players_life_total() {
     for (seed, third_player_life, expected_tapped) in [(97_001, 14, true), (97_002, 13, false)] {
         let mut engine = engine_with_p0_cards(seed, &["razortrap_gorge"]);

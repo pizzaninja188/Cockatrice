@@ -65,6 +65,24 @@ CardItem *rawStackCardByServerId(AbstractGame *game, int serverCardId)
 
 namespace RuledActions
 {
+bool isReplacementEffectCard(const CardItem *card)
+{
+    return card && isRuledGameForCard(card) && card->getZone() &&
+           qobject_cast<const ZoneViewZoneLogic *>(card->getZone()) &&
+           card->getZone()->property("ruledReplacementPicker").toBool();
+}
+
+bool tryHandleReplacementEffectClick(CardItem *card, bool select)
+{
+    if (!isReplacementEffectCard(card))
+        return false;
+    auto *game = card->getOwner()->getGame();
+    auto *state = game->getGameEventHandler()->ruled();
+    if (select && card->getOwner()->getPlayerInfo()->getLocal() && !gameplayInputLocked(game))
+        state->submitReplacementEffect(card->getId(),
+                                       card->getZone()->property("ruledReplacementRevision").toULongLong());
+    return true;
+}
 
 // ---------------------------------------------------------------------------------------
 // Mode predicate

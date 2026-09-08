@@ -587,6 +587,7 @@ impl GameEngine {
         let mut candidates = Vec::new();
         let mut candidate_names = Vec::new();
         let mut candidate_effect_ids = Vec::new();
+        let mut replacement_options = Vec::new();
         for (event_index, application, effect_label) in raw_candidates {
             let choice_id = self.state.next_replacement_application_id;
             self.state.next_replacement_application_id = choice_id.saturating_add(1);
@@ -601,12 +602,53 @@ impl GameEngine {
                 DamagePreventionApplication::Protection(_) => 0,
             });
             let damage = &batch.damage[event_index];
-            candidate_names.push(format!(
-                "{effect_label} — {} damage from {}",
+            let (source, description) = match application {
+                DamagePreventionApplication::Effect(effect_id) => self
+                    .state
+                    .damage_prevention_effects
+                    .iter()
+                    .find(|effect| effect.id == effect_id)
+                    .map(|effect| {
+                        let mut description = match effect.amount {
+                            DamagePreventionAmount::All => "Prevent all damage.".to_string(),
+                            DamagePreventionAmount::FixedPerEvent(amount) =>
+                                format!("Prevent {amount} damage from this event."),
+                            DamagePreventionAmount::Remaining(amount) =>
+                                format!("Prevent the next {amount} damage."),
+                        };
+                        if let Some(DamagePreventionAdditionalEffect::PutCounters { counter, basis }) =
+                            effect.additional_effect
+                        {
+                            let quantity = match basis {
+                                PreventionAmountBasis::Attempted => "that would be dealt",
+                                PreventionAmountBasis::Prevented => "prevented this way",
+                            };
+                            description.push_str(&format!(
+                                " Put a {} counter on the affected permanent for each 1 damage {quantity}.",
+                                counter.label()
+                            ));
+                        }
+                        (effect.source_presentation.clone(), description)
+                    })
+                    .unwrap_or_else(|| (Default::default(), effect_label.clone())),
+                DamagePreventionApplication::Protection(_) => {
+                    let source = match damage.spec.event.recipient {
+                        DamageRecipient::Permanent(object_id) => {
+                            self.replacement_source_presentation(object_id)
+                        }
+                        DamageRecipient::Player(_) => Default::default(),
+                    };
+                    (source, format!("{effect_label}: Prevent all damage."))
+                },
+            };
+            let summary = format!(
+                "{description} ({} damage from {}.)",
                 damage.remaining, damage.spec.event.source.label
-            ));
+            );
+            replacement_options.push(source.option(choice_id, summary.clone()));
+            candidate_names.push(summary);
         }
-        let prompt = "Choose the next damage-prevention effect to apply.".to_string();
+        let prompt = "Choose the next damage-prevention effect. Your choice applies immediately; then remaining effects are reevaluated.".to_string();
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
@@ -632,6 +674,7 @@ impl GameEngine {
                     combat_defender_options: Vec::new(),
                     waterbend: false,
                     selection_slots: Vec::new(),
+                    replacement_options,
                 },
             )),
         });
@@ -1107,19 +1150,23 @@ impl GameEngine {
 
     pub(crate) fn add_damage_prevention(
         &mut self,
-        source_id: Option<ObjectId>,
+        source: Option<&StackItem>,
         source_label: impl Into<String>,
         scope: DamagePreventionScope,
         amount: DamagePreventionAmount,
     ) -> u32 {
         let id = self.state.next_damage_prevention_effect_id;
         self.state.next_damage_prevention_effect_id = id.saturating_add(1);
+        let source_presentation = source
+            .map(|item| self.replacement_stack_source_presentation(item))
+            .unwrap_or_default();
         self.state
             .damage_prevention_effects
             .push(ActiveDamagePrevention {
                 id,
-                source_id,
+                source_id: source.map(|item| item.id),
                 source_label: source_label.into(),
+                source_presentation,
                 scope,
                 amount,
                 duration: EffectDuration::UntilEndOfTurn,

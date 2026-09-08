@@ -172,7 +172,55 @@ fn anti_venom_with_shield_awaiting_five_damage(seed: u64) -> (GameEngine, u32, u
             ),
         )
         .expect("cast Blaze");
-    pass_both_players(&mut engine);
+    engine.apply_command(0, &pass()).expect("first pass");
+    let batch = engine.apply_command(1, &pass()).expect("resolve Blaze");
+    let choice = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::ResolutionChoiceRequired(
+                choice,
+            )) => Some(choice),
+            _ => None,
+        })
+        .expect("prevention image choice");
+    assert_eq!(choice.replacement_options.len(), 2);
+    assert!(choice
+        .replacement_options
+        .iter()
+        .any(|option| option.source_card_name == "Anti-Venom, Horrifying Healer"));
+    assert!(choice
+        .replacement_options
+        .iter()
+        .any(|option| option.source_card_name.is_empty() && option.source_object_id == 0));
+    let anti_option = choice
+        .replacement_options
+        .iter()
+        .find(|option| option.source_card_name == "Anti-Venom, Horrifying Healer")
+        .unwrap();
+    assert!(anti_option.effect_summary.contains("Prevent all damage"));
+    assert!(anti_option.effect_summary.contains("+1/+1 counter"));
+    assert!(anti_option
+        .effect_summary
+        .contains("for each 1 damage that would be dealt"));
+    let shield_option = choice
+        .replacement_options
+        .iter()
+        .find(|option| option.source_card_name.is_empty())
+        .unwrap();
+    assert!(shield_option
+        .effect_summary
+        .contains("Prevent the next 3 damage"));
+    assert!(!shield_option.effect_summary.contains("counter"));
+    assert!(choice.prompt_text.contains("applies immediately"));
+    for (id, option) in choice
+        .candidate_object_ids
+        .iter()
+        .zip(&choice.replacement_options)
+    {
+        assert_eq!(*id, option.application_id);
+        assert!(option.effect_summary.contains("damage from"));
+    }
     let pending = engine
         .state
         .pending_resolution

@@ -462,6 +462,15 @@ pub enum DamagePreventionAmount {
     Remaining(u32),
 }
 
+/// Public display identity captured when an effect is created, independent of later zone moves.
+/// Empty means a source-less or concealed effect, never an invitation to look up a hidden name.
+#[derive(serde::Serialize, Debug, Clone, Default, PartialEq, Eq)]
+pub struct ReplacementSourcePresentation {
+    pub card_name: String,
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+}
+
 /// One independently identifiable prevention effect. IDs are opaque ordering-choice values;
 /// source identity is kept separate because several effects may come from one object.
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
@@ -469,6 +478,7 @@ pub struct ActiveDamagePrevention {
     pub id: u32,
     pub source_id: Option<ObjectId>,
     pub source_label: String,
+    pub source_presentation: ReplacementSourcePresentation,
     pub scope: DamagePreventionScope,
     pub amount: DamagePreventionAmount,
     pub duration: EffectDuration,
@@ -2108,6 +2118,7 @@ impl GameState {
             id,
             source_id: None,
             source_label: "Prevention shield".to_string(),
+            source_presentation: ReplacementSourcePresentation::default(),
             scope: DamagePreventionScope::Recipient(recipient),
             amount: DamagePreventionAmount::Remaining(amount),
             duration: EffectDuration::UntilEndOfTurn,

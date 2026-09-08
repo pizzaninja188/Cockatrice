@@ -962,6 +962,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     state->clearPendingChoiceOfKind(ChoiceKind::ResolutionBranch);
     state->clearPendingChoiceOfKind(ChoiceKind::SpecialCast);
     state->clearPendingChoiceOfKind(ChoiceKind::ReplacementOption);
+    state->clearPendingChoiceOfKind(ChoiceKind::ReplacementEffect);
     state->clearPendingChoiceOfKind(ChoiceKind::AttackingTokenDefender);
     if (isPublicReveal) {
         const auto &reveal = rcr.public_reveal();
@@ -999,6 +1000,32 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     }
     if (!isDecider) {
         state->choiceWaitingPlayerId = static_cast<int>(rcr.deciding_player_id());
+        return;
+    }
+
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT) {
+        if (rcr.min() != 1 || rcr.max() != 1 || rcr.ordered() || rcr.replacement_options_size() == 0 ||
+            rcr.replacement_options_size() != rcr.candidate_object_ids_size()) {
+            qWarning() << "Rejecting malformed replacement-effect images";
+            return;
+        }
+        PendingChoice choice;
+        choice.kind = ChoiceKind::ReplacementEffect;
+        choice.promptText = QString::fromStdString(rcr.prompt_text());
+        QSet<quint32> ids;
+        for (int i = 0; i < rcr.replacement_options_size(); ++i) {
+            const auto &option = rcr.replacement_options(i);
+            if (option.application_id() != rcr.candidate_object_ids(i) || ids.contains(option.application_id()) ||
+                option.effect_summary().empty()) {
+                qWarning() << "Rejecting inconsistent replacement-effect images";
+                return;
+            }
+            ids.insert(option.application_id());
+            choice.replacementOptions.append(option);
+        }
+        state->setPendingChoice(std::move(choice));
+        ctx.replacementEffectSeen = true;
+        ctx.combatStateDirty = true;
         return;
     }
 
@@ -2058,6 +2085,9 @@ void RuledEventDispatcher::finishBatch(BatchContext &ctx)
     if (ctx.triggerOrderDirty) {
         emit state->triggerOrderUiChanged(state->hasPendingTriggerOrder(), state->triggerOrderCandidates());
     }
+    if (ctx.reconcilePublicReveal && !ctx.replacementEffectSeen)
+        state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::ReplacementEffect);
+    emit state->replacementEffectUiChanged();
     // Which graveyards need to be open: a pending trigger's targets (Gravedigger ETB) unioned
     // with any pending cast's. `validTargetsByAbility` and the graveyard OID map are both
     // populated in this same batch, so recompute after applying it.

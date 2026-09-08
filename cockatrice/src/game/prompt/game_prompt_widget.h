@@ -64,6 +64,7 @@ public:
         /// dedicated ordering window, so this mode only supplies the prompt line and suppresses
         /// the priority/combat buttons the engine is refusing anyway.
         TriggerOrder,
+        ReplacementEffect,
         OpeningChooseFirst,
         OpeningMulligan,
         OpeningBottom,

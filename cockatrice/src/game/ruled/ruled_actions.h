@@ -39,6 +39,8 @@ using RuledHandActionKind = ruled::v1::HandActionKind;
 
 namespace RuledActions
 {
+bool isReplacementEffectCard(const CardItem *card);
+bool tryHandleReplacementEffectClick(CardItem *card, bool select);
 
 // ---------------------------------------------------------------------------------------
 // Mode predicate — the one place that reads the ruled_game flag.

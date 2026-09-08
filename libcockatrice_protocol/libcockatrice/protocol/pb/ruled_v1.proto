@@ -1365,6 +1365,16 @@ message ResolutionSelectionSlot {
   PresentationRef presentation = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
+// Display-only identity for one public replacement/prevention application. application_id is
+// opaque, never a physical card or engine object id. Empty source_card_name uses neutral art.
+message ReplacementEffectOption {
+  uint32 application_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string source_card_name = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string effect_summary = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 source_object_id = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 source_zone_change_generation = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
 // A parked custom resolution (CR 608) requesting input from one player. Reused by every tier-3
 // card (and later X-spells / modal spells) — the engine is the sole source of the candidate set,
 // so clients never replicate selection logic from Oracle text. The deciding player may be the
@@ -1426,6 +1436,10 @@ message ResolutionChoiceRequired {
   // Empty for homogeneous picks. Nonempty is a bipartite eligibility graph that the existing
   // picker uses to reject selections which cannot occupy distinct authored slots.
   repeated ResolutionSelectionSlot selection_slots = 23
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Exactly one entry for each CHOICE_KIND_REPLACEMENT_EFFECT candidate application id.
+  // The relay preserves these for the same recipients as the existing public choice labels.
+  repeated ReplacementEffectOption replacement_options = 25
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 

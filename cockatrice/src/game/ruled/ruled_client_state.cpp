@@ -3,6 +3,7 @@
 #include "ruled_client_host.h"
 
 #include <QCoreApplication>
+#include <QPointer>
 #include <QTimer>
 #include <algorithm>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
@@ -394,6 +395,7 @@ void RuledClientState::teardownPendingChoice()
     }
     const bool wasCostSelection = pendingChoice->kind == ChoiceKind::CostObjects;
     pendingChoice.reset();
+    ++pendingChoiceRevision;
     if (wasCostSelection) {
         emit resolutionCostSelectionChanged();
         emit combatStateChanged();
@@ -412,6 +414,7 @@ void RuledClientState::setPendingChoice(RuledPendingChoice choice)
         choice.activeTriggerTargetGroupPosition = 0;
     }
     pendingChoice = std::move(choice);
+    ++pendingChoiceRevision;
     if (pendingChoice->kind == ChoiceKind::CostObjects) {
         emit resolutionCostSelectionChanged();
     }
@@ -427,6 +430,41 @@ void RuledClientState::clearPendingChoiceOfKind(ChoiceKind kind)
     if (hasPendingChoiceOfKind(kind)) {
         teardownPendingChoice();
     }
+}
+
+QVector<RuledClientState::ReplacementImage> RuledClientState::replacementEffectImages() const
+{
+    QVector<ReplacementImage> images;
+    if (!hasPendingReplacementEffect())
+        return images;
+    for (int i = 0; i < pendingChoice->replacementOptions.size(); ++i) {
+        const auto &option = pendingChoice->replacementOptions[i];
+        images.append({i,
+                       option.source_card_name().empty() ? tr("Replacement effect")
+                                                         : QString::fromStdString(option.source_card_name()),
+                       QString::fromStdString(option.effect_summary())});
+    }
+    return images;
+}
+
+void RuledClientState::submitReplacementEffect(int tileIndex, quint64 choiceRevision)
+{
+    if (!hasPendingReplacementEffect() || pendingChoiceRevision != choiceRevision ||
+        pendingChoice->replacementSubmitting || tileIndex < 0 || tileIndex >= pendingChoice->replacementOptions.size())
+        return;
+    ruled::v1::RuledCommand command;
+    command.mutable_submit_resolution_choice()->add_chosen_object_ids(
+        pendingChoice->replacementOptions.at(tileIndex).application_id());
+    pendingChoice->replacementSubmitting = true;
+    emit replacementEffectUiChanged();
+    host->sendRuledCommandExpectingAck(command, [self = QPointer<RuledClientState>(this),
+                                                 choiceRevision](bool accepted) {
+        // A later engine snapshot (or session teardown) supersedes this acknowledgement.
+        if (!self || accepted || self->pendingChoiceRevision != choiceRevision || !self->hasPendingReplacementEffect())
+            return;
+        self->pendingChoice->replacementSubmitting = false;
+        emit self->replacementEffectUiChanged();
+    });
 }
 
 void RuledClientState::sendResolutionChoice(const QVector<quint32> &chosenOids,

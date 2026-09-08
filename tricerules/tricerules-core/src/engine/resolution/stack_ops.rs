@@ -73,6 +73,7 @@ pub(super) fn counter_target_spell(
                         combat_defender_options: Vec::new(),
                         waterbend: false,
                         selection_slots: Vec::new(),
+                        replacement_options: Vec::new(),
                     },
                 )),
             });
@@ -196,6 +197,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 combat_defender_options: Vec::new(),
                 waterbend: false,
                 selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
             };
             (presentation, PendingWardPaymentStage::Mana(payment), event)
         }
@@ -270,6 +272,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 combat_defender_options: Vec::new(),
                 waterbend: false,
                 selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
             };
             (
                 presentation,
@@ -679,6 +682,7 @@ pub(super) fn copy_target_spell(
                                 combat_defender_options: Vec::new(),
                                 waterbend: false,
                                 selection_slots: Vec::new(),
+                                replacement_options: Vec::new(),
                             },
                         )),
                     });

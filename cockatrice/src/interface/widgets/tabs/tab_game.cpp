@@ -21,6 +21,7 @@
 #include "../game/ruled/ruled_client_state.h"
 #include "../game/ruled/ruled_dev_command_parser.h"
 #include "../game/ruled/ruled_dev_console.h"
+#include "../game/ruled/ruled_replacement_picker.h"
 #include "../game/ruled/ruled_resume_client.h"
 #include "../game/ruled/ruled_reveal_windows.h"
 #include "../game/zones/view_zone.h"
@@ -478,6 +479,9 @@ void TabGame::connectToGameEventHandler()
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::revealedPickChanged, this,
                 &TabGame::onRuledRevealedPickChanged);
         ruledRevealWindows = new RuledRevealWindows(game, scene, game->getGameEventHandler()->ruled(), this);
+        new RuledReplacementPicker(game, scene, game->getGameEventHandler()->ruled(), this);
+        connect(game->getGameEventHandler()->ruled(), &RuledClientState::replacementEffectUiChanged, this,
+                &TabGame::refreshRuledPromptState);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::exilePlayPermissionGroupsChanged, this,
                 &TabGame::onRuledExilePlayPermissionGroupsChanged);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::triggerOrderUiChanged, this,
@@ -723,6 +727,9 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
     const OpeningKind opening = h->getOpeningUiKind();
     if (h->isEngineCommandPending()) {
         state.mode = h->isEngineCommandIndicatorVisible() ? PromptMode::UpdatingGame : PromptMode::CommandPending;
+    } else if (h->hasPendingReplacementEffect()) {
+        state.mode = PromptMode::ReplacementEffect;
+        state.text = h->pendingChoice->promptText + tr(" Click an effect's image to apply it next.");
     } else if (h->hasPendingTriggerOrder()) {
         // Above the resolution pick, mirroring the engine's own blocking_choice() precedence: a
         // parked resolution defers staged triggers, so the two are never outstanding together.

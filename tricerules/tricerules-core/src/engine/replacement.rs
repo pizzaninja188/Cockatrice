@@ -13,6 +13,23 @@ use super::resolution::{
 };
 use super::targeting::{battlefield_objects_matching, object_matches_mass_filter};
 use super::*;
+use crate::state::ReplacementSourcePresentation;
+
+impl ReplacementSourcePresentation {
+    pub(super) fn option(
+        &self,
+        application_id: u32,
+        effect_summary: String,
+    ) -> rv1::ReplacementEffectOption {
+        rv1::ReplacementEffectOption {
+            application_id,
+            source_card_name: self.card_name.clone(),
+            effect_summary,
+            source_object_id: self.object_id,
+            source_zone_change_generation: self.zone_change_generation,
+        }
+    }
+}
 
 fn accumulate_entry_counters(
     counters: &mut BTreeMap<CounterKind, u32>,
@@ -65,6 +82,86 @@ pub(super) enum BattlefieldEntryProgress {
 }
 
 impl GameEngine {
+    fn replacement_object_display_name(
+        &self,
+        object_id: ObjectId,
+        entry_face: Option<usize>,
+    ) -> String {
+        let display_name =
+            self.effective_card_identity(object_id)
+                .and_then(|(card_id, face_index)| {
+                    let object = self.state.objects.get(&object_id)?;
+                    let face_index =
+                        if object.copiable_values.is_some() || object.token_origin.is_some() {
+                            face_index
+                        } else {
+                            entry_face.unwrap_or(face_index)
+                        };
+                    self.registry.get(card_id)?.face_display_name(face_index)
+                });
+        display_name.map(str::to_string).unwrap_or_else(|| {
+            self.effective_face(object_id)
+                .map(|face| face.name.clone())
+                .unwrap_or_default()
+        })
+    }
+
+    pub(super) fn replacement_source_presentation(
+        &self,
+        object_id: ObjectId,
+    ) -> ReplacementSourcePresentation {
+        let Some(object) = self.state.objects.get(&object_id) else {
+            return ReplacementSourcePresentation::default();
+        };
+        if object.face_down || matches!(object.zone, Zone::Hand | Zone::Library) {
+            return ReplacementSourcePresentation::default();
+        }
+        ReplacementSourcePresentation {
+            card_name: self.replacement_object_display_name(object_id, None),
+            object_id,
+            zone_change_generation: self
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0),
+        }
+    }
+
+    pub(super) fn replacement_stack_source_presentation(
+        &self,
+        item: &StackItem,
+    ) -> ReplacementSourcePresentation {
+        // StackItem retains the face/card identity of spells, copies, and abilities even after
+        // their physical source has moved. Do not look up a new incarnation of that source.
+        let object_id = item.source_permanent_id.unwrap_or(item.id);
+        if item.source_permanent_id.is_some()
+            && self.state.objects.get(&object_id).is_none_or(|object| {
+                object.face_down || matches!(object.zone, Zone::Hand | Zone::Library)
+            })
+        {
+            return ReplacementSourcePresentation::default();
+        }
+        ReplacementSourcePresentation {
+            card_name: self
+                .registry
+                .get(&item.card_id)
+                .and_then(|card| card.face_display_name(item.face_index))
+                .map(str::to_string)
+                .unwrap_or_default(),
+            object_id,
+            zone_change_generation: if item.source_permanent_id.is_some() {
+                item.source_zone_change
+            } else {
+                self.state
+                    .zone_change_generation
+                    .get(&item.id)
+                    .copied()
+                    .unwrap_or(0)
+            },
+        }
+    }
+
     /// The face proposed by this entry event. Objects outside the battlefield normally expose
     /// their front face through `effective_face`, but a transformed Siege spell is entering on
     /// its back face and its intrinsic entry replacements must come from that face instead.
@@ -471,6 +568,7 @@ impl GameEngine {
                     combat_defender_options: Vec::new(),
                     waterbend: false,
                     selection_slots: Vec::new(),
+                    replacement_options: Vec::new(),
                 },
             )),
         });
@@ -548,6 +646,7 @@ impl GameEngine {
                     combat_defender_options: Vec::new(),
                     waterbend: false,
                     selection_slots: Vec::new(),
+                    replacement_options: Vec::new(),
                 },
             )),
         });
@@ -647,6 +746,7 @@ impl GameEngine {
                     combat_defender_options: Vec::new(),
                     waterbend: false,
                     selection_slots: Vec::new(),
+                    replacement_options: Vec::new(),
                 },
             )),
         });
@@ -869,6 +969,7 @@ impl GameEngine {
                                         combat_defender_options: Vec::new(),
                                         waterbend: false,
                                         selection_slots: Vec::new(),
+                                        replacement_options: Vec::new(),
                                     },
                                 )),
                             });
@@ -951,10 +1052,33 @@ impl GameEngine {
                     let mut applications = Vec::new();
                     let mut application_ids = Vec::new();
                     let mut candidate_names = Vec::new();
+                    let mut replacement_options = Vec::new();
                     for (effect_id, _, label) in candidates {
                         let application_id = self.state.next_replacement_application_id;
                         self.state.next_replacement_application_id =
                             application_id.saturating_add(1);
+                        let source = match &effect_id {
+                            EntryReplacementEffectId::Battlefield { source_id, .. } => {
+                                self.replacement_source_presentation(*source_id)
+                            }
+                            EntryReplacementEffectId::Intrinsic { object_id, .. }
+                            | EntryReplacementEffectId::ReadAhead { object_id, .. } => {
+                                ReplacementSourcePresentation {
+                                    card_name: self.replacement_object_display_name(
+                                        *object_id,
+                                        Some(event.face_index),
+                                    ),
+                                    object_id: *object_id,
+                                    zone_change_generation: self
+                                        .state
+                                        .zone_change_generation
+                                        .get(object_id)
+                                        .copied()
+                                        .unwrap_or(0),
+                                }
+                            }
+                        };
+                        replacement_options.push(source.option(application_id, label.clone()));
                         applications.push(EntryReplacementApplication {
                             application_id,
                             effect_id,
@@ -996,6 +1120,7 @@ impl GameEngine {
                                 combat_defender_options: Vec::new(),
                                 waterbend: false,
                                 selection_slots: Vec::new(),
+                                replacement_options,
                             },
                         )),
                     });
@@ -2123,5 +2248,49 @@ mod tests {
         assert!(engine.battlefield_entry_candidates(&event).is_empty());
         engine.state.objects.get_mut(&globe).unwrap().zone = Zone::Battlefield;
         assert_eq!(engine.battlefield_entry_candidates(&event).len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod presentation_tests {
+    use super::*;
+
+    #[test]
+    fn replacement_images_never_resolve_concealed_source_identity() {
+        let mut engine = GameEngine::new(
+            220_002,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 7], vec!["plains".into(); 7]]),
+            true,
+        )
+        .unwrap();
+        let id = *engine.state.objects.keys().next().unwrap();
+        for (zone, face_down) in [
+            (Zone::Hand, false),
+            (Zone::Library, false),
+            (Zone::Battlefield, true),
+            (Zone::Exile, true),
+        ] {
+            let object = engine.state.objects.get_mut(&id).unwrap();
+            object.zone = zone;
+            object.face_down = face_down;
+            let source = engine.replacement_source_presentation(id);
+            assert_eq!(source, ReplacementSourcePresentation::default());
+        }
+        let object = engine.state.objects.get_mut(&id).unwrap();
+        object.zone = Zone::Battlefield;
+        object.face_down = false;
+        let source = engine.replacement_source_presentation(id);
+        assert!(!source.card_name.is_empty());
+        assert_eq!(source.object_id, id);
+        let object = engine.state.objects.get_mut(&id).unwrap();
+        object.card_id = "bonecrusher_giant_stomp".into();
+        object.zone = Zone::Stack;
+        object.face_up_index = 1;
+        assert_eq!(
+            engine.replacement_source_presentation(id).card_name,
+            "Bonecrusher Giant // Stomp"
+        );
     }
 }

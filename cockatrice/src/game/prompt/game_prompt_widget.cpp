@@ -344,6 +344,7 @@ GamePromptWidget::PromptMode GamePromptWidget::effectiveMode() const
         // The engine is hard-blocked on the ordering answer, so a leftover mid-cast targeting
         // state cannot legitimately coexist with it — this takes over.
         case PromptMode::TriggerOrder:
+        case PromptMode::ReplacementEffect:
         case PromptMode::OpeningChooseFirst:
         case PromptMode::OpeningMulligan:
         case PromptMode::OpeningBottom:
@@ -452,6 +453,7 @@ void GamePromptWidget::applyPromptStateText()
         case PromptMode::ZoneSelection:
         case PromptMode::WaitingForChoice:
         case PromptMode::TriggerOrder:
+        case PromptMode::ReplacementEffect:
             // Engine-authored: the caller passed the prompt the engine wrote.
             setPromptText(promptState.text);
             return;

@@ -2013,6 +2013,7 @@ impl GameEngine {
                             combat_defender_options: Vec::new(),
                             waterbend: false,
                             selection_slots: Vec::new(),
+                            replacement_options: Vec::new(),
                         },
                     )),
                 });

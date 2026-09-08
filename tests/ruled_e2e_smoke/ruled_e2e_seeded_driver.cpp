@@ -355,6 +355,18 @@ void SeededGameDriver::onRuledEvent(const ruled::v1::RuledEvent &ev)
     } else if (ev.has_resolution_choice_required()) {
         const auto &rcr = ev.resolution_choice_required();
 
+        if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT) {
+            ASSERT_GT(rcr.replacement_options_size(), 0);
+            ASSERT_EQ(rcr.replacement_options_size(), rcr.candidate_object_ids_size());
+            EXPECT_EQ(rcr.candidate_server_card_ids_size(), 0);
+            for (int i = 0; i < rcr.replacement_options_size(); ++i) {
+                const auto &option = rcr.replacement_options(i);
+                EXPECT_EQ(option.application_id(), rcr.candidate_object_ids(i));
+                EXPECT_FALSE(option.source_card_name().empty());
+                EXPECT_FALSE(option.effect_summary().empty());
+            }
+        }
+
         if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH) {
             if (rcr.deciding_player_id() == myId) {
                 if (emptyTypecyclingActivated && rcr.candidate_object_ids_size() == 0) {

@@ -604,7 +604,7 @@ pub(super) fn prevent_next_damage(
     // CR 614.1a: place a damage prevention shield on the target object or player.
     if let Some(&tid) = targets.first() {
         engine.add_damage_prevention(
-            Some(cx.top.id),
+            Some(cx.top),
             cx.spell_label,
             DamagePreventionScope::Recipient(tid),
             DamagePreventionAmount::Remaining(amount),
@@ -631,7 +631,7 @@ pub(super) fn prevent_all_combat_damage_turn(
 
     // CR 614.1a: prevent all combat damage this turn (Fog, Holy Day).
     engine.add_damage_prevention(
-        Some(cx.top.id),
+        Some(cx.top),
         cx.spell_label,
         DamagePreventionScope::Combat,
         DamagePreventionAmount::All,
@@ -662,7 +662,7 @@ pub(super) fn prevent_all_combat_damage_to_target_turn(
         .unwrap_or(0);
     let target_name = object_display_name(&cx.engine.state, cx.engine.registry, target_id);
     cx.engine.add_damage_prevention(
-        Some(cx.top.id),
+        Some(cx.top),
         cx.spell_label,
         DamagePreventionScope::CombatRecipient {
             object_id: target_id,

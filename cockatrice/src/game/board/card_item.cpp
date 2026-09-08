@@ -773,6 +773,8 @@ static bool isTableLandSingleClickLegal(const CardItem *card)
  */
 void CardItem::handleClickedToPlay(bool shiftHeld)
 {
+    if (RuledActions::isReplacementEffectCard(this))
+        return;
     if (isUnwritableRevealZone(zone)) {
         // In ruled mode a reveal-zone popup is an engine-driven pick UI (tutor search, Thoughtseize,
         // Gifts Ungiven), not a freeform reveal window: clicking a candidate selects it in
@@ -793,6 +795,11 @@ void CardItem::handleClickedToPlay(bool shiftHeld)
 
 void CardItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
+    if (RuledActions::tryHandleReplacementEffectClick(this, event->button() == Qt::LeftButton &&
+                                                                isStationaryLeftRelease(event))) {
+        AbstractCardItem::mouseReleaseEvent(event);
+        return;
+    }
     if (event->button() == Qt::RightButton) {
         if (RuledActions::tryHandleCombatRightClick(this)) {
             update();

@@ -515,6 +515,8 @@ public:
             TriggerOrder,
             /// Opaque replacement alternatives, answered with chosen_object_ids.
             ReplacementOption,
+            /// Public replacement/prevention applications, selected in a dedicated image picker.
+            ReplacementEffect,
         };
 
         Kind kind = Kind::TriggerTarget;
@@ -595,6 +597,8 @@ public:
         /// is built on the ZoneViewWidget scaffold, whose cards are identified by an int id, so the
         /// candidates are given index ids and mapped back here.
         QHash<int, quint32> orderCardIdToOid;
+        QVector<ruled::v1::ReplacementEffectOption> replacementOptions;
+        bool replacementSubmitting = false;
     };
 
     /// Engine-authoritative targeting data, refreshed from LegalActions each RuledEventBatch.
@@ -602,6 +606,22 @@ public:
     using SpellTargetData = RuledSpellTargetData;
 
     explicit RuledClientState(RuledClientHost *host, QObject *parent = nullptr);
+
+    /// A picker snapshot token, not a game identity. Stale UI and acknowledgements cannot act
+    /// on a later choice even when it reuses the same synthetic tile indices.
+    quint64 pendingChoiceRevision = 0;
+    bool hasPendingReplacementEffect() const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::ReplacementEffect);
+    }
+    void submitReplacementEffect(int tileIndex, quint64 choiceRevision);
+    struct ReplacementImage
+    {
+        int tileIndex;
+        QString cardName;
+        QString annotation;
+    };
+    QVector<ReplacementImage> replacementEffectImages() const;
 
     // -----------------------------------------------------------------------------------
     // Local command lifecycle. The board keeps rendering the last settled engine batch while
@@ -1806,6 +1826,7 @@ public:
     }
 
 signals:
+    void replacementEffectUiChanged();
     void specialCastRequested(quint32 objectId);
     void paymentPreviewReceived();
 

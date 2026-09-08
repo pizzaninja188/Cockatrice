@@ -2124,8 +2124,16 @@ TEST_F(RuledBatchTest, ReplacementEffectChoiceSurvivesRedactionForEveryParticipa
     choice->add_candidate_object_ids(7002);
     choice->add_candidate_names("Diregraf Ghoul - enters tapped");
     choice->add_candidate_names("Orb of Dreams - permanents enter tapped");
+    for (quint32 id : {7001u, 7002u}) {
+        auto *option = choice->add_replacement_options();
+        option->set_application_id(id);
+        option->set_source_card_name(id == 7001 ? "Diregraf Ghoul" : "Orb of Dreams");
+        option->set_effect_summary("Enters tapped");
+    }
 
-    for (auto *participant : {p1, p2}) {
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    for (auto *participant : {p1, p2, spectator}) {
         const auto redacted = redactFor(batch, participant);
         const auto it = std::find_if(redacted.events().begin(), redacted.events().end(),
                                      [](const auto &event) { return event.has_resolution_choice_required(); });
@@ -2135,7 +2143,47 @@ TEST_F(RuledBatchTest, ReplacementEffectChoiceSurvivesRedactionForEveryParticipa
         ASSERT_EQ(kept.candidate_object_ids_size(), 2);
         EXPECT_EQ(kept.candidate_object_ids(0), 7001u);
         EXPECT_EQ(kept.candidate_names(1), "Orb of Dreams - permanents enter tapped");
+        ASSERT_EQ(kept.replacement_options_size(), 2);
+        EXPECT_EQ(kept.replacement_options(1).source_card_name(), "Orb of Dreams");
+        EXPECT_EQ(kept.replacement_options(1).application_id(), 7002u);
+        EXPECT_EQ(kept.candidate_server_card_ids_size(), 0);
     }
+}
+
+TEST_F(RuledBatchTest, ReplacementImagesRestoreOnReconnectAndNeverDecoratePrivateChoices)
+{
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *choice = response.mutable_batch()->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+    choice->add_candidate_object_ids(8123);
+    auto *option = choice->add_replacement_options();
+    option->set_application_id(8123);
+    option->set_source_card_name("Healing Salve");
+    option->set_effect_summary("Prevent the next damage");
+    option->set_source_object_id(101);
+    option->set_source_zone_change_generation(9);
+    updatePendingResolutionChoiceCache(response);
+    for (auto *recipient : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(recipient, reconnect, true);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 3);
+        const auto *container =
+            dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        ASSERT_EQ(restored.events_size(), 1);
+        const auto &restoredChoice = restored.events(0).resolution_choice_required();
+        ASSERT_EQ(restoredChoice.replacement_options_size(), 1);
+        EXPECT_EQ(restoredChoice.replacement_options(0).SerializeAsString(), option->SerializeAsString());
+        EXPECT_EQ(restoredChoice.candidate_server_card_ids_size(), 0);
+    }
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT);
+    const auto filtered = redactFor(response.batch(), p2);
+    EXPECT_EQ(filtered.SerializeAsString().find("Healing Salve"), std::string::npos);
+    EXPECT_EQ(filtered.events(0).resolution_choice_required().replacement_options_size(), 0);
 }
 
 TEST_F(RuledBatchTest, ExileOidMapReversesEngineAndPhysicalPileOrder)
