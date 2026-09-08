@@ -2,7 +2,20 @@
 # two scripted protobuf-level clients over TCP. Only built when the server target exists.
 # The test SKIPs at runtime if either binary is missing (RULED_E2E_REQUIRE=1 makes that a failure).
 
-add_executable(ruled_e2e_smoke_test ${VERSION_STRING_CPP} ruled_e2e_smoke_test.cpp)
+add_executable(ruled_e2e_smoke_test ${VERSION_STRING_CPP}
+  ruled_e2e_smoke_test.cpp
+  ruled_e2e_client.cpp
+  ruled_e2e_session.cpp
+  ruled_e2e_observed_state.cpp
+  ruled_e2e_opening_driver.cpp
+  ruled_e2e_seeded_driver.cpp
+  ruled_e2e_harness_test.cpp
+  ruled_e2e_seeded_game_test.cpp
+  ruled_e2e_opening_diagnostics_test.cpp
+  ruled_e2e_casting_payments_test.cpp
+  ruled_e2e_zones_visibility_test.cpp
+  ruled_e2e_combat_permanents_test.cpp
+)
 
 if(NOT GTEST_FOUND)
   add_dependencies(ruled_e2e_smoke_test gtest)
