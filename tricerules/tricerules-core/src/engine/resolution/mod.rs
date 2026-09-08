@@ -4490,6 +4490,299 @@ mod attached_subject_tests {
         );
     }
 
+    fn payment_branch_fixture(
+        cost: ResolutionCost,
+    ) -> (GameEngine, Vec<ObjectId>, rv1::RuledEventBatch) {
+        let mut engine = GameEngine::new_with_default_decks(195_001, &[0, 1], 20).unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let first = add_battlefield_object(&mut engine, 0, "hill_giant");
+        let second = add_battlefield_object(&mut engine, 0, "hill_giant");
+        let chosen = match cost {
+            ResolutionCost::DiscardCard { .. } => vec![engine.state.players[0].hand[0]],
+            ResolutionCost::TapPermanents { .. } => vec![second, first],
+            _ => vec![first],
+        };
+        let item = quantity_item(
+            source,
+            vec![
+                SpellEffectKind::ChooseResolutionBranch {
+                    chooser: PlayerRecipient::Controller,
+                    optional: true,
+                    selection:
+                        tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice,
+                    branches: vec![ResolutionBranchDef {
+                        branch_id: tricerules_cards::ChoiceId::new("payment").unwrap(),
+                        presentation: tricerules_cards::AbilityPresentation::Fallback,
+                        runtime_fallback: None,
+                        cost,
+                        requirement:
+                            tricerules_cards::primitives::ResolutionBranchRequirement::Always,
+                        effects: vec![SpellEffectKind::GainLife {
+                            amount: Amount::Fixed(1),
+                        }],
+                    }],
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                },
+            ],
+        );
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        let batch = engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 0,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        (engine, chosen, batch)
+    }
+
+    fn payment_branch_costs() -> Vec<ResolutionCost> {
+        vec![
+            ResolutionCost::DiscardCard { filter: None },
+            ResolutionCost::SacrificePermanent {
+                filter: TargetFilter {
+                    kind: TargetKind::Creature,
+                    ..Default::default()
+                },
+                source_only: false,
+            },
+            ResolutionCost::TapPermanents {
+                count: 2,
+                filter: TargetFilter {
+                    kind: TargetKind::Creature,
+                    ..Default::default()
+                },
+                exclude_source: false,
+            },
+            ResolutionCost::Blight { count: 1 },
+        ]
+    }
+
+    #[test]
+    fn issue_195_resolution_payments_preserve_events_and_resume_once() {
+        for cost in payment_branch_costs() {
+            let (mut engine, chosen, choice_batch) = payment_branch_fixture(cost.clone());
+            let choice = choice_batch
+                .events
+                .iter()
+                .find_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                    _ => None,
+                })
+                .unwrap();
+            assert_eq!(choice.deciding_player_id, 0);
+            assert_eq!(choice.min, 0);
+            assert_eq!(choice.max, chosen.len() as u32);
+            assert!(!choice.ordered);
+            assert_eq!(
+                choice.candidate_object_ids.len(),
+                choice.candidate_names.len()
+            );
+            assert_eq!(
+                choice.candidate_object_ids.len(),
+                choice.candidate_card_ids.len()
+            );
+            let expected_kind = match cost {
+                ResolutionCost::DiscardCard { .. } => rv1::ChoiceKind::HandCards,
+                ResolutionCost::SacrificePermanent { .. } => rv1::ChoiceKind::TargetObjects,
+                _ => rv1::ChoiceKind::CostObjects,
+            };
+            assert_eq!(choice.choice_kind, expected_kind as i32);
+            let generation = engine
+                .state
+                .zone_change_generation
+                .get(&chosen[0])
+                .copied()
+                .unwrap_or(0);
+            let batch = engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: chosen.clone(),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            assert_eq!(engine.state.players[0].life, 23, "{cost:?}");
+            assert!(engine.state.pending_resolution.is_none());
+            let logs = batch
+                .events
+                .iter()
+                .filter_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::Log(log)) => Some(log.text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            match cost {
+                ResolutionCost::DiscardCard { .. } | ResolutionCost::SacrificePermanent { .. } => {
+                    assert_eq!(engine.state.objects[&chosen[0]].zone, Zone::Graveyard);
+                    assert_eq!(
+                        engine.state.zone_change_generation[&chosen[0]],
+                        generation + 1
+                    );
+                    assert!(matches!(
+                        batch.events[0].ev,
+                        Some(rv1::ruled_event::Ev::PermanentMoved(_))
+                    ));
+                    if matches!(cost, ResolutionCost::SacrificePermanent { .. }) {
+                        assert_eq!(logs[0], "P0 sacrifices Hill Giant.");
+                        assert_eq!(
+                            engine
+                                .state
+                                .turn_history
+                                .current
+                                .permanents_sacrificed
+                                .len(),
+                            1
+                        );
+                    } else {
+                        assert!(logs[0].starts_with("P0 discards "));
+                    }
+                }
+                ResolutionCost::TapPermanents { .. } => {
+                    assert!(chosen.iter().all(|oid| engine.state.objects[oid].tapped));
+                    assert_eq!(&logs[..2], &["P0 taps Hill Giant.", "P0 taps Hill Giant."]);
+                }
+                ResolutionCost::Blight { count } => {
+                    assert_eq!(
+                        engine.state.objects[&chosen[0]]
+                            .counter_count(CounterKind::MinusOneMinusOne),
+                        count
+                    );
+                    assert_eq!(logs[0], "P0 blights 1 using Hill Giant.");
+                }
+                _ => unreachable!(),
+            }
+            assert!(engine
+                .submit_resolution_choice(0, &rv1::SubmitResolutionChoice::default())
+                .is_err());
+            // An identical seeded fixture and accepted answer produce the same ordered wire events.
+            let (mut replay, replay_chosen, replay_choice) = payment_branch_fixture(cost);
+            assert_eq!(replay_choice, choice_batch);
+            let replay_batch = replay
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: replay_chosen,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            assert_eq!(replay_batch, batch);
+        }
+    }
+
+    #[test]
+    fn issue_195_resolution_sacrifice_keeps_delayed_death_observers() {
+        let (mut engine, chosen, _) = payment_branch_fixture(ResolutionCost::SacrificePermanent {
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                ..Default::default()
+            },
+            source_only: false,
+        });
+        let mut ability = engine
+            .registry
+            .get("brambleguard_captain")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .clone();
+        ability.trigger = TriggerCondition::WhenWatchedObjectDiesThisTurn;
+        ability.effect = vec![SpellEffectKind::GainLife {
+            amount: Amount::Fixed(5),
+        }];
+        ability.targeting = None;
+        ability.may = false;
+        let delayed = quantity_item(
+            chosen[0],
+            vec![SpellEffectKind::CreateDelayedTrigger {
+                subject: EffectSubject::Source,
+                ability: Box::new(ability),
+            }],
+        );
+        let (effects, label) = engine.build_resolution_effects(&delayed);
+        engine
+            .run_effect_list(&delayed, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        assert_eq!(engine.state.active_event_observers.len(), 1);
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: chosen,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(
+            engine.state.active_event_observers.is_empty(),
+            "the paid sacrifice must dispatch its death observer"
+        );
+        // The fixture calls the resolution handler directly; command dispatch normally flushes.
+        engine.flush_staged_triggers(&mut Vec::new());
+        assert_eq!(
+            engine.state.stack.len(),
+            1,
+            "delayed death trigger reaches the stack after resolution"
+        );
+        assert_eq!(
+            engine.state.players[0].life, 23,
+            "the trigger has not resolved yet"
+        );
+    }
+
+    #[test]
+    fn issue_195_resolution_payment_rejections_preserve_state_and_allow_decline() {
+        for cost in payment_branch_costs() {
+            for stale in [false, true] {
+                let (mut engine, mut chosen, _) = payment_branch_fixture(cost.clone());
+                if stale {
+                    *engine
+                        .state
+                        .zone_change_generation
+                        .entry(chosen[0])
+                        .or_default() += 1;
+                } else {
+                    chosen.push(chosen[0]);
+                }
+                let before = format!("{:?}", engine.state);
+                assert!(engine
+                    .submit_resolution_choice(
+                        0,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: chosen,
+                            ..Default::default()
+                        }
+                    )
+                    .is_err());
+                assert_eq!(
+                    format!("{:?}", engine.state),
+                    before,
+                    "{cost:?}, stale={stale}"
+                );
+                engine
+                    .submit_resolution_choice(0, &rv1::SubmitResolutionChoice::default())
+                    .unwrap();
+                assert!(engine.state.pending_resolution.is_none());
+                assert_eq!(
+                    engine.state.players[0].life, 22,
+                    "decline runs only the tail"
+                );
+            }
+        }
+    }
+
     #[test]
     fn forced_resolution_branch_runs_its_tail_exactly_once() {
         let mut engine = GameEngine::new_with_default_decks(142_102, &[0, 1], 20).expect("engine");

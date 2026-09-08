@@ -15,8 +15,8 @@ use super::resolution::{
     seat_resolved_spell_last_in_graveyard,
 };
 use super::targeting::{
-    capture_stack_target, object_matches_mass_filter, validate_ability_targets_with_context,
-    validate_spell_targets, TargetSourceIdentity,
+    capture_stack_target, validate_ability_targets_with_context, validate_spell_targets,
+    TargetSourceIdentity,
 };
 use super::*;
 

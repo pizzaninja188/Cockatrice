@@ -1,6 +1,7 @@
 use super::casting::castable_at_instant_speed;
 use super::combat::priority_locked_for_combat_declaration;
 use super::events::object_display_name;
+use super::payment::components::ObjectPaymentComponent;
 use super::presentation::{presentation_ref, PresentationPath};
 use super::priority::{instant_timing_step_allowed, sorcery_speed_available};
 use super::targeting::{
@@ -793,11 +794,15 @@ fn legal_ability_cost_choices(
                 });
             }
             AbilityCost::Discard => {
-                let candidate_ids: Vec<u32> = (0..eng.state.players[player_idx].hand.len())
-                    .map(|slot| slot as u32)
-                    .collect();
+                let candidates = ObjectPaymentComponent::discard(None).candidates(eng, player);
+                let candidate_ids = eng.state.players[player_idx]
+                    .hand
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(slot, oid)| candidates.contains(oid).then_some(slot as u32))
+                    .collect::<Vec<_>>();
                 requirements.push(ObjectPaymentRequirement::Exact {
-                    candidates: eng.state.players[player_idx].hand.clone(),
+                    candidates,
                     count: 1,
                 });
                 choices.push(rv1::LegalCostChoice {
@@ -817,15 +822,9 @@ fn legal_ability_cost_choices(
                 structurally_payable &= consumed.insert(source);
             }
             AbilityCost::SacrificePermanent { filter } => {
-                let candidate_ids: Vec<u32> = eng
-                    .state
-                    .players
-                    .iter()
-                    .flat_map(|state| state.battlefield.iter().copied())
-                    .filter(|&oid| {
-                        eng.ability_cost_permanent_matches(player, Some(source), oid, filter)
-                    })
-                    .collect();
+                let candidate_ids =
+                    ObjectPaymentComponent::announced_sacrifice(Some(source), filter)
+                        .candidates(eng, player);
                 requirements.push(ObjectPaymentRequirement::Exact {
                     candidates: candidate_ids.clone(),
                     count: 1,
@@ -851,17 +850,14 @@ fn legal_ability_cost_choices(
                 filter,
                 exclude_source,
             } => {
-                let candidate_ids: Vec<ObjectId> = eng
-                    .state
-                    .players
-                    .iter()
-                    .flat_map(|state| state.battlefield.iter().copied())
-                    .filter(|oid| !exclude_source || *oid != source)
-                    .filter(|&oid| {
-                        eng.ability_cost_permanent_matches(player, Some(source), oid, filter)
-                            && !eng.state.objects[&oid].tapped
-                    })
-                    .collect();
+                let candidate_ids = ObjectPaymentComponent::announced_tap(
+                    Some(source),
+                    filter,
+                    *constraint,
+                    exclude_source.then_some(source),
+                    None,
+                )
+                .candidates(eng, player);
                 match *constraint {
                     ObjectPaymentConstraint::ExactCount(count) => {
                         requirements.push(ObjectPaymentRequirement::Exact {
@@ -1012,14 +1008,16 @@ fn legal_spell_cost_choices(
                 choices.push(eng.blight_cost_choice(player, cost_index, *count))
             }
             AdditionalCost::DiscardCard => {
-                let candidates: Vec<(u32, ObjectId)> = eng.state.players[player_idx]
+                let eligible =
+                    ObjectPaymentComponent::discard(Some(source)).candidates(eng, player);
+                let candidates = eng.state.players[player_idx]
                     .hand
                     .iter()
                     .copied()
                     .enumerate()
-                    .filter(|(_, oid)| *oid != source)
+                    .filter(|(_, oid)| eligible.contains(oid))
                     .map(|(slot, oid)| (slot as u32, oid))
-                    .collect();
+                    .collect::<Vec<_>>();
                 requirements.push(ObjectPaymentRequirement::Exact {
                     candidates: candidates.iter().map(|(_, oid)| *oid).collect(),
                     count: 1,
@@ -1038,13 +1036,8 @@ fn legal_spell_cost_choices(
                 });
             }
             AdditionalCost::SacrificePermanent { filter } => {
-                let candidate_ids: Vec<ObjectId> = eng
-                    .state
-                    .players
-                    .iter()
-                    .flat_map(|state| state.battlefield.iter().copied())
-                    .filter(|&oid| eng.ability_cost_permanent_matches(player, None, oid, filter))
-                    .collect();
+                let candidate_ids = ObjectPaymentComponent::announced_sacrifice(None, filter)
+                    .candidates(eng, player);
                 requirements.push(ObjectPaymentRequirement::Exact {
                     candidates: candidate_ids.clone(),
                     count: 1,
@@ -1070,17 +1063,14 @@ fn legal_spell_cost_choices(
                 filter,
                 exclude_source,
             } => {
-                let candidate_ids: Vec<ObjectId> = eng
-                    .state
-                    .players
-                    .iter()
-                    .flat_map(|state| state.battlefield.iter().copied())
-                    .filter(|oid| !exclude_source || *oid != source)
-                    .filter(|&oid| {
-                        eng.ability_cost_permanent_matches(player, None, oid, filter)
-                            && !eng.state.objects[&oid].tapped
-                    })
-                    .collect();
+                let candidate_ids = ObjectPaymentComponent::announced_tap(
+                    None,
+                    filter,
+                    *constraint,
+                    exclude_source.then_some(source),
+                    None,
+                )
+                .candidates(eng, player);
                 match *constraint {
                     ObjectPaymentConstraint::ExactCount(count) => {
                         requirements.push(ObjectPaymentRequirement::Exact {
@@ -1370,11 +1360,13 @@ fn legal_spell_cost_choices(
                         option_id,
                         presentation,
                     } => {
+                        let eligible =
+                            ObjectPaymentComponent::discard(Some(source)).candidates(eng, player);
                         let valid_hand_indices = eng.state.players[player_idx]
                             .hand
                             .iter()
                             .enumerate()
-                            .filter_map(|(slot, oid)| (*oid != source).then_some(slot as u32))
+                            .filter_map(|(slot, oid)| eligible.contains(oid).then_some(slot as u32))
                             .collect::<Vec<_>>();
                         rv1::LegalCastCostOption {
                             option_index: option_index as u32,
@@ -1428,20 +1420,14 @@ fn legal_spell_cost_choices(
                         filter,
                         ..
                     } => {
-                        let candidates = eng
-                            .state
-                            .players
-                            .iter()
-                            .flat_map(|state| state.battlefield.iter().copied())
-                            .filter(|oid| {
-                                eng.ability_cost_permanent_matches(player, None, *oid, filter)
-                                    && eng
-                                        .state
-                                        .objects
-                                        .get(oid)
-                                        .is_some_and(|object| !object.tapped)
-                            })
-                            .collect::<Vec<_>>();
+                        let candidates = ObjectPaymentComponent::announced_tap(
+                            None,
+                            filter,
+                            *constraint,
+                            None,
+                            None,
+                        )
+                        .candidates(eng, player);
                         let selectable = match constraint {
                             ObjectPaymentConstraint::ExactCount(count) => {
                                 candidates.len() >= *count as usize
@@ -1506,15 +1492,8 @@ fn legal_spell_cost_choices(
                         filter,
                         ..
                     } => {
-                        let candidates = eng
-                            .state
-                            .players
-                            .iter()
-                            .flat_map(|state| state.battlefield.iter().copied())
-                            .filter(|oid| {
-                                eng.ability_cost_permanent_matches(player, None, *oid, filter)
-                            })
-                            .collect::<Vec<_>>();
+                        let candidates = ObjectPaymentComponent::announced_sacrifice(None, filter)
+                            .candidates(eng, player);
                         rv1::LegalCastCostOption {
                             option_index: option_index as u32,
                             label: option.fallback_label(),

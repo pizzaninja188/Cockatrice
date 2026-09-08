@@ -1,8 +1,9 @@
-//! Atomic non-mana and mana debit plans shared by spell casting and ability activation.
+//! Atomic non-mana and mana debit plans shared by casting, activation, and resolution.
 
 use super::super::events::object_display_name;
 use super::super::resolution::{permanent_moved_event, sacrifice_permanent};
 use super::super::*;
+use super::components::{ObjectPaymentComponent, PermanentPaymentFilter, PlannedObjectPayment};
 use super::mana::{
     commit_mana_payment, mana_payment_still_valid, plan_mana_payment_with_restricted_reduction,
     ManaPaymentPlan,
@@ -15,7 +16,20 @@ pub(in crate::engine) struct SacrificeSnapshot {
     pub(in crate::engine) died: bool,
 }
 
-enum CostDebit {
+fn payment_sacrifice_events(snapshots: Vec<SacrificeSnapshot>) -> impl Iterator<Item = GameEvent> {
+    snapshots.into_iter().flat_map(|snapshot| {
+        let player = snapshot.source.controller;
+        sacrifice_events(
+            snapshot.source,
+            snapshot.was_creature,
+            player,
+            snapshot.died,
+        )
+    })
+}
+
+pub(super) enum CostDebit {
+    Objects(PlannedObjectPayment),
     Waterbend,
     RemoveCounters {
         object: rv1::CostObjectRef,
@@ -40,9 +54,6 @@ enum CostDebit {
     TapGroup {
         objects: Vec<(ObjectId, u64)>,
         constraint: Option<ObjectPaymentConstraint>,
-        filter: Option<TargetFilter>,
-        source: Option<ObjectId>,
-        exclude_source: bool,
         cast_cost_kind: Option<ObjectCastCostKind>,
     },
     Mana(ManaPaymentPlan),
@@ -89,7 +100,7 @@ enum CostDebit {
     },
 }
 
-enum CounterDebitSource {
+pub(super) enum CounterDebitSource {
     Source,
     SelectedPermanent {
         ability_source: rv1::CostObjectRef,
@@ -195,11 +206,12 @@ pub(in crate::engine) fn card_result_entry(
     }
 }
 
-/// The same atomic debits pay casting or activated costs, but only casting expends mana.
+/// Casting, activation, and resolution share debits; only casting expends mana.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CostPurpose {
     Spell,
     Ability,
+    Resolution,
 }
 
 pub(in crate::engine) struct CostTransactionPlan {
@@ -227,6 +239,10 @@ impl PreparedPaymentCosts {
         !self.transaction.debits.iter().any(|d| match d {
             CostDebit::Tap { object_id, .. } => *object_id == oid,
             CostDebit::TapGroup { objects, .. } => objects.iter().any(|(id, _)| *id == oid),
+            CostDebit::Objects(payment) => {
+                matches!(payment.component, ObjectPaymentComponent::Tap { .. })
+                    && payment.objects.iter().any(|object| object.object_id == oid)
+            }
             _ => false,
         })
     }
@@ -260,9 +276,6 @@ impl PreparedPaymentCosts {
                 CostDebit::TapGroup {
                     objects: taps,
                     constraint: None,
-                    filter: None,
-                    source: None,
-                    exclude_source: false,
                     cast_cost_kind: None,
                 },
             );
@@ -289,7 +302,57 @@ impl PreparedPaymentCosts {
 }
 
 impl GameEngine {
-    fn object_payment_selection_satisfies(
+    /// CR 603.6a: a permanent sacrificed to pay an activation cost still dies, so leaves-the-
+    /// battlefield abilities (Blood Artist, Bottle Gnomes' own controller triggers) see it. The
+    /// triggers go on the stack *above* the ability whose cost they paid, so this runs after the
+    /// ability has been pushed.
+    pub(in crate::engine) fn collect_committed_cost_triggers(
+        &mut self,
+        mut events: Vec<GameEvent>,
+        snapshots: Vec<SacrificeSnapshot>,
+    ) -> Vec<super::triggers::CollectedTrigger> {
+        events.extend(payment_sacrifice_events(snapshots));
+        self.record_committed_events(&events);
+        self.collect_event_triggers(&events)
+    }
+
+    /// Resolution already owns its stack item. Preserve its semantic-before-zone event order
+    /// and full observer dispatch, including delayed death/departure triggers and LKI caches.
+    pub(in crate::engine) fn fire_resolution_cost_triggers(
+        &mut self,
+        events: Vec<GameEvent>,
+        snapshots: Vec<SacrificeSnapshot>,
+    ) {
+        let events = payment_sacrifice_events(snapshots)
+            .chain(events)
+            .collect::<Vec<_>>();
+        self.fire_triggers(&events);
+    }
+
+    pub(in crate::engine) fn plan_resolution_object_costs(
+        &self,
+        player: PlayerId,
+        source: rv1::CostObjectRef,
+        cost: &ResolutionCost,
+        selected: &[rv1::CostObjectRef],
+    ) -> Result<CostTransactionPlan, EngineError> {
+        let player_idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        let component = ObjectPaymentComponent::resolution(source, cost).ok_or(
+            EngineError::Illegal("resolution cost has no object payment"),
+        )?;
+        Ok(CostTransactionPlan {
+            purpose: CostPurpose::Resolution,
+            player,
+            player_idx,
+            debits: vec![self.plan_object_payment(player, component, selected)?],
+            cast_cost_receipts: vec![],
+        })
+    }
+
+    pub(super) fn object_payment_selection_satisfies(
         &self,
         constraint: ObjectPaymentConstraint,
         objects: &[rv1::CostObjectRef],
@@ -333,7 +396,7 @@ impl GameEngine {
                 .then(|| super::waterbend::generic_component(&cost))
                 .transpose()?,
             transaction: CostTransactionPlan {
-                purpose: CostPurpose::Ability,
+                purpose: CostPurpose::Resolution,
                 player,
                 player_idx: idx,
                 debits: if payment.waterbend {
@@ -369,11 +432,7 @@ impl GameEngine {
         let [object] = objects.objects.as_slice() else {
             return Err(EngineError::Illegal("Blight requires exactly one creature"));
         };
-        self.validate_blight(player, count, object)?;
-        Ok(CostDebit::Blight {
-            object: *object,
-            count,
-        })
+        self.plan_object_payment(player, ObjectPaymentComponent::Blight { count }, &[*object])
     }
 
     #[cfg(test)]
@@ -505,11 +564,11 @@ impl GameEngine {
                             object_id,
                             zone_change_generation: selection.expected_zone_change_generation,
                         };
-                        self.validate_blight(player, *count, &reference)?;
-                        debits.push(CostDebit::Blight {
-                            object: reference,
-                            count: *count,
-                        });
+                        debits.push(self.plan_object_payment(
+                            player,
+                            ObjectPaymentComponent::Blight { count: *count },
+                            &[reference],
+                        )?);
                         vec![CastCostObjectReceipt::ChosenPermanent {
                             object_id,
                             zone_change_generation: selection.expected_zone_change_generation,
@@ -643,18 +702,11 @@ impl GameEngine {
                                 "spell cannot discard itself as its additional cost",
                             ));
                         }
-                        let object = &self.state.objects[&object_id];
-                        let generation = self
-                            .state
-                            .zone_change_generation
-                            .get(&object_id)
-                            .copied()
-                            .unwrap_or(0);
-                        debits.push(CostDebit::Discard {
-                            object_id,
-                            generation,
-                            owner: object.owner,
-                        });
+                        debits.push(self.plan_object_payment(
+                            player,
+                            ObjectPaymentComponent::discard(Some(source_oid)),
+                            &[self.payment_object_ref(object_id)],
+                        )?);
                         vec![]
                     }
                     CastCostOptionDef::PayLife { amount, .. } => {
@@ -686,56 +738,30 @@ impl GameEngine {
                                 .ok_or(EngineError::Illegal(
                                     "tap cast cost requires battlefield object references",
                                 ))?;
-                        if !self.object_payment_selection_satisfies(*constraint, &selected.objects)
-                        {
-                            return Err(EngineError::Illegal(
-                                "tap cast cost selection does not satisfy its constraint",
-                            ));
-                        }
-                        let mut taps = Vec::with_capacity(selected.objects.len());
-                        let mut receipts = Vec::with_capacity(selected.objects.len());
-                        let mut distinct = HashSet::new();
-                        for selected in &selected.objects {
-                            let oid = selected.object_id;
-                            if !distinct.insert(oid)
-                                || !self.ability_cost_permanent_matches(player, None, oid, filter)
-                                || self
-                                    .state
-                                    .objects
-                                    .get(&oid)
-                                    .is_none_or(|object| object.tapped)
-                            {
-                                return Err(EngineError::Illegal(
-                                    "illegal tap cast cost selection",
-                                ));
-                            }
-                            let generation = self
-                                .state
-                                .zone_change_generation
-                                .get(&oid)
-                                .copied()
-                                .unwrap_or(0);
-                            if generation != selected.zone_change_generation {
-                                return Err(EngineError::Illegal("stale tap cast cost selection"));
-                            }
-                            let object = &self.state.objects[&oid];
-                            taps.push((oid, generation));
-                            receipts.push(CastCostObjectReceipt::ChosenPermanent {
-                                object_id: oid,
-                                zone_change_generation: generation,
-                                card_id: object.card_id.clone(),
-                                card_name: object_display_name(&self.state, self.registry, oid),
-                            });
-                        }
-                        debits.push(CostDebit::TapGroup {
-                            objects: taps,
-                            constraint: Some(*constraint),
-                            filter: Some((**filter).clone()),
-                            source: None,
-                            exclude_source: false,
-                            cast_cost_kind: Some(*kind),
-                        });
-                        receipts
+                        debits.push(self.plan_object_payment(
+                            player,
+                            ObjectPaymentComponent::announced_tap(
+                                None,
+                                filter,
+                                *constraint,
+                                None,
+                                Some(*kind),
+                            ),
+                            &selected.objects,
+                        )?);
+                        selected
+                            .objects
+                            .iter()
+                            .map(|selected| {
+                                let oid = selected.object_id;
+                                CastCostObjectReceipt::ChosenPermanent {
+                                    object_id: oid,
+                                    zone_change_generation: selected.zone_change_generation,
+                                    card_id: self.state.objects[&oid].card_id.clone(),
+                                    card_name: object_display_name(&self.state, self.registry, oid),
+                                }
+                            })
+                            .collect()
                     }
                     CastCostOptionDef::SacrificePermanent { filter, .. } => {
                         if selection.selected_object.is_some() {
@@ -756,37 +782,17 @@ impl GameEngine {
                             ));
                         };
                         let oid = selected.object_id;
-                        if !self.ability_cost_permanent_matches(player, None, oid, filter) {
-                            return Err(EngineError::Illegal(
-                                "illegal sacrifice cast cost selection",
-                            ));
-                        }
-                        let generation = self
-                            .state
-                            .zone_change_generation
-                            .get(&oid)
-                            .copied()
-                            .unwrap_or(0);
-                        if generation != selected.zone_change_generation {
-                            return Err(EngineError::Illegal(
-                                "stale sacrifice cast cost selection",
-                            ));
-                        }
-                        let object = &self.state.objects[&oid];
-                        let receipt = CastCostObjectReceipt::ChosenPermanent {
+                        debits.push(self.plan_object_payment(
+                            player,
+                            ObjectPaymentComponent::announced_sacrifice(None, filter),
+                            &[*selected],
+                        )?);
+                        vec![CastCostObjectReceipt::ChosenPermanent {
                             object_id: oid,
-                            zone_change_generation: generation,
-                            card_id: object.card_id.clone(),
+                            zone_change_generation: selected.zone_change_generation,
+                            card_id: self.state.objects[&oid].card_id.clone(),
                             card_name: object_display_name(&self.state, self.registry, oid),
-                        };
-                        let snapshot = self
-                            .sacrifice_snapshot(oid)
-                            .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
-                        debits.push(CostDebit::Sacrifice {
-                            snapshot,
-                            owner: object.owner,
-                        });
-                        vec![receipt]
+                        }]
                     }
                 };
                 let label = option.fallback_label();
@@ -898,17 +904,11 @@ impl GameEngine {
                     if !consumed.insert(oid) {
                         return Err(EngineError::Illegal("one object cannot pay two costs"));
                     }
-                    let object = &self.state.objects[&oid];
-                    debits.push(CostDebit::Discard {
-                        object_id: oid,
-                        generation: self
-                            .state
-                            .zone_change_generation
-                            .get(&oid)
-                            .copied()
-                            .unwrap_or(0),
-                        owner: object.owner,
-                    });
+                    debits.push(self.plan_object_payment(
+                        player,
+                        ObjectPaymentComponent::discard(Some(source_oid)),
+                        &[self.payment_object_ref(oid)],
+                    )?);
                 }
                 AdditionalCost::SacrificePermanent { filter } => {
                     let Some(Selection::PermanentId(oid)) = selection.selection else {
@@ -916,17 +916,14 @@ impl GameEngine {
                             "sacrifice cost requires a battlefield permanent",
                         ));
                     };
-                    if !self.ability_cost_permanent_matches(player, None, oid, filter) {
-                        return Err(EngineError::Illegal("illegal sacrifice cost selection"));
-                    }
                     if !consumed.insert(oid) {
                         return Err(EngineError::Illegal("one object cannot pay two costs"));
                     }
-                    let snapshot = self
-                        .sacrifice_snapshot(oid)
-                        .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
-                    let owner = self.state.objects[&oid].owner;
-                    debits.push(CostDebit::Sacrifice { snapshot, owner });
+                    debits.push(self.plan_object_payment(
+                        player,
+                        ObjectPaymentComponent::announced_sacrifice(None, filter),
+                        &[self.payment_object_ref(oid)],
+                    )?);
                 }
                 AdditionalCost::TapPermanents {
                     constraint,
@@ -940,46 +937,22 @@ impl GameEngine {
                             "tap cost requires battlefield object references",
                         ));
                     };
-                    if !self.object_payment_selection_satisfies(*constraint, &selected.objects) {
-                        return Err(EngineError::Illegal(
-                            "tap cost selection does not satisfy its constraint",
-                        ));
-                    }
-                    let mut taps = Vec::new();
+                    debits.push(self.plan_object_payment(
+                        player,
+                        ObjectPaymentComponent::announced_tap(
+                            None,
+                            filter,
+                            *constraint,
+                            exclude_source.then_some(source_oid),
+                            None,
+                        ),
+                        &selected.objects,
+                    )?);
                     for selected in &selected.objects {
-                        let oid = selected.object_id;
-                        if (*exclude_source && oid == source_oid)
-                            || !self.ability_cost_permanent_matches(player, None, oid, filter)
-                            || self
-                                .state
-                                .objects
-                                .get(&oid)
-                                .is_none_or(|object| object.tapped)
-                        {
-                            return Err(EngineError::Illegal("illegal tap cost selection"));
-                        }
-                        let generation = self
-                            .state
-                            .zone_change_generation
-                            .get(&oid)
-                            .copied()
-                            .unwrap_or(0);
-                        if generation != selected.zone_change_generation {
-                            return Err(EngineError::Illegal("stale tap cost selection"));
-                        }
-                        if !consumed.insert(oid) {
+                        if !consumed.insert(selected.object_id) {
                             return Err(EngineError::Illegal("one object cannot pay two costs"));
                         }
-                        taps.push((oid, generation));
                     }
-                    debits.push(CostDebit::TapGroup {
-                        objects: taps,
-                        constraint: Some(*constraint),
-                        filter: Some(filter.clone()),
-                        source: None,
-                        exclude_source: *exclude_source,
-                        cast_cost_kind: None,
-                    });
                 }
                 AdditionalCost::ExileGraveyardCards {
                     constraint,
@@ -1338,51 +1311,22 @@ impl GameEngine {
                             "tap cost requires battlefield object references",
                         ));
                     };
-                    if !self.object_payment_selection_satisfies(*constraint, &selected.objects) {
-                        return Err(EngineError::Illegal(
-                            "tap cost selection does not satisfy its constraint",
-                        ));
-                    }
-                    let mut taps = Vec::new();
+                    debits.push(self.plan_object_payment(
+                        player,
+                        ObjectPaymentComponent::announced_tap(
+                            Some(permanent_id),
+                            filter,
+                            *constraint,
+                            exclude_source.then_some(permanent_id),
+                            None,
+                        ),
+                        &selected.objects,
+                    )?);
                     for selected in &selected.objects {
-                        let oid = selected.object_id;
-                        if (*exclude_source && oid == permanent_id)
-                            || !self.ability_cost_permanent_matches(
-                                player,
-                                Some(permanent_id),
-                                oid,
-                                filter,
-                            )
-                            || self
-                                .state
-                                .objects
-                                .get(&oid)
-                                .is_none_or(|object| object.tapped)
-                        {
-                            return Err(EngineError::Illegal("illegal tap cost selection"));
-                        }
-                        let generation = self
-                            .state
-                            .zone_change_generation
-                            .get(&oid)
-                            .copied()
-                            .unwrap_or(0);
-                        if generation != selected.zone_change_generation {
-                            return Err(EngineError::Illegal("stale tap cost selection"));
-                        }
-                        if !consumed.insert(oid) {
+                        if !consumed.insert(selected.object_id) {
                             return Err(EngineError::Illegal("one object cannot pay two costs"));
                         }
-                        taps.push((oid, generation));
                     }
-                    debits.push(CostDebit::TapGroup {
-                        objects: taps,
-                        constraint: Some(*constraint),
-                        filter: Some(filter.clone()),
-                        source: Some(permanent_id),
-                        exclude_source: *exclude_source,
-                        cast_cost_kind: None,
-                    });
                 }
                 AbilityCost::Mana(cost) | AbilityCost::Waterbend(cost) => {
                     if matches!(costs[cost_index], AbilityCost::Waterbend(_)) {
@@ -1415,33 +1359,21 @@ impl GameEngine {
                     if !consumed.insert(oid) {
                         return Err(EngineError::Illegal("one object cannot pay two costs"));
                     }
-                    let object = &self.state.objects[&oid];
-                    debits.push(CostDebit::Discard {
-                        object_id: oid,
-                        generation: self
-                            .state
-                            .zone_change_generation
-                            .get(&oid)
-                            .copied()
-                            .unwrap_or(0),
-                        owner: object.owner,
-                    });
+                    debits.push(self.plan_object_payment(
+                        player,
+                        ObjectPaymentComponent::discard(None),
+                        &[self.payment_object_ref(oid)],
+                    )?);
                 }
                 AbilityCost::DiscardSelf => {
                     if !consumed.insert(permanent_id) {
                         return Err(EngineError::Illegal("one object cannot pay two costs"));
                     }
-                    let object = &self.state.objects[&permanent_id];
-                    debits.push(CostDebit::Discard {
-                        object_id: permanent_id,
-                        generation: self
-                            .state
-                            .zone_change_generation
-                            .get(&permanent_id)
-                            .copied()
-                            .unwrap_or(0),
-                        owner: object.owner,
-                    });
+                    debits.push(self.plan_object_payment(
+                        player,
+                        ObjectPaymentComponent::discard(None),
+                        &[self.payment_object_ref(permanent_id)],
+                    )?);
                 }
                 AbilityCost::ExileSelf => {
                     if !consumed.insert(permanent_id) {
@@ -1483,11 +1415,15 @@ impl GameEngine {
                     if !consumed.insert(permanent_id) {
                         return Err(EngineError::Illegal("one object cannot pay two costs"));
                     }
-                    let snapshot = self
-                        .sacrifice_snapshot(permanent_id)
-                        .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
-                    let owner = self.state.objects[&permanent_id].owner;
-                    debits.push(CostDebit::Sacrifice { snapshot, owner });
+                    let reference = self.payment_object_ref(permanent_id);
+                    debits.push(self.plan_object_payment(
+                        player,
+                        ObjectPaymentComponent::Sacrifice {
+                            filter: PermanentPaymentFilter::Controlled,
+                            only_source: Some(reference),
+                        },
+                        &[reference],
+                    )?);
                 }
                 AbilityCost::SacrificePermanent { filter } => {
                     expected_selections += 1;
@@ -1499,18 +1435,14 @@ impl GameEngine {
                             "sacrifice cost requires a battlefield permanent",
                         ));
                     };
-                    if !self.ability_cost_permanent_matches(player, Some(permanent_id), oid, filter)
-                    {
-                        return Err(EngineError::Illegal("illegal sacrifice cost selection"));
-                    }
                     if !consumed.insert(oid) {
                         return Err(EngineError::Illegal("one object cannot pay two costs"));
                     }
-                    let snapshot = self
-                        .sacrifice_snapshot(oid)
-                        .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
-                    let owner = self.state.objects[&oid].owner;
-                    debits.push(CostDebit::Sacrifice { snapshot, owner });
+                    debits.push(self.plan_object_payment(
+                        player,
+                        ObjectPaymentComponent::announced_sacrifice(Some(permanent_id), filter),
+                        &[self.payment_object_ref(oid)],
+                    )?);
                 }
                 AbilityCost::ExileGraveyardCards {
                     constraint,
@@ -1619,6 +1551,20 @@ impl GameEngine {
         &mut self,
         mut plan: CostTransactionPlan,
     ) -> Result<CostPaymentReceipt, EngineError> {
+        let mut debits = Vec::new();
+        for debit in plan.debits {
+            match debit {
+                CostDebit::Objects(payment) => {
+                    payment
+                        .component
+                        .validate(self, plan.player, &payment.objects)
+                        .map_err(|_| EngineError::Illegal("cost transaction became stale"))?;
+                    debits.push(self.object_payment_debit(payment)?);
+                }
+                debit => debits.push(debit),
+            }
+        }
+        plan.debits = debits;
         self.revalidate_cost_transaction(&plan)?;
 
         // Counter placement is nonconsuming. Complete it before any selected zone departure,
@@ -1664,6 +1610,9 @@ impl GameEngine {
             )
             .then(|| self.snapshot_zone_event());
             match debit {
+                CostDebit::Objects(_) => {
+                    unreachable!("object requirements were lowered before commit")
+                }
                 CostDebit::Waterbend => payment.trigger_events.push(GameEvent::Waterbent {
                     player: plan.player,
                 }),
@@ -1958,6 +1907,8 @@ impl GameEngine {
         if self.state.player_idx(plan.player) != Some(plan.player_idx) {
             return Err(EngineError::Illegal("cost transaction player changed"));
         }
+        let mut consumed = HashSet::new();
+        let mut tapped = HashSet::new();
         let mut counter_debits: BTreeMap<(ObjectId, CounterKind), u64> = BTreeMap::new();
         let total_life_payment = plan.debits.iter().try_fold(0u64, |total, debit| {
             let amount = match debit {
@@ -1975,7 +1926,33 @@ impl GameEngine {
             return Err(EngineError::Illegal("not enough life to pay all costs"));
         }
         for debit in &plan.debits {
+            // A tap followed by a sacrifice is legal; two taps or two departures are not.
+            let unique = match debit {
+                CostDebit::Discard { object_id, .. } | CostDebit::Exile { object_id, .. } => {
+                    consumed.insert(*object_id)
+                }
+                CostDebit::Sacrifice { snapshot, .. } => consumed.insert(snapshot.source.object_id),
+                CostDebit::ReturnUnblockedAttacker { object, .. } => {
+                    consumed.insert(object.object_id)
+                }
+                CostDebit::ExileGroup { objects, .. } => {
+                    objects.iter().all(|(oid, _, _)| consumed.insert(*oid))
+                }
+                CostDebit::Tap { object_id, .. } => tapped.insert(*object_id),
+                CostDebit::TapGroup { objects, .. } => {
+                    objects.iter().all(|(oid, _)| tapped.insert(*oid))
+                }
+                _ => true,
+            };
+            if !unique {
+                return Err(EngineError::Illegal(
+                    "one object cannot pay two consuming or tap costs",
+                ));
+            }
             let valid = match debit {
+                CostDebit::Objects(_) => {
+                    unreachable!("object requirements were lowered before validation")
+                }
                 CostDebit::Waterbend => true,
                 CostDebit::RemoveCounters {
                     object,
@@ -2070,9 +2047,6 @@ impl GameEngine {
                 CostDebit::TapGroup {
                     objects,
                     constraint,
-                    filter,
-                    source,
-                    exclude_source,
                     ..
                 } => {
                     let refs = objects
@@ -2085,27 +2059,11 @@ impl GameEngine {
                     constraint.is_none_or(|constraint| {
                         self.object_payment_selection_satisfies(constraint, &refs)
                     }) && objects.iter().all(|(oid, generation)| {
-                        (!*exclude_source || source.is_none_or(|source| source != *oid))
-                            && filter.as_ref().is_none_or(|filter| {
-                                self.ability_cost_permanent_matches(
-                                    plan.player,
-                                    *source,
-                                    *oid,
-                                    filter,
-                                )
-                            })
-                            && self.state.objects.get(oid).is_some_and(|object| {
-                                object.zone == Zone::Battlefield
-                                    && !object.tapped
-                                    && object.controller == plan.player
-                            })
-                            && self
-                                .state
-                                .zone_change_generation
-                                .get(oid)
-                                .copied()
-                                .unwrap_or(0)
-                                == *generation
+                        self.state.objects.get(oid).is_some_and(|object| {
+                            object.zone == Zone::Battlefield
+                                && !object.tapped
+                                && object.controller == plan.player
+                        }) && self.payment_object_ref(*oid).zone_change_generation == *generation
                     })
                 }
                 CostDebit::Discard {
@@ -2189,6 +2147,7 @@ impl GameEngine {
                         CostPurpose::Ability => {
                             self.ninjutsu_return_assignment(plan.player, object)
                         }
+                        CostPurpose::Resolution => None,
                     } == Some(*assignment);
                     self.state
                         .objects
@@ -2340,7 +2299,7 @@ impl GameEngine {
     /// Snapshot a permanent about to be sacrificed as an activation cost. Taken *before* the cost
     /// is paid, because CR 603.6 reads the dying object's last-known information and the object is
     /// already in the graveyard (controller reset, characteristics gone) by the time it fires.
-    fn sacrifice_snapshot(&self, permanent_id: ObjectId) -> Option<SacrificeSnapshot> {
+    pub(super) fn sacrifice_snapshot(&self, permanent_id: ObjectId) -> Option<SacrificeSnapshot> {
         let source = self.trigger_source_snapshot(permanent_id)?;
         Some(SacrificeSnapshot {
             source,
@@ -2387,6 +2346,267 @@ impl GameEngine {
 #[cfg(test)]
 mod convoke_transaction_tests {
     use super::*;
+
+    #[test]
+    fn issue_195_resolution_sacrifice_uses_atomic_payment_receipts() {
+        let (mut engine, source, _) = battlefield_self_exile_fixture();
+        let reference = object_ref(&engine, source);
+        let cost = ResolutionCost::SacrificePermanent {
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                ..Default::default()
+            },
+            source_only: true,
+        };
+        let plan = engine
+            .plan_resolution_object_costs(0, reference, &cost, &[reference])
+            .expect("resolution sacrifice must use the shared transaction");
+        let receipt = engine.commit_cost_transaction(plan).unwrap();
+        assert_eq!(receipt.sacrificed.len(), 1);
+        assert_eq!(receipt.paid_card_costs.len(), 1);
+        assert_eq!(receipt.move_events.len(), 1);
+        assert_eq!(
+            receipt.sacrificed[0].source.zone_change_generation,
+            reference.zone_change_generation
+        );
+        assert_eq!(engine.state.objects[&source].zone, Zone::Graveyard);
+        assert!(receipt.expend_triggers.is_empty());
+    }
+
+    #[test]
+    fn issue_195_duplicate_components_reject_before_any_debit() {
+        let (mut engine, source, _) = battlefield_self_exile_fixture();
+        let reference = object_ref(&engine, source);
+        let cost = ResolutionCost::SacrificePermanent {
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                ..Default::default()
+            },
+            source_only: false,
+        };
+        let mut plan = engine
+            .plan_resolution_object_costs(0, reference, &cost, &[reference])
+            .unwrap();
+        let duplicate = engine
+            .plan_resolution_object_costs(0, reference, &cost, &[reference])
+            .unwrap();
+        plan.debits.extend(duplicate.debits);
+        let before = format!("{:?}", engine.state);
+        assert!(engine.commit_cost_transaction(plan).is_err());
+        assert_eq!(format!("{:?}", engine.state), before);
+    }
+
+    #[test]
+    fn issue_195_resolution_revalidates_live_objects_before_spending_mana() {
+        for failure in ["generation", "controller", "type"] {
+            let (mut engine, source, _) = battlefield_self_exile_fixture();
+            let reference = object_ref(&engine, source);
+            let cost = ResolutionCost::SacrificePermanent {
+                filter: TargetFilter {
+                    kind: TargetKind::Creature,
+                    ..Default::default()
+                },
+                source_only: true,
+            };
+            let object_plan = engine
+                .plan_resolution_object_costs(0, reference, &cost, &[reference])
+                .unwrap();
+            let pending = PendingManaPayment::from_cost(0, ManaCost::parse("{1}").unwrap(), 0);
+            let costs = engine
+                .prepare_resolution_payment_costs(0, &pending, &[])
+                .unwrap();
+            let mut plan = costs.finish(&engine.state).unwrap();
+            plan.debits.extend(object_plan.debits);
+            match failure {
+                "generation" => {
+                    *engine
+                        .state
+                        .zone_change_generation
+                        .get_mut(&source)
+                        .unwrap() += 1
+                }
+                "controller" => engine.state.objects.get_mut(&source).unwrap().controller = 1,
+                _ => engine.state.objects.get_mut(&source).unwrap().card_id = "forest".into(),
+            }
+            let before = format!("{:?}", engine.state);
+            assert!(engine.commit_cost_transaction(plan).is_err(), "{failure}");
+            assert_eq!(format!("{:?}", engine.state), before, "{failure}");
+        }
+    }
+
+    #[test]
+    fn issue_195_resolution_payment_keeps_payer_distinct_from_owner() {
+        let (mut engine, source, _) = battlefield_self_exile_fixture();
+        engine.state.players.push(PlayerState::new(19, 20));
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(19),
+        )
+        .unwrap();
+        let reference = object_ref(&engine, source);
+        let cost = ResolutionCost::SacrificePermanent {
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                ..Default::default()
+            },
+            source_only: true,
+        };
+        assert!(engine
+            .plan_resolution_object_costs(0, reference, &cost, &[reference])
+            .is_err());
+        let plan = engine
+            .plan_resolution_object_costs(19, reference, &cost, &[reference])
+            .unwrap();
+        let receipt = engine.commit_cost_transaction(plan).unwrap();
+        assert!(engine.state.players[0].graveyard.contains(&source));
+        assert!(engine.state.players[2].graveyard.is_empty());
+        assert_eq!(receipt.sacrificed[0].source.controller, 19);
+        assert!(matches!(&receipt.move_events[0].ev,
+            Some(rv1::ruled_event::Ev::PermanentMoved(moved)) if moved.owner_player_id == 0));
+        engine.fire_resolution_cost_triggers(receipt.trigger_events, receipt.sacrificed);
+        assert_eq!(
+            engine.state.turn_history.current.permanents_sacrificed[0].player,
+            19
+        );
+    }
+
+    #[test]
+    fn issue_195_resolution_mana_receipt_does_not_count_as_spell_expenditure() {
+        let (mut engine, _, _) = battlefield_self_exile_fixture();
+        let pending = PendingManaPayment::from_cost(0, ManaCost::parse("{1}{G}").unwrap(), 0);
+        let costs = engine
+            .prepare_resolution_payment_costs(0, &pending, &[])
+            .unwrap();
+        let plan = costs.finish(&engine.state).unwrap();
+        let receipt = engine.commit_cost_transaction(plan).unwrap();
+        assert_eq!(receipt.mana_spent, 2);
+        assert!(receipt.expend_triggers.is_empty());
+        assert_eq!(
+            engine
+                .state
+                .turn_history
+                .current
+                .player(0)
+                .mana_spent_casting_spells,
+            0
+        );
+        assert_eq!(
+            engine.state.players[0].mana_pool,
+            crate::state::ManaPool::default()
+        );
+    }
+
+    #[test]
+    fn issue_195_resolution_and_activation_debits_have_matching_receipts() {
+        for kind in ["discard", "sacrifice", "tap", "blight"] {
+            let mut outcomes = Vec::new();
+            for resolution in [false, true] {
+                let (mut engine, source, _) = battlefield_self_exile_fixture();
+                let source_ref = object_ref(&engine, source);
+                let filter = TargetFilter {
+                    kind: TargetKind::Creature,
+                    ..Default::default()
+                };
+                let (cost, ability_cost, chosen, selection) = match kind {
+                    "discard" => (
+                        ResolutionCost::DiscardCard { filter: None },
+                        AbilityCost::Discard,
+                        engine.payment_object_ref(engine.state.players[0].hand[0]),
+                        rv1::cost_selection::Selection::HandIndex(0),
+                    ),
+                    "sacrifice" => (
+                        ResolutionCost::SacrificePermanent {
+                            filter: filter.clone(),
+                            source_only: false,
+                        },
+                        AbilityCost::SacrificePermanent { filter },
+                        source_ref,
+                        rv1::cost_selection::Selection::PermanentId(source),
+                    ),
+                    "tap" => (
+                        ResolutionCost::TapPermanents {
+                            count: 1,
+                            filter: filter.clone(),
+                            exclude_source: false,
+                        },
+                        AbilityCost::TapPermanents {
+                            constraint: ObjectPaymentConstraint::ExactCount(1),
+                            filter,
+                            exclude_source: false,
+                        },
+                        source_ref,
+                        rv1::cost_selection::Selection::BattlefieldObjects(rv1::CostObjectRefs {
+                            objects: vec![source_ref],
+                        }),
+                    ),
+                    _ => (
+                        ResolutionCost::Blight { count: 1 },
+                        AbilityCost::Blight { count: 1 },
+                        source_ref,
+                        rv1::cost_selection::Selection::BattlefieldObjects(rv1::CostObjectRefs {
+                            objects: vec![source_ref],
+                        }),
+                    ),
+                };
+                let plan = if resolution {
+                    engine
+                        .plan_resolution_object_costs(0, source_ref, &cost, &[chosen])
+                        .unwrap()
+                } else {
+                    engine
+                        .plan_ability_costs(
+                            0,
+                            0,
+                            source,
+                            &[ability_cost],
+                            &[],
+                            &[rv1::CostSelection {
+                                cost_index: 0,
+                                selection: Some(selection),
+                            }],
+                            &[],
+                            0,
+                            0,
+                        )
+                        .unwrap()
+                };
+                let receipt = engine.commit_cost_transaction(plan).unwrap();
+                outcomes.push((
+                    (
+                        format!("{:?}", engine.state.players),
+                        engine
+                            .state
+                            .objects
+                            .iter()
+                            .map(|(oid, object)| (*oid, format!("{object:?}")))
+                            .collect::<BTreeMap<_, _>>(),
+                        engine.state.zone_change_generation.clone(),
+                        engine.state.turn_history.clone(),
+                    ),
+                    receipt.move_events,
+                    receipt
+                        .trigger_events
+                        .iter()
+                        .map(std::mem::discriminant)
+                        .collect::<Vec<_>>(),
+                    format!("{:?}", receipt.sacrificed),
+                    receipt.blight_receipts,
+                    receipt
+                        .paid_card_costs
+                        .iter()
+                        .map(|cost| (cost.log_phrase(), format!("{:?}", cost.result())))
+                        .collect::<Vec<_>>(),
+                ));
+            }
+            assert_eq!(
+                outcomes[0], outcomes[1],
+                "{kind} must have the same debit and receipt in both contexts"
+            );
+        }
+    }
 
     fn object_ref(engine: &GameEngine, object_id: ObjectId) -> rv1::CostObjectRef {
         rv1::CostObjectRef {
@@ -3120,9 +3340,6 @@ mod convoke_transaction_tests {
                         (objects[2], references[2].1 + u64::from(stale)),
                     ],
                     constraint: None,
-                    filter: None,
-                    source: None,
-                    exclude_source: false,
                     cast_cost_kind: None,
                 },
             ],
@@ -3460,7 +3677,8 @@ mod convoke_transaction_tests {
         assert!(
             matches!(&plan.debits[1], CostDebit::TapGroup { objects, .. } if objects.len() == 1 && objects[0].0 == bear)
         );
-        assert!(matches!(plan.debits[2], CostDebit::Sacrifice { .. }));
+        assert!(matches!(&plan.debits[2], CostDebit::Objects(payment)
+            if matches!(payment.component, ObjectPaymentComponent::Sacrifice { .. })));
         let probe = PreparedPaymentCosts {
             waterbend_limit: None,
             transaction: CostTransactionPlan {

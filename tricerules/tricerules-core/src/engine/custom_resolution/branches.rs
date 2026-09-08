@@ -1,3 +1,4 @@
+use super::super::payment::PaidCardCost;
 use super::*;
 
 impl GameEngine {
@@ -116,7 +117,7 @@ impl GameEngine {
                         return Err(error);
                     }
                 };
-                self.fire_triggers(&receipt.trigger_events);
+                self.fire_resolution_cost_triggers(receipt.trigger_events, receipt.sacrificed);
                 events.extend(receipt.move_events);
                 let cost_label = if payment.mana_cost.pips.is_empty() {
                     format!("{{{}}}", payment.generic_mana_cost)
@@ -248,65 +249,14 @@ impl GameEngine {
         source_zone_change: u64,
         cost: &ResolutionCost,
     ) -> Vec<ObjectId> {
-        let Some(index) = self.state.player_idx(player) else {
-            return Vec::new();
-        };
-        match cost {
-            ResolutionCost::Blight { .. } => self.blight_candidates(player),
-            ResolutionCost::None => Vec::new(),
-            ResolutionCost::Mana(_) | ResolutionCost::Waterbend(_) => Vec::new(),
-            ResolutionCost::DiscardCard { filter } => self.state.players[index]
-                .hand
-                .iter()
-                .copied()
-                .filter(|oid| {
-                    resolution::card_matches_type_filter(
-                        &self.state,
-                        self.registry,
-                        *oid,
-                        filter.as_ref(),
-                    )
-                })
-                .collect(),
-            ResolutionCost::SacrificePermanent {
-                filter,
-                source_only,
-            } => self.state.players[index]
-                .battlefield
-                .iter()
-                .copied()
-                .filter(|oid| {
-                    !source_only
-                        || (*oid == source_object_id
-                            && self
-                                .state
-                                .zone_change_generation
-                                .get(oid)
-                                .copied()
-                                .unwrap_or(0)
-                                == source_zone_change)
-                })
-                .filter(|oid| {
-                    self.characteristics(*oid)
-                        .is_some_and(|c| c.controller == player)
-                })
-                .filter(|oid| object_matches_mass_filter(self, *oid, filter))
-                .collect(),
-            ResolutionCost::TapPermanents {
-                filter,
-                exclude_source,
-                ..
-            } => self.state.players[index]
-                .battlefield
-                .iter()
-                .copied()
-                .filter(|oid| !exclude_source || *oid != source_object_id)
-                .filter(|oid| {
-                    !self.state.objects[oid].tapped
-                        && object_matches_mass_filter(self, *oid, filter)
-                })
-                .collect(),
-        }
+        super::super::payment::components::ObjectPaymentComponent::resolution(
+            rv1::CostObjectRef {
+                object_id: source_object_id,
+                zone_change_generation: source_zone_change,
+            },
+            cost,
+        )
+        .map_or_else(Vec::new, |component| component.candidates(self, player))
     }
 
     pub(super) fn select_resolution_branch(
@@ -617,113 +567,65 @@ impl GameEngine {
                 ))],
             );
         }
-        let current = self.resolution_cost_candidates(
-            pending.deciding_player,
-            stack.item.source_permanent_id.unwrap_or(stack.item.id),
-            stack.item.source_zone_change,
-            &branch.cost,
-        );
-        let expected_count = match branch.cost {
-            ResolutionCost::TapPermanents { count, .. } => count as usize,
-            _ => 1,
-        };
-        let distinct = chosen.iter().copied().collect::<HashSet<_>>();
-        let generations_match = chosen.iter().all(|oid| {
-            let expected = candidate_generations
+        let result = (|| {
+            let selected = chosen
                 .iter()
-                .find_map(|(candidate, generation)| (candidate == oid).then_some(*generation));
-            expected.is_some_and(|expected| {
-                self.state
-                    .zone_change_generation
-                    .get(oid)
-                    .copied()
-                    .unwrap_or(0)
-                    == expected
-            })
-        });
-        if chosen.len() != expected_count
-            || distinct.len() != chosen.len()
-            || !chosen.iter().all(|oid| current.contains(oid))
-            || !generations_match
-        {
-            self.state.pending_resolution = Some(pending);
-            return Err(EngineError::Illegal("resolution payment choice is stale"));
-        }
-        let oid = chosen[0];
-        let name = object_display_name(&self.state, self.registry, oid);
-        let owner = self
-            .state
-            .objects
-            .get(&oid)
-            .map(|object| object.owner)
-            .ok_or(EngineError::Illegal("resolution payment object missing"))?;
-        let mut ev = Vec::new();
-        match &branch.cost {
-            ResolutionCost::Blight { count } => {
-                let receipt = self.complete_blight(pending.deciding_player, *count, Some(oid));
-                self.fire_triggers(&[GameEvent::Blighted(receipt)]);
-                stack.item.blight_receipts.push(receipt);
-                ev.push(ev_log(format!(
-                    "P{} blights {count} using {name}.",
-                    pending.deciding_player
-                )));
-            }
-            ResolutionCost::None => {
+                .map(|oid| {
+                    candidate_generations
+                        .iter()
+                        .find_map(|(candidate, generation)| {
+                            (*candidate == *oid).then_some(rv1::CostObjectRef {
+                                object_id: *oid,
+                                zone_change_generation: *generation,
+                            })
+                        })
+                        .ok_or(EngineError::Illegal("resolution payment choice is stale"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let plan = self.plan_resolution_object_costs(
+                pending.deciding_player,
+                rv1::CostObjectRef {
+                    object_id: stack.item.source_permanent_id.unwrap_or(stack.item.id),
+                    zone_change_generation: stack.item.source_zone_change,
+                },
+                &branch.cost,
+                &selected,
+            )?;
+            self.commit_cost_transaction(plan)
+        })();
+        let receipt = match result {
+            Ok(receipt) => receipt,
+            Err(error) => {
                 self.state.pending_resolution = Some(pending);
-                return Err(EngineError::Illegal(
-                    "costless branch has no object payment",
-                ));
+                return Err(error);
             }
-            ResolutionCost::DiscardCard { .. } => {
-                let (_, moved) = resolution::perform_discard(
-                    self,
-                    owner,
-                    oid,
-                    crate::state::DiscardCause::Cost,
-                )?;
-                ev.push(moved);
+        };
+        self.fire_resolution_cost_triggers(receipt.trigger_events, receipt.sacrificed);
+        let mut ev = receipt.move_events;
+        if let ResolutionCost::Blight { count } = branch.cost {
+            // Blight does not move its creature; the public name remains available here.
+            let name = object_display_name(&self.state, self.registry, chosen[0]);
+            ev.push(ev_log(format!(
+                "P{} blights {count} using {name}.",
+                pending.deciding_player
+            )));
+        } else {
+            for cost in receipt.paid_card_costs {
+                let (verb, name) = match cost {
+                    PaidCardCost::Discard { card_name, .. } => ("discards", card_name),
+                    PaidCardCost::Sacrifice { card_name, .. } => ("sacrifices", card_name),
+                    PaidCardCost::Tap { card_name, .. } => ("taps", card_name),
+                    PaidCardCost::Exile { .. } => {
+                        unreachable!("resolution branch cannot pay exile")
+                    }
+                };
                 ev.push(ev_log(format!(
-                    "P{} discards {name}.",
+                    "P{} {verb} {name}.",
                     pending.deciding_player
                 )));
-            }
-            ResolutionCost::SacrificePermanent { .. } => {
-                let zone_snapshot = self.snapshot_zone_event();
-                let source = self.trigger_source_snapshot(oid);
-                let was_creature = self
-                    .characteristics(oid)
-                    .is_some_and(|characteristics| characteristics.is_creature());
-                let died = sacrifice_permanent(&mut self.state, self.registry, oid)?;
-                ev.push(permanent_moved_event(
-                    &self.state,
-                    oid,
-                    owner,
-                    rv1::permanent_moved::Destination::Graveyard,
-                ));
-                ev.push(ev_log(format!(
-                    "P{} sacrifices {name}.",
-                    pending.deciding_player
-                )));
-                if let Some(source) = source {
-                    self.fire_zone_triggers(
-                        zone_snapshot,
-                        sacrifice_events(source, was_creature, pending.deciding_player, died),
-                    );
-                }
-            }
-            ResolutionCost::TapPermanents { .. } => {
-                let tap_events = self.tap_permanents(pending.deciding_player, chosen);
-                for oid in chosen {
-                    let name = object_display_name(&self.state, self.registry, *oid);
-                    ev.push(ev_log(format!("P{} taps {name}.", pending.deciding_player)));
-                }
-                self.fire_triggers(&tap_events);
-            }
-            ResolutionCost::Mana(_) | ResolutionCost::Waterbend(_) => {
-                self.state.pending_resolution = Some(pending);
-                return Err(EngineError::Illegal("mana branch requires mana payment"));
             }
         }
+        stack.item.blight_receipts.extend(receipt.blight_receipts);
         self.complete_parked_resolution_with_previous(
             stack.item,
             Some(effect_index),

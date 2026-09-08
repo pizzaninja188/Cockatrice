@@ -1,9 +1,9 @@
 use super::combat::priority_locked_for_combat_declaration;
 use super::events::{ev_log, ev_priority_changed, format_spell_targets_log};
 use super::legal_actions::fill_legal;
+use super::payment::PaidCardCost;
 #[cfg(test)]
 use super::payment::{commit_mana_payment, pay_mana, plan_mana_payment_with_reduction};
-use super::payment::{PaidCardCost, SacrificeSnapshot};
 use super::presentation::{
     ability_presentation, child_presentation_ref, spell_stack_presentation, PresentationPath,
 };
@@ -1386,28 +1386,6 @@ impl GameEngine {
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
         Ok(batch)
-    }
-
-    /// CR 603.6a: a permanent sacrificed to pay an activation cost still dies, so leaves-the-
-    /// battlefield abilities (Blood Artist, Bottle Gnomes' own controller triggers) see it. The
-    /// triggers go on the stack *above* the ability whose cost they paid, so this runs after the
-    /// ability has been pushed.
-    fn collect_committed_cost_triggers(
-        &mut self,
-        mut events: Vec<GameEvent>,
-        snapshots: Vec<SacrificeSnapshot>,
-    ) -> Vec<super::triggers::CollectedTrigger> {
-        events.extend(snapshots.into_iter().flat_map(|snapshot| {
-            let player = snapshot.source.controller;
-            sacrifice_events(
-                snapshot.source,
-                snapshot.was_creature,
-                player,
-                snapshot.died,
-            )
-        }));
-        self.record_committed_events(&events);
-        self.collect_event_triggers(&events)
     }
 
     /// Whether `ability` on `permanent_id` could be activated right now, so the client can grey it
