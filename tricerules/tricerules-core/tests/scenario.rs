@@ -229,6 +229,8 @@ mod issue_217_target_power_scale;
 mod issue_218_battlefield_exile_cost;
 #[path = "scenario/issue_219_surrak.rs"]
 mod issue_219_surrak;
+#[path = "scenario/issue_235_soul_guide_lantern.rs"]
+mod issue_235_soul_guide_lantern;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

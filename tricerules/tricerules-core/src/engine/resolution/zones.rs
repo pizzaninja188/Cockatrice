@@ -1825,6 +1825,101 @@ pub(super) fn choose_graveyard_card(
     Ok(EffectOutcome::Suspended)
 }
 
+pub(super) fn exile_graveyards(
+    cx: &mut EffectCx<'_>,
+    players: RelativePlayerSet,
+    filter: Option<&ZoneCardFilter>,
+) -> Result<EffectOutcome, EngineError> {
+    let engine = &*cx.engine;
+    let cohort = engine
+        .state
+        .players
+        .iter()
+        .filter(|player| {
+            super::super::history::relative_player_set_contains(
+                &engine.state,
+                players,
+                cx.controller,
+                player.id,
+            )
+        })
+        .flat_map(|player| player.graveyard.iter().copied())
+        .filter(|oid| engine.state.is_card_object(*oid))
+        .filter(|oid| {
+            engine
+                .state
+                .objects
+                .get(oid)
+                .is_some_and(|object| object.zone == Zone::Graveyard)
+        })
+        .filter(|oid| zone_card_matches_filter(&engine.state, engine.registry, *oid, filter))
+        .collect();
+    exile_graveyard_cohort(cx, cohort)
+}
+
+/// Selection is caller-owned: targeted moves have already revalidated their targets;
+/// mass exile selects current graveyards. Both commit one generation-bound zone event.
+fn exile_graveyard_cohort(
+    cx: &mut EffectCx<'_>,
+    cohort: Vec<ObjectId>,
+) -> Result<EffectOutcome, EngineError> {
+    let engine = &mut *cx.engine;
+    let cohort: Vec<_> = cohort
+        .into_iter()
+        .map(|oid| {
+            (
+                oid,
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&oid)
+                    .copied()
+                    .unwrap_or(0),
+            )
+        })
+        .collect();
+    let snapshot = engine.snapshot_zone_event();
+    for (oid, generation) in cohort {
+        if engine
+            .state
+            .zone_change_generation
+            .get(&oid)
+            .copied()
+            .unwrap_or(0)
+            != generation
+            || !engine
+                .state
+                .objects
+                .get(&oid)
+                .is_some_and(|object| object.zone == Zone::Graveyard)
+        {
+            continue;
+        }
+        let owner = engine.state.objects[&oid].owner;
+        let name = object_display_name(&engine.state, engine.registry, oid);
+        move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Exile, None)?;
+        cx.effect_result.cards.push(payment::card_result_entry(
+            &engine.state,
+            engine.registry,
+            CardResultAction::Exile,
+            owner,
+            oid,
+        ));
+        cx.events.push(ev_log(format!(
+            "{} moves {name} from graveyard to exile.",
+            cx.spell_label
+        )));
+        cx.events.push(permanent_moved_event(
+            &engine.state,
+            oid,
+            owner,
+            rv1::permanent_moved::Destination::Exile,
+        ));
+    }
+    engine.fire_zone_triggers(snapshot, vec![]);
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn move_graveyard_cards(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -1852,6 +1947,9 @@ pub(super) fn move_graveyard_cards(
             )
         })
         .collect();
+    if destination == GraveyardDestination::Exile {
+        return exile_graveyard_cohort(cx, targets);
+    }
     if let GraveyardDestination::Battlefield { tapped } = destination {
         let entries = targets
             .into_iter()
@@ -1889,11 +1987,6 @@ pub(super) fn move_graveyard_cards(
     let snapshot = engine.snapshot_zone_event();
     let (zone, proto, label) = match destination {
         GraveyardDestination::Hand => (Zone::Hand, rv1::permanent_moved::Destination::Hand, "hand"),
-        GraveyardDestination::Exile => (
-            Zone::Exile,
-            rv1::permanent_moved::Destination::Exile,
-            "exile",
-        ),
         GraveyardDestination::LibraryTop => (
             Zone::Library,
             rv1::permanent_moved::Destination::Library,
@@ -1904,7 +1997,7 @@ pub(super) fn move_graveyard_cards(
             rv1::permanent_moved::Destination::Library,
             "the bottom of its owner's library",
         ),
-        GraveyardDestination::Battlefield { .. } => unreachable!(),
+        GraveyardDestination::Battlefield { .. } | GraveyardDestination::Exile => unreachable!(),
     };
     for tid in targets {
         let owner = engine.state.objects[&tid].owner;
@@ -1917,15 +2010,6 @@ pub(super) fn move_graveyard_cards(
                 .ok_or(EngineError::Illegal("graveyard target owner not found"))?;
             engine.state.players[idx].library.retain(|oid| *oid != tid);
             engine.state.players[idx].library.push_front(tid);
-        }
-        if destination == GraveyardDestination::Exile {
-            cx.effect_result.cards.push(payment::card_result_entry(
-                &engine.state,
-                engine.registry,
-                CardResultAction::Exile,
-                owner,
-                tid,
-            ));
         }
         cx.events.push(ev_log(format!(
             "{} moves {name} from graveyard to {label}.",

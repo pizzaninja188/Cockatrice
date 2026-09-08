@@ -1806,6 +1806,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::MoveGraveyardCards { .. } => {
                         zones::move_graveyard_cards(&mut cx, effect)?
                     }
+                    SpellEffectKind::ExileGraveyards { players, filter } => {
+                        zones::exile_graveyards(&mut cx, players, filter.as_ref())?
+                    }
                     effect @ SpellEffectKind::ChooseGraveyardCard { .. } => {
                         zones::choose_graveyard_card(&mut cx, effect)?
                     }

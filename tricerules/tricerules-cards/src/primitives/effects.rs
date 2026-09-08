@@ -1359,6 +1359,14 @@ pub enum SpellEffectKind {
         filter: GraveyardFilter,
         destination: GraveyardDestination,
     },
+    /// CR 701.13a: exile the complete matching graveyard cohort without targeting.
+    /// Soul-Guide Lantern uses Opponents; Relic of Progenitus uses All. Selection
+    /// uses printed card values at resolution and all departures are simultaneous.
+    ExileGraveyards {
+        players: RelativePlayerSet,
+        #[serde(default)]
+        filter: Option<ZoneCardFilter>,
+    },
     /// Choose a card from the controller's graveyard when this instruction resolves rather than
     /// targeting it while casting. Say Its Name mills first, then optionally chooses the current
     /// creature-or-land cohort; Corpse Churn shares the same post-mill timing.
@@ -2456,6 +2464,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ChangeSourceFace { .. }
             | SpellEffectKind::CastMadness { .. }
             | SpellEffectKind::SiegeDefeat
+            | SpellEffectKind::ExileGraveyards { .. }
             | SpellEffectKind::None => Vec::new(),
         }
     }
@@ -2678,6 +2687,7 @@ impl SpellEffectKind {
                         ..
                     } | SpellEffectKind::ExileTopWithPlayPermission { .. }
                         | SpellEffectKind::ExileWithOwnerCastPermission { .. }
+                        | SpellEffectKind::ExileGraveyards { .. }
                         | SpellEffectKind::MoveGraveyardCards {
                             destination: GraveyardDestination::Exile,
                             ..
@@ -2913,6 +2923,13 @@ impl SpellEffectKind {
             spell_filter.validate()?;
         }
         if let SpellEffectKind::MoveGraveyardCards { filter, .. } = self {
+            filter.validate()?;
+        }
+        if let SpellEffectKind::ExileGraveyards {
+            filter: Some(filter),
+            ..
+        } = self
+        {
             filter.validate()?;
         }
         if let SpellEffectKind::PutCounters { counter, .. }

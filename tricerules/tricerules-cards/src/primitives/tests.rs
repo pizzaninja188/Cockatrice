@@ -1800,3 +1800,17 @@ fn issue_197_hand_choice_requires_an_explicit_typed_action() {
         assert!(ron::from_str::<super::SpellEffectKind>(text).is_err());
     }
 }
+
+#[test]
+fn exile_graveyards_is_untargeted_and_validates_printed_card_filters() {
+    let card = r#"(id: "test", name: "Test", face_id: "test", mana_cost: "{1}", types: ["Sorcery"], spell_effect: [ExileGraveyards(players: Opponents)])"#;
+    let registry = crate::CardRegistry::from_chunks_and_tokens(&[card], &[])
+        .expect("untargeted graveyard cohort is valid");
+    let effect = &registry.get("test").unwrap().primary_face().spell_effect[0];
+    assert!(effect.target_roles().is_empty());
+    let invalid = card.replace(
+        "players: Opponents",
+        "players: All, filter: Some((min_mana_value: Some(4), max_mana_value: Some(2)))",
+    );
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[&invalid], &[]).is_err());
+}

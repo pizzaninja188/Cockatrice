@@ -1,0 +1,25 @@
+// Oracle and rulings checked 2026-09-08; normalized Oracle lines 1-3.
+(
+  id: "soul-guide_lantern",
+  name: "Soul-Guide Lantern",
+  face_id: "soul_guide_lantern",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "exile_graveyard_card",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile)],
+  )],
+  activated_abilities: [(
+    ability_id: "exile_opponents_graveyards",
+    presentation: OracleLines([2]),
+    costs: [Tap, SacrificeSelf],
+    effect: [ExileGraveyards(players: Opponents)],
+  ), (
+    ability_id: "draw_card",
+    presentation: OracleLines([3]),
+    costs: [Mana("{1}"), Tap, SacrificeSelf],
+    effect: [Draw(count: 1)],
+  )],
+)
