@@ -55,6 +55,7 @@ angel_of_retribution	0	cast	exercised
 angelic_wall	0	cast	exercised
 angels_mercy	0	cast	exercised
 ankle_biter	0	cast	exercised
+annul	0	cast	exercised
 antagonize	0	cast	exercised
 anti-venom,_horrifying_healer	0	cast	exercised
 anvilwrought_raptor	0	cast	exercised
@@ -576,6 +577,7 @@ flamecache_gecko	0	ability:0	exercised
 flamecache_gecko	0	cast	exercised
 flametongue_kavu	0	cast	exercised
 flaring_cinder	0	cast	exercised
+flashfreeze	0	cast	exercised
 fleetfoot_dancer	0	cast	exercised
 fleeting_flight	0	cast	exercised
 flesh_burrower	0	cast	exercised
@@ -640,6 +642,7 @@ generous_stray	0	cast	exercised
 genghis_frog	0	cast	exercised
 gerrards_irregulars	0	cast	exercised
 gerrards_verdict	0	cast	exercised
+get_out	0	cast	exercised
 ghirapur_osprey	0	cast	exercised
 ghostform	0	cast	exercised
 ghostly_sentinel	0	cast	exercised

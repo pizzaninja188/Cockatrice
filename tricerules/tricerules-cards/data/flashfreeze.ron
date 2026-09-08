@@ -1,0 +1,13 @@
+// Oracle and rulings verified 2026-09-08; CR 105.2, 601.2c, 608.2b, 701.6a.
+(
+  id: "flashfreeze",
+  name: "Flashfreeze",
+  face_id: "flashfreeze",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(spell_filter: (any_of: Some([
+    (is_color: Some(Red)),
+    (is_color: Some(Green)),
+  ])))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose a red or green spell", effect_indices: [0])])),
+)

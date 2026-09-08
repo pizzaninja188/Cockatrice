@@ -45,6 +45,10 @@ with ample mana. Fixture construction directly establishes test state; subsequen
 choices use engine commands. Battlefield ability fixtures set the intended face explicitly;
 they do not claim to cover that face's entry/transform sequence.
 
+Annul and Flashfreeze fixtures additionally cast a matching artifact or red creature spell
+before exercising the counterspell. Get Out uses the existing modal/permanent fixture;
+its separate semantic scenarios cover both modes and one/two owned targets.
+
 The driver selects from engine-published target groups, selectable modes, cost candidates,
 resolution candidates/slots/branches, and trigger ordering. Payments use engine previews and
 are previewed again before submission. The preview's canonical `remaining_cost` alternatives

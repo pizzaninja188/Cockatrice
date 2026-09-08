@@ -355,11 +355,12 @@ impl CombatRestriction {
             if !filter.all_terminal_filters_match(|leaf| {
                 leaf.kind == TargetKind::Creature
                     && leaf.controller == TargetController::Any
+                    && leaf.owner == super::TargetOwner::Any
                     && leaf.excluded_objects.is_empty()
                     && leaf.combat_role.is_none()
                     && leaf.tapped.is_none()
             }) {
-                return Err("combat predicates require creature characteristics without controller, source, tapped or combat-role selectors".into());
+                return Err("combat predicates require creature characteristics without owner, controller, source, tapped or combat-role selectors".into());
             }
         }
         Ok(())
@@ -3786,11 +3787,12 @@ impl SpellEffectKind {
                         filter.kind
                     ));
                 }
-                if !filter
-                    .all_terminal_filters_match(|leaf| leaf.controller == TargetController::Any)
-                {
+                if !filter.all_terminal_filters_match(|leaf| {
+                    leaf.controller == TargetController::Any
+                        && leaf.owner == super::TargetOwner::Any
+                }) {
                     return Err(
-                        "TargetPlayerSacrifices.filter cannot use a controller-relative target filter"
+                        "TargetPlayerSacrifices.filter cannot use an owner- or controller-relative target filter"
                             .into(),
                     );
                 }
@@ -3820,10 +3822,12 @@ impl SpellEffectKind {
                 // no activating player to compare a controller against — controller scope belongs
                 // in the effect's own `players` (RelativePlayerSet) or `CreatureScopeFilter`, not here.
                 // Rejecting it beats silently ignoring it.
-                if !kind.all_terminal_filters_match(|leaf| leaf.controller == TargetController::Any)
-                {
+                if !kind.all_terminal_filters_match(|leaf| {
+                    leaf.controller == TargetController::Any
+                        && leaf.owner == super::TargetOwner::Any
+                }) {
                     return Err(
-                        "mass effect filter cannot use a controller relationship; scope the effect with \
+                        "mass effect filter cannot use an owner or controller relationship; scope the effect with \
                          `players` (RelativePlayerSet) instead"
                             .into(),
                     );

@@ -115,6 +115,35 @@ pub(super) fn characteristics_from(
     CharacteristicsEvaluator { state, registry }.characteristics(oid)
 }
 
+/// CR 105.2/707.10: a spell uses its selected face, even when it is a copy with no
+/// backing GameObject. Only effects that actually affect this stack object apply;
+/// battlefield creature/permanent scopes must not color a creature/permanent spell.
+pub(super) fn stack_spell_colors(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    item: &StackItem,
+) -> Option<Vec<Color>> {
+    let face = registry.get(&item.card_id)?.face(item.face_index)?;
+    let mut characteristics = Characteristics {
+        mana_value: face.mana_cost.mana_value_on_stack(item.chosen_x),
+        controller: item.controller,
+        names: vec![face.name.clone()],
+        types: face.types.clone(),
+        all_creature_types: false,
+        supertypes: face.supertypes.clone(),
+        colors: face.colors(),
+        keywords: face.keywords.clone(),
+        protections: Vec::new(),
+        evasions: Vec::new(),
+        power: None,
+        toughness: None,
+        signed_power: None,
+        signed_toughness: None,
+    };
+    CharacteristicsEvaluator { state, registry }.apply_layer_5_color(item.id, &mut characteristics);
+    Some(characteristics.colors)
+}
+
 impl CharacteristicsEvaluator<'_> {
     fn characteristics(&self, oid: ObjectId) -> Option<Characteristics> {
         let object = self.state.objects.get(&oid)?;
@@ -837,6 +866,14 @@ pub(super) fn effect_affects(
     oid: ObjectId,
     characteristics: &Characteristics,
 ) -> bool {
+    if !matches!(effect.affected, AffectedScope::Single(_))
+        && !state
+            .objects
+            .get(&oid)
+            .is_some_and(|object| object.zone == Zone::Battlefield)
+    {
+        return false;
+    }
     if effect.duration == EffectDuration::WhileSourceOnBattlefield
         && !matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities)
         && effect.source_id.is_some_and(|source_id| {
@@ -977,6 +1014,7 @@ fn permanent_matches_target_scope(
         || source != Some(oid))
         && kind_matches
         && controller_matches
+        && super::targeting::target_owner_matches(state, filter.owner, reference_player, oid)
         && permanent_matches_filter_characteristics(state, filter, oid, characteristics)
 }
 

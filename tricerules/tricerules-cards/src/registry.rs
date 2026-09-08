@@ -663,6 +663,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             if !filter.all_terminal_filters_match(|leaf| {
                 matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
                     && leaf.controller == TargetController::Any
+                    && leaf.owner == crate::primitives::TargetOwner::Any
                     && leaf.excluded_objects.is_empty()
             }) {
                 return Err(RegistryError::InvalidCard {

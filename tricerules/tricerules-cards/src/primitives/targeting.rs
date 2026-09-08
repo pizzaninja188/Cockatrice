@@ -430,8 +430,15 @@ pub enum CardTypeFilter {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct StackSpellFilter {
+    /// Annul / Get Out type unions and Flashfreeze's color union. As with TargetFilter,
+    /// an OR node has only distinct branches; all leaf fields remain default.
+    #[serde(default)]
+    pub any_of: Option<Vec<Self>>,
     #[serde(default)]
     pub card_type: Option<CardTypeFilter>,
+    /// CR 105.2: matches one of the spell's current colors, including multicolored spells.
+    #[serde(default)]
+    pub is_color: Option<Color>,
     #[serde(default)]
     pub min_mana_value: Option<u32>,
     #[serde(default)]
@@ -440,7 +447,32 @@ pub struct StackSpellFilter {
 
 impl StackSpellFilter {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        validate_mana_value_bounds(self.min_mana_value, self.max_mana_value)
+        fn visit<'a>(
+            filter: &'a StackSpellFilter,
+            leaves: &mut Vec<&'a StackSpellFilter>,
+        ) -> Result<(), String> {
+            if let Some(branches) = &filter.any_of {
+                let mut leaf_fields = filter.clone();
+                leaf_fields.any_of = None;
+                if leaf_fields != StackSpellFilter::default() || branches.len() < 2 {
+                    return Err(
+                        "stack filter any_of requires a pure OR with at least two alternatives"
+                            .into(),
+                    );
+                }
+                for branch in branches {
+                    visit(branch, leaves)?;
+                }
+            } else {
+                validate_mana_value_bounds(filter.min_mana_value, filter.max_mana_value)?;
+                if leaves.contains(&filter) {
+                    return Err("stack filter cannot repeat a terminal filter".into());
+                }
+                leaves.push(filter);
+            }
+            Ok(())
+        }
+        visit(self, &mut Vec::new())
     }
 
     pub fn is_unrestricted(&self) -> bool {
@@ -484,6 +516,15 @@ pub enum TargetController {
     /// A permanent controlled by the event-time defending player of the attack that caused this
     /// triggered ability. Valid only on attack triggers that publish that context.
     DefendingPlayer,
+}
+
+/// CR 110.2 ownership is independent of current control. Get Out's targets and Brand's
+/// untargeted selection restrict permanents to ones you own under any player's control.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TargetOwner {
+    #[default]
+    Any,
+    You,
 }
 
 /// Inclusive comparison against a permanent's current derived power.
@@ -654,6 +695,9 @@ pub struct TargetFilter {
     /// (Glaring Aegis, Rambunctious Mutt) while composing with every other filter field.
     #[serde(default)]
     pub controller: TargetController,
+    /// Relative to the effect controller, independently of `controller` and characteristics.
+    #[serde(default)]
+    pub owner: TargetOwner,
     /// If true, the object that sourced this spell or ability is not a legal target. The engine
     /// compares full object identity (ObjectId plus zone-change generation), so a card that leaves
     /// and returns is a new object under CR 400.7 and is no longer excluded.
@@ -786,6 +830,11 @@ impl TargetFilter {
     }
 
     fn validate_characteristic_leaf(&self) -> Result<(), String> {
+        if self.owner != TargetOwner::Any
+            && !matches!(self.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+        {
+            return Err("owner-relative filter requires Creature or AnyPermanent kind".into());
+        }
         if self.kind == TargetKind::AnyTarget
             && (self.token.is_some()
                 || !self.excluded_permanent_types.is_empty()
@@ -899,6 +948,7 @@ impl TargetFilter {
             || self.not_color.is_some()
             || self.is_color.is_some()
             || self.controller != TargetController::Any
+            || self.owner != TargetOwner::Any
             || !self.excluded_objects.is_empty()
             || !self.permanent_types.is_empty()
             || !self.required_subtypes.is_empty()

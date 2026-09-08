@@ -241,17 +241,21 @@ fn drain(e: &mut GameEngine, mut batch: RuledEventBatch, budget: usize) -> Resul
     }
 }
 fn fixture(case: &Case) -> GameEngine {
-    let deck = helpers::deck_with(
-        "forest",
-        &[
-            &case.card,
-            "grizzly_bears",
-            "grizzly_bears",
-            "grizzly_bears",
-            "island",
-            "explosive_apparatus",
-        ],
-    );
+    let stack_fixture = match case.card.as_str() {
+        "annul" => Some("short_sword"),
+        "flashfreeze" => Some("hill_giant"),
+        _ => None,
+    };
+    let mut cards = vec![
+        case.card.as_str(),
+        "grizzly_bears",
+        "grizzly_bears",
+        "grizzly_bears",
+        "island",
+        "explosive_apparatus",
+    ];
+    cards.extend(stack_fixture);
+    let deck = helpers::deck_with("forest", &cards);
     let mut e = GameEngine::new(SEED, &[0, 1], 20, Some(vec![deck.clone(), deck]), true).unwrap();
     helpers::advance_to_main1_from_game_start(&mut e);
     for player in 0..e.state.players.len() {
@@ -264,6 +268,13 @@ fn fixture(case: &Case) -> GameEngine {
         e.state.players[player].graveyard.push(dead);
         e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
         helpers::grant_pool(&mut e, player);
+    }
+    if let Some(card) = stack_fixture {
+        helpers::relocate_to_hand(&mut e, 0, card);
+        let slot = helpers::hand_index_for_card(&e, 0, card);
+        let mut command = helpers::cast_spell(slot, vec![]);
+        offers::pay(&e, 0, &mut command).expect("fund stack fixture");
+        apply(&mut e, 0, &command).expect("cast stack fixture");
     }
     e
 }
@@ -408,6 +419,9 @@ fn drain_rejects_exhaustion_and_rejected_progression() {
 #[test]
 fn shared_fixture_families_complete() {
     for (card, ability) in [
+        ("annul", None),
+        ("flashfreeze", None),
+        ("get_out", None),
         ("grizzly_bears", None),
         ("forest", Some(0)),
         ("boros_charm", None),

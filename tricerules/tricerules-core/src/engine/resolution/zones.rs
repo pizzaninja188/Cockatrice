@@ -788,20 +788,30 @@ pub(super) fn return_to_owners_hand(
     let SpellEffectKind::ReturnToOwnersHand { subject } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let tid = resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject);
+    let subjects = if matches!(subject, EffectSubject::Chosen(_)) {
+        cx.resolve_battlefield_subjects(&subject)
+    } else {
+        resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject)
+            .into_iter()
+            .collect()
+    };
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let spell_label = cx.spell_label;
 
-    if let Some(tid) = tid {
+    // Get Out returns its entire legal target cohort simultaneously. Capture every leave
+    // observer before moving any subject, then publish triggers once for the whole instruction.
+    let zone_snapshot = engine.snapshot_zone_event();
+    let leave_events = subjects
+        .iter()
+        .filter_map(|&tid| engine.battlefield_leave_event(tid))
+        .collect::<Vec<_>>();
+    for tid in subjects {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
         // Transient battlefield state (damage, counters, tap) is reset centrally
         // by move_object_to_zone on leaving the battlefield (CR 400.7 / 121.2).
-        let zone_snapshot = engine.snapshot_zone_event();
-        let leave_event = engine.battlefield_leave_event(tid);
         move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Hand, None)?;
-        engine.fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
         events.push(ev_log(format!(
             "{spell_label} returns {tgt} to its owner's hand"
         )));
@@ -814,6 +824,7 @@ pub(super) fn return_to_owners_hand(
             ));
         }
     }
+    engine.fire_zone_triggers(zone_snapshot, leave_events);
 
     Ok(EffectOutcome::Continue)
 }

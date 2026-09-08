@@ -54,9 +54,9 @@ use tricerules_cards::primitives::{
     SpecialActionAffected, SpecialActionKind, SpecialActionManaPurpose, SpellCastFilter,
     SpellCastOrigin, SpellCostModifier, SpellEffectKind, SpellManaSpentComparison,
     StackSpellFilter, StaticAbilityDef, StaticDamagePreventionAmount, TapTriggerCardinality,
-    TargetController, TargetFilter, TargetKind, TargetingCostAction, TargetingCostProtected,
-    TargetingDef, TargetingSourceFilter, TriggerCondition, TriggeredAbilityDef,
-    TriggeredCardReference, ZoneCardFilter,
+    TargetController, TargetFilter, TargetKind, TargetOwner, TargetingCostAction,
+    TargetingCostProtected, TargetingDef, TargetingSourceFilter, TriggerCondition,
+    TriggeredAbilityDef, TriggeredCardReference, ZoneCardFilter,
 };
 use tricerules_cards::{
     is_creature_type, mode_fallback, CardDefinition, CardFace, CardRegistry,

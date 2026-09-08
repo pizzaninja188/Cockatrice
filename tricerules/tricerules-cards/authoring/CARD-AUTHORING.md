@@ -138,6 +138,20 @@ half's name; Adventure, Omen, flip, and double-faced cards use their normal/fron
 The removed graveyard characteristic fields and singular `ZoneCardFilter.subtype` are rejected;
 author `card: Some(...)` and `required_subtypes: [...]` directly.
 
+### Stack spells and permanent ownership
+
+Use `StackSpellFilter` for counter/copy spell targets. `card_type`, `is_color`, and inclusive
+mana-value bounds combine with AND. `any_of` follows the pure-OR validation of `TargetFilter`:
+at least two distinct terminal predicates and no leaf fields on an OR node. Annul and Get Out
+use type alternatives; Flashfreeze uses red/green color alternatives. Stack colors use the
+selected face and applicable current color effects, including for spell copies.
+
+`TargetFilter.owner: You` means the effect controller owns the permanent, independently of
+`controller`. The default `Any` preserves unrestricted ownership. Get Out combines `owner: You`
+with `kind: AnyPermanent` and `permanent_types: [Creature, Enchantment]`. Owner restrictions
+require permanent-only kinds and must appear within each leaf of an OR filter. Context-free
+mass, combat, and entry-copy filters reject relative ownership rather than silently ignoring it.
+
 ### Saga definitions
 
 Author a Saga face with both `"Enchantment"` and `"Saga"` types and one

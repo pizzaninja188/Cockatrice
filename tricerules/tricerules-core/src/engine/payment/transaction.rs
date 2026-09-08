@@ -2260,7 +2260,14 @@ impl GameEngine {
             TargetKind::AnyPermanent => true,
             _ => false,
         };
-        kind_matches && crate::engine::targeting::filter_characteristics_match(self, filter, oid)
+        kind_matches
+            && crate::engine::targeting::target_owner_matches(
+                &self.state,
+                filter.owner,
+                player,
+                oid,
+            )
+            && crate::engine::targeting::filter_characteristics_match(self, filter, oid)
     }
 
     pub(in crate::engine) fn counter_payment_permanent_matches(
@@ -2306,6 +2313,12 @@ impl GameEngine {
             _ => false,
         };
         controller_matches
+            && crate::engine::targeting::target_owner_matches(
+                &self.state,
+                filter.owner,
+                player,
+                oid,
+            )
             && kind_matches
             && crate::engine::targeting::filter_characteristics_match(self, filter, oid)
     }

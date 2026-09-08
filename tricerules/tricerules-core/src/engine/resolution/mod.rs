@@ -2696,6 +2696,14 @@ fn move_object_to_zone_with_entry_receipt(
     // source of (anthems) — a static ability stops applying the moment its source leaves (LTB).
     // One-shot `UntilEndOfTurn` effects (Giant Growth, firebreathing) are deliberately NOT drained
     // here: once created they are independent of their source (CR 611.2g) and only end at cleanup.
+    state.continuous_effects.retain(|e| {
+        let single_on_this =
+            old_zone != Some(z) && matches!(&e.affected, AffectedScope::Single(id) if *id == oid);
+        let static_from_this = leaving_battlefield
+            && e.source_id == Some(oid)
+            && e.duration == EffectDuration::WhileSourceOnBattlefield;
+        !single_on_this && !static_from_this
+    });
     if leaving_battlefield {
         if let Some(attached_object) = last_known_attached_object {
             state
@@ -2705,12 +2713,6 @@ fn move_object_to_zone_with_entry_receipt(
         state
             .skip_next_untap
             .retain(|&(object_id, _)| object_id != oid);
-        state.continuous_effects.retain(|e| {
-            let single_on_this = matches!(&e.affected, AffectedScope::Single(id) if *id == oid);
-            let static_from_this =
-                e.source_id == Some(oid) && e.duration == EffectDuration::WhileSourceOnBattlefield;
-            !single_on_this && !static_from_this
-        });
         state.damage_prevention_effects.retain(|effect| {
             let recipient_is_this_object = match effect.scope {
                 DamagePreventionScope::Recipient(recipient) => recipient == oid,

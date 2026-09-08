@@ -475,7 +475,7 @@ fn object_targetable_by(
 /// Deliberately excluded, because they are **not** shared:
 /// - hexproof/shroud ([`object_targetable_by`]) — CR 702.11e, untargeted effects affect those
 ///   permanents normally, so only the targeted caller applies it;
-/// - `controller` — needs an activating player, which untargeted mass selection does not have
+/// - `controller` / `owner` — need a reference player, which untargeted mass selection does not have
 ///   (non-`Any` values are rejected in a mass filter at registry load);
 /// - `excluded_objects` — needs the source object's captured CR 400.7 identity, which untargeted
 ///   mass selection does not have (and registry validation rejects on mass filters);
@@ -512,6 +512,22 @@ fn target_controller_matches(
         TargetController::DefendingPlayer => defending_player
             .map(|defender| defender == target_controller)
             .unwrap_or(false),
+    }
+}
+
+/// CR 110.2: the physical object's owner is stable across control-changing effects.
+pub(super) fn target_owner_matches(
+    state: &GameState,
+    relation: TargetOwner,
+    reference_player: PlayerId,
+    oid: ObjectId,
+) -> bool {
+    match relation {
+        TargetOwner::Any => true,
+        TargetOwner::You => state
+            .objects
+            .get(&oid)
+            .is_some_and(|o| o.owner == reference_player),
     }
 }
 
@@ -643,6 +659,7 @@ pub(super) fn attachment_filter_legal(
         _ => false,
     };
     kind_ok
+        && target_owner_matches(&engine.state, filter.owner, attachment_controller, oid)
         && attachment_protection_legal(engine, recipient, attachment_id)
         && !object_is_excluded(
             &engine.state,
@@ -801,6 +818,7 @@ pub(super) fn object_matches_scoped_mass_filter(
         return false;
     };
     object_matches_mass_filter(engine, oid, filter)
+        && target_owner_matches(&engine.state, filter.owner, reference_player, oid)
         && target_controller_matches(
             &engine.state,
             filter.controller,
@@ -872,13 +890,14 @@ pub(super) fn permanent_choice_filter_legal(
     let Some(characteristics) = engine.characteristics(oid) else {
         return false;
     };
-    target_controller_matches(
-        &engine.state,
-        filter.controller,
-        chooser,
-        characteristics.controller,
-        trigger_context.defending_player,
-    )
+    target_owner_matches(&engine.state, filter.owner, chooser, oid)
+        && target_controller_matches(
+            &engine.state,
+            filter.controller,
+            chooser,
+            characteristics.controller,
+            trigger_context.defending_player,
+        )
 }
 
 fn target_filter_legal_with_context(
@@ -936,13 +955,15 @@ fn target_filter_legal_with_context(
         let Some(characteristics) = engine.characteristics(tid) else {
             return false;
         };
-        if !target_controller_matches(
-            &engine.state,
-            filter.controller,
-            caster,
-            characteristics.controller,
-            trigger_context.defending_player,
-        ) {
+        if !target_owner_matches(&engine.state, filter.owner, caster, tid)
+            || !target_controller_matches(
+                &engine.state,
+                filter.controller,
+                caster,
+                characteristics.controller,
+                trigger_context.defending_player,
+            )
+        {
             return false;
         }
     }
@@ -954,7 +975,7 @@ fn target_filter_legal_with_context(
 /// evaluated against the selected face and its announced X value. The default accepts any spell.
 pub(super) fn stack_spell_target_legal(
     state: &GameState,
-    registry: &CardRegistry,
+    registry: &'static CardRegistry,
     tid: ObjectId,
     spell_filter: &StackSpellFilter,
 ) -> bool {
@@ -968,6 +989,11 @@ pub(super) fn stack_spell_target_legal(
     if spell_filter.is_unrestricted() {
         return true;
     }
+    if let Some(branches) = &spell_filter.any_of {
+        return branches
+            .iter()
+            .any(|branch| stack_spell_target_legal(state, registry, tid, branch));
+    }
     let Some(face) = registry
         .get(&item.card_id)
         .and_then(|d| d.face(item.face_index))
@@ -978,6 +1004,12 @@ pub(super) fn stack_spell_target_legal(
         .card_type
         .is_some_and(|filter| !face.matches_card_type(filter))
     {
+        return false;
+    }
+    if spell_filter.is_color.is_some_and(|color| {
+        super::characteristics::stack_spell_colors(state, registry, item)
+            .is_none_or(|colors| !colors.contains(&color))
+    }) {
         return false;
     }
     let mana_value = face.mana_cost.mana_value_on_stack(item.chosen_x);
@@ -2264,6 +2296,7 @@ mod tests {
             &[],
         )
         .unwrap();
+        let registry: &'static CardRegistry = Box::leak(Box::new(registry));
         let decks = Some(vec![vec!["forest".into(); 7], vec!["forest".into(); 7]]);
         let mut engine = GameEngine::new(205, &[0, 1], 20, decks, true).unwrap();
         engine.state.stack = vec![
@@ -2281,19 +2314,19 @@ mod tests {
         };
         assert!(!stack_spell_target_legal(
             &engine.state,
-            &registry,
+            registry,
             101,
             &exact_two
         ));
         assert!(stack_spell_target_legal(
             &engine.state,
-            &registry,
+            registry,
             102,
             &exact_two
         ));
         assert!(!stack_spell_target_legal(
             &engine.state,
-            &registry,
+            registry,
             104,
             &exact_two
         ));
@@ -2304,25 +2337,25 @@ mod tests {
         };
         assert!(!stack_spell_target_legal(
             &engine.state,
-            &registry,
+            registry,
             102,
             &at_least_four
         ));
         assert!(stack_spell_target_legal(
             &engine.state,
-            &registry,
+            registry,
             104,
             &at_least_four
         ));
         assert!(stack_spell_target_legal(
             &engine.state,
-            &registry,
+            registry,
             105,
             &at_least_four
         ));
         assert!(stack_spell_target_legal(
             &engine.state,
-            &registry,
+            registry,
             106,
             &at_least_four
         ));
@@ -2333,7 +2366,7 @@ mod tests {
         engine.state.stack.push(copied_x_spell);
         assert!(stack_spell_target_legal(
             &engine.state,
-            &registry,
+            registry,
             107,
             &at_least_four
         ));
@@ -2343,7 +2376,7 @@ mod tests {
         engine.state.stack.push(ability);
         assert!(!stack_spell_target_legal(
             &engine.state,
-            &registry,
+            registry,
             108,
             &at_least_four
         ));
@@ -2354,15 +2387,229 @@ mod tests {
         };
         assert!(stack_spell_target_legal(
             &engine.state,
-            &registry,
+            registry,
             102,
             &at_most_two
         ));
         assert!(!stack_spell_target_legal(
             &engine.state,
-            &registry,
+            registry,
             104,
             &at_most_two
+        ));
+    }
+
+    #[test]
+    fn issue_231_stack_filters_match_faces_copies_and_current_colors() {
+        let registry = CardRegistry::from_chunks_and_tokens(
+            &[
+                r#"(id: "red_creature", name: "Red Creature", face_id: "red_creature", mana_cost: "{R}", types: ["Creature"], power: 1, toughness: 1)"#,
+                r#"(id: "artifact", name: "Artifact", face_id: "artifact", mana_cost: "{1}", types: ["Artifact"])"#,
+                r#"(id: "enchantment", name: "Enchantment", face_id: "enchantment", mana_cost: "{U}", types: ["Enchantment"])"#,
+                r#"(id: "split", name: "Blue // Green", layout: Split, faces: [(name: "Blue", face_id: "blue", mana_cost: "{U}", types: ["Instant"]), (name: "Green", face_id: "green", mana_cost: "{R}{G}", types: ["Instant"])])"#,
+            ],
+            &[],
+        ).unwrap();
+        let registry: &'static CardRegistry = Box::leak(Box::new(registry));
+        let mut engine = GameEngine::new(231, &[0, 1], 20, None, true).unwrap();
+        engine.state.stack = vec![
+            issue_205_stack_item(101, "red_creature", 0, 0),
+            issue_205_stack_item(102, "artifact", 0, 0),
+            issue_205_stack_item(103, "enchantment", 0, 0),
+            issue_205_stack_item(104, "split", 0, 0),
+            issue_205_stack_item(105, "split", 1, 0),
+        ];
+        engine.state.stack[4].is_copy = true;
+        let annul = StackSpellFilter {
+            any_of: Some(
+                [CardTypeFilter::Artifact, CardTypeFilter::Enchantment]
+                    .map(|card_type| StackSpellFilter {
+                        card_type: Some(card_type),
+                        ..Default::default()
+                    })
+                    .to_vec(),
+            ),
+            ..Default::default()
+        };
+        let flashfreeze = StackSpellFilter {
+            any_of: Some(
+                [Color::Red, Color::Green]
+                    .map(|color| StackSpellFilter {
+                        is_color: Some(color),
+                        ..Default::default()
+                    })
+                    .to_vec(),
+            ),
+            ..Default::default()
+        };
+        let matches = |state: &GameState, filter: &StackSpellFilter| {
+            (101..=105)
+                .map(|oid| stack_spell_target_legal(state, registry, oid, filter))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            matches(&engine.state, &annul),
+            [false, true, true, false, false]
+        );
+        assert_eq!(
+            matches(&engine.state, &flashfreeze),
+            [true, false, false, false, true]
+        );
+        // Stack copies have no GameObject. Their current color still responds to a direct
+        // color effect, while a battlefield creature scope must not affect a creature spell.
+        for (affected, colors, timestamp) in [
+            (AffectedScope::AllCreatures, vec![Color::Blue], 1),
+            (AffectedScope::Single(105), vec![Color::Blue], 2),
+            (AffectedScope::Single(104), vec![Color::Red], 3),
+        ] {
+            engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected,
+                kind: ContinuousEffectKind::Layer5SetColors(colors),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp,
+            });
+        }
+        assert_eq!(
+            matches(&engine.state, &flashfreeze),
+            [true, false, false, true, false]
+        );
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(105),
+            kind: ContinuousEffectKind::Layer5SetColors(vec![Color::Green]),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 4,
+        });
+        assert!(stack_spell_target_legal(
+            &engine.state,
+            registry,
+            105,
+            &flashfreeze
+        ));
+        engine.state.stack[4].ability_text = Some("ability".into());
+        assert!(!stack_spell_target_legal(
+            &engine.state,
+            registry,
+            105,
+            &flashfreeze
+        ));
+    }
+
+    #[test]
+    fn issue_231_ownership_is_independent_of_control_across_permanent_consumers() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(231002, &[0, 1], 20, decks, true).unwrap();
+        let oid = engine.state.players[0].hand.remove(0);
+        engine.state.players[1].battlefield.push(oid);
+        let object = engine.state.objects.get_mut(&oid).unwrap();
+        object.zone = Zone::Battlefield;
+        object.controller = 1;
+        object.base_controller = 1;
+        let filter = TargetFilter {
+            kind: TargetKind::Creature,
+            owner: tricerules_cards::primitives::TargetOwner::You,
+            ..Default::default()
+        };
+        for player in [0, 1] {
+            let expected = player == 0;
+            let source = TargetSourceIdentity::current(&engine, u32::MAX);
+            assert_eq!(
+                target_filter_legal_with_context(
+                    &engine,
+                    &filter,
+                    oid,
+                    player,
+                    source,
+                    TriggerContext::default()
+                ),
+                expected
+            );
+            assert_eq!(
+                permanent_choice_filter_legal(
+                    &engine,
+                    &filter,
+                    oid,
+                    player,
+                    source,
+                    TriggerContext::default()
+                ),
+                expected
+            );
+            assert_eq!(
+                object_matches_scoped_mass_filter(&engine, oid, &filter, player),
+                expected
+            );
+            assert_eq!(
+                engine.counter_payment_permanent_matches(player, u32::MAX, oid, &filter),
+                expected
+            );
+            let effect = ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::PermanentsMatching {
+                    reference_player: player,
+                    filter: Box::new(filter.clone()),
+                    exclude: None,
+                },
+                kind: ContinuousEffectKind::Layer5SetColors(vec![Color::Blue]),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 0,
+            };
+            assert_eq!(
+                super::super::characteristics::effect_affects(
+                    &engine.state,
+                    engine.registry,
+                    &effect,
+                    oid,
+                    &engine.characteristics(oid).unwrap()
+                ),
+                expected
+            );
+        }
+        assert!(!engine.ability_cost_permanent_matches(1, None, oid, &filter));
+        let payment = super::super::payment::components::ObjectPaymentComponent::resolution(
+            rv1::CostObjectRef::default(),
+            &ResolutionCost::SacrificePermanent {
+                filter: TargetFilter {
+                    controller: TargetController::You,
+                    ..filter.clone()
+                },
+                source_only: false,
+            },
+        )
+        .unwrap();
+        assert!(
+            !payment.candidates(&engine, 1).contains(&oid),
+            "resolution costs must also check ownership"
+        );
+        let controlled_by_opponent = TargetFilter {
+            controller: TargetController::Opponent,
+            ..filter.clone()
+        };
+        assert!(object_matches_scoped_mass_filter(
+            &engine,
+            oid,
+            &controlled_by_opponent,
+            0
+        ));
+        let controlled_by_you = TargetFilter {
+            controller: TargetController::You,
+            ..filter.clone()
+        };
+        assert!(!object_matches_scoped_mass_filter(
+            &engine,
+            oid,
+            &controlled_by_you,
+            0
         ));
     }
 

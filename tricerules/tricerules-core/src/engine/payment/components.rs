@@ -221,9 +221,9 @@ impl PermanentPaymentFilter {
             Self::Announced { source, filter } => {
                 engine.ability_cost_permanent_matches(player, *source, oid, filter)
             }
-            Self::Resolution(filter) => {
-                super::super::targeting::object_matches_mass_filter(engine, oid, filter)
-            }
+            Self::Resolution(filter) => super::super::targeting::object_matches_scoped_mass_filter(
+                engine, oid, filter, player,
+            ),
         }
     }
 }

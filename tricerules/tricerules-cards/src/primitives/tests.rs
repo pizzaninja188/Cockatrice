@@ -645,6 +645,61 @@ fn stack_spell_filter_rejects_inverted_mana_value_bounds() {
 }
 
 #[test]
+fn issue_231_stack_filter_disjunction_and_color_are_validated() {
+    let filter: StackSpellFilter =
+        ron::from_str("(any_of: Some([(card_type: Some(Artifact)), (is_color: Some(Red))]))")
+            .expect("stack filters support type and color alternatives");
+    assert!(filter.validate().is_ok());
+    for text in [
+        "(any_of: Some([]))",
+        "(any_of: Some([(is_color: Some(Red))]))",
+        "(any_of: Some([(is_color: Some(Red)), (is_color: Some(Red))]))",
+        "(card_type: Some(Creature), any_of: Some([(is_color: Some(Red)), (is_color: Some(Green))]))",
+        "(any_of: Some([(min_mana_value: Some(4), max_mana_value: Some(2)), (is_color: Some(Red))]))",
+        "(any_of: Some([(is_color: Some(Red)), (any_of: Some([(is_color: Some(Green)), (is_color: Some(Red))]))]))",
+    ] {
+        let filter: StackSpellFilter = ron::from_str(text).unwrap();
+        assert!(filter.validate().is_err(), "accepted {text}");
+    }
+}
+
+#[test]
+fn issue_231_owner_filter_requires_permanents_and_pure_or_nodes() {
+    let filter: TargetFilter = ron::from_str("(kind: AnyPermanent, owner: You)").unwrap();
+    assert!(filter.validate_target_constraints().is_ok());
+    for text in [
+        "(kind: AnyPlayer, owner: You)",
+        "(kind: AnyTarget, owner: You)",
+        "(owner: You, any_of: Some([(kind: Creature), (kind: AnyPermanent)]))",
+    ] {
+        let filter: TargetFilter = ron::from_str(text).unwrap();
+        assert!(
+            filter.validate_target_constraints().is_err(),
+            "accepted {text}"
+        );
+        assert!(
+            filter.validate_characteristic_constraints().is_err(),
+            "accepted {text}"
+        );
+    }
+}
+
+#[test]
+fn issue_231_context_free_filters_reject_relative_ownership() {
+    for text in [
+        "DestroyAll(kind: (kind: Creature, owner: You))",
+        "TargetPlayerSacrifices(target: (kind: AnyPlayer), filter: (kind: Creature, owner: You))",
+        "ApplyCombatRestriction(scope: Source, restriction: (cant_be_blocked_by: [(kind: Creature, owner: You)]))",
+    ] {
+        let effect: SpellEffectKind = ron::from_str(text).unwrap();
+        assert!(effect.validate(EffectContext::Ability).is_err(), "accepted {text}");
+    }
+    let copy = r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 1,
+        static_abilities: [(ability_id: "copy", presentation: Fallback, definition: EntersAsCopy(filter: (kind: Creature, owner: You)))])"#;
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[copy], &[]).is_err());
+}
+
+#[test]
 fn zone_card_filters_validate_leaf_and_recursive_or_shapes() {
     let living_phone = ZoneCardFilter {
         card_type: Some(CardTypeFilter::Creature),

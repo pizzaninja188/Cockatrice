@@ -1,0 +1,13 @@
+// Oracle and rulings verified 2026-09-08; CR 601.2c, 608.2b, 701.6a.
+(
+  id: "annul",
+  name: "Annul",
+  face_id: "annul",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [CounterTargetSpell(spell_filter: (any_of: Some([
+    (card_type: Some(Artifact)),
+    (card_type: Some(Enchantment)),
+  ])))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose an artifact or enchantment spell", effect_indices: [0])])),
+)
