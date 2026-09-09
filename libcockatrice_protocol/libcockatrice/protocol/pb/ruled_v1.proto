@@ -1368,6 +1368,13 @@ message ResolutionSelectionSlot {
   PresentationRef presentation = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
+// One complete legal selection: exactly count distinct candidates from this index set.
+// Winternight Stories and Thirst for Knowledge use alternatives for their discard instructions.
+message ResolutionSelectionAlternative {
+  uint32 count = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated uint32 candidate_indices = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
 // Display-only identity for one public replacement/prevention application. application_id is
 // opaque, never a physical card or engine object id. Empty source_card_name uses neutral art.
 message ReplacementEffectOption {
@@ -1443,6 +1450,10 @@ message ResolutionChoiceRequired {
   // Exactly one entry for each CHOICE_KIND_REPLACEMENT_EFFECT candidate application id.
   // The relay preserves these for the same recipients as the existing public choice labels.
   repeated ReplacementEffectOption replacement_options = 25
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Empty preserves ordinary min/max picks. Otherwise a selection must match an alternative.
+  // Indices refer to candidate_object_ids and remain private even when candidates are public.
+  repeated ResolutionSelectionAlternative selection_alternatives = 26
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 

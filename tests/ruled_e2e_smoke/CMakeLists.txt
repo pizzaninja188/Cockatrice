@@ -14,6 +14,7 @@ add_executable(ruled_e2e_smoke_test ${VERSION_STRING_CPP}
   ruled_e2e_opening_diagnostics_test.cpp
   ruled_e2e_casting_payments_test.cpp
   ruled_e2e_token_copies_test.cpp
+  ruled_e2e_discard_alternatives_test.cpp
   ruled_e2e_preparation_test.cpp
   ruled_e2e_zones_visibility_test.cpp
   ruled_e2e_combat_permanents_test.cpp

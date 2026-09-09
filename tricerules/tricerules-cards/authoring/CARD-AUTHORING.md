@@ -469,6 +469,14 @@ Use `Discard(quantity: Exact(2))` for a fixed untargeted discard and
 the complete hand automatically while preserving discard replacements and madness. Follow it
 with `Draw(count: 2)` for a mandatory discard-then-draw sequence, including an empty hand.
 
+Use `Discard(quantity: UnlessOne(count: 2, filter: (card_type: Some(Creature))))`
+after `Draw(count: 3)` for Winternight Stories. The same shape with `Artifact` expresses
+Thirst for Knowledge. The count must be at least two and the printed-card filter must be valid.
+The player selects either one matching card or the ordinary count, clamped to the remaining
+hand. This uses the private hand picker and discard continuation, not `ChooseResolutionBranch`.
+The one-card alternative is a resolution-time cost (CR 118.12a); Library of Leng cannot replace
+it, while madness still applies. The ordinary discard instruction retains effect replacements.
+
 Use `LookChooseToHand(count: 2, min: 1, max: 1, reveal: false, bottom_order: Chosen)`
 for Sleight of Hand's mandatory private selection. Omit `filter` to allow any card, or use
 `filter: Some((...))` for a printed-card predicate. Bounds clamp to available matches; these

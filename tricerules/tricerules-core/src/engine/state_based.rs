@@ -640,6 +640,7 @@ impl GameEngine {
                         waterbend: false,
                         selection_slots: Vec::new(),
                         replacement_options: Vec::new(),
+                        selection_alternatives: Vec::new(),
                     },
                 )),
             });

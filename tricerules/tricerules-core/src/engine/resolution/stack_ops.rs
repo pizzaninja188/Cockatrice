@@ -74,6 +74,7 @@ pub(super) fn counter_target_spell(
                         waterbend: false,
                         selection_slots: Vec::new(),
                         replacement_options: Vec::new(),
+                        selection_alternatives: Vec::new(),
                     },
                 )),
             });
@@ -198,6 +199,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 waterbend: false,
                 selection_slots: Vec::new(),
                 replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
             };
             (presentation, PendingWardPaymentStage::Mana(payment), event)
         }
@@ -273,6 +275,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 waterbend: false,
                 selection_slots: Vec::new(),
                 replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
             };
             (
                 presentation,
@@ -693,6 +696,7 @@ pub(super) fn copy_target_spell(
                             waterbend: false,
                             selection_slots: Vec::new(),
                             replacement_options: Vec::new(),
+                            selection_alternatives: Vec::new(),
                         },
                     )),
                 });

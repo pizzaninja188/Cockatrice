@@ -101,6 +101,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
                 waterbend: false,
                 selection_slots: Vec::new(),
                 replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
             },
         )),
     });
@@ -336,9 +337,10 @@ pub(super) fn discard(
             continue;
         };
         let hand = cx.engine.state.players[player_index].hand.clone();
-        let required = match quantity {
-            tricerules_cards::primitives::DiscardQuantity::Exact(count) => {
-                count.min(hand.len() as u32)
+        let required = match &quantity {
+            tricerules_cards::primitives::DiscardQuantity::Exact(count)
+            | tricerules_cards::primitives::DiscardQuantity::UnlessOne { count, .. } => {
+                (*count).min(hand.len() as u32)
             }
             tricerules_cards::primitives::DiscardQuantity::All => hand.len() as u32,
         };
@@ -349,6 +351,28 @@ pub(super) fn discard(
             )));
             continue;
         }
+        let alternative_filter = match &quantity {
+            tricerules_cards::primitives::DiscardQuantity::UnlessOne { filter, .. } => {
+                Some(filter.clone())
+            }
+            _ => None,
+        };
+        let alternative_candidates = alternative_filter
+            .as_ref()
+            .map(|filter| {
+                hand.iter()
+                    .copied()
+                    .filter(|oid| {
+                        zone_card_matches_filter(
+                            &cx.engine.state,
+                            cx.engine.registry,
+                            *oid,
+                            Some(filter),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
         choices.push(PendingPlayerDiscardChoice {
             player,
             candidate_generations: hand
@@ -366,6 +390,8 @@ pub(super) fn discard(
                 })
                 .collect(),
             required,
+            alternative_filter,
+            alternative_candidates,
         });
     }
     if choices.is_empty() {
@@ -427,10 +453,48 @@ pub(in crate::engine) fn park_player_set_discard_choice(
         .map(|(object_id, _)| *object_id)
         .collect::<Vec<_>>();
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
-    let prompt = format!(
-        "P{}: choose {} card(s) to discard.",
-        choice.player, choice.required
-    );
+    let mut selection_alternatives = Vec::new();
+    if choice.alternative_filter.is_some() {
+        selection_alternatives.push(rv1::ResolutionSelectionAlternative {
+            count: choice.required,
+            candidate_indices: (0..candidates.len() as u32).collect(),
+        });
+        if !choice.alternative_candidates.is_empty() && choice.required > 1 {
+            selection_alternatives.push(rv1::ResolutionSelectionAlternative {
+                count: 1,
+                candidate_indices: candidates
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, oid)| {
+                        choice
+                            .alternative_candidates
+                            .contains(oid)
+                            .then_some(index as u32)
+                    })
+                    .collect(),
+            });
+        }
+    }
+    let prompt = if choice.minimum() < choice.required {
+        let matching = match choice
+            .alternative_filter
+            .as_ref()
+            .and_then(|filter| filter.card_type)
+        {
+            Some(tricerules_cards::primitives::CardTypeFilter::Creature) => "creature",
+            Some(tricerules_cards::primitives::CardTypeFilter::Artifact) => "artifact",
+            _ => "matching",
+        };
+        format!(
+            "P{}: choose one {matching} card or {} cards to discard.",
+            choice.player, choice.required
+        )
+    } else {
+        format!(
+            "P{}: choose {} card(s) to discard.",
+            choice.player, choice.required
+        )
+    };
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -441,7 +505,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
                 candidate_object_ids: candidates.clone(),
                 candidate_card_ids,
                 candidate_names,
-                min: choice.required,
+                min: choice.minimum(),
                 max: choice.required,
                 ordered: false,
                 unique_names: false,
@@ -457,6 +521,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
                 waterbend: false,
                 selection_slots: Vec::new(),
                 replacement_options: Vec::new(),
+                selection_alternatives,
             },
         )),
     });
@@ -466,7 +531,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
         presentation: PendingResolutionPresentation {
             source_object_id: stack.item.id,
             candidates,
-            min: choice.required,
+            min: choice.minimum(),
             max: choice.required,
             ordered: false,
             unique_names: false,
@@ -995,6 +1060,7 @@ pub(super) fn put_in_owners_library(
                         waterbend: false,
                         selection_slots: Vec::new(),
                         replacement_options: Vec::new(),
+                        selection_alternatives: Vec::new(),
                     },
                 )),
             });
@@ -1326,7 +1392,10 @@ fn choose_hand_cards_for_player(
             {
                 let batch = engine.start_discard_replacements(
                     ParkedStackResolution::new(top.clone()),
-                    selected.iter().map(|oid| (affected_player, *oid)).collect(),
+                    selected
+                        .iter()
+                        .map(|oid| (affected_player, *oid, crate::state::DiscardCause::Effect))
+                        .collect(),
                     visibility == HandChoiceVisibility::PublicReveal,
                     None,
                 )?;
@@ -1418,6 +1487,7 @@ fn choose_hand_cards_for_player(
                 waterbend: false,
                 selection_slots: Vec::new(),
                 replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
             },
         )),
     });
@@ -1469,19 +1539,15 @@ fn hand_action_verb(action: HandCardAction) -> &'static str {
     }
 }
 
-fn perform_discard_action(
+pub(in crate::engine) fn perform_discard_action(
     engine: &mut GameEngine,
     events: &mut Vec<rv1::RuledEvent>,
     affected_player: PlayerId,
     object_id: ObjectId,
     spell_label: &str,
+    cause: crate::state::DiscardCause,
 ) -> Result<CardResultEntry, EngineError> {
-    let (card_name, moved) = perform_discard(
-        engine,
-        affected_player,
-        object_id,
-        crate::state::DiscardCause::Effect,
-    )?;
+    let (card_name, moved) = perform_discard(engine, affected_player, object_id, cause)?;
     events.push(moved);
     events.push(ev_log(format!(
         "P{affected_player} discards {card_name} ({spell_label})."
@@ -1537,9 +1603,14 @@ pub(crate) fn perform_hand_card_action(
     spell_label: &str,
 ) -> Result<CardResultEntry, EngineError> {
     match action {
-        HandCardAction::Discard => {
-            perform_discard_action(engine, events, affected_player, object_id, spell_label)
-        }
+        HandCardAction::Discard => perform_discard_action(
+            engine,
+            events,
+            affected_player,
+            object_id,
+            spell_label,
+            crate::state::DiscardCause::Effect,
+        ),
         HandCardAction::Exile => {
             perform_exile_from_hand(engine, events, affected_player, object_id, spell_label)
         }
@@ -1704,6 +1775,7 @@ pub(super) fn target_player_sacrifices(
                             waterbend: false,
                             selection_slots: Vec::new(),
                             replacement_options: Vec::new(),
+                            selection_alternatives: Vec::new(),
                         },
                     )),
                 });
@@ -1836,6 +1908,7 @@ pub(super) fn choose_graveyard_card(
                 waterbend: false,
                 selection_slots: Vec::new(),
                 replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
             },
         )),
     });
@@ -2648,6 +2721,7 @@ pub(super) fn explore(
                 waterbend: false,
                 selection_slots: Vec::new(),
                 replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
             },
         )),
     });
@@ -2821,6 +2895,7 @@ fn begin_library_partition(
                 waterbend: false,
                 selection_slots: Vec::new(),
                 replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
             },
         )),
     });
@@ -2963,6 +3038,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 waterbend: false,
                 selection_slots: Vec::new(),
                 replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
             },
         )),
     });
@@ -3078,6 +3154,7 @@ pub(super) fn look_choose_to_hand(
                 waterbend: false,
                 selection_slots: Vec::new(),
                 replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
             },
         )),
     });
@@ -3353,6 +3430,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                 waterbend: false,
                 selection_slots,
                 replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
             },
         )),
     });
@@ -3472,6 +3550,7 @@ pub(in crate::engine) fn begin_search_request(
                         waterbend: false,
                         selection_slots: Vec::new(),
                         replacement_options: Vec::new(),
+                        selection_alternatives: Vec::new(),
                     },
                 )),
             });
@@ -3580,6 +3659,7 @@ pub(super) fn search_library(
                     waterbend: false,
                     selection_slots: Vec::new(),
                     replacement_options: Vec::new(),
+                    selection_alternatives: Vec::new(),
                 },
             )),
         });

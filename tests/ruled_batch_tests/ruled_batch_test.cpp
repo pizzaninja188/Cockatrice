@@ -1036,6 +1036,59 @@ TEST_F(RuledBatchTest, LibraryTopChoiceIsPrivateToTheScryingPlayerWithSequential
     EXPECT_EQ(p2Choice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+TEST_F(RuledBatchTest, DiscardAlternativesArePrivateValidatedAndRestoredOnReconnect)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    choice->set_min(1);
+    choice->set_max(2);
+    for (quint32 oid : {701u, 702u}) {
+        choice->add_candidate_object_ids(oid);
+    }
+    auto *one = choice->add_selection_alternatives();
+    one->set_count(1);
+    one->add_candidate_indices(0);
+    auto *two = choice->add_selection_alternatives();
+    two->set_count(2);
+    two->add_candidate_indices(0);
+    two->add_candidate_indices(1);
+    const auto owner = redactFor(batch, p1);
+    const auto observer = redactFor(batch, p2);
+    EXPECT_EQ(owner.events(0).resolution_choice_required().selection_alternatives_size(), 2);
+    EXPECT_EQ(observer.events(0).resolution_choice_required().selection_alternatives_size(), 0);
+    EXPECT_EQ(observer.events(0).resolution_choice_required().candidate_object_ids_size(), 0);
+
+    for (bool duplicate : {false, true}) {
+        auto malformed = batch;
+        malformed.mutable_events(0)
+            ->mutable_resolution_choice_required()
+            ->mutable_selection_alternatives(0)
+            ->add_candidate_indices(duplicate ? 0 : 99);
+        const auto rejected = redactFor(malformed, p1);
+        const auto &invalid = rejected.events(0).resolution_choice_required();
+        EXPECT_EQ(invalid.candidate_object_ids_size(), 0);
+        EXPECT_GT(invalid.min(), invalid.max());
+    }
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    response.mutable_batch()->CopyFrom(batch);
+    updatePendingResolutionChoiceCache(response);
+    for (auto *participant : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(participant, reconnect, true);
+        const auto *container =
+            dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        EXPECT_EQ(restored.events(0).resolution_choice_required().selection_alternatives_size(),
+                  participant == p1 ? 2 : 0);
+    }
+}
+
 TEST_F(RuledBatchTest, HeterogeneousLibrarySearchSlotsArePrivateAndMalformedSlotsFailClosed)
 {
     ruled::v1::RuledEventBatch batch;

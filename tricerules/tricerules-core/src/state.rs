@@ -29,6 +29,7 @@ pub enum DiscardCause {
 pub(crate) struct ProposedDiscard {
     pub player: PlayerId,
     pub object: TriggerObjectRef,
+    pub cause: DiscardCause,
     pub destination: Option<Zone>,
 }
 
@@ -1227,6 +1228,30 @@ pub struct PendingPlayerDiscardChoice {
     pub player: PlayerId,
     pub candidate_generations: Vec<(ObjectId, u64)>,
     pub required: u32,
+    pub alternative_filter: Option<ZoneCardFilter>,
+    pub alternative_candidates: Vec<ObjectId>,
+}
+
+impl PendingPlayerDiscardChoice {
+    pub(crate) fn minimum(&self) -> u32 {
+        // Bounds are public. Do not reveal whether this private hand contains a match.
+        if self.alternative_filter.is_none() {
+            self.required
+        } else {
+            1
+        }
+    }
+
+    pub(crate) fn selection_cause(&self, chosen: &[ObjectId]) -> Option<DiscardCause> {
+        // Prefer the ordinary instruction when a one-card hand also satisfies it.
+        if chosen.len() == self.required as usize {
+            Some(DiscardCause::Effect)
+        } else if chosen.len() == 1 && self.alternative_candidates.contains(&chosen[0]) {
+            Some(DiscardCause::Cost)
+        } else {
+            None
+        }
+    }
 }
 
 /// Frozen hidden-hand choices for one simultaneous player-set discard action (CR 101.4).

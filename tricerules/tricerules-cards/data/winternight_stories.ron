@@ -1,0 +1,12 @@
+(
+  id: "winternight_stories",
+  name: "Winternight Stories",
+  face_id: "winternight_stories",
+  mana_cost: "{2}{U}",
+  harmonize_cost: Some("{4}{U}"),
+  types: ["Sorcery"],
+  spell_effect: [
+    Draw(count: 3),
+    Discard(quantity: UnlessOne(count: 2, filter: (card_type: Some(Creature)))),
+  ],
+)

@@ -787,6 +787,7 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.canDecline = h->pendingClickChoiceMayDecline();
         state.required = h->resolutionHandPickRequired();
         state.selected = h->resolutionHandPickSelected();
+        state.resolutionPickConfirmable = h->resolutionHandPickConfirmable();
         state.text = h->resolutionHandPickPromptText();
     } else if (opening == OpeningKind::ChooseFirst) {
         state.mode = PromptMode::OpeningChooseFirst;

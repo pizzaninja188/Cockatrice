@@ -1005,6 +1005,13 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
+    if (rcr.min() > rcr.max() || (rcr.selection_alternatives_size() > 0 &&
+                                  (rcr.choice_kind() != ruled::v1::CHOICE_KIND_HAND_CARDS ||
+                                   rcr.candidate_object_ids_size() != rcr.candidate_server_card_ids_size()))) {
+        qWarning() << "Rejecting ruled choice with invalid selection metadata";
+        return;
+    }
+
     if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT) {
         if (rcr.min() != 1 || rcr.max() != 1 || rcr.ordered() || rcr.replacement_options_size() == 0 ||
             rcr.replacement_options_size() != rcr.candidate_object_ids_size()) {
@@ -1199,12 +1206,44 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
             const quint32 oid = rcr.candidate_object_ids(i);
             const int scid = rcr.candidate_server_card_ids(i);
+            if (rcr.selection_alternatives_size() > 0 &&
+                (scid < 0 || pick.serverCardIdToOid.contains(scid) || pick.serverCardIdToOid.values().contains(oid))) {
+                qWarning() << "Rejecting ruled alternatives with an ambiguous hand binding";
+                return;
+            }
             if (scid >= 0) {
                 pick.serverCardIdToOid.insert(scid, oid);
                 if (i < rcr.candidate_names_size()) {
                     pick.candidateNames.append(QString::fromStdString(rcr.candidate_names(i)));
                 }
             }
+        }
+        for (const auto &alternative : rcr.selection_alternatives()) {
+            QSet<int> eligible;
+            QSet<quint32> indices;
+            if (alternative.count() == 0 || alternative.count() < rcr.min() || alternative.count() > rcr.max()) {
+                qWarning() << "Rejecting ruled hand selection with invalid alternative count";
+                return;
+            }
+            for (const auto index : alternative.candidate_indices()) {
+                if (index >= static_cast<uint32_t>(rcr.candidate_server_card_ids_size()) || indices.contains(index)) {
+                    qWarning() << "Rejecting ruled hand selection with invalid alternative index";
+                    return;
+                }
+                indices.insert(index);
+                const int id = rcr.candidate_server_card_ids(static_cast<int>(index));
+                if (id < 0 || !pick.serverCardIdToOid.contains(id)) {
+                    qWarning() << "Rejecting ruled hand selection with an unbound alternative candidate";
+                    return;
+                }
+                eligible.insert(id);
+            }
+            if (alternative.count() > static_cast<uint32_t>(eligible.size())) {
+                qWarning() << "Rejecting ruled hand selection with an impossible alternative";
+                return;
+            }
+            pick.selectionAlternativeCounts.append(static_cast<int>(alternative.count()));
+            pick.selectionAlternativeServerCardIds.append(std::move(eligible));
         }
         const int required = pick.min;
         state->setPendingChoice(std::move(pick));

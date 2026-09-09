@@ -5903,6 +5903,83 @@ TEST_F(RuledClientTest, PrivateHandChoiceMakesTheNonDecidingPlayerWait)
     EXPECT_FALSE(state->isWaitingForChoice());
 }
 
+TEST_F(RuledClientTest, AlternativeDiscardRequiresOneMatchingCardOrTwoCards)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    choice->set_min(1);
+    choice->set_max(2);
+    for (int i = 0; i < 3; ++i) {
+        choice->add_candidate_object_ids(501u + i);
+        choice->add_candidate_server_card_ids(21 + i);
+    }
+    auto *one = choice->add_selection_alternatives();
+    one->set_count(1);
+    one->add_candidate_indices(0);
+    auto *two = choice->add_selection_alternatives();
+    two->set_count(2);
+    for (int i = 0; i < 3; ++i) {
+        two->add_candidate_indices(i);
+    }
+    apply(batch);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    state->toggleResolutionHandPickCard(22);
+    EXPECT_FALSE(state->resolutionHandPickConfirmable());
+    state->submitResolutionHandPick();
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    state->toggleResolutionHandPickCard(23);
+    EXPECT_TRUE(state->resolutionHandPickConfirmable());
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 2);
+    host.sentCommands.clear();
+    apply(batch);
+    state->toggleResolutionHandPickCard(21);
+    EXPECT_TRUE(state->resolutionHandPickConfirmable());
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids(0), 501u);
+}
+
+TEST_F(RuledClientTest, MalformedDiscardAlternativesRetireThePreviousSelection)
+{
+    ruled::v1::RuledEventBatch valid;
+    auto *choice = valid.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    choice->set_min(1);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(501u);
+    choice->add_candidate_server_card_ids(21);
+    auto *one = choice->add_selection_alternatives();
+    one->set_count(1);
+    one->add_candidate_indices(0);
+    for (int malformed = 0; malformed < 4; ++malformed) {
+        apply(valid);
+        state->toggleResolutionHandPickCard(21);
+        ASSERT_TRUE(state->resolutionHandPickConfirmable());
+        auto invalid = valid;
+        auto *alternative =
+            invalid.mutable_events(0)->mutable_resolution_choice_required()->mutable_selection_alternatives(0);
+        if (malformed == 0)
+            alternative->add_candidate_indices(99);
+        if (malformed == 1)
+            alternative->add_candidate_indices(0);
+        if (malformed == 2)
+            alternative->set_count(0);
+        if (malformed == 3)
+            invalid.mutable_events(0)->mutable_resolution_choice_required()->set_max(0);
+        apply(invalid);
+        EXPECT_FALSE(state->isResolutionHandPickActive());
+        EXPECT_FALSE(state->resolutionHandPickConfirmable());
+        state->submitResolutionHandPick();
+        EXPECT_TRUE(host.sentCommands.isEmpty());
+    }
+}
+
 TEST_F(RuledClientTest, SequentialPlayerSetDiscardReplacesPickWithWaitAndNextPrivatePick)
 {
     ruled::v1::RuledEventBatch first;

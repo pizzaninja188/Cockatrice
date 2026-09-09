@@ -60,7 +60,13 @@ impl GameEngine {
                 stack,
                 chosen
                     .iter()
-                    .map(|oid| (hand_choice.affected_player, *oid))
+                    .map(|oid| {
+                        (
+                            hand_choice.affected_player,
+                            *oid,
+                            crate::state::DiscardCause::Effect,
+                        )
+                    })
                     .collect(),
                 hand_choice.revealed,
                 (hand_choice.draw_after > 0)
@@ -125,6 +131,21 @@ impl GameEngine {
             .get(discard.current)
             .expect("player-set discard current choice")
             .clone();
+        let cause = choice.selection_cause(chosen);
+        if cause.is_none()
+            || (cause == Some(crate::state::DiscardCause::Cost)
+                && !zone_card_matches_filter(
+                    &self.state,
+                    self.registry,
+                    chosen[0],
+                    choice.alternative_filter.as_ref(),
+                ))
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "chosen cards do not satisfy a discard alternative",
+            ));
+        }
         let valid = chosen.iter().all(|object_id| {
             let Some(object) = self.state.objects.get(object_id) else {
                 return false;
@@ -173,6 +194,18 @@ impl GameEngine {
                 .iter()
                 .zip(&discard.selections)
                 .all(|(choice, selection)| {
+                    let cause = choice.selection_cause(selection);
+                    if cause.is_none()
+                        || (cause == Some(crate::state::DiscardCause::Cost)
+                            && !zone_card_matches_filter(
+                                &self.state,
+                                self.registry,
+                                selection[0],
+                                choice.alternative_filter.as_ref(),
+                            ))
+                    {
+                        return false;
+                    }
                     selection.iter().all(|object_id| {
                         let Some(object) = self.state.objects.get(object_id) else {
                             return false;
@@ -230,13 +263,27 @@ impl GameEngine {
         if discard
             .choices
             .iter()
-            .any(|choice| self.has_discard_library_replacement(choice.player))
+            .zip(&discard.selections)
+            .any(|(choice, selection)| {
+                choice.selection_cause(selection) == Some(crate::state::DiscardCause::Effect)
+                    && self.has_discard_library_replacement(choice.player)
+            })
         {
             let selected = discard
                 .choices
                 .iter()
                 .zip(&discard.selections)
-                .flat_map(|(choice, selection)| selection.iter().map(|oid| (choice.player, *oid)))
+                .flat_map(|(choice, selection)| {
+                    selection.iter().map(|oid| {
+                        (
+                            choice.player,
+                            *oid,
+                            choice
+                                .selection_cause(selection)
+                                .expect("validated discard selection"),
+                        )
+                    })
+                })
                 .collect();
             let batch = self.start_discard_replacements(stack, selected, false, None)?;
             events.extend(batch.events);
@@ -251,16 +298,16 @@ impl GameEngine {
         let mut result = CardResultCohort::default();
         for (choice, selection) in discard.choices.iter().zip(&discard.selections) {
             for object_id in selection {
-                result
-                    .cards
-                    .push(resolution::zones::perform_hand_card_action(
-                        self,
-                        events,
-                        choice.player,
-                        *object_id,
-                        HandCardAction::Discard,
-                        &card_name,
-                    )?);
+                result.cards.push(resolution::zones::perform_discard_action(
+                    self,
+                    events,
+                    choice.player,
+                    *object_id,
+                    &card_name,
+                    choice
+                        .selection_cause(selection)
+                        .expect("validated discard selection"),
+                )?);
             }
         }
         Ok(Some(result))

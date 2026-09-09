@@ -146,6 +146,8 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
         FIELD(uniqueNames);
         FIELD(selectionSlotServerCardIds);
         FIELD(selectionSlotLabels);
+        FIELD(selectionAlternativeCounts);
+        FIELD(selectionAlternativeServerCardIds);
         FIELD(viewTitle);
         FIELD(showViewControls);
         FIELD(candidateNames);

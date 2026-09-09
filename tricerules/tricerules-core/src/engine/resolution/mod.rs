@@ -2084,6 +2084,7 @@ impl GameEngine {
                             waterbend: false,
                             selection_slots: Vec::new(),
                             replacement_options: Vec::new(),
+                            selection_alternatives: Vec::new(),
                         },
                     )),
                 });
@@ -3323,6 +3324,108 @@ mod attached_subject_tests {
         ability.effect = effects;
         item.triggered_ability = Some(ability);
         item
+    }
+
+    #[test]
+    fn issue_230_residual_hands_discard_as_much_as_possible_and_resume_once() {
+        for size in 0..=2 {
+            let mut engine = GameEngine::new(
+                23003,
+                &[10, 20],
+                20,
+                Some(vec![vec!["forest".into(); 12]; 2]),
+                true,
+            )
+            .unwrap();
+            // Test the post-draw instruction directly, including future draw replacement outcomes.
+            engine.state.players.push(PlayerState::new(30, 20));
+            for index in 0..2 {
+                let hand = engine.state.players[index].hand.clone();
+                for oid in hand {
+                    move_object_to_zone(
+                        &mut engine.state,
+                        engine.registry,
+                        oid,
+                        Zone::Library,
+                        None,
+                    )
+                    .unwrap();
+                }
+            }
+            let source = add_battlefield_object(&mut engine, 10, "tatterkite");
+            let mut selected = Vec::new();
+            for _ in 0..size {
+                let oid = engine.state.players[0].library[0];
+                move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Hand, None)
+                    .unwrap();
+                selected.push(oid);
+            }
+            let mut item = quantity_item(
+                source,
+                vec![
+                    SpellEffectKind::Discard {
+                        who: PlayerRecipient::EachPlayer,
+                        quantity: tricerules_cards::primitives::DiscardQuantity::UnlessOne {
+                            count: 2,
+                            filter: tricerules_cards::primitives::ZoneCardFilter {
+                                card_type: Some(
+                                    tricerules_cards::primitives::CardTypeFilter::Creature,
+                                ),
+                                ..Default::default()
+                            },
+                        },
+                    },
+                    SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(2),
+                    },
+                ],
+            );
+            item.controller = 10;
+            let (effects, label) = engine.build_resolution_effects(&item);
+            let mut events = Vec::new();
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut events)
+                .unwrap();
+            if size > 0 {
+                let choice = events
+                    .iter()
+                    .find_map(|event| match &event.ev {
+                        Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => {
+                            Some(choice)
+                        }
+                        _ => None,
+                    })
+                    .unwrap();
+                assert_eq!(choice.selection_alternatives.len(), 1);
+                assert_eq!(choice.selection_alternatives[0].count, size);
+                assert_eq!(
+                    choice.min, 1,
+                    "public minimum never reveals creature eligibility"
+                );
+                if size == 2 {
+                    let answer = rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![selected[0]],
+                        ..Default::default()
+                    };
+                    assert!(engine.submit_resolution_choice(10, &answer).is_err());
+                }
+                engine
+                    .submit_resolution_choice(
+                        10,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: selected.clone(),
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+            }
+            assert!(engine.state.players.iter().all(|p| p.hand.is_empty()));
+            assert!(selected
+                .iter()
+                .all(|oid| engine.state.objects[oid].zone == Zone::Graveyard));
+            assert_eq!(engine.state.players[0].life, 22);
+            assert!(engine.state.pending_resolution.is_none());
+        }
     }
 
     #[test]

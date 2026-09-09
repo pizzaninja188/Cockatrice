@@ -342,3 +342,6 @@ mod spellementals;
 
 #[path = "scenario/issue_229_sunderflock.rs"]
 mod issue_229_sunderflock;
+
+#[path = "scenario/issue_230_winternight.rs"]
+mod issue_230_winternight;

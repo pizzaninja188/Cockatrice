@@ -120,14 +120,15 @@ impl GameEngine {
     pub(super) fn start_discard_replacements(
         &mut self,
         stack: ParkedStackResolution,
-        selected: Vec<(PlayerId, ObjectId)>,
+        selected: Vec<(PlayerId, ObjectId, DiscardCause)>,
         revealed: bool,
         draw_after: Option<(PlayerId, u32)>,
     ) -> Result<RuledEventBatch, EngineError> {
         let cards = selected
             .into_iter()
-            .map(|(player, oid)| ProposedDiscard {
+            .map(|(player, oid, cause)| ProposedDiscard {
                 player,
+                cause,
                 object: TriggerObjectRef {
                     object_id: oid,
                     zone_change_generation: self
@@ -241,7 +242,9 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         while batch.current < batch.cards.len() {
             let card = &batch.cards[batch.current];
-            if self.has_discard_library_replacement(card.player) {
+            if card.cause == DiscardCause::Effect
+                && self.has_discard_library_replacement(card.player)
+            {
                 let name = object_display_name(&self.state, self.registry, card.object.object_id);
                 let player = card.player;
                 let madness = self.madness_ability(card.object.object_id).is_some();
@@ -292,7 +295,7 @@ impl GameEngine {
             let (name, moved) = self.commit_discard_to(
                 card.player,
                 card.object.object_id,
-                DiscardCause::Effect,
+                card.cause,
                 destination,
                 batch.revealed,
             )?;

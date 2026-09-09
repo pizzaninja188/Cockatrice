@@ -512,10 +512,15 @@ pub enum HandChoiceVisibility {
 }
 
 /// Untargeted discard quantity, shared by Stoke Genius and Dangerous Wager.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DiscardQuantity {
     Exact(u32),
     All,
+    /// Winternight Stories (creature) and Thirst for Knowledge (artifact), CR 118.12a.
+    UnlessOne {
+        count: u32,
+        filter: ZoneCardFilter,
+    },
 }
 
 /// Written order for a draw/discard sequence whose discard may suspend resolution.
@@ -3589,6 +3594,16 @@ impl SpellEffectKind {
         } = self
         {
             return Err("Discard count must be at least 1".into());
+        }
+        if let SpellEffectKind::Discard {
+            quantity: DiscardQuantity::UnlessOne { count, filter },
+            ..
+        } = self
+        {
+            if *count < 2 {
+                return Err("Discard UnlessOne count must be at least 2".into());
+            }
+            filter.validate()?;
         }
 
         // CR 115: a source-bound ability effect is not targeting and only exists where there is

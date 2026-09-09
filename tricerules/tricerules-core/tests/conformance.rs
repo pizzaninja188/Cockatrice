@@ -86,6 +86,43 @@ fn apply(
         .map_err(|err| diagnostic(e, &format!("actor={actor}; command={command:?}"), err))
 }
 fn resolution_answer(choice: &ResolutionChoiceRequired) -> Result<RuledCommand, String> {
+    if !choice.selection_alternatives.is_empty() {
+        for alternative in &choice.selection_alternatives {
+            if alternative.count == 0
+                || alternative.count < choice.min
+                || alternative.count > choice.max
+            {
+                return Err("invalid resolution alternative count".into());
+            }
+            let mut eligible = std::collections::BTreeSet::new();
+            for &index in &alternative.candidate_indices {
+                if index as usize >= choice.candidate_object_ids.len()
+                    || !eligible.insert(index as usize)
+                {
+                    return Err("invalid resolution alternative candidate".into());
+                }
+            }
+            let mut narrowed = choice.clone();
+            narrowed.selection_alternatives.clear();
+            narrowed.min = alternative.count;
+            narrowed.max = alternative.count;
+            narrowed.candidate_selectable = (0..choice.candidate_object_ids.len())
+                .map(|index| {
+                    eligible.contains(&index)
+                        && (choice.candidate_selectable.is_empty()
+                            || choice
+                                .candidate_selectable
+                                .get(index)
+                                .copied()
+                                .unwrap_or(false))
+                })
+                .collect();
+            if let Ok(answer) = resolution_answer(&narrowed) {
+                return Ok(answer);
+            }
+        }
+        return Err("no satisfiable resolution alternative".into());
+    }
     let mut answer = SubmitResolutionChoice::default();
     if !choice.resolution_branches.is_empty() {
         let branch = choice

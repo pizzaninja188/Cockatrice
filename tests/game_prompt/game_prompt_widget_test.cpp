@@ -328,7 +328,18 @@ TEST_F(GamePromptWidgetTest, ResolutionPickShowsConfirmEnabledOnlyWhenSatisfied)
     EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isEnabled());
     EXPECT_TRUE(btn("passPriorityButton")->isHidden());
 
-    widget->setRuledPromptState({PromptMode::ResolutionPick, 2, 2, "Put two cards back.", {}});
+    GamePromptWidget::RuledPromptState ready{PromptMode::ResolutionPick, 2, 2, "Put two cards back.", {}};
+    ready.resolutionPickConfirmable = true;
+    widget->setRuledPromptState(ready);
+    EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isEnabled());
+
+    ready.required = 1;
+    ready.selected = 1;
+    ready.resolutionPickConfirmable = false;
+    widget->setRuledPromptState(ready);
+    EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isEnabled());
+    ready.resolutionPickConfirmable = true;
+    widget->setRuledPromptState(ready);
     EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isEnabled());
 
     widget->setRuledPromptState({});

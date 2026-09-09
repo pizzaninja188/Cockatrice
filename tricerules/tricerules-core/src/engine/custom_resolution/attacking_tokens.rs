@@ -15,6 +15,7 @@ fn defender_choice_event(
                 waterbend: false,
                 selection_slots: Vec::new(),
                 replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
                 deciding_player_id: deciding_player,
                 source_object_id,
                 prompt_text: format!(

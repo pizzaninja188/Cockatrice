@@ -114,6 +114,7 @@ public:
         QVector<QString> openingPickSeatNames;
         bool openingCanKeep = false;
         bool openingCanRedraw = false;
+        bool resolutionPickConfirmable = false;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into

@@ -552,6 +552,8 @@ public:
         /// Each set is one capacity and contains only transient ids from this pick's popup.
         QVector<QSet<int>> selectionSlotServerCardIds;
         QStringList selectionSlotLabels;
+        QVector<int> selectionAlternativeCounts;
+        QVector<QSet<int>> selectionAlternativeServerCardIds;
         // Title for the Deck / Revealed popup. The popup is built on the local player's deck zone
         // purely as a scaffold, so without this it would inherit that zone's name and claim to be
         // a library even when it is showing a hand or a revealed set.
@@ -1689,6 +1691,7 @@ public:
     [[nodiscard]] QVector<int> resolutionHandPickCandidateServerCardIds() const;
     void toggleResolutionHandPickCard(int serverCardId);
     void submitResolutionHandPick();
+    [[nodiscard]] bool resolutionHandPickConfirmable() const;
 
     [[nodiscard]] bool isResolutionManaWindow() const
     {

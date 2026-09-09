@@ -879,6 +879,27 @@ fn optional_draw_discard_is_only_single_card_discard_then_draw() {
 }
 
 #[test]
+fn issue_230_discard_alternatives_validate_both_real_card_filters() {
+    for kind in [CardTypeFilter::Creature, CardTypeFilter::Artifact] {
+        let effect = |count, filter| SpellEffectKind::Discard {
+            who: PlayerRecipient::Controller,
+            quantity: DiscardQuantity::UnlessOne { count, filter },
+        };
+        let filter = ZoneCardFilter {
+            card_type: Some(kind),
+            ..Default::default()
+        };
+        assert!(effect(2, filter.clone())
+            .validate(EffectContext::Spell)
+            .is_ok());
+        assert!(effect(1, filter).validate(EffectContext::Spell).is_err());
+        assert!(effect(2, ZoneCardFilter::default())
+            .validate(EffectContext::Spell)
+            .is_err());
+    }
+}
+
+#[test]
 fn amount_serde_preserves_literals_x_and_named_conditionals() {
     assert_eq!(ron::from_str::<Amount>("4").unwrap(), Amount::Fixed(4));
     assert_eq!(ron::from_str::<Amount>(r#""X""#).unwrap(), Amount::X);

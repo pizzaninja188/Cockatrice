@@ -423,6 +423,37 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                 continue;
             }
             auto *rcr = filtered.mutable_events(ei)->mutable_resolution_choice_required();
+            bool malformedAlternatives =
+                rcr->selection_alternatives_size() > 0 && rcr->choice_kind() != ruled::v1::CHOICE_KIND_HAND_CARDS;
+            for (const auto &alternative : rcr->selection_alternatives()) {
+                QSet<quint32> indices;
+                if (alternative.count() == 0 || alternative.count() < rcr->min() || alternative.count() > rcr->max()) {
+                    malformedAlternatives = true;
+                }
+                for (const auto index : alternative.candidate_indices()) {
+                    if (index >= static_cast<uint32_t>(rcr->candidate_object_ids_size()) || indices.contains(index)) {
+                        malformedAlternatives = true;
+                    }
+                    indices.insert(index);
+                }
+                if (alternative.count() > static_cast<uint32_t>(indices.size())) {
+                    malformedAlternatives = true;
+                }
+            }
+            if (malformedAlternatives) {
+                rcr->clear_candidate_object_ids();
+                rcr->clear_candidate_card_ids();
+                rcr->clear_candidate_names();
+                rcr->clear_candidate_server_card_ids();
+                rcr->clear_candidate_selectable();
+                rcr->clear_selection_alternatives();
+                rcr->set_min(1);
+                rcr->set_max(0);
+                rcr->set_prompt_text("Resolution choice metadata is unavailable.");
+            }
+            if (rcr->deciding_player_id() != participant->getPlayerId()) {
+                rcr->clear_selection_alternatives();
+            }
             bool malformedSelectionSlots = false;
             for (const auto &slot : rcr->selection_slots()) {
                 if (slot.label().empty()) {
@@ -600,6 +631,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
         choice->mutable_candidate_names()->CopyFrom(choiceIt.value().candidate_names());
         choice->mutable_candidate_server_card_ids()->CopyFrom(choiceIt.value().candidate_server_card_ids());
         choice->mutable_candidate_selectable()->CopyFrom(choiceIt.value().candidate_selectable());
+        choice->mutable_selection_alternatives()->CopyFrom(choiceIt.value().selection_alternatives());
         choice->mutable_candidate_source_zones()->CopyFrom(choiceIt.value().candidate_source_zones());
         if (choiceIt.value().choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT)
             choice->mutable_replacement_options()->CopyFrom(choiceIt.value().replacement_options());

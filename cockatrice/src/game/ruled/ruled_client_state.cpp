@@ -1032,18 +1032,37 @@ void RuledClientState::toggleResolutionHandPickCard(int serverCardId)
     emit combatStateChanged();
 }
 
-void RuledClientState::submitResolutionHandPick()
+bool RuledClientState::resolutionHandPickConfirmable() const
 {
     if (!isResolutionHandPickActive()) {
-        return;
+        return false;
     }
     const int n = pendingChoice->selectedServerCardIds.size();
     if (n < pendingChoice->min || n > pendingChoice->max) {
-        return;
+        return false;
     }
     if (!resolutionPickSelectionAdmitsSlots(pendingChoice->selectedServerCardIds)) {
+        return false;
+    }
+    if (pendingChoice->selectionAlternativeCounts.isEmpty()) {
+        return true;
+    }
+    for (int i = 0; i < pendingChoice->selectionAlternativeCounts.size(); ++i) {
+        if (n == pendingChoice->selectionAlternativeCounts.at(i) &&
+            std::all_of(pendingChoice->selectedServerCardIds.cbegin(), pendingChoice->selectedServerCardIds.cend(),
+                        [&](int id) { return pendingChoice->selectionAlternativeServerCardIds.at(i).contains(id); })) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void RuledClientState::submitResolutionHandPick()
+{
+    if (!resolutionHandPickConfirmable()) {
         return;
     }
+    const int n = pendingChoice->selectedServerCardIds.size();
     QVector<quint32> chosen;
     chosen.reserve(n);
     for (int scid : pendingChoice->selectedServerCardIds) {
