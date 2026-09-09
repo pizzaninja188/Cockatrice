@@ -1,5 +1,10 @@
 # Cockatrice fork — agent context
 
+## Native Windows Computer Use
+
+- Manual Cockatrice interaction must use the trusted `node_repl` → `@oai/sky` path: initialize Sky, enumerate with `sky.list_apps()` and `sky.list_windows()`, select returned window objects, and refresh state after every action. Do not use `cua_repl` for native app control.
+- Launch `scripts/launch-ruled-game.ps1 -Dev` from the interactive Windows user context when visible clients are required. If the clients have window titles but are missing from the taskbar, check whether they run as `CodexSandboxOffline`; stop that run and relaunch from the interactive context.
+
 ## Mandatory workflow
 
 1. **Build and test after every coherent code-change increment.** An increment may batch inseparable edits needed to reach one compilable or testable state; it does not mean every line edit needs its own build. Prove the relevant focused gate after each increment, then run the full affected-side gate once the implementation is stable. Never report completion until every required command exits 0; check the exit code rather than eyeballing logs. Read-only investigation needs no build.
