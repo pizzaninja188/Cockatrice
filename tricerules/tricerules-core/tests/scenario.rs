@@ -7,6 +7,8 @@
 
 #[path = "scenario/issue_231_spell_filters.rs"]
 mod issue_231_spell_filters;
+#[path = "scenario/issue_236_hydro_man.rs"]
+mod issue_236_hydro_man;
 
 #[path = "scenario/activation_restrictions.rs"]
 mod activation_restrictions;

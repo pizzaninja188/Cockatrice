@@ -1007,6 +1007,13 @@ fn validate_nested_effect_metadata(effect: &SpellEffectKind) -> Result<(), Strin
             ability.validate_shape()?;
             validate_effect_list_metadata(&ability.effect)
         }
+        SpellEffectKind::ApplyPermanentModifier {
+            modifier: crate::primitives::ResolvingPermanentModifier::GrantActivatedAbility(ability),
+            ..
+        } => {
+            ability.validate_shape()?;
+            validate_effect_list_metadata(&ability.effect)
+        }
         SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
             for branch in branches {
                 validate_effect_list_metadata(&branch.effects)?;

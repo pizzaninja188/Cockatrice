@@ -218,6 +218,9 @@ pub(super) fn spell_cast_matches(
         .card_type
         .is_none_or(|kind| fact.matched_card_types.contains(&kind))
         && filter
+            .is_color
+            .is_none_or(|color| fact.colors.contains(&color))
+        && filter
             .targeted_permanent_type
             .is_none_or(|kind| fact.targeted_permanent_types.contains(&kind))
         && filter.required_subtypes.iter().all(|subtype| {
@@ -794,6 +797,12 @@ impl GameEngine {
                 .any(|characteristics| characteristics.has_type(kind.as_str()))
         })
         .collect();
+        let colors = super::characteristics::stack_spell_colors(
+            &self.state,
+            self.registry,
+            &self.state.stack[item_index],
+        )
+        .unwrap_or_default();
         let item = &mut self.state.stack[item_index];
         let occurrence = StackObjectRef {
             object_id,
@@ -830,6 +839,7 @@ impl GameEngine {
             origin,
             face_index: item.face_index,
             types,
+            colors,
             all_creature_types: face
                 .characteristic_defining_abilities
                 .iter()

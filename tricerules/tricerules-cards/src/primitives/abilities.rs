@@ -1031,6 +1031,10 @@ pub struct SpellCastFilter {
     pub any_of: Option<Vec<Self>>,
     #[serde(default)]
     pub card_type: Option<CardTypeFilter>,
+    /// The spell has this derived color as it becomes cast. Multicolor spells match every
+    /// color they have; directly created spell copies are not casts and never enter this path.
+    #[serde(default)]
+    pub is_color: Option<Color>,
     /// CR 115.9b: at least one target is currently a battlefield permanent of this derived type
     /// when the spell becomes cast. Forum Necroscribe and Graduation Day use `Creature`.
     #[serde(default)]

@@ -1651,6 +1651,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::RemoveAllAbilities { .. } => {
                         pump_counters::remove_all_abilities(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::ApplyPermanentModifier { .. } => {
+                        pump_counters::apply_permanent_modifier(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::GrantKeywords { .. } => {
                         pump_counters::grant_keywords(&mut cx, effect)?
                     }

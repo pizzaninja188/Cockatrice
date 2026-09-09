@@ -1,4 +1,5 @@
 # card_id	face_id	node_path	reason
+hydro-man,_fluid_felon	hydro_man_fluid_felon	triggered_abilities/end_step_land/effect/2/ApplyPermanentModifier/modifier/GrantActivatedAbility	The granted mana ability is only a quoted fragment of the printed instruction; mapping the whole line would repeat the transformation and duration as the child ability.
 aangs_journey	aang_s_journey	spell_effect/0/SearchLibrary/slots/slot_01	This search slot names only its own card filter; the printed line combines multiple slots and would mislabel the individual choice.
 aangs_journey	aang_s_journey	spell_effect/0/SearchLibrary/slots/slot_02	This search slot names only its own card filter; the printed line combines multiple slots and would mislabel the individual choice.
 abnormal_endurance	abnormal_endurance	spell_effect/1/GrantTriggeredAbility/ability	This granted ability is only a quoted fragment of the printed instruction; mapping the whole line would repeat the granting effect as the child ability.

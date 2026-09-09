@@ -1,5 +1,76 @@
 use super::*;
 
+fn materialize_resolving_duration(
+    cx: &EffectCx<'_>,
+    ordinary_source_id: Option<ObjectId>,
+    duration: ResolvingEffectDuration,
+) -> Option<(Option<ObjectId>, EffectDuration)> {
+    match duration {
+        ResolvingEffectDuration::Indefinite => {
+            Some((ordinary_source_id, EffectDuration::Indefinite))
+        }
+        ResolvingEffectDuration::UntilEndOfTurn => {
+            Some((ordinary_source_id, EffectDuration::UntilEndOfTurn))
+        }
+        ResolvingEffectDuration::UntilControllerNextTurn => Some((
+            ordinary_source_id,
+            EffectDuration::UntilTurnStart(cx.controller),
+        )),
+        ResolvingEffectDuration::WhileSourceOnBattlefield => {
+            let source_id = cx.top.source_permanent_id?;
+            let source_is_current = cx
+                .engine
+                .state
+                .objects
+                .get(&source_id)
+                .is_some_and(|source| source.zone == Zone::Battlefield)
+                && cx
+                    .engine
+                    .state
+                    .zone_change_generation
+                    .get(&source_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == cx.top.source_zone_change;
+            source_is_current.then_some((Some(source_id), EffectDuration::WhileSourceOnBattlefield))
+        }
+    }
+}
+
+fn resolving_duration_label(duration: &ResolvingEffectDuration) -> &'static str {
+    match duration {
+        ResolvingEffectDuration::Indefinite => "",
+        ResolvingEffectDuration::UntilEndOfTurn => " until end of turn",
+        ResolvingEffectDuration::WhileSourceOnBattlefield => {
+            " for as long as its source remains on the battlefield"
+        }
+        ResolvingEffectDuration::UntilControllerNextTurn => " until its controller's next turn",
+    }
+}
+
+fn materialize_resolving_modifier(
+    modifier: ResolvingPermanentModifier,
+) -> Vec<ContinuousEffectKind> {
+    match modifier {
+        ResolvingPermanentModifier::SetTypeLine(replacement) => {
+            vec![ContinuousEffectKind::Layer4SetTypeLine(replacement)]
+        }
+        ResolvingPermanentModifier::AddTypes(addition) => {
+            vec![ContinuousEffectKind::Layer4AddTypes(addition)]
+        }
+        ResolvingPermanentModifier::SetBasePowerToughness { power, toughness } => {
+            vec![ContinuousEffectKind::Layer7bSetPt { power, toughness }]
+        }
+        ResolvingPermanentModifier::GrantKeywords(keywords) => keywords
+            .into_iter()
+            .map(ContinuousEffectKind::Layer6AddKeyword)
+            .collect(),
+        ResolvingPermanentModifier::GrantActivatedAbility(ability) => {
+            vec![ContinuousEffectKind::GrantActivatedAbility(ability)]
+        }
+    }
+}
+
 pub(super) fn create_static_emblem(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -251,30 +322,10 @@ pub(super) fn remove_all_abilities(
     let Some((object_id, ordinary_source_id)) = cx.resolve_continuous_subject(&subject) else {
         return Ok(EffectOutcome::Continue);
     };
-    let source_id = if duration == EffectDuration::WhileSourceOnBattlefield {
-        let Some(source_id) = cx.top.source_permanent_id else {
-            return Ok(EffectOutcome::Continue);
-        };
-        let source_is_current = cx
-            .engine
-            .state
-            .objects
-            .get(&source_id)
-            .is_some_and(|source| source.zone == Zone::Battlefield)
-            && cx
-                .engine
-                .state
-                .zone_change_generation
-                .get(&source_id)
-                .copied()
-                .unwrap_or(0)
-                == cx.top.source_zone_change;
-        if !source_is_current {
-            return Ok(EffectOutcome::Continue);
-        }
-        Some(source_id)
-    } else {
-        ordinary_source_id
+    let Some((source_id, runtime_duration)) =
+        materialize_resolving_duration(cx, ordinary_source_id, duration.clone())
+    else {
+        return Ok(EffectOutcome::Continue);
     };
 
     cx.engine.state.continuous_effects.push(ContinuousEffect {
@@ -283,21 +334,56 @@ pub(super) fn remove_all_abilities(
         affected: AffectedScope::Single(object_id),
         kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
         condition: None,
-        duration: duration.clone(),
+        duration: runtime_duration,
         timestamp: cx.engine.state.command_index,
     });
-    let duration_label = match duration {
-        EffectDuration::Indefinite => "",
-        EffectDuration::UntilEndOfTurn => " until end of turn",
-        EffectDuration::WhileSourceOnBattlefield => {
-            " for as long as its source remains on the battlefield"
-        }
-    };
+    let duration_label = resolving_duration_label(&duration);
     cx.events.push(ev_log(format!(
         "{} removes all abilities from {}{}",
         cx.spell_label,
         object_display_name(&cx.engine.state, cx.engine.registry, object_id),
         duration_label
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn apply_permanent_modifier(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ApplyPermanentModifier {
+        subject,
+        modifier,
+        duration,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some((object_id, ordinary_source_id)) = cx.resolve_continuous_subject(&subject) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some((source_id, runtime_duration)) =
+        materialize_resolving_duration(cx, ordinary_source_id, duration.clone())
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let kinds = materialize_resolving_modifier(modifier);
+    for kind in kinds {
+        cx.engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id,
+            affected: AffectedScope::Single(object_id),
+            kind,
+            condition: None,
+            duration: runtime_duration.clone(),
+            timestamp: cx.engine.state.command_index,
+        });
+    }
+    cx.events.push(ev_log(format!(
+        "{} modifies {}{}",
+        cx.spell_label,
+        object_display_name(&cx.engine.state, cx.engine.registry, object_id),
+        resolving_duration_label(&duration)
     )));
     Ok(EffectOutcome::Continue)
 }
@@ -585,7 +671,10 @@ pub(super) fn animate_self(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    if duration == EffectDuration::WhileSourceOnBattlefield {
+    if !matches!(
+        duration,
+        ResolvingEffectDuration::UntilEndOfTurn | ResolvingEffectDuration::Indefinite
+    ) {
         return Err(EngineError::Illegal(
             "AnimateSelf requires a resolving-effect duration",
         ));
@@ -620,6 +709,11 @@ pub(super) fn animate_self(
         toughness: base_toughness,
     });
 
+    let Some((source_id, runtime_duration)) =
+        materialize_resolving_duration(cx, source_id, duration.clone())
+    else {
+        return Ok(EffectOutcome::Continue);
+    };
     for kind in kinds {
         cx.engine.state.continuous_effects.push(ContinuousEffect {
             trigger_grant_origin: None,
@@ -627,15 +721,11 @@ pub(super) fn animate_self(
             affected: AffectedScope::Single(oid),
             kind,
             condition: None,
-            duration: duration.clone(),
+            duration: runtime_duration.clone(),
             timestamp: cx.engine.state.command_index,
         });
     }
-    let duration_label = match duration {
-        EffectDuration::UntilEndOfTurn => " until end of turn",
-        EffectDuration::Indefinite => "",
-        EffectDuration::WhileSourceOnBattlefield => unreachable!("rejected above"),
-    };
+    let duration_label = resolving_duration_label(&duration);
     cx.events.push(ev_log(format!(
         "{} animates {oid} as a {base_power}/{base_toughness} creature{duration_label}",
         cx.spell_label
@@ -899,4 +989,54 @@ pub(super) fn change_counters(
         }
     }
     Ok(EffectOutcome::Continue)
+}
+
+#[cfg(test)]
+mod issue_236_tests {
+    use super::*;
+    use tricerules_cards::primitives::TypeLineAddition;
+
+    #[test]
+    fn wrenn_shaped_modifiers_compile_to_existing_layer_kinds() {
+        let modifiers = vec![
+            ResolvingPermanentModifier::AddTypes(TypeLineAddition {
+                card_types: vec![PermanentTypeFilter::Creature],
+                creature_types: vec!["Treefolk".into()],
+            }),
+            ResolvingPermanentModifier::SetBasePowerToughness {
+                power: 3,
+                toughness: 3,
+            },
+            ResolvingPermanentModifier::GrantKeywords(vec![
+                Keyword::Vigilance,
+                Keyword::Hexproof,
+                Keyword::Haste,
+            ]),
+        ];
+        let kinds = modifiers
+            .into_iter()
+            .flat_map(materialize_resolving_modifier)
+            .collect::<Vec<_>>();
+        assert!(matches!(
+            &kinds[0],
+            ContinuousEffectKind::Layer4AddTypes(addition)
+                if addition.card_types == [PermanentTypeFilter::Creature]
+                    && addition.creature_types == ["Treefolk"]
+        ));
+        assert_eq!(
+            kinds[1],
+            ContinuousEffectKind::Layer7bSetPt {
+                power: 3,
+                toughness: 3,
+            }
+        );
+        assert_eq!(
+            &kinds[2..],
+            [
+                ContinuousEffectKind::Layer6AddKeyword(Keyword::Vigilance),
+                ContinuousEffectKind::Layer6AddKeyword(Keyword::Hexproof),
+                ContinuousEffectKind::Layer6AddKeyword(Keyword::Haste),
+            ]
+        );
+    }
 }

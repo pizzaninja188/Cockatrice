@@ -1,0 +1,50 @@
+// Marvel's Spider-Man. Oracle and rulings verified 2026-09-09.
+// CR 105.2, 205.1a, 500.4, 603.4, 611.2a, 613, and 605.1a.
+(
+  id: "hydro-man,_fluid_felon",
+  name: "Hydro-Man, Fluid Felon",
+  face_id: "hydro_man_fluid_felon",
+  mana_cost: "{U}{U}",
+  types: ["Creature", "Elemental", "Villain"],
+  supertypes: ["Legendary"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "blue_spell_pump",
+      presentation: OracleLines([1]),
+      trigger: WheneverPlayerCastsSpell(
+        caster: Controller,
+        filter: (is_color: Some(Blue)),
+      ),
+      intervening_if: Some(ObjectMatches(
+        object: Source,
+        filter: (kind: Creature),
+      )),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+    (
+      ability_id: "end_step_land",
+      presentation: OracleLines([2]),
+      trigger: AtBeginningOfEndStep(player: Controller),
+      effect: [
+        Untap(subject: Source),
+        ApplyPermanentModifier(
+          subject: Source,
+          modifier: SetTypeLine((card_types: [Land])),
+          duration: UntilControllerNextTurn,
+        ),
+        ApplyPermanentModifier(
+          subject: Source,
+          modifier: GrantActivatedAbility((
+            ability_id: "land_mana",
+            presentation: Fallback,
+            costs: [Tap],
+            effect: [ProduceMana(options: [(u: 1)])],
+          )),
+          duration: UntilControllerNextTurn,
+        ),
+      ],
+    ),
+  ],
+)

@@ -620,6 +620,12 @@ impl GameEngine {
         self.state.turn_instance = self.state.turn_instance.saturating_add(1);
         self.state.trigger_uses_this_turn.clear();
         let ap = self.state.active_player_id();
+        // CR 500.4: "until your next turn" effects end as that turn begins, before the untap
+        // step or any turn-begin observer sees the new turn. The resolving controller was captured
+        // as a concrete player id, so extra turns and multiplayer turn order need no special case.
+        self.state
+            .continuous_effects
+            .retain(|effect| effect.duration != EffectDuration::UntilTurnStart(ap));
         let armed = self
             .state
             .dispatch_event_observers(ObservedGameEvent::TurnBegan {

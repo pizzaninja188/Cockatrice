@@ -1,13 +1,13 @@
 //! Spell and continuous-effect vocabulary plus shared effect parameters.
 
 use super::{
-    ActivatedAbilityDef, Amount, BasePowerToughnessValue, BasicLandType, CardTypeFilter,
-    CastCostReceiptCondition, Color, ConditionObjectRef, CountExpression, CreatureScopeFilter,
-    DamageDivision, EventZone, GameCondition, GraveyardDestination, GraveyardFilter, Keyword,
-    LifeAmount, PermanentTypeFilter, PowerComparison, PowerToughnessCharacteristic,
-    ProtectionQuality, ReflexiveTriggeredAbilityDef, SpecialActionKind, StackSpellFilter,
-    TargetController, TargetFilter, TargetKind, TargetRole, TriggerCondition, TriggeredAbilityDef,
-    TypeLineAddition, TypeLineReplacement,
+    AbilitySourceZone, ActivatedAbilityDef, Amount, BasePowerToughnessValue, BasicLandType,
+    CardTypeFilter, CastCostReceiptCondition, Color, ConditionObjectRef, CountExpression,
+    CreatureScopeFilter, DamageDivision, EventZone, GameCondition, GraveyardDestination,
+    GraveyardFilter, Keyword, LifeAmount, PermanentTypeFilter, PowerComparison,
+    PowerToughnessCharacteristic, ProtectionQuality, ReflexiveTriggeredAbilityDef,
+    SpecialActionKind, StackSpellFilter, TargetController, TargetFilter, TargetKind, TargetRole,
+    TriggerCondition, TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
 };
 #[cfg(test)]
 use super::{
@@ -818,7 +818,16 @@ pub enum SpellEffectKind {
         creature_types: CreatureTypeChange,
         #[serde(default)]
         keywords: Vec<Keyword>,
-        duration: EffectDuration,
+        duration: ResolvingEffectDuration,
+    },
+    /// CR 611.2a/613: apply one allowlisted characteristic or ability modifier to one exact
+    /// permanent. Hydro-Man composes a type replacement and an activated-ability grant; Wrenn
+    /// and Realmbreaker composes type addition, base P/T, and keyword grants. Keeping each layer
+    /// operation separate preserves the existing continuous-effect pipeline without a modifier DSL.
+    ApplyPermanentModifier {
+        subject: EffectSubject,
+        modifier: ResolvingPermanentModifier,
+        duration: ResolvingEffectDuration,
     },
     /// Move this activated ability's exact hand-zone source onto the battlefield tapped and
     /// attacking the defender inherited from its returned-attacker cost. Kaito and Ninja of the
@@ -1209,7 +1218,7 @@ pub enum SpellEffectKind {
     /// Tidebinder use a resolving source's battlefield lifetime.
     RemoveAllAbilities {
         subject: EffectSubject,
-        duration: EffectDuration,
+        duration: ResolvingEffectDuration,
     },
     /// CR 613 layer 6: grant one or more keyword abilities until end of turn. `Chosen` is an
     /// ordinary permanent target (Boros Charm); `Source` auto-binds an activated or triggered
@@ -2389,6 +2398,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Untap { subject }
             | SpellEffectKind::SetPrepared { subject, .. }
             | SpellEffectKind::GrantKeywords { subject, .. }
+            | SpellEffectKind::ApplyPermanentModifier { subject, .. }
             | SpellEffectKind::RemoveAllAbilities { subject, .. }
             | SpellEffectKind::GrantKeywordChoice { subject, .. }
             | SpellEffectKind::GrantProtection { subject, .. }
@@ -3079,7 +3089,10 @@ impl SpellEffectKind {
             ..
         } = self
         {
-            if *duration == EffectDuration::WhileSourceOnBattlefield {
+            if !matches!(
+                duration,
+                ResolvingEffectDuration::UntilEndOfTurn | ResolvingEffectDuration::Indefinite
+            ) {
                 return Err("AnimateSelf duration must be UntilEndOfTurn or Indefinite".into());
             }
             if colors.as_ref().is_some_and(|colors| {
@@ -3102,6 +3115,37 @@ impl SpellEffectKind {
                 return Err("AnimateSelf keywords must be distinct".into());
             }
             creature_types.validate()?;
+        }
+        if let SpellEffectKind::ApplyPermanentModifier {
+            subject,
+            modifier,
+            duration,
+        } = self
+        {
+            match subject {
+                EffectSubject::Source if context == EffectContext::Ability => {}
+                EffectSubject::Source => {
+                    return Err("source permanent modifiers require an ability".into());
+                }
+                EffectSubject::Chosen(filter) if filter.is_permanent_only() => {}
+                EffectSubject::Chosen(_) => {
+                    return Err("permanent modifiers require a battlefield-permanent target".into());
+                }
+                EffectSubject::AttachedObject
+                | EffectSubject::TriggerObject
+                | EffectSubject::PreviousEffectObject
+                | EffectSubject::SearchedObject(_) => {
+                    return Err(
+                        "permanent modifiers support only Source and Chosen subjects".into(),
+                    );
+                }
+            }
+            if *duration == ResolvingEffectDuration::WhileSourceOnBattlefield
+                && context != EffectContext::Ability
+            {
+                return Err("source-linked permanent modifiers require an ability".into());
+            }
+            modifier.validate()?;
         }
 
         match self {
@@ -3237,7 +3281,7 @@ impl SpellEffectKind {
             | SpellEffectKind::GrantKeywordsAll { filter, .. }
             | SpellEffectKind::RemoveAbilitiesAll { filter } => filter.validate()?,
             SpellEffectKind::RemoveAllAbilities {
-                duration: EffectDuration::WhileSourceOnBattlefield,
+                duration: ResolvingEffectDuration::WhileSourceOnBattlefield,
                 ..
             } if context != EffectContext::Ability => {
                 return Err(
@@ -3638,6 +3682,9 @@ impl SpellEffectKind {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::ApplyPermanentModifier {
+                subject: EffectSubject::Source,
                 ..
             } | SpellEffectKind::GrantKeywordChoice {
                 subject: EffectSubject::Source
@@ -4499,7 +4546,61 @@ mod attachment_filter_tests {
 // Continuous effects (layer system, CR 613)
 // ---------------------------------------------------------------------------
 
-/// How long a continuous effect lasts.
+/// How long an authored continuous effect created during resolution lasts. Controller-relative
+/// wording is compiled to a concrete player id when the spell or ability resolves.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResolvingEffectDuration {
+    Indefinite,
+    UntilEndOfTurn,
+    WhileSourceOnBattlefield,
+    UntilControllerNextTurn,
+}
+
+/// One safe layer operation available to a resolving spell or ability. This intentionally reuses
+/// the typed layer parameters while excluding player effects, dynamic scopes, control changes,
+/// and other continuous-effect kinds whose lifetime or reference player needs different rules.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResolvingPermanentModifier {
+    SetTypeLine(TypeLineReplacement),
+    AddTypes(TypeLineAddition),
+    SetBasePowerToughness { power: i64, toughness: i64 },
+    GrantKeywords(Vec<Keyword>),
+    GrantActivatedAbility(Box<ActivatedAbilityDef>),
+}
+
+impl ResolvingPermanentModifier {
+    fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::SetTypeLine(replacement) => replacement.validate(),
+            Self::AddTypes(addition) => addition.validate(),
+            Self::SetBasePowerToughness { .. } => Ok(()),
+            Self::GrantKeywords(keywords) => {
+                if keywords.is_empty() {
+                    return Err("resolving keyword grant requires at least one keyword".into());
+                }
+                let unique = keywords
+                    .iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<_>>();
+                if unique.len() != keywords.len() {
+                    return Err("resolving keyword grant requires distinct keywords".into());
+                }
+                Ok(())
+            }
+            Self::GrantActivatedAbility(ability) => {
+                if ability.source_zone != AbilitySourceZone::Battlefield {
+                    return Err(
+                        "a resolving permanent modifier can grant only a battlefield ability"
+                            .into(),
+                    );
+                }
+                ability.validate_shape()
+            }
+        }
+    }
+}
+
+/// How long a materialized runtime effect lasts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EffectDuration {
     /// CR 611.2a: no stated duration. Earthbend from Badgermole and Rebellious Captives
@@ -4514,6 +4615,9 @@ pub enum EffectDuration {
     /// (CR 611.2b). The engine drains it when that exact source leaves, not at cleanup. The source
     /// is identified by [`ContinuousEffect::source_id`].
     WhileSourceOnBattlefield,
+    /// CR 500.4: expires as the named player's next turn begins, before any turn-begin action or
+    /// priority. The player id is captured from the resolving controller, never authored in RON.
+    UntilTurnStart(i32),
 }
 
 /// The kind of modification a continuous effect applies.

@@ -358,6 +358,127 @@ fn issue_191_cast_filter_accepts_targeted_permanent_type() {
 }
 
 #[test]
+fn issue_236_cast_filter_accepts_derived_color() {
+    let trigger: super::TriggerCondition =
+        ron::from_str("WheneverPlayerCastsSpell(filter: (is_color: Some(Blue)))")
+            .expect("Hydro-Man needs a typed cast-color predicate");
+    assert!(trigger.validate().is_ok());
+}
+
+#[test]
+fn issue_236_composable_permanent_modifiers_parse_and_validate() {
+    let card = r#"(
+        id: "test_hydro",
+        name: "Test Hydro",
+        face_id: "test_hydro",
+        mana_cost: "{U}{U}",
+        types: ["Legendary", "Creature", "Elemental", "Villain"],
+        power: 2,
+        toughness: 2,
+        triggered_abilities: [(
+            ability_id: "end_step_land",
+            presentation: Fallback,
+            trigger: AtBeginningOfEndStep(player: Controller),
+            effect: [
+                ApplyPermanentModifier(
+                    subject: Source,
+                    modifier: SetTypeLine((card_types: [Land])),
+                    duration: UntilControllerNextTurn,
+                ),
+                ApplyPermanentModifier(
+                    subject: Source,
+                    modifier: GrantActivatedAbility((
+                        ability_id: "land_mana",
+                        presentation: Fallback,
+                        costs: [Tap],
+                        effect: [ProduceMana(options: [(u: 1)])],
+                    )),
+                    duration: UntilControllerNextTurn,
+                ),
+            ],
+        )],
+    )"#;
+    let wrenn = r#"(
+        id: "test_wrenn",
+        name: "Test Wrenn",
+        face_id: "test_wrenn",
+        mana_cost: "{1}{G}{G}",
+        types: ["Planeswalker", "Wrenn"],
+        loyalty: 4,
+        activated_abilities: [(
+            ability_id: "animate_land",
+            presentation: Fallback,
+            costs: [Loyalty(1)],
+            effect: [
+                ApplyPermanentModifier(
+                    subject: Chosen((kind: AnyPermanent, permanent_types: [Land])),
+                    modifier: AddTypes((card_types: [Creature], creature_types: ["Treefolk"])),
+                    duration: UntilControllerNextTurn,
+                ),
+                ApplyPermanentModifier(
+                    subject: Chosen((kind: AnyPermanent, permanent_types: [Land])),
+                    modifier: SetBasePowerToughness(power: 3, toughness: 3),
+                    duration: UntilControllerNextTurn,
+                ),
+                ApplyPermanentModifier(
+                    subject: Chosen((kind: AnyPermanent, permanent_types: [Land])),
+                    modifier: GrantKeywords([Vigilance, Hexproof, Haste]),
+                    duration: UntilControllerNextTurn,
+                ),
+            ],
+            targeting: Some((groups: [(
+                min: 1,
+                max: 1,
+                prompt: "Choose target land you control",
+                effect_indices: [0, 1, 2],
+            )])),
+        )],
+    )"#;
+    crate::CardRegistry::from_chunks_and_tokens(&[card, wrenn], &[])
+        .expect("Hydro-Man's modifiers should use the reusable resolving vocabulary");
+}
+
+#[test]
+fn issue_236_permanent_modifier_validation_fails_closed() {
+    let invalid_effects = [
+        "ApplyPermanentModifier(subject: AttachedObject, modifier: SetTypeLine((card_types: [Land])), duration: UntilControllerNextTurn)",
+        "ApplyPermanentModifier(subject: Source, modifier: GrantKeywords([]), duration: UntilControllerNextTurn)",
+        "ApplyPermanentModifier(subject: Source, modifier: GrantActivatedAbility((ability_id: \"bad\", presentation: Fallback, source_zone: Hand, costs: [DiscardSelf], effect: [ProduceMana(options: [(u: 1)])])), duration: UntilControllerNextTurn)",
+    ];
+    for effect in invalid_effects {
+        let card = format!(
+            r#"(id: "invalid", name: "Invalid", face_id: "invalid", types: ["Creature"], power: 1, toughness: 1,
+            triggered_abilities: [(ability_id: "test", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [{effect}])])"#,
+        );
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&card], &[]).is_err(),
+            "must reject {effect}"
+        );
+    }
+
+    let source_in_spell = r#"(
+        id: "invalid_spell", name: "Invalid Spell", face_id: "invalid_spell", types: ["Sorcery"],
+        spell_effect: [ApplyPermanentModifier(
+            subject: Source,
+            modifier: SetTypeLine((card_types: [Land])),
+            duration: UntilControllerNextTurn,
+        )],
+    )"#;
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[source_in_spell], &[]).is_err());
+
+    let source_linked_spell = r#"(
+        id: "invalid_lifetime", name: "Invalid Lifetime", face_id: "invalid_lifetime", types: ["Sorcery"],
+        spell_effect: [ApplyPermanentModifier(
+            subject: Chosen((kind: AnyPermanent)),
+            modifier: SetTypeLine((card_types: [Land])),
+            duration: WhileSourceOnBattlefield,
+        )],
+        targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target permanent", effect_indices: [0])])),
+    )"#;
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[source_linked_spell], &[]).is_err());
+}
+
+#[test]
 fn issue_185_saga_vocabulary_and_validation_are_typed() {
     let card = r#"(
         id: "test_saga",

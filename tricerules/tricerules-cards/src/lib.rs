@@ -33,10 +33,10 @@ pub use primitives::{
     LibraryPartitionKind, ManaAmount, ManaSpendFilter, ManaSpendingRestriction, ObjectCastCostKind,
     ObjectContributionKind, ObjectPaymentConstraint, PermanentChoiceConstraint,
     PermanentTypeFilter, PowerComparison, PowerToughnessCharacteristic, PtScale, PtScaleBasis,
-    QuantityTerm, RelativePlayerSet, SearchDestination, SearchZoneSelection,
-    SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin, SpellCostModifier, SpellEffectKind,
-    TargetMatchFilter, TargetObjectExclusion, TriggerCondition, TriggeredAbilityDef,
-    TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
+    QuantityTerm, RelativePlayerSet, ResolvingEffectDuration, ResolvingPermanentModifier,
+    SearchDestination, SearchZoneSelection, SpecialActionManaPurpose, SpellCastFilter,
+    SpellCastOrigin, SpellCostModifier, SpellEffectKind, TargetMatchFilter, TargetObjectExclusion,
+    TriggerCondition, TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
 };
 pub use registry::CardRegistry;
 pub use slug::slugify;

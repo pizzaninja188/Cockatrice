@@ -1219,6 +1219,7 @@ fn validate_effect_targets(
         | SpellEffectKind::Explore { subject }
         | SpellEffectKind::PutCounters { subject, .. } | SpellEffectKind::RemoveCounters { subject, .. } | SpellEffectKind::PutCounterSnapshot { subject, .. }
         | SpellEffectKind::GrantKeywords { subject, .. }
+        | SpellEffectKind::ApplyPermanentModifier { subject, .. }
         | SpellEffectKind::RemoveAllAbilities { subject, .. }
         | SpellEffectKind::GrantKeywordChoice { subject, .. }
         | SpellEffectKind::GrantProtection { subject, .. }

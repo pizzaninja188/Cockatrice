@@ -1955,6 +1955,8 @@ pub struct SpellCastFact {
     pub origin: Zone,
     pub face_index: usize,
     pub types: Vec<String>,
+    /// Derived layer-5 colors of the spell as the cast commits.
+    pub colors: Vec<Color>,
     pub all_creature_types: bool,
     pub mana_value: u32,
     /// Actual mana paid across the completed cast's costs, independent of printed mana value.
