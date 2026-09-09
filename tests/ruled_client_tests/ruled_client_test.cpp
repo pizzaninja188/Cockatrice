@@ -4314,6 +4314,32 @@ TEST_F(RuledClientTest, TriggerOrderRequiredOpensTheOrderingChoiceForTheDecider)
     EXPECT_FALSE(candidates[0].abilityText.isEmpty());
 }
 
+TEST_F(RuledClientTest, SessionResetClosesAnOpenTriggerOrderingChoice)
+{
+    apply(triggerOrderBatch(kLocalPlayer));
+    ASSERT_TRUE(state->hasPendingTriggerOrder());
+
+    int uiChangeCount = 0;
+    bool active = true;
+    QVector<RuledTriggerOrderCandidate> candidates;
+    QObject::connect(state, &RuledClientState::triggerOrderUiChanged, state,
+                     [&](bool nextActive, QVector<RuledTriggerOrderCandidate> nextCandidates) {
+                         ++uiChangeCount;
+                         active = nextActive;
+                         candidates = std::move(nextCandidates);
+                     });
+
+    // Concession ends the current ruled session; starting the next game reuses this TabGame.
+    // The ordering popup is non-closeable, so teardown must explicitly tell its UI owner to
+    // destroy it rather than merely clearing the view-model choice.
+    state->clearSessionState();
+
+    EXPECT_EQ(uiChangeCount, 1);
+    EXPECT_FALSE(active);
+    EXPECT_TRUE(candidates.isEmpty());
+    EXPECT_FALSE(state->hasPendingTriggerOrder());
+}
+
 TEST_F(RuledClientTest, TriggerOrderRequiredIsNotPromptedForTheOpponent)
 {
     apply(triggerOrderBatch(kLocalPlayer + 1));

@@ -1947,8 +1947,11 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     }
 
     // A pick may have been live when the session ended; the holder is already cleared above, but
-    // the prompt panel still needs telling.
+    // its UI owner still needs telling. Trigger ordering is announced unconditionally because a
+    // submitted pick deliberately clears the holder without closing its window while waiting for
+    // the engine reply; concession can end the session during that round trip.
     emit resolutionHandPickUiChanged(-1, -1);
+    emit triggerOrderUiChanged(false, {});
 
     payment.clear();
     emit sessionReset();
