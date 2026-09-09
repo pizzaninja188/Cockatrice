@@ -210,3 +210,11 @@ impl Keyword {
         }
     }
 }
+
+/// Keyword abilities that belong to spells rather than battlefield permanents. Keeping these
+/// separate prevents stack-only rules from leaking into layer-6 permanent characteristics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SpellKeyword {
+    /// CR 702.40: when this spell is cast, copy it for each earlier spell cast that turn.
+    Storm,
+}

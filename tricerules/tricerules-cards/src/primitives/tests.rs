@@ -1,4 +1,52 @@
 #[test]
+fn storm_is_a_spell_keyword_and_static_emblems_require_typed_effects() {
+    let face: crate::CardFace = ron::from_str(
+        r#"(
+            face_id: "storm_spell",
+            name: "Storm Spell",
+            mana_cost: "{1}{U}",
+            types: ["Instant"],
+            spell_keywords: [Storm],
+        )"#,
+    )
+    .expect("spell keywords parse independently from permanent keywords");
+    assert_eq!(face.spell_keywords, vec![super::SpellKeyword::Storm]);
+
+    let emblem: super::SpellEffectKind = ron::from_str(
+        r#"CreateStaticEmblem(
+            emblem_id: "ral_crackling_wit_emblem",
+            display_name: "Ral, Crackling Wit Emblem",
+            effects: [GrantSpellKeyword(
+                filter: (card_type: Some(InstantOrSorcery)),
+                keyword: Storm,
+            )],
+        )"#,
+    )
+    .expect("typed spell-keyword emblem parses");
+    assert!(emblem.validate(super::EffectContext::Ability).is_ok());
+
+    let empty: super::SpellEffectKind = ron::from_str(
+        r#"CreateStaticEmblem(
+            emblem_id: "empty",
+            display_name: "Empty Emblem",
+            effects: [],
+        )"#,
+    )
+    .expect("shape parses before semantic validation");
+    assert!(empty.validate(super::EffectContext::Ability).is_err());
+
+    let zero_anthem: super::SpellEffectKind = ron::from_str(
+        r#"CreateStaticEmblem(
+            emblem_id: "zero",
+            display_name: "Zero Emblem",
+            effects: [CreaturePt(power: 0, toughness: 0)],
+        )"#,
+    )
+    .expect("shape parses before semantic validation");
+    assert!(zero_anthem.validate(super::EffectContext::Ability).is_err());
+}
+
+#[test]
 fn presentation_only_choice_prose_is_rejected() {
     assert!(ron::from_str::<super::CastCostGroupDef>(
         r#"(prompt: "Pay kicker?", options: [Mana(label: "Kicker {2}", cost: "{2}")])"#,

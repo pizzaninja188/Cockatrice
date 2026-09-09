@@ -1,0 +1,19 @@
+// 1/1 blue and red Otter creature token with prowess (Ral, Crackling Wit).
+(
+  id: "otter_ur_1_1_prowess",
+  name: "Otter",
+  face_id: "otter",
+  types: ["Creature", "Otter"],
+  colors: [Blue, Red],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
+    trigger: WheneverPlayerCastsSpell(
+      caster: Controller,
+      filter: (card_type: Some(Noncreature)),
+    ),
+    effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+  )],
+)

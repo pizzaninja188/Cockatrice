@@ -585,6 +585,10 @@ pub struct CardFace {
     /// Static keyword abilities (Flying, Reach, Intimidate, …). Omit for keywordless faces.
     #[serde(default)]
     pub keywords: Vec<Keyword>,
+    /// Stack-active keyword abilities such as storm. These are not permanent characteristics and
+    /// are evaluated when a cast commits.
+    #[serde(default)]
+    pub spell_keywords: Vec<crate::SpellKeyword>,
     /// Parameterized protection abilities printed on this face.
     #[serde(default)]
     pub protections: Vec<ProtectionQuality>,
@@ -855,6 +859,8 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub keywords: Vec<Keyword>,
     #[serde(default)]
+    pub spell_keywords: Vec<crate::SpellKeyword>,
+    #[serde(default)]
     pub protections: Vec<ProtectionQuality>,
     #[serde(default)]
     pub evasions: Vec<Evasion>,
@@ -925,6 +931,7 @@ impl RawCardDefinition {
                 modal_spell: self.modal_spell,
                 custom_effect: self.custom_effect,
                 keywords: self.keywords,
+                spell_keywords: self.spell_keywords,
                 protections: self.protections,
                 evasions: self.evasions,
                 activated_abilities: self.activated_abilities,

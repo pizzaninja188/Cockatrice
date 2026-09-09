@@ -78,9 +78,7 @@ pub(super) fn create_static_emblem(
     let SpellEffectKind::CreateStaticEmblem {
         emblem_id,
         display_name,
-        creatures,
-        power,
-        toughness,
+        effects,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -92,23 +90,33 @@ pub(super) fn create_static_emblem(
         controller: cx.controller,
         emblem_id,
         display_name: display_name.clone(),
+        effects: effects.clone(),
     });
-    cx.engine.state.continuous_effects.push(ContinuousEffect {
-        trigger_grant_origin: None,
-        source_id: Some(object_id),
-        affected: AffectedScope::CreaturesMatching {
-            reference_player: cx.controller,
-            filter: creatures,
-            exclude: None,
-        },
-        kind: ContinuousEffectKind::PtModify {
-            delta_power: power,
-            delta_toughness: toughness,
-        },
-        condition: None,
-        duration: EffectDuration::Indefinite,
-        timestamp: cx.engine.state.command_index,
-    });
+    for effect in effects {
+        if let StaticEmblemEffect::CreaturePt {
+            filter,
+            power,
+            toughness,
+        } = effect
+        {
+            cx.engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: Some(object_id),
+                affected: AffectedScope::CreaturesMatching {
+                    reference_player: cx.controller,
+                    filter,
+                    exclude: None,
+                },
+                kind: ContinuousEffectKind::PtModify {
+                    delta_power: power,
+                    delta_toughness: toughness,
+                },
+                condition: None,
+                duration: EffectDuration::Indefinite,
+                timestamp: cx.engine.state.command_index,
+            });
+        }
+    }
     cx.events
         .push(ev_log(format!("P{} gets {display_name}.", cx.controller)));
     Ok(EffectOutcome::Continue)

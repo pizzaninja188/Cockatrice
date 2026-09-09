@@ -994,6 +994,7 @@ impl GameEngine {
         );
         target_triggers.extend(payment.expend_triggers);
         self.snapshot_completed_cast(oid);
+        target_triggers.extend(self.collect_storm_triggers(&fact));
         target_triggers.extend(self.collect_delayed_copy_triggers(&fact));
         target_triggers.extend(self.collect_event_triggers(&[GameEvent::SpellCast { fact }]));
         // Both kinds of triggers are waiting when the cast completes, so they form one CR 603.3b
@@ -2230,6 +2231,232 @@ mod cast_snapshot_tests {
     }
 
     #[test]
+    fn issue_238_printed_storm_copies_once_for_each_earlier_cast() {
+        let mut e = engine_with_extra(
+            "spell_effect: [GainLife(amount: 1)]",
+            &[
+                r#"(id: "storm_spell", name: "Storm Spell", face_id: "storm_spell",
+                mana_cost: "{U}", types: ["Sorcery"], spell_keywords: [Storm],
+                spell_effect: [GainLife(amount: 1)])"#,
+            ],
+        );
+
+        let first = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+        e.state.players[0].mana_pool.black = 1;
+        e.apply_command(0, &command(&e, first)).expect("first cast");
+        resolve(&mut e);
+
+        let storm = add(&mut e, 0, "storm_spell", Zone::Hand);
+        e.state.players[0].mana_pool.blue = 1;
+        e.state.priority_idx = 0;
+        e.apply_command(0, &command(&e, storm)).expect("storm cast");
+
+        assert_eq!(e.state.turn_history.current.spells_cast, 2);
+        assert_eq!(
+            e.state
+                .stack
+                .iter()
+                .filter(|item| item.is_triggered)
+                .count(),
+            1,
+            "storm must trigger from the spell on the stack"
+        );
+        resolve(&mut e);
+        assert_eq!(
+            e.state.players[0].life, 23,
+            "the first spell plus one storm copy and the original all resolve"
+        );
+        assert_eq!(
+            e.state.turn_history.current.spells_cast, 2,
+            "the storm copy is not cast"
+        );
+    }
+
+    #[test]
+    fn issue_238_each_targeted_storm_copy_gets_an_independent_choice() {
+        let mut e = engine_with_extra(
+            "spell_effect: [GainLife(amount: 1)]",
+            &[
+                r#"(id: "targeted_storm", name: "Targeted Storm", face_id: "targeted_storm",
+                mana_cost: "{U}", types: ["Instant"], spell_keywords: [Storm],
+                spell_effect: [DamageTarget(amount: 1, target: (kind: AnyTarget))])"#,
+            ],
+        );
+        for _ in 0..2 {
+            let prior = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+            e.state.players[0].mana_pool.black = 1;
+            e.apply_command(0, &command(&e, prior)).expect("prior cast");
+            resolve(&mut e);
+        }
+
+        let storm = add(&mut e, 0, "targeted_storm", Zone::Hand);
+        e.state.players[0].mana_pool.blue = 1;
+        let mut cast = command(&e, storm);
+        let Some(rv1::ruled_command::Cmd::CastSpell(spell)) = cast.cmd.as_mut() else {
+            unreachable!()
+        };
+        spell.targets = vec![rv1::TargetRef {
+            object_id: 1,
+            ..Default::default()
+        }];
+        e.apply_command(0, &cast).expect("storm cast");
+        resolve(&mut e);
+        assert!(e.state.pending_resolution.is_some(), "first copy choice");
+
+        e.apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![1],
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("first copy keeps the original target");
+        assert!(
+            e.state.pending_resolution.is_some(),
+            "second copy must receive its own target choice before priority"
+        );
+        assert_eq!(e.state.stack.iter().filter(|item| item.is_copy).count(), 1);
+
+        let second_copy_id = e
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("second copy remains pending")
+            .presentation
+            .source_object_id;
+        assert!(e
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![999],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .is_err());
+        assert_eq!(
+            e.state
+                .pending_resolution
+                .as_ref()
+                .expect("invalid choice must preserve the queued copy")
+                .presentation
+                .source_object_id,
+            second_copy_id
+        );
+
+        e.apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![0],
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("second copy chooses independently");
+        assert!(e.state.pending_resolution.is_none());
+        assert_eq!(e.state.stack.iter().filter(|item| item.is_copy).count(), 2);
+        assert_eq!(e.state.turn_history.current.spells_cast, 3);
+    }
+
+    #[test]
+    fn issue_238_storm_counts_every_seat_and_keeps_the_original_snapshot_after_countering() {
+        let mut e = engine_with_extra(
+            "spell_effect: [GainLife(amount: 1)]",
+            &[
+                r#"(id: "storm_spell", name: "Storm Spell", face_id: "storm_spell",
+                mana_cost: "{U}", types: ["Sorcery"], spell_keywords: [Storm],
+                spell_effect: [GainLife(amount: 1)])"#,
+            ],
+        );
+        e.state.players.push(PlayerState::new(7, 20));
+
+        for (player_index, player_id) in [(1, 1), (2, 7)] {
+            let prior = add(&mut e, player_index, "snapshot_spell", Zone::Hand);
+            e.state.players[player_index].mana_pool.black = 1;
+            e.state.priority_idx = player_index;
+            e.apply_command(player_id, &command_for(&e, player_index, prior))
+                .expect("opponent cast");
+            resolve(&mut e);
+        }
+
+        let storm = add(&mut e, 0, "storm_spell", Zone::Hand);
+        e.state.players[0].mana_pool.blue = 1;
+        e.state.priority_idx = 0;
+        e.apply_command(0, &command(&e, storm)).expect("storm cast");
+        let original_id = e
+            .state
+            .stack
+            .iter()
+            .find(|item| !item.is_triggered)
+            .expect("original storm spell")
+            .id;
+        super::super::resolution::counter_stack_object(
+            &mut e,
+            original_id,
+            "test counter",
+            &mut Vec::new(),
+        )
+        .expect("counter original");
+        resolve(&mut e);
+
+        assert_eq!(e.state.players[0].life, 22, "two captured copies resolve");
+        assert_eq!(e.state.players[1].life, 21);
+        assert_eq!(e.state.players[2].life, 21);
+        assert_eq!(e.state.turn_history.current.spells_cast, 3);
+    }
+
+    #[test]
+    fn issue_238_each_printed_or_granted_storm_instance_stages_a_separate_trigger() {
+        let mut e = engine_with_extra(
+            "spell_effect: [GainLife(amount: 1)]",
+            &[
+                r#"(id: "storm_spell", name: "Storm Spell", face_id: "storm_spell",
+                mana_cost: "{U}", types: ["Sorcery"], spell_keywords: [Storm],
+                spell_effect: [GainLife(amount: 1)])"#,
+            ],
+        );
+        for object_id in [900, 901] {
+            e.state.static_emblems.push(StaticEmblemInstance {
+                object_id,
+                controller: 0,
+                emblem_id: format!("storm_emblem_{object_id}"),
+                display_name: "Storm Emblem".into(),
+                effects: vec![StaticEmblemEffect::GrantSpellKeyword {
+                    filter: SpellCastFilter {
+                        card_type: Some(CardTypeFilter::InstantOrSorcery),
+                        ..Default::default()
+                    },
+                    keyword: SpellKeyword::Storm,
+                }],
+            });
+        }
+        let storm = add(&mut e, 0, "storm_spell", Zone::Hand);
+        e.state.players[0].mana_pool.blue = 1;
+        e.apply_command(0, &command(&e, storm)).expect("storm cast");
+
+        let order = e
+            .state
+            .pending_trigger_order
+            .as_ref()
+            .expect("three same-controller storm triggers require ordering");
+        assert_eq!(order.candidates.len(), 3);
+        assert!(order
+            .candidates
+            .iter()
+            .all(|trigger| trigger.ability_text.starts_with("Storm —")));
+    }
+
+    #[test]
     fn issue_148_warp_publishes_and_pays_a_distinct_hand_method() {
         let mut e = engine_with_extra(
             "",
@@ -2842,13 +3069,17 @@ mod cast_snapshot_tests {
     }
 
     fn command(e: &GameEngine, spell: ObjectId) -> RuledCommand {
+        command_for(e, 0, spell)
+    }
+
+    fn command_for(e: &GameEngine, player_index: usize, spell: ObjectId) -> RuledCommand {
         RuledCommand {
             cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
                 cast_method: rv1::CastMethod::Normal as i32,
                 source: Some(rv1::CastSource {
                     expected_zone_change_generation: None,
                     location: Some(rv1::cast_source::Location::HandIndex(
-                        e.state.players[0]
+                        e.state.players[player_index]
                             .hand
                             .iter()
                             .position(|id| *id == spell)

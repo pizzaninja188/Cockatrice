@@ -6,7 +6,7 @@
 
 use super::events::{color_string, ev_log, object_display_name};
 use super::targeting::{
-    attachment_recipient_for_target, battlefield_objects_matching, compute_spell_targets,
+    attachment_recipient_for_target, battlefield_objects_matching,
     effect_has_legal_target_at_resolution, graveyard_target_legal, object_matches_mass_filter,
     object_matches_scoped_mass_filter, stack_target_identity_is_current,
     target_filter_legal_at_resolution, target_role_legal_at_resolution, target_schema,
@@ -1775,7 +1775,7 @@ impl GameEngine {
                             .register_next_spell_copy(cx.top, cx.controller, cx.spell_label);
                         EffectOutcome::Continue
                     }
-                    effect @ SpellEffectKind::CopyCapturedSpell => {
+                    effect @ SpellEffectKind::CopyCapturedSpell { .. } => {
                         stack_ops::copy_target_spell(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::GainControlUntilEndOfTurn { .. } => {

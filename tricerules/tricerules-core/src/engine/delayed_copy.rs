@@ -37,7 +37,7 @@ impl GameEngine {
                 ordinal: None,
                 ordinal_scope: Default::default(),
             },
-            effect: vec![SpellEffectKind::CopyCapturedSpell],
+            effect: vec![SpellEffectKind::CopyCapturedSpell { count: 1 }],
             modal: None,
             targeting: None,
             may: false,

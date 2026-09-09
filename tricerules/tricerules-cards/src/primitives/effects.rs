@@ -6,8 +6,8 @@ use super::{
     CreatureScopeFilter, DamageDivision, EventZone, GameCondition, GraveyardDestination,
     GraveyardFilter, Keyword, LifeAmount, PermanentTypeFilter, PowerComparison,
     PowerToughnessCharacteristic, ProtectionQuality, ReflexiveTriggeredAbilityDef,
-    SpecialActionKind, StackSpellFilter, TargetController, TargetFilter, TargetKind, TargetRole,
-    TriggerCondition, TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
+    SpecialActionKind, SpellKeyword, StackSpellFilter, TargetController, TargetFilter, TargetKind,
+    TargetRole, TriggerCondition, TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
 };
 #[cfg(test)]
 use super::{
@@ -21,6 +21,24 @@ use serde::{Deserialize, Serialize};
 
 fn default_one() -> u32 {
     1
+}
+
+/// One persistent static effect carried by an emblem marker. Kaito demonstrates the creature
+/// modifier form; Ral demonstrates a spell-keyword grant. Emblems have no zone or permanent
+/// characteristics, so these effects live on the marker rather than in battlefield layers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StaticEmblemEffect {
+    CreaturePt {
+        #[serde(default)]
+        filter: CreatureScopeFilter,
+        power: i32,
+        toughness: i32,
+    },
+    GrantSpellKeyword {
+        #[serde(default)]
+        filter: super::SpellCastFilter,
+        keyword: SpellKeyword,
+    },
 }
 /// A kind of counter that can sit on a permanent (CR 122.1). `Ord` is required so [`crate`]
 /// consumers can store counters in a `BTreeMap` for deterministic iteration/serialization.
@@ -835,15 +853,12 @@ pub enum SpellEffectKind {
     /// attacking the defender inherited from its returned-attacker cost. Kaito and Ninja of the
     /// Deep Hours exercise the shared Ninjutsu resolution action.
     PutAbilitySourceOntoBattlefieldTappedAndAttacking,
-    /// Create a persistent, nonpermanent emblem marker and its controller-scoped static creature
-    /// modifier. Kaito and Gideon-style emblems share this narrow static-anthem representation;
-    /// triggered emblem abilities remain intentionally unsupported.
+    /// Create a persistent, nonpermanent emblem marker and its controller-scoped static effects.
+    /// Effects remain active after the source planeswalker leaves.
     CreateStaticEmblem {
         emblem_id: String,
         display_name: String,
-        creatures: CreatureScopeFilter,
-        power: i32,
-        toughness: i32,
+        effects: Vec<StaticEmblemEffect>,
     },
     DamageTarget {
         amount: Amount,
@@ -1165,7 +1180,9 @@ pub enum SpellEffectKind {
     CopyNextSpellThisTurn,
     /// Engine-created delayed trigger instruction; its captured spell is stored with the trigger.
     #[serde(skip_deserializing)]
-    CopyCapturedSpell,
+    CopyCapturedSpell {
+        count: u32,
+    },
     /// CR 613.4 layer 7c: give every creature matching `filter` +power/+toughness until end of
     /// turn (the mass, one-shot sibling of [`Self::PumpTarget`]). Untargeted — `filter` selects
     /// the set the same way a static anthem does. Glorious Charge / Inspired Charge
@@ -2485,7 +2502,7 @@ impl SpellEffectKind {
                 ..
             }
             | SpellEffectKind::CopyNextSpellThisTurn
-            | SpellEffectKind::CopyCapturedSpell
+            | SpellEffectKind::CopyCapturedSpell { .. }
             | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
             | SpellEffectKind::CreateStaticEmblem { .. }
             | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
@@ -2972,18 +2989,30 @@ impl SpellEffectKind {
         if let SpellEffectKind::CreateStaticEmblem {
             emblem_id,
             display_name,
-            creatures,
-            power,
-            toughness,
+            effects,
         } = self
         {
             if emblem_id.trim().is_empty() || display_name.trim().is_empty() {
                 return Err("static emblem id and display name cannot be empty".into());
             }
-            if *power == 0 && *toughness == 0 {
-                return Err("static emblem must modify power or toughness".into());
+            if effects.is_empty() {
+                return Err("static emblem requires at least one effect".into());
             }
-            creatures.validate()?;
+            for effect in effects {
+                match effect {
+                    StaticEmblemEffect::CreaturePt {
+                        filter,
+                        power,
+                        toughness,
+                    } => {
+                        if *power == 0 && *toughness == 0 {
+                            return Err("static emblem creature modifier cannot be zero".into());
+                        }
+                        filter.validate()?;
+                    }
+                    StaticEmblemEffect::GrantSpellKeyword { filter, .. } => filter.validate()?,
+                }
+            }
         }
         for filter in self.target_filters() {
             filter.validate_target_constraints()?;

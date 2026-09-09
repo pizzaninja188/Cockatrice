@@ -1298,6 +1298,10 @@ raise_the_alarm	0	cast	exercised
 rakdos_ragemutt	0	cast	exercised
 rakdos_shred-freak	0	cast	exercised
 rakish_crew	0	cast	exercised
+ral,_crackling_wit	0	ability:0	exercised
+ral,_crackling_wit	0	ability:1	unsupported: nonmana costs need additional fixture resources
+ral,_crackling_wit	0	ability:2	unsupported: nonmana costs need additional fixture resources
+ral,_crackling_wit	0	cast	exercised
 rambunctious_mutt	0	cast	exercised
 rampaging_ceratops	0	cast	exercised
 rampaging_ferocidon	0	cast	exercised

@@ -1,0 +1,50 @@
+// Oracle and rulings: https://scryfall.com/card/blb/230/ral-crackling-wit (verified 2026-09-09).
+// CR 702.40: each granted instance of storm triggers separately and counts earlier spells cast.
+(
+  id: "ral,_crackling_wit",
+  name: "Ral, Crackling Wit",
+  face_id: "ral_crackling_wit",
+  mana_cost: "{2}{U}{R}",
+  supertypes: ["Legendary"],
+  types: ["Planeswalker", "Ral"],
+  loyalty: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(
+      caster: Controller,
+      filter: (card_type: Some(Noncreature)),
+    ),
+    effect: [PutCounters(counter: Loyalty, count: 1, subject: Source)],
+  )],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Loyalty(1)],
+      effect: [CreateTokens(token: "otter_ur_1_1_prowess", count: 1)],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Loyalty(-3)],
+      effect: [Draw(count: 3), Discard(who: Controller, quantity: Exact(2))],
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: OracleLines([4]),
+      costs: [Loyalty(-10)],
+      effect: [
+        Draw(count: 3),
+        CreateStaticEmblem(
+          emblem_id: "ral_crackling_wit_emblem",
+          display_name: "Ral, Crackling Wit Emblem",
+          effects: [GrantSpellKeyword(
+            filter: (card_type: Some(InstantOrSorcery)),
+            keyword: Storm,
+          )],
+        ),
+      ],
+    ),
+  ],
+)

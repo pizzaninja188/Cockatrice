@@ -37,9 +37,11 @@
       effect: [CreateStaticEmblem(
         emblem_id: "kaito_bane_of_nightmares_emblem",
         display_name: "Kaito, Bane of Nightmares Emblem",
-        creatures: (controller: Some(YouControl), subtype: Some("Ninja")),
-        power: 1,
-        toughness: 1,
+        effects: [CreaturePt(
+          filter: (controller: Some(YouControl), subtype: Some("Ninja")),
+          power: 1,
+          toughness: 1,
+        )],
       )],
     ),
     (

@@ -1434,7 +1434,7 @@ fn validate_effect_targets(
         | SpellEffectKind::TapAll { .. }
         | SpellEffectKind::UntapAll { .. }
         | SpellEffectKind::CopyNextSpellThisTurn
-        | SpellEffectKind::CopyCapturedSpell
+        | SpellEffectKind::CopyCapturedSpell { .. }
         | SpellEffectKind::Untap {
             subject: EffectSubject::Source
                 | EffectSubject::AttachedObject

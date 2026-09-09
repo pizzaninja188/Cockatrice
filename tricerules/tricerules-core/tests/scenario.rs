@@ -9,6 +9,8 @@
 mod issue_231_spell_filters;
 #[path = "scenario/issue_236_hydro_man.rs"]
 mod issue_236_hydro_man;
+#[path = "scenario/issue_238_ral_crackling_wit.rs"]
+mod issue_238_ral_crackling_wit;
 
 #[path = "scenario/activation_restrictions.rs"]
 mod activation_restrictions;

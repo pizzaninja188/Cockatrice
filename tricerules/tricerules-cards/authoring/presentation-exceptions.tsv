@@ -55,6 +55,7 @@ mercenary_r_1_1	mercenary	activated_abilities/activated_01	Token templates have 
 mutagen	mutagen	activated_abilities/activated_01	Token templates have no normal-card face fingerprint; generated ability descriptions are displayed while stable token identity selects artwork.
 osseous_exhale	osseous_exhale	spell_effect/1/ChooseResolutionBranch/branches/gain_2_life	This internal branch implements only the conditional result within a larger printed instruction; mapping the whole line would repeat the parent effect.
 osseous_exhale	osseous_exhale	spell_effect/1/ChooseResolutionBranch/branches/no_additional_effect	Synthetic FirstApplicable continuation with no effect and no independently printed instruction.
+otter_ur_1_1_prowess	otter	triggered_abilities/triggered_01	Token templates have no normal-card face fingerprint; generated ability descriptions are displayed while stable token identity selects artwork.
 perigee_beckoner	perigee_beckoner	triggered_abilities/triggered_01/effect/1/GrantTriggeredAbility/ability	This granted ability is only a quoted fragment of the printed instruction; mapping the whole line would repeat the granting effect as the child ability.
 rat_b_1_1_cant_block	rat	static_abilities/static_01	This token variant has no normal-card face fingerprint; token artwork uses the separate token database and abilities use engine descriptions.
 ray_of_command	ray_of_command	spell_effect/3/CreateDelayedTrigger/ability	This delayed trigger is only the final control-loss instruction; mapping the whole line would repeat the spell that created it.

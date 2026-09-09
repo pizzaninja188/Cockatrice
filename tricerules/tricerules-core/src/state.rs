@@ -6,7 +6,7 @@ use tricerules_cards::primitives::{
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
     LibraryBottomOrder, LibraryPlacement, ManaAmount, ManaSpendingRestriction, PermanentTypeFilter,
     ResolvingPermanentModifier, SearchDestination, SearchSelectionSlot, SearchZoneSelection,
-    TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
+    StaticEmblemEffect, TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{
@@ -992,6 +992,7 @@ pub enum ResolutionContinuation {
     CopyTargets {
         stack: ParkedStackResolution,
         copy_source_object_id: ObjectId,
+        remaining: Vec<ParkedStackResolution>,
     },
     SearchLibrary {
         stack: ParkedStackResolution,
@@ -1743,6 +1744,7 @@ pub struct StaticEmblemInstance {
     pub controller: PlayerId,
     pub emblem_id: String,
     pub display_name: String,
+    pub effects: Vec<StaticEmblemEffect>,
 }
 
 /// The stack-bound payload of a one-shot delayed triggered ability (CR 603.7).
