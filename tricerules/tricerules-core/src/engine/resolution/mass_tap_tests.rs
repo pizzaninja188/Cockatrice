@@ -75,6 +75,7 @@ fn resolve(engine: &mut GameEngine, effect: SpellEffectKind) {
         chosen_modes: vec![],
         cast_condition_results: vec![],
         cast_occurrence: None,
+        cast_by: None,
         cast_cost_receipts: vec![],
         payment_result: CardResultCohort::default(),
         search_results: Default::default(),

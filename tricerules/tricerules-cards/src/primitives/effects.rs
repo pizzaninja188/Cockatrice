@@ -1363,6 +1363,12 @@ pub enum SpellEffectKind {
     ReturnToOwnersHand {
         subject: EffectSubject,
     },
+    /// Sunderflock's filtered return and Evacuation's unconditional mass creature return.
+    /// Selection uses current battlefield characteristics; all departures share one snapshot.
+    ReturnAllToOwnersHand {
+        #[serde(default = "TargetFilter::default_creature")]
+        kind: TargetFilter,
+    },
     /// Move a permanent-valued subject to its owner's library (CR 400.3). Chosen subjects retain
     /// ordinary target legality; Watery Grasp uses the exact attached object untargeted.
     PutInOwnersLibrary {
@@ -2480,6 +2486,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ExileTopWithPlayPermission { .. }
             | SpellEffectKind::Mill { .. }
             | SpellEffectKind::DestroyAll { .. }
+            | SpellEffectKind::ReturnAllToOwnersHand { .. }
             | SpellEffectKind::DamageAll { .. }
             | SpellEffectKind::CreateTokens { .. }
             | SpellEffectKind::Amass { .. }
@@ -3093,7 +3100,7 @@ impl SpellEffectKind {
 
         match self {
             SpellEffectKind::Conditional { condition, effect } => {
-                condition.validate()?;
+                condition.validate_without_cast_entry()?;
                 if matches!(effect.as_ref(), SpellEffectKind::Conditional { .. }) {
                     return Err("Conditional effects cannot be nested".into());
                 }
@@ -3459,7 +3466,7 @@ impl SpellEffectKind {
                     if let ResolutionBranchRequirement::GameCondition(condition) =
                         &branch.requirement
                     {
-                        condition.validate()?;
+                        condition.validate_without_cast_entry()?;
                     }
                     if let ResolutionBranchRequirement::CardResultCount { min, max, .. } =
                         &branch.requirement
@@ -3835,6 +3842,7 @@ impl SpellEffectKind {
             // Mass effects select objects, not players, and never use AnyTarget (which includes
             // players). Only Creature / AnyPermanent are honored by the engine.
             SpellEffectKind::DestroyAll { kind, .. }
+            | SpellEffectKind::ReturnAllToOwnersHand { kind }
             | SpellEffectKind::DamageAll { kind, .. }
             | SpellEffectKind::TapAll { filter: kind, .. }
             | SpellEffectKind::UntapAll { filter: kind, .. } => {
@@ -4068,7 +4076,7 @@ impl SpellEffectKind {
                     restriction.validate()?;
                 }
                 if let Some(conditional) = conditional {
-                    conditional.condition.validate()?;
+                    conditional.condition.validate_without_cast_entry()?;
                     if conditional.options.is_empty() {
                         return Err(
                             "conditional ProduceMana requires at least one mana option".into()
@@ -4192,7 +4200,7 @@ impl SpellEffectKind {
                     );
                 }
                 if let Some(conditional) = conditional_destination {
-                    conditional.condition.validate()?;
+                    conditional.condition.validate_without_cast_entry()?;
                 }
                 if let Some(result_id) = result_id {
                     result_id.validate()?;

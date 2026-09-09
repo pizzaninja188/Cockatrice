@@ -1428,6 +1428,7 @@ fn validate_effect_targets(
         | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::DestroyAll { .. }
+        | SpellEffectKind::ReturnAllToOwnersHand { .. }
         | SpellEffectKind::DamageAll { .. }
         | SpellEffectKind::TapAll { .. }
         | SpellEffectKind::UntapAll { .. }
@@ -2279,6 +2280,7 @@ mod tests {
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),
             cast_occurrence: None,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),

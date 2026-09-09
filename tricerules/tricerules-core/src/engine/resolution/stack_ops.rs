@@ -563,6 +563,7 @@ pub(super) fn copy_target_spell(
                 chosen_modes: src.chosen_modes.clone(),
                 cast_condition_results: Vec::new(),
                 cast_occurrence: None,
+                cast_by: None,
                 cast_cost_receipts: src.cast_cost_receipts.clone(),
                 payment_result: src.payment_result.clone(),
                 search_results: Default::default(),

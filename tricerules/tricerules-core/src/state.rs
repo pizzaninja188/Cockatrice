@@ -196,6 +196,8 @@ pub struct TriggerStackObjectRef {
 /// reconstructing relationships after objects detach, change controller, or leave a zone.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TriggerContext {
+    /// The exact permanent incarnation whose self-entry trigger asks "if you cast it".
+    pub entering_cast: Option<CastEntryFact>,
     /// CR 400.7e public-zone incarnation reached by a self zone-change trigger.
     /// Hoarding Recluse and Myr Retriever exclude this card, not every later incarnation.
     pub source_after_zone_change: Option<TriggerObjectRef>,
@@ -215,6 +217,15 @@ pub struct TriggerContext {
     /// Chosen X retained only for a permanent spell's own ETB trigger. Other permanents observing
     /// that entry do not inherit the entrant's X.
     pub entering_chosen_x: Option<u32>,
+}
+
+/// CR 400.7d casting information retained for the permanent that a spell becomes. It is not
+/// copiable and expires on the next zone change; an already-created trigger retains its copy.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CastEntryFact {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub caster: PlayerId,
 }
 
 /// The game entity an Aura or Equipment is attached to. Players are represented explicitly;
@@ -1273,6 +1284,8 @@ pub struct BattlefieldEntryEvent {
     pub unlock_room_door: Option<usize>,
     /// X chosen for the entering permanent spell. Non-spell entry paths carry zero.
     pub chosen_x: u32,
+    /// The committed caster of the entering spell, or None for every non-cast entry path.
+    pub cast_by: Option<PlayerId>,
     pub cast_cost_receipts: Vec<CastCostReceipt>,
     /// Public life totals captured when this event is proposed. Simultaneous entries receive the
     /// same snapshot, so replacement ordering cannot retroactively change an entry predicate.
@@ -1544,6 +1557,9 @@ pub struct StackItem {
     /// The actual committed cast, not a copiable choice (Magebane Lizard, Thunder Salvo).
     /// Physical spells use their stack-entry generation; virtual cast copies use their unique ID.
     pub cast_occurrence: Option<StackObjectRef>,
+    /// The player who committed this cast, independent of later spell-control changes.
+    /// Uncast copies and abilities carry None.
+    pub cast_by: Option<PlayerId>,
     /// Exact card objects used to pay this spell or ability's costs. Copies retain the original
     /// cohort under CR 707.10.
     pub(crate) payment_result: CardResultCohort,
@@ -1989,6 +2005,8 @@ pub struct GameState {
     /// for relay compatibility, while this generation preserves CR 400.7 identity semantics for
     /// effects that resolve after a source leaves and returns.
     pub zone_change_generation: HashMap<ObjectId, u64>,
+    /// Live, generation-bound CR 400.7d facts; self-entry triggers retain a separate snapshot.
+    pub(crate) cast_entry_facts: HashMap<ObjectId, CastEntryFact>,
     /// Incremented whenever a battlefield permanent changes face/status in place.
     pub face_change_generation: HashMap<ObjectId, u64>,
     /// Public CR 709.5 designations for battlefield Rooms. Absence means the object is not a

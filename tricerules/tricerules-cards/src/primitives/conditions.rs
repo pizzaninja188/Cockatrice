@@ -34,6 +34,9 @@ pub enum GameCondition {
     /// The zone from which the current physical spell was actually cast. This is captured as a
     /// face cast condition and consumed through `CastSnapshot`; spell copies were not cast.
     CastOrigin { origin: SpellCastOrigin },
+    /// Sunderflock's self-entry intervening condition: the trigger's controller cast the
+    /// spell that became this permanent. This is not a copied characteristic or cast snapshot.
+    SelfWasCast,
     /// Compare the actual mana paid for the spell whose cast event created this triggered
     /// ability. The value is frozen at CR 601.2i and follows the trigger through resolution;
     /// printed mana value and aggregate Expend history are deliberately unrelated.
@@ -224,6 +227,17 @@ pub enum GameCondition {
 }
 
 impl GameCondition {
+    pub(crate) fn requires_cast_entry_context(&self) -> bool {
+        self.any_node_matches(|condition| matches!(condition, Self::SelfWasCast))
+    }
+
+    pub(crate) fn validate_without_cast_entry(&self) -> Result<(), String> {
+        if self.requires_cast_entry_context() {
+            return Err("SelfWasCast requires a self-entry intervening-if condition".into());
+        }
+        self.validate()
+    }
+
     pub(crate) fn references_previous_effect_object(&self) -> bool {
         self.any_node_matches(|condition| {
             matches!(
@@ -261,7 +275,7 @@ impl GameCondition {
             return Err("CastOrigin is available only as a face cast condition".into());
         }
         self.validate_cast_snapshot_reference(0)?;
-        self.validate()
+        self.validate_without_cast_entry()
     }
 
     pub(crate) fn validate_cast_condition(&self) -> Result<(), String> {
@@ -272,7 +286,7 @@ impl GameCondition {
             return Err("triggering-spell mana spending requires a spell-cast trigger".into());
         }
         self.validate_cast_snapshot_reference(0)?;
-        self.validate()
+        self.validate_without_cast_entry()
     }
 
     pub(crate) fn validate_trigger_condition(&self) -> Result<(), String> {
@@ -350,6 +364,7 @@ impl GameCondition {
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
             | GameCondition::CastSnapshot { .. }
             | GameCondition::CastOrigin { .. }
+            | GameCondition::SelfWasCast
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ObjectTapped { .. } => Ok(()),
             GameCondition::ActivePlayer { .. } => Ok(()),
@@ -419,6 +434,7 @@ impl GameCondition {
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
             | GameCondition::CastSnapshot { .. }
             | GameCondition::CastOrigin { .. }
+            | GameCondition::SelfWasCast
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ActivePlayer { .. }
             | GameCondition::LifeChangedThisTurn { .. }

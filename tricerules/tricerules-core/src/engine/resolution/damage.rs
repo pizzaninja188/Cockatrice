@@ -465,6 +465,7 @@ mod damage_source_tests {
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),
             cast_occurrence: None,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),

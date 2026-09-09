@@ -77,7 +77,7 @@ pub(crate) enum PendingReplacementEvent {
 }
 
 pub(super) enum BattlefieldEntryProgress {
-    Ready(BattlefieldEntryEvent),
+    Ready(Box<BattlefieldEntryEvent>),
     Parked,
 }
 
@@ -1008,7 +1008,7 @@ impl GameEngine {
                             return BattlefieldEntryProgress::Parked;
                         }
                     }
-                    return BattlefieldEntryProgress::Ready(event);
+                    return BattlefieldEntryProgress::Ready(Box::new(event));
                 }
                 [(effect_id, _, _)] => {
                     if let Some(filter) = self.entry_copy_filter(&event, effect_id) {
@@ -1232,6 +1232,16 @@ impl GameEngine {
             Zone::Battlefield,
             Some(event.destination_controller),
         )?;
+        if let Some(caster) = event.cast_by {
+            self.state.cast_entry_facts.insert(
+                event.object_id,
+                crate::state::CastEntryFact {
+                    object_id: event.object_id,
+                    zone_change_generation: self.state.zone_change_generation[&event.object_id],
+                    caster,
+                },
+            );
+        }
         if let Some(replacement) = event.set_types.clone() {
             self.state.continuous_effects.push(ContinuousEffect {
                 trigger_grant_origin: None,
@@ -1312,7 +1322,7 @@ impl GameEngine {
             ) {
                 BattlefieldEntryProgress::Parked => return Ok(true),
                 BattlefieldEntryProgress::Ready(event) => ready.push(TokenBattlefieldEntry {
-                    event,
+                    event: *event,
                     created: current.created,
                 }),
             }
@@ -1354,7 +1364,7 @@ impl GameEngine {
             ) {
                 BattlefieldEntryProgress::Parked => return Ok(true),
                 BattlefieldEntryProgress::Ready(event) => batch.ready.push(TokenBattlefieldEntry {
-                    event,
+                    event: *event,
                     created: next.created,
                 }),
             }
@@ -1849,7 +1859,7 @@ impl GameEngine {
             &mut events,
         ) {
             BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
-            BattlefieldEntryProgress::Ready(event) => event,
+            BattlefieldEntryProgress::Ready(event) => *event,
         };
         self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
     }
@@ -1942,7 +1952,7 @@ impl GameEngine {
             &mut events,
         ) {
             BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
-            BattlefieldEntryProgress::Ready(event) => event,
+            BattlefieldEntryProgress::Ready(event) => *event,
         };
 
         self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
@@ -2041,7 +2051,7 @@ impl GameEngine {
             &mut events,
         ) {
             BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
-            BattlefieldEntryProgress::Ready(event) => event,
+            BattlefieldEntryProgress::Ready(event) => *event,
         };
         self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
     }
@@ -2116,7 +2126,7 @@ impl GameEngine {
             &mut events,
         ) {
             BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
-            BattlefieldEntryProgress::Ready(event) => event,
+            BattlefieldEntryProgress::Ready(event) => *event,
         };
         self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
     }
@@ -2140,6 +2150,7 @@ mod tests {
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: engine.player_life_snapshot(),
             tapped: false,
@@ -2180,6 +2191,7 @@ mod tests {
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: snapshot,
             tapped: false,
@@ -2248,6 +2260,7 @@ mod tests {
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: engine.player_life_snapshot(),
             tapped: false,

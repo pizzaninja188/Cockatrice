@@ -339,3 +339,6 @@ mod ability_logs;
 mod issue_227_whole_hand_discard;
 #[path = "scenario/spellementals.rs"]
 mod spellementals;
+
+#[path = "scenario/issue_229_sunderflock.rs"]
+mod issue_229_sunderflock;

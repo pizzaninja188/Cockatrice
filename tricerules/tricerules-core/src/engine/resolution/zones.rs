@@ -785,21 +785,26 @@ pub(super) fn return_to_owners_hand(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::ReturnToOwnersHand { subject } = effect else {
-        return Err(EngineError::Illegal("resolution dispatch mismatch"));
-    };
-    let subjects = if matches!(subject, EffectSubject::Chosen(_)) {
-        cx.resolve_battlefield_subjects(&subject)
-    } else {
-        resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject)
-            .into_iter()
-            .collect()
+    let subjects = match effect {
+        SpellEffectKind::ReturnAllToOwnersHand { kind } => {
+            battlefield_objects_matching(cx.engine, &kind)
+        }
+        SpellEffectKind::ReturnToOwnersHand { subject } => {
+            if matches!(subject, EffectSubject::Chosen(_)) {
+                cx.resolve_battlefield_subjects(&subject)
+            } else {
+                resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject)
+                    .into_iter()
+                    .collect()
+            }
+        }
+        _ => return Err(EngineError::Illegal("resolution dispatch mismatch")),
     };
     let engine = &mut *cx.engine;
     let events = &mut *cx.events;
     let spell_label = cx.spell_label;
 
-    // Get Out returns its entire legal target cohort simultaneously. Capture every leave
+    // Get Out and Sunderflock return their selected cohort simultaneously. Capture every leave
     // observer before moving any subject, then publish triggers once for the whole instruction.
     let zone_snapshot = engine.snapshot_zone_event();
     let leave_events = subjects
@@ -2007,6 +2012,7 @@ pub(super) fn move_graveyard_cards(
                 face_index: 0,
                 unlock_room_door: None,
                 chosen_x: 0,
+                cast_by: None,
                 cast_cost_receipts: vec![],
                 player_life_snapshot: cx.engine.player_life_snapshot(),
                 tapped,
@@ -2136,6 +2142,7 @@ pub(super) fn return_triggered_card(
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: cx.engine.player_life_snapshot(),
             tapped,
@@ -2157,6 +2164,7 @@ pub(super) fn return_triggered_card(
     ) {
         super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
         super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+            let entry = *entry;
             cx.engine.commit_battlefield_entry(entry, None)?;
             cx.events.push(ev_log(format!(
                 "{} returns {object_label} to the battlefield.",
@@ -2216,6 +2224,7 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
             face_index: cx.top.face_index,
             unlock_room_door: None,
             chosen_x: 0,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: cx.engine.player_life_snapshot(),
             tapped: true,
@@ -2232,6 +2241,7 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
     ) {
         super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
         super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+            let entry = *entry;
             cx.engine.commit_battlefield_entry(entry, None)?;
             cx.events.push(ev_log(format!(
                 "{} puts {object_label} onto the battlefield tapped and attacking.",
@@ -2351,6 +2361,7 @@ pub(super) fn exile_source_then_return_transformed(
             face_index: 1,
             unlock_room_door: None,
             chosen_x: 0,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: cx.engine.player_life_snapshot(),
             tapped: false,
@@ -2368,6 +2379,7 @@ pub(super) fn exile_source_then_return_transformed(
     ) {
         super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
         super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+            let entry = *entry;
             cx.engine.commit_battlefield_entry(entry, None)?;
             cx.events.push(ev_log(format!(
                 "{} returns {object_label} transformed from exile to the battlefield.",
@@ -2886,6 +2898,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 face_index: 0,
                 unlock_room_door: None,
                 chosen_x: 0,
+                cast_by: None,
                 cast_cost_receipts: Vec::new(),
                 player_life_snapshot: engine.player_life_snapshot(),
                 tapped: false,
@@ -2904,6 +2917,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 return Ok(EffectOutcome::Suspended);
             }
             super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                let entry = *entry;
                 engine.commit_battlefield_entry(entry, None)?;
                 cx.events.push(permanent_moved_event_with_library_position(
                     &engine.state,

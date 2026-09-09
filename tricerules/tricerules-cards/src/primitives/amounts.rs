@@ -32,10 +32,11 @@ pub enum CountExpression {
         #[serde(default)]
         filter: Option<ZoneCardFilter>,
     },
-    /// Repulsive Mutation and Glint Weaver use the greatest power/toughness respectively.
+    /// Repulsive Mutation and Glint Weaver use the greatest power/toughness respectively;
+    /// Sunderflock uses the greatest battlefield mana value.
     BattlefieldMaximum {
         filter: BattlefieldPermanentFilter,
-        characteristic: PowerToughnessCharacteristic,
+        characteristic: BattlefieldQuantityCharacteristic,
     },
     /// Brambleguard Captain and Boulderbranch Golem use the original source's power.
     SourcePower,
@@ -75,6 +76,13 @@ pub enum CountExpression {
         filter: CardResultFilter,
         characteristic: PowerToughnessCharacteristic,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BattlefieldQuantityCharacteristic {
+    Power,
+    Toughness,
+    ManaValue,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -320,7 +328,7 @@ impl Amount {
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            Amount::Conditional { condition, .. } => condition.validate(),
+            Amount::Conditional { condition, .. } => condition.validate_without_cast_entry(),
             Amount::Count(expression) => expression.validate(),
             Amount::DivideRoundedDown { amount, divisor } => {
                 if *divisor == 0 {

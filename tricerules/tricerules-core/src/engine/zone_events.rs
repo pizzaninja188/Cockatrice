@@ -100,7 +100,7 @@ impl GameEngine {
                 events,
             ) {
                 replacement::BattlefieldEntryProgress::Parked => return Ok(true),
-                replacement::BattlefieldEntryProgress::Ready(entry) => batch.ready.push(entry),
+                replacement::BattlefieldEntryProgress::Ready(entry) => batch.ready.push(*entry),
             }
         }
         let snapshot = self.snapshot_zone_event();

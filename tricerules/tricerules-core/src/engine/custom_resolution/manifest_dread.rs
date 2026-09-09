@@ -55,6 +55,7 @@ impl GameEngine {
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: self.player_life_snapshot(),
             tapped: false,
@@ -77,6 +78,7 @@ impl GameEngine {
                 Ok(finish_with_events(self, events))
             }
             super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                let entry = *entry;
                 self.commit_battlefield_entry(entry, None)?;
                 events.push(permanent_moved_event_with_library_position(
                     &self.state,

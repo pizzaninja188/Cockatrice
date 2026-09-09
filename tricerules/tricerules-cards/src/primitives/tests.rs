@@ -479,6 +479,57 @@ fn issue_165_dynamic_consumers_accept_quantities() {
         effect.validate(super::EffectContext::Ability).expect("valid dynamic consumer");
     }
 }
+
+#[test]
+fn issue_229_mass_return_is_untargeted_and_validates_its_cohort() {
+    let effect: super::SpellEffectKind = ron::from_str(
+        "ReturnAllToOwnersHand(kind: (kind: Creature, excluded_subtypes: [\"Elemental\"]))",
+    )
+    .expect("mass return vocabulary");
+    effect.validate(super::EffectContext::Ability).unwrap();
+    assert!(effect.target_roles().is_empty());
+    for filter in [
+        "kind: AnyPlayer",
+        "kind: Creature, controller: You",
+        "kind: Creature, owner: You",
+        "kind: Creature, required_subtypes: [\"Elemental\"], excluded_subtypes: [\"Elemental\"]",
+    ] {
+        let effect: super::SpellEffectKind =
+            ron::from_str(&format!("ReturnAllToOwnersHand(kind: ({filter}))")).unwrap();
+        assert!(
+            effect.validate(super::EffectContext::Ability).is_err(),
+            "{filter}"
+        );
+    }
+}
+
+#[test]
+fn issue_229_cast_entry_condition_is_limited_to_self_entry_intervening_if() {
+    let card = |body: &str| {
+        format!(
+            r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 1, {body})"#
+        )
+    };
+    let ability = |trigger: &str| {
+        format!(
+            r#"triggered_abilities: [(ability_id: "entry", presentation: Fallback, trigger: {trigger}, intervening_if: Some(SelfWasCast), effect: [GainLife(amount: 1)])]"#
+        )
+    };
+    assert!(crate::CardRegistry::from_chunks_and_tokens(
+        &[&card(&ability("WhenSelfEntersBattlefield"))],
+        &[]
+    )
+    .is_ok());
+    for body in [
+        ability("WhenSelfDies"),
+        "cast_conditions: [SelfWasCast]".into(),
+        "cost_modifiers: [ConditionalGenericReduction(amount: 1, condition: SelfWasCast)]".into(),
+        "spell_effect: [Conditional(condition: SelfWasCast, effect: GainLife(amount: 1))]".into(),
+        "spell_effect: [GainLife(amount: Conditional(condition: SelfWasCast, when_true: 2, otherwise: 1))]".into(),
+    ] {
+        assert!(crate::CardRegistry::from_chunks_and_tokens(&[&card(&body)], &[]).is_err(), "{body}");
+    }
+}
 #[test]
 fn issue_165_static_quantity_accepts_permanents_without_pt_recursion() {
     let card = r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 2,

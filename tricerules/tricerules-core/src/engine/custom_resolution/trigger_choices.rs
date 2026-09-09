@@ -200,6 +200,7 @@ impl GameEngine {
             chosen_modes,
             cast_condition_results: Vec::new(),
             cast_occurrence: None,
+            cast_by: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),

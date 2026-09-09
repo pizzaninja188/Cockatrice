@@ -987,6 +987,9 @@ impl GameEngine {
                         face_index: top.face_index,
                         unlock_room_door: Some(top.face_index),
                         chosen_x: top.chosen_x,
+                        cast_by: top
+                            .cast_by
+                            .filter(|_| !top.is_copy && top.cast_occurrence.is_some()),
                         cast_cost_receipts: top.cast_cost_receipts.clone(),
                         player_life_snapshot: self.player_life_snapshot(),
                         tapped: top.cast_method == SpellCastMethod::Sneak,
@@ -999,6 +1002,7 @@ impl GameEngine {
                 ) {
                     super::replacement::BattlefieldEntryProgress::Parked => return Ok(()),
                     super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                        let entry = *entry;
                         events.push(rv1::RuledEvent {
                             ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
                                 object_id: top.id,
@@ -1716,7 +1720,8 @@ impl GameEngine {
                     effect @ SpellEffectKind::ExileTopWithPlayPermission { .. } => {
                         zones::exile_top_with_play_permission(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::ReturnToOwnersHand { .. } => {
+                    effect @ (SpellEffectKind::ReturnToOwnersHand { .. }
+                    | SpellEffectKind::ReturnAllToOwnersHand { .. }) => {
                         zones::return_to_owners_hand(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::PutInOwnersLibrary { .. } => {
@@ -2111,6 +2116,7 @@ impl GameEngine {
                 face_index: 0,
                 unlock_room_door: None,
                 chosen_x: 0,
+                cast_by: None,
                 cast_cost_receipts: Vec::new(),
                 player_life_snapshot: self.player_life_snapshot(),
                 tapped: false,
@@ -2150,6 +2156,7 @@ impl GameEngine {
                     return Ok(true);
                 }
                 super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                    let entry = *entry;
                     entries.push((entry, owner, label));
                 }
             }
@@ -2215,6 +2222,7 @@ impl GameEngine {
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),
             cast_occurrence: None,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
@@ -2347,6 +2355,7 @@ impl GameEngine {
                         face_index: copy.map_or(0, |snapshot| snapshot.face_up_index),
                         unlock_room_door: None,
                         chosen_x: 0,
+                        cast_by: None,
                         cast_cost_receipts: Vec::new(),
                         player_life_snapshot: player_life_snapshot.clone(),
                         tapped: enters_tapped,
@@ -2688,6 +2697,7 @@ fn move_object_to_zone_with_entry_receipt(
     // This matters for exile permissions: exiling an already-exiled card cannot preserve an old
     // Adventure or "play it" permission merely because the destination enum is unchanged.
     if old_zone.is_some() {
+        state.cast_entry_facts.remove(&oid);
         state
             .discard_reference_successors
             .retain(|(object_id, _), _| *object_id != oid);
@@ -3292,6 +3302,7 @@ mod attached_subject_tests {
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
             cast_occurrence: None,
+            cast_by: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
@@ -3989,7 +4000,7 @@ mod attached_subject_tests {
                             required_subtypes: vec![],
                             exclude_source: false,
                         },
-                        characteristic: tricerules_cards::PowerToughnessCharacteristic::Power,
+                        characteristic: tricerules_cards::BattlefieldQuantityCharacteristic::Power,
                     }
                 };
                 *unless_controller_pays = Some(Amount::Count(quantity));
@@ -5397,6 +5408,7 @@ mod source_keyword_tests {
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
             cast_occurrence: None,
+            cast_by: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
@@ -5429,6 +5441,7 @@ mod source_keyword_tests {
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
             cast_occurrence: None,
+            cast_by: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),

@@ -449,6 +449,7 @@ impl GameEngine {
             face_index: 0,
             unlock_room_door: None,
             chosen_x: 0,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             player_life_snapshot: self.player_life_snapshot(),
             tapped: false,
@@ -484,7 +485,7 @@ impl GameEngine {
                 }
                 return Ok(finish_with_events(self, events));
             }
-            super::replacement::BattlefieldEntryProgress::Ready(entry) => entry,
+            super::replacement::BattlefieldEntryProgress::Ready(entry) => *entry,
         };
         self.commit_battlefield_entry_state(entry, Some(recipient))?;
         self.fire_triggers(&[GameEvent::EntersBattlefield {

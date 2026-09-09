@@ -64,6 +64,7 @@ impl GameEngine {
                     face_index: 0,
                     unlock_room_door: None,
                     chosen_x: 0,
+                    cast_by: None,
                     cast_cost_receipts: Vec::new(),
                     player_life_snapshot: self.player_life_snapshot(),
                     tapped: progress.tapped,
@@ -78,6 +79,7 @@ impl GameEngine {
                     return Ok(finish_with_events(self, events));
                 }
                 super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                    let entry = *entry;
                     self.commit_battlefield_entry(entry, None)?;
                 }
             }
@@ -435,6 +437,7 @@ impl GameEngine {
                         face_index: 0,
                         unlock_room_door: None,
                         chosen_x: 0,
+                        cast_by: None,
                         cast_cost_receipts: Vec::new(),
                         player_life_snapshot: self.player_life_snapshot(),
                         tapped,
@@ -454,6 +457,7 @@ impl GameEngine {
                         return Ok(finish_with_events(self, events));
                     }
                     super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                        let entry = *entry;
                         self.commit_battlefield_entry(entry, None)?;
                     }
                 }

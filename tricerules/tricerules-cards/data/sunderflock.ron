@@ -1,0 +1,16 @@
+// Oracle and rulings checked 2026-09-08. CR 202.3e, 400.7d, 601.2f, 603.4.
+(
+  id: "sunderflock", name: "Sunderflock", face_id: "sunderflock",
+  mana_cost: "{7}{U}{U}", types: ["Creature", "Elemental"],
+  power: 5, toughness: 5, keywords: [Flying],
+  cost_modifiers: [GenericReduction(amount: Count(BattlefieldMaximum(
+    filter: (controllers: Controller, required_subtypes: ["Elemental"]),
+    characteristic: ManaValue,
+  )))],
+  triggered_abilities: [(
+    ability_id: "return_non_elementals", presentation: OracleLines([3]),
+    trigger: WhenSelfEntersBattlefield,
+    intervening_if: Some(SelfWasCast),
+    effect: [ReturnAllToOwnersHand(kind: (kind: Creature, excluded_subtypes: ["Elemental"]))],
+  )],
+)

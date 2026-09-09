@@ -859,6 +859,7 @@ impl GameEngine {
             chosen_modes,
             cast_condition_results: Vec::new(),
             cast_occurrence: None,
+            cast_by: None,
             cast_cost_receipts,
             payment_result,
             search_results: Default::default(),
@@ -1345,6 +1346,7 @@ impl GameEngine {
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
             cast_occurrence: None,
+            cast_by: None,
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort {
                 cards: payment
@@ -2113,6 +2115,7 @@ impl GameEngine {
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),
             cast_occurrence: None,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
@@ -2131,6 +2134,7 @@ impl GameEngine {
                 face_index,
                 unlock_room_door: None,
                 chosen_x: 0,
+                cast_by: None,
                 cast_cost_receipts: Vec::new(),
                 player_life_snapshot: self.player_life_snapshot(),
                 tapped: false,
@@ -2146,6 +2150,7 @@ impl GameEngine {
         ) {
             super::replacement::BattlefieldEntryProgress::Parked => return Ok(batch),
             super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                let entry = *entry;
                 self.commit_battlefield_entry(entry, None)?;
                 batch.events.push(permanent_moved_event(
                     &self.state,

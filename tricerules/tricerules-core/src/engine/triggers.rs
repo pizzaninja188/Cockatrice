@@ -426,6 +426,8 @@ impl GameEngine {
                         && trigger.ability.trigger == TriggerCondition::WhenSelfEntersBattlefield
                     {
                         trigger.trigger_context.entering_chosen_x = Some(*chosen_x);
+                        trigger.trigger_context.entering_cast =
+                            self.state.cast_entry_facts.get(object_id).copied();
                     }
                     if matches!(
                         trigger.ability.trigger,
@@ -2481,6 +2483,7 @@ impl GameEngine {
                 chosen_modes: vec![],
                 cast_condition_results: Vec::new(),
                 cast_occurrence: None,
+                cast_by: None,
                 cast_cost_receipts: vec![],
                 payment_result: CardResultCohort::default(),
                 search_results: Default::default(),
@@ -3470,6 +3473,7 @@ mod tests {
             chosen_modes: Vec::new(),
             cast_condition_results: Vec::new(),
             cast_occurrence: None,
+            cast_by: None,
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),

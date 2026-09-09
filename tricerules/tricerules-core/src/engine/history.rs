@@ -119,8 +119,13 @@ pub(super) fn battlefield_quantity_value(
     Some(match expression {
         CountExpression::BattlefieldMaximum { characteristic, .. } => values
             .filter_map(|c| match characteristic {
-                tricerules_cards::PowerToughnessCharacteristic::Power => c.signed_power,
-                tricerules_cards::PowerToughnessCharacteristic::Toughness => c.signed_toughness,
+                tricerules_cards::BattlefieldQuantityCharacteristic::Power => c.signed_power,
+                tricerules_cards::BattlefieldQuantityCharacteristic::Toughness => {
+                    c.signed_toughness
+                }
+                tricerules_cards::BattlefieldQuantityCharacteristic::ManaValue => {
+                    Some(c.mana_value.into())
+                }
             })
             .max()
             .unwrap_or(0),
@@ -801,6 +806,7 @@ impl GameEngine {
             }),
         };
         item.cast_occurrence = Some(occurrence);
+        item.cast_by = Some(caster);
         let definition = self
             .registry
             .get(&item.card_id)
@@ -958,6 +964,20 @@ impl GameEngine {
                         },
                         fact,
                     )
+                }),
+            GameCondition::SelfWasCast => trigger_context
+                .or_else(|| context.stack_item.map(|item| &item.trigger_context))
+                .and_then(|trigger| trigger.entering_cast)
+                .or_else(|| {
+                    self.state
+                        .cast_entry_facts
+                        .get(&context.source_object_id)
+                        .copied()
+                })
+                .is_some_and(|fact| {
+                    fact.object_id == context.source_object_id
+                        && fact.zone_change_generation == context.source_zone_change
+                        && fact.caster == context.controller
                 }),
             GameCondition::TriggeringSpellManaSpent { comparison } => {
                 let spent = trigger_context
@@ -2251,7 +2271,7 @@ mod tests {
                 characteristic,
             })
         };
-        use tricerules_cards::PowerToughnessCharacteristic::{Power, Toughness};
+        use tricerules_cards::BattlefieldQuantityCharacteristic::{Power, Toughness};
         assert_eq!(
             engine.resolve_amount(&maximum(filter.clone(), Power), quantity_context(0)),
             0
@@ -2328,6 +2348,69 @@ mod tests {
             engine.resolve_amount(&maximum(filter, Toughness), quantity_context(source)),
             4
         );
+    }
+
+    #[test]
+    fn issue_229_maximum_mana_value_uses_derived_noncreature_elementals_and_zero_x() {
+        let mut engine = quantity_engine();
+        let registry = CardRegistry::from_chunks_and_tokens(
+            &[r#"(
+            id: "test", name: "Test", face_id: "test", types: ["Sorcery"],
+            spell_effect: [GainLife(amount: Count(BattlefieldMaximum(
+                filter: (controllers: Controller, required_subtypes: ["Elemental"]),
+                characteristic: ManaValue)))])"#],
+            &[],
+        )
+        .expect("mana-value maximum vocabulary");
+        let SpellEffectKind::GainLife { amount } =
+            &registry.get("test").unwrap().primary_face().spell_effect[0]
+        else {
+            panic!("quantity fixture");
+        };
+        assert_eq!(engine.resolve_amount(amount, quantity_context(0)), 0);
+        let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        let angel = move_to_battlefield(&mut engine, 0, "serra_angel");
+        let mut face = engine
+            .registry
+            .get("serra_angel")
+            .unwrap()
+            .primary_face()
+            .clone();
+        face.types = vec!["Enchantment".into(), "Elemental".into()];
+        face.power = None;
+        face.toughness = None;
+        engine
+            .state
+            .objects
+            .get_mut(&angel)
+            .unwrap()
+            .copiable_values = Some(CopiableValues {
+            source_card_id: "serra_angel".into(),
+            source_face_index: 0,
+            face,
+            room_faces: None,
+            display_name: "Elemental enchantment".into(),
+        });
+        assert_eq!(engine.resolve_amount(amount, quantity_context(bear)), 5);
+        engine
+            .state
+            .objects
+            .get_mut(&angel)
+            .unwrap()
+            .copiable_values
+            .as_mut()
+            .unwrap()
+            .face
+            .mana_cost = ManaCost::parse("{X}{U}").unwrap();
+        assert_eq!(engine.resolve_amount(amount, quantity_context(bear)), 1);
+        engine.state.objects.get_mut(&angel).unwrap().controller = 1;
+        engine
+            .state
+            .objects
+            .get_mut(&angel)
+            .unwrap()
+            .base_controller = 1;
+        assert_eq!(engine.resolve_amount(amount, quantity_context(bear)), 0);
     }
 
     #[test]
@@ -2775,6 +2858,7 @@ mod tests {
             cast_cost_receipts: vec![],
             cast_condition_results: vec![],
             cast_occurrence: None,
+            cast_by: None,
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
             resolution_branch_choices: Default::default(),

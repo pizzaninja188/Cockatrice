@@ -523,6 +523,7 @@ impl CharacteristicsEvaluator<'_> {
             }
             // Cast snapshots are internal to resolving spells, never continuous characteristics.
             GameCondition::CastSnapshot { .. }
+            | GameCondition::SelfWasCast
             | GameCondition::CastOrigin { .. }
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ObjectMatches { .. } => false,

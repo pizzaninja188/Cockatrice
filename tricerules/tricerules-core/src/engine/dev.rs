@@ -178,6 +178,7 @@ impl GameEngine {
                     face_index: 0,
                     unlock_room_door: None,
                     chosen_x: 0,
+                    cast_by: None,
                     cast_cost_receipts: Vec::new(),
                     player_life_snapshot: self.player_life_snapshot(),
                     tapped: false,
@@ -191,7 +192,7 @@ impl GameEngine {
                 super::replacement::BattlefieldEntryProgress::Parked => Ok(()),
                 super::replacement::BattlefieldEntryProgress::Ready(entry) => self
                     .complete_dev_battlefield_placement(
-                        entry,
+                        *entry,
                         target,
                         ready,
                         name,
@@ -459,6 +460,7 @@ fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> S
         chosen_modes: Vec::new(),
         cast_condition_results: Vec::new(),
         cast_occurrence: None,
+        cast_by: None,
         cast_cost_receipts: Vec::new(),
         payment_result: CardResultCohort::default(),
         search_results: Default::default(),
