@@ -14,7 +14,9 @@ use super::{
     BattlefieldAggregate, BattlefieldCreatureCountFilter, BattlefieldPermanentFilter,
     CreatureEventFilter, GraveyardAggregate, PermanentEventFilter,
 };
-use crate::{choice_fallback, AbilityPresentation, ChoiceId, ManaCost, SearchResultId};
+use crate::{
+    choice_fallback, AbilityLinkId, AbilityPresentation, ChoiceId, ManaCost, SearchResultId,
+};
 use serde::{Deserialize, Serialize};
 
 fn default_one() -> u32 {
@@ -1403,6 +1405,21 @@ pub enum SpellEffectKind {
     MoveGraveyardCards {
         filter: GraveyardFilter,
         destination: GraveyardDestination,
+        /// Pair this exile instruction with a later `ReturnLinkedExiledCards` instruction on the
+        /// same card face. Omitted for ordinary graveyard movement.
+        #[serde(default)]
+        linked_exile_id: Option<AbilityLinkId>,
+    },
+    /// CR 406.6 / 607.2a: return the exact cards still in exile from a paired source-incarnation
+    /// link. The identity foundation is shared with cards such as Sisters of Stone Death; this
+    /// all-matching-cards return shape and its entry modifications serve Ghost Vacuum.
+    ReturnLinkedExiledCards {
+        linked_exile_id: AbilityLinkId,
+        filter: ZoneCardFilter,
+        #[serde(default)]
+        entry_counters: Vec<CounterPlacement>,
+        #[serde(default)]
+        entry_modifiers: Vec<ResolvingPermanentModifier>,
     },
     /// CR 701.13a: exile the complete matching graveyard cohort without targeting.
     /// Soul-Guide Lantern uses Opponents; Relic of Progenitus uses All. Selection
@@ -2494,6 +2511,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
             | SpellEffectKind::SacrificeObservedObjects
             | SpellEffectKind::ExileWarpedObject
+            | SpellEffectKind::ReturnLinkedExiledCards { .. }
             | SpellEffectKind::ChooseGraveyardCard { .. }
             | SpellEffectKind::GrantKeywordsAllPermanents { .. }
             | SpellEffectKind::GainLife { .. }
@@ -2975,8 +2993,52 @@ impl SpellEffectKind {
         {
             spell_filter.validate()?;
         }
-        if let SpellEffectKind::MoveGraveyardCards { filter, .. } = self {
+        if let SpellEffectKind::MoveGraveyardCards {
+            filter,
+            destination,
+            linked_exile_id,
+        } = self
+        {
             filter.validate()?;
+            if let Some(link_id) = linked_exile_id {
+                link_id.validate()?;
+                if context != EffectContext::Ability {
+                    return Err(
+                        "linked graveyard exile requires an activated or triggered ability".into(),
+                    );
+                }
+                if *destination != GraveyardDestination::Exile {
+                    return Err("linked graveyard exile requires the exile destination".into());
+                }
+            }
+        }
+        if let SpellEffectKind::ReturnLinkedExiledCards {
+            linked_exile_id,
+            filter,
+            entry_counters,
+            entry_modifiers,
+        } = self
+        {
+            if context != EffectContext::Ability {
+                return Err(
+                    "linked exile return requires an activated or triggered ability".into(),
+                );
+            }
+            linked_exile_id.validate()?;
+            filter.validate()?;
+            let mut kinds = std::collections::HashSet::new();
+            for placement in entry_counters {
+                placement.counter.validate()?;
+                if placement.count == 0 {
+                    return Err("entry counter placement count must be positive".into());
+                }
+                if !kinds.insert(placement.counter) {
+                    return Err("entry counter placements cannot repeat a counter kind".into());
+                }
+            }
+            for modifier in entry_modifiers {
+                modifier.validate()?;
+            }
         }
         if let SpellEffectKind::ExileGraveyards {
             filter: Some(filter),

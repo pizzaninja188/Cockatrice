@@ -5,17 +5,33 @@ use tricerules_cards::primitives::{
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
     LibraryBottomOrder, LibraryPlacement, ManaAmount, ManaSpendingRestriction, PermanentTypeFilter,
-    SearchDestination, SearchSelectionSlot, SearchZoneSelection, TargetFilter, TriggeredAbilityDef,
-    TypeLineReplacement, ZoneCardFilter,
+    ResolvingPermanentModifier, SearchDestination, SearchSelectionSlot, SearchZoneSelection,
+    TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{
-    is_creature_type, CardFace, ChoiceId, ManaCost, ManaSymbol, ModeId, SearchResultId,
+    is_creature_type, AbilityLinkId, CardFace, ChoiceId, ManaCost, ManaSymbol, ModeId,
+    SearchResultId,
 };
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
 pub type PlayerId = i32;
 pub type ObjectId = u32;
+
+/// One printed linked-ability pair on one exact CR 400.7 source incarnation.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct LinkedExileKey {
+    pub source_object_id: ObjectId,
+    pub source_zone_change: u64,
+    pub ability_link_id: AbilityLinkId,
+}
+
+/// One exact object generation placed into exile by a linked producer ability.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LinkedExiledObject {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+}
 
 /// Why the discard is performed; Library of Leng applies only to Effect.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -1331,6 +1347,9 @@ pub struct BattlefieldEntryEvent {
     pub chosen_basic_land_type: Option<tricerules_cards::BasicLandType>,
     /// Counter state accumulated by entry replacement effects before zone commitment.
     pub entry_counters: BTreeMap<CounterKind, u32>,
+    /// CR 611.2e continuous effects created by the instruction putting this object onto the
+    /// battlefield. They apply simultaneously with entry and persist for this incarnation.
+    pub entry_modifiers: Vec<ResolvingPermanentModifier>,
     pub applied_effects: Vec<EntryReplacementEffectId>,
 }
 
@@ -1380,6 +1399,7 @@ pub(crate) struct PendingZoneEntryBatch {
     pub ready: Vec<BattlefieldEntryEvent>,
     pub remaining: Vec<BattlefieldEntryEvent>,
     pub generations: Vec<(ObjectId, u64)>,
+    pub origin: Zone,
     pub spell_label: String,
 }
 
@@ -2054,6 +2074,8 @@ pub struct GameState {
     pub prepare_spell_sources: BTreeMap<ObjectId, TriggerObjectRef>,
     /// Event-time spell choices for delayed copy triggers, keyed by the trigger's unique id.
     pub captured_spell_copies: BTreeMap<ObjectId, StackItem>,
+    /// CR 406.6 / 607.2a source-incarnation links to exact objects exiled by the paired ability.
+    pub(crate) linked_exile_records: BTreeMap<LinkedExileKey, Vec<LinkedExiledObject>>,
     /// CR 310.11a: public protector chosen for each battlefield Siege. The zone-change funnel
     /// removes this mapping so a returned Battle must choose again.
     pub battle_protectors: HashMap<ObjectId, PlayerId>,

@@ -48,7 +48,7 @@ fn resolving_duration_label(duration: &ResolvingEffectDuration) -> &'static str 
     }
 }
 
-fn materialize_resolving_modifier(
+pub(in crate::engine) fn materialize_resolving_modifier(
     modifier: ResolvingPermanentModifier,
 ) -> Vec<ContinuousEffectKind> {
     match modifier {

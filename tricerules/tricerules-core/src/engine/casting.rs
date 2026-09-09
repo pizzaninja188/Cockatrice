@@ -2148,6 +2148,7 @@ impl GameEngine {
                 set_types: None,
                 chosen_basic_land_type: None,
                 entry_counters: BTreeMap::new(),
+                entry_modifiers: Vec::new(),
                 applied_effects: Vec::new(),
             },
             BattlefieldEntryCompletion::LandPlay {

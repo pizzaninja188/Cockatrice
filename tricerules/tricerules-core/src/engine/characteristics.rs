@@ -102,6 +102,29 @@ pub(super) fn apply_type_line_replacement(
         .extend(replacement.creature_types.iter().cloned());
 }
 
+pub(super) fn apply_type_line_addition(
+    characteristics: &mut Characteristics,
+    addition: &tricerules_cards::TypeLineAddition,
+) {
+    for card_type in &addition.card_types {
+        let card_type = card_type.as_str();
+        if !characteristics
+            .types
+            .iter()
+            .any(|existing| existing == card_type)
+        {
+            characteristics.types.push(card_type.to_string());
+        }
+    }
+    if characteristics.is_creature() || characteristics.has_type("Kindred") {
+        for creature_type in &addition.creature_types {
+            if !characteristics.types.contains(creature_type) {
+                characteristics.types.push(creature_type.clone());
+            }
+        }
+    }
+}
+
 struct CharacteristicsEvaluator<'a> {
     state: &'a GameState,
     registry: &'static CardRegistry,
@@ -376,19 +399,7 @@ impl CharacteristicsEvaluator<'_> {
         for (_, effect) in effects {
             match &effect.kind {
                 ContinuousEffectKind::Layer4AddTypes(addition) => {
-                    for card_type in &addition.card_types {
-                        let card_type = card_type.as_str();
-                        if !result.types.iter().any(|existing| existing == card_type) {
-                            result.types.push(card_type.to_string());
-                        }
-                    }
-                    if result.is_creature() || result.has_type("Kindred") {
-                        for creature_type in &addition.creature_types {
-                            if !result.types.contains(creature_type) {
-                                result.types.push(creature_type.clone());
-                            }
-                        }
-                    }
+                    apply_type_line_addition(result, addition);
                 }
                 ContinuousEffectKind::Layer4SetTypeLine(replacement) => {
                     apply_type_line_replacement(result, replacement);

@@ -34,6 +34,7 @@ impl GameEngine {
         &mut self,
         item: StackItem,
         mut entries: Vec<BattlefieldEntryEvent>,
+        origin: Zone,
         spell_label: &str,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
@@ -57,6 +58,7 @@ impl GameEngine {
                 ready: vec![],
                 remaining: entries,
                 generations,
+                origin,
                 spell_label: spell_label.into(),
             },
             events,
@@ -71,7 +73,7 @@ impl GameEngine {
             self.state
                 .objects
                 .get(oid)
-                .is_some_and(|object| object.zone == Zone::Graveyard)
+                .is_some_and(|object| object.zone == batch.origin)
                 && self
                     .state
                     .zone_change_generation
@@ -89,7 +91,7 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         if !self.zone_entry_batch_current(&batch) {
-            return Err(EngineError::Illegal("graveyard entry cohort became stale"));
+            return Err(EngineError::Illegal("zone entry cohort became stale"));
         }
         while !batch.remaining.is_empty() {
             let entry = batch.remaining.remove(0);
@@ -126,8 +128,13 @@ impl GameEngine {
                 rv1::permanent_moved::Destination::Battlefield,
             ));
             events.push(events::ev_log(format!(
-                "{} returns {label} from graveyard to battlefield.",
-                batch.spell_label
+                "{} returns {label} from {} to battlefield.",
+                batch.spell_label,
+                match batch.origin {
+                    Zone::Graveyard => "graveyard",
+                    Zone::Exile => "exile",
+                    _ => "another zone",
+                }
             )));
         }
         self.fire_zone_triggers(snapshot, triggers);

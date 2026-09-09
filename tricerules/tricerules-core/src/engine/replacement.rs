@@ -1,7 +1,8 @@
 //! Shared CR 614/616 replacement ordering and battlefield-entry preprocessing.
 
 use super::characteristics::{
-    apply_face_down_values, apply_type_line_replacement, creature_matches_scope,
+    apply_face_down_values, apply_type_line_addition, apply_type_line_replacement,
+    creature_matches_scope,
 };
 use super::events::{ev_log, ev_priority_changed, finish_with_events};
 use super::history::player_life_aggregate_value;
@@ -183,14 +184,69 @@ impl GameEngine {
             .map(Cow::Borrowed)
     }
 
-    fn battlefield_entry_is_battle(&self, event: &BattlefieldEntryEvent) -> bool {
-        if let Some(replacement) = &event.set_types {
-            return replacement
-                .card_types
-                .contains(&PermanentTypeFilter::Battle);
+    fn battlefield_entry_characteristics_through_layer_5(
+        &self,
+        event: &BattlefieldEntryEvent,
+    ) -> Option<Characteristics> {
+        let mut characteristics = self.characteristics_through_layer_5(event.object_id)?;
+        if self
+            .state
+            .objects
+            .get(&event.object_id)
+            .is_some_and(|object| object.face_down)
+        {
+            apply_face_down_values(&mut characteristics);
         }
-        let face = self.battlefield_entry_face(event);
-        face.is_some_and(|face| face.types.iter().any(|card_type| card_type == "Battle"))
+        if let Some(replacement) = &event.set_types {
+            apply_type_line_replacement(&mut characteristics, replacement);
+        }
+        if let Some(land_type) = event.chosen_basic_land_type {
+            super::characteristics::apply_basic_land_type(&mut characteristics, land_type);
+        }
+        // CR 611.2e: a resolving effect that moves an object and then modifies its
+        // characteristics already applies while replacement effects inspect that entry.
+        for modifier in &event.entry_modifiers {
+            match modifier {
+                ResolvingPermanentModifier::SetTypeLine(replacement) => {
+                    apply_type_line_replacement(&mut characteristics, replacement);
+                }
+                ResolvingPermanentModifier::AddTypes(addition) => {
+                    apply_type_line_addition(&mut characteristics, addition);
+                }
+                ResolvingPermanentModifier::SetBasePowerToughness { .. }
+                | ResolvingPermanentModifier::GrantKeywords(_)
+                | ResolvingPermanentModifier::GrantActivatedAbility(_) => {}
+            }
+        }
+        characteristics.controller = event.destination_controller;
+        Some(characteristics)
+    }
+
+    fn battlefield_entry_is_battle(&self, event: &BattlefieldEntryEvent) -> bool {
+        let mut is_battle = if let Some(replacement) = &event.set_types {
+            replacement
+                .card_types
+                .contains(&PermanentTypeFilter::Battle)
+        } else {
+            self.battlefield_entry_face(event)
+                .is_some_and(|face| face.types.iter().any(|card_type| card_type == "Battle"))
+        };
+        for modifier in &event.entry_modifiers {
+            match modifier {
+                ResolvingPermanentModifier::SetTypeLine(replacement) => {
+                    is_battle = replacement
+                        .card_types
+                        .contains(&PermanentTypeFilter::Battle);
+                }
+                ResolvingPermanentModifier::AddTypes(addition) => {
+                    is_battle |= addition.card_types.contains(&PermanentTypeFilter::Battle);
+                }
+                ResolvingPermanentModifier::SetBasePowerToughness { .. }
+                | ResolvingPermanentModifier::GrantKeywords(_)
+                | ResolvingPermanentModifier::GrantActivatedAbility(_) => {}
+            }
+        }
+        is_battle
     }
 
     pub(super) fn player_life_snapshot(&self) -> BTreeMap<PlayerId, i32> {
@@ -245,25 +301,10 @@ impl GameEngine {
         let Some(source_controller) = self.controller_of(source_id) else {
             return false;
         };
-        let Some(mut characteristics) = self.characteristics_through_layer_5(event.object_id)
+        let Some(characteristics) = self.battlefield_entry_characteristics_through_layer_5(event)
         else {
             return false;
         };
-        if self
-            .state
-            .objects
-            .get(&event.object_id)
-            .is_some_and(|object| object.face_down)
-        {
-            apply_face_down_values(&mut characteristics);
-        }
-        if let Some(replacement) = &event.set_types {
-            apply_type_line_replacement(&mut characteristics, replacement);
-        }
-        if let Some(land_type) = event.chosen_basic_land_type {
-            super::characteristics::apply_basic_land_type(&mut characteristics, land_type);
-        }
-        characteristics.controller = event.destination_controller;
         creature_matches_scope(
             &self.state,
             self.registry,
@@ -1407,6 +1448,19 @@ impl GameEngine {
                 timestamp: self.state.command_index,
             });
         }
+        for modifier in event.entry_modifiers.clone() {
+            for kind in super::resolution::materialize_resolving_modifier(modifier) {
+                self.state.continuous_effects.push(ContinuousEffect {
+                    trigger_grant_origin: None,
+                    source_id: None,
+                    affected: AffectedScope::Single(event.object_id),
+                    kind,
+                    condition: None,
+                    duration: EffectDuration::Indefinite,
+                    timestamp: self.state.command_index,
+                });
+            }
+        }
         if let Some(object) = self.state.objects.get_mut(&event.object_id) {
             object.face_up_index = event.face_index;
             object.tapped = event.tapped;
@@ -2399,6 +2453,7 @@ mod tests {
                 (CounterKind::PlusOnePlusOne, 3),
                 (CounterKind::Stun, 2),
             ]),
+            entry_modifiers: Vec::new(),
             applied_effects: Vec::new(),
         };
         engine.commit_battlefield_entry(event, None).unwrap();
@@ -2438,6 +2493,7 @@ mod tests {
             set_types: None,
             chosen_basic_land_type: None,
             entry_counters: BTreeMap::new(),
+            entry_modifiers: Vec::new(),
             applied_effects: Vec::new(),
         };
         let condition = GameCondition::PlayerLifeAggregate {
@@ -2508,11 +2564,71 @@ mod tests {
             set_types: None,
             chosen_basic_land_type: None,
             entry_counters: BTreeMap::new(),
+            entry_modifiers: Vec::new(),
             applied_effects: Vec::new(),
         };
 
         assert!(engine.battlefield_entry_candidates(&event).is_empty());
         engine.state.objects.get_mut(&globe).unwrap().zone = Zone::Battlefield;
+        assert_eq!(engine.battlefield_entry_candidates(&event).len(), 1);
+    }
+
+    #[test]
+    fn entry_replacements_see_types_added_by_the_resolving_effect() {
+        let decks = Some(vec![
+            vec![
+                "dragonstorm_globe".into(),
+                "hill_giant".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+                "mountain".into(),
+            ],
+            vec!["forest".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(234_002, &[0, 1], 20, decks, true).expect("engine");
+        let globe = engine
+            .state
+            .objects
+            .values()
+            .find(|object| object.card_id == "dragonstorm_globe")
+            .expect("Globe")
+            .id;
+        let giant = engine
+            .state
+            .objects
+            .values()
+            .find(|object| object.card_id == "hill_giant")
+            .expect("Giant")
+            .id;
+        engine.state.objects.get_mut(&globe).unwrap().zone = Zone::Battlefield;
+        engine.state.objects.get_mut(&giant).unwrap().zone = Zone::Stack;
+        let event = BattlefieldEntryEvent {
+            prepared: false,
+            object_id: giant,
+            deciding_player: 0,
+            destination_controller: 0,
+            battle_protector: None,
+            face_index: 0,
+            unlock_room_door: None,
+            chosen_x: 0,
+            cast_by: None,
+            cast_cost_receipts: Vec::new(),
+            player_life_snapshot: engine.player_life_snapshot(),
+            tapped: false,
+            set_types: None,
+            chosen_basic_land_type: None,
+            entry_counters: BTreeMap::new(),
+            entry_modifiers: vec![ResolvingPermanentModifier::AddTypes(
+                tricerules_cards::TypeLineAddition {
+                    card_types: Vec::new(),
+                    creature_types: vec!["Dragon".into()],
+                },
+            )],
+            applied_effects: Vec::new(),
+        };
+
         assert_eq!(engine.battlefield_entry_candidates(&event).len(), 1);
     }
 }

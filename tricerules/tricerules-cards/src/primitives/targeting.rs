@@ -1371,6 +1371,7 @@ mod tests {
         let graveyard = SpellEffectKind::MoveGraveyardCards {
             filter: GraveyardFilter::default(),
             destination: GraveyardDestination::Hand,
+            linked_exile_id: None,
         };
         assert!(matches!(
             permanent.target_roles().as_slice(),
@@ -1402,6 +1403,7 @@ mod tests {
         let graveyard_effects = vec![SpellEffectKind::MoveGraveyardCards {
             filter: GraveyardFilter::default(),
             destination: GraveyardDestination::Exile,
+            linked_exile_id: None,
         }];
         let same_graveyard = TargetingDef {
             groups: vec![TargetGroupDef {

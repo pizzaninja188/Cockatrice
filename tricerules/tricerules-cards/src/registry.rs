@@ -1031,6 +1031,108 @@ fn validate_effect_list_metadata(effects: &[SpellEffectKind]) -> Result<(), Stri
     Ok(())
 }
 
+fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String, (u32, u32)>) {
+    match effect {
+        SpellEffectKind::MoveGraveyardCards {
+            linked_exile_id: Some(link_id),
+            ..
+        } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
+        SpellEffectKind::ReturnLinkedExiledCards {
+            linked_exile_id, ..
+        } => {
+            uses.entry(linked_exile_id.as_str().to_owned())
+                .or_default()
+                .1 += 1
+        }
+        SpellEffectKind::Conditional { effect, .. }
+        | SpellEffectKind::ConditionalCastCost { effect, .. } => {
+            collect_linked_exile_uses(effect, uses)
+        }
+        SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
+            for effect in branches.iter().flat_map(|branch| &branch.effects) {
+                collect_linked_exile_uses(effect, uses);
+            }
+        }
+        SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
+            for effect in &ability.effect {
+                collect_linked_exile_uses(effect, uses);
+            }
+        }
+        SpellEffectKind::GrantTriggeredAbility { ability, .. }
+        | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
+            for effect in &ability.effect {
+                collect_linked_exile_uses(effect, uses);
+            }
+        }
+        SpellEffectKind::ApplyPermanentModifier {
+            modifier: crate::primitives::ResolvingPermanentModifier::GrantActivatedAbility(ability),
+            ..
+        } => {
+            for effect in &ability.effect {
+                collect_linked_exile_uses(effect, uses);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
+    let mut uses = HashMap::new();
+    let mut collect = |effects: &[SpellEffectKind]| {
+        for effect in effects {
+            collect_linked_exile_uses(effect, &mut uses);
+        }
+    };
+    collect(&face.spell_effect);
+    for mode in face.modal_spell.iter().flat_map(|modal| &modal.modes) {
+        collect(&mode.effects);
+    }
+    for ability in &face.activated_abilities {
+        collect(&ability.effect);
+    }
+    for ability in &face.triggered_abilities {
+        collect(&ability.effect);
+    }
+    for ability in &face.static_abilities {
+        match &ability.definition {
+            StaticAbilityDef::AttachedModifier {
+                activated_abilities,
+                triggered_abilities,
+                ..
+            }
+            | StaticAbilityDef::ConditionalSelfModifier {
+                activated_abilities,
+                triggered_abilities,
+                ..
+            } => {
+                for ability in activated_abilities {
+                    collect(&ability.effect);
+                }
+                for ability in triggered_abilities {
+                    collect(&ability.effect);
+                }
+            }
+            StaticAbilityDef::GrantTriggeredAbilityToPermanents {
+                triggered_abilities,
+                ..
+            } => {
+                for ability in triggered_abilities {
+                    collect(&ability.effect);
+                }
+            }
+            _ => {}
+        }
+    }
+    for (link_id, (producers, consumers)) in uses {
+        if producers != 1 || consumers != 1 {
+            return Err(format!(
+                "linked exile id '{link_id}' requires exactly one producer and one consumer"
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn effect_returns_source_transformed(effect: &SpellEffectKind) -> bool {
     match effect {
         SpellEffectKind::ExileSourceThenReturnTransformed { .. } => true,
@@ -1190,6 +1292,7 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
         ability.validate_metadata()?;
         ability.definition.validate()?;
     }
+    validate_linked_exile_pairs(face)?;
     let mut cast_cost_group_ids = HashSet::new();
     for group in &face.cast_cost_groups {
         group.validate()?;

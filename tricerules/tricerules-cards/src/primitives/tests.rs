@@ -479,6 +479,120 @@ fn issue_236_permanent_modifier_validation_fails_closed() {
 }
 
 #[test]
+fn issue_234_linked_exile_schema_is_paired_and_fail_closed() {
+    let valid = r#"(
+        id: "test_vacuum",
+        name: "Test Vacuum",
+        face_id: "test_vacuum",
+        mana_cost: "{1}",
+        types: ["Artifact"],
+        activated_abilities: [(
+            ability_id: "exile_card",
+            presentation: Fallback,
+            costs: [Tap],
+            effect: [MoveGraveyardCards(
+                filter: (owner: AnyPlayer),
+                destination: Exile,
+                linked_exile_id: Some("exiled_cards"),
+            )],
+        ), (
+            ability_id: "return_creatures",
+            presentation: Fallback,
+            costs: [Mana("{6}"), Tap, SacrificeSelf],
+            timing: SorcerySpeed,
+            effect: [ReturnLinkedExiledCards(
+                linked_exile_id: "exiled_cards",
+                filter: (card_type: Some(Creature)),
+                entry_counters: [(counter: Keyword(Flying), count: 1)],
+                entry_modifiers: [
+                    AddTypes((creature_types: ["Spirit"])),
+                    SetBasePowerToughness(power: 1, toughness: 1),
+                ],
+            )],
+        )],
+    )"#;
+    crate::CardRegistry::from_chunks_and_tokens(&[valid], &[])
+        .expect("Ghost Vacuum needs a paired linked-exile vocabulary");
+
+    for (needle, invalid_effects) in [
+        (
+            "requires an activated or triggered ability",
+            r#"spell_effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))],
+            activated_abilities: [(ability_id: "return", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))])]"#,
+        ),
+        (
+            "requires the exile destination",
+            r#"activated_abilities: [
+                (ability_id: "bad", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Hand, linked_exile_id: Some("exiled_cards"))]),
+                (ability_id: "return", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))])
+            ]"#,
+        ),
+        (
+            "linked exile return requires an activated or triggered ability",
+            r#"spell_effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))],
+            activated_abilities: [(ability_id: "producer", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))])]"#,
+        ),
+        (
+            "ability link id 'Bad' must be canonical snake_case beginning with a letter",
+            r#"activated_abilities: [
+                (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("Bad"))]),
+                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "Bad", filter: (card_type: Some(Creature)))])
+            ]"#,
+        ),
+        (
+            "requires exactly one producer and one consumer",
+            r#"activated_abilities: [(ability_id: "bad", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))])]"#,
+        ),
+        (
+            "requires exactly one producer and one consumer",
+            r#"activated_abilities: [
+                (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
+                (ability_id: "duplicate", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
+                (ability_id: "return", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)))])
+            ]"#,
+        ),
+        (
+            "zone card filter requires at least one predicate",
+            r#"activated_abilities: [
+                (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
+                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: ())]),
+            ]"#,
+        ),
+        (
+            "entry counter placement count must be positive",
+            r#"activated_abilities: [
+                (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
+                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)), entry_counters: [(counter: Keyword(Flying), count: 0)])]),
+            ]"#,
+        ),
+        (
+            "entry counter placements cannot repeat a counter kind",
+            r#"activated_abilities: [
+                (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
+                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)), entry_counters: [(counter: Keyword(Flying), count: 1), (counter: Keyword(Flying), count: 1)])]),
+            ]"#,
+        ),
+        (
+            "type-line addition must add a card type or creature type",
+            r#"activated_abilities: [
+                (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
+                (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)), entry_modifiers: [AddTypes(())])]),
+            ]"#,
+        ),
+    ] {
+        let card = format!(
+            r#"(id: "invalid_link", name: "Invalid Link", face_id: "invalid_link", mana_cost: "{{1}}", types: ["Artifact"], {invalid_effects})"#
+        );
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[])
+            .expect_err("invalid linked-exile schema must fail registry load");
+        assert!(
+            error.to_string().contains(needle),
+            "expected {needle:?}, got {error}"
+        );
+    }
+}
+
+#[test]
 fn issue_185_saga_vocabulary_and_validation_are_typed() {
     let card = r#"(
         id: "test_saga",

@@ -174,6 +174,7 @@ fn issue_168_reanimation_group_waits_for_all_replacement_choices() {
         SpellEffectKind::MoveGraveyardCards {
             filter: Default::default(),
             destination: GraveyardDestination::Battlefield { tapped: false },
+            linked_exile_id: None,
         },
         SpellEffectKind::GainLife {
             amount: Amount::Fixed(1),

@@ -1977,7 +1977,7 @@ pub(super) fn exile_graveyards(
         })
         .filter(|oid| zone_card_matches_filter(&engine.state, engine.registry, *oid, filter))
         .collect();
-    exile_graveyard_cohort(cx, cohort)
+    exile_graveyard_cohort(cx, cohort, None)
 }
 
 /// Selection is caller-owned: targeted moves have already revalidated their targets;
@@ -1985,6 +1985,7 @@ pub(super) fn exile_graveyards(
 fn exile_graveyard_cohort(
     cx: &mut EffectCx<'_>,
     cohort: Vec<ObjectId>,
+    linked_exile_key: Option<LinkedExileKey>,
 ) -> Result<EffectOutcome, EngineError> {
     let engine = &mut *cx.engine;
     let cohort: Vec<_> = cohort
@@ -2021,6 +2022,20 @@ fn exile_graveyard_cohort(
         let owner = engine.state.objects[&oid].owner;
         let name = object_display_name(&engine.state, engine.registry, oid);
         move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Exile, None)?;
+        if let Some(key) = &linked_exile_key {
+            let linked = LinkedExiledObject {
+                object_id: oid,
+                zone_change_generation: engine.state.zone_change_generation[&oid],
+            };
+            let records = engine
+                .state
+                .linked_exile_records
+                .entry(key.clone())
+                .or_default();
+            if !records.contains(&linked) {
+                records.push(linked);
+            }
+        }
         cx.effect_result.cards.push(payment::card_result_entry(
             &engine.state,
             engine.registry,
@@ -2050,6 +2065,7 @@ pub(super) fn move_graveyard_cards(
     let SpellEffectKind::MoveGraveyardCards {
         filter,
         destination,
+        linked_exile_id,
     } = effect
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
@@ -2071,7 +2087,19 @@ pub(super) fn move_graveyard_cards(
         })
         .collect();
     if destination == GraveyardDestination::Exile {
-        return exile_graveyard_cohort(cx, targets);
+        let linked_exile_key = linked_exile_id
+            .map(|ability_link_id| {
+                let source_object_id = cx.top.source_permanent_id.ok_or(EngineError::Illegal(
+                    "linked exile requires an ability source",
+                ))?;
+                Ok(LinkedExileKey {
+                    source_object_id,
+                    source_zone_change: cx.top.source_zone_change,
+                    ability_link_id,
+                })
+            })
+            .transpose()?;
+        return exile_graveyard_cohort(cx, targets, linked_exile_key);
     }
     if let GraveyardDestination::Battlefield { tapped } = destination {
         let entries = targets
@@ -2092,6 +2120,7 @@ pub(super) fn move_graveyard_cards(
                 set_types: None,
                 chosen_basic_land_type: None,
                 entry_counters: BTreeMap::new(),
+                entry_modifiers: Vec::new(),
                 applied_effects: vec![],
             })
             .collect();
@@ -2099,6 +2128,7 @@ pub(super) fn move_graveyard_cards(
             if cx.engine.begin_zone_entry_batch(
                 cx.top.clone(),
                 entries,
+                Zone::Graveyard,
                 cx.spell_label,
                 cx.events,
             )? {
@@ -2145,6 +2175,102 @@ pub(super) fn move_graveyard_cards(
     }
     engine.fire_zone_triggers(snapshot, vec![]);
     Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn return_linked_exiled_cards(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ReturnLinkedExiledCards {
+        linked_exile_id,
+        filter,
+        entry_counters,
+        entry_modifiers,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(source_object_id) = cx.top.source_permanent_id else {
+        return Err(EngineError::Illegal(
+            "linked exile requires an ability source",
+        ));
+    };
+    let key = LinkedExileKey {
+        source_object_id,
+        source_zone_change: cx.top.source_zone_change,
+        ability_link_id: linked_exile_id,
+    };
+    let linked = cx
+        .engine
+        .state
+        .linked_exile_records
+        .get(&key)
+        .cloned()
+        .unwrap_or_default();
+    let player_life_snapshot = cx.engine.player_life_snapshot();
+    let entry_counters: BTreeMap<_, _> = entry_counters
+        .into_iter()
+        .map(|placement| (placement.counter, placement.count))
+        .collect();
+    let entries = linked
+        .into_iter()
+        .filter(|linked| {
+            cx.engine
+                .state
+                .objects
+                .get(&linked.object_id)
+                .is_some_and(|object| object.zone == Zone::Exile)
+                && cx
+                    .engine
+                    .state
+                    .zone_change_generation
+                    .get(&linked.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == linked.zone_change_generation
+                && zone_card_matches_filter(
+                    &cx.engine.state,
+                    cx.engine.registry,
+                    linked.object_id,
+                    Some(&filter),
+                )
+        })
+        .map(|linked| {
+            let object = &cx.engine.state.objects[&linked.object_id];
+            BattlefieldEntryEvent {
+                prepared: false,
+                object_id: linked.object_id,
+                deciding_player: object.owner,
+                destination_controller: cx.controller,
+                battle_protector: None,
+                face_index: 0,
+                unlock_room_door: None,
+                chosen_x: 0,
+                cast_by: None,
+                cast_cost_receipts: Vec::new(),
+                player_life_snapshot: player_life_snapshot.clone(),
+                tapped: false,
+                set_types: None,
+                chosen_basic_land_type: None,
+                entry_counters: entry_counters.clone(),
+                entry_modifiers: entry_modifiers.clone(),
+                applied_effects: Vec::new(),
+            }
+        })
+        .collect();
+    Ok(
+        if cx.engine.begin_zone_entry_batch(
+            cx.top.clone(),
+            entries,
+            Zone::Exile,
+            cx.spell_label,
+            cx.events,
+        )? {
+            EffectOutcome::Suspended
+        } else {
+            EffectOutcome::Continue
+        },
+    )
 }
 
 pub(super) fn return_triggered_card(
@@ -2223,6 +2349,7 @@ pub(super) fn return_triggered_card(
             set_types,
             chosen_basic_land_type: None,
             entry_counters,
+            entry_modifiers: Vec::new(),
             applied_effects: Vec::new(),
         },
         BattlefieldEntryCompletion::ResolutionEffect {
@@ -2306,6 +2433,7 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
             set_types: None,
             chosen_basic_land_type: None,
             entry_counters: BTreeMap::new(),
+            entry_modifiers: Vec::new(),
             applied_effects: Vec::new(),
         },
         BattlefieldEntryCompletion::Ninjutsu {
@@ -2444,6 +2572,7 @@ pub(super) fn exile_source_then_return_transformed(
             set_types: None,
             chosen_basic_land_type: None,
             entry_counters,
+            entry_modifiers: Vec::new(),
             applied_effects: Vec::new(),
         },
         BattlefieldEntryCompletion::ResolutionEffect {
@@ -2984,6 +3113,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 set_types: None,
                 chosen_basic_land_type: None,
                 entry_counters: BTreeMap::new(),
+                entry_modifiers: Vec::new(),
                 applied_effects: Vec::new(),
             },
             BattlefieldEntryCompletion::ManifestDread {

@@ -1,0 +1,39 @@
+// Oracle and rulings checked against Scryfall on 2026-09-09; no card-specific rulings.
+// CR 400.7, 406.6, 607.2a, and 611.2e govern the linked cohort and modified entry.
+(
+  id: "ghost_vacuum",
+  name: "Ghost Vacuum",
+  face_id: "ghost_vacuum",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "exile_graveyard_card",
+    presentation: OracleLines([1]),
+    costs: [Tap],
+    effect: [MoveGraveyardCards(
+      filter: (owner: AnyPlayer),
+      destination: Exile,
+      linked_exile_id: Some("exiled_cards"),
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target card from a graveyard",
+      effect_indices: [0],
+    )])),
+  ), (
+    ability_id: "release_spirits",
+    presentation: OracleLines([2]),
+    costs: [Mana("{6}"), Tap, SacrificeSelf],
+    timing: SorcerySpeed,
+    effect: [ReturnLinkedExiledCards(
+      linked_exile_id: "exiled_cards",
+      filter: (card_type: Some(Creature)),
+      entry_counters: [(counter: Keyword(Flying), count: 1)],
+      entry_modifiers: [
+        AddTypes((creature_types: ["Spirit"])),
+        SetBasePowerToughness(power: 1, toughness: 1),
+      ],
+    )],
+  )],
+)

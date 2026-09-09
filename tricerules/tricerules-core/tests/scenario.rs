@@ -236,6 +236,8 @@ mod issue_218_battlefield_exile_cost;
 mod issue_219_surrak;
 #[path = "scenario/issue_233_multiversal_passage.rs"]
 mod issue_233_multiversal_passage;
+#[path = "scenario/issue_234_ghost_vacuum.rs"]
+mod issue_234_ghost_vacuum;
 #[path = "scenario/issue_235_soul_guide_lantern.rs"]
 mod issue_235_soul_guide_lantern;
 #[path = "scenario/issue_237_token_copies.rs"]

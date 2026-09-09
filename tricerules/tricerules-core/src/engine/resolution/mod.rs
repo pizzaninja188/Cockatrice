@@ -32,6 +32,7 @@ mod misc;
 mod pump_counters;
 mod restrictions;
 mod stack_ops;
+pub(super) use pump_counters::materialize_resolving_modifier;
 pub(super) use stack_ops::{counter_stack_object, counter_stack_object_ref};
 mod tokens;
 pub(in crate::engine) mod zones;
@@ -996,6 +997,7 @@ impl GameEngine {
                         set_types: None,
                         chosen_basic_land_type: None,
                         entry_counters: BTreeMap::new(),
+                        entry_modifiers: Vec::new(),
                         applied_effects: Vec::new(),
                     },
                     BattlefieldEntryCompletion::PermanentSpell { attached_to },
@@ -1833,6 +1835,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::MoveGraveyardCards { .. } => {
                         zones::move_graveyard_cards(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::ReturnLinkedExiledCards { .. } => {
+                        zones::return_linked_exiled_cards(&mut cx, effect)?
+                    }
                     SpellEffectKind::ExileGraveyards { players, filter } => {
                         zones::exile_graveyards(&mut cx, players, filter.as_ref())?
                     }
@@ -2128,6 +2133,7 @@ impl GameEngine {
                 set_types: None,
                 chosen_basic_land_type: None,
                 entry_counters: BTreeMap::new(),
+                entry_modifiers: Vec::new(),
                 applied_effects: Vec::new(),
             };
             let resume_original_stack = resume_stack.is_some();
@@ -2368,6 +2374,7 @@ impl GameEngine {
                         set_types: None,
                         chosen_basic_land_type: None,
                         entry_counters: BTreeMap::new(),
+                        entry_modifiers: Vec::new(),
                         applied_effects: Vec::new(),
                     },
                     created,
