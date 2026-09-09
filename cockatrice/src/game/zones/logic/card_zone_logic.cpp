@@ -5,6 +5,7 @@
 #include "../../player/player_actions.h"
 #include "../view_zone.h"
 #include "view_zone_logic.h"
+#include "../../ruled/ruled_preparation_display.h"
 
 #include <QAction>
 #include <QDebug>
@@ -46,6 +47,7 @@ void CardZoneLogic::addCard(CardItem *card, const bool reorganize, const int x, 
         if (qobject_cast<ZoneViewZoneLogic *>(view->getLogic())->prepareAddCard(x)) {
             auto copy = new CardItem(player, nullptr, card->getCardRef(), card->getId());
             copy->setFaceDown(card->getFaceDown());
+            RuledPreparationDisplay::copyViewState(card, copy);
 
             view->getLogic()->addCard(copy, reorganize, x, y);
         }

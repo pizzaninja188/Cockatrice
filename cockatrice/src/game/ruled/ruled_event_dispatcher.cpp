@@ -796,7 +796,9 @@ void RuledEventDispatcher::applyStackPushed(const ruled::v1::StackPushed &sp, Ba
             // shows the same card art rather than defaulting to the newest printing.
             const auto srcOid = static_cast<quint32>(sp.copy_source_object_id());
             const QString copySetName = srcOid != 0 ? host->stackCardProviderId(srcOid) : QString{};
-            host->createSyntheticStackCard(sp.object_id(), QString::fromStdString(sp.description()), -1, copySetName);
+            const QString copyDisplayName =
+                QString::fromStdString(sp.card_display_name().empty() ? sp.description() : sp.card_display_name());
+            host->createSyntheticStackCard(sp.object_id(), copyDisplayName, -1, copySetName);
             // The StackResolved for the copy-maker (Twincast/Fork) uses counterspell cleanup logic
             // that removes targets from stackOidOrder — but the source spell was NOT removed from
             // the engine stack, so restore it here.
@@ -1639,6 +1641,8 @@ void RuledEventDispatcher::applyExileObjectMap(const ruled::v1::ExileObjectMap &
 
 void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, BatchContext &ctx)
 {
+    ctx.preparationSnapshotSeen = true;
+    ctx.preparationCopies.clear();
     if (!view.battlefields_unchanged()) {
         state->engineOidMarkedDamage.clear();
         state->engineOidBattlefieldPower.clear();
@@ -1652,6 +1656,13 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
     }
     bool anyFirstStrikePending = false;
     for (const auto &p : view.per_player()) {
+        for (const auto &copy : p.prepare_spell_copies()) {
+            const auto position = std::find(p.exile_object_ids().begin(), p.exile_object_ids().end(), copy.object_id());
+            if (copy.object_id() != 0 && !copy.display_name().empty() && position != p.exile_object_ids().end()) {
+                ctx.preparationCopies.append({copy.object_id(), p.player_id(), -1,
+                    static_cast<int>(position - p.exile_object_ids().begin()), QString::fromStdString(copy.display_name())});
+            }
+        }
         if (p.first_strike_step_pending()) {
             anyFirstStrikePending = true;
         }
@@ -2108,6 +2119,18 @@ void RuledEventDispatcher::applyNoLegalActions()
 
 void RuledEventDispatcher::finishBatch(BatchContext &ctx)
 {
+    if (ctx.preparationSnapshotSeen) {
+        QVector<RuledClientHost::PreparationCopy> boundCopies;
+        for (auto copy : ctx.preparationCopies) {
+            if (state->exileOidToPlayerId.value(copy.objectId, -1) != copy.playerId ||
+                !state->exileOidToServerCardId.contains(copy.objectId)) {
+                continue;
+            }
+            copy.serverCardId = state->exileOidToServerCardId.value(copy.objectId);
+            boundCopies.append(copy);
+        }
+        host->reconcilePreparationCopies(boundCopies);
+    }
     if (ctx.reconcilePublicReveal && !ctx.publicRevealSeen) {
         state->reveals.completeChoice();
     }

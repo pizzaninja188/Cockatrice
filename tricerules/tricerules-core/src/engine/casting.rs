@@ -967,6 +967,12 @@ impl GameEngine {
                 targets: public_targets,
                 ability_annotation: stack_annotation,
                 card_id: cast_card_id.clone(),
+                card_display_name: self
+                    .registry
+                    .get(&cast_card_id)
+                    .and_then(|definition| definition.face_display_name(face_index))
+                    .unwrap_or(&face_name)
+                    .to_string(),
                 is_prepare_spell: prepare_source.is_some(),
                 is_copy: prepare_source.is_some(),
                 is_triggered: false,
@@ -1398,6 +1404,7 @@ impl GameEngine {
                 targets: targets.to_vec(),
                 ability_annotation: ability_text,
                 card_id: String::new(),
+                card_display_name: String::new(),
                 is_prepare_spell: false,
                 is_copy: false,
                 is_triggered: false,

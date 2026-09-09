@@ -204,6 +204,18 @@ targeting and payment. Servatrice maintains dedicated synthetic exile bindings a
 those display objects as physical cards. `StackPushed.is_prepare_spell` preserves inset naming
 and classification for both cast copies and subsequent spell copies.
 
+Hand conjures and exile copies use the definition's shared display-database identity. Spell events
+carry `StackPushed.card_display_name` separately from the rules-facing `description`, so synthetic
+stack cards load the combined preparation card's artwork and details. The inset's short name is
+still used for rules, actions, and annotations; it must not select a separately printed namesake
+such as Stream of Life from the client database.
+
+Because physical exile snapshots are intentionally skipped by the client, `RuledPreparationDisplay`
+materializes these noncard entries after the dispatcher has joined the full public copy snapshot
+to the batch's final exile bindings. It uses the relay's exact player/card IDs, updates open zone
+views through ordinary zone insertion/removal, and retires only its tracked copies. Repeated
+snapshots are idempotent; an empty snapshot removes copies, while an omitted snapshot retains them.
+
 Physical deck aliases exclude preparation inset names: implementing Infirmary Healer does not
 implement the separately printed Stream of Life. The inset name remains in the face definition
 for rules and presentation. Striking Palette's next-spell trigger uses the existing one-shot event

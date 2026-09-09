@@ -12,6 +12,7 @@ public:
     std::map<quint32, ruled::v1::PrepareSpellCopyView> copies;
     std::map<quint32, quint32> prepared;
     std::map<int, std::map<int, QString>> physicalExile;
+    std::map<int, QStringList> physicalHands;
     std::map<quint32, ruled::v1::StackPushed> pushed;
 
     void onRuledEvent(const ruled::v1::RuledEvent &event) override
@@ -44,6 +45,13 @@ public:
         }
         for (const auto &player : event.GetExtension(Event_GameStateChanged::ext).player_list()) {
             for (const auto &zone : player.zone_list()) {
+                if (zone.name() == ZoneNames::HAND) {
+                    auto &names = physicalHands[player.properties().player_id()];
+                    names.clear();
+                    for (const auto &card : zone.card_list()) {
+                        names.append(QString::fromStdString(card.name()));
+                    }
+                }
                 if (zone.name() != ZoneNames::EXILE) {
                     continue;
                 }
@@ -120,6 +128,9 @@ TEST_F(RuledE2ESmokeTest, PreparationCopiesReachBothRecipientsAndNeverMoveTheSou
     };
     for (const char *name : {"Infirmary Healer // Stream of Life", "Elite Interceptor // Rejoinder",
                             "Quill-Blade Laureate // Twofold Intent", "Pigment Wrangler // Striking Palette"}) {
+        ASSERT_TRUE(put(p1, name, ruled::v1::DEV_ZONE_HAND));
+        EXPECT_TRUE(p1.physicalHands[p1.myId].contains(QString::fromUtf8(name)));
+        EXPECT_FALSE(p2.physicalHands[p1.myId].contains(QString::fromUtf8(name)));
         ASSERT_TRUE(put(p1, name, ruled::v1::DEV_ZONE_BATTLEFIELD));
     }
     ASSERT_EQ(p1.copies.size(), 4u);
@@ -134,7 +145,8 @@ TEST_F(RuledE2ESmokeTest, PreparationCopiesReachBothRecipientsAndNeverMoveTheSou
         const int physicalCopy = p1.serverCardByEngineOid.at(oid);
         EXPECT_EQ(p1.physicalExile[p1.myId].at(physicalCopy), QString::fromStdString(copy.display_name()));
         EXPECT_NE(physicalCopy, p1.serverCardByEngineOid.at(copy.source().object_id()));
-        if (copy.display_name() == "Stream of Life") {
+        EXPECT_NE(copy.display_name().find(" // "), std::string::npos);
+        if (copy.card_id() == "infirmary_healer_stream_of_life") {
             source = copy.source().object_id();
         }
     }
@@ -171,6 +183,7 @@ TEST_F(RuledE2ESmokeTest, PreparationCopiesReachBothRecipientsAndNeverMoveTheSou
     EXPECT_TRUE(p1.pushed.at(copy).is_copy());
     EXPECT_TRUE(p1.pushed.at(copy).is_prepare_spell());
     EXPECT_EQ(p1.pushed.at(copy).description(), "Stream of Life");
+    EXPECT_EQ(p1.pushed.at(copy).card_display_name(), "Infirmary Healer // Stream of Life");
     EXPECT_EQ(p1.pushed.at(copy).SerializeAsString(), p2.pushed.at(copy).SerializeAsString());
     ASSERT_TRUE(pass(p1));
     ASSERT_TRUE(pass(p2));

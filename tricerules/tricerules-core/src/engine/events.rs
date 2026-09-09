@@ -641,10 +641,8 @@ impl GameEngine {
                 .filter_map(|id| {
                     let source = self.state.prepare_spell_sources.get(id)?;
                     let object = self.state.objects.get(id)?;
-                    let face = self
-                        .registry
-                        .get(&object.card_id)?
-                        .face(object.face_up_index)?;
+                    let definition = self.registry.get(&object.card_id)?;
+                    let display_name = definition.face_display_name(object.face_up_index)?;
                     Some(rv1::PrepareSpellCopyView {
                         object_id: *id,
                         zone_change_generation: self
@@ -657,7 +655,7 @@ impl GameEngine {
                             object_id: source.object_id,
                             zone_change_generation: source.zone_change_generation,
                         }),
-                        display_name: face.name.clone(),
+                        display_name: display_name.to_string(),
                         card_id: object.card_id.clone(),
                         face_index: object.face_up_index as u32,
                     })

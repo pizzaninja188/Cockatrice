@@ -737,6 +737,12 @@ pub(super) fn copy_target_spell(
                             .collect(),
                         ability_annotation: "(copy)".to_string(),
                         card_id: src.card_id.clone(),
+                        card_display_name: engine
+                            .registry
+                            .get(&src.card_id)
+                            .and_then(|definition| definition.face_display_name(src.face_index))
+                            .unwrap_or(&copied_name)
+                            .to_string(),
                         is_prepare_spell: engine.registry.get(&src.card_id).is_some_and(|d| {
                             d.layout == Layout::Preparation && src.face_index == 1
                         }),

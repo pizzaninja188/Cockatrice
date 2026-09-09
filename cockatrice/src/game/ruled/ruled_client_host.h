@@ -29,6 +29,14 @@ class RuledCommand;
 class RuledClientHost
 {
 public:
+    struct PreparationCopy
+    {
+        quint32 objectId;
+        int playerId;
+        int serverCardId;
+        int zoneIndex;
+        QString displayName;
+    };
     struct TokenStackIdentity
     {
         QString name;
@@ -58,6 +66,8 @@ public:
                              const QString &setName,
                              const std::optional<TokenStackIdentity> &sourceTokenIdentity = std::nullopt) = 0;
     virtual void removeSyntheticStackCard(quint32 virtualOid) = 0;
+    /// Full public snapshot. These exile copies have server bindings but no Event_MoveCard.
+    virtual void reconcilePreparationCopies(const QVector<PreparationCopy> &copies) = 0;
     /// Printing (Scryfall provider id) of the spell currently on the stack under `oid`, so a
     /// copy (CR 707.10) inherits the original's art. Empty when it cannot be resolved.
     [[nodiscard]] virtual QString stackCardProviderId(quint32 oid) const = 0;

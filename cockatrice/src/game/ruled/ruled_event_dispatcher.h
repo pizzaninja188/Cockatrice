@@ -20,6 +20,7 @@
 #include <QString>
 #include <string>
 #include "ruled_presentation_resolver.h"
+#include "ruled_client_host.h"
 
 namespace ruled::v1
 {
@@ -77,6 +78,8 @@ private:
         bool combatStateDirty = false;
         bool battlefieldMapDirty = false;
         bool stackTrackingDirty = false;
+        bool preparationSnapshotSeen = false;
+        QVector<RuledClientHost::PreparationCopy> preparationCopies;
         /// Public reveals are exact per-authoritative-batch snapshots. Preview echoes are the one
         /// non-authoritative payload and deliberately do not participate in teardown.
         bool reconcilePublicReveal = true;

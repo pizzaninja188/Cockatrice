@@ -63,6 +63,13 @@ public:
     };
     QVector<SyntheticCard> createdSyntheticCards;
     QVector<quint32> removedSyntheticCards;
+    QVector<PreparationCopy> preparationCopies;
+    int preparationSyncs = 0;
+    void reconcilePreparationCopies(const QVector<PreparationCopy> &copies) override
+    {
+        preparationCopies = copies;
+        ++preparationSyncs;
+    }
     QVector<ruled::v1::RuledCommand> sentCommands;
     int dialogRequests = 0;
     QString lastDialogPrompt;
@@ -3250,6 +3257,73 @@ TEST_F(RuledClientTest, SpellCopyInheritsTheOriginalPrinting)
     ASSERT_EQ(host.createdSyntheticCards.size(), 1);
     EXPECT_EQ(host.createdSyntheticCards[0].oid, 11u);
     EXPECT_EQ(host.createdSyntheticCards[0].setName, QStringLiteral("lea"));
+}
+
+TEST_F(RuledClientTest, PreparationStackUsesDatabaseIdentityInsteadOfInsetName)
+{
+    host.presentationCards = readPresentationCards(R"(<cockatrice_carddatabase version="4"><cards>
+      <card><name>Infirmary Healer // Stream of Life</name><text>Prepared creature and inset.</text></card>
+      <card><name>Stream of Life</name><text>Standalone spell.</text></card>
+    </cards></cockatrice_carddatabase>)");
+    ruled::v1::RuledEventBatch batch;
+    auto *copy = batch.add_events()->mutable_stack_pushed();
+    copy->set_object_id(900);
+    copy->set_card_id("infirmary_healer_stream_of_life");
+    copy->set_description("Stream of Life");
+    copy->set_card_display_name("Infirmary Healer // Stream of Life");
+    copy->set_ability_annotation("Stream of Life; X = 3");
+    copy->set_is_copy(true);
+    copy->set_is_prepare_spell(true);
+    apply(batch);
+    ASSERT_EQ(host.createdSyntheticCards.size(), 1);
+    const auto &name = host.createdSyntheticCards[0].name;
+    EXPECT_EQ(name, QStringLiteral("Infirmary Healer // Stream of Life"));
+    ASSERT_TRUE(host.presentationCards.contains(name));
+    EXPECT_EQ(host.presentationCards.value(name)->getText(), QStringLiteral("Prepared creature and inset."));
+    EXPECT_EQ(state->stackAnnotationByOid.value(900), QStringLiteral("Stream of Life; X = 3"));
+}
+
+TEST_F(RuledClientTest, PreparationExileDisplayUsesSettledBindingsAndFullSnapshotsWithoutLocalActions)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *view = batch.add_events()->mutable_zone_view();
+    view->set_battlefields_unchanged(true);
+    auto *player = view->add_per_player();
+    player->set_player_id(kOpponent);
+    player->add_exile_object_ids(50);
+    player->add_exile_object_ids(77);
+    auto *copy = player->add_prepare_spell_copies();
+    copy->set_object_id(77);
+    copy->set_display_name("Infirmary Healer // Stream of Life");
+    // Relay mappings can follow the engine snapshot in the same batch.
+    auto *entry = batch.add_events()->mutable_exile_object_map()->add_entries();
+    entry->set_player_id(kOpponent);
+    entry->set_engine_object_id(77);
+    entry->set_server_card_id(123);
+    apply(batch);
+    ASSERT_EQ(host.preparationCopies.size(), 1);
+    EXPECT_EQ(host.preparationCopies[0].objectId, 77u);
+    EXPECT_EQ(host.preparationCopies[0].playerId, kOpponent);
+    EXPECT_EQ(host.preparationCopies[0].serverCardId, 123);
+    EXPECT_EQ(host.preparationCopies[0].zoneIndex, 1);
+    EXPECT_EQ(host.preparationCopies[0].displayName, QStringLiteral("Infirmary Healer // Stream of Life"));
+    apply(batch);
+    ASSERT_EQ(host.preparationCopies.size(), 1);
+    batch.mutable_events()->SwapElements(0, 1);
+    apply(batch);
+    ASSERT_EQ(host.preparationCopies.size(), 1); // Mapping-before-snapshot is equivalent.
+    batch.mutable_events(0)->mutable_exile_object_map()->mutable_entries(0)->set_player_id(kLocalPlayer);
+    apply(batch);
+    EXPECT_TRUE(host.preparationCopies.isEmpty()); // Never bind an entry to another seat's card.
+    batch.mutable_events(0)->mutable_exile_object_map()->mutable_entries(0)->set_player_id(kOpponent);
+    apply(batch);
+    ASSERT_EQ(host.preparationCopies.size(), 1);
+    const int syncs = host.preparationSyncs;
+    apply(ruled::v1::RuledEventBatch{});
+    EXPECT_EQ(host.preparationSyncs, syncs); // No snapshot is not an empty snapshot.
+    batch.mutable_events(1)->mutable_zone_view()->mutable_per_player(0)->clear_prepare_spell_copies();
+    apply(batch);
+    EXPECT_TRUE(host.preparationCopies.isEmpty());
 }
 
 TEST_F(RuledClientTest, PhaseChangeEmptiesTheStack)

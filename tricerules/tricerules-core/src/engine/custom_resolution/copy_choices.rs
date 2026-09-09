@@ -201,6 +201,12 @@ impl GameEngine {
                     targets: published_targets,
                     ability_annotation: "(copy)".to_string(),
                     card_id: card_id.clone(),
+                    card_display_name: self
+                        .registry
+                        .get(&card_id)
+                        .and_then(|definition| definition.face_display_name(face_index))
+                        .unwrap_or(&copied_name)
+                        .to_string(),
                     is_prepare_spell: self
                         .registry
                         .get(&card_id)

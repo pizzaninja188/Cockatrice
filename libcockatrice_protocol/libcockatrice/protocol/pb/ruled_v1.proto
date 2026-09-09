@@ -1598,6 +1598,9 @@ message StackPushed {
   repeated PresentationRef chosen_mode_presentations = 14 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   repeated PresentationRef chosen_cast_cost_presentations = 15 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   bool is_prepare_spell = 16 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Card-database identity for spell artwork/details, distinct from the rules-facing description.
+  // Empty for abilities without a physical card face.
+  string card_display_name = 17 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ActivePublicRevealSnapshot {
@@ -1744,6 +1747,7 @@ message PrepareSpellCopyView {
   uint32 object_id = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint64 zone_change_generation = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   PreparationSource source = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Combined card-database name for artwork/details; face_index identifies the inset spell.
   string display_name = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string card_id = 5 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   uint32 face_index = 6 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];

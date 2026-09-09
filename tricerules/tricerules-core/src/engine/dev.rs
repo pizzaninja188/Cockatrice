@@ -281,12 +281,7 @@ impl GameEngine {
             .ok_or_else(|| EngineError::MissingCard(card_id.to_string()))?;
         let face = def.primary_face();
         let is_creature = face.is_creature;
-        let display_name = if matches!(def.layout, Layout::Split | Layout::Room | Layout::Adventure)
-        {
-            def.name.clone()
-        } else {
-            face.name.to_string()
-        };
+        let display_name = def.face_display_name(0).unwrap_or(&def.name).to_string();
 
         let oid = self.state.next_object_id;
         self.state.next_object_id += 1;

@@ -355,6 +355,7 @@ fn preparation_copied_spell_preserves_x_and_classification_without_a_second_cast
     let command = inset_cast(&mut engine, copy, 3);
     let batch = engine.apply_command(0, &command).unwrap();
     assert!(batch.events.iter().any(|e| matches!(&e.ev, Some(rv1::ruled_event::Ev::StackPushed(p)) if p.object_id == copy && p.is_prepare_spell && p.is_copy)));
+    assert!(batch.events.iter().any(|e| matches!(&e.ev, Some(rv1::ruled_event::Ev::StackPushed(p)) if p.object_id == copy && p.card_display_name == "Infirmary Healer // Stream of Life" && p.description == "Stream of Life")));
     give_mana(
         &mut engine,
         0,
@@ -373,6 +374,7 @@ fn preparation_copied_spell_preserves_x_and_classification_without_a_second_cast
         .apply_command(0, &submit_resolution_choice(vec![0]))
         .unwrap();
     assert!(batch.events.iter().any(|e| matches!(&e.ev, Some(rv1::ruled_event::Ev::StackPushed(p)) if p.is_prepare_spell && p.is_copy && p.copy_source_object_id == copy)));
+    assert!(batch.events.iter().any(|e| matches!(&e.ev, Some(rv1::ruled_event::Ev::StackPushed(p)) if p.is_prepare_spell && p.card_display_name == "Infirmary Healer // Stream of Life" && p.description == "Stream of Life")));
     let second = engine.state.stack.last().unwrap();
     assert!(second.cast_occurrence.is_none());
     assert_eq!(second.chosen_x, 3);

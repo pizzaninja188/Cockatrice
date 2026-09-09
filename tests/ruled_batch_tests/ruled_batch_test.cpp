@@ -1773,7 +1773,7 @@ TEST_F(RuledBatchTest, PreparationCopiesHaveDedicatedExileIdentityAndFullReplace
     view.add_exile_object_ids(9001u);
     auto *copy = view.add_prepare_spell_copies();
     copy->set_object_id(9001u);
-    copy->set_display_name("Stream of Life");
+    copy->set_display_name("Infirmary Healer // Stream of Life");
     copy->mutable_source()->set_object_id(203u);
     copy->mutable_source()->set_zone_change_generation(2u);
     view.mutable_battlefield_objects(0)->mutable_preparation()->set_copy_object_id(9001u);
@@ -1785,7 +1785,7 @@ TEST_F(RuledBatchTest, PreparationCopiesHaveDedicatedExileIdentityAndFullReplace
     const auto *synthetic = bindingFor(p1).findExileCardByEngineOid(p1, 9001u);
     ASSERT_NE(synthetic, nullptr);
     EXPECT_NE(synthetic, physicalExile);
-    EXPECT_EQ(synthetic->getName(), QStringLiteral("Stream of Life"));
+    EXPECT_EQ(synthetic->getName(), QStringLiteral("Infirmary Healer // Stream of Life"));
     EXPECT_EQ(bindingFor(p1).findExileCardByEngineOid(p1, 204u), physicalExile);
     EXPECT_EQ(findCardByEngineOid(p1, 203u), source);
     const int copyCardId = synthetic->getId();

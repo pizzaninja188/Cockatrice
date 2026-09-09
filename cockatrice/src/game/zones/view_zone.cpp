@@ -1,4 +1,5 @@
 #include "view_zone.h"
+#include "../ruled/ruled_preparation_display.h"
 
 #include "../ruled/ruled_actions.h"
 #include "../board/card_drag_item.h"
@@ -123,6 +124,7 @@ void ZoneViewZone::initializeCards(const QList<const ServerInfo_Card *> &cardLis
             CardItem *card = c.at(i);
             auto copy = new CardItem(getLogic()->getPlayer(), this, card->getCardRef(), card->getId());
             copy->setFaceDown(card->getFaceDown());
+            RuledPreparationDisplay::copyViewState(card, copy);
 
             getLogic()->addCard(copy, false, i);
         }

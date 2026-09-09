@@ -15,6 +15,7 @@
 #include "ruled/ruled_client_state.h"
 #include "ruled/ruled_diagnostic_viewer.h"
 #include "ruled/ruled_event_dispatcher.h"
+#include "ruled/ruled_preparation_display.h"
 #include "ruled/ruled_resolution_choice_dialog.h"
 #include "ruled/ruled_token_display.h"
 #include "zones/logic/card_zone_logic.h"
@@ -58,7 +59,8 @@
 GameEventHandler::GameEventHandler(AbstractGame *_game)
     : QObject(_game), game(_game), ruledState(new RuledClientState(this, this)),
       ruledDispatcher(new RuledEventDispatcher(ruledState, this, this)),
-      ruledDiagnostics(new RuledClientDiagnostics(game, this))
+      ruledDiagnostics(new RuledClientDiagnostics(game, this)),
+      ruledPreparationDisplay(new RuledPreparationDisplay(game, this))
 {
 }
 
@@ -172,6 +174,11 @@ void GameEventHandler::removeSyntheticStackCard(quint32 virtualOid)
     }
     ruledState->unregisterSyntheticStackCard(virtualOid, card->getId());
     card->deleteLater();
+}
+
+void GameEventHandler::reconcilePreparationCopies(const QVector<PreparationCopy> &copies)
+{
+    ruledPreparationDisplay->reconcile(copies);
 }
 
 QString GameEventHandler::stackCardProviderId(quint32 oid) const
@@ -966,6 +973,7 @@ void GameEventHandler::syncRuledSpellTargetingArrows()
 
 void GameEventHandler::clearRuledSessionState(RuledSessionResetScope scope)
 {
+    ruledPreparationDisplay->reconcile({});
     // Invalidate a response callback from the old session before the view model unlocks. It must
     // not be able to clear a newer command sent after this reset.
     ++ruledPendingCommandToken;

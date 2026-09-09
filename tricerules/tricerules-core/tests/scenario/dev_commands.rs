@@ -62,6 +62,43 @@ fn basics_engine(seed: u64) -> GameEngine {
 }
 
 #[test]
+fn preparation_display_identity_matches_the_whole_card_database_entry() {
+    let mut e = basics_engine(180_201);
+    for name in [
+        "Elite Interceptor // Rejoinder",
+        "Infirmary Healer // Stream of Life",
+        "Pigment Wrangler // Striking Palette",
+        "Quill-Blade Laureate // Twofold Intent",
+    ] {
+        let batch = e.apply_command(0, &put(0, DevZone::Hand, name)).unwrap();
+        let conjured = batch
+            .events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(Ev::DevCardConjured(card)) => Some(card),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(conjured.card_name, name, "hand card database identity");
+        let batch = e
+            .apply_command(0, &put(0, DevZone::Battlefield, name))
+            .unwrap();
+        let views = batch.events.iter().filter_map(|event| match &event.ev {
+            Some(Ev::ZoneView(view)) => Some(view),
+            _ => None,
+        });
+        let copy = views
+            .flat_map(|view| &view.per_player)
+            .flat_map(|player| &player.prepare_spell_copies)
+            .find(|copy| copy.display_name == name);
+        assert!(
+            copy.is_some(),
+            "exile copy must use database identity for {name}"
+        );
+    }
+}
+
+#[test]
 fn issue_157_dounguard_removes_counters_only_for_other_friendly_entries() {
     use tricerules_cards::CounterKind::MinusOneMinusOne;
     let mut e = basics_engine(15701);

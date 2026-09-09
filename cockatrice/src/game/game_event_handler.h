@@ -50,6 +50,7 @@ class Player;
 class RuledClientState;
 class RuledEventDispatcher;
 class RuledClientDiagnostics;
+class RuledPreparationDisplay;
 /// Defined in ruled/ruled_client_state.h; declared opaquely so this header need not include it.
 enum class RuledSessionResetScope : int;
 
@@ -178,6 +179,7 @@ private:
                                   const QString &setName,
                                   const std::optional<TokenStackIdentity> &sourceTokenIdentity) override;
     void removeSyntheticStackCard(quint32 virtualOid) override;
+    void reconcilePreparationCopies(const QVector<PreparationCopy> &copies) override;
     [[nodiscard]] QString stackCardProviderId(quint32 oid) const override;
     [[nodiscard]] bool fallbackCreaturePt(quint32 engineOid, int *power, int *toughness) const override;
     [[nodiscard]] QString battlefieldCardName(quint32 engineOid) const override;
@@ -207,6 +209,7 @@ private:
     RuledClientState *ruledState;
     RuledEventDispatcher *ruledDispatcher;
     RuledClientDiagnostics *ruledDiagnostics;
+    RuledPreparationDisplay *ruledPreparationDisplay;
 
     // Synthetic CardItems inserted into the stack zone to represent ability / copy stack items.
     // QPointer auto-nullifies if the CardItem is deleted outside our cleanup path.
