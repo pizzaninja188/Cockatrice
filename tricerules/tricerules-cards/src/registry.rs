@@ -433,6 +433,23 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 }
             }
         }
+        if let StaticAbilityDef::EntersWithChosenBasicLandType {
+            untapped_cost: crate::primitives::EntryCost::PayLife { amount },
+        } = ability
+        {
+            if *amount == 0 || *amount > i32::MAX as u32 {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "entry life payment requires a positive i32 amount".into(),
+                });
+            }
+            if !face.types.iter().any(|value| value == "Land") {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "EntersWithChosenBasicLandType requires a Land".into(),
+                });
+            }
+        }
         if let StaticAbilityDef::TargetingCostIncrease {
             protected, amount, ..
         } = ability
@@ -4089,6 +4106,25 @@ mod tests {
                 ..
             }
         )));
+    }
+
+    #[test]
+    fn issue_233_multiversal_passage_has_one_combined_entry_replacement() {
+        let reg = CardRegistry::from_embedded().unwrap();
+        let face = reg
+            .get("multiversal_passage")
+            .expect("Multiversal Passage")
+            .primary_face();
+
+        assert!(face.activated_abilities.is_empty());
+        assert!(face.triggered_abilities.is_empty());
+        assert_eq!(face.static_abilities.len(), 1);
+        assert!(matches!(
+            face.static_abilities[0].definition,
+            StaticAbilityDef::EntersWithChosenBasicLandType {
+                untapped_cost: EntryCost::PayLife { amount: 2 }
+            }
+        ));
     }
 
     #[test]

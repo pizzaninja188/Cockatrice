@@ -1,0 +1,14 @@
+(
+  id: "multiversal_passage",
+  name: "Multiversal Passage",
+  face_id: "multiversal_passage",
+  mana_cost: "",
+  types: ["Land"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1, 2]),
+      definition: EntersWithChosenBasicLandType(untapped_cost: PayLife(amount: 2)),
+    ),
+  ],
+)

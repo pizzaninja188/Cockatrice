@@ -1472,6 +1472,83 @@ pub enum EntryCost {
     PayLife { amount: u32 },
 }
 
+/// The five basic land types in color-wheel order. This is a closed rules vocabulary rather
+/// than an arbitrary subtype string because each value carries the corresponding intrinsic
+/// mana ability under CR 305.6.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BasicLandType {
+    Plains,
+    Island,
+    Swamp,
+    Mountain,
+    Forest,
+}
+
+impl BasicLandType {
+    pub const ALL: [Self; 5] = [
+        Self::Plains,
+        Self::Island,
+        Self::Swamp,
+        Self::Mountain,
+        Self::Forest,
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Plains => "Plains",
+            Self::Island => "Island",
+            Self::Swamp => "Swamp",
+            Self::Mountain => "Mountain",
+            Self::Forest => "Forest",
+        }
+    }
+
+    pub const fn mana(self) -> ManaAmount {
+        match self {
+            Self::Plains => ManaAmount {
+                w: 1,
+                u: 0,
+                b: 0,
+                r: 0,
+                g: 0,
+                c: 0,
+            },
+            Self::Island => ManaAmount {
+                w: 0,
+                u: 1,
+                b: 0,
+                r: 0,
+                g: 0,
+                c: 0,
+            },
+            Self::Swamp => ManaAmount {
+                w: 0,
+                u: 0,
+                b: 1,
+                r: 0,
+                g: 0,
+                c: 0,
+            },
+            Self::Mountain => ManaAmount {
+                w: 0,
+                u: 0,
+                b: 0,
+                r: 1,
+                g: 0,
+                c: 0,
+            },
+            Self::Forest => ManaAmount {
+                w: 0,
+                u: 0,
+                b: 0,
+                r: 0,
+                g: 1,
+                c: 0,
+            },
+        }
+    }
+}
+
 /// Which proposed entrant receives counters from an enters-with-counters replacement. Intrinsic
 /// abilities default to `Self_`; battlefield sources use a derived-characteristic creature scope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -1581,6 +1658,10 @@ pub enum StaticAbilityDef {
         #[serde(default = "TargetFilter::default_creature")]
         filter: TargetFilter,
     },
+    /// CR 614.12 / 305.6-305.7: choose one basic land type as this land enters, then offer the
+    /// linked optional cost. The type choice and cost are one replacement-effect application;
+    /// no unrelated replacement effect may be interposed between them.
+    EntersWithChosenBasicLandType { untapped_cost: EntryCost },
     /// CR 614.1d: modify a proposed battlefield-entry event rather than tapping the permanent
     /// after it enters. Intrinsic examples include Diregraf Ghoul and the gainland cycle;
     /// `Permanents` is the global Orb of Dreams form.

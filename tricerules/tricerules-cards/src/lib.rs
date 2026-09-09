@@ -22,7 +22,7 @@ pub use mana::{ColorPip, ManaCost, ManaSymbol};
 pub use presentation::PresentationFaceMetadata;
 pub use primitives::{
     AbilityCost, AbilitySourceZone, ActivatedAbilityDef, ActivationTiming, AdditionalCost, Amount,
-    BasePowerToughnessValue, BattlefieldAggregate, BattlefieldCreatureCountFilter,
+    BasePowerToughnessValue, BasicLandType, BattlefieldAggregate, BattlefieldCreatureCountFilter,
     BattlefieldPermanentFilter, BattlefieldQuantityCharacteristic, CardResultAction,
     CardResultFilter, CardResultSource, CardSearchZone, CastCostConditionalAmount,
     CastCostGroupDef, CastCostOptionDef, CastCostOptionRef, CastCostReceiptCondition,

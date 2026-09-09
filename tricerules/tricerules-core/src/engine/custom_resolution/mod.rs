@@ -110,6 +110,12 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
+            ResolutionContinuation::EntryBasicLandType { .. }
+        ) {
+            return self.finish_basic_land_type_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::SagaReadAhead { .. }
         ) {
             return self.finish_saga_read_ahead_choice(pending, answer, decision);
@@ -303,6 +309,9 @@ impl GameEngine {
             ResolutionContinuation::EntryCost { .. } => {
                 unreachable!("entry-cost branch handled before object-choice validation")
             }
+            ResolutionContinuation::EntryBasicLandType { .. } => {
+                unreachable!("basic-land-type branch handled before object-choice validation")
+            }
             ResolutionContinuation::SagaReadAhead { .. } => {
                 unreachable!("read-ahead branch handled before object-choice validation")
             }
@@ -454,6 +463,7 @@ impl GameEngine {
             player_life_snapshot: self.player_life_snapshot(),
             tapped: false,
             set_types: None,
+            chosen_basic_land_type: None,
             entry_counters: BTreeMap::new(),
             applied_effects: Vec::new(),
         };

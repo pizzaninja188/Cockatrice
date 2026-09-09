@@ -363,6 +363,7 @@ impl CharacteristicsEvaluator<'_> {
                     effect.kind,
                     ContinuousEffectKind::Layer4AddTypes(_)
                         | ContinuousEffectKind::Layer4SetTypeLine(_)
+                        | ContinuousEffectKind::Layer4SetBasicLandType(_)
                         | ContinuousEffectKind::Layer4SetCreatureTypes(_)
                         | ContinuousEffectKind::Layer4SetAllCreatureTypes
                 )
@@ -391,6 +392,9 @@ impl CharacteristicsEvaluator<'_> {
                 }
                 ContinuousEffectKind::Layer4SetTypeLine(replacement) => {
                     apply_type_line_replacement(result, replacement);
+                }
+                ContinuousEffectKind::Layer4SetBasicLandType(land_type) => {
+                    apply_basic_land_type(result, *land_type);
                 }
                 ContinuousEffectKind::Layer4SetCreatureTypes(creature_types) => {
                     result.all_creature_types = false;
@@ -989,6 +993,53 @@ pub(super) fn latest_remove_all_abilities_timestamp(
         .max()
 }
 
+const LAND_SUBTYPES: &[&str] = &[
+    "Cave",
+    "Desert",
+    "Forest",
+    "Gate",
+    "Island",
+    "Lair",
+    "Locus",
+    "Mine",
+    "Mountain",
+    "Plains",
+    "Power-Plant",
+    "Sphere",
+    "Swamp",
+    "Tower",
+    "Urza's",
+];
+
+fn is_land_subtype(value: &str) -> bool {
+    LAND_SUBTYPES.contains(&value)
+}
+
+pub(super) fn apply_basic_land_type(result: &mut Characteristics, land_type: BasicLandType) {
+    result.types.retain(|value| !is_land_subtype(value));
+    result.types.push(land_type.as_str().to_string());
+}
+
+/// The last active CR 305.7 setting operation for this object. Equal timestamps use insertion
+/// order, matching the layer-4 characteristics pass.
+pub(super) fn basic_land_type_setting(
+    state: &GameState,
+    oid: ObjectId,
+) -> Option<(u64, usize, BasicLandType)> {
+    state
+        .continuous_effects
+        .iter()
+        .enumerate()
+        .filter_map(|(index, effect)| {
+            let ContinuousEffectKind::Layer4SetBasicLandType(land_type) = effect.kind else {
+                return None;
+            };
+            matches!(effect.affected, AffectedScope::Single(affected) if affected == oid)
+                .then_some((effect.timestamp, index, land_type))
+        })
+        .max_by_key(|(timestamp, index, _)| (*timestamp, *index))
+}
+
 fn permanent_matches_target_scope(
     state: &GameState,
     filter: &TargetFilter,
@@ -1230,6 +1281,11 @@ impl CharacteristicsEvaluator<'_> {
         result: &mut Characteristics,
         effects: &[&ContinuousEffect],
     ) {
+        if basic_land_type_setting(self.state, object.id).is_some() {
+            result.keywords.clear();
+            result.protections.clear();
+            result.evasions.clear();
+        }
         let mut last_removal_timestamp = None;
         for effect in effects {
             if matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities) {

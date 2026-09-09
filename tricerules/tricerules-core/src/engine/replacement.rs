@@ -260,6 +260,9 @@ impl GameEngine {
         if let Some(replacement) = &event.set_types {
             apply_type_line_replacement(&mut characteristics, replacement);
         }
+        if let Some(land_type) = event.chosen_basic_land_type {
+            super::characteristics::apply_basic_land_type(&mut characteristics, land_type);
+        }
         characteristics.controller = event.destination_controller;
         creature_matches_scope(
             &self.state,
@@ -291,6 +294,10 @@ impl GameEngine {
                         StaticAbilityDef::EntersAsCopy { .. } => (
                             ReplacementPriority::EntryCopy,
                             Some(format!("{} — enters as a copy", face.name)),
+                        ),
+                        StaticAbilityDef::EntersWithChosenBasicLandType { .. } => (
+                            ReplacementPriority::Other,
+                            Some(format!("{} — choose a basic land type", face.name)),
                         ),
                         StaticAbilityDef::EntersTapped {
                             affected: EntersTappedAffected::Self_,
@@ -508,8 +515,125 @@ impl GameEngine {
                 unless_cost: Some(cost),
                 ..
             } => Some(cost.clone()),
+            StaticAbilityDef::EntersWithChosenBasicLandType { untapped_cost }
+                if event.chosen_basic_land_type.is_some() =>
+            {
+                Some(untapped_cost.clone())
+            }
             _ => None,
         }
+    }
+
+    fn entry_needs_basic_land_type_choice(
+        &self,
+        event: &BattlefieldEntryEvent,
+        effect_id: &EntryReplacementEffectId,
+    ) -> bool {
+        if event.chosen_basic_land_type.is_some() {
+            return false;
+        }
+        let EntryReplacementEffectId::Intrinsic {
+            object_id,
+            copy_revision,
+            ability_index,
+        } = effect_id
+        else {
+            return false;
+        };
+        self.state
+            .objects
+            .get(object_id)
+            .filter(|object| {
+                *object_id == event.object_id && object.copy_revision == *copy_revision
+            })
+            .and_then(|_| self.battlefield_entry_face(event))
+            .and_then(|face| face.static_abilities.get(*ability_index).cloned())
+            .is_some_and(|ability| {
+                matches!(
+                    ability.definition,
+                    StaticAbilityDef::EntersWithChosenBasicLandType { .. }
+                )
+            })
+    }
+
+    fn park_basic_land_type_choice(
+        &mut self,
+        item: StackItem,
+        event: BattlefieldEntryEvent,
+        completion: BattlefieldEntryCompletion,
+        effect_id: EntryReplacementEffectId,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let options = BasicLandType::ALL
+            .into_iter()
+            .enumerate()
+            .map(|(index, land_type)| rv1::ResolutionBranchOption {
+                branch_index: index as u32,
+                label: land_type.as_str().to_string(),
+                cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                cost_text: String::new(),
+                selectable: true,
+                search_zones: Vec::new(),
+                presentation: None,
+            })
+            .collect();
+        let prompt = "Choose a basic land type for Multiversal Passage.".to_string();
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: event.deciding_player,
+                    source_object_id: event.object_id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                    candidate_object_ids: Vec::new(),
+                    candidate_card_ids: Vec::new(),
+                    min: 1,
+                    max: 1,
+                    ordered: false,
+                    candidate_names: Vec::new(),
+                    candidate_server_card_ids: Vec::new(),
+                    candidate_selectable: Vec::new(),
+                    unique_names: false,
+                    generic_mana_cost: 0,
+                    payment_currently_legal: false,
+                    resolution_branches: options,
+                    mana_cost: String::new(),
+                    public_reveal: None,
+                    candidate_source_zones: Vec::new(),
+                    combat_defender_options: Vec::new(),
+                    waterbend: false,
+                    selection_slots: Vec::new(),
+                    replacement_options: Vec::new(),
+                    selection_alternatives: Vec::new(),
+                },
+            )),
+        });
+        let deciding_player = event.deciding_player;
+        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
+            Box::new(PendingBattlefieldEntry {
+                event,
+                applications: Vec::new(),
+                copy_source_effect: None,
+                completion,
+            }),
+        ));
+        self.state.pending_resolution = Some(PendingResolution {
+            deciding_player,
+            presentation: PendingResolutionPresentation {
+                source_object_id: item.id,
+                candidates: Vec::new(),
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: rv1::ChoiceKind::ResolutionBranch,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::EntryBasicLandType {
+                stack: ParkedStackResolution::new(item),
+                effect_id,
+            },
+        });
     }
 
     fn park_entry_cost_choice(
@@ -816,6 +940,10 @@ impl GameEngine {
                         affected: EntersTappedAffected::Self_,
                         ..
                     }) => event.tapped = true,
+                    Some(StaticAbilityDef::EntersWithChosenBasicLandType { .. }) => {
+                        debug_assert!(event.chosen_basic_land_type.is_some());
+                        event.tapped = true;
+                    }
                     Some(StaticAbilityDef::EntersWithCounters {
                         affected: EntersWithCountersAffected::Self_,
                         counter,
@@ -1044,6 +1172,16 @@ impl GameEngine {
                         );
                         return BattlefieldEntryProgress::Parked;
                     }
+                    if self.entry_needs_basic_land_type_choice(&event, effect_id) {
+                        self.park_basic_land_type_choice(
+                            item,
+                            event,
+                            completion,
+                            effect_id.clone(),
+                            events,
+                        );
+                        return BattlefieldEntryProgress::Parked;
+                    }
                     if let Some(cost) = self.entry_unless_cost(&event, effect_id) {
                         self.park_entry_cost_choice(
                             item,
@@ -1246,6 +1384,17 @@ impl GameEngine {
                     caster,
                 },
             );
+        }
+        if let Some(land_type) = event.chosen_basic_land_type {
+            self.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: Some(event.object_id),
+                affected: AffectedScope::Single(event.object_id),
+                kind: ContinuousEffectKind::Layer4SetBasicLandType(land_type),
+                condition: None,
+                duration: EffectDuration::WhileSourceOnBattlefield,
+                timestamp: self.state.command_index,
+            });
         }
         if let Some(replacement) = event.set_types.clone() {
             self.state.continuous_effects.push(ContinuousEffect {
@@ -1937,6 +2086,15 @@ impl GameEngine {
                 &mut events,
             );
             return Ok(finish_with_events(self, events));
+        } else if self.entry_needs_basic_land_type_choice(&entry.event, &application.effect_id) {
+            self.park_basic_land_type_choice(
+                stack.item,
+                entry.event,
+                entry.completion,
+                application.effect_id,
+                &mut events,
+            );
+            return Ok(finish_with_events(self, events));
         } else if let Some(cost) = self.entry_unless_cost(&entry.event, &application.effect_id) {
             self.park_entry_cost_choice(
                 stack.item,
@@ -1961,6 +2119,82 @@ impl GameEngine {
         };
 
         self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
+    }
+
+    pub(super) fn finish_basic_land_type_choice(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, effect_id) = match &pending.continuation {
+            ResolutionContinuation::EntryBasicLandType { stack, effect_id } => {
+                (stack.clone(), effect_id.clone())
+            }
+            _ => return Err(EngineError::Illegal("basic-land-type continuation missing")),
+        };
+        let Some(pending_event) = self.state.pending_replacement_event.take() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("basic land type choice is stale"));
+        };
+        let mut entry = match pending_event {
+            PendingReplacementEvent::BattlefieldEntry(entry) => *entry,
+            other => {
+                self.state.pending_replacement_event = Some(other);
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("basic land type choice is stale"));
+            }
+        };
+        let restore = |engine: &mut Self,
+                       pending: PendingResolution,
+                       entry: PendingBattlefieldEntry,
+                       message| {
+            engine.state.pending_replacement_event =
+                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+            engine.state.pending_resolution = Some(pending);
+            Err(EngineError::Illegal(message))
+        };
+        if decision != rv1::ResolutionChoiceDecision::SelectBranch
+            || !answer.chosen_object_ids.is_empty()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.cast_spell.is_some()
+            || answer.chosen_combat_defender.is_some()
+        {
+            return restore(
+                self,
+                pending,
+                entry,
+                "basic land type requires exactly one branch",
+            );
+        }
+        if !self.entry_needs_basic_land_type_choice(&entry.event, &effect_id) {
+            return restore(self, pending, entry, "basic land type choice is stale");
+        }
+        let Some(chosen) = BasicLandType::ALL
+            .get(answer.selected_branch_index as usize)
+            .copied()
+        else {
+            return restore(self, pending, entry, "unknown basic land type branch");
+        };
+        entry.event.chosen_basic_land_type = Some(chosen);
+        let Some(cost) = self.entry_unless_cost(&entry.event, &effect_id) else {
+            return restore(self, pending, entry, "basic land type choice is stale");
+        };
+        let mut events = vec![ev_log(format!(
+            "P{} chooses {} for Multiversal Passage.",
+            entry.event.deciding_player,
+            chosen.as_str()
+        ))];
+        self.park_entry_cost_choice(
+            stack.item,
+            entry.event,
+            entry.completion,
+            effect_id,
+            cost,
+            &mut events,
+        );
+        Ok(finish_with_events(self, events))
     }
 
     pub(super) fn finish_entry_cost_choice(
@@ -2160,6 +2394,7 @@ mod tests {
             player_life_snapshot: engine.player_life_snapshot(),
             tapped: false,
             set_types: None,
+            chosen_basic_land_type: None,
             entry_counters: BTreeMap::from([
                 (CounterKind::PlusOnePlusOne, 3),
                 (CounterKind::Stun, 2),
@@ -2201,6 +2436,7 @@ mod tests {
             player_life_snapshot: snapshot,
             tapped: false,
             set_types: None,
+            chosen_basic_land_type: None,
             entry_counters: BTreeMap::new(),
             applied_effects: Vec::new(),
         };
@@ -2270,6 +2506,7 @@ mod tests {
             player_life_snapshot: engine.player_life_snapshot(),
             tapped: false,
             set_types: None,
+            chosen_basic_land_type: None,
             entry_counters: BTreeMap::new(),
             applied_effects: Vec::new(),
         };

@@ -1,12 +1,13 @@
 //! Spell and continuous-effect vocabulary plus shared effect parameters.
 
 use super::{
-    ActivatedAbilityDef, Amount, BasePowerToughnessValue, CardTypeFilter, CastCostReceiptCondition,
-    Color, ConditionObjectRef, CountExpression, CreatureScopeFilter, DamageDivision, EventZone,
-    GameCondition, GraveyardDestination, GraveyardFilter, Keyword, LifeAmount, PermanentTypeFilter,
-    PowerComparison, PowerToughnessCharacteristic, ProtectionQuality, ReflexiveTriggeredAbilityDef,
-    SpecialActionKind, StackSpellFilter, TargetController, TargetFilter, TargetKind, TargetRole,
-    TriggerCondition, TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
+    ActivatedAbilityDef, Amount, BasePowerToughnessValue, BasicLandType, CardTypeFilter,
+    CastCostReceiptCondition, Color, ConditionObjectRef, CountExpression, CreatureScopeFilter,
+    DamageDivision, EventZone, GameCondition, GraveyardDestination, GraveyardFilter, Keyword,
+    LifeAmount, PermanentTypeFilter, PowerComparison, PowerToughnessCharacteristic,
+    ProtectionQuality, ReflexiveTriggeredAbilityDef, SpecialActionKind, StackSpellFilter,
+    TargetController, TargetFilter, TargetKind, TargetRole, TriggerCondition, TriggeredAbilityDef,
+    TypeLineAddition, TypeLineReplacement,
 };
 #[cfg(test)]
 use super::{
@@ -4550,6 +4551,10 @@ pub enum ContinuousEffectKind {
     Layer4AddTypes(TypeLineAddition),
     /// CR 205.1a / 613.1d layer 4 — replace all card types and subtypes, preserving supertypes.
     Layer4SetTypeLine(TypeLineReplacement),
+    /// CR 305.7 / 613.1d: retain card types, supertypes, and non-land subtypes; replace all land
+    /// subtypes with one basic land type. The same rules operation suppresses printed/copiable
+    /// abilities and supplies the type's intrinsic mana ability.
+    Layer4SetBasicLandType(BasicLandType),
     /// CR 205.1b / 613.1d layer 4 — replace every creature type while retaining card types and
     /// unrelated subtypes. An empty list means the object loses all creature types. Frogify and
     /// Witness Protection exercise the nonempty form; Amoeboid Changeling exercises empty.

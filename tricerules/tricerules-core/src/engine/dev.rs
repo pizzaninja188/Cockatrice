@@ -183,6 +183,7 @@ impl GameEngine {
                     player_life_snapshot: self.player_life_snapshot(),
                     tapped: false,
                     set_types: None,
+                    chosen_basic_land_type: None,
                     entry_counters: BTreeMap::new(),
                     applied_effects: Vec::new(),
                 },

@@ -2074,8 +2074,10 @@ impl GameEngine {
             .is_some_and(|object| object.face_down);
         let removed_at =
             super::characteristics::latest_remove_all_abilities_timestamp(&self.state, source_id);
+        let basic_land_setting =
+            super::characteristics::basic_land_type_setting(&self.state, source_id);
         let mut printed = Vec::new();
-        if !face_down && removed_at.is_none() {
+        if !face_down && removed_at.is_none() && basic_land_setting.is_none() {
             if let Some(faces) = self.room_faces(source_id) {
                 for door in self
                     .state

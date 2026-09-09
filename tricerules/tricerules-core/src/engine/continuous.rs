@@ -324,6 +324,7 @@ impl GameEngine {
         }
         if super::characteristics::latest_remove_all_abilities_timestamp(&self.state, object_id)
             .is_some()
+            || super::characteristics::basic_land_type_setting(&self.state, object_id).is_some()
         {
             return;
         }
@@ -386,7 +387,9 @@ impl GameEngine {
                     // CR 614.12 / 707.5 entry replacement, handled before zone commitment in
                     // `engine::replacement`; there is no post-entry continuous effect to emit.
                 }
-                StaticAbilityDef::EntersPrepared | StaticAbilityDef::EntersTapped { .. } => {
+                StaticAbilityDef::EntersPrepared
+                | StaticAbilityDef::EntersTapped { .. }
+                | StaticAbilityDef::EntersWithChosenBasicLandType { .. } => {
                     // CR 614.12 entry replacements are evaluated against the proposed event in
                     // `engine::replacement`; there is no post-entry continuous effect to emit.
                 }
@@ -956,12 +959,14 @@ impl GameEngine {
             .is_some_and(|object| object.face_down);
         let removed_at =
             super::characteristics::latest_remove_all_abilities_timestamp(&self.state, source_id);
+        let basic_land_setting =
+            super::characteristics::basic_land_type_setting(&self.state, source_id);
         let mut abilities: Vec<(
             usize,
             ActivatedAbilityDef,
             bool,
             Vec<tricerules_cards::AbilityId>,
-        )> = (!face_down && removed_at.is_none())
+        )> = (!face_down && removed_at.is_none() && basic_land_setting.is_none())
             .then(|| self.effective_face(source_id))
             .flatten()
             .map(|face| {
@@ -980,6 +985,35 @@ impl GameEngine {
                     .collect()
             })
             .unwrap_or_default();
+        if !face_down {
+            if let Some((timestamp, _, land_type)) = basic_land_setting {
+                if removed_at.is_none_or(|removed| removed < timestamp) {
+                    abilities.push((
+                        0,
+                        ActivatedAbilityDef {
+                            ability_id: tricerules_cards::AbilityId::new("basic_land_mana")
+                                .expect("constant ability id is valid"),
+                            presentation: tricerules_cards::AbilityPresentation::Fallback,
+                            source_zone: AbilitySourceZone::Battlefield,
+                            costs: vec![AbilityCost::Tap],
+                            cost_modifiers: Vec::new(),
+                            effect: vec![SpellEffectKind::ProduceMana {
+                                options: vec![land_type.mana()],
+                                restriction: None,
+                                conditional: None,
+                            }],
+                            targeting: None,
+                            timing: Default::default(),
+                            conditions: Vec::new(),
+                            activation_limit: None,
+                        },
+                        false,
+                        vec![tricerules_cards::AbilityId::new("basic_land_mana")
+                            .expect("constant ability id is valid")],
+                    ));
+                }
+            }
+        }
         let Some(characteristics) = self.characteristics(source_id) else {
             return abilities;
         };

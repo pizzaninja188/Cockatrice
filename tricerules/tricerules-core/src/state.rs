@@ -1060,6 +1060,10 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         effect_id: EntryReplacementEffectId,
     },
+    EntryBasicLandType {
+        stack: ParkedStackResolution,
+        effect_id: EntryReplacementEffectId,
+    },
     SagaReadAhead {
         stack: ParkedStackResolution,
         effect_id: EntryReplacementEffectId,
@@ -1123,6 +1127,7 @@ impl ResolutionContinuation {
             | Self::Blight { stack, .. }
             | Self::EntryReplacement { stack }
             | Self::EntryCost { stack, .. }
+            | Self::EntryBasicLandType { stack, .. }
             | Self::SagaReadAhead { stack, .. }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
@@ -1161,6 +1166,7 @@ impl ResolutionContinuation {
             | Self::Blight { stack, .. }
             | Self::EntryReplacement { stack }
             | Self::EntryCost { stack, .. }
+            | Self::EntryBasicLandType { stack, .. }
             | Self::SagaReadAhead { stack, .. }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
@@ -1320,6 +1326,9 @@ pub struct BattlefieldEntryEvent {
     /// CR 611.2e type-setting effect supplied by the instruction putting this object onto the
     /// battlefield. Entry replacement predicates and ETB triggers must see these types.
     pub set_types: Option<TypeLineReplacement>,
+    /// A basic land type chosen by a still-resolving intrinsic entry replacement. Kept on the
+    /// proposed event so later replacement predicates see the provisional characteristics.
+    pub chosen_basic_land_type: Option<tricerules_cards::BasicLandType>,
     /// Counter state accumulated by entry replacement effects before zone commitment.
     pub entry_counters: BTreeMap<CounterKind, u32>,
     pub applied_effects: Vec<EntryReplacementEffectId>,

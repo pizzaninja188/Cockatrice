@@ -23,6 +23,11 @@ impl GameEngine {
         {
             labels.push("Loses all abilities".to_string());
         }
+        if let Some((_, _, land_type)) =
+            super::characteristics::basic_land_type_setting(&self.state, oid)
+        {
+            labels.push(format!("Chosen basic land type: {}", land_type.as_str()));
+        }
         labels.extend(
             characteristics
                 .zip(face)
