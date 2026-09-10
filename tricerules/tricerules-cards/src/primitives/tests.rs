@@ -935,6 +935,57 @@ fn unrestricted_ability_and_all_nonspell_permissions_are_distinct_and_canonical(
 }
 
 #[test]
+fn unrestricted_mana_can_carry_a_validated_spell_keyword_effect() {
+    let rule: ManaSpendingRestriction = ron::from_str(
+        r#"(
+            restriction_id: "restriction_01",
+            presentation: Fallback,
+            unrestricted: true,
+            spending_effects: [GrantKeywordsToSpellUntilEndOfTurn(
+                filter: (card_type: Some(Creature)),
+                keywords: [Haste],
+            )],
+        )"#,
+    )
+    .expect("typed mana spending effect");
+    assert!(rule.validate().is_ok());
+    assert_eq!(
+        rule.fallback_label(),
+        "Spend this mana on any cost; a creature spell paid with it gains Haste until end of turn"
+    );
+
+    for invalid in [
+        r#"(
+            restriction_id: "restriction_01",
+            presentation: Fallback,
+            unrestricted: true,
+            cast_spell: [(card_type: Some(Creature))],
+        )"#,
+        r#"(
+            restriction_id: "restriction_01",
+            presentation: Fallback,
+            unrestricted: true,
+            spending_effects: [GrantKeywordsToSpellUntilEndOfTurn(
+                filter: (card_type: Some(Creature)),
+                keywords: [],
+            )],
+        )"#,
+        r#"(
+            restriction_id: "restriction_01",
+            presentation: Fallback,
+            unrestricted: true,
+            spending_effects: [GrantKeywordsToSpellUntilEndOfTurn(
+                filter: (card_type: Some(Creature)),
+                keywords: [Haste, Haste],
+            )],
+        )"#,
+    ] {
+        let rule: ManaSpendingRestriction = ron::from_str(invalid).unwrap();
+        assert!(rule.validate().is_err(), "{invalid}");
+    }
+}
+
+#[test]
 fn firebending_uses_a_resolving_combat_retained_mana_effect() {
     let effect = SpellEffectKind::AddMana {
         amount: ManaAmount {

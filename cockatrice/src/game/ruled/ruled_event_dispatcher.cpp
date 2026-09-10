@@ -381,7 +381,7 @@ RuledAbilityEntry parseAbilityInfo(const ruled::v1::AbilityInfo &ability, const 
     return {ability.has_presentation() ? resolver.resolve(ability.presentation())
                                        : QString::fromStdString(ability.text()),
             QString::fromStdString(ability.mana_cost()), QString::fromStdString(ability.mana_produced()),
-            QString::fromStdString(ability.cost_label()), ability.activatable()};
+            QString::fromStdString(ability.cost_label()), ability.activatable(), ability.has_only_tap_cost()};
 }
 
 /// Copies the engine's structured hand-action contract into the generic client-side indexes.
@@ -1868,6 +1868,13 @@ void RuledEventDispatcher::applyManaPoolUpdated(const ruled::v1::ManaPoolUpdated
 
 void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &actions, BatchContext &ctx)
 {
+    if (actions.has_pending_spell_cast()) {
+        state->pendingSpellCast = actions.pending_spell_cast();
+        if (actions.pending_spell_cast().resolution_time_offer())
+            state->clearPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast);
+    } else {
+        state->pendingSpellCast.reset();
+    }
     state->handActions = copyHandActions(actions, presentationResolver);
     QHash<quint64, RuledExilePlayPermissionGroup> permissionGroups;
     for (const auto &group : actions.exile_play_permission_groups()) {

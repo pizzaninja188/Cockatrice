@@ -289,7 +289,20 @@ template <typename PendingPayment>
 
 struct PendingRuledSpellCast
 {
+    enum class Stage
+    {
+        Announcing,
+        BeginPending,
+        Paying,
+        CommitPending,
+        CancelPending,
+    };
+
     bool hasConvoke = false;
+    Stage stage = Stage::Announcing;
+    quint64 engineTransactionId = 0;
+    quint32 reservedObjectId = 0;
+    bool resolutionTimeOffer = false;
 
     struct SelectedMode
     {

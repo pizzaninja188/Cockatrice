@@ -10,6 +10,7 @@ fn branch(index: u32, decision: ResolutionChoiceDecision) -> rv1::RuledCommand {
             decision: decision as i32,
             selected_branch_index: index,
             cast_spell: None,
+            spell_cast_announcement: None,
             chosen_combat_defender: None,
             payment: None,
             restricted_mana: Vec::new(),

@@ -612,7 +612,10 @@ impl GameEngine {
         let mut events = Vec::new();
         match decision {
             rv1::ResolutionChoiceDecision::Decline => {
-                if answer.cast_spell.is_some() || !answer.chosen_object_ids.is_empty() {
+                if answer.cast_spell.is_some()
+                    || answer.spell_cast_announcement.is_some()
+                    || !answer.chosen_object_ids.is_empty()
+                {
                     self.state.pending_resolution = Some(pending);
                     return Err(EngineError::Illegal(
                         "declining a cast cannot include an announcement",
@@ -656,6 +659,22 @@ impl GameEngine {
                 )));
             }
             rv1::ResolutionChoiceDecision::CastSpell => {
+                if answer.cast_spell.is_some() && answer.spell_cast_announcement.is_some() {
+                    self.state.pending_resolution = Some(pending);
+                    return Err(EngineError::Illegal(
+                        "accepting a cast requires exactly one spell announcement",
+                    ));
+                }
+                if let Some(announcement) = answer.spell_cast_announcement.as_ref() {
+                    let player = pending.deciding_player;
+                    self.state.pending_resolution = Some(pending);
+                    return self.begin_spell_cast(
+                        player,
+                        &rv1::BeginSpellCast {
+                            announcement: Some(announcement.clone()),
+                        },
+                    );
+                }
                 let Some(cast) = answer.cast_spell.as_ref() else {
                     self.state.pending_resolution = Some(pending);
                     return Err(EngineError::Illegal(
@@ -665,10 +684,7 @@ impl GameEngine {
                 let player = pending.deciding_player;
                 self.state.pending_resolution = Some(pending);
                 match self.cast_spell(player, cast) {
-                    Ok(batch) => {
-                        events.extend(batch.events);
-                        self.state.pending_resolution = None;
-                    }
+                    Ok(batch) => return Ok(batch),
                     Err(error) => return Err(error),
                 }
             }

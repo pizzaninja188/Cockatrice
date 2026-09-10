@@ -64,6 +64,7 @@ impl GameEngine {
         if decision != rv1::ResolutionChoiceDecision::Unspecified
             || !answer.chosen_object_ids.is_empty()
             || answer.cast_spell.is_some()
+            || answer.spell_cast_announcement.is_some()
         {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(

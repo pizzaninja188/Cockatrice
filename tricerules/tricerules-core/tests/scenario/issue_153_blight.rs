@@ -349,6 +349,9 @@ fn issue_153_copied_cinder_inherits_payment_without_blighting_again() {
         )
         .unwrap();
     let original = engine.state.stack.last().unwrap().clone();
+    engine
+        .apply_command(0, &pass())
+        .expect("pass priority to the Twincast player");
     let slot = hand_index_for_card(&engine, 1, "twincast");
     engine
         .apply_command(1, &cast_spell(slot, target_object(original.id)))
@@ -394,6 +397,9 @@ fn issue_153_wild_unraveling_requires_exactly_one_additional_payment() {
             .apply_command(0, &cast_spell(slot, target_player(1)))
             .unwrap();
         let target = engine.state.stack.last().unwrap().id;
+        engine
+            .apply_command(0, &pass())
+            .expect("pass priority to the Wild Unraveling player");
         let slot = hand_index_for_card(&engine, 1, "wild_unraveling");
         assert!(engine
             .apply_command(1, &cast_spell(slot, target_object(target)))

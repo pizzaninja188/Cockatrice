@@ -207,6 +207,7 @@ fn issue_149_permission_cost_and_identity_are_engine_authoritative() {
 
     let object_id = inject_card_into_hand(&mut engine, 0, "grizzly_bears");
     engine.state.players[0].hand.retain(|&id| id != object_id);
+    engine.state.players[0].exile.push(object_id);
     engine.state.objects.get_mut(&object_id).expect("card").zone = Zone::Exile;
     let generation = engine
         .state

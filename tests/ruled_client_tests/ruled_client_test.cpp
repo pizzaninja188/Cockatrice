@@ -3259,6 +3259,55 @@ TEST_F(RuledClientTest, SpellCopyInheritsTheOriginalPrinting)
     EXPECT_EQ(host.createdSyntheticCards[0].setName, QStringLiteral("lea"));
 }
 
+TEST_F(RuledClientTest, PendingSpellCastIsAuthoritativePerBatchState)
+{
+    ruled::v1::RuledEventBatch begun;
+    auto *pending = (*begun.mutable_legal_by_player())[kLocalPlayer].mutable_pending_spell_cast();
+    pending->set_transaction_id(81u);
+    pending->set_reserved_object_id(901u);
+    pending->set_locked_total_cost("{2}{R}");
+    pending->add_eligible_restricted_mana_group_ids(17u);
+    pending->mutable_announcement()->mutable_source()->set_hand_index(3u);
+    apply(begun);
+    ASSERT_TRUE(state->pendingSpellCast.has_value());
+    EXPECT_EQ(state->pendingSpellCast->transaction_id(), 81u);
+    EXPECT_EQ(state->pendingSpellCast->locked_total_cost(), "{2}{R}");
+    EXPECT_EQ(state->eligibleRestrictedManaForPendingCast(), QSet<quint32>({17u}));
+
+    ruled::v1::RuledEventBatch previewOnly;
+    previewOnly.add_events()->mutable_attackers_preview();
+    apply(previewOnly);
+    ASSERT_TRUE(state->pendingSpellCast.has_value())
+        << "a Servatrice-only preview without LegalActions must not retire engine state";
+
+    ruled::v1::RuledEventBatch completed;
+    (*completed.mutable_legal_by_player())[kLocalPlayer];
+    apply(completed);
+    EXPECT_FALSE(state->pendingSpellCast.has_value());
+}
+
+TEST(RuledPaymentTest, CommitSpellCastPreviewAndSubmissionCarryOnlyLockedTransactionPayment)
+{
+    RuledPayment payment;
+    payment.begin();
+    ruled::v1::RuledCommand commit;
+    commit.mutable_commit_spell_cast()->set_transaction_id(7001u);
+    auto request = payment.requestAction(commit);
+    ASSERT_TRUE(request.has_commit_spell_cast());
+    EXPECT_EQ(request.commit_spell_cast().transaction_id(), 7001u);
+
+    ruled::v1::PaymentPreview response;
+    response.set_transaction_id(request.transaction_id());
+    response.set_revision(request.revision());
+    response.set_valid(true);
+    ASSERT_TRUE(payment.apply(response));
+    ASSERT_TRUE(payment.payMana('R'));
+    payment.writePayment(commit);
+    EXPECT_EQ(commit.commit_spell_cast().transaction_id(), 7001u);
+    EXPECT_EQ(commit.commit_spell_cast().payment().mana().r(), 1u);
+    EXPECT_FALSE(commit.has_cast_spell());
+}
+
 TEST_F(RuledClientTest, PreparationStackUsesDatabaseIdentityInsteadOfInsetName)
 {
     host.presentationCards = readPresentationCards(R"(<cockatrice_carddatabase version="4"><cards>
@@ -3965,6 +4014,7 @@ TEST_F(RuledClientTest, AbilityDecodingPreservesSparseSlotsAndPresentationAcross
     ability.set_mana_produced("G");
     ability.set_cost_label("{1}, {T}");
     ability.set_activatable(true);
+    ability.set_has_only_tap_cost(true);
     *object->add_activated_abilities() = ability;
     auto *zone = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_ability_actions();
     zone->set_object_id(204);
@@ -3987,6 +4037,8 @@ TEST_F(RuledClientTest, AbilityDecodingPreservesSparseSlotsAndPresentationAcross
         EXPECT_EQ(entries[2]->manaCost, QStringLiteral("{1}"));
         EXPECT_EQ(entries[2]->manaProduced, QStringLiteral("G"));
         EXPECT_EQ(entries[2]->costLabel, QStringLiteral("{1}, {T}"));
+        EXPECT_TRUE(entries[2]->hasOnlyTapCost);
+        EXPECT_TRUE(entries[2]->usesDirectManaActivation());
         EXPECT_FALSE(state->abilityActivatable(oid, 0));
         EXPECT_TRUE(state->abilityActivatable(oid, 2));
     }
@@ -4135,7 +4187,8 @@ TEST_F(RuledClientTest, AbilityDiagnosticsDescribeEntriesAndDropExpiredPrivateOf
                                {"manaCost", "{1}"},
                                {"manaProduced", "G"},
                                {"costLabel", "{1}, {T}"},
-                               {"activatable", true}};
+                               {"activatable", true},
+                               {"hasOnlyTapCost", false}};
     EXPECT_EQ(entries[2].toObject(), expected);
     EXPECT_EQ(snapshot, state->diagnosticSnapshot());
 
@@ -7774,20 +7827,20 @@ When Spyglass Siren enters, create a Map token.</text></face>
 TEST(RuledPendingCastTest, SpecialCastSubmissionPreservesTheCompleteAnnouncement)
 {
     ruled::v1::RuledCommand proposal;
-    auto *cast = proposal.mutable_cast_spell();
-    cast->set_cast_method(ruled::v1::CAST_METHOD_MADNESS);
-    cast->set_casting_permission_id(123456);
-    cast->mutable_source()->set_exile_object_id(70);
-    cast->mutable_source()->set_expected_zone_change_generation(6);
-    cast->add_targets()->set_object_id(12);
-    cast->mutable_payment()->set_expected_state_revision(987);
+    auto *announcement = proposal.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->set_cast_method(ruled::v1::CAST_METHOD_MADNESS);
+    announcement->set_casting_permission_id(123456);
+    announcement->mutable_source()->set_exile_object_id(70);
+    announcement->mutable_source()->set_expected_zone_change_generation(6);
+    announcement->add_targets()->set_object_id(12);
     auto submitted = RuledPendingCast::submissionCommand(proposal);
     ASSERT_TRUE(submitted.has_submit_resolution_choice());
     EXPECT_EQ(submitted.submit_resolution_choice().decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_SPELL);
-    EXPECT_EQ(submitted.submit_resolution_choice().cast_spell().SerializeAsString(), cast->SerializeAsString());
-    EXPECT_TRUE(proposal.has_cast_spell());
-    cast->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
-    EXPECT_TRUE(RuledPendingCast::submissionCommand(proposal).has_cast_spell());
+    EXPECT_EQ(submitted.submit_resolution_choice().spell_cast_announcement().SerializeAsString(),
+              announcement->SerializeAsString());
+    EXPECT_TRUE(proposal.has_begin_spell_cast());
+    announcement->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    EXPECT_TRUE(RuledPendingCast::submissionCommand(proposal).has_begin_spell_cast());
 }
 
 TEST_F(RuledClientTest, PaymentReconciliationRebindsHandCostsAndRejectsMissingCards)

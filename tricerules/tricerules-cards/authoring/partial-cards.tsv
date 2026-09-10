@@ -2,7 +2,6 @@
 rooftop_percher	Target selection incorrectly requires a single graveyard; Oracle permits cards from graveyards.
 sorcerer_of_the_fang	Activated ability omits the tap cost and incorrectly limits planeswalker targets to opponents' planeswalkers.
 soul-shackled_zombie	The conditional opponent life loss is implemented as damage rather than loss of life.
-sunderflock	Cost locking across mana abilities during casting payment requires an engine-owned casting transaction; current payment previews are read-only and recompute the cost on submission (#239).
 anti-venom,_horrifying_healer	Cast-conditioned ETB creature reanimation trigger is not implemented
 cackling_counterpart	Copy-with-modifications remain unsupported.
 firdoch_core	{4}: Firdoch Core becomes a 4/4 Shapeshifter artifact creature until end of turn is unsupported

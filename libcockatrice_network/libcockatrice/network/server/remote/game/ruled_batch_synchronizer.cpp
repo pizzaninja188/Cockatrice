@@ -266,100 +266,171 @@ void RuledBatchSynchronizer::setPriorityPlayer(int playerId)
     ruledPriorityPlayer = playerId;
 }
 
-void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId, const ruled::v1::RuledCommand &ruledCmd)
+void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
+                                                         const ruled::v1::RuledCommand &ruledCmd,
+                                                         const ruled::v1::IpcResponse &response)
 {
-    if (Server_AbstractPlayer *cmdPlayer = game->getPlayer(playerId)) {
-        Server_CardZone *handZone = cmdPlayer->getZones().value(ZoneNames::HAND);
-        if (ruledCmd.has_cast_spell() ||
-            (ruledCmd.has_submit_resolution_choice() && ruledCmd.submit_resolution_choice().has_cast_spell())) {
-            const auto &acceptedCast =
-                ruledCmd.has_cast_spell() ? ruledCmd.cast_spell() : ruledCmd.submit_resolution_choice().cast_spell();
-            // Route all spells to the canonical (lowest player-id) stack zone so every
-            // client's stack window shows the complete stack without a split view.
-            // Resolution uses ruledStackObjectIdToCasterPlayerId to send the card to the
-            // correct destination zone regardless of which physical zone it sat in.
-            Server_CardZone *stackZone = ruledCanonicalStackZone(game);
-            // CR 702.34: a flashback cast comes from the caster's graveyard, and
-            // hand_card_index indexes that zone instead. Sourcing it from the hand would move
-            // an unrelated hand card to the stack — and that card, not the flashback spell,
-            // would then be the one exiled on resolution.
-            //
-            // The index cannot be used against the physical graveyard pile directly: the
-            // engine's graveyard is oldest-first while the Cockatrice pile is newest-first, so
-            // the binding resolves the engine slot to the real card.
-            const auto &source = acceptedCast.source();
-            Server_CardZone *sourceZone = nullptr;
-            Server_Card *card = nullptr;
-            QString sourceLabel = QStringLiteral("missing");
-            if (source.location_case() == ruled::v1::CastSource::kHandIndex) {
-                const int handIndex = static_cast<int>(source.hand_index());
-                sourceZone = handZone;
-                sourceLabel = QStringLiteral("hand:%1").arg(handIndex);
-                card = playerBinding(playerId).findHandCardByEngineIndex(static_cast<Server_Player *>(cmdPlayer),
-                                                                         handIndex);
-            } else if (source.location_case() == ruled::v1::CastSource::kGraveyardObjectId ||
-                       source.location_case() == ruled::v1::CastSource::kExileObjectId) {
-                const bool fromGraveyard = source.location_case() == ruled::v1::CastSource::kGraveyardObjectId;
-                const quint32 oid =
-                    static_cast<quint32>(fromGraveyard ? source.graveyard_object_id() : source.exile_object_id());
-                sourceLabel = QStringLiteral("%1:%2")
-                                  .arg(fromGraveyard ? QStringLiteral("graveyard") : QStringLiteral("exile"))
-                                  .arg(oid);
-                for (Server_AbstractPlayer *candidate : game->getPlayers()) {
-                    auto *owner = dynamic_cast<Server_Player *>(candidate);
-                    if (!owner) {
-                        continue;
-                    }
-                    if (!fromGraveyard && playerBinding(owner->getPlayerId()).preparationCopyServerCardIds.contains(oid)) {
-                        // The engine will publish a synthetic stack copy. Its exile display is
-                        // retired by the next full copy snapshot, never moved as a physical card.
-                        break;
-                    }
-                    card = fromGraveyard ? playerBinding(owner->getPlayerId()).findGraveyardCardByEngineOid(owner, oid)
-                                         : playerBinding(owner->getPlayerId()).findExileCardByEngineOid(owner, oid);
-                    if (card) {
-                        sourceZone = owner->getZones().value(fromGraveyard ? ZoneNames::GRAVE : ZoneNames::EXILE);
-                        break;
-                    }
-                }
+    Server_AbstractPlayer *cmdPlayer = game->getPlayer(playerId);
+    if (!cmdPlayer) {
+        return;
+    }
+
+    if (ruledCmd.has_cancel_spell_cast()) {
+        const quint64 transactionId = ruledCmd.cancel_spell_cast().transaction_id();
+        const auto pendingIt = std::find_if(
+            ruledPendingCastVisualQueue.begin(), ruledPendingCastVisualQueue.end(),
+            [playerId, transactionId](const PendingRuledCastVisual &entry) {
+                return entry.casterPlayerId == playerId && entry.transactionId == transactionId;
+            });
+        if (pendingIt == ruledPendingCastVisualQueue.end()) {
+            return;
+        }
+        Server_AbstractPlayer *sourcePlayer = game->getPlayer(pendingIt->sourcePlayerId);
+        Server_CardZone *sourceZone =
+            sourcePlayer ? sourcePlayer->getZones().value(pendingIt->sourceZoneName) : nullptr;
+        Server_CardZone *stackZone = ruledCanonicalStackZone(game);
+        Server_Card *card = nullptr;
+        if (stackZone) {
+            const auto cardIt = std::find_if(stackZone->getCards().begin(), stackZone->getCards().end(),
+                                             [&pendingIt](const Server_Card *candidate) {
+                                                 return candidate && candidate->getId() == pendingIt->serverCardId;
+                                             });
+            if (cardIt != stackZone->getCards().end()) {
+                card = *cardIt;
             }
-            RULED_TRACE("relay") << "cast source=" << sourceLabel
-                                 << " sourceZone=" << (sourceZone ? sourceZone->getName() : QStringLiteral("<null>"))
-                                 << " sourceZoneSize=" << (sourceZone ? sourceZone->getCards().size() : -1)
-                                 << " resolvedCard=" << (card ? card->getName() : QStringLiteral("<none>"))
-                                 << " serverCardId=" << (card ? card->getId() : -1);
-            if (sourceZone && stackZone && card) {
-                const int faceIndex = static_cast<int>(acceptedCast.face_index());
-                if (faceIndex > 0) {
-                    const QString cardId = cardIdForName(card->getName());
-                    const QString activeName = faceDisplayName(cardId, faceIndex);
-                    if (!activeName.isEmpty() && activeName != card->getName()) {
-                        card->setCardRef(CardRef{activeName});
-                    }
+        }
+        if (sourceZone && stackZone && card) {
+            card->setCardRef(pendingIt->sourceCardRef);
+            CardToMove cardToMove;
+            cardToMove.set_card_id(card->getId());
+            GameEventStorage moveGes;
+            const int targetX = sourceZone->hasCoords() ? pendingIt->sourceX : pendingIt->sourcePosition;
+            if (ruledApplyMove(cmdPlayer, moveGes, stackZone, sourceZone, cardToMove, targetX, pendingIt->sourceY,
+                               "cancelCast")) {
+                moveGes.sendToGame(game);
+            }
+        }
+        ruledPendingCastVisualQueue.erase(pendingIt);
+        return;
+    }
+
+    quint64 transactionId = 0;
+    quint32 reservedObjectId = 0;
+    if (response.has_batch()) {
+        const auto legalIt = response.batch().legal_by_player().find(playerId);
+        if (legalIt != response.batch().legal_by_player().end() && legalIt->second.has_pending_spell_cast()) {
+            transactionId = static_cast<quint64>(legalIt->second.pending_spell_cast().transaction_id());
+            reservedObjectId = static_cast<quint32>(legalIt->second.pending_spell_cast().reserved_object_id());
+        }
+    }
+
+    // Transitional support for recorded atomic commands remains until every in-tree replay and
+    // caller is migrated. New casts must have an authoritative pending transaction in the reply.
+    const bool legacyAtomic = ruledCmd.has_cast_spell() ||
+                              (ruledCmd.has_submit_resolution_choice() &&
+                               ruledCmd.submit_resolution_choice().has_cast_spell());
+    if (transactionId == 0 && !legacyAtomic) {
+        return;
+    }
+
+    const auto applyBegin = [&](const auto &acceptedCast) {
+        // Route all spells to the canonical (lowest player-id) stack zone so every client's stack
+        // window shows one stack. Commit later binds this same physical card to StackPushed.
+        Server_CardZone *stackZone = ruledCanonicalStackZone(game);
+        Server_CardZone *sourceZone = nullptr;
+        Server_Card *card = nullptr;
+        QString sourceLabel = QStringLiteral("missing");
+        const auto &source = acceptedCast.source();
+        if (source.location_case() == ruled::v1::CastSource::kHandIndex) {
+            const int handIndex = static_cast<int>(source.hand_index());
+            sourceZone = cmdPlayer->getZones().value(ZoneNames::HAND);
+            sourceLabel = QStringLiteral("hand:%1").arg(handIndex);
+            card = playerBinding(playerId).findHandCardByEngineIndex(static_cast<Server_Player *>(cmdPlayer), handIndex);
+        } else if (source.location_case() == ruled::v1::CastSource::kGraveyardObjectId ||
+                   source.location_case() == ruled::v1::CastSource::kExileObjectId) {
+            const bool fromGraveyard = source.location_case() == ruled::v1::CastSource::kGraveyardObjectId;
+            const quint32 oid =
+                static_cast<quint32>(fromGraveyard ? source.graveyard_object_id() : source.exile_object_id());
+            sourceLabel = QStringLiteral("%1:%2")
+                              .arg(fromGraveyard ? QStringLiteral("graveyard") : QStringLiteral("exile"))
+                              .arg(oid);
+            for (Server_AbstractPlayer *candidate : game->getPlayers()) {
+                auto *owner = dynamic_cast<Server_Player *>(candidate);
+                if (!owner) {
+                    continue;
                 }
-                PendingRuledCastVisual pending;
-                pending.cardName = card ? card->getName() : QString();
-                pending.serverCardId = card ? card->getId() : -1;
-                pending.casterPlayerId = playerId;
-                for (int ti = 0; ti < acceptedCast.targets_size(); ++ti) {
-                    pending.targetOids.append(static_cast<quint32>(acceptedCast.targets(ti).object_id()));
+                if (!fromGraveyard && playerBinding(owner->getPlayerId()).preparationCopyServerCardIds.contains(oid)) {
+                    // Preparation casts publish a synthetic stack copy. Never move its exile
+                    // presentation as though it were a physical source card.
+                    break;
                 }
-                // Modal targets are grouped on the atomic command for rules resolution, but
-                // Cockatrice's visual arrow/binding layer consumes one flat target list.
-                for (const auto &mode : acceptedCast.selected_modes()) {
-                    for (const auto &target : mode.targets()) {
-                        pending.targetOids.append(static_cast<quint32>(target.object_id()));
-                    }
-                }
-                ruledPendingCastVisualQueue.append(pending);
-                CardToMove cardToMove;
-                cardToMove.set_card_id(card->getId());
-                GameEventStorage moveGes;
-                if (ruledApplyMove(cmdPlayer, moveGes, sourceZone, stackZone, cardToMove, -1, 0, "cast")) {
-                    moveGes.sendToGame(game);
+                card = fromGraveyard ? playerBinding(owner->getPlayerId()).findGraveyardCardByEngineOid(owner, oid)
+                                     : playerBinding(owner->getPlayerId()).findExileCardByEngineOid(owner, oid);
+                if (card) {
+                    sourceZone = owner->getZones().value(fromGraveyard ? ZoneNames::GRAVE : ZoneNames::EXILE);
+                    break;
                 }
             }
         }
+        RULED_TRACE("relay") << "cast source=" << sourceLabel
+                             << " sourceZone=" << (sourceZone ? sourceZone->getName() : QStringLiteral("<null>"))
+                             << " sourceZoneSize=" << (sourceZone ? sourceZone->getCards().size() : -1)
+                             << " resolvedCard=" << (card ? card->getName() : QStringLiteral("<none>"))
+                             << " serverCardId=" << (card ? card->getId() : -1)
+                             << " transactionId=" << transactionId << " reservedOid=" << reservedObjectId;
+        if (!sourceZone || !stackZone || !card) {
+            return;
+        }
+
+        PendingRuledCastVisual pending;
+        pending.transactionId = transactionId;
+        pending.reservedObjectId = reservedObjectId;
+        pending.serverCardId = card->getId();
+        pending.casterPlayerId = playerId;
+        pending.sourcePlayerId = sourceZone->getPlayer()->getPlayerId();
+        pending.sourceZoneName = sourceZone->getName();
+        pending.sourcePosition = sourceZone->getCards().indexOf(card);
+        pending.sourceX = card->getX();
+        pending.sourceY = card->getY();
+        pending.sourceCardRef = card->getCardRef();
+        const int faceIndex = static_cast<int>(acceptedCast.face_index());
+        if (faceIndex > 0) {
+            const QString cardId = cardIdForName(card->getName());
+            const QString activeName = faceDisplayName(cardId, faceIndex);
+            if (!activeName.isEmpty() && activeName != card->getName()) {
+                card->setCardRef(CardRef{activeName});
+            }
+        }
+        pending.cardName = card->getName();
+        for (const auto &target : acceptedCast.targets()) {
+            pending.targetOids.append(static_cast<quint32>(target.object_id()));
+        }
+        for (const auto &mode : acceptedCast.selected_modes()) {
+            for (const auto &target : mode.targets()) {
+                pending.targetOids.append(static_cast<quint32>(target.object_id()));
+            }
+        }
+
+        CardToMove cardToMove;
+        cardToMove.set_card_id(card->getId());
+        GameEventStorage moveGes;
+        if (ruledApplyMove(cmdPlayer, moveGes, sourceZone, stackZone, cardToMove, -1, 0, "beginCast")) {
+            ruledPendingCastVisualQueue.append(pending);
+            moveGes.sendToGame(game);
+        } else {
+            card->setCardRef(pending.sourceCardRef);
+        }
+    };
+
+    if (ruledCmd.has_begin_spell_cast()) {
+        applyBegin(ruledCmd.begin_spell_cast().announcement());
+    } else if (ruledCmd.has_submit_resolution_choice() &&
+               ruledCmd.submit_resolution_choice().has_spell_cast_announcement()) {
+        applyBegin(ruledCmd.submit_resolution_choice().spell_cast_announcement());
+    } else if (ruledCmd.has_cast_spell()) {
+        applyBegin(ruledCmd.cast_spell());
+    } else if (ruledCmd.has_submit_resolution_choice() && ruledCmd.submit_resolution_choice().has_cast_spell()) {
+        applyBegin(ruledCmd.submit_resolution_choice().cast_spell());
     }
 }
 

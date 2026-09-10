@@ -41,20 +41,22 @@ Reach it with `game->getGameEventHandler()->ruled()`.
 
 Holds: legal hand actions per `HandActionKind`, engine targeting tables (by hand slot/face and by
 ability), the identity maps (§ ARCHITECTURE identity glossary), combat staging and confirmed
-combat state, stack order and annotations, the single pending player choice, and the opening
-(choose-first / mulligan / bottom) state.
+combat state, stack order and annotations, the single pending player choice, the caster-private
+engine `PendingSpellCast`, and the opening (choose-first / mulligan / bottom) state.
 
 Members are public on purpose — this is a shared view model, and an accessor pair per field would
 be noise. The `[[nodiscard]]` query methods are the read API consumers should prefer.
 
 ### `ruled_pending_cast.{h,cpp}` — `RuledPendingCast`
 
-Owns the mutually exclusive local spell-cast / activated-ability transaction. The engine still
-owns legality: `LegalCostChoices` supplies discard hand slots or sacrifice ObjectIds, and a legal
-refresh reconciles staged selections. Hand selections are retained as stable `Server_Card.id`
-values and converted back to the latest engine hand slot only when the command is submitted.
-Starting one transaction cancels the other; a genuine engine-blocking choice removes the cast
-action and therefore cancels local staging. Freeform never enters this controller.
+Owns the mutually exclusive local spell-cast / activated-ability transaction. A spell progresses
+through `Announcing`, `BeginPending`, engine-authoritative `Paying`, `CommitPending`, or
+`CancelPending`. Modes, targets, X, and additional-cost objects are staged before
+`BeginSpellCast`; only the returned transaction id and locked cost may enter payment. A reconnect
+rebuilds `Paying` from the caster-private `PendingSpellCast` and the exact reserved stack object.
+The client never redetermines that cost. Hand selections are retained as stable `Server_Card.id`
+values and converted back to the latest engine hand slot only when the announcement is submitted.
+Starting one local transaction cancels the other. Freeform never enters this controller.
 
 Cost reconciliation and prompt calculations live in `ruled_pending_costs.cpp`, as methods of
 `RuledPendingCast`, and run in the headless client tests. Menu-only test targets can link the
@@ -77,11 +79,12 @@ Two writer groups, and they must not be confused:
 ### `ruled_payment.{h,cpp}` and `ruled_payment_ui.{h,cpp}`
 
 `RuledPayment` holds exact mana and object-contribution staging, correlates private preview
-replies, and allows one submission after an authoritative complete preview. `RuledPaymentUi`
-adapts that model to spell casts, activated abilities, permanent actions, and parked resolution
-payments. It owns object highlights, mana contribution clicks, and nested suspension around mana
-abilities. Rust supplies all candidates and remaining costs; previews never tap cards or spend
-mana. See
+replies, and allows one submission after an authoritative complete preview. Spell previews carry
+`CommitSpellCast { transaction_id }`, so Rust validates the proposed payment against the locked
+engine transaction without accepting a client-supplied total. `RuledPaymentUi` adapts that model
+to spell casts, activated abilities, permanent actions, and parked resolution payments. It owns
+object highlights, mana contribution clicks, engine cancellation, and nested suspension around
+mana abilities. Previews never tap cards or spend mana. See
 [Waterbend acceptance](../../../../docs/ISSUE-146-WATERBEND.md).
 
 `ruled_payment_progression.cpp` implements the same `RuledPaymentUi` bridge's cast/activation

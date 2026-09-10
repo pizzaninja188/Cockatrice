@@ -113,6 +113,7 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     FIELD(waterbendAbilities);
     FIELD(restrictedManaByPlayer);
 #undef FIELD
+    result.insert("pendingSpellCast", value(pendingSpellCast));
     result.insert("lastEnginePhaseId", QString::fromStdString(ruled::v1::PhaseId_Name(lastEnginePhaseId)));
     const char *combat[] = {
         "None", "DeclareAttackers", "DeclareBlockers", "AssignCombatDamage", "FirstStrikeDamage", "CombatDamage"};
@@ -303,7 +304,8 @@ QJsonValue value(const RuledAbilityEntry &v)
                        {"manaCost", value(v.manaCost)},
                        {"manaProduced", value(v.manaProduced)},
                        {"costLabel", value(v.costLabel)},
-                       {"activatable", value(v.activatable)}};
+                       {"activatable", value(v.activatable)},
+                       {"hasOnlyTapCost", value(v.hasOnlyTapCost)}};
 }
 QJsonValue value(const RuledPermanentAction &v)
 {
@@ -554,6 +556,28 @@ QJsonValue value(const PendingRuledSpellCast::SelectedMode &v)
 QJsonValue value(const PendingRuledSpellCast &v)
 {
     QJsonObject result;
+    const char *stage = "Unknown";
+    switch (v.stage) {
+        case PendingRuledSpellCast::Stage::Announcing:
+            stage = "Announcing";
+            break;
+        case PendingRuledSpellCast::Stage::BeginPending:
+            stage = "BeginPending";
+            break;
+        case PendingRuledSpellCast::Stage::Paying:
+            stage = "Paying";
+            break;
+        case PendingRuledSpellCast::Stage::CommitPending:
+            stage = "CommitPending";
+            break;
+        case PendingRuledSpellCast::Stage::CancelPending:
+            stage = "CancelPending";
+            break;
+    }
+    result.insert("stage", stage);
+    result.insert("engineTransactionId", value(v.engineTransactionId));
+    result.insert("reservedObjectId", value(v.reservedObjectId));
+    result.insert("resolutionTimeOffer", value(v.resolutionTimeOffer));
     result.insert("hasConvoke", value(v.hasConvoke));
     result.insert("handIndex", value(v.handIndex));
     result.insert("source", value(v.source));

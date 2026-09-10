@@ -261,14 +261,14 @@ std::optional<QVector<int>> RuledPendingCast::chooseModes(QWidget *parent,
 
 ruled::v1::RuledCommand RuledPendingCast::submissionCommand(const ruled::v1::RuledCommand &command)
 {
-    if (!command.has_cast_spell() ||
-        (command.cast_spell().cast_method() != ruled::v1::CAST_METHOD_MADNESS &&
-         command.cast_spell().cast_method() != ruled::v1::CAST_METHOD_SIEGE_DEFEAT))
+    if (!command.has_begin_spell_cast() || !command.begin_spell_cast().has_announcement() ||
+        (command.begin_spell_cast().announcement().cast_method() != ruled::v1::CAST_METHOD_MADNESS &&
+         command.begin_spell_cast().announcement().cast_method() != ruled::v1::CAST_METHOD_SIEGE_DEFEAT))
         return command;
     ruled::v1::RuledCommand result;
     auto *choice = result.mutable_submit_resolution_choice();
     choice->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_CAST_SPELL);
-    *choice->mutable_cast_spell() = command.cast_spell();
+    *choice->mutable_spell_cast_announcement() = command.begin_spell_cast().announcement();
     return result;
 }
 
@@ -285,5 +285,8 @@ bool RuledPendingCast::matchesSpecialCastOffer(const PendingRuledSpellCast &spel
 
 bool RuledPendingCast::resolutionChoiceBlocksSpell(const RuledClientState &state) const
 {
+    if (spell.engineTransactionId != 0 && state.pendingSpellCast &&
+        state.pendingSpellCast->transaction_id() == spell.engineTransactionId)
+        return false;
     return state.choiceWaitingPlayerId >= 0 || (state.pendingChoice && !matchesSpecialCastOffer(spell, state));
 }

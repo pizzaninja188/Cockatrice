@@ -25,6 +25,17 @@ public:
     std::set<quint64> ruledCmdIds;
     std::vector<ServerInfo_Game> announcedGames;
 
+    struct LegacyCastCommit
+    {
+        bool hasPayment = false;
+        ruled::v1::PaymentSelection payment;
+        std::vector<ruled::v1::ManaSpendSelection> restrictedMana;
+    };
+    std::optional<LegacyCastCommit> legacyCastCommit;
+    bool translatedCastCommitInFlight = false;
+    bool sendingTranslatedCastCommit = false;
+    std::vector<std::pair<ruled::v1::RuledCommand, QString>> commandsAfterTranslatedCast;
+
     void log(const QString &line);
     bool connectToServer();
     void writeFrame(const std::string &bytes);
@@ -54,6 +65,8 @@ public:
     }
     void handleGameEventContainer(const GameEventContainer &cont);
     void applyRuledBatch(const ruled::v1::RuledEventBatch &batch);
+    void commitTranslatedLegacyCast(const ruled::v1::RuledEventBatch &batch);
+    void releaseCommandsAfterTranslatedCast(const ruled::v1::RuledEventBatch &batch);
     // Called synchronously after each observation is decoded, before the next wire event.
     virtual void onResponse(const Response &)
     {

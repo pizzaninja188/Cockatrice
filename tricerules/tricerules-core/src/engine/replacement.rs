@@ -1368,6 +1368,30 @@ impl GameEngine {
         event: BattlefieldEntryEvent,
         attached_to: Option<AttachmentRecipient>,
     ) -> Result<Vec<GameEvent>, EngineError> {
+        // CR 400.7a: the marked characteristic-changing mana effects on a permanent spell
+        // continue to apply to the permanent it becomes. Do not carry unrelated stack effects.
+        let carries_spell_effects = self
+            .state
+            .objects
+            .get(&event.object_id)
+            .is_some_and(|object| object.zone == Zone::Stack)
+            && self
+                .state
+                .spell_effects_carry_to_permanent
+                .contains(&event.object_id);
+        let spell_effects = if carries_spell_effects {
+            self.state
+                .continuous_effects
+                .iter()
+                .filter(|effect| {
+                    matches!(effect.affected, AffectedScope::Single(id) if id == event.object_id)
+                        && matches!(effect.kind, ContinuousEffectKind::Layer6AddKeyword(_))
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
         let zone_snapshot = self.snapshot_zone_event();
         let is_battle = self.battlefield_entry_is_battle(&event);
         if is_battle
@@ -1416,6 +1440,7 @@ impl GameEngine {
             Zone::Battlefield,
             Some(event.destination_controller),
         )?;
+        self.state.continuous_effects.extend(spell_effects);
         if let Some(caster) = event.cast_by {
             self.state.cast_entry_facts.insert(
                 event.object_id,
@@ -2213,6 +2238,7 @@ impl GameEngine {
             || answer.payment.is_some()
             || !answer.restricted_mana.is_empty()
             || answer.cast_spell.is_some()
+            || answer.spell_cast_announcement.is_some()
             || answer.chosen_combat_defender.is_some()
         {
             return restore(
@@ -2289,6 +2315,7 @@ impl GameEngine {
             || answer.payment.is_some()
             || !answer.restricted_mana.is_empty()
             || answer.cast_spell.is_some()
+            || answer.spell_cast_announcement.is_some()
             || answer.chosen_combat_defender.is_some()
             || !matches!(
                 decision,
@@ -2387,6 +2414,7 @@ impl GameEngine {
             || answer.payment.is_some()
             || !answer.restricted_mana.is_empty()
             || answer.cast_spell.is_some()
+            || answer.spell_cast_announcement.is_some()
             || answer.chosen_combat_defender.is_some()
         {
             return restore(

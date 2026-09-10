@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-09. CR 106.6 and 106.6a attach the additional effect to
+// each produced mana; CR 400.7a carries the spell's haste effect to the resulting permanent.
+(
+  id: "generator_servant",
+  name: "Generator Servant",
+  face_id: "generator_servant",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Elemental"],
+  power: 2,
+  toughness: 1,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap, SacrificeSelf],
+    effect: [ProduceMana(
+      options: [(c: 2)],
+      restriction: Some((
+        restriction_id: "restriction_01",
+        presentation: OracleLines([1]),
+        unrestricted: true,
+        spending_effects: [GrantKeywordsToSpellUntilEndOfTurn(
+          filter: (card_type: Some(Creature)),
+          keywords: [Haste],
+        )],
+      )),
+    )],
+  )],
+)

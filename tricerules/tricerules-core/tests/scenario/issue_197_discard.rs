@@ -235,6 +235,101 @@ fn accept_madness(cast: rv1::CastSpell) -> rv1::RuledCommand {
     }
 }
 
+fn accept_madness_transaction(cast: rv1::CastSpell) -> rv1::RuledCommand {
+    rv1::RuledCommand {
+        cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+            rv1::SubmitResolutionChoice {
+                decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
+                spell_cast_announcement: Some(rv1::SpellCastAnnouncement {
+                    targets: cast.targets,
+                    x_value: cast.x_value,
+                    flex_payments: cast.flex_payments,
+                    face_index: cast.face_index,
+                    selected_modes: cast.selected_modes,
+                    source: cast.source,
+                    cost_selections: cast.cost_selections,
+                    cast_cost_group_selections: cast.cast_cost_group_selections,
+                    cast_method: cast.cast_method,
+                    casting_permission_id: cast.casting_permission_id,
+                }),
+                ..Default::default()
+            },
+        )),
+    }
+}
+
+#[test]
+fn issue_239_madness_cast_transaction_can_cancel_retry_pay_and_commit() {
+    let (mut e, fiery, _) = madness_offer("fiery_temper");
+    let mountain = relocate_to_battlefield(&mut e, 1, "mountain", false);
+    let cast = offered_cast(&e, fiery, target_player(0));
+    let announcement = accept_madness_transaction(cast.clone());
+
+    e.apply_command(1, &announcement)
+        .expect("begin Madness cast");
+    let pending = e.state.pending_spell_cast.as_ref().unwrap();
+    assert!(pending.resolution_time_offer);
+    assert!(e.state.pending_resolution.is_some());
+    assert_eq!(e.state.objects[&fiery].zone, tricerules_core::Zone::Stack);
+    let first_transaction = pending.transaction_id;
+    e.apply_command(
+        1,
+        &rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::CancelSpellCast(
+                rv1::CancelSpellCast {
+                    transaction_id: first_transaction,
+                },
+            )),
+        },
+    )
+    .expect("cancel restores the Madness offer");
+    assert!(e.state.pending_spell_cast.is_none());
+    assert!(e.state.pending_resolution.is_some());
+    assert_eq!(e.state.objects[&fiery].zone, tricerules_core::Zone::Exile);
+
+    e.apply_command(1, &announcement)
+        .expect("retry Madness cast");
+    let transaction_id = e.state.pending_spell_cast.as_ref().unwrap().transaction_id;
+    apply_ability(&mut e, 1, mountain, 0, vec![]).expect("float mana during special cast");
+    let preview = e.preview_payment(
+        1,
+        &rv1::PreviewPayment {
+            transaction_id,
+            revision: 1,
+            commit_spell_cast: Some(rv1::CommitSpellCast {
+                transaction_id,
+                payment: Some(rv1::PaymentSelection {
+                    mana: Some(rv1::PaymentMana {
+                        r: 1,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    assert!(preview.valid && preview.complete, "{preview:?}");
+    e.apply_command(
+        1,
+        &rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::CommitSpellCast(
+                rv1::CommitSpellCast {
+                    transaction_id,
+                    payment: preview.selection,
+                    restricted_mana: preview.restricted_mana,
+                },
+            )),
+        },
+    )
+    .expect("commit Madness cast");
+    assert!(e.state.pending_spell_cast.is_none());
+    assert!(e.state.pending_resolution.is_none());
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.players[0].life, 17);
+}
+
 #[test]
 fn issue_197_madness_publishes_recipient_scoped_targets_and_allows_mana_and_retry() {
     let (mut e, fiery, batch) = madness_offer("fiery_temper");
@@ -248,13 +343,13 @@ fn issue_197_madness_publishes_recipient_scoped_targets_and_allows_mana_and_retr
     assert!(batch.legal_by_player[&0].zone_cast_actions.is_empty());
     assert!(e.state.active_exile_play_permissions.is_empty());
     let cast = offered_cast(&e, fiery, target_player(0));
-    let before = format!("{:?}", e.state);
+    let before = serde_json::to_value(&e.state).unwrap();
     assert!(e.apply_command(0, &accept_madness(cast.clone())).is_err());
     assert!(
         e.apply_command(1, &accept_madness(cast.clone())).is_err(),
         "cannot pay yet"
     );
-    assert_eq!(format!("{:?}", e.state), before);
+    assert_eq!(serde_json::to_value(&e.state).unwrap(), before);
     let mountain = relocate_to_battlefield(&mut e, 1, "mountain", false);
     let batch = apply_ability(&mut e, 1, mountain, 0, vec![]).unwrap();
     assert_eq!(e.state.players[1].mana_pool.red, 1);

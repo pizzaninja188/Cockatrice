@@ -28,6 +28,7 @@ fn payment_sacrifice_events(snapshots: Vec<SacrificeSnapshot>) -> impl Iterator<
     })
 }
 
+#[derive(Clone)]
 pub(super) enum CostDebit {
     Objects(PlannedObjectPayment),
     Waterbend,
@@ -100,6 +101,7 @@ pub(super) enum CostDebit {
     },
 }
 
+#[derive(Clone)]
 pub(super) enum CounterDebitSource {
     Source,
     SelectedPermanent {
@@ -214,6 +216,7 @@ enum CostPurpose {
     Resolution,
 }
 
+#[derive(Clone)]
 pub(in crate::engine) struct CostTransactionPlan {
     purpose: CostPurpose,
     player: PlayerId,
@@ -222,6 +225,7 @@ pub(in crate::engine) struct CostTransactionPlan {
     cast_cost_receipts: Vec<CastCostReceipt>,
 }
 
+#[derive(Clone)]
 pub(in crate::engine) struct PreparedPaymentCosts {
     pub waterbend_limit: Option<u32>,
     pub transaction: CostTransactionPlan,
@@ -235,6 +239,20 @@ pub(in crate::engine) struct PreparedPaymentCosts {
 }
 
 impl PreparedPaymentCosts {
+    pub(in crate::engine) fn total_cost_label(&self) -> Result<String, EngineError> {
+        Ok(super::demand::normalize(
+            &self.mana,
+            self.x_value,
+            self.extra_generic,
+            self.generic_reduction,
+            &self.flex_payments,
+        )?
+        .iter()
+        .map(super::demand::Demand::label)
+        .collect::<Vec<_>>()
+        .join(" or "))
+    }
+
     pub fn can_convoke(&self, oid: ObjectId) -> bool {
         !self.transaction.debits.iter().any(|d| match d {
             CostDebit::Tap { object_id, .. } => *object_id == oid,

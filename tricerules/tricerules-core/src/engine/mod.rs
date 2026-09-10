@@ -611,6 +611,7 @@ enum TargetingSourceKind {
     Ability,
 }
 
+#[derive(Clone)]
 enum GameEvent {
     Discarded(crate::state::DiscardReceipt),
     Waterbent {
@@ -778,6 +779,7 @@ fn sacrifice_events(
 
 pub struct GameEngine {
     pub state: GameState,
+    pending_spell_cast_internal: Option<casting::PendingSpellCastInternal>,
     /// Shared process-wide registry (`CardRegistry::global()`); read-only.
     registry: &'static CardRegistry,
     /// Debug-only: whether this session accepts `DevCommand` (see `engine::dev`). Off unless the
@@ -1219,6 +1221,8 @@ impl GameEngine {
             turn_instance: 1,
             next_object_id,
             command_index: 0,
+            next_spell_cast_transaction_id: 1,
+            pending_spell_cast: None,
             passes_since_stack_change: 0,
             lands_played_this_turn: 0,
             activation_uses_this_turn: HashMap::new(),
@@ -1249,6 +1253,7 @@ impl GameEngine {
             pending_resolution: None,
             pending_replacement_event: None,
             continuous_effects: Vec::new(),
+            spell_effects_carry_to_permanent: HashSet::new(),
             static_emblems: Vec::new(),
             skip_next_untap: HashSet::new(),
             damage_prevention_effects: Vec::new(),
@@ -1263,6 +1268,7 @@ impl GameEngine {
         };
         let mut eng = GameEngine {
             state,
+            pending_spell_cast_internal: None,
             registry,
             dev_commands_enabled: false,
             private_zone_cache: HashMap::new(),
@@ -1761,7 +1767,9 @@ impl GameEngine {
         // reaching a flush point, which would silently swallow them — fail loudly in debug instead
         // of shipping a game that quietly drops abilities.
         debug_assert!(
-            self.state.staged_trigger_groups.is_empty() || self.state.blocking_choice().is_some(),
+            self.state.staged_trigger_groups.is_empty()
+                || self.state.blocking_choice().is_some()
+                || self.state.pending_spell_cast.is_some(),
             "triggers left staged with nothing blocking them"
         );
         result
@@ -1872,6 +1880,7 @@ impl GameEngine {
         if self.state.winner.is_some()
             || self.state.opening.is_some()
             || self.state.blocking_choice().is_some()
+            || self.state.pending_spell_cast.is_some()
             || !self.state.stack.is_empty()
             || self.state.cleanup_discard_player.is_some()
         {
@@ -2005,6 +2014,23 @@ impl GameEngine {
         if self.state.opening.is_some() {
             return self.apply_opening_command(player, cmd);
         }
+        if let Some(pending) = self.state.pending_spell_cast.as_ref() {
+            let allowed = pending.caster == player
+                && matches!(
+                    cmd.cmd.as_ref(),
+                    Some(
+                        Cmd::ActivateAbility(_)
+                            | Cmd::UndoManaAbility(_)
+                            | Cmd::CommitSpellCast(_)
+                            | Cmd::CancelSpellCast(_)
+                    )
+                );
+            if !allowed {
+                return Err(EngineError::Illegal(
+                    "only the caster's mana payment actions are legal while casting",
+                ));
+            }
+        }
         // An outstanding player decision blocks every action but the one that answers it (or
         // conceding, CR 104.3a). All three are decisions the rules require *before* any player
         // receives priority, so letting anything else through would act against a wrong or
@@ -2014,17 +2040,27 @@ impl GameEngine {
             let answered = match blocking {
                 BlockingChoice::Resolution => {
                     matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitResolutionChoice(_)))
+                        || self.state.pending_spell_cast.is_some()
+                            && matches!(
+                                cmd.cmd.as_ref(),
+                                Some(Cmd::CommitSpellCast(_) | Cmd::CancelSpellCast(_))
+                            )
                         || matches!(
                             cmd.cmd.as_ref(),
                             Some(Cmd::ActivateAbility(_)) | Some(Cmd::UndoManaAbility(_))
-                        ) && self
+                        ) && (self
                             .state
-                            .pending_resolution
+                            .pending_spell_cast
                             .as_ref()
-                            .is_some_and(|pending| {
-                                pending.continuation.mana_window_undo_start().is_some()
-                                    && pending.deciding_player == player
-                            })
+                            .is_some_and(|pending| pending.caster == player)
+                            || self
+                                .state
+                                .pending_resolution
+                                .as_ref()
+                                .is_some_and(|pending| {
+                                    pending.continuation.mana_window_undo_start().is_some()
+                                        && pending.deciding_player == player
+                                }))
                 }
                 BlockingChoice::TriggerOrder => {
                     matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitTriggerOrder(_)))
@@ -2054,7 +2090,12 @@ impl GameEngine {
                     .pending_resolution
                     .as_ref()
                     .is_some_and(|pending| pending.continuation.mana_window_undo_start().is_some());
+        let preserves_spell_payment_undo = matches!(
+            cmd.cmd.as_ref(),
+            Some(Cmd::CommitSpellCast(_) | Cmd::CancelSpellCast(_))
+        ) && self.state.pending_spell_cast.is_some();
         if !preserves_payment_undo
+            && !preserves_spell_payment_undo
             && !matches!(
                 cmd.cmd.as_ref(),
                 Some(Cmd::ActivateAbility(_)) | Some(Cmd::UndoManaAbility(_))
@@ -2124,6 +2165,9 @@ impl GameEngine {
             }
             Some(Cmd::PrimitiveYieldStructured(_)) => self.primitive_yield_structured(player),
             Some(Cmd::CastSpell(cs)) => self.cast_spell(player, cs),
+            Some(Cmd::BeginSpellCast(command)) => self.begin_spell_cast(player, command),
+            Some(Cmd::CommitSpellCast(command)) => self.commit_spell_cast(player, command),
+            Some(Cmd::CancelSpellCast(command)) => self.cancel_spell_cast(player, command),
             Some(Cmd::ActivateAbility(aa)) => self.activate_ability(player, aa),
             Some(Cmd::ExecutePermanentAction(command)) => {
                 self.execute_permanent_action(player, command)
@@ -2158,7 +2202,7 @@ impl GameEngine {
         // SBAs are not checked while a tier-3 resolution is parked mid-resolution (CR 608/704);
         // they run when it completes. Zone view + legal actions still refresh so the deciding
         // player's client sees the drawn/revealed cards and the choice prompt.
-        if self.state.pending_resolution.is_none() {
+        if self.state.pending_resolution.is_none() && self.state.pending_spell_cast.is_none() {
             let mut d = vec![];
             self.apply_sbas(&mut d)?;
             // CR 704.3 then 603.3b: state-based actions are performed first, and only then are

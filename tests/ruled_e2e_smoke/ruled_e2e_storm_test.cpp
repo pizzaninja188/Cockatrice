@@ -219,7 +219,8 @@ TEST_F(RuledE2ESmokeTest, RalStormCopiesResumeTargetQueueAndPublishStableStackId
 
     const quint32 secondPendingCopy = p1.pendingChoice->source_object_id();
     const auto expectedChoice = p1.pendingChoice->SerializeAsString();
-    const quint64 expectedVersion = p1.stateVersion;
+    const quint64 expectedVersion1 = p1.stateVersion;
+    const quint64 expectedVersion2 = p2.stateVersion;
 
     collectServerLogs();
     servatrice.kill();
@@ -262,9 +263,9 @@ TEST_F(RuledE2ESmokeTest, RalStormCopiesResumeTargetQueueAndPublishStableStackId
     ASSERT_TRUE(resumed2.selectDeck(deck2));
     resumed1.sendReady();
     resumed2.sendReady();
-    ASSERT_TRUE(resumed1.pumpUntil([&] { return resumed1.stateVersion == expectedVersion; }, 20000,
+    ASSERT_TRUE(resumed1.pumpUntil([&] { return resumed1.stateVersion == expectedVersion1; }, 20000,
                                       "resumed storm chooser state"));
-    ASSERT_TRUE(resumed2.pumpUntil([&] { return resumed2.stateVersion == expectedVersion; }, 20000,
+    ASSERT_TRUE(resumed2.pumpUntil([&] { return resumed2.stateVersion == expectedVersion2; }, 20000,
                                       "resumed storm observer state"));
     ASSERT_TRUE(resumed1.pendingChoice.has_value());
     EXPECT_EQ(resumed1.pendingChoice->SerializeAsString(), expectedChoice);

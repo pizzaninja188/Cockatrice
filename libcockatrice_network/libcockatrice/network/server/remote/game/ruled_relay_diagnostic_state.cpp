@@ -81,8 +81,13 @@ QJsonObject RuledBatchSynchronizer::diagnosticSnapshot() const
         for (auto target : visual.targetOids)
             targets.append(qint64(target));
         pending.append(QJsonObject{{"known_name", visual.cardName},
+                                   {"transaction_id", QString::number(visual.transactionId)},
+                                   {"reserved_object_id", qint64(visual.reservedObjectId)},
                                    {"server_card_id", visual.serverCardId},
                                    {"caster_player_id", visual.casterPlayerId},
+                                   {"source_player_id", visual.sourcePlayerId},
+                                   {"source_zone", visual.sourceZoneName},
+                                   {"source_position", visual.sourcePosition},
                                    {"targets", targets}});
     }
     return {{"format_version", 1},

@@ -223,6 +223,9 @@ fn distinct_kopala_sources_stack_but_do_not_tax_their_controller() {
     );
     let own_unsummon = hand_index_for_card(&own_engine, 1, "unsummon");
     own_engine
+        .apply_command(0, &pass())
+        .expect("pass priority to Kopala's controller");
+    own_engine
         .apply_command(1, &cast_spell(own_unsummon, target_object(own_kopala)))
         .expect("Kopala does not tax its controller");
 }

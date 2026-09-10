@@ -23,18 +23,24 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         return;
     }
     for p in &eng.state.players {
-        let labels = legal_labels(eng, p.id);
-        let hand_actions = legal_hand_actions(eng, p.id);
-        let zone_cast_actions = legal_zone_cast_actions(eng, p.id);
-        let zone_land_actions = legal_zone_land_actions(eng, p.id);
-        let exile_play_permission_groups = exile_play_permission_groups(eng, p.id);
-        let permanent_actions = legal_permanent_actions(eng, p.id);
-        let zone_ability_actions = legal_zone_ability_actions(eng, p.id);
+        let paying_cast = eng
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .is_some_and(|pending| pending.caster == p.id);
+        let mut labels = legal_labels(eng, p.id);
+        let mut hand_actions = legal_hand_actions(eng, p.id);
+        let mut zone_cast_actions = legal_zone_cast_actions(eng, p.id);
+        let mut zone_land_actions = legal_zone_land_actions(eng, p.id);
+        let mut exile_play_permission_groups = exile_play_permission_groups(eng, p.id);
+        let mut permanent_actions = legal_permanent_actions(eng, p.id);
+        let mut zone_ability_actions = legal_zone_ability_actions(eng, p.id);
         let mut valid_targets_by_hand_slot = BTreeMap::new();
         let mut valid_targets_by_zone_object = BTreeMap::new();
         let mut valid_targets_by_ability = BTreeMap::new();
         let mut cost_choices_by_ability = BTreeMap::new();
         let mut mana_payment_by_ability = BTreeMap::new();
+        let mut mana_ability_keys = HashSet::new();
 
         if let Some(idx) = eng.state.player_idx(p.id) {
             for (slot, &oid) in eng.state.players[idx].hand.iter().enumerate() {
@@ -88,6 +94,9 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 }
                 for (ai, ability, _, _) in eng.effective_activated_abilities(poid) {
                     let key = (poid as u64) << 32 | ai as u64;
+                    if ability.mana_options().is_some() {
+                        mana_ability_keys.insert(key);
+                    }
                     mana_payment_by_ability.insert(
                         key,
                         rv1::ManaPaymentEligibility {
@@ -259,29 +268,104 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         let combat = eng.state.combat.as_ref();
         let attackers_open = eng.state.turn_step == TurnStep::DeclareAttackers
             && !combat.map(|c| c.attackers_declared).unwrap_or(false);
-        let required_attacker_ids = if attackers_open && p.id == eng.state.active_player_id() {
+        let mut required_attacker_ids = if attackers_open && p.id == eng.state.active_player_id() {
             eng.required_attacker_ids()
         } else {
             Vec::new()
         };
-        let selectable_attacker_ids = if attackers_open && p.id == eng.state.active_player_id() {
+        let mut selectable_attacker_ids = if attackers_open && p.id == eng.state.active_player_id()
+        {
             eng.eligible_attacker_ids(p.id)
         } else {
             Vec::new()
         };
-        let legal_attack_assignments = if attackers_open && p.id == eng.state.active_player_id() {
+        let mut legal_attack_assignments = if attackers_open && p.id == eng.state.active_player_id()
+        {
             eng.legal_attack_assignments(p.id)
         } else {
             Vec::new()
         };
         let blocks_open = eng.state.turn_step == TurnStep::DeclareBlockers
             && !combat.map(|c| c.blockers_declared).unwrap_or(false);
-        let (legal_block_pairs, required_blocker_ids) =
+        let (mut legal_block_pairs, mut required_blocker_ids) =
             if blocks_open && eng.state.is_defending_player(p.id) {
                 eng.blocking_options(p.id)
             } else {
                 (Vec::new(), Vec::new())
             };
+
+        if eng.state.pending_spell_cast.is_some() {
+            labels.clear();
+            hand_actions.clear();
+            zone_cast_actions.clear();
+            zone_land_actions.clear();
+            exile_play_permission_groups.clear();
+            permanent_actions.clear();
+            zone_ability_actions.clear();
+            required_attacker_ids.clear();
+            selectable_attacker_ids.clear();
+            legal_attack_assignments.clear();
+            legal_block_pairs.clear();
+            required_blocker_ids.clear();
+            valid_targets_by_hand_slot.clear();
+            valid_targets_by_zone_object.clear();
+            if paying_cast {
+                valid_targets_by_ability.retain(|key, _| mana_ability_keys.contains(key));
+                cost_choices_by_ability.retain(|key, _| mana_ability_keys.contains(key));
+                mana_payment_by_ability.retain(|key, _| mana_ability_keys.contains(key));
+            } else {
+                valid_targets_by_ability.clear();
+                cost_choices_by_ability.clear();
+                mana_payment_by_ability.clear();
+            }
+        }
+        let pending_spell_cast = eng
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .filter(|pending| pending.caster == p.id)
+            .map(|pending| {
+                let mut payment_preview = eng.preview_payment(
+                    p.id,
+                    &rv1::PreviewPayment {
+                        transaction_id: pending.transaction_id,
+                        revision: eng.state.command_index,
+                        commit_spell_cast: Some(rv1::CommitSpellCast {
+                            transaction_id: pending.transaction_id,
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    },
+                );
+                // LegalActions is assembled before apply_gameplay_command advances the accepted
+                // command index. Any selection published in this batch is for the next command,
+                // including reconnect clients that use this snapshot before refreshing.
+                if let Some(selection) = payment_preview.selection.as_mut() {
+                    selection.expected_state_revision = eng.state.command_index.saturating_add(1);
+                }
+                rv1::PendingSpellCast {
+                    transaction_id: pending.transaction_id,
+                    reserved_object_id: pending.reserved_object_id,
+                    announcement: Some(pending.announcement.clone()),
+                    locked_total_cost: pending.locked_total_cost.clone(),
+                    payment_preview: Some(payment_preview),
+                    resolution_time_offer: pending.resolution_time_offer,
+                    eligible_restricted_mana_group_ids: eng
+                        .state
+                        .objects
+                        .get(&pending.reserved_object_id)
+                        .and_then(|object| eng.registry.get(&object.card_id))
+                        .and_then(|definition| {
+                            definition.face(pending.announcement.face_index as usize)
+                        })
+                        .and_then(|face| {
+                            eng.state.player_idx(p.id).map(|player_index| {
+                                eng.eligible_restricted_mana_for_spell(player_index, face)
+                            })
+                        })
+                        .unwrap_or_default(),
+                }
+            });
 
         batch.legal_by_player.insert(
             p.id,
@@ -305,6 +389,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 zone_land_actions,
                 exile_play_permission_groups,
                 legal_attack_assignments,
+                pending_spell_cast,
             },
         );
     }
@@ -388,6 +473,7 @@ pub(super) fn activated_ability_info(
         mana_produced,
         cost_label,
         activatable: eng.ability_activatable(source_id, ability_index, ability),
+        has_only_tap_cost: matches!(ability.costs.as_slice(), [AbilityCost::Tap]),
         presentation: Some(presentation_ref(
             eng.registry,
             &definition.card_id,

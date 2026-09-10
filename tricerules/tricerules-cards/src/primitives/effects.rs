@@ -2030,15 +2030,63 @@ pub enum SpecialActionManaPurpose {
     TurnFaceUp,
 }
 
-/// CR 106.6 restriction carried by an individual mana contribution. A purpose is disallowed
-/// unless its filter list or broader purpose flag permits it. Filters within one list are ORed so
-/// one contribution can cover wording such as "an Elemental spell or a Chandra planeswalker
-/// spell."
+/// CR 106.6 additional effect carried by an individual mana contribution. Generator Servant and
+/// Hall of the Bandit Lord both grant haste to a matching creature spell paid with their mana.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ManaSpendingEffect {
+    GrantKeywordsToSpellUntilEndOfTurn {
+        filter: ManaSpendFilter,
+        keywords: Vec<Keyword>,
+    },
+}
+
+impl ManaSpendingEffect {
+    fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::GrantKeywordsToSpellUntilEndOfTurn { filter, keywords } => {
+                filter.validate()?;
+                if keywords.is_empty() {
+                    return Err("mana spending keyword effect requires a keyword".into());
+                }
+                if keywords
+                    .iter()
+                    .enumerate()
+                    .any(|(index, keyword)| keywords[..index].contains(keyword))
+                {
+                    return Err("mana spending keyword effect cannot repeat a keyword".into());
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn fallback_description(&self) -> String {
+        match self {
+            Self::GrantKeywordsToSpellUntilEndOfTurn { filter, keywords } => format!(
+                "{} paid with it gains {} until end of turn",
+                filter.fallback_spell_description(),
+                keywords
+                    .iter()
+                    .map(|keyword| keyword.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+    }
+}
+
+/// CR 106.6 spending rule carried by an individual mana contribution. A purpose is disallowed
+/// unless `unrestricted` or its filter list/broader purpose flag permits it. Filters within one
+/// list are ORed so one contribution can cover wording such as "an Elemental spell or a Chandra
+/// planeswalker spell." `spending_effects` are independent of permission: Generator Servant's
+/// mana may pay any cost but affects only creature spells paid with it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ManaSpendingRestriction {
     pub restriction_id: ChoiceId,
     pub presentation: AbilityPresentation,
+    #[serde(default)]
+    pub unrestricted: bool,
     #[serde(default)]
     pub cast_spell: Vec<ManaSpendFilter>,
     #[serde(default)]
@@ -2055,19 +2103,33 @@ pub struct ManaSpendingRestriction {
     pub all_nonspell_costs: bool,
     #[serde(default)]
     pub special_actions: Vec<SpecialActionManaPurpose>,
+    #[serde(default)]
+    pub spending_effects: Vec<ManaSpendingEffect>,
 }
 
 impl ManaSpendingRestriction {
     pub fn validate(&self) -> Result<(), String> {
         self.restriction_id.validate()?;
         self.presentation.validate()?;
-        if self.cast_spell.is_empty()
+        if !self.unrestricted
+            && self.cast_spell.is_empty()
             && self.activate_ability.is_empty()
             && !self.activate_any_ability
             && !self.all_nonspell_costs
             && self.special_actions.is_empty()
         {
             return Err("mana spending restriction must allow a spending purpose".into());
+        }
+        if self.unrestricted
+            && (!self.cast_spell.is_empty()
+                || !self.activate_ability.is_empty()
+                || self.activate_any_ability
+                || self.all_nonspell_costs
+                || !self.special_actions.is_empty())
+        {
+            return Err(
+                "unrestricted mana cannot also declare spending-purpose permissions".into(),
+            );
         }
         if self.activate_any_ability && !self.activate_ability.is_empty() {
             return Err(
@@ -2086,7 +2148,10 @@ impl ManaSpendingRestriction {
         self.cast_spell
             .iter()
             .chain(&self.activate_ability)
-            .try_for_each(ManaSpendFilter::validate)
+            .try_for_each(ManaSpendFilter::validate)?;
+        self.spending_effects
+            .iter()
+            .try_for_each(ManaSpendingEffect::validate)
     }
 
     pub fn fallback_label(&self) -> String {
@@ -2113,6 +2178,7 @@ impl ManaSpendingRestriction {
             purposes.push("pay a nonspell cost".into());
         }
         let joined = match purposes.as_slice() {
+            [] if self.unrestricted => "Spend this mana on any cost".into(),
             [] => choice_fallback("Restricted mana", &self.restriction_id),
             [only] => only.clone(),
             [first, second] => format!("{first} or {second}"),
@@ -2121,7 +2187,23 @@ impl ManaSpendingRestriction {
                 format!("{}, or {last}", rest.join(", "))
             }
         };
-        format!("Spend only to {joined}")
+        let permission = if self.unrestricted {
+            joined
+        } else {
+            format!("Spend only to {joined}")
+        };
+        if self.spending_effects.is_empty() {
+            permission
+        } else {
+            format!(
+                "{permission}; {}",
+                self.spending_effects
+                    .iter()
+                    .map(ManaSpendingEffect::fallback_description)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            )
+        }
     }
 }
 

@@ -200,7 +200,7 @@ RuledGameDriver::processRuledPayloadImpl(int playerId, const Command_RuledPayloa
     if (!resp.ok()) {
         return Response::RespContextError;
     }
-    synchronizer->applyAcceptedCommandVisuals(playerId, ruledCmd);
+    synchronizer->applyAcceptedCommandVisuals(playerId, ruledCmd, resp);
     const RuledBatchSynchronizer::BatchApplyResult batchResult = synchronizer->applyBatch(resp);
     if ((batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged || batchResult.publicZoneOrderChanged)) ||
         batchResult.battlefieldDisplayChanged) {
@@ -310,7 +310,7 @@ bool RuledGameDriver::resumeCapturedPrefix()
                 return false;
             }
         }
-        synchronizer->applyAcceptedCommandVisuals(request.player_id(), command);
+        synchronizer->applyAcceptedCommandVisuals(request.player_id(), command, response);
         const auto result = synchronizer->applyBatch(response);
         if (result.zoneViewApplied || result.battlefieldDisplayChanged)
             game->sendGameStateToPlayers();

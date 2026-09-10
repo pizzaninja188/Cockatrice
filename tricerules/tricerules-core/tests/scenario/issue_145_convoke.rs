@@ -76,6 +76,7 @@ fn preview(engine: &GameEngine, cast: &rv1::CastSpell) -> rv1::PaymentPreview {
             revision: 2,
             cast_spell: Some(cast.clone()),
             execute_permanent_action: None,
+            commit_spell_cast: None,
         },
     )
 }
@@ -390,6 +391,7 @@ fn convoke_combines_restricted_mana_and_refreshes_unavailable_group_amounts() {
         .push(ManaSpendingRestriction {
             restriction_id: tricerules_cards::ChoiceId::new("restriction_01").unwrap(),
             presentation: tricerules_cards::AbilityPresentation::Fallback,
+            unrestricted: false,
             cast_spell: vec![ManaSpendFilter {
                 card_type: Some(CardTypeFilter::InstantOrSorcery),
                 subtype: None,
@@ -398,6 +400,7 @@ fn convoke_combines_restricted_mana_and_refreshes_unavailable_group_amounts() {
             activate_any_ability: false,
             all_nonspell_costs: false,
             special_actions: vec![],
+            spending_effects: vec![],
         });
     engine.state.players[0]
         .restricted_mana

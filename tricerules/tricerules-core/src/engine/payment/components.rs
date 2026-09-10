@@ -38,6 +38,7 @@ pub(in crate::engine) enum ObjectPaymentComponent {
     },
 }
 
+#[derive(Clone)]
 pub(super) struct PlannedObjectPayment {
     pub component: ObjectPaymentComponent,
     pub objects: Vec<rv1::CostObjectRef>,

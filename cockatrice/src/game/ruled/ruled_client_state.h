@@ -55,6 +55,12 @@ struct RuledAbilityEntry
     /// Used for generated mana-picker labels; text already contains the ordinary menu's cost.
     QString costLabel;
     bool activatable = false;
+    bool hasOnlyTapCost = false;
+
+    [[nodiscard]] bool usesDirectManaActivation() const
+    {
+        return hasOnlyTapCost && !manaProduced.isEmpty();
+    }
 };
 
 /// Positions are authoritative ability indices. Unpublished sparse slots are empty.
@@ -666,6 +672,13 @@ public:
     QHash<quint32, QVector<RuledFaceOption>> zoneLandFacesByOid;
     QHash<quint32, RuledCastSource> zoneLandSourceByOid;
     QHash<quint64, RuledExilePlayPermissionGroup> exilePlayPermissionGroups;
+    /// Caster-private engine-owned CR 601 transaction. Presence, identity, and locked cost come
+    /// only from the latest authoritative LegalActions entry.
+    std::optional<ruled::v1::PendingSpellCast> pendingSpellCast;
+    [[nodiscard]] bool hasPendingSpellCast() const
+    {
+        return pendingSpellCast.has_value();
+    }
     QSet<int> cleanupDiscardSelectedIndices;
     QList<int> openingBottomSelectedIndices;
     QVector<int> openingPickSeatIds;
@@ -1143,6 +1156,14 @@ public:
     [[nodiscard]] QVector<RuledRestrictedManaGroup> restrictedManaForPlayer(int playerId) const
     {
         return restrictedManaByPlayer.value(playerId);
+    }
+    [[nodiscard]] QSet<quint32> eligibleRestrictedManaForPendingCast() const
+    {
+        QSet<quint32> result;
+        if (pendingSpellCast)
+            for (const quint32 groupId : pendingSpellCast->eligible_restricted_mana_group_ids())
+                result.insert(groupId);
+        return result;
     }
     /// Latest engine-published target group for one selected modal mode. The pending-cast UI keeps
     /// a display snapshot, but click legality must always consult this live copy after mana or
@@ -1695,7 +1716,8 @@ public:
 
     [[nodiscard]] bool isResolutionManaWindow() const
     {
-        return isResolutionPaymentActive() || hasPendingChoiceOfKind(ChoiceKind::SpecialCast);
+        return isResolutionPaymentActive() || hasPendingChoiceOfKind(ChoiceKind::SpecialCast) ||
+               hasPendingSpellCast();
     }
 
     [[nodiscard]] bool isResolutionPaymentActive() const

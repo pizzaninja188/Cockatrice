@@ -33,6 +33,8 @@ fn phantom_interference_casts_both_spree_modes_with_one_atomic_total() {
     e.apply_command(1, &cast_spell(bolt_slot, target_player(0)))
         .expect("opponent spell supplies the Spree target");
     let bolt = e.state.stack.last().unwrap().id;
+    e.apply_command(1, &pass())
+        .expect("pass priority to the Phantom Interference player");
 
     e.state.players[0].mana_pool.blue = 1;
     e.state.players[0].mana_pool.colorless = 4;

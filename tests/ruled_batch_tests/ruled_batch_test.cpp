@@ -305,9 +305,11 @@ protected:
         }
     }
 
-    void applyAcceptedCommandVisuals(int playerId, const ruled::v1::RuledCommand &command)
+    void applyAcceptedCommandVisuals(int playerId,
+                                     const ruled::v1::RuledCommand &command,
+                                     const ruled::v1::IpcResponse &response = {})
     {
-        game->ruled()->synchronizer->applyAcceptedCommandVisuals(playerId, command);
+        game->ruled()->synchronizer->applyAcceptedCommandVisuals(playerId, command, response);
     }
 
     bool hasSyntheticStackBookkeeping(quint32 engineOid) const
@@ -316,6 +318,16 @@ protected:
                game->ruled()->synchronizer->ruledStackObjectIdToCasterPlayerId.contains(engineOid) ||
                game->ruled()->synchronizer->ruledEngineStackPushDescriptionsByObjectId.contains(engineOid) ||
                game->ruled()->synchronizer->ruledStackCopyObjectIds.contains(engineOid);
+    }
+
+    int boundStackServerCardId(quint32 engineOid) const
+    {
+        return game->ruled()->synchronizer->ruledStackObjectIdToServerCardId.value(engineOid, -1);
+    }
+
+    QVector<quint32> boundStackTargets(quint32 engineOid) const
+    {
+        return game->ruled()->synchronizer->ruledStackTargetsByObjectId.value(engineOid);
     }
 
     const RuledPlayerBinding &bindingFor(Server_Player *p)
@@ -1793,9 +1805,17 @@ TEST_F(RuledBatchTest, PreparationCopiesHaveDedicatedExileIdentityAndFullReplace
     EXPECT_EQ(bindingFor(p1).findExileCardByEngineOid(p1, 9001u)->getId(), copyCardId);
 
     ruled::v1::RuledCommand cast;
-    cast.mutable_cast_spell()->mutable_source()->set_exile_object_id(9001u);
-    cast.mutable_cast_spell()->set_face_index(1u);
-    applyAcceptedCommandVisuals(p1->getPlayerId(), cast);
+    auto *announcement = cast.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->mutable_source()->set_exile_object_id(9001u);
+    announcement->set_face_index(1u);
+    ruled::v1::IpcResponse begun;
+    begun.set_ok(true);
+    auto *pending =
+        (*begun.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_spell_cast();
+    pending->set_transaction_id(40u);
+    pending->set_reserved_object_id(9001u);
+    pending->mutable_announcement()->CopyFrom(*announcement);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), cast, begun);
     EXPECT_TRUE(p1->getZones().value(ZoneNames::STACK)->getCards().isEmpty());
     EXPECT_EQ(findCardByEngineOid(p1, 203u), source);
 
@@ -1809,6 +1829,208 @@ TEST_F(RuledBatchTest, PreparationCopiesHaveDedicatedExileIdentityAndFullReplace
     EXPECT_EQ(exile->getCards().first(), physicalExile);
     EXPECT_EQ(bindingFor(p1).findExileCardByEngineOid(p1, 9001u), nullptr);
     EXPECT_EQ(findCardByEngineOid(p1, 203u), source);
+}
+
+TEST_F(RuledBatchTest, SpellCastTransactionMovesOnceAndBindsTheReservedPhysicalCardOnCommit)
+{
+    seedCardCatalog({"Lightning Bolt"});
+    Server_Card *first = addCardToHand(p1, "Lightning Bolt");
+    Server_Card *second = addCardToHand(p1, "Lightning Bolt");
+    const int secondPhysicalId = second->getId();
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    auto *firstView = p1Seed.add_hand_cards();
+    firstView->set_object_id(301u);
+    firstView->set_card_id("lightning_bolt");
+    auto *secondView = p1Seed.add_hand_cards();
+    secondView->set_object_id(302u);
+    secondView->set_card_id("lightning_bolt");
+    *seedView->add_per_player() = p1Seed;
+    *seedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+    ASSERT_EQ(bindingFor(p1).findHandCardByEngineIndex(p1, 0), first);
+    ASSERT_EQ(bindingFor(p1).findHandCardByEngineIndex(p1, 1), second);
+
+    ruled::v1::RuledCommand begin;
+    auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->mutable_source()->set_hand_index(1u);
+    announcement->add_targets()->set_object_id(777u);
+    ruled::v1::IpcResponse begun;
+    begun.set_ok(true);
+    auto &pending = (*begun.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()];
+    pending.mutable_pending_spell_cast()->set_transaction_id(41u);
+    pending.mutable_pending_spell_cast()->set_reserved_object_id(302u);
+    pending.mutable_pending_spell_cast()->mutable_announcement()->CopyFrom(*announcement);
+
+    applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
+    auto *stack = p1->getZones().value(ZoneNames::STACK);
+    ASSERT_EQ(stack->getCards().size(), 1);
+    EXPECT_EQ(stack->getCards().first(), second);
+    EXPECT_EQ(first->getZone()->getName(), QString(ZoneNames::HAND));
+
+    ruled::v1::RuledCommand commit;
+    commit.mutable_commit_spell_cast()->set_transaction_id(41u);
+    ruled::v1::IpcResponse committed;
+    committed.set_ok(true);
+    auto *pushed = committed.mutable_batch()->add_events()->mutable_stack_pushed();
+    pushed->set_object_id(900u);
+    pushed->set_card_id("lightning_bolt");
+    pushed->set_description("Lightning Bolt");
+
+    applyAcceptedCommandVisuals(p1->getPlayerId(), commit, committed);
+    callBatchApply(committed);
+    ASSERT_EQ(stack->getCards().size(), 1) << "commit must not move or create a second physical card";
+    EXPECT_EQ(stack->getCards().first()->getId(), secondPhysicalId);
+    EXPECT_EQ(boundStackServerCardId(900u), secondPhysicalId);
+    EXPECT_EQ(boundStackTargets(900u), QVector<quint32>({777u}));
+}
+
+TEST_F(RuledBatchTest, CancelSpellCastRestoresTheExactPhysicalCardAndHandOrder)
+{
+    seedCardCatalog({"Lightning Bolt", "Giant Growth"});
+    Server_Card *first = addCardToHand(p1, "Lightning Bolt");
+    Server_Card *middle = addCardToHand(p1, "Giant Growth");
+    Server_Card *last = addCardToHand(p1, "Lightning Bolt");
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    for (const auto &[oid, cardId] :
+         {std::pair{301u, "lightning_bolt"}, std::pair{302u, "giant_growth"},
+          std::pair{303u, "lightning_bolt"}}) {
+        auto *card = p1Seed.add_hand_cards();
+        card->set_object_id(oid);
+        card->set_card_id(cardId);
+    }
+    *seedView->add_per_player() = p1Seed;
+    *seedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+    const QList<Server_Card *> originalHand = p1->getZones().value(ZoneNames::HAND)->getCards();
+
+    ruled::v1::RuledCommand begin;
+    auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->mutable_source()->set_hand_index(1u);
+    announcement->set_face_index(0u);
+    ruled::v1::IpcResponse begun;
+    begun.set_ok(true);
+    auto *pending =
+        (*begun.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_spell_cast();
+    pending->set_transaction_id(52u);
+    pending->set_reserved_object_id(302u);
+    pending->mutable_announcement()->CopyFrom(*announcement);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
+    ASSERT_EQ(p1->getZones().value(ZoneNames::STACK)->getCards().size(), 1);
+
+    ruled::v1::RuledCommand cancel;
+    cancel.mutable_cancel_spell_cast()->set_transaction_id(52u);
+    ruled::v1::IpcResponse canceled;
+    canceled.set_ok(true);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), cancel, canceled);
+
+    const auto &hand = p1->getZones().value(ZoneNames::HAND)->getCards();
+    ASSERT_EQ(hand.size(), 3);
+    EXPECT_EQ(hand, originalHand);
+    EXPECT_TRUE(hand.contains(first));
+    EXPECT_TRUE(hand.contains(middle));
+    EXPECT_TRUE(hand.contains(last));
+    EXPECT_TRUE(p1->getZones().value(ZoneNames::STACK)->getCards().isEmpty());
+}
+
+TEST_F(RuledBatchTest, GraveyardSpellCastTransactionCommitsWithTheReservedPhysicalCard)
+{
+    seedCardCatalog({"Lightning Bolt"});
+    Server_Card *older = addCardToGraveyard(p1, "Lightning Bolt");
+    Server_Card *source = addCardToGraveyard(p1, "Lightning Bolt");
+    const int sourcePhysicalId = source->getId();
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    p1Seed.add_graveyard_object_ids(401u);
+    p1Seed.add_graveyard_object_ids(402u);
+    *seedView->add_per_player() = p1Seed;
+    *seedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+    ASSERT_EQ(bindingFor(p1).findGraveyardCardByEngineOid(p1, 402u), source);
+
+    ruled::v1::RuledCommand begin;
+    auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->mutable_source()->set_graveyard_object_id(402u);
+    ruled::v1::IpcResponse begun;
+    begun.set_ok(true);
+    auto *pending =
+        (*begun.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_spell_cast();
+    pending->set_transaction_id(61u);
+    pending->set_reserved_object_id(402u);
+    pending->mutable_announcement()->CopyFrom(*announcement);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
+    ASSERT_EQ(p1->getZones().value(ZoneNames::STACK)->getCards().size(), 1);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::STACK)->getCards().first(), source);
+    EXPECT_EQ(older->getZone()->getName(), QString(ZoneNames::GRAVE));
+
+    ruled::v1::RuledCommand commit;
+    commit.mutable_commit_spell_cast()->set_transaction_id(61u);
+    ruled::v1::IpcResponse committed;
+    committed.set_ok(true);
+    auto *pushed = committed.mutable_batch()->add_events()->mutable_stack_pushed();
+    pushed->set_object_id(402u);
+    pushed->set_card_id("lightning_bolt");
+    pushed->set_description("Lightning Bolt");
+    applyAcceptedCommandVisuals(p1->getPlayerId(), commit, committed);
+    callBatchApply(committed);
+    EXPECT_EQ(boundStackServerCardId(402u), sourcePhysicalId);
+    ASSERT_EQ(p1->getZones().value(ZoneNames::STACK)->getCards().size(), 1);
+}
+
+TEST_F(RuledBatchTest, CancelSpellCastRestoresExactExileCardAndPileOrder)
+{
+    seedCardCatalog({"Lightning Bolt", "Giant Growth"});
+    Server_Card *oldest = addCardToExile(p1, "Lightning Bolt");
+    Server_Card *middle = addCardToExile(p1, "Giant Growth");
+    Server_Card *newest = addCardToExile(p1, "Lightning Bolt");
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Seed = buildPerPlayerView(p1, {}, {});
+    p1Seed.add_exile_object_ids(501u);
+    p1Seed.add_exile_object_ids(502u);
+    p1Seed.add_exile_object_ids(503u);
+    *seedView->add_per_player() = p1Seed;
+    *seedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+    const QList<Server_Card *> originalExile = p1->getZones().value(ZoneNames::EXILE)->getCards();
+    ASSERT_EQ(bindingFor(p1).findExileCardByEngineOid(p1, 502u), middle);
+
+    ruled::v1::RuledCommand begin;
+    auto *announcement = begin.mutable_begin_spell_cast()->mutable_announcement();
+    announcement->mutable_source()->set_exile_object_id(502u);
+    ruled::v1::IpcResponse begun;
+    begun.set_ok(true);
+    auto *pending =
+        (*begun.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_spell_cast();
+    pending->set_transaction_id(62u);
+    pending->set_reserved_object_id(502u);
+    pending->mutable_announcement()->CopyFrom(*announcement);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
+    ASSERT_EQ(p1->getZones().value(ZoneNames::STACK)->getCards().size(), 1);
+
+    ruled::v1::RuledCommand cancel;
+    cancel.mutable_cancel_spell_cast()->set_transaction_id(62u);
+    ruled::v1::IpcResponse canceled;
+    canceled.set_ok(true);
+    applyAcceptedCommandVisuals(p1->getPlayerId(), cancel, canceled);
+
+    EXPECT_EQ(p1->getZones().value(ZoneNames::EXILE)->getCards(), originalExile);
+    EXPECT_TRUE(originalExile.contains(oldest));
+    EXPECT_TRUE(originalExile.contains(middle));
+    EXPECT_TRUE(originalExile.contains(newest));
+    EXPECT_TRUE(p1->getZones().value(ZoneNames::STACK)->getCards().isEmpty());
 }
 
 TEST_F(RuledBatchTest, StaticEmblemSnapshotReconcilesPresentationOnlyTableTokens)
@@ -5043,6 +5265,71 @@ TEST_F(RuledBatchTest, SpecialCastReconnectRestoresExactOfferAndRecipientLegalAc
             EXPECT_EQ(restored.legal_by_player().at(p1->getPlayerId()).zone_cast_actions(0).SerializeAsString(), offer->SerializeAsString());
         } else EXPECT_FALSE(restored.legal_by_player().contains(p1->getPlayerId()));
     }
+}
+
+TEST_F(RuledBatchTest, PendingSpellCastReconnectRestoresOnlyTheCastersPrivateTransaction)
+{
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1View = buildPerPlayerView(p1, {700u}, {false});
+    p1View.set_private_zones_unchanged(true);
+    *seedView->add_per_player() = p1View;
+    auto p2View = buildPerPlayerView(p2, {}, {});
+    p2View.set_private_zones_unchanged(true);
+    *seedView->add_per_player() = p2View;
+    updatePendingResolutionChoiceCache(seed);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *batch = response.mutable_batch();
+    auto *pending =
+        (*batch->mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_spell_cast();
+    pending->set_transaction_id(77u);
+    pending->set_reserved_object_id(901u);
+    pending->set_locked_total_cost("{1}{R}");
+    pending->mutable_announcement()->mutable_source()->set_hand_index(0u);
+    pending->mutable_payment_preview()->set_valid(true);
+    pending->mutable_payment_preview()->set_remaining_cost("{1}{R}");
+    auto *mana = batch->add_events()->mutable_mana_pool_updated();
+    mana->set_player_id(p1->getPlayerId());
+    mana->set_r(1u);
+    updatePendingResolutionChoiceCache(response);
+
+    for (Server_Player *recipient : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(recipient, reconnect, true);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 3);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        const auto restoredView = std::find_if(restored.events().begin(), restored.events().end(),
+                                               [](const auto &event) { return event.has_zone_view(); });
+        ASSERT_NE(restoredView, restored.events().end());
+        const auto restoredMana = std::find_if(restored.events().begin(), restored.events().end(),
+                                               [](const auto &event) { return event.has_mana_pool_updated(); });
+        ASSERT_NE(restoredMana, restored.events().end());
+        EXPECT_EQ(restoredMana->mana_pool_updated().r(), 1u);
+        if (recipient == p1) {
+            ASSERT_TRUE(restored.legal_by_player().contains(p1->getPlayerId()));
+            const auto &own = restored.legal_by_player().at(p1->getPlayerId());
+            ASSERT_TRUE(own.has_pending_spell_cast());
+            EXPECT_EQ(own.pending_spell_cast().transaction_id(), 77u);
+            EXPECT_EQ(own.pending_spell_cast().locked_total_cost(), "{1}{R}");
+        } else {
+            EXPECT_TRUE(restored.legal_by_player().empty());
+            EXPECT_EQ(restored.SerializeAsString().find("{1}{R}"), std::string::npos);
+        }
+    }
+
+    ruled::v1::IpcResponse completed;
+    completed.set_ok(true);
+    (*completed.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()];
+    updatePendingResolutionChoiceCache(completed);
+    ResponseContainer afterCompletion(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, afterCompletion);
+    EXPECT_TRUE(afterCompletion.getPostResponseQueue().isEmpty());
 }
 
 TEST_F(RuledBatchTest, ResolvingAbilityCannotBindOrMoveAnIdenticallyNamedPhysicalSpell)

@@ -2662,6 +2662,13 @@ TEST_F(RuledE2ESmokeTest, DiscardReplacementPrivacyAndMadnessPaymentReachBothCli
         ASSERT_TRUE(send(p2, accepted, QStringLiteral("issue 197 cast Fiery Temper")));
         ASSERT_TRUE(pass(p1));
         ASSERT_TRUE(pass(p2));
+        QElapsedTimer delivery;
+        delivery.start();
+        while ((p1.lifeByPlayer[p1.myId] != 17 || p2.lifeByPlayer[p1.myId] != 17) &&
+               delivery.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
         EXPECT_EQ(p1.lifeByPlayer[p1.myId], 17);
         EXPECT_EQ(p2.lifeByPlayer[p1.myId], 17);
         for (OpeningDriver *client : {&p1, &p2}) {
@@ -2899,6 +2906,227 @@ TEST_F(RuledE2ESmokeTest, PerTargetDamageMetadataAndResolutionReachBothSeats)
     ASSERT_TRUE(pass(p2));
     EXPECT_EQ(p1.stackDepth, 0);
     EXPECT_EQ(p2.stackDepth, 0);
+}
+
+TEST_F(RuledE2ESmokeTest, SpellCastTransactionAllowsManaAbilitiesCancelRetryAndCommit)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    OpeningDriver p1(true, QStringLiteral("casttxp1"), &transcript);
+    OpeningDriver p2(false, QStringLiteral("casttxp2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    const auto deck1 = deckXml({{40, QStringLiteral("Island")}});
+    const auto deck2 = deckXml({{40, QStringLiteral("Forest")}});
+    ASSERT_TRUE(p1.selectDeck(deck1));
+    ASSERT_TRUE(p2.selectDeck(deck2));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "spell transaction start p1"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "spell transaction start p2"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto sendSettled = [&](const ruled::v1::RuledCommand &command, const QString &description) {
+        const auto before1 = p1.stateVersion;
+        const auto before2 = p2.stateVersion;
+        p1.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto put = [&](const char *name, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        dev->mutable_put_card_in_zone()->set_card_name(name);
+        dev->mutable_put_card_in_zone()->set_zone(zone);
+        dev->mutable_put_card_in_zone()->set_ready(true);
+        return sendSettled(command, QStringLiteral("spell transaction put %1").arg(name));
+    };
+    ASSERT_TRUE(put("Island", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(put("Island", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(put("Island", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(put("Divination", ruled::v1::DEV_ZONE_HAND));
+    const auto *action = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Divination"));
+    ASSERT_NE(action, nullptr);
+    const int handSlot = static_cast<int>(action->hand_index());
+    ASSERT_NE(p1.handServerCardBySlot.find(handSlot), p1.handServerCardBySlot.end());
+    const int physicalCardId = p1.handServerCardBySlot.at(handSlot);
+
+    auto begin = [&] {
+        ruled::v1::RuledCommand command;
+        auto *announcement = command.mutable_begin_spell_cast()->mutable_announcement();
+        announcement->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        announcement->mutable_source()->set_hand_index(handSlot);
+        p1.sendRuled(command, QStringLiteral("begin Divination cast transaction"));
+        QElapsedTimer wait;
+        wait.start();
+        while (!p1.latestLegal.has_pending_spell_cast() && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.latestLegal.has_pending_spell_cast();
+    };
+    ASSERT_TRUE(begin());
+    EXPECT_EQ(p1.latestLegal.pending_spell_cast().locked_total_cost(), "{2}{U}");
+    EXPECT_FALSE(p2.latestLegal.has_pending_spell_cast());
+    const quint64 firstTransaction = p1.latestLegal.pending_spell_cast().transaction_id();
+
+    std::vector<quint32> islands;
+    for (const auto &permanent : p1.battlefieldByPlayer[p1.myId]) {
+        if (permanent.cardId == QStringLiteral("island")) {
+            islands.push_back(permanent.oid);
+        }
+    }
+    ASSERT_EQ(islands.size(), 3u);
+    for (int i = 0; i < 3; ++i) {
+        ruled::v1::RuledCommand mana;
+        p1.setBattlefieldAbilitySource(mana.mutable_activate_ability(), islands[static_cast<size_t>(i)]);
+        mana.mutable_activate_ability()->set_ability_index(0);
+        p1.sendRuled(mana, QStringLiteral("activate Island during spell payment"));
+        ASSERT_TRUE(p1.pumpUntil([&] { return p1.myPool.u == i + 1; }, 10000, "spell-payment mana"));
+        p2.pump(25);
+        ASSERT_TRUE(p1.latestLegal.has_pending_spell_cast());
+        EXPECT_EQ(p1.latestLegal.pending_spell_cast().transaction_id(), firstTransaction);
+    }
+
+    ruled::v1::RuledCommand cancel;
+    cancel.mutable_cancel_spell_cast()->set_transaction_id(firstTransaction);
+    ASSERT_TRUE(sendSettled(cancel, QStringLiteral("cancel Divination cast transaction")));
+    EXPECT_FALSE(p1.latestLegal.has_pending_spell_cast());
+    EXPECT_EQ(p1.myPool.u, 3) << "cancel must not reverse legal mana abilities";
+    ASSERT_NE(p1.handServerCardBySlot.find(handSlot), p1.handServerCardBySlot.end());
+    EXPECT_EQ(p1.handServerCardBySlot.at(handSlot), physicalCardId);
+
+    ASSERT_TRUE(begin());
+    const quint64 secondTransaction = p1.latestLegal.pending_spell_cast().transaction_id();
+    EXPECT_NE(secondTransaction, firstTransaction);
+    const quint32 reservedObjectId = p1.latestLegal.pending_spell_cast().reserved_object_id();
+    const auto expectedPending = p1.latestLegal.pending_spell_cast().SerializeAsString();
+    const quint64 expectedVersion1 = p1.stateVersion;
+    const quint64 expectedVersion2 = p2.stateVersion;
+
+    collectServerLogs();
+    servatrice.kill();
+    ASSERT_TRUE(servatrice.waitForFinished(5000));
+    sidecar.kill();
+    ASSERT_TRUE(sidecar.waitForFinished(5000));
+    p1.sock.abort();
+    p2.sock.abort();
+
+    QString capture;
+    QDirIterator manifests(tempDir.filePath("captures"), {"manifest.json"}, QDir::Files,
+                           QDirIterator::Subdirectories);
+    while (manifests.hasNext()) {
+        QFile file(manifests.next());
+        ASSERT_TRUE(file.open(QIODevice::ReadOnly));
+        if (QJsonDocument::fromJson(file.readAll()).object().value("source") == "server") {
+            ASSERT_TRUE(capture.isEmpty());
+            capture = QFileInfo(file).absolutePath();
+        }
+    }
+    ASSERT_FALSE(capture.isEmpty());
+    const auto planDir = tempDir.filePath("spell-cast-resume");
+    QProcess replay;
+    replay.start(QStringLiteral(RULED_E2E_REPLAY_PATH),
+                 {"--capture", capture, "--resume-plan", "--output", planDir});
+    ASSERT_TRUE(replay.waitForStarted(10000));
+    ASSERT_TRUE(replay.waitForFinished(60000));
+    ASSERT_EQ(replay.exitStatus(), QProcess::NormalExit) << replay.readAllStandardError().constData();
+    ASSERT_EQ(replay.exitCode(), 0) << replay.readAllStandardError().constData();
+    resumePlanPath = planDir + "/resume-plan.pb";
+
+    ASSERT_TRUE(startServers());
+    OpeningDriver resumed1(true, QStringLiteral("casttx-resume1"), &transcript);
+    OpeningDriver resumed2(false, QStringLiteral("casttx-resume2"), &transcript);
+    ASSERT_TRUE(resumed1.loginAndJoinRoom());
+    ASSERT_TRUE(resumed2.loginAndJoinRoom());
+    ASSERT_TRUE(resumed1.createRuledGame());
+    ASSERT_TRUE(resumed2.joinRuledGame(resumed1.gameId));
+    ASSERT_TRUE(resumed1.selectDeck(deck1));
+    ASSERT_TRUE(resumed2.selectDeck(deck2));
+    resumed1.sendReady();
+    resumed2.sendReady();
+    ASSERT_TRUE(resumed1.pumpUntil(
+        [&] {
+            resumed2.pump(25);
+            return resumed1.stateVersion == expectedVersion1 && resumed1.latestLegal.has_pending_spell_cast();
+        },
+        20000, "resumed spell-payment caster state"));
+    ASSERT_TRUE(resumed2.pumpUntil([&] { return resumed2.stateVersion == expectedVersion2; }, 20000,
+                                   "resumed spell-payment observer state"));
+    EXPECT_EQ(resumed1.latestLegal.pending_spell_cast().SerializeAsString(), expectedPending);
+    EXPECT_FALSE(resumed2.latestLegal.has_pending_spell_cast());
+    EXPECT_EQ(resumed1.myPool.u, 3);
+    ASSERT_NE(resumed1.serverCardByEngineOid.find(reservedObjectId), resumed1.serverCardByEngineOid.end());
+    EXPECT_EQ(resumed1.serverCardByEngineOid.at(reservedObjectId), physicalCardId);
+    ASSERT_NE(resumed2.serverCardByEngineOid.find(reservedObjectId), resumed2.serverCardByEngineOid.end());
+    EXPECT_EQ(resumed2.serverCardByEngineOid.at(reservedObjectId), physicalCardId);
+
+    const int previewCount = resumed1.paymentPreviewCount;
+    ruled::v1::RuledCommand preview;
+    auto *paymentQuery = preview.mutable_preview_payment();
+    paymentQuery->set_transaction_id(9001u);
+    paymentQuery->set_revision(1u);
+    auto *previewCommit = paymentQuery->mutable_commit_spell_cast();
+    previewCommit->set_transaction_id(secondTransaction);
+    previewCommit->mutable_payment()->CopyFrom(
+        resumed1.latestLegal.pending_spell_cast().payment_preview().selection());
+    previewCommit->mutable_payment()->mutable_mana()->set_u(3);
+    resumed1.sendRuled(preview, QStringLiteral("preview resumed locked Divination payment"));
+    ASSERT_TRUE(resumed1.pumpUntil([&] { return resumed1.paymentPreviewCount > previewCount; }, 10000,
+                                   "resumed locked spell payment preview"));
+    ASSERT_TRUE(resumed1.paymentPreview.valid()) << resumed1.paymentPreview.error();
+    ASSERT_TRUE(resumed1.paymentPreview.complete());
+    ruled::v1::RuledCommand commit;
+    auto *commitCast = commit.mutable_commit_spell_cast();
+    commitCast->set_transaction_id(secondTransaction);
+    commitCast->mutable_payment()->CopyFrom(resumed1.paymentPreview.selection());
+    commitCast->mutable_restricted_mana()->CopyFrom(resumed1.paymentPreview.restricted_mana());
+    const auto beforeCommit1 = resumed1.stateVersion;
+    const auto beforeCommit2 = resumed2.stateVersion;
+    resumed1.sendRuled(commit, QStringLiteral("commit resumed Divination cast transaction"));
+    QElapsedTimer commitWait;
+    commitWait.start();
+    while ((resumed1.stateVersion <= beforeCommit1 || resumed2.stateVersion <= beforeCommit2) &&
+           commitWait.elapsed() < 10000) {
+        resumed1.pump(25);
+        resumed2.pump(25);
+    }
+    ASSERT_GT(resumed1.stateVersion, beforeCommit1);
+    ASSERT_GT(resumed2.stateVersion, beforeCommit2);
+    EXPECT_FALSE(resumed1.latestLegal.has_pending_spell_cast());
+    EXPECT_EQ(resumed1.myPool.total(), 0);
+    EXPECT_EQ(resumed1.stackDepth, 1);
+    EXPECT_EQ(resumed2.stackDepth, 1);
+    ASSERT_NE(resumed1.serverCardByEngineOid.find(reservedObjectId), resumed1.serverCardByEngineOid.end());
+    EXPECT_EQ(resumed1.serverCardByEngineOid.at(reservedObjectId), physicalCardId);
 }
 
 } // namespace

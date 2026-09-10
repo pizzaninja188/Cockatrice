@@ -60,6 +60,8 @@ mod enters_tapped;
 mod enters_with_counters;
 #[path = "scenario/equipment.rs"]
 mod equipment;
+#[path = "scenario/generator_servant.rs"]
+mod generator_servant;
 #[path = "scenario/helpers.rs"]
 mod helpers;
 #[path = "scenario/issue_100_omen.rs"]

@@ -476,6 +476,9 @@ fn ward_can_counter_a_targeting_spell_copy_without_moving_a_card() {
         .apply_command(0, &cast_spell(bolt, target_player(1)))
         .expect("cast Lightning Bolt");
     let bolt_id = engine.state.stack[0].id;
+    engine
+        .apply_command(0, &pass())
+        .expect("pass priority to the Twincast player");
 
     ensure_in_hand(&mut engine, 1, "twincast");
     give_mana(

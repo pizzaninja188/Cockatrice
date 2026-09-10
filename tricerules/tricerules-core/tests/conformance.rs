@@ -730,11 +730,48 @@ fn grouped_offer_choices_are_typed_and_stale_payment_is_rejected() {
     assert_eq!(chosen[0].kind, TargetRefKind::Permanent as i32);
     assert_eq!(chosen[1].kind, TargetRefKind::Permanent as i32);
     assert_ne!(chosen[0].group_index, chosen[1].group_index);
-    let mut command = helpers::cast_spell(slot as usize, chosen);
-    offers::pay(&e, 0, &mut command).unwrap();
-    *e.state.zone_change_generation.entry(oid).or_default() += 1;
-    assert!(apply(&mut e, 0, &command).is_err());
-    assert!(settled(&e));
+    let command = helpers::cast_spell(slot as usize, chosen);
+    let Some(Cmd::CastSpell(cast)) = command.cmd else {
+        unreachable!()
+    };
+    apply(
+        &mut e,
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                announcement: Some(SpellCastAnnouncement {
+                    targets: cast.targets,
+                    x_value: cast.x_value,
+                    flex_payments: cast.flex_payments,
+                    face_index: cast.face_index,
+                    selected_modes: cast.selected_modes,
+                    source: cast.source,
+                    cost_selections: cast.cost_selections,
+                    cast_cost_group_selections: cast.cast_cost_group_selections,
+                    cast_method: cast.cast_method,
+                    casting_permission_id: cast.casting_permission_id,
+                }),
+            })),
+        },
+    )
+    .unwrap();
+    let pending = e.state.pending_spell_cast.as_ref().unwrap();
+    let transaction_id = pending.transaction_id;
+    let reserved = pending.reserved_object_id;
+    assert_eq!(reserved, oid);
+    *e.state.zone_change_generation.entry(reserved).or_default() += 1;
+    assert!(apply(
+        &mut e,
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                transaction_id,
+                ..Default::default()
+            })),
+        },
+    )
+    .is_err());
+    assert!(e.state.pending_spell_cast.is_some());
     exercise(&case).unwrap();
 }
 

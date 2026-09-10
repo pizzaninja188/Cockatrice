@@ -199,6 +199,7 @@ impl GameEngine {
             request.activate_ability.is_some(),
             request.resolution_choice.is_some(),
             request.execute_permanent_action.is_some(),
+            request.commit_spell_cast.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
@@ -210,8 +211,29 @@ impl GameEngine {
             ));
         }
         let (mut prepared, source, mut selection, allows_convoke) = if let Some(command) =
-            &request.cast_spell
+            &request.commit_spell_cast
         {
+            let pending = self
+                .state
+                .pending_spell_cast
+                .as_ref()
+                .ok_or(EngineError::Illegal("no spell cast is being paid"))?;
+            if pending.caster != player || pending.transaction_id != command.transaction_id {
+                return Err(EngineError::Illegal("stale spell-cast transaction"));
+            }
+            let internal = self
+                .pending_spell_cast_internal
+                .as_ref()
+                .ok_or(EngineError::Illegal("missing locked spell cost"))?;
+            let mut prepared = internal.prepared.payment.clone();
+            prepared.restricted_mana = command.restricted_mana.clone();
+            (
+                prepared,
+                self.payment_object_ref(pending.reserved_object_id),
+                command.payment.clone().unwrap_or_default(),
+                internal.prepared.convoke,
+            )
+        } else if let Some(command) = &request.cast_spell {
             if self.special_cast_method(player).is_none()
                 && (self.state.priority_player_id() != player
                     || self.state.blocking_choice().is_some())
@@ -246,6 +268,7 @@ impl GameEngine {
                 || command.decision != rv1::ResolutionChoiceDecision::PayMana as i32
                 || !command.chosen_object_ids.is_empty()
                 || command.cast_spell.is_some()
+                || command.spell_cast_announcement.is_some()
                 || command.chosen_combat_defender.is_some()
             {
                 return Err(EngineError::Illegal("invalid resolution payment proposal"));

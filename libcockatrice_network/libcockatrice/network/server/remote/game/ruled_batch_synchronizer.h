@@ -15,6 +15,7 @@
 #include <QString>
 #include <QVector>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
+#include <libcockatrice/utility/card_ref.h>
 
 class RuledGameSession;
 class Server_Card;
@@ -41,7 +42,9 @@ public:
     RuledBatchSynchronizer(Server_Game *game, RuledGameSession *session);
 
     void resetForNewGame();
-    void applyAcceptedCommandVisuals(int playerId, const ruled::v1::RuledCommand &command);
+    void applyAcceptedCommandVisuals(int playerId,
+                                     const ruled::v1::RuledCommand &command,
+                                     const ruled::v1::IpcResponse &response);
     BatchApplyResult applyBatch(const ruled::v1::IpcResponse &response);
     void applyStartupBatch(const ruled::v1::IpcResponse &response, const QList<QPair<int, QStringList>> &deckByPlayer);
     void revealFaceDownPermanentsOnConcede(int concedingPlayerId, GameEventStorage &events);
@@ -56,9 +59,17 @@ public:
 private:
     struct PendingRuledCastVisual
     {
+        quint64 transactionId = 0;
+        quint32 reservedObjectId = 0;
         QString cardName;
         int serverCardId = -1;
         int casterPlayerId = -1;
+        int sourcePlayerId = -1;
+        QString sourceZoneName;
+        int sourcePosition = -1;
+        int sourceX = -1;
+        int sourceY = 0;
+        CardRef sourceCardRef;
         QVector<quint32> targetOids;
     };
 

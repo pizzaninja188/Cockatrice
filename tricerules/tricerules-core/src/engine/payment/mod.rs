@@ -172,6 +172,9 @@ fn restriction_allows_purpose(
     restriction: &ManaSpendingRestriction,
     purpose: ManaSpendPurpose<'_>,
 ) -> bool {
+    if restriction.unrestricted {
+        return true;
+    }
     match purpose {
         ManaSpendPurpose::CastSpell(face) => restriction
             .cast_spell
@@ -189,6 +192,60 @@ fn restriction_allows_purpose(
             restriction.all_nonspell_costs || restriction.special_actions.contains(&action)
         }
         ManaSpendPurpose::ResolutionPayment => restriction.all_nonspell_costs,
+    }
+}
+
+impl GameEngine {
+    pub(in crate::engine) fn mana_spending_keywords_for_spell(
+        &self,
+        card_id: &str,
+        face_index: usize,
+        spent: &[rv1::ManaSpendSelection],
+    ) -> Vec<Keyword> {
+        let Some(face) = self
+            .registry
+            .get(card_id)
+            .and_then(|definition| definition.face(face_index))
+        else {
+            return Vec::new();
+        };
+        let mut keywords = Vec::new();
+        for selection in spent {
+            if [
+                selection.w,
+                selection.u,
+                selection.b,
+                selection.r,
+                selection.g,
+                selection.c,
+            ]
+            .into_iter()
+            .all(|count| count == 0)
+            {
+                continue;
+            }
+            let Some(rule) = selection
+                .restriction_group_id
+                .checked_sub(1)
+                .and_then(|index| self.state.mana_restrictions.get(index as usize))
+            else {
+                continue;
+            };
+            for effect in &rule.spending_effects {
+                let tricerules_cards::ManaSpendingEffect::GrantKeywordsToSpellUntilEndOfTurn {
+                    filter,
+                    keywords: granted,
+                } = effect;
+                if mana_filter_matches_face(filter, face) {
+                    for keyword in granted {
+                        if !keywords.contains(keyword) {
+                            keywords.push(*keyword);
+                        }
+                    }
+                }
+            }
+        }
+        keywords
     }
 }
 

@@ -39,6 +39,585 @@ fn setup() -> GameEngine {
     engine
 }
 
+fn grant_sacrifice_for_blue(engine: &mut GameEngine, source: u32) {
+    use tricerules_cards::{ContinuousEffectKind, EffectDuration};
+    use tricerules_core::state::{AffectedScope, ContinuousEffect};
+
+    let fixture = r#"(id: "issue_239_mana_elemental", name: "Issue 239 Mana Elemental",
+        face_id: "issue_239_mana_elemental", types: ["Creature"], power: 1, toughness: 1,
+        activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
+            costs: [SacrificeSelf], effect: [ProduceMana(options: [(u: 1)])])])"#;
+    let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
+        .expect("scenario mana ability is valid card data");
+    let ability = registry
+        .get("issue_239_mana_elemental")
+        .unwrap()
+        .primary_face()
+        .activated_abilities[0]
+        .clone();
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(source),
+        kind: ContinuousEffectKind::GrantActivatedAbility(Box::new(ability)),
+        condition: None,
+        duration: EffectDuration::WhileSourceOnBattlefield,
+        timestamp: engine.state.command_index,
+    });
+}
+
+fn grant_nonmana_ability(engine: &mut GameEngine, source: u32) {
+    use tricerules_cards::{ContinuousEffectKind, EffectDuration};
+    use tricerules_core::state::{AffectedScope, ContinuousEffect};
+
+    let fixture = r#"(id: "issue_239_life_elemental", name: "Issue 239 Life Elemental",
+        face_id: "issue_239_life_elemental", types: ["Creature"], power: 1, toughness: 1,
+        activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
+            costs: [], effect: [GainLife(amount: 1)])])"#;
+    let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
+        .expect("scenario nonmana ability is valid card data");
+    let ability = registry
+        .get("issue_239_life_elemental")
+        .unwrap()
+        .primary_face()
+        .activated_abilities[0]
+        .clone();
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(source),
+        kind: ContinuousEffectKind::GrantActivatedAbility(Box::new(ability)),
+        condition: None,
+        duration: EffectDuration::WhileSourceOnBattlefield,
+        timestamp: engine.state.command_index,
+    });
+}
+
+fn grant_any_creature_dies_life_trigger(engine: &mut GameEngine, source: u32) {
+    use tricerules_cards::{ContinuousEffectKind, EffectDuration};
+    use tricerules_core::state::{AffectedScope, ContinuousEffect};
+
+    let fixture = r#"(id: "issue_239_death_watcher", name: "Issue 239 Death Watcher",
+        face_id: "issue_239_death_watcher", types: ["Creature"], power: 1, toughness: 1,
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+            trigger: WheneverCreatureDies(controller: AnyPlayer, filter: (exclude_source: false)),
+            effect: [GainLife(amount: 1)])])"#;
+    let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
+        .expect("scenario death trigger is valid card data");
+    let ability = registry
+        .get("issue_239_death_watcher")
+        .unwrap()
+        .primary_face()
+        .triggered_abilities[0]
+        .clone();
+    engine.state.add_triggered_ability_grant(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(source),
+        kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
+        condition: None,
+        duration: EffectDuration::WhileSourceOnBattlefield,
+        timestamp: engine.state.command_index,
+    });
+}
+
+fn begin_cast_transaction(engine: &mut GameEngine, player: i32, command: RuledCommand) -> u64 {
+    use tricerules_proto::ruled::v1::{BeginSpellCast, SpellCastAnnouncement};
+
+    let Some(Cmd::CastSpell(cast)) = command.cmd else {
+        panic!("expected legacy cast fixture")
+    };
+    let announcement = SpellCastAnnouncement {
+        targets: cast.targets,
+        x_value: cast.x_value,
+        flex_payments: cast.flex_payments,
+        face_index: cast.face_index,
+        selected_modes: cast.selected_modes,
+        source: cast.source,
+        cost_selections: cast.cost_selections,
+        cast_cost_group_selections: cast.cast_cost_group_selections,
+        cast_method: cast.cast_method,
+        casting_permission_id: cast.casting_permission_id,
+    };
+    engine
+        .apply_command(
+            player,
+            &RuledCommand {
+                cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                    announcement: Some(announcement),
+                })),
+            },
+        )
+        .expect("begin cast transaction");
+    engine
+        .state
+        .pending_spell_cast
+        .as_ref()
+        .unwrap()
+        .transaction_id
+}
+
+fn begin_cast_command(command: RuledCommand) -> RuledCommand {
+    use tricerules_proto::ruled::v1::{BeginSpellCast, SpellCastAnnouncement};
+
+    let Some(Cmd::CastSpell(cast)) = command.cmd else {
+        panic!("expected legacy cast fixture")
+    };
+    RuledCommand {
+        cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+            announcement: Some(SpellCastAnnouncement {
+                targets: cast.targets,
+                x_value: cast.x_value,
+                flex_payments: cast.flex_payments,
+                face_index: cast.face_index,
+                selected_modes: cast.selected_modes,
+                source: cast.source,
+                cost_selections: cast.cost_selections,
+                cast_cost_group_selections: cast.cast_cost_group_selections,
+                cast_method: cast.cast_method,
+                casting_permission_id: cast.casting_permission_id,
+            }),
+        })),
+    }
+}
+
+#[test]
+fn issue_239_sunderflock_cost_stays_locked_while_activating_mana_abilities() {
+    use tricerules_proto::ruled::v1::{
+        BeginSpellCast, CommitSpellCast, PaymentMana, PaymentSelection, PreviewPayment,
+        SpellCastAnnouncement,
+    };
+
+    let mut engine = setup();
+    let elemental = inject_creature_on_battlefield(&mut engine, 0, "air_elemental");
+    grant_sacrifice_for_blue(&mut engine, elemental);
+    engine.state.players[0].mana_pool.blue = 4;
+
+    let slot = hand_index_for_card(&engine, 0, "sunderflock");
+    let cast = cast_spell(slot, vec![]);
+    let Some(Cmd::CastSpell(cast)) = cast.cmd else {
+        unreachable!()
+    };
+    let announcement = SpellCastAnnouncement {
+        targets: cast.targets,
+        x_value: cast.x_value,
+        flex_payments: cast.flex_payments,
+        face_index: cast.face_index,
+        selected_modes: cast.selected_modes,
+        source: cast.source,
+        cost_selections: cast.cost_selections,
+        cast_cost_group_selections: cast.cast_cost_group_selections,
+        cast_method: cast.cast_method,
+        casting_permission_id: cast.casting_permission_id,
+    };
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::BeginSpellCast(BeginSpellCast {
+                    announcement: Some(announcement),
+                })),
+            },
+        )
+        .expect("the Elemental determines Sunderflock's total cost at begin");
+    let pending = engine.state.pending_spell_cast.as_ref().unwrap();
+    assert_eq!(pending.locked_total_cost, "{2}{U}{U}");
+    let transaction_id = pending.transaction_id;
+
+    engine
+        .apply_command(0, &activate_ability(elemental, 0, vec![]))
+        .expect("the Elemental's mana ability resolves during payment");
+    assert_eq!(engine.state.objects[&elemental].zone, Zone::Graveyard);
+    assert_eq!(engine.state.players[0].mana_pool.blue, 5);
+
+    let proposed = CommitSpellCast {
+        transaction_id,
+        payment: Some(PaymentSelection {
+            mana: Some(PaymentMana {
+                u: 4,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let preview = engine.preview_payment(
+        0,
+        &PreviewPayment {
+            transaction_id,
+            revision: 1,
+            commit_spell_cast: Some(proposed),
+            ..Default::default()
+        },
+    );
+    assert!(preview.valid && preview.complete, "{preview:?}");
+
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                    transaction_id,
+                    payment: preview.selection,
+                    restricted_mana: preview.restricted_mana,
+                })),
+            },
+        )
+        .expect("the four-mana total was locked before the Elemental was sacrificed");
+    assert_eq!(engine.state.players[0].mana_pool.blue, 1);
+}
+
+#[test]
+fn issue_239_cancel_restores_exact_source_but_keeps_mana_ability_changes() {
+    use tricerules_proto::ruled::v1::{CancelSpellCast, CommitSpellCast};
+
+    let mut engine = setup();
+    let elemental = inject_creature_on_battlefield(&mut engine, 0, "air_elemental");
+    grant_sacrifice_for_blue(&mut engine, elemental);
+    engine.state.players[0].mana_pool.blue = 4;
+    let hand_before = engine.state.players[0].hand.clone();
+    let slot = hand_index_for_card(&engine, 0, "sunderflock");
+    let source = hand_before[slot];
+    let generation_before = engine
+        .state
+        .zone_change_generation
+        .get(&source)
+        .copied()
+        .unwrap_or(0);
+    let transaction_id = begin_cast_transaction(&mut engine, 0, cast_spell(slot, vec![]));
+    assert_eq!(engine.state.objects[&source].zone, Zone::Stack);
+
+    engine
+        .apply_command(0, &activate_ability(elemental, 0, vec![]))
+        .expect("mana ability during casting");
+    let before_wrong_commit = format!("{:?}", engine.state);
+    assert!(engine
+        .apply_command(
+            1,
+            &RuledCommand {
+                cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                    transaction_id,
+                    ..Default::default()
+                })),
+            },
+        )
+        .is_err());
+    assert_eq!(format!("{:?}", engine.state), before_wrong_commit);
+
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
+            },
+        )
+        .expect("cancel cast transaction");
+    assert_eq!(engine.state.players[0].hand, hand_before);
+    assert_eq!(engine.state.objects[&source].zone, Zone::Hand);
+    assert_eq!(
+        engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0),
+        generation_before
+    );
+    assert_eq!(engine.state.objects[&elemental].zone, Zone::Graveyard);
+    assert_eq!(engine.state.players[0].mana_pool.blue, 5);
+    assert!(engine.state.pending_spell_cast.is_none());
+}
+
+#[test]
+fn issue_239_pending_cast_rejects_unrelated_and_stale_commands_without_mutation() {
+    use tricerules_proto::ruled::v1::{CancelSpellCast, CommitSpellCast};
+
+    let mut engine = setup();
+    let slot = hand_index_for_card(&engine, 0, "sunderflock");
+    let transaction_id = begin_cast_transaction(&mut engine, 0, cast_spell(slot, vec![]));
+    for command in [
+        pass(),
+        cast_spell(0, vec![]),
+        RuledCommand {
+            cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                transaction_id: transaction_id + 1,
+                ..Default::default()
+            })),
+        },
+    ] {
+        let before = serde_json::to_value(&engine.state).unwrap();
+        assert!(engine.apply_command(0, &command).is_err());
+        assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
+    }
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
+            },
+        )
+        .unwrap();
+}
+
+#[test]
+fn issue_239_pending_cast_rejects_nonmana_activation_without_mutation() {
+    use tricerules_proto::ruled::v1::CancelSpellCast;
+
+    let mut engine = setup();
+    let elemental = inject_creature_on_battlefield(&mut engine, 0, "air_elemental");
+    grant_nonmana_ability(&mut engine, elemental);
+    let slot = hand_index_for_card(&engine, 0, "sunderflock");
+    let transaction_id = begin_cast_transaction(&mut engine, 0, cast_spell(slot, vec![]));
+    let before = serde_json::to_value(&engine.state).unwrap();
+    let error = engine
+        .apply_command(0, &activate_ability(elemental, 0, vec![]))
+        .expect_err("a nonmana ability cannot be activated while paying for a spell");
+    assert!(error.to_string().contains("only mana abilities"));
+    assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
+            },
+        )
+        .unwrap();
+}
+
+#[test]
+fn issue_239_incomplete_and_excess_payment_leave_transaction_open_and_unchanged() {
+    use tricerules_proto::ruled::v1::{
+        CancelSpellCast, CommitSpellCast, PaymentMana, PreviewPayment,
+    };
+
+    let mut engine = setup();
+    engine.state.players[0].mana_pool.blue = 20;
+    let slot = hand_index_for_card(&engine, 0, "sunderflock");
+    let transaction_id = begin_cast_transaction(&mut engine, 0, cast_spell(slot, vec![]));
+    let base = engine.preview_payment(
+        0,
+        &PreviewPayment {
+            transaction_id,
+            revision: 1,
+            commit_spell_cast: Some(CommitSpellCast {
+                transaction_id,
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    assert!(base.valid && !base.complete, "{base:?}");
+
+    for blue in [1, 20] {
+        let mut selection = base.selection.clone().unwrap();
+        selection.mana = Some(PaymentMana {
+            u: blue,
+            ..Default::default()
+        });
+        let before = serde_json::to_value(&engine.state).unwrap();
+        let error = engine
+            .apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                        transaction_id,
+                        payment: Some(selection),
+                        ..Default::default()
+                    })),
+                },
+            )
+            .expect_err("an inexact payment cannot commit the spell");
+        assert!(error.to_string().contains("incomplete or excessive"));
+        assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
+        assert_eq!(
+            engine
+                .state
+                .pending_spell_cast
+                .as_ref()
+                .unwrap()
+                .transaction_id,
+            transaction_id
+        );
+    }
+
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
+            },
+        )
+        .unwrap();
+}
+
+#[test]
+fn issue_239_serialized_begin_mana_cancel_retry_commit_replays_identically() {
+    use prost::Message;
+    use tricerules_proto::ruled::v1::{
+        CancelSpellCast, CommitSpellCast, PaymentMana, PreviewPayment,
+    };
+
+    fn fresh() -> (GameEngine, u32) {
+        let mut engine = setup();
+        let elemental = inject_creature_on_battlefield(&mut engine, 0, "air_elemental");
+        grant_sacrifice_for_blue(&mut engine, elemental);
+        engine.state.players[0].mana_pool.blue = 20;
+        (engine, elemental)
+    }
+
+    let (mut original, elemental) = fresh();
+    let slot = hand_index_for_card(&original, 0, "sunderflock");
+    let mut commands = Vec::new();
+    let mut batches = Vec::new();
+    let mut apply = |engine: &mut GameEngine, command: RuledCommand| {
+        let encoded = command.encode_to_vec();
+        let wire = RuledCommand::decode(encoded.as_slice()).unwrap();
+        let batch = engine.apply_command(0, &wire).unwrap();
+        commands.push(wire);
+        batches.push(batch);
+    };
+
+    apply(&mut original, begin_cast_command(cast_spell(slot, vec![])));
+    let first_transaction = original
+        .state
+        .pending_spell_cast
+        .as_ref()
+        .unwrap()
+        .transaction_id;
+    apply(&mut original, activate_ability(elemental, 0, vec![]));
+    apply(
+        &mut original,
+        RuledCommand {
+            cmd: Some(Cmd::CancelSpellCast(CancelSpellCast {
+                transaction_id: first_transaction,
+            })),
+        },
+    );
+    apply(&mut original, begin_cast_command(cast_spell(slot, vec![])));
+    let second_transaction = original
+        .state
+        .pending_spell_cast
+        .as_ref()
+        .unwrap()
+        .transaction_id;
+    let preview = original.preview_payment(
+        0,
+        &PreviewPayment {
+            transaction_id: second_transaction,
+            revision: 1,
+            commit_spell_cast: Some(CommitSpellCast {
+                transaction_id: second_transaction,
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    let mut payment = preview.selection.unwrap();
+    payment.mana = Some(PaymentMana {
+        u: 9,
+        ..Default::default()
+    });
+    apply(
+        &mut original,
+        RuledCommand {
+            cmd: Some(Cmd::CommitSpellCast(CommitSpellCast {
+                transaction_id: second_transaction,
+                payment: Some(payment),
+                ..Default::default()
+            })),
+        },
+    );
+
+    let (mut replay, replay_elemental) = fresh();
+    assert_eq!(replay_elemental, elemental);
+    let replayed = commands
+        .iter()
+        .map(|command| replay.apply_command(0, command).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(replayed, batches);
+    assert_eq!(replay.state.command_index, original.state.command_index);
+    assert_eq!(replay.state.players[0].hand, original.state.players[0].hand);
+    assert_eq!(
+        replay.state.players[0].mana_pool.blue,
+        original.state.players[0].mana_pool.blue
+    );
+    assert_eq!(replay.state.stack.len(), 1);
+    assert_eq!(replay.state.stack[0].id, original.state.stack[0].id);
+    assert_eq!(
+        replay.state.zone_change_generation,
+        original.state.zone_change_generation
+    );
+}
+
+#[test]
+fn issue_239_mana_ability_triggers_wait_until_cancel_then_stack_in_apnap_order() {
+    use tricerules_proto::ruled::v1::CancelSpellCast;
+
+    let mut engine = setup();
+    let elemental = inject_creature_on_battlefield(&mut engine, 0, "air_elemental");
+    grant_sacrifice_for_blue(&mut engine, elemental);
+    let active_watcher = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let nonactive_watcher = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    grant_any_creature_dies_life_trigger(&mut engine, active_watcher);
+    grant_any_creature_dies_life_trigger(&mut engine, nonactive_watcher);
+    let slot = hand_index_for_card(&engine, 0, "sunderflock");
+    let transaction_id = begin_cast_transaction(&mut engine, 0, cast_spell(slot, vec![]));
+
+    engine
+        .apply_command(0, &activate_ability(elemental, 0, vec![]))
+        .expect("sacrifice mana ability during payment");
+    assert!(engine.state.stack.is_empty());
+    assert!(engine.state.pending_triggers.is_empty());
+    assert!(engine.state.pending_trigger_order.is_none());
+
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
+            },
+        )
+        .expect("cancel reaches the deferred trigger boundary");
+    assert_eq!(engine.state.stack.len(), 2);
+    assert_eq!(
+        (
+            engine.state.stack[0].controller,
+            engine.state.stack[1].controller
+        ),
+        (0, 1),
+        "the active player's waiting trigger is stacked before the nonactive player's"
+    );
+}
+
+#[test]
+fn issue_239_state_based_actions_wait_until_cast_cancellation() {
+    use tricerules_proto::ruled::v1::CancelSpellCast;
+
+    let mut engine = setup();
+    let elemental = inject_creature_on_battlefield(&mut engine, 0, "air_elemental");
+    grant_sacrifice_for_blue(&mut engine, elemental);
+    let lethal = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    engine.state.objects.get_mut(&lethal).unwrap().damage = 2;
+    let slot = hand_index_for_card(&engine, 0, "sunderflock");
+    let transaction_id = begin_cast_transaction(&mut engine, 0, cast_spell(slot, vec![]));
+    assert_eq!(engine.state.objects[&lethal].zone, Zone::Battlefield);
+
+    engine
+        .apply_command(0, &activate_ability(elemental, 0, vec![]))
+        .expect("mana ability cannot open an SBA window mid-cast");
+    assert_eq!(engine.state.objects[&lethal].zone, Zone::Battlefield);
+
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::CancelSpellCast(CancelSpellCast { transaction_id })),
+            },
+        )
+        .expect("cancel reaches the SBA boundary");
+    assert_eq!(engine.state.objects[&lethal].zone, Zone::Graveyard);
+}
+
 #[test]
 fn issue_229_sunderflock_cast_returns_non_elementals_to_owners() {
     let mut engine = setup();

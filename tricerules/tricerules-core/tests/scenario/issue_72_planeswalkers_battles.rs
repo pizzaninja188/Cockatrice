@@ -309,6 +309,9 @@ fn siege_ready_to_choose(seed: u64) -> (GameEngine, u32, u64) {
         .expect("Battle")
         .set_counter(tricerules_cards::primitives::CounterKind::Defense, 3);
     engine.apply_command(0, &pass()).expect("assign protector");
+    engine
+        .apply_command(1, &pass())
+        .expect("advance with priority returned to the active player");
     let battlefield_generation = engine
         .state
         .zone_change_generation
@@ -426,6 +429,7 @@ fn defeated_siege_casts_back_face_with_exact_physical_identity() {
             decision: tricerules_proto::ruled::v1::ResolutionChoiceDecision::CastSpell as i32,
             selected_branch_index: 0,
             cast_spell: Some(announcement),
+            spell_cast_announcement: None,
             chosen_combat_defender: None,
             payment: None,
             restricted_mana: vec![],

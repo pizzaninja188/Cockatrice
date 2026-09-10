@@ -241,6 +241,10 @@ void SmokeClient::sendReady()
 
 void SmokeClient::sendRuled(const ruled::v1::RuledCommand &cmd, const QString &what)
 {
+    if (!sendingTranslatedCastCommit && (legacyCastCommit.has_value() || translatedCastCommitInFlight)) {
+        commandsAfterTranslatedCast.emplace_back(cmd, what);
+        return;
+    }
     CommandContainer cont;
     cont.set_game_id(gameId);
     std::string bytes;
@@ -248,6 +252,44 @@ void SmokeClient::sendRuled(const ruled::v1::RuledCommand &cmd, const QString &w
     if (explicitCommand.has_cast_spell() &&
         explicitCommand.cast_spell().cast_method() == ruled::v1::CAST_METHOD_UNSPECIFIED) {
         explicitCommand.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    }
+    const auto translateCast = [this](const ruled::v1::CastSpell &cast,
+                                      ruled::v1::SpellCastAnnouncement *announcement) {
+        announcement->mutable_targets()->CopyFrom(cast.targets());
+        announcement->set_x_value(cast.x_value());
+        announcement->mutable_flex_payments()->CopyFrom(cast.flex_payments());
+        announcement->set_face_index(cast.face_index());
+        announcement->mutable_selected_modes()->CopyFrom(cast.selected_modes());
+        if (cast.has_source()) {
+            announcement->mutable_source()->CopyFrom(cast.source());
+        }
+        announcement->mutable_cost_selections()->CopyFrom(cast.cost_selections());
+        announcement->mutable_cast_cost_group_selections()->CopyFrom(cast.cast_cost_group_selections());
+        announcement->set_cast_method(cast.cast_method());
+        if (cast.has_casting_permission_id()) {
+            announcement->set_casting_permission_id(cast.casting_permission_id());
+        }
+        LegacyCastCommit commit;
+        commit.hasPayment = cast.has_payment();
+        if (commit.hasPayment) {
+            commit.payment.CopyFrom(cast.payment());
+        }
+        commit.restrictedMana.assign(cast.restricted_mana().begin(), cast.restricted_mana().end());
+        legacyCastCommit = std::move(commit);
+    };
+    if (explicitCommand.has_cast_spell()) {
+        ruled::v1::RuledCommand translated;
+        translateCast(explicitCommand.cast_spell(), translated.mutable_begin_spell_cast()->mutable_announcement());
+        explicitCommand = std::move(translated);
+    } else if (explicitCommand.has_submit_resolution_choice() &&
+               explicitCommand.submit_resolution_choice().has_cast_spell()) {
+        ruled::v1::RuledCommand translated;
+        auto *choice = translated.mutable_submit_resolution_choice();
+        choice->CopyFrom(explicitCommand.submit_resolution_choice());
+        choice->clear_cast_spell();
+        translateCast(explicitCommand.submit_resolution_choice().cast_spell(),
+                      choice->mutable_spell_cast_announcement());
+        explicitCommand = std::move(translated);
     }
     explicitCommand.SerializeToString(&bytes);
     cont.add_game_command()->MutableExtension(Command_RuledPayload::ext)->set_payload(bytes);
@@ -305,15 +347,74 @@ void SmokeClient::applyRuledBatch(const ruled::v1::RuledEventBatch &batch)
         onPaymentPreview(batch);
         return;
     }
-    ++stateVersion;
+    const auto localLegal = batch.legal_by_player().find(myId);
+    const bool spellAnnouncementBatch =
+        localLegal != batch.legal_by_player().end() && localLegal->second.has_pending_spell_cast();
+    if (!spellAnnouncementBatch) {
+        ++stateVersion;
+    }
     onBatchBegin(batch);
     for (const auto &ev : batch.events()) {
         observeRuledEvent(ev, [this](const QString &line) { log(line); });
         onRuledEvent(ev);
     }
     onBatchEventsComplete(batch);
-    if (observeLegalActions(batch))
+    if (observeLegalActions(batch)) {
+        commitTranslatedLegacyCast(batch);
+        releaseCommandsAfterTranslatedCast(batch);
         onLegalActions(batch);
+    }
+}
+
+void SmokeClient::commitTranslatedLegacyCast(const ruled::v1::RuledEventBatch &batch)
+{
+    if (!legacyCastCommit.has_value()) {
+        return;
+    }
+    const auto legal = batch.legal_by_player().find(myId);
+    if (legal == batch.legal_by_player().end() || !legal->second.has_pending_spell_cast()) {
+        return;
+    }
+    const quint64 transactionId = legal->second.pending_spell_cast().transaction_id();
+    LegacyCastCommit payment = std::move(*legacyCastCommit);
+    legacyCastCommit.reset();
+    translatedCastCommitInFlight = true;
+    ruled::v1::RuledCommand commit;
+    auto *spell = commit.mutable_commit_spell_cast();
+    spell->set_transaction_id(transactionId);
+    if (payment.hasPayment) {
+        spell->mutable_payment()->CopyFrom(payment.payment);
+        if (legal->second.pending_spell_cast().has_payment_preview()) {
+            const auto &authoritative = legal->second.pending_spell_cast().payment_preview().selection();
+            spell->mutable_payment()->set_expected_state_revision(authoritative.expected_state_revision());
+            if (authoritative.has_source()) {
+                spell->mutable_payment()->mutable_source()->CopyFrom(authoritative.source());
+            }
+        }
+    }
+    for (const auto &restricted : payment.restrictedMana) {
+        spell->add_restricted_mana()->CopyFrom(restricted);
+    }
+    sendingTranslatedCastCommit = true;
+    sendRuled(commit, QStringLiteral("commit translated spell cast"));
+    sendingTranslatedCastCommit = false;
+}
+
+void SmokeClient::releaseCommandsAfterTranslatedCast(const ruled::v1::RuledEventBatch &batch)
+{
+    if (!translatedCastCommitInFlight) {
+        return;
+    }
+    const auto legal = batch.legal_by_player().find(myId);
+    if (legal == batch.legal_by_player().end() || legal->second.has_pending_spell_cast()) {
+        return;
+    }
+    translatedCastCommitInFlight = false;
+    auto queued = std::move(commandsAfterTranslatedCast);
+    commandsAfterTranslatedCast.clear();
+    for (const auto &[command, what] : queued) {
+        sendRuled(command, what);
+    }
 }
 bool SmokeClient::labelMatching(const QRegularExpression &re, QRegularExpressionMatch *out) const
 {

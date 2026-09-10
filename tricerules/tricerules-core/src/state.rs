@@ -2092,6 +2092,11 @@ pub struct GameState {
     pub turn_instance: u64,
     pub next_object_id: ObjectId,
     pub command_index: u64,
+    /// Deterministic opaque identity for the next engine-owned CR 601 casting transaction.
+    pub next_spell_cast_transaction_id: u64,
+    /// Caster-private, serializable portion of the one in-progress spell proposal. The locked
+    /// debit plan remains engine-internal; this state is enough for diagnostics and LegalActions.
+    pub pending_spell_cast: Option<PendingSpellCastState>,
     /// Consecutive priority passes; reset when a spell/ability is added to stack
     pub passes_since_stack_change: u32,
     /// Number of lands played this turn from any legal zone; compared against max (1 + extras).
@@ -2174,6 +2179,9 @@ pub struct GameState {
     /// recomputed from base + this list on demand — `GameObject.power/toughness` always hold the
     /// printed base value and are never mutated by effects.
     pub continuous_effects: Vec<ContinuousEffect>,
+    /// Stack spells whose characteristic-changing mana-spending effects carry to the permanent
+    /// they become under CR 400.7a. Cleared at the spell's next zone change.
+    pub spell_effects_carry_to_permanent: HashSet<ObjectId>,
     pub static_emblems: Vec<StaticEmblemInstance>,
     /// CR 502.3 / 611.2a rules-changing effects that suppress one permanent's next controller
     /// untap. The generation is part of identity because relay-compatible ObjectIds survive zone
@@ -2208,6 +2216,21 @@ pub struct GameState {
     /// deliberately excluded from snapshots — a reconnecting client learns tap state from the
     /// zone view instead.
     pub untapped_this_command: Vec<ObjectId>,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct PendingSpellCastState {
+    pub transaction_id: u64,
+    pub caster: PlayerId,
+    pub reserved_object_id: ObjectId,
+    pub announcement: tricerules_proto::ruled::v1::SpellCastAnnouncement,
+    pub locked_total_cost: String,
+    pub original_zone: Zone,
+    pub original_holder: PlayerId,
+    pub original_position: usize,
+    pub original_zone_change_generation: u64,
+    pub original_zone_change_generation_present: bool,
+    pub resolution_time_offer: bool,
 }
 
 impl GameState {

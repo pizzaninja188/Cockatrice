@@ -3,6 +3,7 @@
 use super::*;
 use tricerules_cards::primitives::{EventZone, ZoneEventCardinality, ZoneEventDestination};
 
+#[derive(Clone)]
 pub(super) struct ZoneEventSnapshot {
     sources: Vec<TriggerSourceSnapshot>,
     objects: Vec<(Zone, TurnObjectFact)>,
@@ -17,6 +18,7 @@ impl ZoneEventSnapshot {
     }
 }
 
+#[derive(Clone)]
 pub(super) struct ZoneChangeReceipt {
     pub origin: Zone,
     pub destination: Zone,
@@ -24,6 +26,7 @@ pub(super) struct ZoneChangeReceipt {
     pub destination_generation: u64,
 }
 
+#[derive(Clone)]
 pub(super) struct ZoneEventBatch {
     pub sources: Vec<TriggerSourceSnapshot>,
     pub moves: Vec<ZoneChangeReceipt>,

@@ -532,11 +532,12 @@ void RuledPaymentUi::cancelPendingRuledSpellCast()
         return;
     }
     const QString cardName = actions->pendingRuledSpellCast.cardName;
+    const quint64 engineTransactionId = actions->pendingRuledSpellCast.engineTransactionId;
 
-    // Restore the mana counters drained pip-by-pip toward this spell. The cast was never sent, so
-    // the engine never spent the mana (the pool is engine-owned; the display was only decremented
-    // locally — see tryPayRuledSpellWithCounter). Any lands tapped to float mana stay tapped/floated
-    // and remain undoable via the engine's UndoManaAbility (the Undo button), not unwound here.
+    // Restore the display counters drained pip-by-pip toward this spell. Even after BeginSpellCast,
+    // the engine has not spent the staged selection; its authoritative pool changes only for mana
+    // abilities and a successful CommitSpellCast. Any lands tapped to float mana stay
+    // tapped/floated and remain undoable through UndoManaAbility, not unwound here.
     for (int i = actions->manaPaymentCounterIds.size() - 1; i >= 0; --i) {
         if (auto *counter = actions->player->getCounters().value(actions->manaPaymentCounterIds[i], nullptr)) {
             counter->setValue(counter->getValue() + 1);
@@ -545,6 +546,32 @@ void RuledPaymentUi::cancelPendingRuledSpellCast()
     actions->manaPaymentCounterIds.clear();
     clearRestrictedManaPaymentSelections();
     actions->midCastLandTapStack.clear();
+
+    if (engineTransactionId != 0) {
+        clear();
+        actions->pendingRuledSpellCast.stage = PendingRuledSpellCast::Stage::CancelPending;
+        actions->pendingRuledSpellCast.submissionPending = true;
+        emit actions->ruledSpellCastPendingChanged(true);
+        ruled::v1::RuledCommand cancel;
+        cancel.mutable_cancel_spell_cast()->set_transaction_id(engineTransactionId);
+        RuledActions::sendRuledCommandExpectingAck(
+            actions->player->getGame(), cancel, [this, engineTransactionId](bool accepted) {
+                auto &pending = actions->pendingRuledSpellCast;
+                if (!pending.valid || pending.engineTransactionId != engineTransactionId)
+                    return;
+                pending.submissionPending = false;
+                if (accepted) {
+                    clearPendingRuledSpellCast();
+                } else {
+                    pending.stage = PendingRuledSpellCast::Stage::Paying;
+                    emit actions->ruledSpellCastPendingChanged(true);
+                    startOrRefresh();
+                }
+            });
+        actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
+            PlayerActions::tr("Canceling casting %1.").arg(cardName));
+        return;
+    }
 
     clearPendingRuledSpellCast();
     emit actions->landTapUndoAvailableChanged(actions->landTapUndoCurrentlyAvailable());
@@ -579,6 +606,7 @@ bool RuledPaymentUi::completePendingRuledSpellCast()
         return false;
     }
     actions->pendingRuledSpellCast.submissionPending = true;
+    actions->pendingRuledSpellCast.stage = PendingRuledSpellCast::Stage::BeginPending;
     emit actions->ruledSpellCastPendingChanged(true);
     RuledActions::sendRuledCommandExpectingAck(actions->player->getGame(), *built, [this](bool accepted) {
         if (!actions->pendingRuledSpellCast.valid || !actions->pendingRuledSpellCast.submissionPending) {
@@ -586,13 +614,11 @@ bool RuledPaymentUi::completePendingRuledSpellCast()
         }
         actions->pendingRuledSpellCast.submissionPending = false;
         if (accepted) {
-            actions->manaPaymentCounterIds.clear();
-            actions->midCastLandTapStack.clear();
-            actions->clearLandTapUndoStack();
-            clearPendingRuledSpellCast();
+            reconcileEnginePendingSpellCast();
+            startOrRefresh();
         } else {
+            actions->pendingRuledSpellCast.stage = PendingRuledSpellCast::Stage::Announcing;
             emit actions->ruledSpellCastPendingChanged(true);
-            emit actions->ruledSpellManaPromptChanged();
         }
     });
     return true;
@@ -898,21 +924,10 @@ void RuledPaymentUi::continuePendingSpellAfterChoice()
         return;
     }
     actions->pendingRuledSpellCast.waitingForCost = false;
-    if (startOrRefresh())
-        return;
     if (!resolvePendingSpellFlexiblePips()) {
         return;
     }
-    if (RuledPendingCast::totalRemainingForCost(actions->pendingRuledSpellCast.remainingCost,
-                                                actions->pendingRuledSpellCast.flexPips) == 0) {
-        completePendingRuledSpellCast();
-        return;
-    }
-    actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
-        PlayerActions::tr("Pay mana for %1: %2 remaining (click mana counters).")
-            .arg(actions->pendingRuledSpellCast.cardName,
-                 RuledPendingCast::formatRemainingCost(actions->pendingRuledSpellCast.remainingCost,
-                                                       actions->pendingRuledSpellCast.flexPips)));
+    completePendingRuledSpellCast();
 }
 
 void RuledPaymentUi::continuePendingActivatedAbilityAfterChoice()
@@ -997,7 +1012,9 @@ void RuledPaymentUi::finishPendingAbilityManaPaymentStep()
 
 bool RuledPaymentUi::tryReducePendingSpellRemainingCostOnePip(bool colorlessMana, QChar coloredMana)
 {
-    if (!actions->pendingRuledSpellCast.valid || actions->pendingRuledSpellCast.waitingForTarget ||
+    if (!actions->pendingRuledSpellCast.valid ||
+        actions->pendingRuledSpellCast.stage != PendingRuledSpellCast::Stage::Paying ||
+        actions->pendingRuledSpellCast.waitingForTarget ||
         actions->pendingRuledSpellCast.waitingForCost) {
         return false;
     }
@@ -1355,6 +1372,9 @@ bool RuledPaymentUi::ruledRestrictedManaGroupEligible(quint32 groupId) const
     }
     if (actions->pendingRuledSpellCast.valid && !actions->pendingRuledSpellCast.waitingForTarget &&
         !actions->pendingRuledSpellCast.waitingForCost) {
+        if (actions->pendingRuledSpellCast.engineTransactionId != 0) {
+            return state->eligibleRestrictedManaForPendingCast().contains(groupId);
+        }
         return state
             ->eligibleRestrictedManaForCast(
                 actions->pendingRuledSpellCast.handIndex, actions->pendingRuledSpellCast.faceIndex,
@@ -1947,7 +1967,7 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     // A tapped (or summoning-sick) mana source has nothing to offer: skip the fast path rather
     // than firing an activation the engine will reject.
     if (battlefieldSource && preparationCopy == 0 && paymentContributions.isEmpty() && abilities.size() == 1 && firstAbility &&
-        !firstAbility->manaProduced.isEmpty() && handler->abilityActivatable(oid, 0) &&
+        firstAbility->usesDirectManaActivation() && handler->abilityActivatable(oid, 0) &&
         handler->abilityCostChoices(oid, 0).isEmpty()) {
         const QStringList colorOptions = firstAbility->manaProduced.split(QChar('/'));
         if (colorOptions.size() > 1) {

@@ -29,6 +29,7 @@ void RuledBroadcastRouter::resetForNewGame()
     lastBroadcastHandSlotParticipants.clear();
     pendingResolutionChoice.reset();
     pendingResolutionState.Clear();
+    pendingSpellCastState.Clear();
     currentPublicZoneView.reset();
     pendingOpeningState.Clear();
 }
@@ -69,6 +70,7 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
 {
     pendingResolutionChoice.reset();
     pendingResolutionState.Clear();
+    pendingSpellCastState.Clear();
     pendingOpeningState.Clear();
     if (!response.has_batch()) {
         return;
@@ -116,25 +118,42 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
             if (event.has_mana_pool_updated()) pendingResolutionState.add_events()->CopyFrom(event);
         }
     }
+    if (std::any_of(legal.begin(), legal.end(),
+                    [](const auto &entry) { return entry.second.has_pending_spell_cast(); })) {
+        *pendingSpellCastState.mutable_legal_by_player() = legal;
+        if (currentPublicZoneView)
+            pendingSpellCastState.add_events()->mutable_zone_view()->CopyFrom(*currentPublicZoneView);
+        for (const auto &event : response.batch().events()) {
+            if (event.has_mana_pool_updated())
+                pendingSpellCastState.add_events()->CopyFrom(event);
+        }
+        // A begun resolution-time cast has superseded its offer prompt until cancel restores it.
+        pendingResolutionChoice.reset();
+        pendingResolutionState.Clear();
+    }
 }
 
 void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_AbstractParticipant *participant,
                                                                         ResponseContainer &rc)
 {
     const bool opening = !pendingOpeningState.legal_by_player().empty();
-    if (!participant || (!opening && !pendingResolutionChoice.has_value())) {
+    const bool casting = !pendingSpellCastState.legal_by_player().empty();
+    if (!participant || (!opening && !casting && !pendingResolutionChoice.has_value())) {
         return;
     }
     ruled::v1::IpcResponse snapshot;
     auto *batch = snapshot.mutable_batch();
     if (opening) {
         batch->CopyFrom(pendingOpeningState);
+    } else if (casting) {
+        batch->CopyFrom(pendingSpellCastState);
     } else {
         batch->add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingResolutionChoice);
         *batch->mutable_legal_by_player() = pendingResolutionState.legal_by_player();
         for (const auto &event : pendingResolutionState.events()) batch->add_events()->CopyFrom(event);
     }
-    if (opening || pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
+    if (opening || casting ||
+        (pendingResolutionChoice && pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST)) {
         appendServerObjectMaps(snapshot);
         // Reconnecting an existing seat does not change the broadcast participant set.
         // Still restore its hand identities if the normal delta map was elided.
@@ -226,6 +245,17 @@ void RuledBroadcastRouter::appendServerObjectMaps(ruled::v1::IpcResponse &toSend
                             stackOid = it.key();
                             foundStackOid = true;
                             break;
+                        }
+                    }
+                    if (!foundStackOid) {
+                        const auto pending = std::find_if(
+                            synchronizer->ruledPendingCastVisualQueue.cbegin(),
+                            synchronizer->ruledPendingCastVisualQueue.cend(), [&stackCard](const auto &entry) {
+                                return entry.serverCardId == stackCard->getId() && entry.reservedObjectId != 0;
+                            });
+                        if (pending != synchronizer->ruledPendingCastVisualQueue.cend()) {
+                            stackOid = pending->reservedObjectId;
+                            foundStackOid = true;
                         }
                     }
                     if (!foundStackOid) {

@@ -74,6 +74,9 @@ void RuledPayment::writePayment(ruled::v1::RuledCommand &command) const
     if (command.has_cast_spell()) {
         *command.mutable_cast_spell()->mutable_payment() = selection;
         *command.mutable_cast_spell()->mutable_restricted_mana() = restrictedMana;
+    } else if (command.has_commit_spell_cast()) {
+        *command.mutable_commit_spell_cast()->mutable_payment() = selection;
+        *command.mutable_commit_spell_cast()->mutable_restricted_mana() = restrictedMana;
     } else if (command.has_activate_ability()) {
         *command.mutable_activate_ability()->mutable_payment() = selection;
         *command.mutable_activate_ability()->mutable_restricted_mana() = restrictedMana;
@@ -94,6 +97,8 @@ ruled::v1::PreviewPayment RuledPayment::requestAction(ruled::v1::RuledCommand co
     writePayment(command);
     if (command.has_cast_spell())
         *query.mutable_cast_spell() = command.cast_spell();
+    else if (command.has_commit_spell_cast())
+        *query.mutable_commit_spell_cast() = command.commit_spell_cast();
     else if (command.has_activate_ability())
         *query.mutable_activate_ability() = command.activate_ability();
     else if (command.has_submit_resolution_choice())

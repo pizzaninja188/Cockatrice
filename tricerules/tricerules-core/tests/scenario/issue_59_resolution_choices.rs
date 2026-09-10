@@ -22,6 +22,7 @@ fn select_branch(index: u32) -> RuledCommand {
             decision: ResolutionChoiceDecision::SelectBranch as i32,
             selected_branch_index: index,
             cast_spell: None,
+            spell_cast_announcement: None,
             chosen_combat_defender: None,
             payment: None,
             restricted_mana: vec![],

@@ -38,17 +38,124 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
     });
     QObject::connect(state, &RuledClientState::paymentPreviewReceived, actions, [this] { received(); });
     QObject::connect(state, &RuledClientState::legalActionsChanged, actions, [this] {
-        if (actions->player->getPlayerInfo()->getLocal())
+        if (actions->player->getPlayerInfo()->getLocal()) {
+            reconcileEnginePendingSpellCast();
             startOrRefresh();
+        }
     });
     QObject::connect(state, &RuledClientState::sessionReset, actions, [this] {
         suspendedPayments.clear();
+        actions->ruledPendingCast->clearSpell();
         clear();
     });
 }
 
+void RuledPaymentUi::reconcileEnginePendingSpellCast()
+{
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    auto &local = actions->pendingRuledSpellCast;
+    if (!state->pendingSpellCast.has_value()) {
+        if (local.valid &&
+            (local.stage == PendingRuledSpellCast::Stage::Paying ||
+             local.stage == PendingRuledSpellCast::Stage::CommitPending ||
+             local.stage == PendingRuledSpellCast::Stage::CancelPending)) {
+            clearPendingRuledSpellCast();
+        }
+        return;
+    }
+
+    const auto &engine = *state->pendingSpellCast;
+    const auto suspended = std::find_if(suspendedPayments.begin(), suspendedPayments.end(), [&engine](auto &frame) {
+        return frame.spell && frame.spell->engineTransactionId == engine.transaction_id();
+    });
+    if (suspended != suspendedPayments.end()) {
+        suspended->spell->reservedObjectId = engine.reserved_object_id();
+        suspended->spell->resolutionTimeOffer = engine.resolution_time_offer();
+        suspended->spell->stage = PendingRuledSpellCast::Stage::Paying;
+        return;
+    }
+    if (local.valid && local.engineTransactionId == engine.transaction_id()) {
+        local.reservedObjectId = engine.reserved_object_id();
+        local.resolutionTimeOffer = engine.resolution_time_offer();
+        local.stage = PendingRuledSpellCast::Stage::Paying;
+        local.submissionPending = false;
+        return;
+    }
+
+    bool announcedHere = false;
+    if (local.valid && local.stage == PendingRuledSpellCast::Stage::BeginPending && engine.has_announcement()) {
+        const auto proposed = buildCommand(actions);
+        announcedHere = proposed && proposed->has_begin_spell_cast() &&
+                        proposed->begin_spell_cast().has_announcement() &&
+                        proposed->begin_spell_cast().announcement().SerializeAsString() ==
+                            engine.announcement().SerializeAsString();
+    }
+    if (!announcedHere) {
+        clearPendingRuledSpellCast();
+        auto &rebuilt = actions->ruledPendingCast->beginSpell();
+        const auto &announcement = engine.announcement();
+        rebuilt.faceIndex = static_cast<int>(announcement.face_index());
+        rebuilt.xValue = static_cast<int>(announcement.x_value());
+        rebuilt.castMethod = announcement.cast_method();
+        rebuilt.castingPermissionId = announcement.has_casting_permission_id()
+                                            ? announcement.casting_permission_id()
+                                            : 0;
+        rebuilt.sourceZoneChangeGeneration = announcement.has_source()
+                                                   ? announcement.source().expected_zone_change_generation()
+                                                   : 0;
+        if (announcement.has_source()) {
+            switch (announcement.source().location_case()) {
+                case ruled::v1::CastSource::kHandIndex:
+                    rebuilt.source = RuledCastSource::Hand;
+                    rebuilt.handIndex = static_cast<int>(announcement.source().hand_index());
+                    break;
+                case ruled::v1::CastSource::kGraveyardObjectId:
+                    rebuilt.source = RuledCastSource::Graveyard;
+                    rebuilt.handIndex = static_cast<int>(announcement.source().graveyard_object_id());
+                    break;
+                case ruled::v1::CastSource::kExileObjectId:
+                    rebuilt.source = RuledCastSource::Exile;
+                    rebuilt.handIndex = static_cast<int>(announcement.source().exile_object_id());
+                    break;
+                default:
+                    break;
+            }
+        }
+        for (const auto &target : announcement.targets())
+            rebuilt.selectedTargetOids.append(static_cast<quint32>(target.object_id()));
+        for (const auto &mode : announcement.selected_modes()) {
+            PendingRuledSpellCast::SelectedMode selected;
+            selected.modeIndex = static_cast<int>(mode.mode_index());
+            for (const auto &target : mode.targets())
+                selected.selectedTargetOids.append(static_cast<quint32>(target.object_id()));
+            rebuilt.selectedModes.append(std::move(selected));
+        }
+        for (const auto &flex : announcement.flex_payments())
+            if (flex.pay_life())
+                rebuilt.lifePipIndices.append(static_cast<quint32>(flex.pip_index()));
+        rebuilt.remainingCost = RuledPendingCast::parseSimpleManaCost(
+            QString::fromStdString(engine.locked_total_cost()));
+        if (CardItem *card = RuledActions::findStackCardItemByEngineOid(
+                actions->player->getGame(), static_cast<quint32>(engine.reserved_object_id()))) {
+            rebuilt.cardName = card->getName();
+        } else {
+            rebuilt.cardName = PlayerActions::tr("spell");
+        }
+    }
+
+    local.engineTransactionId = static_cast<quint64>(engine.transaction_id());
+    local.reservedObjectId = static_cast<quint32>(engine.reserved_object_id());
+    local.resolutionTimeOffer = engine.resolution_time_offer();
+    local.stage = PendingRuledSpellCast::Stage::Paying;
+    local.submissionPending = false;
+    emit actions->ruledSpellCastPendingChanged(true);
+    emit actions->ruledSpellManaPromptChanged();
+}
+
 bool RuledPaymentUi::isStagingSpecialCast(const RuledClientState &state) const
 {
+    if (actions->pendingRuledSpellCast.valid && actions->pendingRuledSpellCast.resolutionTimeOffer)
+        return true;
     if (RuledPendingCast::matchesSpecialCastOffer(actions->pendingRuledSpellCast, state))
         return true;
     return std::any_of(suspendedPayments.cbegin(), suspendedPayments.cend(), [&state](const auto &frame) {
@@ -73,7 +180,8 @@ RuledPaymentUi::Context RuledPaymentUi::context() const
     if (state->isResolutionPaymentActive())
         return Context::Resolution;
     const auto &p = actions->pendingRuledSpellCast;
-    return p.valid && !p.waitingForTarget && !p.waitingForCost && !p.waitingForCastCostObject &&
+    return p.valid && p.stage == PendingRuledSpellCast::Stage::Paying && p.engineTransactionId != 0 &&
+                   !p.waitingForTarget && !p.waitingForCost && !p.waitingForCastCostObject &&
                    p.nextCastCostGroup >= p.castCostGroups.size()
                ? Context::Spell
                : Context::None;
@@ -257,6 +365,8 @@ void RuledPaymentUi::received()
         }
         model.writePayment(*command);
         const auto transaction = model.transaction();
+        if (submittingContext == Context::Spell && actions->pendingRuledSpellCast.valid)
+            actions->pendingRuledSpellCast.stage = PendingRuledSpellCast::Stage::CommitPending;
         RuledActions::sendRuledCommandExpectingAck(
             game, *command, [this, transaction, submittingContext](bool accepted) {
                 auto &current = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
@@ -275,6 +385,8 @@ void RuledPaymentUi::received()
                     }
                     actions->clearLandTapUndoStack();
                 } else if (current.active) {
+                    if (submittingContext == Context::Spell && actions->pendingRuledSpellCast.valid)
+                        actions->pendingRuledSpellCast.stage = PendingRuledSpellCast::Stage::Paying;
                     current.submitting = false;
                     schedule();
                 }
@@ -577,10 +689,14 @@ void RuledPaymentUi::paint(CardItem *card, QPainter *painter)
 std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerActions *actions)
 {
     const auto &pendingRuledSpellCast = actions->pendingRuledSpellCast;
-    const auto &restrictedManaPaymentSelections = actions->restrictedManaPaymentSelections;
     auto *player = actions->player;
     ruled::v1::RuledCommand ruledCommand;
-    auto *cast = ruledCommand.mutable_cast_spell();
+    if (pendingRuledSpellCast.engineTransactionId != 0) {
+        ruledCommand.mutable_commit_spell_cast()->set_transaction_id(
+            pendingRuledSpellCast.engineTransactionId);
+        return ruledCommand;
+    }
+    auto *cast = ruledCommand.mutable_begin_spell_cast()->mutable_announcement();
     cast->set_cast_method(pendingRuledSpellCast.castMethod);
     if (pendingRuledSpellCast.castingPermissionId != 0) {
         cast->set_casting_permission_id(pendingRuledSpellCast.castingPermissionId);
@@ -696,18 +812,6 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerAction
                 castSelection->set_expected_zone_change_generation(selection.expectedZoneChangeGeneration);
             }
         }
-    }
-    for (auto groupIt = restrictedManaPaymentSelections.constBegin();
-         groupIt != restrictedManaPaymentSelections.constEnd(); ++groupIt) {
-        auto *selection = cast->add_restricted_mana();
-        selection->set_restriction_group_id(groupIt.key());
-        const auto &counts = groupIt.value();
-        selection->set_w(static_cast<quint32>(counts.value(QLatin1Char('W'))));
-        selection->set_u(static_cast<quint32>(counts.value(QLatin1Char('U'))));
-        selection->set_b(static_cast<quint32>(counts.value(QLatin1Char('B'))));
-        selection->set_r(static_cast<quint32>(counts.value(QLatin1Char('R'))));
-        selection->set_g(static_cast<quint32>(counts.value(QLatin1Char('G'))));
-        selection->set_c(static_cast<quint32>(counts.value(QLatin1Char('C'))));
     }
     return ruledCommand;
 }

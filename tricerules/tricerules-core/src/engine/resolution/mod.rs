@@ -2711,6 +2711,7 @@ fn move_object_to_zone_with_entry_receipt(
     // This matters for exile permissions: exiling an already-exiled card cannot preserve an old
     // Adventure or "play it" permission merely because the destination enum is unchanged.
     if old_zone.is_some() {
+        state.spell_effects_carry_to_permanent.remove(&oid);
         state.cast_entry_facts.remove(&oid);
         state
             .discard_reference_successors

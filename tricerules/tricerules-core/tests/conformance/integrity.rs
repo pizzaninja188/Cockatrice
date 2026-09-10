@@ -233,6 +233,7 @@ fn try_drain_stack(e: &mut GameEngine) -> bool {
                     },
                     selected_branch_index: 0,
                     cast_spell: None,
+                    spell_cast_announcement: None,
                     chosen_combat_defender: None,
                     payment,
                     restricted_mana: vec![],

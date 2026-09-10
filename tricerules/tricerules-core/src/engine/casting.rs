@@ -104,6 +104,7 @@ fn validate_cast_cost_target_expansions(
     Ok(())
 }
 
+#[derive(Clone)]
 pub(in crate::engine) struct PreparedSpellCast {
     idx: usize,
     pub oid: ObjectId,
@@ -122,7 +123,363 @@ pub(in crate::engine) struct PreparedSpellCast {
     pub payment: super::payment::transaction::PreparedPaymentCosts,
 }
 
+#[derive(Clone)]
+pub(in crate::engine) struct PendingSpellCastInternal {
+    pub(in crate::engine) prepared: PreparedSpellCast,
+    original_object: GameObject,
+    restored_permissions: Vec<(usize, ActiveExilePlayPermission)>,
+    restored_discard_successors: Vec<((ObjectId, u64), u64)>,
+    proposal_triggers: Vec<super::triggers::CollectedTrigger>,
+    crime_events: Vec<GameEvent>,
+}
+
+fn cast_from_announcement(announcement: &rv1::SpellCastAnnouncement) -> rv1::CastSpell {
+    rv1::CastSpell {
+        targets: announcement.targets.clone(),
+        x_value: announcement.x_value,
+        flex_payments: announcement.flex_payments.clone(),
+        face_index: announcement.face_index,
+        selected_modes: announcement.selected_modes.clone(),
+        source: announcement.source,
+        cost_selections: announcement.cost_selections.clone(),
+        restricted_mana: Vec::new(),
+        cast_cost_group_selections: announcement.cast_cost_group_selections.clone(),
+        cast_method: announcement.cast_method,
+        payment: None,
+        casting_permission_id: announcement.casting_permission_id,
+    }
+}
+
+pub(in crate::engine) fn announcement_from_cast(
+    cast: &rv1::CastSpell,
+) -> rv1::SpellCastAnnouncement {
+    rv1::SpellCastAnnouncement {
+        targets: cast.targets.clone(),
+        x_value: cast.x_value,
+        flex_payments: cast.flex_payments.clone(),
+        face_index: cast.face_index,
+        selected_modes: cast.selected_modes.clone(),
+        source: cast.source,
+        cost_selections: cast.cost_selections.clone(),
+        cast_cost_group_selections: cast.cast_cost_group_selections.clone(),
+        cast_method: cast.cast_method,
+        casting_permission_id: cast.casting_permission_id,
+    }
+}
+
 impl GameEngine {
+    pub(super) fn begin_spell_cast(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::BeginSpellCast,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if self.state.pending_spell_cast.is_some() || self.pending_spell_cast_internal.is_some() {
+            return Err(EngineError::Illegal("a spell cast is already being paid"));
+        }
+        let announcement = command
+            .announcement
+            .as_ref()
+            .ok_or(EngineError::Illegal("missing spell announcement"))?;
+        let special = self.special_cast_method(player).is_some();
+        if !special
+            && (self.state.priority_player_id() != player || self.state.blocking_choice().is_some())
+        {
+            return Err(EngineError::Illegal(
+                "spell announcement is not available now",
+            ));
+        }
+        let cast = cast_from_announcement(announcement);
+        let prepared = self.prepare_spell_cast(player, &cast)?;
+        let oid = prepared.oid;
+        let object = self
+            .state
+            .objects
+            .get(&oid)
+            .cloned()
+            .ok_or(EngineError::Illegal("spell source missing"))?;
+        let original_zone = object.zone;
+        let original_holder = self
+            .state
+            .players
+            .iter()
+            .find(|candidate| match original_zone {
+                Zone::Hand => candidate.hand.contains(&oid),
+                Zone::Graveyard => candidate.graveyard.contains(&oid),
+                Zone::Exile => candidate.exile.contains(&oid),
+                _ => false,
+            })
+            .map(|candidate| candidate.id)
+            .ok_or(EngineError::Illegal(
+                "spell source is not in a castable zone",
+            ))?;
+        let holder_idx = self
+            .state
+            .player_idx(original_holder)
+            .ok_or(EngineError::UnknownPlayer(original_holder))?;
+        let original_position = match original_zone {
+            Zone::Hand => self.state.players[holder_idx]
+                .hand
+                .iter()
+                .position(|id| *id == oid),
+            Zone::Graveyard => self.state.players[holder_idx]
+                .graveyard
+                .iter()
+                .position(|id| *id == oid),
+            Zone::Exile => self.state.players[holder_idx]
+                .exile
+                .iter()
+                .position(|id| *id == oid),
+            _ => None,
+        }
+        .ok_or(EngineError::Illegal("spell source position is unavailable"))?;
+        let original_generation_entry = self.state.zone_change_generation.get(&oid).copied();
+        let original_generation = original_generation_entry.unwrap_or(0);
+        let stack_generation = original_generation.saturating_add(1);
+        let public_targets = prepared.public_targets.clone();
+        let stack_targets = public_targets
+            .iter()
+            .map(|target| capture_stack_target(self, target))
+            .collect();
+        let mut proposal_triggers = self.collect_event_triggers(&[GameEvent::TargetsChosen {
+            controller: player,
+            source: TargetingSourceKind::SpellCast,
+            stack_object: StackObjectRef {
+                object_id: oid,
+                zone_change_generation: Some(stack_generation),
+            },
+            targets: stack_targets,
+        }]);
+        let crime_events = self
+            .crime_event(player, &public_targets)
+            .into_iter()
+            .collect();
+        let cast_departure = (original_zone == Zone::Graveyard).then(|| self.snapshot_zone_event());
+        let restored_permissions = self
+            .state
+            .active_exile_play_permissions
+            .iter()
+            .cloned()
+            .enumerate()
+            .filter(|(_, permission)| permission.object_id == oid)
+            .collect();
+        let restored_discard_successors = self
+            .state
+            .discard_reference_successors
+            .iter()
+            .filter(|((object_id, _), _)| *object_id == oid)
+            .map(|(key, value)| (*key, *value))
+            .collect();
+        let locked_total_cost = prepared.payment.total_cost_label()?;
+
+        // Everything fallible above is validation. This is the CR 601.2a reservation edge.
+        super::resolution::move_object_to_zone(
+            &mut self.state,
+            self.registry,
+            oid,
+            Zone::Stack,
+            None,
+        )?;
+        if let Some(snapshot) = cast_departure {
+            let event = self.finish_single_zone_event(snapshot, oid);
+            proposal_triggers.extend(self.collect_event_triggers(&[event]));
+        }
+        let transaction_id = self.state.next_spell_cast_transaction_id;
+        self.state.next_spell_cast_transaction_id = transaction_id.saturating_add(1);
+        self.state.pending_spell_cast = Some(crate::state::PendingSpellCastState {
+            transaction_id,
+            caster: player,
+            reserved_object_id: oid,
+            announcement: announcement.clone(),
+            locked_total_cost,
+            original_zone,
+            original_holder,
+            original_position,
+            original_zone_change_generation: original_generation,
+            original_zone_change_generation_present: original_generation_entry.is_some(),
+            resolution_time_offer: special,
+        });
+        self.pending_spell_cast_internal = Some(PendingSpellCastInternal {
+            prepared,
+            original_object: object,
+            restored_permissions,
+            restored_discard_successors,
+            proposal_triggers,
+            crime_events,
+        });
+        Ok(RuledEventBatch::default())
+    }
+
+    pub(super) fn commit_spell_cast(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::CommitSpellCast,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let state = self
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .ok_or(EngineError::Illegal("no spell cast is being paid"))?;
+        if state.caster != player {
+            return Err(EngineError::Illegal(
+                "only the caster may commit this spell",
+            ));
+        }
+        if state.transaction_id != command.transaction_id {
+            return Err(EngineError::Illegal("stale spell-cast transaction"));
+        }
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&state.reserved_object_id)
+            .copied()
+            .unwrap_or(0);
+        if self
+            .state
+            .objects
+            .get(&state.reserved_object_id)
+            .is_none_or(|object| object.zone != Zone::Stack)
+            || current_generation != state.original_zone_change_generation.saturating_add(1)
+        {
+            return Err(EngineError::Illegal("reserved spell source changed"));
+        }
+        let internal = self
+            .pending_spell_cast_internal
+            .clone()
+            .ok_or(EngineError::Illegal("missing locked spell cost"))?;
+        let mut prepared = internal.prepared.clone();
+        prepared.payment.restricted_mana = command.restricted_mana.clone();
+        let mut cast = cast_from_announcement(&state.announcement);
+        cast.payment = command.payment.clone();
+        cast.restricted_mana = command.restricted_mana.clone();
+        let special = state.resolution_time_offer;
+        let special_continuation = if special {
+            let pending = self
+                .state
+                .pending_resolution
+                .as_ref()
+                .ok_or(EngineError::Illegal("special cast resolution disappeared"))?;
+            let ResolutionContinuation::SpecialCast { stack, .. } = &pending.continuation else {
+                return Err(EngineError::Illegal("special cast resolution changed"));
+            };
+            Some((
+                stack.item.clone(),
+                stack.resume_effect_index,
+                stack.previous_result.clone(),
+            ))
+        } else {
+            None
+        };
+        let mut batch = self.commit_prepared_spell_cast(player, &cast, prepared, &internal)?;
+        self.state.undoable_mana_abilities.clear();
+        self.state.pending_spell_cast = None;
+        self.pending_spell_cast_internal = None;
+        if let Some((item, resume_effect_index, previous_result)) = special_continuation {
+            self.state.pending_resolution = None;
+            batch = self.complete_parked_resolution_with_previous(
+                item,
+                resume_effect_index,
+                previous_result,
+                batch.events,
+            )?;
+        }
+        Ok(batch)
+    }
+
+    pub(super) fn cancel_spell_cast(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::CancelSpellCast,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let state = self
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .ok_or(EngineError::Illegal("no spell cast is being paid"))?;
+        if state.caster != player {
+            return Err(EngineError::Illegal(
+                "only the caster may cancel this spell",
+            ));
+        }
+        if state.transaction_id != command.transaction_id {
+            return Err(EngineError::Illegal("stale spell-cast transaction"));
+        }
+        let state = self.state.pending_spell_cast.take().unwrap();
+        let internal = self
+            .pending_spell_cast_internal
+            .take()
+            .ok_or(EngineError::Illegal("missing reserved spell state"))?;
+        let oid = state.reserved_object_id;
+        for participant in &mut self.state.players {
+            participant.hand.retain(|candidate| *candidate != oid);
+            participant.graveyard.retain(|candidate| *candidate != oid);
+            participant.exile.retain(|candidate| *candidate != oid);
+        }
+        let holder_idx = self
+            .state
+            .player_idx(state.original_holder)
+            .ok_or(EngineError::UnknownPlayer(state.original_holder))?;
+        match state.original_zone {
+            Zone::Hand => {
+                let position = state
+                    .original_position
+                    .min(self.state.players[holder_idx].hand.len());
+                self.state.players[holder_idx].hand.insert(position, oid);
+            }
+            Zone::Graveyard => {
+                let position = state
+                    .original_position
+                    .min(self.state.players[holder_idx].graveyard.len());
+                self.state.players[holder_idx]
+                    .graveyard
+                    .insert(position, oid);
+            }
+            Zone::Exile => {
+                let position = state
+                    .original_position
+                    .min(self.state.players[holder_idx].exile.len());
+                self.state.players[holder_idx].exile.insert(position, oid);
+            }
+            _ => {
+                return Err(EngineError::Illegal(
+                    "invalid spell origin for cancellation",
+                ))
+            }
+        }
+        self.state.objects.insert(oid, internal.original_object);
+        if state.original_zone_change_generation_present {
+            self.state
+                .zone_change_generation
+                .insert(oid, state.original_zone_change_generation);
+        } else {
+            self.state.zone_change_generation.remove(&oid);
+        }
+        self.state
+            .active_exile_play_permissions
+            .retain(|permission| permission.object_id != oid);
+        for (position, permission) in internal.restored_permissions {
+            let position = position.min(self.state.active_exile_play_permissions.len());
+            self.state
+                .active_exile_play_permissions
+                .insert(position, permission);
+        }
+        self.state
+            .discard_reference_successors
+            .retain(|(object_id, _), _| *object_id != oid);
+        for (key, value) in internal.restored_discard_successors {
+            self.state.discard_reference_successors.insert(key, value);
+        }
+        let mut batch = RuledEventBatch::default();
+        batch.events.push(ev_log(format!(
+            "P{player} cancels the spell-casting proposal."
+        )));
+        if state.resolution_time_offer {
+            if let Some(event) = self.resolution_payment_choice_event() {
+                batch.events.push(event);
+            }
+        }
+        Ok(batch)
+    }
+
     /// CR 601.2i / 608.2i: freeze automatic public conditions after all costs and cast facts
     /// have committed. Unlike cost receipts these facts do not transfer to an uncast copy.
     fn snapshot_completed_cast(&mut self, object_id: ObjectId) {
@@ -730,6 +1087,51 @@ impl GameEngine {
         player: PlayerId,
         command: &rv1::CastSpell,
     ) -> Result<RuledEventBatch, EngineError> {
+        self.begin_spell_cast(
+            player,
+            &rv1::BeginSpellCast {
+                announcement: Some(announcement_from_cast(command)),
+            },
+        )?;
+        let pending = self
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .expect("an accepted spell announcement creates a transaction");
+        let transaction_id = pending.transaction_id;
+        let reserved_object_id = pending.reserved_object_id;
+        let mut payment = command.payment.clone();
+        if let Some(selection) = payment.as_mut() {
+            // Legacy fixtures previewed before the source reservation. The production client
+            // previews only after BeginSpellCast, where the same physical card has its stack
+            // generation. Retarget this compatibility selection to that reserved occurrence.
+            selection.source = Some(self.payment_object_ref(reserved_object_id));
+        }
+        let commit = rv1::CommitSpellCast {
+            transaction_id,
+            payment,
+            restricted_mana: command.restricted_mana.clone(),
+        };
+        match self.commit_spell_cast(player, &commit) {
+            Ok(batch) => Ok(batch),
+            Err(error) => {
+                // The obsolete atomic fixture shape cannot leave an interactive transaction open.
+                // Roll its proposal back so rejected legacy scenario commands retain the same
+                // all-or-nothing contract while still exercising the production lifecycle.
+                let _ = self.cancel_spell_cast(player, &rv1::CancelSpellCast { transaction_id });
+                self.state.next_spell_cast_transaction_id = transaction_id;
+                Err(error)
+            }
+        }
+    }
+
+    fn commit_prepared_spell_cast(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::CastSpell,
+        prepared: PreparedSpellCast,
+        pending: &PendingSpellCastInternal,
+    ) -> Result<RuledEventBatch, EngineError> {
         let PreparedSpellCast {
             idx,
             oid,
@@ -746,7 +1148,7 @@ impl GameEngine {
             mana_value,
             payment,
             convoke,
-        } = self.prepare_spell_cast(player, command)?;
+        } = prepared;
         let face_index = command.face_index as usize;
         let payment_plan = if let Some(selection) = &command.payment {
             let life = self.validate_explicit_payment(player, oid, convoke, &payment, selection)?;
@@ -763,48 +1165,22 @@ impl GameEngine {
             .iter()
             .map(|target| capture_stack_target(self, target))
             .collect();
-        let stack_generation = self
+        let pending_state = self
             .state
-            .zone_change_generation
-            .get(&oid)
-            .copied()
-            .unwrap_or(0)
-            .saturating_add(1);
-        // CR 115.9: target-watchers see the final legal target set. Collect now so the event's
-        // battlefield identity is exact, but do not stage anything unless all costs are paid and
-        // the spell is successfully cast.
-        let mut target_triggers = self.collect_event_triggers(&[GameEvent::TargetsChosen {
-            controller: player,
-            source: TargetingSourceKind::SpellCast,
-            stack_object: StackObjectRef {
-                object_id: oid,
-                zone_change_generation: Some(stack_generation),
-            },
-            targets: stack_targets.clone(),
-        }]);
-        let crime_events: Vec<_> = self
-            .crime_event(player, &public_targets)
-            .into_iter()
-            .collect();
-        let origin = self.state.objects[&oid].zone;
-        let cast_departure = (origin == Zone::Graveyard).then(|| self.snapshot_zone_event());
+            .pending_spell_cast
+            .as_ref()
+            .ok_or(EngineError::Illegal("missing pending cast state"))?;
+        let mut target_triggers = pending.proposal_triggers.clone();
+        let crime_events = pending.crime_events.clone();
+        let origin = pending_state.original_zone;
         let prepare_source = self.state.prepare_spell_sources.get(&oid).cloned();
         let payment_plan = self.prepare_cost_transaction_commit(payment_plan)?;
-        // The copy must be on the stack before costs can sacrifice its prepared source.
-        // All fallible payment validation precedes this first committed state change.
-        if prepare_source.is_some() {
-            super::resolution::move_object_to_zone(
-                &mut self.state,
-                self.registry,
-                oid,
-                Zone::Stack,
-                None,
-            )?;
-        }
         let payment = self.commit_prevalidated_cost_transaction(payment_plan)?;
         let returned_attacker_assignment = payment.returned_attacker_assignment;
         let life_paid = payment.life_paid;
         let mana_spent = payment.mana_spent;
+        let mana_spending_keywords =
+            self.mana_spending_keywords_for_spell(&card_id, face_index, &command.restricted_mana);
         let mut paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
         if let Some(returned_name) = &payment.sneak_returned_name {
             let returned = format!("returning {returned_name}");
@@ -839,6 +1215,20 @@ impl GameEngine {
         self.state
             .stack_presentations
             .insert(oid, stack_presentation.clone());
+        if !mana_spending_keywords.is_empty() {
+            self.state.spell_effects_carry_to_permanent.insert(oid);
+        }
+        for keyword in mana_spending_keywords {
+            self.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(oid),
+                kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: self.state.command_index,
+            });
+        }
         self.state.stack.push(StackItem {
             id: oid,
             controller: player,
@@ -886,18 +1276,6 @@ impl GameEngine {
                 copy.controller = player;
                 copy.base_controller = player;
             }
-        } else {
-            super::resolution::move_object_to_zone(
-                &mut self.state,
-                self.registry,
-                oid,
-                Zone::Stack,
-                None,
-            )?;
-        }
-        if let Some(snapshot) = cast_departure {
-            let event = self.finish_single_zone_event(snapshot, oid);
-            target_triggers.extend(self.collect_event_triggers(&[event]));
         }
 
         self.state.passes_since_stack_change = 0;
@@ -1190,10 +1568,15 @@ impl GameEngine {
                     pending.continuation.mana_window_undo_start().is_some()
                         && pending.deciding_player == player
                 });
-        if resolving_mana_payment {
+        let casting_mana_payment = self
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .is_some_and(|pending| pending.caster == player);
+        if resolving_mana_payment || casting_mana_payment {
             if ability.mana_options().is_none() {
                 return Err(EngineError::Illegal(
-                    "only mana abilities may be activated during a resolution payment",
+                    "only mana abilities may be activated during payment",
                 ));
             }
         } else if self.state.priority_player_id() != player {
@@ -1890,7 +2273,15 @@ impl GameEngine {
             (pending.deciding_player == player)
                 .then_some(pending.continuation.mana_window_undo_start()?)
         });
-        if self.state.priority_player_id() != player && payment_undo_start.is_none() {
+        let spell_payment = self
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .is_some_and(|pending| pending.caster == player);
+        if self.state.priority_player_id() != player
+            && payment_undo_start.is_none()
+            && !spell_payment
+        {
             return Err(EngineError::Illegal("not your priority"));
         }
         let event =

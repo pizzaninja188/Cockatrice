@@ -84,6 +84,14 @@ message RuledCommand {
     ExecutePermanentAction execute_permanent_action = 27;
     // Query only: authenticated relay routes this outside the gameplay/replay path.
     PreviewPayment preview_payment = 28;
+    // CR 601.2a-f: announce a spell and ask the engine to lock its complete cost before mana
+    // abilities may be activated. Every ruled cast, including effect-created offers, enters this
+    // lifecycle before payment.
+    BeginSpellCast begin_spell_cast = 29;
+    // CR 601.2g-h: pay the already-locked transaction and complete the cast atomically.
+    CommitSpellCast commit_spell_cast = 30;
+    // CR 733.1: reverse only the spell proposal. Mana abilities performed while paying remain.
+    CancelSpellCast cancel_spell_cast = 31;
   }
 }
 
@@ -228,6 +236,10 @@ message SubmitResolutionChoice {
   // Exact, previewed payment for the current parked mana cost.
   PaymentSelection payment = 6;
   repeated ManaSpendSelection restricted_mana = 7;
+  // Payment-free announcement used when accepting a SPECIAL_CAST offer. Acceptance begins the
+  // same engine-owned transaction as an ordinary BeginSpellCast and leaves the resolution parked
+  // until CommitSpellCast or CancelSpellCast.
+  SpellCastAnnouncement spell_cast_announcement = 8;
 }
 
 // A player's answer to a TriggerOrderRequired (CR 603.3b): put THIS trigger on the stack next.
@@ -274,13 +286,13 @@ message PrimitiveYieldStructured {}
 message CastSource {
   oneof location {
     // Concealed hand identity remains the short-lived engine slot published in HandSlotMap.
-    uint32 hand_index = 1;
+    uint32 hand_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
     // Public zones use stable engine ObjectIds so pile display order cannot select another card.
-    uint32 graveyard_object_id = 2;
-    uint32 exile_object_id = 3;
+    uint32 graveyard_object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+    uint32 exile_object_id = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   }
   // Required for ordinary public-zone casts; hand casts use their current private slot.
-  optional uint64 expected_zone_change_generation = 4;
+  optional uint64 expected_zone_change_generation = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // CR 601.2b: the announced method whose alternative cost and stack-exit rules apply to this cast.
@@ -336,6 +348,35 @@ message CastSpell {
   optional uint64 casting_permission_id = 14;
 }
 
+// Payment-free CR 601.2a-e announcement. `CastSpell` remains the legacy atomic request shape
+// during the in-tree caller migration; new gameplay and reconnect state use only this message.
+message SpellCastAnnouncement {
+  repeated TargetRef targets = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 x_value = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated FlexPipPayment flex_payments = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 face_index = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated SelectedSpellMode selected_modes = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  CastSource source = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated CostSelection cost_selections = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated CastCostGroupSelection cast_cost_group_selections = 8 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  CastMethod cast_method = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  optional uint64 casting_permission_id = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message BeginSpellCast {
+  SpellCastAnnouncement announcement = 1;
+}
+
+message CommitSpellCast {
+  uint64 transaction_id = 1;
+  PaymentSelection payment = 2;
+  repeated ManaSpendSelection restricted_mana = 3;
+}
+
+message CancelSpellCast {
+  uint64 transaction_id = 1;
+}
+
 // One unit paid by a creature; GENERIC is a demand, never colorless mana.
 enum ObjectPaymentKind {
   OBJECT_PAYMENT_KIND_UNSPECIFIED = 0;
@@ -378,6 +419,8 @@ message PreviewPayment {
   ActivateAbility activate_ability = 4;
   SubmitResolutionChoice resolution_choice = 5;
   ExecutePermanentAction execute_permanent_action = 6;
+  // Refresh payment against an engine-owned, already-locked spell transaction.
+  CommitSpellCast commit_spell_cast = 7;
 }
 
 message ObjectPaymentCandidate {
@@ -401,17 +444,17 @@ message PaymentPreview {
 }
 
 message CastCostGroupSelection {
-  uint32 group_index = 1;
-  uint32 option_index = 2;
+  uint32 group_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 option_index = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   oneof selected_object {
-    uint32 hand_index = 3;
-    uint32 permanent_id = 4;
+    uint32 hand_index = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+    uint32 permanent_id = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   }
   // Required with permanent_id; rejects a leave-and-return between publication and submission.
-  uint64 expected_zone_change_generation = 5;
+  uint64 expected_zone_change_generation = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Generation-bound battlefield cohort for authored cast costs such as Teamwork. Singular
   // permanent_id remains the compatibility shape for Behold, Blight, and Harmonize.
-  CostObjectRefs battlefield_objects = 6;
+  CostObjectRefs battlefield_objects = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message ManaSpendSelection {
@@ -428,8 +471,8 @@ message ManaSpendSelection {
 // carry one (the pay-2-life vs pay-mana choice); hybrid/mono-hybrid mana is resolved by the
 // engine from the pool. Identified by the pip's position in the spell/ability mana cost.
 message FlexPipPayment {
-  uint32 pip_index = 1; // index into the cost's pip list
-  bool pay_life = 2;    // Phyrexian: pay 2 life instead of the colored mana
+  uint32 pip_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER]; // index into the cost's pip list
+  bool pay_life = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];    // Phyrexian: pay 2 life instead of the colored mana
 }
 
 enum TargetRefKind {
@@ -453,9 +496,9 @@ message TargetRef {
 
 message SelectedSpellMode {
   // Zero-based index into the chosen face's ModalSpellDef.modes list.
-  uint32 mode_index = 1;
+  uint32 mode_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Targets chosen specifically for this mode.
-  repeated TargetRef targets = 2;
+  repeated TargetRef targets = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LandSource {
@@ -791,7 +834,7 @@ message CostObjectRef {
 }
 
 message CostObjectRefs {
-  repeated CostObjectRef objects = 1;
+  repeated CostObjectRef objects = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 enum ObjectContributionKind {
@@ -861,8 +904,8 @@ message CounterRemovalChoices {
 
 message CounterRemovalSelection {
   // The source-only ability object or the selected candidate permanent, with physical identity.
-  CostObjectRef source = 1;
-  uint32 option_id = 2;
+  CostObjectRef source = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 option_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message LegalCostChoices {
@@ -1030,6 +1073,22 @@ message LegalActions {
   repeated AttackAssignment legal_attack_assignments = 22
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   OpeningActions opening = 23 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Present only for the caster while CR 601.2g is in progress. The nested payment preview is
+  // refreshed from the current mana pool and object candidates without redetermining total cost.
+  PendingSpellCast pending_spell_cast = 24 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message PendingSpellCast {
+  uint64 transaction_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 reserved_object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  SpellCastAnnouncement announcement = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string locked_total_cost = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PaymentPreview payment_preview = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool resolution_time_offer = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // CR 106.6 groups currently legal for the locked spell. This remains available after the
+  // source leaves its hand/public-zone action list and refreshes as mana abilities add mana.
+  repeated uint32 eligible_restricted_mana_group_ids = 7
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,
@@ -1658,13 +1717,13 @@ message ExecutePermanentAction {
 }
 
 message CostSelection {
-  uint32 cost_index = 1;
+  uint32 cost_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   oneof selection {
-    uint32 hand_index = 2;
-    uint32 permanent_id = 3;
-    CostObjectRefs graveyard_objects = 4;
-    CostObjectRefs battlefield_objects = 5;
-    CounterRemovalSelection counter_removal = 6;
+    uint32 hand_index = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+    uint32 permanent_id = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+    CostObjectRefs graveyard_objects = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+    CostObjectRefs battlefield_objects = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+    CounterRemovalSelection counter_removal = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   }
 }
 
@@ -1732,6 +1791,9 @@ message AbilityInfo {
   // omit abilities whose source_zone is Hand or Graveyard, so repeated-field position is not an
   // activation command index.
   uint32 ability_index = 7 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // True only when Tap is the ability's entire authored cost. The client may use the direct
+  // mana-activation shortcut without hiding additional costs such as sacrifice or life payment.
+  bool has_only_tap_cost = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // CR 722. Public designation and exact source linkage, independent of card characteristics.

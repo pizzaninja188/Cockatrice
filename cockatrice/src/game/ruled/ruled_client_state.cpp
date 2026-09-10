@@ -1935,6 +1935,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
         zoneLandFacesByOid.clear();
         zoneLandSourceByOid.clear();
         exilePlayPermissionGroups.clear();
+        pendingSpellCast.reset();
         validTargetsByHandSlot.clear();
         validTargetsByZoneObject.clear();
         openingUiKind = RuledOpeningUiKind::None;
