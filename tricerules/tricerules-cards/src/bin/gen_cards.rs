@@ -40,6 +40,8 @@ mod candidate_report;
 mod presentation_audit;
 #[path = "gen_cards/recipes.rs"]
 mod recipes;
+#[path = "gen_cards/scaffold.rs"]
+mod scaffold;
 
 #[cfg(test)]
 use recipes::{french_vanilla_keywords, keyword_ident};
@@ -54,6 +56,10 @@ struct Args {
     oracle_tags: Option<String>,
     candidate_report: Option<PathBuf>,
     target_names: Option<PathBuf>,
+    scaffold_card: Option<String>,
+    scaffold_batch: Option<PathBuf>,
+    scaffold_out_dir: Option<PathBuf>,
+    inspect_existing: bool,
     out_dir: PathBuf,
     presentation_registry: PathBuf,
     dry_run: bool,
@@ -73,6 +79,10 @@ fn print_usage() {
          --oracle-tags <path> optional `oracle_tags` .jsonl.gz advisory report\n  \
          --candidate-report <path> write a read-only unsupported-clause JSON report\n  \
          --target-names <path> optional exact-name corpus for --candidate-report\n  \
+         --scaffold-card <name> emit one source-backed incomplete authoring scaffold\n  \
+         --scaffold-batch <path> emit a deterministic exact-name scaffold batch + manifest\n  \
+         --scaffold-out-dir <path> write .ron.scaffold files and manifest instead of stdout\n  \
+         --inspect-existing inspect matching implemented cards without emitting replacement scaffolds\n  \
          --out-dir <path>   output root (default: data/generated, relative to this crate)\n  \
          --presentation-registry <path> generated Oracle fingerprint TSV\n  \
          --dry-run          report counts + skip reasons, write nothing\n  \
@@ -91,6 +101,10 @@ fn parse_args() -> Result<Args, String> {
     let mut oracle_tags: Option<String> = None;
     let mut candidate_report: Option<PathBuf> = None;
     let mut target_names: Option<PathBuf> = None;
+    let mut scaffold_card = None;
+    let mut scaffold_batch = None;
+    let mut scaffold_out_dir = None;
+    let mut inspect_existing = false;
     let mut out_dir: Option<PathBuf> = None;
     let mut presentation_registry: Option<PathBuf> = None;
     let mut dry_run = false;
@@ -118,6 +132,20 @@ fn parse_args() -> Result<Args, String> {
                     it.next().ok_or("--target-names needs a value")?,
                 ))
             }
+            "--scaffold-card" => {
+                scaffold_card = Some(it.next().ok_or("--scaffold-card needs a value")?)
+            }
+            "--scaffold-batch" => {
+                scaffold_batch = Some(PathBuf::from(
+                    it.next().ok_or("--scaffold-batch needs a value")?,
+                ))
+            }
+            "--scaffold-out-dir" => {
+                scaffold_out_dir = Some(PathBuf::from(
+                    it.next().ok_or("--scaffold-out-dir needs a value")?,
+                ))
+            }
+            "--inspect-existing" => inspect_existing = true,
             "--out-dir" => {
                 out_dir = Some(PathBuf::from(it.next().ok_or("--out-dir needs a value")?))
             }
@@ -162,6 +190,29 @@ fn parse_args() -> Result<Args, String> {
     if target_names.is_some() && candidate_report.is_none() {
         return Err("--target-names requires --candidate-report".into());
     }
+    if scaffold_card.is_some() && scaffold_batch.is_some() {
+        return Err("--scaffold-card and --scaffold-batch are mutually exclusive".into());
+    }
+    let scaffolding = scaffold_card.is_some() || scaffold_batch.is_some();
+    if (scaffold_out_dir.is_some() || inspect_existing) && !scaffolding {
+        return Err("--scaffold-out-dir and --inspect-existing require a scaffold mode".into());
+    }
+    if scaffolding
+        && (candidate_report.is_some()
+            || target_names.is_some()
+            || oracle_tags.is_some()
+            || dry_run
+            || check
+            || include_new
+            || limit.is_some()
+            || audit_presentation
+            || inspect_card.is_some())
+    {
+        return Err(
+            "scaffold modes cannot be combined with generation, check, candidate-report, Oracle Tags, or presentation-audit modes"
+                .into(),
+        );
+    }
     if candidate_report.is_some()
         && (dry_run
             || check
@@ -198,6 +249,10 @@ fn parse_args() -> Result<Args, String> {
         oracle_tags,
         candidate_report,
         target_names,
+        scaffold_card,
+        scaffold_batch,
+        scaffold_out_dir,
+        inspect_existing,
         out_dir,
         presentation_registry,
         dry_run,
@@ -1450,6 +1505,84 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    if args.scaffold_card.is_some() || args.scaffold_batch.is_some() {
+        let batch_names = match args.scaffold_batch.as_ref() {
+            Some(path) => match fs::read_to_string(path) {
+                Ok(names) => Some(names),
+                Err(error) => {
+                    eprintln!(
+                        "error: cannot read scaffold exact-name file {}: {error}",
+                        path.display()
+                    );
+                    return ExitCode::FAILURE;
+                }
+            },
+            None => None,
+        };
+        let selection = match (args.scaffold_card.as_deref(), batch_names.as_deref()) {
+            (Some(name), None) => scaffold::Selection::Single(name),
+            (None, Some(names)) => scaffold::Selection::Batch(names),
+            _ => unreachable!("argument validation selects exactly one scaffold mode"),
+        };
+        let mut cards = Vec::new();
+        if let Err(error) = for_each_gzipped_jsonl(input_path, |card| {
+            cards.push(card);
+            true
+        }) {
+            eprintln!("error: failed to read {}: {error}", args.input);
+            return ExitCode::FAILURE;
+        }
+        let registry = match CardRegistry::from_embedded() {
+            Ok(registry) => registry,
+            Err(error) => {
+                eprintln!("error: failed to load embedded card registry: {error}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let mut existing = scaffold::ExistingCards::default();
+        for definition in registry.definitions() {
+            existing.ids.insert(definition.id.clone());
+            existing
+                .names
+                .extend(definition.deck_input_names().map(normalize_name));
+        }
+        let output = match scaffold::build(
+            cards,
+            selection,
+            &existing,
+            &provenance,
+            args.inspect_existing,
+        ) {
+            Ok(output) => output,
+            Err(error) => {
+                eprintln!("error: scaffold request was refused\n{error}");
+                return ExitCode::FAILURE;
+            }
+        };
+        if let Some(out_dir) = &args.scaffold_out_dir {
+            let data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data");
+            if let Err(error) = scaffold::write_directory(&output, out_dir, &data_dir) {
+                eprintln!("error: {error}");
+                return ExitCode::FAILURE;
+            }
+            eprintln!(
+                "Wrote {} incomplete scaffold(s) and manifest to {}.",
+                output.files.len(),
+                out_dir.display()
+            );
+        } else {
+            let rendered = match scaffold::stdout_bundle(&output, args.scaffold_card.is_some()) {
+                Ok(rendered) => rendered,
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    return ExitCode::FAILURE;
+                }
+            };
+            print!("{rendered}");
+        }
+        return ExitCode::SUCCESS;
+    }
 
     if let Some(report_path) = &args.candidate_report {
         let target_names = match args.target_names.as_ref() {

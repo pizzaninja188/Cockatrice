@@ -560,6 +560,40 @@ ambiguous names fail the command without writing the report. The stable JSON clu
 clauses by descending printing-independent card count, retains face and source-routing context,
 and keeps any optional Oracle Tags summary advisory and separate from the clause signatures.
 
+### Scaffold source-backed authoring
+
+For an unsupported card chosen from a candidate report, scaffold the clerical source fields from
+the same pinned, SHA-verified Oracle bulk input:
+
+```powershell
+./scripts/gen-cards.ps1 --scaffold-card "Black Lotus"
+./scripts/gen-cards.ps1 --scaffold-batch selected-cards.txt --scaffold-out-dir build/scaffolds
+```
+
+Single-card mode writes the incomplete scaffold to stdout by default. Batch stdout is a stable JSON
+bundle containing the manifest and scaffold contents. `--scaffold-out-dir` instead writes a
+`manifest.json` plus deterministic `*.ron.scaffold` files. The command refuses output anywhere
+under `tricerules-cards/data/` and refuses every overwrite; the extra `.scaffold` suffix and the
+unresolved sentinel fields prevent accidental registry loading. Reprints collapse by Oracle ID.
+Unknown, ambiguous, colliding, unsupported-layout, and already-implemented selections are recorded
+separately in the batch manifest. A single refused selection fails the command. Use
+`--inspect-existing` only to report an already-implemented match; it never emits replacement RON or
+renumbers the authored stable IDs.
+
+Scaffolds contain source identity, faces, printed characteristics, normalized numbered Oracle lines,
+candidate ability/choice IDs, presentation review prompts, and the per-card research checklist. The
+IDs are deliberately marked for author confirmation: Oracle line boundaries are not trusted
+mechanical boundaries. The tool never selects effects, costs, targets, conditions, or legality.
+
+To turn a reviewed scaffold into authored RON:
+
+1. Fetch and review the exact card, its `rulings_uri`, and the relevant current CR sections.
+2. Choose the lowest complete implementation tier and hand-author every mechanical field.
+3. Confirm, merge, split, rename, or remove candidate IDs, then keep accepted IDs stable.
+4. Resolve every presentation mapping and prerequisite or record intentional partial support.
+5. Remove both unresolved sentinels, rename the file to `.ron` under `data/`, and complete all
+   checks in sections 9 and 10. A scaffold is never evidence that the card is implemented.
+
 ## 9. Track partial implementations
 
 Record a genuine implementation gap as one `card_id<TAB>note` row in

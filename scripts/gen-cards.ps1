@@ -11,6 +11,8 @@
         ./scripts/fetch-scryfall-bulk.ps1            # download oracle-cards.jsonl.gz
         ./scripts/gen-cards.ps1 --dry-run            # preview counts + skip reasons
         ./scripts/gen-cards.ps1 --candidate-report build/candidates.json
+        ./scripts/gen-cards.ps1 --scaffold-card "Black Lotus"
+        ./scripts/gen-cards.ps1 --scaffold-batch selected-cards.txt --scaffold-out-dir build/scaffolds
         ./scripts/gen-cards.ps1                      # write the RON files
         cd tricerules; cargo test                    # registry + conformance validate every card
         ./scripts/gen-card-checklist.ps1 --check     # name gate, then review + commit
@@ -19,6 +21,8 @@
     --input is oracle-cards.jsonl.gz in the repo root; override with --input <path>.
     Candidate reports are read-only analysis. Add --target-names <path> to restrict one report
     to an exact-name corpus; the file contains one whole-card or face name per nonblank line.
+    Scaffold modes copy source-backed clerical fields but leave mechanics unresolved. They write
+    to stdout unless --scaffold-out-dir is explicit, never write below data\, and never overwrite.
 .EXAMPLE
     ./scripts/gen-cards.ps1 --dry-run
 #>
