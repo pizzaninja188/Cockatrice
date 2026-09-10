@@ -539,6 +539,37 @@ Refresh may replace only files carrying valid generator provenance. Oracle Tags 
 cannot select mechanics, IDs, or presentation mappings. Review the dry run and generated diff;
 never accept unrelated bulk churn.
 
+### Extend the exact-recipe catalog
+
+When at least two real cards share one exact Oracle template and existing typed primitives express
+the complete behavior, add a recipe to
+[`recipes.rs`](../src/bin/gen_cards/recipes.rs). Keep recipes in typed Rust; do not add an external
+or stringly rules DSL.
+
+Each recipe requires:
+
+- a stable `RecipeId` that names the semantic surface and operation;
+- the narrowest applicable `RecipeSurface`;
+- an exact matcher that emits typed `tricerules-cards` data;
+- at least two distinct named positive calibration cards; and
+- reviewed negative near-misses covering the closest optional, bounded, conditional, or
+  additional-clause forms.
+
+Every functional Oracle clause must match exactly one applicable recipe. Zero matches remain
+unsupported, while multiple matches are an ambiguity error listing the matching recipe IDs. Do
+not loosen normalization or accept a near-match merely to increase coverage.
+
+After focused catalog tests pass, preview and deliberately include newly qualifying cards:
+
+```powershell
+./scripts/gen-cards.ps1 --dry-run --include-new
+./scripts/gen-cards.ps1 --include-new
+```
+
+Review every new generated RON file and the presentation-fingerprint/checklist changes. An ordinary
+generation run or `update-card-data.ps1 -Mode Refresh` updates provenance-owned files that are
+already tracked; neither opts new candidates into the registry.
+
 Use `gen-cards --check` against the pinned SHA-verified snapshot to detect drift without writing.
 Both PowerShell generator wrappers preserve the child's exit code. For the combined read-only
 generator and checklist check, use the workflow entry point from the repository root:

@@ -922,3 +922,11 @@ three-tier model is the deliberate middle path. Keep its gates.
    `gen-cards` beyond vanillas to recognize common Oracle templates and emit tier-1 RON — with
    the registry/conformance tests as the net — is the coverage-jump path to thousands of cards
    without hand-authoring.
+
+   > **Baseline implemented 2026-09-10 (Issues #244–#246).** `gen-cards` now has a typed Rust
+   > exact-recipe catalog with stable recipe IDs, two-card positive calibration, negative
+   > near-misses, and fail-closed ambiguity detection. Printing-independent candidate reports
+   > rank unsupported Oracle-clause clusters for a full or exact-name target corpus, and
+   > source-backed scaffolds automate clerical card fields without inferring mechanics. Future
+   > scaling work expands the typed catalog and authors the highest-value reported clusters; it
+   > does not introduce an external rules DSL or set-oriented rules data.

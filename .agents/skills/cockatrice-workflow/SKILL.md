@@ -21,6 +21,9 @@ requirements; this skill routes the work rather than replacing them.
 - Query the live `pizzaninja188/Cockatrice` tracker using `gh` with the explicit repository. Check
   dependencies, current code, local history, and existing changes before selecting a candidate.
   `docs/issues.md` is a pointer; upstream Cockatrice issues are a different queue.
+- For high-volume card coverage, use `gen-cards --candidate-report` over the full pinned corpus or
+  an exact-name target file. Rank printing-independent unsupported-clause clusters instead of
+  authoring alphabetically or by set; the report routes research and never selects mechanics.
 - Honor whether the user is available for UI testing. Prefer a bounded Rust/card-data candidate
   when requested, but trace presentation, protocol, relay, physical identity, and Qt consumers
   before declaring those gates N/A.
@@ -37,6 +40,13 @@ requirements; this skill routes the work rather than replacing them.
   [card authoring guide](../../../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md).
   Use its Oracle/rulings research, complete-support boundary, presentation mappings, and blocker
   tracking. Do not substitute nearby legacy RON for the guide.
+- For an unsupported data-only card or batch, use the source-backed scaffold mode to populate only
+  clerical source fields. Keep scaffolds outside embedded `data/`; mechanically author and review
+  every unresolved field before removing both sentinels and promoting a file to `.ron`.
+- When at least two real cards share one exact Oracle template, extend the typed Rust recipe catalog
+  with a stable recipe id, the correct surface, typed emission, two named positive calibrations,
+  and reviewed negative near-misses. The catalog must remain fail-closed and must not become an
+  external or stringly rules DSL.
 - Follow the [verification ladder](../../../docs/AGENT-VERIFICATION.md): focused red/green tests
   through the quiet runner, then the full affected-side entry point. Choose the affected side
   from the actual contract, not merely changed file extensions. Use Preview if the selected
@@ -45,6 +55,10 @@ requirements; this skill routes the work rather than replacing them.
   `scripts/update-card-data.ps1 -Mode Refresh` from the root and inspect the generated diff.
   Regeneration from existing local inputs is part of authorized card implementation and needs
   no separate approval. Updating external source datasets requires separate authorization.
+  A reviewed recipe that deliberately qualifies new cards requires the
+  `gen-cards --dry-run --include-new` preview followed by `gen-cards --include-new`; Refresh alone
+  updates only already tracked generated files. Inspect every newly generated card before the
+  final gate.
   Final card verification uses the read-only Check mode through
   `scripts/verify.ps1 -Side Rust -CardData` or `-Side Both -CardData`.
   Do not silently refresh external sources or accept unrelated generated churn.

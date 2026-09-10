@@ -5,8 +5,8 @@ Rust workspace that implements an authoritative game engine and exposes it over 
 ## Card authoring
 
 - [Card authoring guide](tricerules-cards/authoring/CARD-AUTHORING.md) is the canonical workflow for
-  source research, implementation tiers, RON and custom Rust, presentation, generation, partial
-  tracking, and completion checks.
+  source research, candidate-cluster reports, source-backed scaffolds, typed exact recipes, RON and
+  custom Rust, presentation, generation, partial tracking, and completion checks.
 - Implementation gaps are tracked in
   [`tricerules-cards/authoring/partial-cards.tsv`](tricerules-cards/authoring/partial-cards.tsv), not
   in runtime RON.
