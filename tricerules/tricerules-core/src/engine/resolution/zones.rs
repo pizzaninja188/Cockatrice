@@ -679,10 +679,23 @@ pub(super) fn exile(
     if let Some(tid) = tid {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
+        let controller = engine.state.objects.get(&tid).map(|o| o.controller);
         let zone_snapshot = engine.snapshot_zone_event();
         let leave_event = engine.battlefield_leave_event(tid);
         move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Exile, None)?;
         engine.fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
+        if let Some(controller_at_event) = controller {
+            cx.effect_result.produced_objects.push(TriggerObjectRef {
+                object_id: tid,
+                zone_change_generation: engine
+                    .state
+                    .zone_change_generation
+                    .get(&tid)
+                    .copied()
+                    .unwrap_or(0),
+                controller_at_event,
+            });
+        }
         events.push(ev_log(format!("{spell_label} exiles {tgt}")));
         if let Some(owner_id) = owner {
             events.push(permanent_moved_event(
@@ -2301,6 +2314,12 @@ pub(super) fn return_triggered_card(
             };
             (observed.object_id, observed.zone_change_generation)
         }
+        TriggeredCardReference::ExactTriggerObject => {
+            let Some(observed) = cx.top.trigger_context.observed_object else {
+                return Ok(EffectOutcome::Continue);
+            };
+            (observed.object_id, observed.zone_change_generation)
+        }
     };
     let current_generation = cx
         .engine
@@ -2317,7 +2336,13 @@ pub(super) fn return_triggered_card(
         Zone::Exile => tricerules_cards::primitives::EventZone::Exile,
         _ => return Ok(EffectOutcome::Continue),
     };
-    if !from.contains(&origin) || current_generation != event_generation.saturating_add(1) {
+    let expected_generation = match reference {
+        TriggeredCardReference::ExactTriggerObject => event_generation,
+        TriggeredCardReference::AbilitySource | TriggeredCardReference::TriggerObject => {
+            event_generation.saturating_add(1)
+        }
+    };
+    if !from.contains(&origin) || current_generation != expected_generation {
         return Ok(EffectOutcome::Continue);
     }
 

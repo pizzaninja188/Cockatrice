@@ -293,11 +293,18 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             }
 
             match effect {
-                SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
+                SpellEffectKind::ChooseResolutionBranch {
+                    branches,
+                    otherwise,
+                    ..
+                } => {
                     for branch in branches {
                         for nested in &branch.effects {
                             collect_referenced_groups(nested, groups);
                         }
+                    }
+                    for nested in otherwise {
+                        collect_referenced_groups(nested, groups);
                     }
                 }
                 SpellEffectKind::Conditional { effect, .. } => {

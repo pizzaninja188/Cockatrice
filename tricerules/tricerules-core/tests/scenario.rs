@@ -364,3 +364,6 @@ mod issue_230_winternight;
 
 #[path = "scenario/issue_240_hand_bottom_cost.rs"]
 mod issue_240_hand_bottom_cost;
+
+#[path = "scenario/issue_241_koya.rs"]
+mod issue_241_koya;

@@ -1,0 +1,48 @@
+// Oracle and rulings verified 2026-09-10. CR 118.12a, 400.7, 400.7j, and 603.7.
+(
+  id: "koya,_death_from_above",
+  name: "Koya, Death from Above",
+  face_id: "koya_death_from_above",
+  mana_cost: "{2}{W}",
+  types: ["Legendary", "Creature", "Mutant", "Ninja", "Bird"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    targeting: Some((groups: [(
+      min: 0,
+      max: 1,
+      prompt: "Choose up to one other target creature",
+      effect_indices: [0],
+    )])),
+    effect: [
+      Exile(subject: Chosen((kind: Creature, excluded_objects: [Source]))),
+      CreateDelayedTrigger(
+        subject: PreviousEffectObject,
+        ability: (
+          ability_id: "delayed_01",
+          presentation: OracleLines([2]),
+          trigger: AtBeginningOfNextEndStep,
+          effect: [ChooseResolutionBranch(
+            optional: true,
+            branches: [(
+              branch_id: "pay",
+              // The choice is only the payment fragment of the printed delayed instruction.
+              presentation: Fallback,
+              cost: Mana("{3}{B}"),
+              effects: [],
+            )],
+            otherwise: [ReturnTriggeredCard(
+              reference: ExactTriggerObject,
+              from: [Exile],
+              controller: Owner,
+            )],
+          )],
+        ),
+      ),
+    ],
+  )],
+)

@@ -1427,7 +1427,12 @@ impl GameEngine {
                         };
                     }
                 }
-                if let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &entry.effect {
+                if let SpellEffectKind::ChooseResolutionBranch {
+                    branches,
+                    otherwise,
+                    ..
+                } = &entry.effect
+                {
                     if let Some(choice) = top.resolution_branch_choices.get(&(effect_index as u32))
                     {
                         if let Some(branch_index) = choice {
@@ -1446,6 +1451,16 @@ impl GameEngine {
                                     }
                                 }));
                             }
+                        } else {
+                            expanded.extend(otherwise.iter().cloned().map(|effect| {
+                                ResolutionEffect {
+                                    effect,
+                                    targets: entry.targets.clone(),
+                                    target_damage: entry.target_damage.clone(),
+                                    target_group_indices: entry.target_group_indices.clone(),
+                                    role_group_indices: Vec::new(),
+                                }
+                            }));
                         }
                         continue;
                     }
@@ -4862,6 +4877,47 @@ mod attached_subject_tests {
         );
     }
 
+    #[test]
+    fn optional_resolution_branch_runs_otherwise_when_no_branch_is_applicable() {
+        let mut engine = GameEngine::new_with_default_decks(241_099, &[0, 1], 20).unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let item = quantity_item(
+            source,
+            vec![SpellEffectKind::ChooseResolutionBranch {
+                chooser: PlayerRecipient::Controller,
+                optional: true,
+                selection: tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice,
+                branches: vec![ResolutionBranchDef {
+                    branch_id: tricerules_cards::ChoiceId::new("unavailable").unwrap(),
+                    presentation: tricerules_cards::AbilityPresentation::Fallback,
+                    runtime_fallback: None,
+                    cost: ResolutionCost::None,
+                    requirement:
+                        tricerules_cards::primitives::ResolutionBranchRequirement::GameCondition(
+                            GameCondition::CreatureDeathsThisTurn {
+                                min: Some(1),
+                                max: None,
+                            },
+                        ),
+                    effects: vec![SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(99),
+                    }],
+                }],
+                otherwise: vec![SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(3),
+                }],
+            }],
+        );
+        let before = engine.state.players[0].life;
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        assert_eq!(engine.state.players[0].life, before + 3);
+    }
+
     fn payment_branch_fixture(
         cost: ResolutionCost,
     ) -> (GameEngine, Vec<ObjectId>, rv1::RuledEventBatch) {
@@ -4895,6 +4951,7 @@ mod attached_subject_tests {
                             amount: Amount::Fixed(1),
                         }],
                     }],
+                    otherwise: Vec::new(),
                 },
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(2),
@@ -5187,6 +5244,7 @@ mod attached_subject_tests {
                             amount: Amount::Fixed(1),
                         }],
                     }],
+                    otherwise: Vec::new(),
                 },
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(2),
@@ -5265,6 +5323,7 @@ mod attached_subject_tests {
                             }],
                         },
                     ],
+                    otherwise: Vec::new(),
                 },
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(2),
@@ -5329,6 +5388,7 @@ mod attached_subject_tests {
                             subject: EffectSubject::Source,
                         }],
                     }],
+                    otherwise: Vec::new(),
                 },
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(2),

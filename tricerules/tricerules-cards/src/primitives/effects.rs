@@ -134,8 +134,9 @@ pub enum EffectSubject {
     /// The distinct permanent named by the trigger event. This is an untargeted rules reference
     /// (for example, the blocking creature affected by flanking), not a CR 115 target.
     TriggerObject,
-    /// The exact generation-bound permanent selected by the immediately preceding
-    /// `ChoosePermanents(min: 1, max: 1)` instruction. This is an untargeted CR 608 choice.
+    /// The exact generation-bound object published by the immediately preceding compatible
+    /// single-object instruction. This is an untargeted CR 608 reference and may name an object
+    /// outside the battlefield; battlefield-only consumers still require it to remain there.
     PreviousEffectObject,
     /// The exact post-entry incarnation published by an earlier, single-card battlefield
     /// [`SpellEffectKind::SearchLibrary`] instruction in this resolution.
@@ -982,6 +983,9 @@ pub enum SpellEffectKind {
         #[serde(default)]
         selection: ResolutionBranchSelection,
         branches: Vec<ResolutionBranchDef>,
+        /// Effects performed when an optional choice is declined or has no applicable branch.
+        #[serde(default)]
+        otherwise: Vec<SpellEffectKind>,
     },
     /// Choose a bounded set of battlefield permanents during resolution without targeting.
     /// The result is engine-private and may be consumed by the immediately following effect.
@@ -2706,7 +2710,11 @@ impl SpellEffectKind {
             } => {
                 scale.validate_cast_snapshot_references(count)?;
             }
-            Self::ChooseResolutionBranch { branches, .. } => {
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
                 for branch in branches {
                     if let ResolutionBranchRequirement::GameCondition(condition) =
                         &branch.requirement
@@ -2716,6 +2724,9 @@ impl SpellEffectKind {
                     for effect in &branch.effects {
                         effect.validate_cast_snapshot_references(count)?;
                     }
+                }
+                for effect in otherwise {
+                    effect.validate_cast_snapshot_references(count)?;
                 }
             }
             Self::Conditional { condition, effect } => {
@@ -2762,6 +2773,7 @@ impl SpellEffectKind {
                     ProducedObjectCardinality::ExactlyOne
                 }
                 SpellEffectKind::ChoosePermanents { max: 1, .. }
+                | SpellEffectKind::Exile { .. }
                 | SpellEffectKind::CounterTargetAbility
                 | SpellEffectKind::Amass { .. } => ProducedObjectCardinality::OptionalOne,
                 SpellEffectKind::ChoosePermanents { .. } => ProducedObjectCardinality::Many,
@@ -2791,6 +2803,10 @@ impl SpellEffectKind {
                     ..
                 }
                 | SpellEffectKind::RemoveAllAbilities {
+                    subject: EffectSubject::PreviousEffectObject,
+                    ..
+                }
+                | SpellEffectKind::CreateDelayedTrigger {
                     subject: EffectSubject::PreviousEffectObject,
                     ..
                 } => Some(false),
@@ -3616,9 +3632,15 @@ impl SpellEffectKind {
                 optional,
                 selection,
                 branches,
+                otherwise,
             } => {
                 if branches.is_empty() {
                     return Err("resolution choice requires at least one branch".into());
+                }
+                if !otherwise.is_empty() && !optional {
+                    return Err(
+                        "resolution choice otherwise effects require an optional choice".into(),
+                    );
                 }
                 if matches!(
                     chooser,
@@ -3763,6 +3785,19 @@ impl SpellEffectKind {
                     }
                     SpellEffectKind::validate_list(&branch.effects)?;
                 }
+                for effect in otherwise {
+                    if effect.needs_target() {
+                        return Err(
+                            "resolution choice otherwise effects cannot target directly; create a reflexive trigger instead"
+                                .into(),
+                        );
+                    }
+                    if matches!(effect, SpellEffectKind::ChooseResolutionBranch { .. }) {
+                        return Err("nested resolution branch choices are not supported".into());
+                    }
+                    effect.validate(context)?;
+                }
+                SpellEffectKind::validate_list(otherwise)?;
                 if !optional
                     && branches.iter().any(|branch| {
                         !matches!(branch.requirement, ResolutionBranchRequirement::Always)
@@ -4697,16 +4732,24 @@ impl SpellEffectKind {
             Self::PumpTarget {
                 scale: Some(scale), ..
             } => scale.requires_triggering_spell_context(),
-            Self::ChooseResolutionBranch { branches, .. } => branches.iter().any(|branch| {
-                matches!(
-                    &branch.requirement,
-                    ResolutionBranchRequirement::GameCondition(condition)
-                        if condition.requires_triggering_spell_context()
-                ) || branch
-                    .effects
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches.iter().any(|branch| {
+                    matches!(
+                        &branch.requirement,
+                        ResolutionBranchRequirement::GameCondition(condition)
+                            if condition.requires_triggering_spell_context()
+                    ) || branch
+                        .effects
+                        .iter()
+                        .any(Self::requires_triggering_spell_context)
+                }) || otherwise
                     .iter()
                     .any(Self::requires_triggering_spell_context)
-            }),
+            }
             Self::Conditional { condition, effect } => {
                 condition.requires_triggering_spell_context()
                     || effect.requires_triggering_spell_context()
@@ -4864,6 +4907,9 @@ pub enum ReturnController {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TriggeredCardReference {
     AbilitySource,
+    /// The exact incarnation captured in the triggering context. Unlike `TriggerObject`, this
+    /// does not advance through the observed zone change.
+    ExactTriggerObject,
     TriggerObject,
 }
 

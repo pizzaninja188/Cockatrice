@@ -380,14 +380,17 @@ pub(super) fn create_delayed_trigger(
     let SpellEffectKind::CreateDelayedTrigger { subject, ability } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    let exact_previous = matches!(subject, EffectSubject::PreviousEffectObject)
+        .then(|| cx.previous_effect_result.produced_objects.first().copied())
+        .flatten();
     let watched_id = match &subject {
         EffectSubject::Source
         | EffectSubject::AttachedObject
         | EffectSubject::TriggerObject
-        | EffectSubject::PreviousEffectObject
         | EffectSubject::SearchedObject(_) => {
             resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
         }
+        EffectSubject::PreviousEffectObject => exact_previous.map(|object| object.object_id),
         EffectSubject::Chosen(target) => cx.targets.first().copied().filter(|object_id| {
             target_filter_legal_at_resolution(
                 cx.engine,
@@ -402,22 +405,26 @@ pub(super) fn create_delayed_trigger(
     let Some(watched_id) = watched_id else {
         return Ok(EffectOutcome::Continue);
     };
-    let Some(watched_object) = cx.engine.state.objects.get(&watched_id) else {
-        return Ok(EffectOutcome::Continue);
-    };
-    if watched_object.zone != Zone::Battlefield {
-        return Ok(EffectOutcome::Continue);
-    }
-    let watched = TriggerObjectRef {
-        object_id: watched_id,
-        zone_change_generation: cx
-            .engine
-            .state
-            .zone_change_generation
-            .get(&watched_id)
-            .copied()
-            .unwrap_or(0),
-        controller_at_event: watched_object.controller,
+    let watched = if let Some(previous) = exact_previous {
+        previous
+    } else {
+        let Some(watched_object) = cx.engine.state.objects.get(&watched_id) else {
+            return Ok(EffectOutcome::Continue);
+        };
+        if watched_object.zone != Zone::Battlefield {
+            return Ok(EffectOutcome::Continue);
+        }
+        TriggerObjectRef {
+            object_id: watched_id,
+            zone_change_generation: cx
+                .engine
+                .state
+                .zone_change_generation
+                .get(&watched_id)
+                .copied()
+                .unwrap_or(0),
+            controller_at_event: watched_object.controller,
+        }
     };
     let card_name = cx
         .engine

@@ -176,7 +176,11 @@ fn validate_effect_cast_cost_conditions(
             }
             Ok(())
         }
-        SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
+        SpellEffectKind::ChooseResolutionBranch {
+            branches,
+            otherwise,
+            ..
+        } => {
             for branch in branches {
                 if let ResolutionBranchRequirement::CastCostReceipt(condition) = &branch.requirement
                 {
@@ -185,6 +189,9 @@ fn validate_effect_cast_cost_conditions(
                 for nested in &branch.effects {
                     validate_effect_cast_cost_conditions(groups, nested)?;
                 }
+            }
+            for nested in otherwise {
+                validate_effect_cast_cost_conditions(groups, nested)?;
             }
             Ok(())
         }
@@ -224,7 +231,12 @@ fn validate_effect_payment_results(
             return Err("Payment card result requires a compatible card cost".into());
         }
     }
-    if let SpellEffectKind::ChooseResolutionBranch { branches, .. } = effect {
+    if let SpellEffectKind::ChooseResolutionBranch {
+        branches,
+        otherwise,
+        ..
+    } = effect
+    {
         for branch in branches {
             if let ResolutionBranchRequirement::CardResultCount { filter, .. } = &branch.requirement
             {
@@ -235,6 +247,9 @@ fn validate_effect_payment_results(
             for nested in &branch.effects {
                 validate_effect_payment_results(allowed, nested)?;
             }
+        }
+        for nested in otherwise {
+            validate_effect_payment_results(allowed, nested)?;
         }
     }
     Ok(())
@@ -1014,11 +1029,15 @@ fn validate_nested_effect_metadata(effect: &SpellEffectKind) -> Result<(), Strin
             ability.validate_shape()?;
             validate_effect_list_metadata(&ability.effect)
         }
-        SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
+        SpellEffectKind::ChooseResolutionBranch {
+            branches,
+            otherwise,
+            ..
+        } => {
             for branch in branches {
                 validate_effect_list_metadata(&branch.effects)?;
             }
-            Ok(())
+            validate_effect_list_metadata(otherwise)
         }
         _ => Ok(()),
     }
@@ -1048,8 +1067,15 @@ fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String
         | SpellEffectKind::ConditionalCastCost { effect, .. } => {
             collect_linked_exile_uses(effect, uses)
         }
-        SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
+        SpellEffectKind::ChooseResolutionBranch {
+            branches,
+            otherwise,
+            ..
+        } => {
             for effect in branches.iter().flat_map(|branch| &branch.effects) {
+                collect_linked_exile_uses(effect, uses);
+            }
+            for effect in otherwise {
                 collect_linked_exile_uses(effect, uses);
             }
         }
@@ -1140,10 +1166,17 @@ fn effect_returns_source_transformed(effect: &SpellEffectKind) -> bool {
         | SpellEffectKind::ConditionalCastCost { effect, .. } => {
             effect_returns_source_transformed(effect)
         }
-        SpellEffectKind::ChooseResolutionBranch { branches, .. } => branches
-            .iter()
-            .flat_map(|branch| &branch.effects)
-            .any(effect_returns_source_transformed),
+        SpellEffectKind::ChooseResolutionBranch {
+            branches,
+            otherwise,
+            ..
+        } => {
+            branches
+                .iter()
+                .flat_map(|branch| &branch.effects)
+                .any(effect_returns_source_transformed)
+                || otherwise.iter().any(effect_returns_source_transformed)
+        }
         SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
             ability.effect.iter().any(effect_returns_source_transformed)
         }

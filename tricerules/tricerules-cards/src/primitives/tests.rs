@@ -1482,6 +1482,7 @@ fn first_applicable_resolution_branches_require_a_costless_final_fallback() {
         optional,
         selection: ResolutionBranchSelection::FirstApplicable,
         branches,
+        otherwise: Vec::new(),
     };
 
     assert!(automatic(
@@ -1536,6 +1537,65 @@ fn resolution_cost_supports_exact_hand_card_bottom_payment() {
     let cost: ResolutionCost = ron::from_str("PutHandCardOnLibraryBottom")
         .expect("parse an exact hand-card bottom resolution cost");
     assert_eq!(cost, ResolutionCost::PutHandCardOnLibraryBottom);
+}
+
+#[test]
+fn issue_241_pay_or_otherwise_supports_exact_delayed_objects() {
+    let effects: Vec<SpellEffectKind> = ron::from_str(
+        r#"[
+          Exile(subject: Chosen((kind: Creature))),
+          CreateDelayedTrigger(
+            subject: PreviousEffectObject,
+            ability: (
+              ability_id: "delayed_01",
+              presentation: Fallback,
+              trigger: AtBeginningOfNextEndStep,
+              effect: [ChooseResolutionBranch(
+                optional: true,
+                branches: [(
+                  branch_id: "pay",
+                  presentation: Fallback,
+                  cost: Mana("{3}{B}"),
+                  effects: [],
+                )],
+                otherwise: [ReturnTriggeredCard(
+                  reference: ExactTriggerObject,
+                  from: [Exile],
+                  controller: Owner,
+                )],
+              )],
+            ),
+          ),
+        ]"#,
+    )
+    .expect("generic delayed pay-or-otherwise sequence parses");
+
+    for effect in &effects {
+        effect
+            .validate(EffectContext::Ability)
+            .expect("each issue 241 primitive is valid in an ability");
+    }
+    SpellEffectKind::validate_list(&effects)
+        .expect("Exile publishes one exact object for the following delayed trigger");
+}
+
+#[test]
+fn issue_241_otherwise_requires_an_optional_resolution_choice() {
+    let effect: SpellEffectKind = ron::from_str(
+        r#"ChooseResolutionBranch(
+          optional: false,
+          branches: [(
+            branch_id: "pay",
+            presentation: Fallback,
+            cost: Mana("{1}"),
+            effects: [],
+          )],
+          otherwise: [GainLife(amount: 1)],
+        )"#,
+    )
+    .expect("otherwise is typed authoring vocabulary");
+
+    assert!(effect.validate(EffectContext::Ability).is_err());
 }
 
 #[test]

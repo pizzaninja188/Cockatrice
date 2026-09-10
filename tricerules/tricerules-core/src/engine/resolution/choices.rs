@@ -49,6 +49,7 @@ pub(super) fn choose_resolution_branch(
         optional,
         selection,
         branches,
+        otherwise: _,
     } = effect
     else {
         unreachable!();
