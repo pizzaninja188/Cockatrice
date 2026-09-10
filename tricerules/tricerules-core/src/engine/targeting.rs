@@ -1120,7 +1120,7 @@ fn validate_effect_targets(
         }
         SpellEffectKind::TapOrUntap { target: _ }
         | SpellEffectKind::SkipNextUntap { target: _ }
-        | SpellEffectKind::GainControlUntilEndOfTurn { target: _ }
+        | SpellEffectKind::GainControl { target: _, duration: _ }
         | SpellEffectKind::Tap {
             subject: EffectSubject::Chosen(_),
         }
@@ -1818,7 +1818,10 @@ fn spell_target_legality_error_with_context(
         | SpellEffectKind::DamageTargets { target: _, .. }
         | SpellEffectKind::TapOrUntap { target: _ }
         | SpellEffectKind::SkipNextUntap { target: _ }
-        | SpellEffectKind::GainControlUntilEndOfTurn { target: _ }
+        | SpellEffectKind::GainControl {
+            target: _,
+            duration: _,
+        }
         | SpellEffectKind::Tap {
             subject: EffectSubject::Chosen(_),
         }

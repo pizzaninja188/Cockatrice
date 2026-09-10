@@ -6,7 +6,7 @@
   types: ["Instant"],
   spell_effect: [
     Untap(subject: Chosen((kind: Creature, controller: Opponent))),
-    GainControlUntilEndOfTurn(target: (kind: Creature, controller: Opponent)),
+    GainControl(target: (kind: Creature, controller: Opponent), duration: UntilEndOfTurn),
     GrantKeywords(
       subject: Chosen((kind: Creature)),
       keywords: [Haste],

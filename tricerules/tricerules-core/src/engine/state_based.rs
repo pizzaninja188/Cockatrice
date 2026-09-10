@@ -66,8 +66,6 @@ impl GameEngine {
         &mut self,
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
-        let mut changed = self.reindex_battlefield_control(out);
-        changed |= self.refresh_enduring_story_designations();
         let lost_players = self
             .state
             .players
@@ -75,6 +73,17 @@ impl GameEngine {
             .filter(|player| player.has_lost)
             .map(|player| player.id)
             .collect::<HashSet<_>>();
+        let effect_count = self.state.continuous_effects.len();
+        self.state.continuous_effects.retain(|effect| {
+            !matches!(
+                effect.duration,
+                EffectDuration::UntilEndOfNextTurn { player, .. }
+                    if lost_players.contains(&player)
+            )
+        });
+        let mut changed = self.state.continuous_effects.len() != effect_count;
+        changed |= self.reindex_battlefield_control(out);
+        changed |= self.refresh_enduring_story_designations();
         let removed_emblems = self
             .state
             .static_emblems

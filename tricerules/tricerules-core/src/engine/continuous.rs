@@ -1062,11 +1062,20 @@ impl GameEngine {
         abilities
     }
 
-    /// CR 514.2: drain all until-end-of-turn continuous effects.
+    /// CR 514.2: drain ordinary turn effects and extended effects ending during this cleanup.
     pub(super) fn cleanup_until_end_of_turn_effects(&mut self) {
+        let active_player = self.state.active_player_id();
+        let turn_instance = self.state.turn_instance;
         self.state
             .continuous_effects
-            .retain(|effect| effect.duration != EffectDuration::UntilEndOfTurn);
+            .retain(|effect| match effect.duration {
+                EffectDuration::UntilEndOfTurn => false,
+                EffectDuration::UntilEndOfNextTurn {
+                    player,
+                    created_turn_instance,
+                } => player != active_player || created_turn_instance >= turn_instance,
+                _ => true,
+            });
         self.state.active_event_observers.retain(|observer| {
             !matches!(
                 observer.matcher,

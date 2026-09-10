@@ -1,0 +1,18 @@
+// Oracle checked 2026-09-10. CR 202.3, 500.4, 514.2, 611.2a, 613.1b.
+(
+  id: "evils_thrall",
+  name: "Evil's Thrall",
+  face_id: "evils_thrall",
+  mana_cost: "{2}{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    GainControl(
+      target: (kind: Creature),
+      duration: UntilEndOfControllerNextTurnIfBattlefieldMaximumGreaterThanTargetManaValue(
+        filter: (controllers: Controller, required_subtypes: ["Villain"]),
+      ),
+    ),
+    Untap(subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Haste]),
+  ],
+)

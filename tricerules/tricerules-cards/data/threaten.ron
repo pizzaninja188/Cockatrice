@@ -6,7 +6,7 @@
   types: ["Sorcery"],
   spell_effect: [
     Untap(subject: Chosen((kind: Creature))),
-    GainControlUntilEndOfTurn(target: (kind: Creature)),
+    GainControl(target: (kind: Creature), duration: UntilEndOfTurn),
     GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Haste]),
   ],
 )

@@ -5,7 +5,7 @@
   mana_cost: "{2}{R}",
   types: ["Sorcery"],
   spell_effect: [
-    GainControlUntilEndOfTurn(target: (kind: Creature)),
+    GainControl(target: (kind: Creature), duration: UntilEndOfTurn),
     Untap(subject: Chosen((kind: Creature))),
     GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Haste]),
   ],

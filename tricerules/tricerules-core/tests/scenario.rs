@@ -13,6 +13,8 @@ mod issue_236_hydro_man;
 mod issue_238_ral_crackling_wit;
 #[path = "scenario/issue_242_heated_argument.rs"]
 mod issue_242_heated_argument;
+#[path = "scenario/issue_243_evils_thrall.rs"]
+mod issue_243_evils_thrall;
 
 #[path = "scenario/activation_restrictions.rs"]
 mod activation_restrictions;

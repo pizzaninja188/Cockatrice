@@ -45,8 +45,9 @@ fn temporary_control_spells_preserve_their_oracle_effect_order() {
     let registry = CardRegistry::global();
     let target = TargetFilter::default_creature();
     let chosen = EffectSubject::Chosen(Box::new(target.clone()));
-    let control = SpellEffectKind::GainControlUntilEndOfTurn {
+    let control = SpellEffectKind::GainControl {
         target: target.clone(),
+        duration: tricerules_cards::GainControlDuration::UntilEndOfTurn,
     };
     let untap = SpellEffectKind::Untap {
         subject: chosen.clone(),

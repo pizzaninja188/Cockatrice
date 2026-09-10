@@ -304,11 +304,11 @@ pub(super) fn set_prepared(
     Ok(EffectOutcome::Continue)
 }
 
-pub(super) fn gain_control_until_end_of_turn(
+pub(super) fn gain_control(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::GainControlUntilEndOfTurn { .. } = effect else {
+    let SpellEffectKind::GainControl { duration, .. } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let Some(&target) = cx.targets.first() else {
@@ -323,6 +323,37 @@ pub(super) fn gain_control_until_end_of_turn(
     {
         return Ok(EffectOutcome::Continue);
     }
+    let target_mana_value = cx
+        .engine
+        .characteristics(target)
+        .map_or(0, |characteristics| characteristics.mana_value);
+    let duration = match duration {
+        GainControlDuration::UntilEndOfTurn => EffectDuration::UntilEndOfTurn,
+        GainControlDuration::UntilEndOfControllerNextTurnIfBattlefieldMaximumGreaterThanTargetManaValue {
+            filter,
+        } => {
+            let maximum = cx.engine.resolve_amount(
+                &Amount::Count(CountExpression::BattlefieldMaximum {
+                    filter,
+                    characteristic: BattlefieldQuantityCharacteristic::ManaValue,
+                }),
+                AmountContext::for_stack_item(cx.top, cx.controller)
+                    .with_previous_effect_result(cx.previous_effect_result),
+            );
+            if maximum > target_mana_value {
+                EffectDuration::UntilEndOfNextTurn {
+                    player: cx.controller,
+                    created_turn_instance: cx.engine.state.turn_instance,
+                }
+            } else {
+                EffectDuration::UntilEndOfTurn
+            }
+        }
+    };
+    let duration_label = match duration {
+        EffectDuration::UntilEndOfNextTurn { .. } => "until end of its controller's next turn",
+        _ => "until end of turn",
+    };
     cx.engine.state.continuous_effects.push(ContinuousEffect {
         trigger_grant_origin: None,
         source_id: Some(cx.top.id),
@@ -331,13 +362,13 @@ pub(super) fn gain_control_until_end_of_turn(
             controller: ControllerReference::Fixed(cx.controller),
         },
         condition: None,
-        duration: EffectDuration::UntilEndOfTurn,
+        duration,
         timestamp: cx.engine.state.command_index,
     });
     cx.engine.reindex_battlefield_control(cx.events);
     cx.events.push(ev_log(format!(
-        "{} changes control of {target} until end of turn",
-        cx.spell_label
+        "{} changes control of {target} {duration_label}",
+        cx.spell_label,
     )));
     Ok(EffectOutcome::Continue)
 }

@@ -2,17 +2,17 @@
 
 use super::{
     AbilitySourceZone, ActivatedAbilityDef, Amount, BasePowerToughnessValue, BasicLandType,
-    CardTypeFilter, CastCostReceiptCondition, Color, ConditionObjectRef, CountExpression,
-    CreatureScopeFilter, DamageDivision, EventZone, GameCondition, GraveyardDestination,
-    GraveyardFilter, Keyword, LifeAmount, PermanentTypeFilter, PowerComparison,
-    PowerToughnessCharacteristic, ProtectionQuality, ReflexiveTriggeredAbilityDef,
+    BattlefieldPermanentFilter, CardTypeFilter, CastCostReceiptCondition, Color,
+    ConditionObjectRef, CountExpression, CreatureScopeFilter, DamageDivision, EventZone,
+    GameCondition, GraveyardDestination, GraveyardFilter, Keyword, LifeAmount, PermanentTypeFilter,
+    PowerComparison, PowerToughnessCharacteristic, ProtectionQuality, ReflexiveTriggeredAbilityDef,
     SpecialActionKind, SpellKeyword, StackSpellFilter, TargetController, TargetFilter, TargetKind,
     TargetRole, TriggerCondition, TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement,
 };
 #[cfg(test)]
 use super::{
-    BattlefieldAggregate, BattlefieldCreatureCountFilter, BattlefieldPermanentFilter,
-    CreatureEventFilter, GraveyardAggregate, PermanentEventFilter,
+    BattlefieldAggregate, BattlefieldCreatureCountFilter, CreatureEventFilter, GraveyardAggregate,
+    PermanentEventFilter,
 };
 use crate::{
     choice_fallback, AbilityLinkId, AbilityPresentation, ChoiceId, ManaCost, SearchResultId,
@@ -1133,11 +1133,13 @@ pub enum SpellEffectKind {
         #[serde(default = "TargetFilter::default_creature")]
         filter: TargetFilter,
     },
-    /// CR 611.2a / 613.1b: the resolving spell's controller gains control of target permanent
-    /// until cleanup. Act of Treason and Threaten compose this with Untap and GrantKeywords.
-    GainControlUntilEndOfTurn {
+    /// CR 611.2a / 613.1b: the resolving spell's controller gains control of target permanent for
+    /// the authored duration. Act of Treason and Threaten use the ordinary turn duration; Evil's
+    /// Thrall can extend it after comparing derived battlefield mana values during resolution.
+    GainControl {
         #[serde(default = "TargetFilter::default_creature")]
         target: TargetFilter,
+        duration: GainControlDuration,
     },
     /// CR 701.6: counter target spell on the stack. `spell_filter` narrows which spells are legal
     /// targets by type and/or inclusive mana-value bounds. The default is unrestricted
@@ -2557,7 +2559,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DestroyAttached { target, .. }
             | SpellEffectKind::TapOrUntap { target }
             | SpellEffectKind::SkipNextUntap { target }
-            | SpellEffectKind::GainControlUntilEndOfTurn { target }
+            | SpellEffectKind::GainControl { target, .. }
             | SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::TargetPlayerDraws { target, .. }
@@ -3104,6 +3106,16 @@ impl SpellEffectKind {
         }
         for filter in self.target_filters() {
             filter.validate_target_constraints()?;
+        }
+        if let SpellEffectKind::GainControl {
+            duration:
+                GainControlDuration::UntilEndOfControllerNextTurnIfBattlefieldMaximumGreaterThanTargetManaValue {
+                    filter,
+                },
+            ..
+        } = self
+        {
+            filter.validate()?;
         }
         if let SpellEffectKind::CounterTargetSpell { spell_filter, .. }
         | SpellEffectKind::CopyTargetSpell { spell_filter, .. } = self
@@ -3987,7 +3999,7 @@ impl SpellEffectKind {
             // players. A source subject is already constrained to a permanent ability above.
             SpellEffectKind::TapOrUntap { target }
             | SpellEffectKind::SkipNextUntap { target }
-            | SpellEffectKind::GainControlUntilEndOfTurn { target } => {
+            | SpellEffectKind::GainControl { target, .. } => {
                 if !target.is_permanent_only() {
                     Err(format!(
                         "permanent effect cannot target players, got {:?}",
@@ -4741,6 +4753,16 @@ pub enum ResolvingEffectDuration {
     UntilControllerNextTurn,
 }
 
+/// A duration specialized to control-changing resolution effects. The conditional form snapshots
+/// both the target and the controller's derived battlefield maximum exactly once as it resolves.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GainControlDuration {
+    UntilEndOfTurn,
+    UntilEndOfControllerNextTurnIfBattlefieldMaximumGreaterThanTargetManaValue {
+        filter: BattlefieldPermanentFilter,
+    },
+}
+
 /// One safe layer operation available to a resolving spell or ability. This intentionally reuses
 /// the typed layer parameters while excluding player effects, dynamic scopes, control changes,
 /// and other continuous-effect kinds whose lifetime or reference player needs different rules.
@@ -4795,6 +4817,13 @@ pub enum EffectDuration {
     /// spell or ability (Giant Growth, firebreathing) — independent of their source once made
     /// (CR 611.2g), so they persist even if the source permanent later leaves the battlefield.
     UntilEndOfTurn,
+    /// CR 611.2a / 514.2: expires during the cleanup step of the named player's first actual turn
+    /// after the effect was created. Capturing the turn instance makes inserted and skipped turns
+    /// behave without predicting future turn order.
+    UntilEndOfNextTurn {
+        player: i32,
+        created_turn_instance: u64,
+    },
     /// A continuous effect linked to a permanent remaining on the battlefield. This covers both
     /// static abilities (CR 604.3 / 611.3) and resolving effects with a "for as long as" duration
     /// (CR 611.2b). The engine drains it when that exact source leaves, not at cleanup. The source

@@ -1790,8 +1790,8 @@ impl GameEngine {
                     effect @ SpellEffectKind::CopyCapturedSpell { .. } => {
                         stack_ops::copy_target_spell(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::GainControlUntilEndOfTurn { .. } => {
-                        misc::gain_control_until_end_of_turn(&mut cx, effect)?
+                    effect @ SpellEffectKind::GainControl { .. } => {
+                        misc::gain_control(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::CreateDelayedTrigger { .. } => {
                         misc::create_delayed_trigger(&mut cx, effect)?

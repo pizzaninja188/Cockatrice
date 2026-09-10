@@ -65,6 +65,16 @@ impl GameEngine {
             }
         }
         let mut batch = RuledEventBatch::default();
+        self.state.continuous_effects.retain(|effect| {
+            !matches!(
+                effect.duration,
+                EffectDuration::UntilEndOfNextTurn {
+                    player: duration_player,
+                    ..
+                } if duration_player == player
+            )
+        });
+        self.reindex_battlefield_control(&mut batch.events);
         batch.events.push(ev_log(format!("P{player} conceded")));
         if let Some(winner) = self.state.winner {
             batch.events.push(ev_game_over(winner));
