@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use super::{
     evaluate, external_oracle_lines, normalize_name, parse_rules_text, parse_type_line, str_field,
-    strip_reminder, Skip,
+    strip_reminder, EvaluationError, Skip,
 };
 
 #[derive(Debug)]
@@ -184,7 +184,7 @@ fn resolve_target_names(
 }
 
 fn exact_recipe_matches_one_clause(clause: &str, is_spell: bool) -> bool {
-    let Some(parsed) = parse_rules_text(clause, is_spell) else {
+    let Ok(parsed) = parse_rules_text(clause, is_spell) else {
         return false;
     };
     !is_spell || !parsed.spell_effect.is_empty()
@@ -230,7 +230,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
             .any(|card_type| matches!(card_type.as_str(), "Instant" | "Sorcery"));
         let oracle_text = str_field(face.value, "oracle_text");
         let face_matches = parse_rules_text(oracle_text, is_spell)
-            .is_some_and(|parsed| !is_spell || !parsed.spell_effect.is_empty());
+            .is_ok_and(|parsed| !is_spell || !parsed.spell_effect.is_empty());
         if face_matches {
             continue;
         }
@@ -302,7 +302,7 @@ pub(super) fn build(
         {
             continue;
         }
-        let Err(reason) = evaluate(
+        let Err(error) = evaluate(
             card,
             &HashSet::new(),
             &HashSet::new(),
@@ -310,6 +310,15 @@ pub(super) fn build(
             &HashSet::new(),
         ) else {
             continue;
+        };
+        let reason = match error {
+            EvaluationError::Skip(reason) => reason,
+            EvaluationError::Ambiguous(ambiguity) => {
+                return Err(format!(
+                    "ambiguous recipe match while analyzing {:?}: {ambiguity}",
+                    str_field(card, "name")
+                ));
+            }
         };
         if !reason.is_rules_text() {
             continue;
