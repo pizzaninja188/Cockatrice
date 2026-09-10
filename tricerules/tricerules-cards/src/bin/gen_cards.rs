@@ -36,6 +36,8 @@ use tricerules_cards::{
     ManaAmount, ManaCost, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
+#[path = "gen_cards/candidate_report.rs"]
+mod candidate_report;
 #[path = "gen_cards/presentation_audit.rs"]
 mod presentation_audit;
 
@@ -46,6 +48,8 @@ struct Args {
     input: String,
     metadata: PathBuf,
     oracle_tags: Option<String>,
+    candidate_report: Option<PathBuf>,
+    target_names: Option<PathBuf>,
     out_dir: PathBuf,
     presentation_registry: PathBuf,
     dry_run: bool,
@@ -63,6 +67,8 @@ fn print_usage() {
          --input <path>     Scryfall `oracle_cards` .jsonl.gz (required)\n  \
          --metadata <path>  bulk metadata sidecar (default: <input>.meta.json)\n  \
          --oracle-tags <path> optional `oracle_tags` .jsonl.gz advisory report\n  \
+         --candidate-report <path> write a read-only unsupported-clause JSON report\n  \
+         --target-names <path> optional exact-name corpus for --candidate-report\n  \
          --out-dir <path>   output root (default: data/generated, relative to this crate)\n  \
          --presentation-registry <path> generated Oracle fingerprint TSV\n  \
          --dry-run          report counts + skip reasons, write nothing\n  \
@@ -79,6 +85,8 @@ fn parse_args() -> Result<Args, String> {
     let mut input: Option<String> = None;
     let mut metadata: Option<PathBuf> = None;
     let mut oracle_tags: Option<String> = None;
+    let mut candidate_report: Option<PathBuf> = None;
+    let mut target_names: Option<PathBuf> = None;
     let mut out_dir: Option<PathBuf> = None;
     let mut presentation_registry: Option<PathBuf> = None;
     let mut dry_run = false;
@@ -96,6 +104,16 @@ fn parse_args() -> Result<Args, String> {
                 metadata = Some(PathBuf::from(it.next().ok_or("--metadata needs a value")?))
             }
             "--oracle-tags" => oracle_tags = Some(it.next().ok_or("--oracle-tags needs a value")?),
+            "--candidate-report" => {
+                candidate_report = Some(PathBuf::from(
+                    it.next().ok_or("--candidate-report needs a value")?,
+                ))
+            }
+            "--target-names" => {
+                target_names = Some(PathBuf::from(
+                    it.next().ok_or("--target-names needs a value")?,
+                ))
+            }
             "--out-dir" => {
                 out_dir = Some(PathBuf::from(it.next().ok_or("--out-dir needs a value")?))
             }
@@ -137,6 +155,22 @@ fn parse_args() -> Result<Args, String> {
     if inspect_card.is_some() && !audit_presentation {
         return Err("--inspect-card requires --audit-presentation".into());
     }
+    if target_names.is_some() && candidate_report.is_none() {
+        return Err("--target-names requires --candidate-report".into());
+    }
+    if candidate_report.is_some()
+        && (dry_run
+            || check
+            || include_new
+            || limit.is_some()
+            || audit_presentation
+            || inspect_card.is_some())
+    {
+        return Err(
+            "--candidate-report cannot be combined with generation, check, or presentation-audit modes"
+                .into(),
+        );
+    }
     if audit_presentation && (limit.is_some() || include_new || dry_run) {
         return Err(
             "--audit-presentation cannot be combined with --limit, --include-new, or --dry-run"
@@ -158,6 +192,8 @@ fn parse_args() -> Result<Args, String> {
         input,
         metadata,
         oracle_tags,
+        candidate_report,
+        target_names,
         out_dir,
         presentation_registry,
         dry_run,
@@ -1597,6 +1633,69 @@ fn main() -> ExitCode {
         }
     };
 
+    let input_path = Path::new(&args.input);
+    let provenance = match load_provenance(input_path, &args.metadata) {
+        Ok(provenance) => provenance,
+        Err(error) => {
+            eprintln!("error: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    if let Some(report_path) = &args.candidate_report {
+        let target_names = match args.target_names.as_ref() {
+            Some(path) => match fs::read_to_string(path) {
+                Ok(names) => Some(names),
+                Err(error) => {
+                    eprintln!(
+                        "error: cannot read target-name file {}: {error}",
+                        path.display()
+                    );
+                    return ExitCode::FAILURE;
+                }
+            },
+            None => None,
+        };
+        let mut cards = Vec::new();
+        let read_count = match for_each_gzipped_jsonl(input_path, |card| {
+            cards.push(card);
+            true
+        }) {
+            Ok(count) => count,
+            Err(error) => {
+                eprintln!("error: failed to read {}: {error}", args.input);
+                return ExitCode::FAILURE;
+            }
+        };
+        eprintln!("Read {read_count} cards from {}.", args.input);
+        let report = match candidate_report::build(cards, target_names.as_deref(), &provenance) {
+            Ok(report) => report,
+            Err(error) => {
+                eprintln!("error: {error}");
+                return ExitCode::FAILURE;
+            }
+        };
+        eprint!("{}", report.summary);
+        if let Some(tag_input) = &args.oracle_tags {
+            match oracle_tag_report(Path::new(tag_input), &report.unsupported_oracle_ids) {
+                Ok(tag_report) => eprint!("{}", tag_report.render()),
+                Err(error) => {
+                    eprintln!("error: failed to read advisory Oracle Tags {tag_input}: {error}");
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+        if let Err(error) = fs::write(report_path, report.json) {
+            eprintln!(
+                "error: cannot write candidate report {}: {error}",
+                report_path.display()
+            );
+            return ExitCode::FAILURE;
+        }
+        eprintln!("Wrote candidate report to {}.", report_path.display());
+        return ExitCode::SUCCESS;
+    }
+
     let tracked_generated = match generated_outputs(&args.out_dir) {
         Ok(outputs) => outputs,
         Err(error) => {
@@ -1635,15 +1734,6 @@ fn main() -> ExitCode {
             );
         }
     }
-
-    let input_path = Path::new(&args.input);
-    let provenance = match load_provenance(input_path, &args.metadata) {
-        Ok(provenance) => provenance,
-        Err(error) => {
-            eprintln!("error: {error}");
-            return ExitCode::FAILURE;
-        }
-    };
 
     let mut generated_ids: HashSet<String> = HashSet::new();
     let mut generated_names: HashSet<String> = HashSet::new();
@@ -2036,6 +2126,221 @@ mod tests {
         assert_eq!(report.entries[0].id, "stable-tag-id");
         assert_eq!(report.entries[0].label, "Mutable Label");
         assert_eq!(report.entries[0].count, 1);
+    }
+
+    #[test]
+    fn candidate_report_deduplicates_printings_and_normalizes_clause_signatures() {
+        let mut first = normal_card(
+            "Alpha Adept",
+            "{1}{U}",
+            "Creature — Wizard",
+            "Ward {2} (Whenever this becomes the target of a spell, counter it unless its controller pays {2}.)",
+            Some(("2", "2")),
+        );
+        first["oracle_id"] = json!("oracle-alpha");
+        first["scryfall_uri"] = json!("https://scryfall.com/card/one/1/alpha-adept");
+        first["rulings_uri"] = json!("https://api.scryfall.com/cards/oracle-alpha/rulings");
+
+        let mut reprint = first.clone();
+        reprint["oracle_text"] = json!(
+            "  Ward   {2}   (Whenever this becomes the target of a spell, counter it unless its controller pays {2}.)  \r\n"
+        );
+        reprint["scryfall_uri"] = json!("https://scryfall.com/card/two/2/alpha-adept");
+
+        let mut second = normal_card(
+            "Beta Adept",
+            "{1}{U}",
+            "Creature — Wizard",
+            "Ward {2}",
+            Some(("2", "2")),
+        );
+        second["oracle_id"] = json!("oracle-beta");
+        second["scryfall_uri"] = json!("https://scryfall.com/card/one/2/beta-adept");
+        second["rulings_uri"] = json!("https://api.scryfall.com/cards/oracle-beta/rulings");
+
+        let mut different = normal_card(
+            "Gamma Adept",
+            "{1}{U}",
+            "Creature — Wizard",
+            "Ward {3}",
+            Some(("2", "2")),
+        );
+        different["oracle_id"] = json!("oracle-gamma");
+        different["scryfall_uri"] = json!("https://scryfall.com/card/one/3/gamma-adept");
+        different["rulings_uri"] = json!("https://api.scryfall.com/cards/oracle-gamma/rulings");
+
+        let report = candidate_report::build(
+            vec![
+                reprint.clone(),
+                different.clone(),
+                second.clone(),
+                first.clone(),
+            ],
+            None,
+            "verified fixture",
+        )
+        .unwrap();
+        let parsed: Value = serde_json::from_str(&report.json).unwrap();
+        let clusters = parsed["clusters"].as_array().unwrap();
+        assert_eq!(clusters.len(), 2);
+        assert_eq!(clusters[0]["signature"], "Ward {2}");
+        assert_eq!(clusters[0]["unique_card_count"], 2);
+        assert_eq!(clusters[0]["occurrences"].as_array().unwrap().len(), 2);
+        assert_eq!(clusters[0]["occurrences"][0]["oracle_id"], "oracle-alpha");
+        assert_eq!(
+            clusters[0]["occurrences"][0]["scryfall_uri"],
+            "https://scryfall.com/card/one/1/alpha-adept"
+        );
+        assert_eq!(clusters[1]["signature"], "Ward {3}");
+        assert_eq!(clusters[1]["unique_card_count"], 1);
+        assert!(report.summary.contains("2 unique cards  Ward {2}"));
+
+        let repeated = candidate_report::build(
+            vec![second, first, different, reprint],
+            None,
+            "verified fixture",
+        )
+        .unwrap();
+        assert_eq!(report.json, repeated.json);
+        assert_eq!(report.summary, repeated.summary);
+    }
+
+    #[test]
+    fn candidate_report_attributes_multiface_failures_and_separates_near_misses() {
+        let mut multiface = multiface(
+            "modal_dfc",
+            "Quiet Front // Busy Back",
+            vec![
+                face(
+                    "Quiet Front",
+                    "{1}{G}",
+                    "Creature — Elf",
+                    "Reach",
+                    Some(("2", "2")),
+                    &["G"],
+                    None,
+                ),
+                face(
+                    "Busy Back",
+                    "{2}{U}",
+                    "Creature — Wizard",
+                    "Whenever you cast a spell, draw a card.",
+                    Some(("2", "3")),
+                    &["U"],
+                    None,
+                ),
+            ],
+        );
+        multiface["oracle_id"] = json!("oracle-multiface");
+        multiface["scryfall_uri"] = json!("https://scryfall.com/card/test/1/quiet-front-busy-back");
+        multiface["rulings_uri"] = json!("https://api.scryfall.com/cards/oracle-multiface/rulings");
+
+        let mut near_miss = normal_card(
+            "Two Instructions",
+            "{2}{U}",
+            "Sorcery",
+            "Draw two cards.\nYou gain 2 life.",
+            None,
+        );
+        near_miss["oracle_id"] = json!("oracle-near-miss");
+        near_miss["scryfall_uri"] = json!("https://scryfall.com/card/test/2/two-instructions");
+        near_miss["rulings_uri"] = json!("https://api.scryfall.com/cards/oracle-near-miss/rulings");
+
+        let report =
+            candidate_report::build(vec![near_miss, multiface], None, "verified fixture").unwrap();
+        let parsed: Value = serde_json::from_str(&report.json).unwrap();
+        let occurrences = parsed["clusters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|cluster| cluster["occurrences"].as_array().unwrap())
+            .collect::<Vec<_>>();
+        assert!(occurrences.iter().any(|occurrence| {
+            occurrence["card_name"] == "Quiet Front // Busy Back"
+                && occurrence["face_name"] == "Busy Back"
+                && occurrence["face_index"] == 2
+                && occurrence["skip_reason"] == "face rules text has no exact supported recipe"
+        }));
+        assert!(!occurrences
+            .iter()
+            .any(|occurrence| occurrence["face_name"] == "Quiet Front"));
+        assert!(occurrences.iter().any(|occurrence| {
+            occurrence["card_name"] == "Two Instructions"
+                && occurrence["cluster_kind"] == "face_near_miss"
+                && occurrence["original_clause"] == "Draw two cards.\nYou gain 2 life."
+        }));
+    }
+
+    #[test]
+    fn candidate_report_exact_name_filter_rejects_unknown_and_ambiguous_names() {
+        let mut alpha = multiface(
+            "modal_dfc",
+            "Alpha // Shared Back",
+            vec![
+                face(
+                    "Alpha",
+                    "{G}",
+                    "Creature — Elf",
+                    "Ward {2}",
+                    Some(("1", "1")),
+                    &["G"],
+                    None,
+                ),
+                face(
+                    "Shared Back",
+                    "{U}",
+                    "Creature — Wizard",
+                    "Flying",
+                    Some(("1", "1")),
+                    &["U"],
+                    None,
+                ),
+            ],
+        );
+        alpha["oracle_id"] = json!("oracle-alpha");
+        let mut beta = multiface(
+            "modal_dfc",
+            "Beta // Shared Back",
+            vec![
+                face(
+                    "Beta",
+                    "{G}",
+                    "Creature — Elf",
+                    "Ward {2}",
+                    Some(("1", "1")),
+                    &["G"],
+                    None,
+                ),
+                face(
+                    "Shared Back",
+                    "{U}",
+                    "Creature — Wizard",
+                    "Flying",
+                    Some(("1", "1")),
+                    &["U"],
+                    None,
+                ),
+            ],
+        );
+        beta["oracle_id"] = json!("oracle-beta");
+
+        let cards = vec![alpha, beta];
+        let filtered = candidate_report::build(cards.clone(), Some(" Alpha \r\n"), "fixture")
+            .expect("whole-card and face names should select one exact Oracle identity");
+        let parsed: Value = serde_json::from_str(&filtered.json).unwrap();
+        assert_eq!(parsed["analyzed_unique_cards"], 1);
+        assert_eq!(parsed["clusters"][0]["unique_card_count"], 1);
+
+        assert!(
+            candidate_report::build(cards.clone(), Some("Missing\n"), "fixture")
+                .unwrap_err()
+                .contains("unknown target name")
+        );
+        assert!(
+            candidate_report::build(cards, Some("Shared Back\n"), "fixture")
+                .unwrap_err()
+                .contains("ambiguous target name")
+        );
     }
 
     #[test]

@@ -547,6 +547,19 @@ generator and checklist check, use the workflow entry point from the repository 
 ./scripts/update-card-data.ps1 -Mode Check
 ```
 
+To rank unsupported Oracle clauses without changing generated data, write an explicit candidate
+report destination:
+
+```powershell
+./scripts/gen-cards.ps1 --candidate-report build/candidates.json
+./scripts/gen-cards.ps1 --candidate-report build/cube-candidates.json --target-names cube-names.txt
+```
+
+The optional target file contains one exact whole-card or face name per nonblank line. Unknown or
+ambiguous names fail the command without writing the report. The stable JSON clusters normalized
+clauses by descending printing-independent card count, retains face and source-routing context,
+and keeps any optional Oracle Tags summary advisory and separate from the clause signatures.
+
 ## 9. Track partial implementations
 
 Record a genuine implementation gap as one `card_id<TAB>note` row in
