@@ -155,10 +155,26 @@ void ZoneViewZone::zoneDumpReceived(const Response &r)
 // Because of boundingRect(), this function must not be called before the zone was added to a scene.
 void ZoneViewZone::reorganizeCards()
 {
+    const auto *zvLogic = qobject_cast<ZoneViewZoneLogic *>(getLogic());
+    const bool isStackZoneView =
+        forceStackFanLayout ||
+        (zvLogic && zvLogic->getOriginalZone()->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) == 0);
+    RuledClientState *ruledState = nullptr;
+    int stackOwnerId = -1;
+    if (isStackZoneView) {
+        if (auto *player = getLogic()->getPlayer()) {
+            if (auto *ag = player->getGame(); ag && RuledActions::isRuledGame(ag)) {
+                ruledState = ag->getGameEventHandler()->ruled();
+                stackOwnerId = player->getPlayerInfo()->getId();
+            }
+        }
+    }
+
     // filter cards
     CardList cardsToDisplay = CardList(getLogic()->getCards().getContentsKnown());
     for (auto card : getLogic()->getCards()) {
-        if (filterString.check(card->getCard().getCardPtr())) {
+        const bool published = !ruledState || ruledState->isPublishedStackCard(stackOwnerId, card->getId());
+        if (published && filterString.check(card->getCard().getCardPtr())) {
             card->show();
             cardsToDisplay.append(card);
         } else {
@@ -187,11 +203,6 @@ void ZoneViewZone::reorganizeCards()
     cardsToDisplay.sortBy(sortOptions);
 
     const int cardCount = cardsToDisplay.size();
-    const auto *zvLogic = qobject_cast<ZoneViewZoneLogic *>(getLogic());
-    const bool isStackZoneView =
-        forceStackFanLayout ||
-        (zvLogic && zvLogic->getOriginalZone()->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) == 0);
-
     if (isStackZoneView) {
         // For ruled games, sort cardsToDisplay by engine push order so the fan layout mirrors
         // the engine's authoritative LIFO order. Index 0 → rightmost → resolves first visually.

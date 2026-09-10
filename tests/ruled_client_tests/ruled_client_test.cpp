@@ -2471,6 +2471,31 @@ TEST_F(RuledClientTest, StackPushAndResolveKeepLifoOrder)
     EXPECT_EQ(host.removedSyntheticCards, QVector<quint32>({11}));
 }
 
+TEST_F(RuledClientTest, PhysicalStackCardIsPublishedOnlyAfterStackPushed)
+{
+    constexpr quint32 reservedOid = 20;
+    constexpr int physicalCardId = 7;
+
+    ruled::v1::RuledEventBatch begun;
+    addPermanent(begun.add_events(), kLocalPlayer, reservedOid, physicalCardId);
+    apply(begun);
+
+    EXPECT_FALSE(state->isPublishedStackCard(kLocalPlayer, physicalCardId))
+        << "a reserved cast source must stay hidden while its payment transaction is open";
+
+    ruled::v1::RuledEventBatch committed;
+    committed.add_events()->mutable_stack_pushed()->set_object_id(reservedOid);
+    apply(committed);
+
+    EXPECT_TRUE(state->isPublishedStackCard(kLocalPlayer, physicalCardId));
+
+    ruled::v1::RuledEventBatch resolved;
+    resolved.add_events()->mutable_stack_resolved()->set_object_id(reservedOid);
+    apply(resolved);
+
+    EXPECT_FALSE(state->isPublishedStackCard(kLocalPlayer, physicalCardId));
+}
+
 TEST_F(RuledClientTest, StackPushPreservesEveryTypedTargetWithoutPlayerIdCollisions)
 {
     ruled::v1::RuledEventBatch batch;

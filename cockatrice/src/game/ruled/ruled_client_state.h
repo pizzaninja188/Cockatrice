@@ -956,6 +956,14 @@ public:
     {
         return ownerCardIdToEngineOid.value(makeOwnedCardKey(ownerPlayerId, cardId), 0);
     }
+    /// A physical card may already be parked in Cockatrice's canonical stack zone while the
+    /// engine-owned casting transaction is still awaiting payment. It becomes presentable only
+    /// after the authoritative StackPushed event publishes that reserved object on the stack.
+    [[nodiscard]] bool isPublishedStackCard(int ownerPlayerId, int cardId) const
+    {
+        const quint32 oid = engineOidForCardId(ownerPlayerId, cardId);
+        return oid != 0 && stackOidOrder.contains(oid);
+    }
     [[nodiscard]] quint32 zoneAbilityOidForHandSlot(int handSlot) const
     {
         return handAbilityOidBySlot.value(handSlot, 0);

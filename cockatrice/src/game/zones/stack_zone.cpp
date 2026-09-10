@@ -22,6 +22,12 @@ StackZone::StackZone(StackZoneLogic *_logic, int _zoneHeight, QGraphicsItem *par
     : SelectZone(_logic, parent), zoneHeight(_zoneHeight)
 {
     connect(themeManager, &ThemeManager::themeChanged, this, &StackZone::updateBg);
+    if (auto *game = getLogic()->getPlayer()->getGame()) {
+        if (auto *handler = game->getGameEventHandler()) {
+            connect(handler->ruled(), &RuledClientState::stackOrderChanged, this,
+                    [this](const QList<quint32> &) { reorganizeCards(); });
+        }
+    }
     updateBg();
     setCacheMode(DeviceCoordinateCache);
 }
@@ -99,26 +105,44 @@ void StackZone::reorganizeCards()
 {
     const CardList &rawCards = getLogic()->getCards();
     if (!rawCards.isEmpty()) {
-        // Build a display list and sort by engine push order when in a ruled game.
+        // Build a display list and sort by engine push order when in a ruled game. A physical
+        // cast source is parked in this zone as soon as BeginSpellCast removes it from hand, but
+        // remains hidden until CommitSpellCast produces StackPushed.
         // Index 0 = most recently pushed = resolves first. The underlying rawCards list
         // is not reordered so that takeCard(position, id) continues to work correctly.
-        QList<CardItem *> display(rawCards.begin(), rawCards.end());
+        QList<CardItem *> display;
+        display.reserve(rawCards.size());
+        RuledClientState *ruledState = nullptr;
+        int stackOwnerId = -1;
         if (auto *ag = getLogic()->getPlayer()->getGame()) {
             if (RuledActions::isRuledGame(ag)) {
-                if (auto *geh = ag->getGameEventHandler()->ruled()) {
-                    const QList<quint32> &oidOrder = geh->getStackOidOrder();
-                    const int pid = getLogic()->getPlayer()->getPlayerInfo()->getId();
-                    std::sort(display.begin(), display.end(), [&](CardItem *a, CardItem *b) {
-                        int ia = static_cast<int>(oidOrder.indexOf(
-                            geh->engineOidForCardId(pid, a->getId())));
-                        int ib = static_cast<int>(oidOrder.indexOf(
-                            geh->engineOidForCardId(pid, b->getId())));
-                        if (ia < 0) ia = INT_MAX;
-                        if (ib < 0) ib = INT_MAX;
-                        return ia < ib;
-                    });
-                }
+                ruledState = ag->getGameEventHandler()->ruled();
+                stackOwnerId = getLogic()->getPlayer()->getPlayerInfo()->getId();
             }
+        }
+        for (CardItem *card : rawCards) {
+            const bool published = !ruledState || ruledState->isPublishedStackCard(stackOwnerId, card->getId());
+            card->setVisible(published);
+            if (published) {
+                display.append(card);
+            }
+        }
+        if (ruledState) {
+            const QList<quint32> &oidOrder = ruledState->getStackOidOrder();
+            std::sort(display.begin(), display.end(), [&](CardItem *a, CardItem *b) {
+                int ia = static_cast<int>(oidOrder.indexOf(ruledState->engineOidForCardId(stackOwnerId, a->getId())));
+                int ib = static_cast<int>(oidOrder.indexOf(ruledState->engineOidForCardId(stackOwnerId, b->getId())));
+                if (ia < 0)
+                    ia = INT_MAX;
+                if (ib < 0)
+                    ib = INT_MAX;
+                return ia < ib;
+            });
+        }
+
+        if (display.isEmpty()) {
+            update();
+            return;
         }
 
         const auto cardCount = static_cast<int>(display.size());

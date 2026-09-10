@@ -1412,6 +1412,8 @@ CardZoneLogic *TabGame::findVisibleStackZone() const
     CardZoneLogic *best = nullptr;
     int bestCount = -1;
     Player *localPlayer = pm->isSpectator() ? nullptr : pm->getPlayer(pm->getLocalPlayerId());
+    const RuledClientState *ruledState =
+        RuledActions::isRuledGame(game) ? game->getGameEventHandler()->ruled() : nullptr;
     // --- DIAG H2/H3: log all zones and their sizes to see which one gets picked. ---
     {
         QString zoneInfo;
@@ -1433,7 +1435,17 @@ CardZoneLogic *TabGame::findVisibleStackZone() const
             continue;
         }
         CardZoneLogic *zs = player->getStackZone();
-        const int n = zs->getCards().size();
+        int n = 0;
+        if (ruledState) {
+            const int stackOwnerId = player->getPlayerInfo()->getId();
+            for (CardItem *card : zs->getCards()) {
+                if (card && ruledState->isPublishedStackCard(stackOwnerId, card->getId())) {
+                    ++n;
+                }
+            }
+        } else {
+            n = zs->getCards().size();
+        }
         if (n == 0) {
             continue;
         }
