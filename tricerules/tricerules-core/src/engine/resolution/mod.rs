@@ -1432,7 +1432,19 @@ impl GameEngine {
                     {
                         if let Some(branch_index) = choice {
                             if let Some(branch) = branches.get(*branch_index) {
-                                expanded.extend(build_entries(&branch.effects, None, &[]));
+                                // Branch effects do not acquire new targets during resolution.
+                                // They inherit the enclosing instruction's generation-bound target
+                                // context so recipients such as ControllerOfTargetGroup can resolve
+                                // against the target that was chosen when the spell was cast.
+                                expanded.extend(branch.effects.iter().cloned().map(|effect| {
+                                    ResolutionEffect {
+                                        effect,
+                                        targets: entry.targets.clone(),
+                                        target_damage: entry.target_damage.clone(),
+                                        target_group_indices: entry.target_group_indices.clone(),
+                                        role_group_indices: Vec::new(),
+                                    }
+                                }));
                             }
                         }
                         continue;

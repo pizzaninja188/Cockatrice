@@ -577,6 +577,11 @@ pub enum ResolutionCost {
         #[serde(default)]
         filter: Option<CardTypeFilter>,
     },
+    /// Heated Argument: exactly one nontargeted card from the payer's graveyard (CR 118.12).
+    ExileGraveyardCard {
+        #[serde(default)]
+        filter: Option<ZoneCardFilter>,
+    },
     SacrificePermanent {
         filter: TargetFilter,
         /// Servant of the Stinger pays with its own incarnation; Crypt Lurker can pay with
@@ -617,6 +622,7 @@ impl ResolutionBranchDef {
             ResolutionCost::Blight { count } => format!("Blight {count}"),
             ResolutionCost::Mana(cost) => format!("Pay {cost}"),
             ResolutionCost::DiscardCard { .. } => "Discard a card".into(),
+            ResolutionCost::ExileGraveyardCard { .. } => "Exile a card from your graveyard".into(),
             ResolutionCost::SacrificePermanent { .. } => "Sacrifice a permanent".into(),
             ResolutionCost::TapPermanents { count, .. } => {
                 format!("Tap {count} permanent(s)")
@@ -3647,6 +3653,11 @@ impl SpellEffectKind {
                             }
                         }
                         ResolutionCost::DiscardCard { .. } => {}
+                        ResolutionCost::ExileGraveyardCard { filter } => {
+                            if let Some(filter) = filter {
+                                filter.validate()?;
+                            }
+                        }
                         ResolutionCost::SacrificePermanent {
                             filter,
                             source_only,
@@ -4360,6 +4371,7 @@ impl SpellEffectKind {
                 ResolutionCost::Waterbend(_)
                 | ResolutionCost::None
                 | ResolutionCost::Blight { .. }
+                | ResolutionCost::ExileGraveyardCard { .. }
                 | ResolutionCost::SacrificePermanent { .. }
                 | ResolutionCost::TapPermanents { .. } => {
                     Err("Ward supports only mana and discard-card costs".into())

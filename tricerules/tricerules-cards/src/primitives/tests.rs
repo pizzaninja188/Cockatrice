@@ -1523,6 +1523,30 @@ fn first_applicable_resolution_branches_require_a_costless_final_fallback() {
 }
 
 #[test]
+fn resolution_cost_supports_exact_graveyard_exile_payment() {
+    let _: ResolutionCost = ron::from_str(r#"ExileGraveyardCard(filter: None)"#)
+        .expect("parse an unrestricted graveyard-exile resolution cost");
+    let _: ResolutionCost =
+        ron::from_str(r#"ExileGraveyardCard(filter: Some((card_type: Some(InstantOrSorcery))))"#)
+            .expect("parse an exact graveyard-exile resolution cost");
+}
+
+#[test]
+fn nested_resolution_branch_rejects_unknown_target_controller_group() {
+    let card = r#"(
+      id: "test", name: "Test", face_id: "test", types: ["Instant"],
+      spell_effect: [
+        DamageTarget(amount: 1, target: (kind: Creature)),
+        ChooseResolutionBranch(optional: true, branches: [(
+          branch_id: "branch_01", presentation: Fallback, cost: None,
+          effects: [DamagePlayer(amount: 1, who: ControllerOfTargetGroup(group_index: 1))],
+        )]),
+      ],
+    )"#;
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[card], &[]).is_err());
+}
+
+#[test]
 fn turn_history_trigger_ordinals_must_be_positive() {
     assert!(TriggerCondition::WheneverPlayerCastsSpell {
         caster: CastTriggerPlayer::Controller,

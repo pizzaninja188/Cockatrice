@@ -76,7 +76,7 @@ pub(super) enum CostDebit {
     ExileGroup {
         objects: Vec<(ObjectId, u64, PlayerId)>,
         constraint: ObjectPaymentConstraint,
-        filter: ZoneCardFilter,
+        filter: Option<ZoneCardFilter>,
         source: ObjectId,
         exclude_source: bool,
     },
@@ -1023,7 +1023,7 @@ impl GameEngine {
                     debits.push(CostDebit::ExileGroup {
                         objects: exiles,
                         constraint: *constraint,
-                        filter: filter.clone(),
+                        filter: Some(filter.clone()),
                         source: source_oid,
                         exclude_source: *exclude_source,
                     });
@@ -1520,7 +1520,7 @@ impl GameEngine {
                     debits.push(CostDebit::ExileGroup {
                         objects: exiles,
                         constraint: *constraint,
-                        filter: filter.clone(),
+                        filter: Some(filter.clone()),
                         source: permanent_id,
                         exclude_source: *exclude_source,
                     });
@@ -2145,7 +2145,7 @@ impl GameEngine {
                                     &self.state,
                                     self.registry,
                                     *oid,
-                                    Some(filter),
+                                    filter.as_ref(),
                                 )
                                 && self.graveyard_exile_cost_object_current(
                                     plan.player_idx,

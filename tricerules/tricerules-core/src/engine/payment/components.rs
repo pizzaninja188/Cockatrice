@@ -23,6 +23,10 @@ pub(in crate::engine) enum ObjectPaymentComponent {
         filter: Option<CardTypeFilter>,
         excluded: Option<ObjectId>,
     },
+    ExileGraveyardCard {
+        source: rv1::CostObjectRef,
+        filter: Option<ZoneCardFilter>,
+    },
     Sacrifice {
         filter: PermanentPaymentFilter,
         only_source: Option<rv1::CostObjectRef>,
@@ -92,6 +96,10 @@ impl ObjectPaymentComponent {
                 filter: *filter,
                 excluded: None,
             },
+            ResolutionCost::ExileGraveyardCard { filter } => Self::ExileGraveyardCard {
+                source,
+                filter: filter.clone(),
+            },
             ResolutionCost::SacrificePermanent {
                 filter,
                 source_only,
@@ -132,6 +140,20 @@ impl ObjectPaymentComponent {
                         filter.as_ref(),
                     )
             }
+            Self::ExileGraveyardCard { filter, .. } => {
+                object.zone == Zone::Graveyard
+                    && object.owner == player
+                    && engine
+                        .state
+                        .player_idx(player)
+                        .is_some_and(|index| engine.state.players[index].graveyard.contains(&oid))
+                    && super::super::card_predicates::zone_card_matches_filter(
+                        &engine.state,
+                        engine.registry,
+                        oid,
+                        filter.as_ref(),
+                    )
+            }
             Self::Sacrifice {
                 filter,
                 only_source,
@@ -162,6 +184,13 @@ impl ObjectPaymentComponent {
         if matches!(self, Self::Discard { .. }) {
             engine.state.players[index]
                 .hand
+                .iter()
+                .copied()
+                .filter(|oid| self.matches(engine, player, *oid))
+                .collect()
+        } else if matches!(self, Self::ExileGraveyardCard { .. }) {
+            engine.state.players[index]
+                .graveyard
                 .iter()
                 .copied()
                 .filter(|oid| self.matches(engine, player, *oid))
@@ -257,6 +286,21 @@ impl GameEngine {
                 generation: objects[0].zone_change_generation,
                 owner: self.state.objects[&objects[0].object_id].owner,
             },
+            ObjectPaymentComponent::ExileGraveyardCard { source, filter } => {
+                CostDebit::ExileGroup {
+                    objects: objects
+                        .into_iter()
+                        .map(|object| {
+                            let owner = self.state.objects[&object.object_id].owner;
+                            (object.object_id, object.zone_change_generation, owner)
+                        })
+                        .collect(),
+                    constraint: ObjectPaymentConstraint::ExactCount(1),
+                    filter,
+                    source: source.object_id,
+                    exclude_source: false,
+                }
+            }
             ObjectPaymentComponent::Sacrifice { .. } => CostDebit::Sacrifice {
                 snapshot: self
                     .sacrifice_snapshot(objects[0].object_id)

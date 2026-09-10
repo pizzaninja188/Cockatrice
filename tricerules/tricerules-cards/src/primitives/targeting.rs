@@ -264,29 +264,53 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
     }
 
     fn validate_player_recipient_groups(&self, effects: &[SpellEffectKind]) -> Result<(), String> {
-        let referenced_groups = effects.iter().filter_map(|effect| match effect {
-            SpellEffectKind::CreateTokens {
-                who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
-                ..
+        fn collect_referenced_groups(effect: &SpellEffectKind, groups: &mut Vec<u32>) {
+            let referenced_group = match effect {
+                SpellEffectKind::CreateTokens {
+                    who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
+                    ..
+                }
+                | SpellEffectKind::DamagePlayer {
+                    who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
+                    ..
+                }
+                | SpellEffectKind::LoseLife {
+                    who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
+                    ..
+                }
+                | SpellEffectKind::Mill {
+                    who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
+                    ..
+                }
+                | SpellEffectKind::SearchLibrary {
+                    who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
+                    ..
+                } => Some(*group_index),
+                _ => None,
+            };
+            if let Some(group_index) = referenced_group {
+                groups.push(group_index);
             }
-            | SpellEffectKind::DamagePlayer {
-                who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
-                ..
+
+            match effect {
+                SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
+                    for branch in branches {
+                        for nested in &branch.effects {
+                            collect_referenced_groups(nested, groups);
+                        }
+                    }
+                }
+                SpellEffectKind::Conditional { effect, .. } => {
+                    collect_referenced_groups(effect, groups);
+                }
+                _ => {}
             }
-            | SpellEffectKind::LoseLife {
-                who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
-                ..
-            }
-            | SpellEffectKind::Mill {
-                who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
-                ..
-            }
-            | SpellEffectKind::SearchLibrary {
-                who: super::PlayerRecipient::ControllerOfTargetGroup { group_index },
-                ..
-            } => Some(*group_index),
-            _ => None,
-        });
+        }
+
+        let mut referenced_groups = Vec::new();
+        for effect in effects {
+            collect_referenced_groups(effect, &mut referenced_groups);
+        }
 
         for group_index in referenced_groups {
             let group = self

@@ -1,0 +1,17 @@
+// Oracle and rulings checked 2026-09-10.
+(
+  id: "heated_argument",
+  name: "Heated Argument",
+  face_id: "heated_argument",
+  mana_cost: "{4}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 6, target: (kind: Creature)),
+    ChooseResolutionBranch(optional: true, branches: [(
+      branch_id: "exile_graveyard_card",
+      presentation: Fallback,
+      cost: ExileGraveyardCard(filter: None),
+      effects: [DamagePlayer(amount: 2, who: ControllerOfTargetGroup(group_index: 0))],
+    )]),
+  ],
+)

@@ -11,6 +11,8 @@ mod issue_231_spell_filters;
 mod issue_236_hydro_man;
 #[path = "scenario/issue_238_ral_crackling_wit.rs"]
 mod issue_238_ral_crackling_wit;
+#[path = "scenario/issue_242_heated_argument.rs"]
+mod issue_242_heated_argument;
 
 #[path = "scenario/activation_restrictions.rs"]
 mod activation_restrictions;

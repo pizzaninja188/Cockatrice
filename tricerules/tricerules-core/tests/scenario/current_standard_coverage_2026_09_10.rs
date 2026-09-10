@@ -27,6 +27,15 @@ fn select_branch(index: u32) -> RuledCommand {
 }
 
 #[test]
+fn heated_argument_is_registered_in_the_current_standard_audit() {
+    let definition = tricerules_cards::CardRegistry::global()
+        .get("heated_argument")
+        .expect("Heated Argument is in the current-Standard coverage cohort");
+    assert_eq!(definition.name, "Heated Argument");
+    assert_eq!(definition.primary_face().spell_effect.len(), 2);
+}
+
+#[test]
 fn environmental_scientist_search_is_optional_private_and_basic_only() {
     let decks = Some(vec![
         deck_with("forest", &["environmental_scientist"]),

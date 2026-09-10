@@ -401,10 +401,13 @@ impl GameEngine {
                 );
             }
             ResolutionCost::DiscardCard { .. }
+            | ResolutionCost::ExileGraveyardCard { .. }
             | ResolutionCost::SacrificePermanent { .. }
             | ResolutionCost::Blight { .. }
             | ResolutionCost::TapPermanents { .. } => {
                 let is_discard = matches!(branch.cost, ResolutionCost::DiscardCard { .. });
+                let is_graveyard_exile =
+                    matches!(branch.cost, ResolutionCost::ExileGraveyardCard { .. });
                 let is_tap = matches!(branch.cost, ResolutionCost::TapPermanents { .. });
                 let count = match branch.cost {
                     ResolutionCost::TapPermanents { count, .. } => count,
@@ -412,6 +415,8 @@ impl GameEngine {
                 };
                 pending.presentation.choice_kind = if is_discard {
                     rv1::ChoiceKind::HandCards
+                } else if is_graveyard_exile {
+                    rv1::ChoiceKind::GraveyardCards
                 } else if is_tap || matches!(branch.cost, ResolutionCost::Blight { .. }) {
                     rv1::ChoiceKind::CostObjects
                 } else {
@@ -432,6 +437,8 @@ impl GameEngine {
                     )
                 } else if is_discard {
                     "Choose a card to discard, or decline.".into()
+                } else if is_graveyard_exile {
+                    "Choose a card from your graveyard to exile, or decline.".into()
                 } else if is_tap {
                     let plural = if count == 1 { "" } else { "s" };
                     let decline = if branch_state.optional {
@@ -496,7 +503,14 @@ impl GameEngine {
                             resolution_branches: Vec::new(),
                             mana_cost: String::new(),
                             public_reveal: None,
-                            candidate_source_zones: Vec::new(),
+                            candidate_source_zones: if is_graveyard_exile {
+                                vec![
+                                    rv1::ChoiceCandidateSourceZone::Graveyard as i32;
+                                    candidates.len()
+                                ]
+                            } else {
+                                Vec::new()
+                            },
                             combat_defender_options: Vec::new(),
                             waterbend: false,
                             selection_slots: Vec::new(),
@@ -617,9 +631,7 @@ impl GameEngine {
                     PaidCardCost::Discard { card_name, .. } => ("discards", card_name),
                     PaidCardCost::Sacrifice { card_name, .. } => ("sacrifices", card_name),
                     PaidCardCost::Tap { card_name, .. } => ("taps", card_name),
-                    PaidCardCost::Exile { .. } => {
-                        unreachable!("resolution branch cannot pay exile")
-                    }
+                    PaidCardCost::Exile { card_name, .. } => ("exiles", card_name),
                 };
                 ev.push(ev_log(format!(
                     "P{} {verb} {name}.",

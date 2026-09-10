@@ -637,6 +637,10 @@ fn park_resolution_branches_for(
                     rv1::ResolutionBranchCostKind::DiscardCard,
                     "discard a matching card".into(),
                 ),
+                ResolutionCost::ExileGraveyardCard { .. } => (
+                    rv1::ResolutionBranchCostKind::ExileGraveyardCard,
+                    "exile a matching card from your graveyard".into(),
+                ),
                 ResolutionCost::SacrificePermanent { .. } => (
                     rv1::ResolutionBranchCostKind::SacrificePermanent,
                     "sacrifice a matching permanent".into(),
