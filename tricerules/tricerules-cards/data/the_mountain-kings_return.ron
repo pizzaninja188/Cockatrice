@@ -1,0 +1,56 @@
+// Oracle and rulings verified 2026-09-10. CR 603.1, 701.70, and 714.
+(
+  id: "the_mountain-kings_return",
+  name: "The Mountain-king's Return",
+  face_id: "the_mountain_kings_return",
+  mana_cost: "{2}{W}",
+  types: ["Enchantment", "Saga"],
+  triggered_abilities: [
+    (
+      ability_id: "chapter_i",
+      presentation: OracleLines([2]),
+      trigger: SagaChapter(chapters: [1]),
+      effect: [
+        DrawDiscard(draw_count: 1, discard_count: 1, order: DrawThenDiscard, optional: false),
+        ChooseResolutionBranch(
+          selection: FirstApplicable,
+          branches: [
+            (
+              branch_id: "create_a_soldier",
+              presentation: Fallback,
+              cost: None,
+              requirement: CardResultCount(
+                filter: (source: PreviousEffect, action: Discard, players: Controller, card_type: Some(Nonland)),
+                min: Some(1),
+              ),
+              effects: [CreateTokens(token: "human_soldier_w_1_1", count: 1)],
+            ),
+            (
+              branch_id: "no_soldier",
+              presentation: Fallback,
+              cost: None,
+              requirement: Always,
+              effects: [],
+            ),
+          ],
+        ),
+      ],
+    ),
+    (
+      ability_id: "chapter_ii",
+      presentation: OracleLines([3]),
+      trigger: SagaChapter(chapters: [2]),
+      effect: [MoveGraveyardCards(
+        filter: (owner: Controller, card: Some((card_type: Some(Creature), max_mana_value: Some(3)))),
+        destination: Battlefield(tapped: false),
+      )],
+    ),
+    (
+      ability_id: "chapter_iii",
+      presentation: OracleLines([4]),
+      trigger: SagaChapter(chapters: [3]),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature)))],
+      may: true,
+    ),
+  ],
+)

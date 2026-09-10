@@ -1,0 +1,12 @@
+// Oracle and rulings verified 2026-09-10. CR 111.2, 611.2a, 613.4c, 701.7, and 702.111.
+(
+  id: "hire_a_crew",
+  name: "Hire a Crew",
+  face_id: "hire_a_crew",
+  mana_cost: "{2}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    CreateTokens(token: "villain_b_2_1_menace", count: 1),
+    PumpAll(filter: (controller: YouControl), power: 1, toughness: 0),
+  ],
+)

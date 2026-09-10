@@ -44,6 +44,8 @@ mod control;
 mod copy_effects;
 #[path = "scenario/counters_and_pump.rs"]
 mod counters_and_pump;
+#[path = "scenario/current_standard_coverage_2026_09_10.rs"]
+mod current_standard_coverage_2026_09_10;
 #[path = "scenario/custom_resolution.rs"]
 mod custom_resolution;
 #[path = "scenario/damage_prevention.rs"]

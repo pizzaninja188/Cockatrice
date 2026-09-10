@@ -1,0 +1,29 @@
+// Oracle and rulings verified 2026-09-10. CR 603.1, 701.20, 701.23, and 701.24.
+(
+  id: "environmental_scientist",
+  name: "Environmental Scientist",
+  face_id: "environmental_scientist",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Human", "Druid"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ChooseResolutionBranch(
+      optional: true,
+      branches: [(
+        branch_id: "search_for_a_basic_land",
+        presentation: Fallback,
+        cost: None,
+        effects: [SearchLibrary(
+          filter: Some((card_type: Some(BasicLand))),
+          destination: Hand,
+          shuffle: true,
+          reveal: true,
+        )],
+      )],
+    )],
+  )],
+)

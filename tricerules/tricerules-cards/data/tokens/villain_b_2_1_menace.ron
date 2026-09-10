@@ -1,0 +1,11 @@
+// Exact linked token for Hire a Crew: 2/1 black Villain creature token with menace.
+(
+  id: "villain_b_2_1_menace",
+  name: "Villain",
+  face_id: "villain",
+  types: ["Creature", "Villain"],
+  colors: [Black],
+  power: 2,
+  toughness: 1,
+  keywords: [Menace],
+)
