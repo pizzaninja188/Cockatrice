@@ -36,6 +36,42 @@ fn heated_argument_is_registered_in_the_current_standard_audit() {
 }
 
 #[test]
+fn hand_bottom_damage_spells_share_the_resolution_cost_primitive() {
+    for (card_id, target_kind_count) in [
+        ("manhole_missile", 1),
+        ("fire_prophecy", 1),
+        ("volcanic_spite", 3),
+    ] {
+        let definition = tricerules_cards::CardRegistry::global()
+            .get(card_id)
+            .unwrap_or_else(|| panic!("{card_id} is registered"));
+        let face = definition.primary_face();
+        assert_eq!(face.spell_effect.len(), 2);
+        let tricerules_cards::primitives::SpellEffectKind::DamageTarget { target, .. } =
+            &face.spell_effect[0]
+        else {
+            panic!("{card_id} starts with targeted damage");
+        };
+        let leaves = if target.any_of.is_some() { 3 } else { 1 };
+        assert_eq!(leaves, target_kind_count);
+        let tricerules_cards::primitives::SpellEffectKind::ChooseResolutionBranch {
+            optional,
+            branches,
+            ..
+        } = &face.spell_effect[1]
+        else {
+            panic!("{card_id} ends with an optional paid branch");
+        };
+        assert!(*optional);
+        assert_eq!(branches.len(), 1);
+        assert_eq!(
+            branches[0].cost,
+            tricerules_cards::primitives::ResolutionCost::PutHandCardOnLibraryBottom
+        );
+    }
+}
+
+#[test]
 fn environmental_scientist_search_is_optional_private_and_basic_only() {
     let decks = Some(vec![
         deck_with("forest", &["environmental_scientist"]),

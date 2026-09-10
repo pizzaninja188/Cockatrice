@@ -66,6 +66,11 @@ pub(super) enum CostDebit {
         generation: u64,
         owner: PlayerId,
     },
+    PutHandCardOnLibraryBottom {
+        object_id: ObjectId,
+        generation: u64,
+        owner: PlayerId,
+    },
     Exile {
         object_id: ObjectId,
         generation: u64,
@@ -136,6 +141,10 @@ pub(in crate::engine) enum PaidCardCost {
         card_name: String,
         result: CardResultEntry,
     },
+    PutOnLibraryBottom {
+        object_id: ObjectId,
+        result: CardResultEntry,
+    },
     Sacrifice {
         object_id: ObjectId,
         card_name: String,
@@ -153,6 +162,7 @@ impl PaidCardCost {
         match self {
             Self::Discard { object_id, .. }
             | Self::Exile { object_id, .. }
+            | Self::PutOnLibraryBottom { object_id, .. }
             | Self::Sacrifice { object_id, .. }
             | Self::Tap { object_id, .. } => *object_id,
         }
@@ -162,6 +172,9 @@ impl PaidCardCost {
         match self {
             Self::Discard { card_name, .. } => format!("discarding {card_name}"),
             Self::Exile { card_name, .. } => format!("exiling {card_name}"),
+            Self::PutOnLibraryBottom { .. } => {
+                "putting a card on the bottom of their library".into()
+            }
             Self::Sacrifice { card_name, .. } => format!("sacrificing {card_name}"),
             Self::Tap { card_name, .. } => format!("tapping {card_name}"),
         }
@@ -171,6 +184,7 @@ impl PaidCardCost {
         match self {
             Self::Discard { result, .. }
             | Self::Exile { result, .. }
+            | Self::PutOnLibraryBottom { result, .. }
             | Self::Sacrifice { result, .. }
             | Self::Tap { result, .. } => result,
         }
@@ -1614,6 +1628,7 @@ impl GameEngine {
                         | CostDebit::Exile { .. }
                         | CostDebit::ExileGroup { .. }
                         | CostDebit::Discard { .. }
+                        | CostDebit::PutHandCardOnLibraryBottom { .. }
                 )
             });
         }
@@ -1767,6 +1782,38 @@ impl GameEngine {
                     };
                     debug_assert_eq!(paid_cost.object_id(), oid);
                     payment.paid_card_costs.push(paid_cost);
+                }
+                CostDebit::PutHandCardOnLibraryBottom {
+                    object_id: oid,
+                    owner,
+                    ..
+                } => {
+                    crate::engine::resolution::move_object_to_zone(
+                        &mut self.state,
+                        self.registry,
+                        oid,
+                        Zone::Library,
+                        None,
+                    )
+                    .expect("prevalidated hand-card bottom cost must commit");
+                    payment.move_events.push(permanent_moved_event(
+                        &self.state,
+                        oid,
+                        owner,
+                        rv1::permanent_moved::Destination::Library,
+                    ));
+                    payment
+                        .paid_card_costs
+                        .push(PaidCardCost::PutOnLibraryBottom {
+                            object_id: oid,
+                            result: card_result_entry(
+                                &self.state,
+                                self.registry,
+                                CardResultAction::PutOnLibraryBottom,
+                                owner,
+                                oid,
+                            ),
+                        });
                 }
                 CostDebit::Exile {
                     object_id, owner, ..
@@ -1960,9 +2007,9 @@ impl GameEngine {
         for debit in &plan.debits {
             // A tap followed by a sacrifice is legal; two taps or two departures are not.
             let unique = match debit {
-                CostDebit::Discard { object_id, .. } | CostDebit::Exile { object_id, .. } => {
-                    consumed.insert(*object_id)
-                }
+                CostDebit::Discard { object_id, .. }
+                | CostDebit::PutHandCardOnLibraryBottom { object_id, .. }
+                | CostDebit::Exile { object_id, .. } => consumed.insert(*object_id),
                 CostDebit::Sacrifice { snapshot, .. } => consumed.insert(snapshot.source.object_id),
                 CostDebit::ReturnUnblockedAttacker { object, .. } => {
                     consumed.insert(object.object_id)
@@ -2115,6 +2162,18 @@ impl GameEngine {
                         .copied()
                         .unwrap_or(0)
                         == *generation
+                }
+                CostDebit::PutHandCardOnLibraryBottom {
+                    object_id,
+                    generation,
+                    owner,
+                } => {
+                    *owner == plan.player
+                        && self.state.objects.get(object_id).is_some_and(|object| {
+                            object.zone == Zone::Hand && object.owner == *owner
+                        })
+                        && self.state.players[plan.player_idx].hand.contains(object_id)
+                        && self.payment_object_ref(*object_id).zone_change_generation == *generation
                 }
                 CostDebit::Exile {
                     object_id,

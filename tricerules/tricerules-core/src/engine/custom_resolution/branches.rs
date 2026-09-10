@@ -402,18 +402,24 @@ impl GameEngine {
             }
             ResolutionCost::DiscardCard { .. }
             | ResolutionCost::ExileGraveyardCard { .. }
+            | ResolutionCost::PutHandCardOnLibraryBottom
             | ResolutionCost::SacrificePermanent { .. }
             | ResolutionCost::Blight { .. }
             | ResolutionCost::TapPermanents { .. } => {
-                let is_discard = matches!(branch.cost, ResolutionCost::DiscardCard { .. });
+                let is_hand_card = matches!(
+                    branch.cost,
+                    ResolutionCost::DiscardCard { .. } | ResolutionCost::PutHandCardOnLibraryBottom
+                );
                 let is_graveyard_exile =
                     matches!(branch.cost, ResolutionCost::ExileGraveyardCard { .. });
+                let is_hand_bottom =
+                    matches!(branch.cost, ResolutionCost::PutHandCardOnLibraryBottom);
                 let is_tap = matches!(branch.cost, ResolutionCost::TapPermanents { .. });
                 let count = match branch.cost {
                     ResolutionCost::TapPermanents { count, .. } => count,
                     _ => 1,
                 };
-                pending.presentation.choice_kind = if is_discard {
+                pending.presentation.choice_kind = if is_hand_card {
                     rv1::ChoiceKind::HandCards
                 } else if is_graveyard_exile {
                     rv1::ChoiceKind::GraveyardCards
@@ -435,8 +441,10 @@ impl GameEngine {
                             ""
                         }
                     )
-                } else if is_discard {
+                } else if matches!(branch.cost, ResolutionCost::DiscardCard { .. }) {
                     "Choose a card to discard, or decline.".into()
+                } else if is_hand_bottom {
+                    "Choose a card to put on the bottom of your library, or decline.".into()
                 } else if is_graveyard_exile {
                     "Choose a card from your graveyard to exile, or decline.".into()
                 } else if is_tap {
@@ -632,6 +640,13 @@ impl GameEngine {
                     PaidCardCost::Sacrifice { card_name, .. } => ("sacrifices", card_name),
                     PaidCardCost::Tap { card_name, .. } => ("taps", card_name),
                     PaidCardCost::Exile { card_name, .. } => ("exiles", card_name),
+                    PaidCardCost::PutOnLibraryBottom { .. } => {
+                        ev.push(ev_log(format!(
+                            "P{} puts a card on the bottom of their library.",
+                            pending.deciding_player
+                        )));
+                        continue;
+                    }
                 };
                 ev.push(ev_log(format!(
                     "P{} {verb} {name}.",

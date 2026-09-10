@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-10.
+(
+  id: "manhole_missile",
+  name: "Manhole Missile",
+  face_id: "manhole_missile",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 3, target: (kind: Creature)),
+    ChooseResolutionBranch(optional: true, branches: [(
+      branch_id: "put_hand_card_on_bottom",
+      // The single Oracle line also contains the preceding damage instruction.
+      presentation: Fallback,
+      cost: PutHandCardOnLibraryBottom,
+      effects: [Draw(count: 1)],
+    )]),
+  ],
+)

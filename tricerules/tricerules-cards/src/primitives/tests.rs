@@ -1532,6 +1532,13 @@ fn resolution_cost_supports_exact_graveyard_exile_payment() {
 }
 
 #[test]
+fn resolution_cost_supports_exact_hand_card_bottom_payment() {
+    let cost: ResolutionCost = ron::from_str("PutHandCardOnLibraryBottom")
+        .expect("parse an exact hand-card bottom resolution cost");
+    assert_eq!(cost, ResolutionCost::PutHandCardOnLibraryBottom);
+}
+
+#[test]
 fn nested_resolution_branch_rejects_unknown_target_controller_group() {
     let card = r#"(
       id: "test", name: "Test", face_id: "test", types: ["Instant"],

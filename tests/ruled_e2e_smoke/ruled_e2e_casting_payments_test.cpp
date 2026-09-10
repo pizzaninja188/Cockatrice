@@ -3270,5 +3270,142 @@ TEST_F(RuledE2ESmokeTest, HeatedArgumentKeepsGraveyardChoicePrivateAndMovesTheEx
     }
 }
 
+TEST_F(RuledE2ESmokeTest, ManholeMissileKeepsHandChoicePrivateAndMovesTheExactCardToLibrary)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+    OpeningDriver p1(true, QStringLiteral("manholep1"), &transcript);
+    OpeningDriver p2(false, QStringLiteral("manholep2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Mountain")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Plains")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "Manhole Missile start p1"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "Manhole Missile start p2"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    auto send = [&](OpeningDriver &sender, const ruled::v1::RuledCommand &command) {
+        const auto before1 = p1.stateVersion;
+        const auto before2 = p2.stateVersion;
+        sender.sendRuled(command, QStringLiteral("Manhole Missile scenario"));
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto put = [&](int owner, const char *name, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(owner);
+        dev->mutable_put_card_in_zone()->set_card_name(name);
+        dev->mutable_put_card_in_zone()->set_zone(zone);
+        dev->mutable_put_card_in_zone()->set_ready(true);
+        return send(p1, command);
+    };
+    auto pass = [&](OpeningDriver &sender) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(sender, command);
+    };
+
+    ASSERT_TRUE(put(p2.myId, "Indomitable Ancients", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(put(p1.myId, "Lightning Bolt", ruled::v1::DEV_ZONE_HAND));
+    ASSERT_TRUE(put(p1.myId, "Manhole Missile", ruled::v1::DEV_ZONE_HAND));
+    ruled::v1::RuledCommand mana;
+    mana.mutable_dev_command()->set_target_player_id(p1.myId);
+    mana.mutable_dev_command()->mutable_add_mana()->set_r(1);
+    mana.mutable_dev_command()->mutable_add_mana()->set_c(1);
+    ASSERT_TRUE(send(p1, mana));
+    const auto *action = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Manhole Missile"));
+    ASSERT_NE(action, nullptr);
+    const auto target = p1.battlefieldByPlayer[p2.myId].front();
+    ruled::v1::RuledCommand cast;
+    cast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    cast.mutable_cast_spell()->mutable_source()->set_hand_index(action->hand_index());
+    auto *targetRef = cast.mutable_cast_spell()->add_targets();
+    targetRef->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    targetRef->set_object_id(target.oid);
+    ASSERT_TRUE(send(p1, cast));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    ASSERT_TRUE(p1.pendingChoice);
+    ASSERT_EQ(p1.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    ASSERT_EQ(p1.pendingChoice->resolution_branches_size(), 1);
+    EXPECT_EQ(p1.pendingChoice->resolution_branches(0).cost_kind(),
+              ruled::v1::RESOLUTION_BRANCH_COST_KIND_PUT_HAND_CARD_ON_LIBRARY_BOTTOM);
+
+    ruled::v1::RuledCommand branch;
+    branch.mutable_submit_resolution_choice()->set_decision(
+        ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
+    branch.mutable_submit_resolution_choice()->set_selected_branch_index(0);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, branch));
+    ASSERT_TRUE(p1.pendingChoice);
+    const auto choice = *p1.pendingChoice;
+    EXPECT_EQ(choice.choice_kind(), ruled::v1::CHOICE_KIND_HAND_CARDS);
+    quint32 chosenOid = 0;
+    int physicalCard = -1;
+    for (int i = 0; i < choice.candidate_names_size(); ++i) {
+        if (choice.candidate_names(i) == "Lightning Bolt") {
+            chosenOid = choice.candidate_object_ids(i);
+            physicalCard = choice.candidate_server_card_ids(i);
+            break;
+        }
+    }
+    ASSERT_NE(chosenOid, 0u);
+    ASSERT_GE(physicalCard, 0);
+    EXPECT_EQ(choice.min(), 0u);
+    EXPECT_EQ(choice.max(), 1u);
+    EXPECT_FALSE(p2.pendingChoice);
+    ASSERT_TRUE(p2.lastResolutionChoice);
+    EXPECT_EQ(p2.lastResolutionChoice->candidate_object_ids_size(), 0);
+    EXPECT_EQ(p2.lastResolutionChoice->candidate_card_ids_size(), 0);
+    EXPECT_EQ(p2.lastResolutionChoice->candidate_names_size(), 0);
+    EXPECT_EQ(p2.lastResolutionChoice->candidate_server_card_ids_size(), 0);
+    const int handBefore = p1.handSizeByPlayer[p1.myId];
+
+    p1.physicalMoveEvents.clear();
+    p2.physicalMoveEvents.clear();
+    transcript.clear();
+    ruled::v1::RuledCommand pay;
+    pay.mutable_submit_resolution_choice()->add_chosen_object_ids(chosenOid);
+    p1.pendingChoice.reset();
+    ASSERT_TRUE(send(p1, pay));
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], handBefore);
+    const auto moved = std::find_if(p1.physicalMoveEvents.begin(), p1.physicalMoveEvents.end(), [&](const auto &event) {
+        return event.start_zone() == ZoneNames::HAND && event.target_zone() == ZoneNames::DECK &&
+               event.card_id() == physicalCard;
+    });
+    ASSERT_NE(moved, p1.physicalMoveEvents.end());
+    EXPECT_EQ(moved->new_card_id(), physicalCard);
+    EXPECT_TRUE(std::none_of(transcript.cbegin(), transcript.cend(),
+                             [](const auto &line) { return line.contains(QStringLiteral("Lightning Bolt")); }));
+}
+
 } // namespace
 } // namespace ruled_e2e

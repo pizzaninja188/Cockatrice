@@ -27,6 +27,7 @@ pub(in crate::engine) enum ObjectPaymentComponent {
         source: rv1::CostObjectRef,
         filter: Option<ZoneCardFilter>,
     },
+    PutHandCardOnLibraryBottom,
     Sacrifice {
         filter: PermanentPaymentFilter,
         only_source: Option<rv1::CostObjectRef>,
@@ -100,6 +101,7 @@ impl ObjectPaymentComponent {
                 source,
                 filter: filter.clone(),
             },
+            ResolutionCost::PutHandCardOnLibraryBottom => Self::PutHandCardOnLibraryBottom,
             ResolutionCost::SacrificePermanent {
                 filter,
                 source_only,
@@ -139,6 +141,14 @@ impl ObjectPaymentComponent {
                         oid,
                         filter.as_ref(),
                     )
+            }
+            Self::PutHandCardOnLibraryBottom => {
+                object.zone == Zone::Hand
+                    && object.owner == player
+                    && engine
+                        .state
+                        .player_idx(player)
+                        .is_some_and(|index| engine.state.players[index].hand.contains(&oid))
             }
             Self::ExileGraveyardCard { filter, .. } => {
                 object.zone == Zone::Graveyard
@@ -181,7 +191,10 @@ impl ObjectPaymentComponent {
             // Blight publishes ascending object IDs, independently of battlefield vector order.
             return engine.blight_candidates(player);
         }
-        if matches!(self, Self::Discard { .. }) {
+        if matches!(
+            self,
+            Self::Discard { .. } | Self::PutHandCardOnLibraryBottom
+        ) {
             engine.state.players[index]
                 .hand
                 .iter()
@@ -299,6 +312,13 @@ impl GameEngine {
                     filter,
                     source: source.object_id,
                     exclude_source: false,
+                }
+            }
+            ObjectPaymentComponent::PutHandCardOnLibraryBottom => {
+                CostDebit::PutHandCardOnLibraryBottom {
+                    object_id: objects[0].object_id,
+                    generation: objects[0].zone_change_generation,
+                    owner: self.state.objects[&objects[0].object_id].owner,
                 }
             }
             ObjectPaymentComponent::Sacrifice { .. } => CostDebit::Sacrifice {

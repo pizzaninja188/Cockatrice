@@ -641,6 +641,10 @@ fn park_resolution_branches_for(
                     rv1::ResolutionBranchCostKind::ExileGraveyardCard,
                     "exile a matching card from your graveyard".into(),
                 ),
+                ResolutionCost::PutHandCardOnLibraryBottom => (
+                    rv1::ResolutionBranchCostKind::PutHandCardOnLibraryBottom,
+                    "put a card from your hand on the bottom of your library".into(),
+                ),
                 ResolutionCost::SacrificePermanent { .. } => (
                     rv1::ResolutionBranchCostKind::SacrificePermanent,
                     "sacrifice a matching permanent".into(),

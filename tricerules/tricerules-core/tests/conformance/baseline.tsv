@@ -572,6 +572,7 @@ fire_nation_ambushers	0	cast	exercised
 fire_nation_cadets	0	ability:0	exercised
 fire_nation_cadets	0	cast	exercised
 fire_nation_soldier	0	cast	exercised
+fire_prophecy	0	cast	exercised
 fireball	0	cast	exercised
 fists_of_the_anvil	0	cast	exercised
 flame_javelin	0	cast	exercised
@@ -1041,6 +1042,7 @@ manakin	0	ability:0	exercised
 manakin	0	cast	exercised
 mandroid_squadron	0	cast	exercised
 maned_serval	0	cast	exercised
+manhole_missile	0	cast	exercised
 manifest_dread	0	cast	exercised
 mantis_rider	0	cast	exercised
 marauding_sphinx	0	cast	exercised
@@ -1842,6 +1844,7 @@ voiceless_spirit	0	cast	exercised
 volcanic_dragon	0	cast	exercised
 volcanic_island	0	ability:0	exercised
 volcanic_island	0	land	exercised
+volcanic_spite	0	cast	exercised
 volunteer_militia	0	cast	exercised
 vorstclaw	0	cast	exercised
 vow_to_erebor	0	cast	exercised

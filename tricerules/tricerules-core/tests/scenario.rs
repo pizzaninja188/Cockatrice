@@ -361,3 +361,6 @@ mod issue_229_sunderflock;
 
 #[path = "scenario/issue_230_winternight.rs"]
 mod issue_230_winternight;
+
+#[path = "scenario/issue_240_hand_bottom_cost.rs"]
+mod issue_240_hand_bottom_cost;

@@ -145,6 +145,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
         | ResolutionCost::None
         | ResolutionCost::Blight { .. }
         | ResolutionCost::ExileGraveyardCard { .. }
+        | ResolutionCost::PutHandCardOnLibraryBottom
         | ResolutionCost::SacrificePermanent { .. }
         | ResolutionCost::TapPermanents { .. } => {
             return Err(EngineError::Illegal("unsupported Ward cost"));
@@ -290,6 +291,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
         | ResolutionCost::None
         | ResolutionCost::Blight { .. }
         | ResolutionCost::ExileGraveyardCard { .. }
+        | ResolutionCost::PutHandCardOnLibraryBottom
         | ResolutionCost::SacrificePermanent { .. }
         | ResolutionCost::TapPermanents { .. } => unreachable!(),
     };

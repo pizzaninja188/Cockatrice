@@ -582,6 +582,9 @@ pub enum ResolutionCost {
         #[serde(default)]
         filter: Option<ZoneCardFilter>,
     },
+    /// Manhole Missile, Fire Prophecy, and Volcanic Spite: exactly one nontargeted card from
+    /// the payer's hand goes to the bottom of its owner's library (CR 118.12).
+    PutHandCardOnLibraryBottom,
     SacrificePermanent {
         filter: TargetFilter,
         /// Servant of the Stinger pays with its own incarnation; Crypt Lurker can pay with
@@ -623,6 +626,9 @@ impl ResolutionBranchDef {
             ResolutionCost::Mana(cost) => format!("Pay {cost}"),
             ResolutionCost::DiscardCard { .. } => "Discard a card".into(),
             ResolutionCost::ExileGraveyardCard { .. } => "Exile a card from your graveyard".into(),
+            ResolutionCost::PutHandCardOnLibraryBottom => {
+                "Put a card from your hand on the bottom of your library".into()
+            }
             ResolutionCost::SacrificePermanent { .. } => "Sacrifice a permanent".into(),
             ResolutionCost::TapPermanents { count, .. } => {
                 format!("Tap {count} permanent(s)")
@@ -660,6 +666,7 @@ pub enum CardResultAction {
     /// Technique and Make Yourself Useful consume this generic "destroyed this way" receipt.
     Destroy,
     Exile,
+    PutOnLibraryBottom,
     Sacrifice,
     Mill,
     Tap,
@@ -2871,6 +2878,7 @@ impl SpellEffectKind {
                             ..
                         }
                 ),
+                CardResultAction::PutOnLibraryBottom => false,
                 CardResultAction::Sacrifice => {
                     matches!(effect, SpellEffectKind::TargetPlayerSacrifices { .. })
                 }
@@ -3664,7 +3672,8 @@ impl SpellEffectKind {
                                 );
                             }
                         }
-                        ResolutionCost::DiscardCard { .. } => {}
+                        ResolutionCost::DiscardCard { .. }
+                        | ResolutionCost::PutHandCardOnLibraryBottom => {}
                         ResolutionCost::ExileGraveyardCard { filter } => {
                             if let Some(filter) = filter {
                                 filter.validate()?;
@@ -4384,6 +4393,7 @@ impl SpellEffectKind {
                 | ResolutionCost::None
                 | ResolutionCost::Blight { .. }
                 | ResolutionCost::ExileGraveyardCard { .. }
+                | ResolutionCost::PutHandCardOnLibraryBottom
                 | ResolutionCost::SacrificePermanent { .. }
                 | ResolutionCost::TapPermanents { .. } => {
                     Err("Ward supports only mana and discard-card costs".into())
