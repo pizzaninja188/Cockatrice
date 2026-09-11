@@ -174,6 +174,7 @@ benders_waterskin	0	cast	exercised
 benthic_giant	0	cast	exercised
 bestial_menace	0	cast	exercised
 bifur,_melodic_rider	0	cast	exercised
+bigfin_bouncer	0	cast	exercised
 biosynthic_burst	0	cast	exercised
 birnin_zana_plaza	0	ability:0	exercised
 birnin_zana_plaza	0	land	exercised
@@ -236,6 +237,7 @@ boros_swiftblade	0	cast	exercised
 bot_bashing_time	0	cast	exercised
 bottle_gnomes	0	ability:0	exercised
 bottle_gnomes	0	cast	exercised
+boulderborn_dragon	0	cast	exercised
 bounding_wolf	0	cast	exercised
 brainstorm	0	cast	exercised
 brambleback_brute	0	ability:0	unsupported: nonmana costs need additional fixture resources
@@ -302,6 +304,7 @@ caravan_hurda	0	cast	exercised
 carrion_screecher	0	cast	exercised
 carrot_cake	0	ability:0	exercised
 carrot_cake	0	cast	exercised
+cartographers_companion	0	cast	exercised
 cartouche_of_knowledge	0	cast	exercised
 carven_caryatid	0	cast	exercised
 catacomb_crocodile	0	cast	exercised
@@ -544,6 +547,7 @@ dwarven_priest	0	cast	exercised
 dwarven_trader	0	cast	exercised
 dwynens_elite	0	cast	exercised
 eager_cadet	0	cast	exercised
+eager_trufflesnout	0	cast	exercised
 eagle_of_the_watch	0	cast	exercised
 earth_elemental	0	cast	exercised
 earthbender_ascension	0	cast	exercised
@@ -591,6 +595,7 @@ evils_thrall	0	cast	exercised
 eviscerate	0	cast	exercised
 evolving_wilds	0	ability:0	exercised
 evolving_wilds	0	land	exercised
+exclusion_mage	0	cast	exercised
 expedition_envoy	0	cast	exercised
 exploration	0	cast	exercised
 explosive_apparatus	0	ability:0	exercised
@@ -967,6 +972,7 @@ icewrought_sentry	0	cast	exercised
 icy_manipulator	0	ability:0	exercised
 icy_manipulator	0	cast	exercised
 iguana_parrot	0	cast	exercised
+il_mheg_pixie	0	cast	exercised
 illegitimate_business	0	ability:0	exercised
 illegitimate_business	0	land	exercised
 illvoi_light_jammer	0	ability:0	exercised
@@ -1621,6 +1627,7 @@ say_its_name	0	cast	exercised
 sazhs_chocobo	0	cast	exercised
 scaled_behemoth	0	cast	exercised
 scaled_wurm	0	cast	exercised
+scarblade_scout	0	cast	exercised
 scarlet_witch,_wanda_maximoff	0	cast	exercised
 scarwood_goblins	0	cast	exercised
 scathe_zombies	0	cast	exercised
@@ -1631,6 +1638,7 @@ scorching_dragonfire	0	cast	exercised
 scoria_elemental	0	cast	exercised
 scoured_barrens	0	ability:0	exercised
 scoured_barrens	0	land	exercised
+scream_puff	0	cast	exercised
 scroll_thief	0	cast	exercised
 scrounger_of_souls	0	cast	exercised
 scrubland	0	ability:0	exercised
@@ -2073,6 +2081,7 @@ vector,_imperial_capital	0	land	exercised
 venerable_lammasu	0	cast	exercised
 venerable_monk	0	cast	exercised
 vengeful_tracker	0	cast	exercised
+venomized_cat	0	cast	exercised
 venomthrope	0	cast	exercised
 vensers_sliver	0	cast	exercised
 verdant_outrider	0	ability:0	exercised
@@ -2168,6 +2177,7 @@ wastes	0	land	exercised
 watcher_of_the_wayside	0	cast	exercised
 watchwolf	0	cast	exercised
 waterbending_lesson	0	cast	exercised
+waterwind_scout	0	cast	exercised
 watery_grasp	0	ability:0	exercised
 watery_grasp	0	cast	exercised
 watery_grave	0	ability:0	exercised

@@ -480,6 +480,98 @@ fn match_etb_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEm
     })
 }
 
+fn match_self_attacks_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "Whenever this creature attacks, surveil 1.").then(
+        || {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                vec![SpellEffectKind::LibraryPartition {
+                    count: 1,
+                    top_min: 0,
+                    top_max: None,
+                    kind: LibraryPartitionKind::Surveil,
+                }],
+            )
+        },
+    )
+}
+
+fn match_etb_create_map(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    match_creature_trigger_create_token(
+        text,
+        context,
+        "When this creature enters, create a Map token.",
+        TriggerCondition::WhenSelfEntersBattlefield,
+        "map",
+    )
+}
+
+fn match_etb_mill_two(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "When this creature enters, mill two cards.").then(
+        || {
+            triggered_ability(
+                context,
+                SpellEffectKind::Mill {
+                    count: Amount::Fixed(2),
+                    who: PlayerRecipient::Controller,
+                },
+            )
+        },
+    )
+}
+
+fn match_etb_return_opponent_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "When this creature enters, return target creature an opponent controls to its owner's hand.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::Opponent,
+                ..TargetFilter::default()
+            };
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability(
+                context,
+                SpellEffectKind::ReturnToOwnersHand {
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                },
+            ) else {
+                unreachable!("triggered_ability always returns a triggered ability")
+            };
+            ability.targeting = Some(TargetingDef {
+                groups: vec![TargetGroupDef {
+                    min: 1,
+                    max: 1,
+                    prompt: "Choose target creature an opponent controls".into(),
+                    effect_indices: vec![0],
+                    distinct_from: Vec::new(),
+                    same_graveyard: false,
+                    cast_cost_expansion: None,
+                }],
+            });
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+fn match_self_combat_damage_create_food(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    match_creature_trigger_create_token(
+        text,
+        context,
+        "Whenever this creature deals combat damage to a player, create a Food token.",
+        TriggerCondition::WheneverSelfDealsCombatDamageToPlayer,
+        "food",
+    )
+}
+
 fn match_self_dies_draw_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "When this creature dies, draw a card.").then(|| {
         triggered_ability_with(
@@ -1263,6 +1355,90 @@ pub(super) static CATALOG: &[Recipe] = &[
             "When this creature enters, target player surveils 1.",
             "When this creature enters, surveil 1, then draw a card.",
             "Whenever another creature enters, surveil 1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_attacks.surveil.one"),
+        label: "self-attacks surveil 1",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_attacks_surveil_one,
+        calibration: calibrations!(
+            "Boulderborn Dragon" => "Whenever this creature attacks, surveil 1.",
+            "Il Mheg Pixie" => "Whenever this creature attacks, surveil 1.";
+            "Whenever this creature attacks, you may surveil 1.",
+            "Whenever this creature attacks, surveil 2.",
+            "Whenever another creature attacks, surveil 1.",
+            "Whenever one or more creatures you control attack, surveil 1.",
+            "Whenever this creature becomes blocked, surveil 1.",
+            "Whenever this creature attacks, surveil 1, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.create_token.map.one"),
+        label: "ETB create Map",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_create_map,
+        calibration: calibrations!(
+            "Cartographer's Companion" => "When this creature enters, create a Map token.",
+            "Waterwind Scout" => "When this creature enters, create a Map token.";
+            "When this creature enters, you may create a Map token.",
+            "When this creature enters, create two Map tokens.",
+            "When this creature enters, create a tapped Map token.",
+            "When this creature enters, create a Clue token.",
+            "When this creature enters, create a Map token, then draw a card.",
+            "Whenever another creature enters, create a Map token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.mill.controller.two"),
+        label: "ETB mill two",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_mill_two,
+        calibration: calibrations!(
+            "Venomized Cat" => "When this creature enters, mill two cards.",
+            "Scarblade Scout" => "When this creature enters, mill two cards.";
+            "When this creature enters, you may mill two cards.",
+            "When this creature enters, mill three cards.",
+            "When this creature enters, target player mills two cards.",
+            "When this creature enters, each player mills two cards.",
+            "Whenever another creature enters, mill two cards.",
+            "When this creature enters, mill two cards, then gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.return_to_hand.opponent_creature"),
+        label: "ETB return opponent creature",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_return_opponent_creature,
+        calibration: calibrations!(
+            "Bigfin Bouncer" => "When this creature enters, return target creature an opponent controls to its owner's hand.",
+            "Exclusion Mage" => "When this creature enters, return target creature an opponent controls to its owner's hand.";
+            "When this creature enters, you may return target creature an opponent controls to its owner's hand.",
+            "When this creature enters, return up to one target creature an opponent controls to its owner's hand.",
+            "When this creature enters, return target creature to its owner's hand.",
+            "When this creature enters, return target creature you control to its owner's hand.",
+            "When this creature enters, return target nonland permanent an opponent controls to its owner's hand.",
+            "Whenever another creature enters, return target creature an opponent controls to its owner's hand.",
+            "When this creature enters, return target creature an opponent controls to its owner's hand, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_combat_damage_to_player.create_token.food.one"),
+        label: "self combat damage to player create Food",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_combat_damage_create_food,
+        calibration: calibrations!(
+            "Eager Trufflesnout" => "Whenever this creature deals combat damage to a player, create a Food token.",
+            "Scream Puff" => "Whenever this creature deals combat damage to a player, create a Food token.";
+            "Whenever this creature deals combat damage to a player, you may create a Food token.",
+            "Whenever this creature deals combat damage to a player, create two Food tokens.",
+            "Whenever this creature deals combat damage to a player, create a tapped Food token.",
+            "Whenever this creature deals combat damage to a player, create a Treasure token.",
+            "Whenever this creature deals combat damage to an opponent, create a Food token.",
+            "Whenever this creature deals combat damage to a planeswalker, create a Food token.",
+            "Whenever this creature deals damage to a player, create a Food token.",
+            "Whenever another creature deals combat damage to a player, create a Food token.",
+            "Whenever this creature deals combat damage to a player, create a Food token, then draw a card."
         ),
     },
     Recipe {
@@ -2193,5 +2369,119 @@ mod tests {
         };
         assert_eq!(ability.ability_id.as_str(), "static_01");
         assert_eq!(ability.definition, StaticAbilityDef::SpellCannotBeCountered);
+    }
+
+    #[test]
+    fn issue_260_creature_trigger_clauses_emit_exact_typed_abilities() {
+        let cases = [
+            (
+                "Whenever this creature attacks, surveil 1.",
+                "triggered.self_attacks.surveil.one",
+            ),
+            (
+                "When this creature enters, create a Map token.",
+                "etb.create_token.map.one",
+            ),
+            (
+                "When this creature enters, mill two cards.",
+                "etb.mill.controller.two",
+            ),
+            (
+                "When this creature enters, return target creature an opponent controls to its owner's hand.",
+                "etb.return_to_hand.opponent_creature",
+            ),
+            (
+                "Whenever this creature deals combat damage to a player, create a Food token.",
+                "triggered.self_combat_damage_to_player.create_token.food.one",
+            ),
+        ];
+
+        let abilities = cases.map(|(clause, expected_id)| {
+            let matched = match_clause(clause, false, &context())
+                .expect("issue #260 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #260 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("issue #260 recipe must emit a triggered ability: {clause}");
+            };
+            assert_eq!(ability.ability_id.as_str(), "triggered_01");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![1])
+            );
+            assert!(!ability.may);
+            ability
+        });
+
+        assert_eq!(
+            abilities[0].trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            }
+        );
+        assert_eq!(
+            abilities[0].effect,
+            [SpellEffectKind::LibraryPartition {
+                count: 1,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }]
+        );
+
+        for (index, token, trigger) in [
+            (1, "map", TriggerCondition::WhenSelfEntersBattlefield),
+            (
+                4,
+                "food",
+                TriggerCondition::WheneverSelfDealsCombatDamageToPlayer,
+            ),
+        ] {
+            assert_eq!(abilities[index].trigger, trigger);
+            assert_eq!(
+                abilities[index].effect,
+                [SpellEffectKind::CreateTokens {
+                    token: token.into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }]
+            );
+        }
+
+        assert_eq!(
+            abilities[2].trigger,
+            TriggerCondition::WhenSelfEntersBattlefield
+        );
+        assert_eq!(
+            abilities[2].effect,
+            [SpellEffectKind::Mill {
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+            }]
+        );
+
+        assert_eq!(
+            abilities[3].trigger,
+            TriggerCondition::WhenSelfEntersBattlefield
+        );
+        assert_eq!(
+            abilities[3].effect,
+            [SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::Opponent,
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        let targeting = abilities[3]
+            .targeting
+            .as_ref()
+            .expect("bounce trigger must publish its target group");
+        assert_eq!(targeting.groups.len(), 1);
+        assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (1, 1));
+        assert_eq!(targeting.groups[0].effect_indices, [0]);
     }
 }

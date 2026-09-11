@@ -272,6 +272,8 @@ mod issue_237_token_copies;
 mod issue_255_generated_lands;
 #[path = "scenario/issue_256_generated_triggers.rs"]
 mod issue_256_generated_triggers;
+#[path = "scenario/issue_260_generated_creature_triggers.rs"]
+mod issue_260_generated_creature_triggers;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]
