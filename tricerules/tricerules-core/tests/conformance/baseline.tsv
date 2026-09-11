@@ -172,6 +172,8 @@ blightstep_pathway_searstep_pathway	1	land	exercised
 blind_phantasm	0	cast	exercised
 blistering_barrier	0	cast	exercised
 blood_artist	0	cast	exercised
+blood_crypt	0	ability:0	exercised
+blood_crypt	0	land	exercised
 blood_glutton	0	cast	exercised
 blood_tithe	0	cast	exercised
 bloodcrazed_paladin	0	cast	exercised
@@ -216,6 +218,8 @@ branchloft_pathway_boulderloft_pathway	1	ability:0	exercised
 branchloft_pathway_boulderloft_pathway	1	land	exercised
 brazen_scourge	0	cast	exercised
 breakneck_berserker	0	cast	exercised
+breeding_pool	0	ability:0	exercised
+breeding_pool	0	land	exercised
 brightblade_stoat	0	cast	exercised
 brightclimb_pathway_grimclimb_pathway	0	ability:0	exercised
 brightclimb_pathway_grimclimb_pathway	0	land	exercised
@@ -713,6 +717,8 @@ goblin_smuggler	0	cast	exercised
 goblin_striker	0	cast	exercised
 goblin_trailblazer	0	cast	exercised
 goblin_wizardry	0	cast	exercised
+godless_shrine	0	ability:0	exercised
+godless_shrine	0	land	exercised
 gold-forged_sentinel	0	cast	exercised
 gold_myr	0	ability:0	exercised
 gold_myr	0	cast	exercised
@@ -765,6 +771,8 @@ gurmag_swiftwing	0	cast	exercised
 gutless_plunderer	0	cast	exercised
 gutter_skulk	0	cast	exercised
 halberdier	0	cast	exercised
+hallowed_fountain	0	ability:0	exercised
+hallowed_fountain	0	land	exercised
 hamato_guardian_stance	0	cast	exercised
 hand_of_silumgar	0	cast	exercised
 happy_hogan,_dauntless_driver	0	cast	exercised
@@ -1203,6 +1211,8 @@ orochi_sustainer	0	cast	exercised
 osseous_exhale	0	cast	unsupported: target group 0 needs a richer fixture
 otter-penguin	0	cast	exercised
 outcaster_greenblade	0	cast	exercised
+overgrown_tomb	0	ability:0	exercised
+overgrown_tomb	0	land	exercised
 overrun	0	cast	exercised
 pacifism	0	cast	exercised
 pack_mastiff	0	ability:0	exercised
@@ -1403,6 +1413,8 @@ russet_wolves	0	cast	exercised
 rustwing_falcon	0	cast	exercised
 sabertooth_mauler	0	cast	exercised
 sabretooth_tiger	0	cast	exercised
+sacred_foundry	0	ability:0	exercised
+sacred_foundry	0	land	exercised
 sacred_nectar	0	cast	exercised
 sacred_wolf	0	cast	exercised
 safewright_cavalry	0	ability:0	exercised
@@ -1604,6 +1616,8 @@ steward_of_valeron	0	cast	exercised
 stir_up_trouble	0	cast	unsupported: required cast-cost group needs a specialized fixture
 stomped_by_the_foot	0	cast	exercised
 stomper_cub	0	cast	exercised
+stomping_ground	0	ability:0	exercised
+stomping_ground	0	land	exercised
 stone-throwing_devils	0	cast	exercised
 stone_golem	0	cast	exercised
 stonework_puma	0	cast	exercised
@@ -1679,6 +1693,8 @@ teferis_protege	0	ability:0	exercised
 teferis_protege	0	cast	exercised
 tempest_drake	0	cast	exercised
 tempest_hawk	0	cast	exercised
+temple_garden	0	ability:0	exercised
+temple_garden	0	land	exercised
 temporal_intervention	0	cast	exercised
 temur_devotee	0	ability:0	exercised
 temur_devotee	0	cast	exercised

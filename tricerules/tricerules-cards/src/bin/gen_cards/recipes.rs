@@ -1,10 +1,11 @@
 use tricerules_cards::primitives::{
-    DiscardQuantity, EffectSubject, PlayerRecipient, StackSpellFilter, TargetFilter,
+    DiscardQuantity, EffectSubject, EntersTappedAffected, EntryCost, PlayerRecipient,
+    StackSpellFilter, StaticAbilityDef, TargetFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
-    ActivationTiming, Amount, Keyword, ManaAmount, SpellEffectKind, TriggerCondition,
-    TriggeredAbilityDef,
+    ActivationTiming, Amount, IdentifiedAbility, Keyword, ManaAmount, SpellEffectKind,
+    TriggerCondition, TriggeredAbilityDef,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,6 +14,7 @@ pub(super) enum RecipeSurface {
     SpellClause,
     EtbAbility,
     ActivatedAbility,
+    StaticAbility,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -47,6 +49,7 @@ pub(super) struct Recipe {
 pub(super) struct RecipeContext {
     pub(super) triggered_ability_id: AbilityId,
     pub(super) activated_ability_id: AbilityId,
+    pub(super) static_ability_id: AbilityId,
     pub(super) presentation: AbilityPresentation,
 }
 
@@ -56,6 +59,7 @@ pub(super) enum RecipeEmission {
     SpellEffect(SpellEffectKind),
     TriggeredAbility(TriggeredAbilityDef),
     ActivatedAbility(ActivatedAbilityDef),
+    StaticAbility(IdentifiedAbility<StaticAbilityDef>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -312,6 +316,22 @@ fn match_tap_for_one_mana(text: &str, context: &RecipeContext) -> Option<RecipeE
     }))
 }
 
+fn match_shockland_entry_payment(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "As this land enters, you may pay 2 life. If you don't, it enters tapped.").then(
+        || {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::EntersTapped {
+                    affected: EntersTappedAffected::Self_,
+                    condition: None,
+                    unless_cost: Some(EntryCost::PayLife { amount: 2 }),
+                },
+            })
+        },
+    )
+}
+
 macro_rules! calibrations {
     ($first_name:literal => $first_clause:literal, $second_name:literal => $second_clause:literal; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -457,13 +477,29 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{T}, Pay 1 life: Add {G}."
         ),
     },
+    Recipe {
+        id: RecipeId("static.enters_tapped.unless_pay_life_2"),
+        label: "shockland entry payment",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_shockland_entry_payment,
+        calibration: calibrations!(
+            "Blood Crypt" => "As this land enters, you may pay 2 life. If you don't, it enters tapped.",
+            "Breeding Pool" => "As this land enters, you may pay 2 life. If you don't, it enters tapped.";
+            "This land enters tapped.",
+            "This land enters tapped unless you control two or more other lands.",
+            "As this land enters, you may pay 3 life. If you don't, it enters tapped.",
+            "As this land enters, you may pay 2 life. If you don't, it enters tapped. When this land enters, draw a card."
+        ),
+    },
 ];
 
 fn surface_applies(surface: RecipeSurface, is_spell: bool) -> bool {
     match surface {
         RecipeSurface::KeywordClause => true,
         RecipeSurface::SpellClause => is_spell,
-        RecipeSurface::EtbAbility | RecipeSurface::ActivatedAbility => !is_spell,
+        RecipeSurface::EtbAbility
+        | RecipeSurface::ActivatedAbility
+        | RecipeSurface::StaticAbility => !is_spell,
     }
 }
 
@@ -509,6 +545,7 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
     let context = RecipeContext {
         triggered_ability_id: AbilityId::new("triggered_01")?,
         activated_ability_id: AbilityId::new("activated_01")?,
+        static_ability_id: AbilityId::new("static_01")?,
         presentation: AbilityPresentation::OracleLines(vec![1]),
     };
     let mut ids = std::collections::BTreeSet::new();
@@ -610,6 +647,7 @@ mod tests {
         RecipeContext {
             triggered_ability_id: AbilityId::new("triggered_01").unwrap(),
             activated_ability_id: AbilityId::new("activated_01").unwrap(),
+            static_ability_id: AbilityId::new("static_01").unwrap(),
             presentation: AbilityPresentation::OracleLines(vec![1]),
         }
     }
@@ -672,6 +710,22 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "clause matched multiple exact recipes: synthetic.first, synthetic.second"
+        );
+    }
+
+    #[test]
+    fn shockland_clause_has_one_stable_static_recipe_id() {
+        let matched = match_clause(
+            "As this land enters, you may pay 2 life. If you don't, it enters tapped.",
+            false,
+            &context(),
+        )
+        .expect("shockland clause must not be ambiguous")
+        .expect("shockland clause must be supported");
+
+        assert_eq!(
+            matched.id,
+            RecipeId("static.enters_tapped.unless_pay_life_2")
         );
     }
 }

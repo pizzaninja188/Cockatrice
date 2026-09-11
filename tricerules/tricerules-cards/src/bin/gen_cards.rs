@@ -27,11 +27,14 @@ use flate2::read::GzDecoder;
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use tricerules_cards::primitives::{EffectSubject, PlayerRecipient, TargetFilter};
+use tricerules_cards::primitives::{
+    EffectSubject, EntersTappedAffected, EntryCost, PlayerRecipient, StaticAbilityDef, TargetFilter,
+};
 use tricerules_cards::{
     external_oracle_lines, slugify, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
-    ActivatedAbilityDef, ActivationTiming, Amount, CardFaceId, CardRegistry, Color, Keyword,
-    ManaAmount, ManaCost, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    ActivatedAbilityDef, ActivationTiming, Amount, BasicLandType, CardFaceId, CardRegistry, Color,
+    IdentifiedAbility, Keyword, ManaAmount, ManaCost, SpellEffectKind, TriggerCondition,
+    TriggeredAbilityDef,
 };
 
 #[path = "gen_cards/candidate_report.rs"]
@@ -503,6 +506,7 @@ struct ParsedRules {
     spell_effect: Vec<SpellEffectKind>,
     activated_abilities: Vec<ActivatedAbilityDef>,
     triggered_abilities: Vec<TriggeredAbilityDef>,
+    static_abilities: Vec<IdentifiedAbility<StaticAbilityDef>>,
     recipe_labels: Vec<&'static str>,
 }
 
@@ -533,9 +537,12 @@ fn parse_rules_text(oracle_text: &str, is_spell: bool) -> Result<ParsedRules, Ru
             parsed.activated_abilities.len() + 1
         ))
         .map_err(|_| RulesParseError::Unsupported)?;
+        let static_id = AbilityId::new(format!("static_{:02}", parsed.static_abilities.len() + 1))
+            .map_err(|_| RulesParseError::Unsupported)?;
         let context = RecipeContext {
             triggered_ability_id: triggered_id,
             activated_ability_id: activated_id,
+            static_ability_id: static_id,
             presentation,
         };
         let matched = match_clause(clause, is_spell, &context)
@@ -558,12 +565,72 @@ fn parse_rules_text(oracle_text: &str, is_spell: bool) -> Result<ParsedRules, Ru
             }
             RecipeEmission::TriggeredAbility(ability) => parsed.triggered_abilities.push(ability),
             RecipeEmission::ActivatedAbility(ability) => parsed.activated_abilities.push(ability),
+            RecipeEmission::StaticAbility(ability) => parsed.static_abilities.push(ability),
         }
         if counts_as_reported_recipe {
             parsed.recipe_labels.push(matched.label);
         }
     }
     Ok(parsed)
+}
+
+fn add_intrinsic_land_mana_ability(
+    rules: &mut ParsedRules,
+    types: &[String],
+    oracle_text: &str,
+) -> Result<(), RulesParseError> {
+    let is_shockland = rules.static_abilities.iter().any(|ability| {
+        matches!(
+            ability.definition,
+            StaticAbilityDef::EntersTapped {
+                affected: EntersTappedAffected::Self_,
+                condition: None,
+                unless_cost: Some(EntryCost::PayLife { amount: 2 }),
+            }
+        )
+    });
+    if !is_shockland {
+        return Ok(());
+    }
+    if !types.iter().any(|card_type| card_type == "Land")
+        || !rules.activated_abilities.is_empty()
+        || external_oracle_lines(oracle_text)
+            .first()
+            .is_none_or(|line| !strip_reminder(line).trim().is_empty())
+    {
+        return Err(RulesParseError::Unsupported);
+    }
+
+    let options = types
+        .iter()
+        .filter_map(|subtype| {
+            BasicLandType::ALL
+                .into_iter()
+                .find(|land_type| land_type.as_str() == subtype)
+                .map(BasicLandType::mana)
+        })
+        .collect::<Vec<_>>();
+    if options.len() != 2 {
+        return Err(RulesParseError::Unsupported);
+    }
+
+    rules.activated_abilities.push(ActivatedAbilityDef {
+        ability_id: AbilityId::new("activated_01").map_err(|_| RulesParseError::Unsupported)?,
+        presentation: AbilityPresentation::OracleLines(vec![1]),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Tap],
+        effect: vec![SpellEffectKind::ProduceMana {
+            options,
+            restriction: None,
+            conditional: None,
+        }],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: None,
+    });
+    Ok(())
 }
 
 /// Splits an MTG type line into (supertypes, card types, subtypes).
@@ -637,6 +704,7 @@ struct GenFace {
     spell_effect: Vec<SpellEffectKind>,
     activated_abilities: Vec<ActivatedAbilityDef>,
     triggered_abilities: Vec<TriggeredAbilityDef>,
+    static_abilities: Vec<IdentifiedAbility<StaticAbilityDef>>,
     recipe_labels: Vec<&'static str>,
 }
 
@@ -723,6 +791,16 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
                 .join(", ")
         ));
     }
+    if !face.static_abilities.is_empty() {
+        s.push_str(&format!(
+            "{indent}static_abilities: [{}],\n",
+            face.static_abilities
+                .iter()
+                .map(render_generated_static_ability)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
 }
 
 fn render_generated_effect(effect: &SpellEffectKind) -> String {
@@ -767,8 +845,16 @@ fn render_generated_effect(effect: &SpellEffectKind) -> String {
             options,
             restriction: None,
             conditional: None,
-        } if options.len() == 1 => {
-            format!("ProduceMana(options: [{}])", render_mana_amount(options[0]))
+        } if !options.is_empty() => {
+            format!(
+                "ProduceMana(options: [{}])",
+                options
+                    .iter()
+                    .copied()
+                    .map(render_mana_amount)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         }
         _ => ron::ser::to_string(effect).expect("generated effect should serialize"),
     }
@@ -848,6 +934,24 @@ fn render_generated_triggered_ability(ability: &TriggeredAbilityDef) -> String {
         );
     }
     ron::ser::to_string(ability).expect("generated triggered ability should serialize")
+}
+
+fn render_generated_static_ability(ability: &IdentifiedAbility<StaticAbilityDef>) -> String {
+    if matches!(
+        ability.definition,
+        StaticAbilityDef::EntersTapped {
+            affected: EntersTappedAffected::Self_,
+            condition: None,
+            unless_cost: Some(EntryCost::PayLife { amount: 2 }),
+        }
+    ) {
+        return format!(
+            "(ability_id: {:?}, presentation: {}, definition: EntersTapped(affected: Self_, unless_cost: Some(PayLife(amount: 2))))",
+            ability.ability_id.as_str(),
+            render_presentation(&ability.presentation),
+        );
+    }
+    ron::ser::to_string(ability).expect("generated static ability should serialize")
 }
 
 impl GenCard {
@@ -1143,7 +1247,9 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
     let is_spell = types
         .iter()
         .any(|card_type| matches!(card_type.as_str(), "Instant" | "Sorcery"));
-    let rules = parse_rules_text(oracle_text, is_spell)
+    let mut rules = parse_rules_text(oracle_text, is_spell)
+        .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
+    add_intrinsic_land_mana_ability(&mut rules, &types, oracle_text)
         .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
 
     let source_colors = face
@@ -1174,6 +1280,7 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
         spell_effect: rules.spell_effect,
         activated_abilities: rules.activated_abilities,
         triggered_abilities: rules.triggered_abilities,
+        static_abilities: rules.static_abilities,
         recipe_labels: rules.recipe_labels,
     })
 }
@@ -1197,7 +1304,8 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
         return Err(Skip::BadManaCost.into());
     }
 
-    let rules = parse_rules_text(str_field(card, "oracle_text"), is_spell)
+    let oracle_text = str_field(card, "oracle_text");
+    let mut rules = parse_rules_text(oracle_text, is_spell)
         .map_err(|error| EvaluationError::rules_text(error, Skip::NonKeywordText))?;
     if !is_creature && !is_spell && rules.recipe_labels.is_empty() {
         return Err(Skip::NotCreature.into());
@@ -1208,6 +1316,8 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     let name = str_field(card, "name").to_string();
     let mut types = card_types;
     types.extend(subtypes);
+    add_intrinsic_land_mana_ability(&mut rules, &types, oracle_text)
+        .map_err(|error| EvaluationError::rules_text(error, Skip::NonKeywordText))?;
 
     Ok(GenCard {
         id: slugify(&name),
@@ -1226,6 +1336,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
             spell_effect: rules.spell_effect,
             activated_abilities: rules.activated_abilities,
             triggered_abilities: rules.triggered_abilities,
+            static_abilities: rules.static_abilities,
             recipe_labels: rules.recipe_labels,
         }],
     })
@@ -1923,7 +2034,8 @@ mod tests {
     use std::io::{Cursor, Write};
     use tricerules_cards::card_def::RawCardDefinition;
     use tricerules_cards::primitives::{
-        EffectSubject, PlayerRecipient, StackSpellFilter, TargetFilter,
+        EffectSubject, EntersTappedAffected, EntryCost, PlayerRecipient, StackSpellFilter,
+        StaticAbilityDef, TargetFilter,
     };
     use tricerules_cards::{
         AbilityCost, Amount, Color, Keyword, Layout, SpellEffectKind, TriggerCondition,
@@ -2452,6 +2564,74 @@ mod tests {
     }
 
     #[test]
+    fn shockland_recipe_emits_typed_entry_payment_and_subtype_mana() {
+        let card = normal_card(
+            "Blood Crypt",
+            "",
+            "Land — Swamp Mountain",
+            "({T}: Add {B} or {R}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+            None,
+        );
+
+        let generated = evaluate_fresh(&card).expect("exact shockland recipe should qualify");
+        let ron = generated.to_ron("fixture");
+        assert!(ron.contains("ProduceMana(options: [(b: 1), (r: 1)])"));
+        let raw = parse_generated(&ron);
+
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["shockland entry payment"]
+        );
+        assert_eq!(raw.activated_abilities.len(), 1);
+        assert_eq!(
+            raw.activated_abilities[0].ability_id.as_str(),
+            "activated_01"
+        );
+        assert_eq!(
+            raw.activated_abilities[0].presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        let mana = raw.activated_abilities[0]
+            .mana_options()
+            .expect("basic land subtypes publish intrinsic mana");
+        assert_eq!(mana.len(), 2);
+        assert_eq!((mana[0].b, mana[0].r), (1, 0));
+        assert_eq!((mana[1].b, mana[1].r), (0, 1));
+
+        assert_eq!(raw.static_abilities.len(), 1);
+        assert_eq!(raw.static_abilities[0].ability_id.as_str(), "static_01");
+        assert_eq!(
+            raw.static_abilities[0].presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert_eq!(
+            raw.static_abilities[0].definition,
+            StaticAbilityDef::EntersTapped {
+                affected: EntersTappedAffected::Self_,
+                condition: None,
+                unless_cost: Some(EntryCost::PayLife { amount: 2 }),
+            }
+        );
+    }
+
+    #[test]
+    fn shockland_recipe_rejects_near_misses() {
+        for text in [
+            "This land enters tapped.",
+            "This land enters tapped unless you control two or more other lands.",
+            "As this land enters, you may pay 3 life. If you don't, it enters tapped.",
+            "As this land enters, you may pay 2 life. If you don't, it enters tapped. When this land enters, draw a card.",
+        ] {
+            let card = normal_card("Near Miss Land", "", "Land — Swamp Mountain", text, None);
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
     fn recipes_fail_closed_on_near_misses_or_unconsumed_clauses() {
         for text in [
             "You may draw a card.",
@@ -2631,6 +2811,22 @@ mod tests {
                 "{T}: Add {G}.",
                 Some(("1", "1")),
                 "tap for one mana",
+            ),
+            (
+                "Blood Crypt",
+                "",
+                "Land — Swamp Mountain",
+                "({T}: Add {B} or {R}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+                None,
+                "shockland entry payment",
+            ),
+            (
+                "Breeding Pool",
+                "",
+                "Land — Forest Island",
+                "({T}: Add {G} or {U}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+                None,
+                "shockland entry payment",
             ),
         ];
 
