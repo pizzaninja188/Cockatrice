@@ -183,8 +183,13 @@ fn resolve_target_names(
     Ok((selected, requested.into_iter().collect()))
 }
 
-fn exact_recipe_matches_one_clause(clause: &str, is_spell: bool, source_is_land: bool) -> bool {
-    let Ok(parsed) = parse_rules_text(clause, is_spell, source_is_land) else {
+fn exact_recipe_matches_one_clause(
+    clause: &str,
+    is_spell: bool,
+    source_is_land: bool,
+    source_is_creature: bool,
+) -> bool {
+    let Ok(parsed) = parse_rules_text(clause, is_spell, source_is_land, source_is_creature) else {
         return false;
     };
     !is_spell || !parsed.spell_effect.is_empty()
@@ -229,9 +234,11 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
             .iter()
             .any(|card_type| matches!(card_type.as_str(), "Instant" | "Sorcery"));
         let source_is_land = card_types.iter().any(|card_type| card_type == "Land");
+        let source_is_creature = card_types.iter().any(|card_type| card_type == "Creature");
         let oracle_text = str_field(face.value, "oracle_text");
-        let face_matches = parse_rules_text(oracle_text, is_spell, source_is_land)
-            .is_ok_and(|parsed| !is_spell || !parsed.spell_effect.is_empty());
+        let face_matches =
+            parse_rules_text(oracle_text, is_spell, source_is_land, source_is_creature)
+                .is_ok_and(|parsed| !is_spell || !parsed.spell_effect.is_empty());
         if face_matches {
             continue;
         }
@@ -241,8 +248,13 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
             .iter()
             .enumerate()
             .filter_map(|(index, clause)| {
-                (!exact_recipe_matches_one_clause(clause, is_spell, source_is_land))
-                    .then_some((index, clause))
+                (!exact_recipe_matches_one_clause(
+                    clause,
+                    is_spell,
+                    source_is_land,
+                    source_is_creature,
+                ))
+                .then_some((index, clause))
             })
             .collect::<Vec<_>>();
         if unsupported.is_empty() {

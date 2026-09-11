@@ -60,6 +60,7 @@ pub(super) struct RecipeContext {
     pub(super) static_ability_id: AbilityId,
     pub(super) presentation: AbilityPresentation,
     pub(super) source_is_land: bool,
+    pub(super) source_is_creature: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -315,6 +316,83 @@ fn match_etb_surveil_two(text: &str, context: &RecipeContext) -> Option<RecipeEm
             context,
             SpellEffectKind::LibraryPartition {
                 count: 2,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            },
+        )
+    })
+}
+
+fn match_creature_trigger_create_token(
+    text: &str,
+    context: &RecipeContext,
+    expected: &str,
+    trigger: TriggerCondition,
+    token: &str,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == expected).then(|| {
+        triggered_ability_with(
+            context,
+            trigger,
+            vec![SpellEffectKind::CreateTokens {
+                token: token.to_string(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }],
+        )
+    })
+}
+
+fn match_etb_create_treasure(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    match_creature_trigger_create_token(
+        text,
+        context,
+        "When this creature enters, create a Treasure token.",
+        TriggerCondition::WhenSelfEntersBattlefield,
+        "treasure",
+    )
+}
+
+fn match_dies_create_treasure(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    match_creature_trigger_create_token(
+        text,
+        context,
+        "When this creature dies, create a Treasure token.",
+        TriggerCondition::WhenSelfDies,
+        "treasure",
+    )
+}
+
+fn match_etb_create_food(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    match_creature_trigger_create_token(
+        text,
+        context,
+        "When this creature enters, create a Food token.",
+        TriggerCondition::WhenSelfEntersBattlefield,
+        "food",
+    )
+}
+
+fn match_etb_scry_two(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "When this creature enters, scry 2.").then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::Scry {
+                count: Amount::Fixed(2),
+            },
+        )
+    })
+}
+
+fn match_etb_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "When this creature enters, surveil 1.").then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::LibraryPartition {
+                count: 1,
                 top_min: 0,
                 top_max: None,
                 kind: LibraryPartitionKind::Surveil,
@@ -862,9 +940,84 @@ pub(super) static CATALOG: &[Recipe] = &[
             "A.I.M. Synthoids" => "When this creature enters, surveil 2.",
             "Imperious Inkmage" => "When this creature enters, surveil 2.";
             "When this creature enters, you may surveil 2.",
-            "When this creature enters, surveil 1.",
+            "When this creature enters, surveil 3.",
             "When this creature enters, target player surveils 2.",
             "When this creature enters, surveil 2, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.create_token.treasure.one"),
+        label: "ETB create Treasure",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_create_treasure,
+        calibration: calibrations!(
+            "Meticulous Artisan" => "When this creature enters, create a Treasure token.",
+            "Plundering Pirate" => "When this creature enters, create a Treasure token.";
+            "When this creature enters, you may create a Treasure token.",
+            "When this creature enters, create two Treasure tokens.",
+            "When this creature enters, create a tapped Treasure token.",
+            "When this creature enters, create a Treasure token, then draw a card.",
+            "Whenever another creature enters, create a Treasure token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("dies.create_token.treasure.one"),
+        label: "dies create Treasure",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_dies_create_treasure,
+        calibration: calibrations!(
+            "Gleaming Barrier" => "When this creature dies, create a Treasure token.",
+            "Piggy Bank" => "When this creature dies, create a Treasure token.";
+            "When this creature dies, you may create a Treasure token.",
+            "When this creature dies, create two Treasure tokens.",
+            "When this creature leaves the battlefield, create a Treasure token.",
+            "When another creature dies, create a Treasure token.",
+            "When this creature dies, create a Treasure token and draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.create_token.food.one"),
+        label: "ETB create Food",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_create_food,
+        calibration: calibrations!(
+            "Canyon Crawler" => "When this creature enters, create a Food token.",
+            "Fierce Witchstalker" => "When this creature enters, create a Food token.";
+            "When this creature enters, you may create a Food token.",
+            "When this creature enters, create two Food tokens.",
+            "When this creature enters, create a tapped Food token.",
+            "When this creature enters, create a Food token, then draw a card.",
+            "Whenever another creature enters, create a Food token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.scry.two"),
+        label: "ETB scry 2",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_scry_two,
+        calibration: calibrations!(
+            "Wakandan Drone Flock" => "When this creature enters, scry 2.",
+            "Augury Owl" => "When this creature enters, scry 2.";
+            "When this creature enters, you may scry 2.",
+            "When this creature enters, scry 1.",
+            "When this creature enters, target player scries 2.",
+            "When this creature enters, scry 2, then draw a card.",
+            "Whenever another creature enters, scry 2."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.surveil.one"),
+        label: "ETB surveil 1",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_surveil_one,
+        calibration: calibrations!(
+            "Shore Lurker" => "When this creature enters, surveil 1.",
+            "Sanitation Automaton" => "When this creature enters, surveil 1.";
+            "When this creature enters, you may surveil 1.",
+            "When this creature enters, surveil 3.",
+            "When this creature enters, target player surveils 1.",
+            "When this creature enters, surveil 1, then draw a card.",
+            "Whenever another creature enters, surveil 1."
         ),
     },
     Recipe {
@@ -1150,6 +1303,7 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
         static_ability_id: AbilityId::new("static_01")?,
         presentation: AbilityPresentation::OracleLines(vec![1]),
         source_is_land: true,
+        source_is_creature: true,
     };
     let mut ids = std::collections::BTreeSet::new();
     for recipe in catalog {
@@ -1253,6 +1407,7 @@ mod tests {
             static_ability_id: AbilityId::new("static_01").unwrap(),
             presentation: AbilityPresentation::OracleLines(vec![1]),
             source_is_land: true,
+            source_is_creature: true,
         }
     }
 

@@ -524,6 +524,7 @@ fn parse_rules_text(
     oracle_text: &str,
     is_spell: bool,
     source_is_land: bool,
+    source_is_creature: bool,
 ) -> Result<ParsedRules, RulesParseError> {
     let mut parsed = ParsedRules::default();
     let external_lines = external_oracle_lines(oracle_text);
@@ -553,6 +554,7 @@ fn parse_rules_text(
             static_ability_id: static_id,
             presentation,
             source_is_land,
+            source_is_creature,
         };
         let matched = match_clause(clause, is_spell, &context)
             .map_err(RulesParseError::Ambiguous)?
@@ -1260,6 +1262,7 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
         oracle_text,
         is_spell,
         types.iter().any(|card_type| card_type == "Land"),
+        is_creature,
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
     add_intrinsic_land_mana_ability(&mut rules, &types, oracle_text)
@@ -1322,6 +1325,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
         oracle_text,
         is_spell,
         card_types.iter().any(|card_type| card_type == "Land"),
+        is_creature,
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::NonKeywordText))?;
     if !is_creature && !is_spell && rules.recipe_labels.is_empty() {
@@ -2899,6 +2903,105 @@ mod tests {
                 kind: LibraryPartitionKind::Surveil,
             }]
         );
+    }
+
+    #[test]
+    fn issue_256_simple_token_triggers_emit_canonical_tokens() {
+        for (name, text, trigger, token, label) in [
+            (
+                "Plundering Pirate",
+                "When this creature enters, create a Treasure token.",
+                TriggerCondition::WhenSelfEntersBattlefield,
+                "treasure",
+                "ETB create Treasure",
+            ),
+            (
+                "Gleaming Barrier",
+                "Defender\nWhen this creature dies, create a Treasure token.",
+                TriggerCondition::WhenSelfDies,
+                "treasure",
+                "dies create Treasure",
+            ),
+            (
+                "Canyon Crawler",
+                "Deathtouch\nWhen this creature enters, create a Food token.\nSwampcycling {2}",
+                TriggerCondition::WhenSelfEntersBattlefield,
+                "food",
+                "ETB create Food",
+            ),
+        ] {
+            let card = normal_card(name, "{2}", "Creature — Test", text, Some(("2", "2")));
+            let generated = evaluate_fresh(&card).expect("exact token trigger should qualify");
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert!(generated.faces[0].recipe_labels.contains(&label), "{name}");
+            let ability = raw
+                .triggered_abilities
+                .iter()
+                .find(|ability| ability.trigger == trigger)
+                .expect("token trigger");
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::CreateTokens {
+                    token: token.to_string(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }]
+            );
+        }
+    }
+
+    #[test]
+    fn issue_256_etb_scry_two_and_surveil_one_emit_private_library_effects() {
+        for (name, text, effect, label) in [
+            (
+                "Wakandan Drone Flock",
+                "Flying\nWhen this creature enters, scry 2.",
+                SpellEffectKind::Scry {
+                    count: Amount::Fixed(2),
+                },
+                "ETB scry 2",
+            ),
+            (
+                "Shore Lurker",
+                "Flying\nWhen this creature enters, surveil 1.",
+                SpellEffectKind::LibraryPartition {
+                    count: 1,
+                    top_min: 0,
+                    top_max: None,
+                    kind: LibraryPartitionKind::Surveil,
+                },
+                "ETB surveil 1",
+            ),
+        ] {
+            let card = normal_card(name, "{3}{W}", "Creature — Test", text, Some(("3", "3")));
+            let generated = evaluate_fresh(&card).expect("exact library trigger should qualify");
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert!(generated.faces[0].recipe_labels.contains(&label), "{name}");
+            assert!(raw.triggered_abilities.iter().any(|ability| {
+                ability.trigger == TriggerCondition::WhenSelfEntersBattlefield
+                    && ability.effect == [effect.clone()]
+            }));
+        }
+    }
+
+    #[test]
+    fn issue_256_this_creature_templates_reject_noncreature_faces() {
+        for text in [
+            "When this creature enters, create a Treasure token.",
+            "When this creature dies, create a Treasure token.",
+            "When this creature enters, create a Food token.",
+            "When this creature enters, scry 2.",
+            "When this creature enters, surveil 1.",
+        ] {
+            let card = normal_card("Near Miss Relic", "{2}", "Artifact", text, None);
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "{text}"
+            );
+        }
     }
 
     #[test]

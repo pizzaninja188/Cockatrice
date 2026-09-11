@@ -277,6 +277,8 @@ canonized_in_blood	0	ability:0	exercised
 canonized_in_blood	0	cast	exercised
 canopy_gorger	0	cast	exercised
 canopy_spider	0	cast	exercised
+canyon_crawler	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+canyon_crawler	0	cast	exercised
 canyon_minotaur	0	cast	exercised
 capital_guard	0	cast	exercised
 captain_of_the_watch	0	cast	exercised
@@ -348,6 +350,7 @@ colossapede	0	cast	exercised
 colossodon_yearling	0	cast	exercised
 command_bridge	0	ability:0	exercised
 command_bridge	0	land	exercised
+common_crook	0	cast	exercised
 commune_with_nature	0	cast	exercised
 compassionate_healer	0	cast	exercised
 concentrate	0	cast	exercised
@@ -609,6 +612,7 @@ flame_javelin	0	cast	exercised
 flameborn_viron	0	cast	exercised
 flamecache_gecko	0	ability:0	exercised
 flamecache_gecko	0	cast	exercised
+flamekin_gildweaver	0	cast	exercised
 flametongue_kavu	0	cast	exercised
 flaring_cinder	0	cast	exercised
 flashfreeze	0	cast	exercised
@@ -714,6 +718,7 @@ glaring_aegis	0	cast	exercised
 glass_golem	0	cast	exercised
 glassworks_shattered_yard	0	cast	exercised
 glassworks_shattered_yard	1	cast	exercised
+gleaming_barrier	0	cast	exercised
 glidedive_duo	0	cast	exercised
 glider_kids	0	cast	exercised
 glimpse_the_core	0	cast	exercised
@@ -1145,6 +1150,7 @@ merrow_skyswimmer	0	cast	exercised
 mesa_cavalier	0	cast	exercised
 mesa_unicorn	0	cast	exercised
 messenger_falcons	0	cast	exercised
+meticulous_artisan	0	cast	exercised
 michelangelo,_mutant_bff	0	cast	exercised
 midnight_assassin	0	cast	exercised
 midnight_haunting	0	cast	exercised
@@ -1325,6 +1331,7 @@ pheres-band_centaurs	0	cast	exercised
 phyrexian_arena	0	cast	exercised
 phyrexian_walker	0	cast	exercised
 phytoburst	0	cast	exercised
+piggy_bank	0	cast	exercised
 pigment_wrangler_striking_palette	0	cast	exercised
 pigment_wrangler_striking_palette	1	cast	intentional: face unavailable from hand
 pilgrim_of_the_fires	0	cast	exercised
@@ -1346,6 +1353,7 @@ plated_wurm	0	cast	exercised
 platypus-bear	0	cast	exercised
 plover_knights	0	cast	exercised
 plumeveil	0	cast	exercised
+plundering_pirate	0	cast	exercised
 poised_practitioner	0	cast	exercised
 pond_prophet	0	cast	exercised
 porcelain_legionnaire	0	cast	exercised
@@ -1436,6 +1444,7 @@ rebellious_captives	0	cast	exercised
 reckless_air_strike	0	cast	exercised
 reckless_waif_merciless_predator	0	cast	exercised
 reckless_waif_merciless_predator	1	cast	intentional: face unavailable from hand
+redcap_thief	0	cast	exercised
 redwood_treefolk	0	cast	exercised
 regal_unicorn	0	cast	exercised
 regathan_firecat	0	cast	exercised
@@ -1526,6 +1535,7 @@ sandskitter_outrider	0	cast	exercised
 sandsteppe_citadel	0	ability:0	exercised
 sandsteppe_citadel	0	land	exercised
 sanguine_syphoner	0	cast	exercised
+sanitation_automaton	0	cast	exercised
 sapling_nursery	0	ability:0	exercised
 sapling_nursery	0	cast	exercised
 satyr_rambler	0	cast	exercised
@@ -1594,6 +1604,7 @@ shining_aerosaur	0	cast	exercised
 shock	0	cast	exercised
 shock_brigade	0	cast	exercised
 shoot_the_sheriff	0	cast	exercised
+shore_lurker	0	cast	exercised
 shorecomber_crab	0	cast	exercised
 short_sword	0	ability:0	exercised
 short_sword	0	cast	exercised
@@ -1997,6 +2008,7 @@ vulpine_goliath	0	cast	exercised
 vulshok_berserker	0	cast	exercised
 vulshok_morningstar	0	ability:0	exercised
 vulshok_morningstar	0	cast	exercised
+wakandan_drone_flock	0	cast	exercised
 wake_the_reflections	0	cast	exercised
 walking_corpse	0	cast	exercised
 wall_of_air	0	cast	exercised
