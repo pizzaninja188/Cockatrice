@@ -108,6 +108,8 @@ aven_wind_mage	0	cast	exercised
 axebane_beast	0	cast	exercised
 axebane_stag	0	cast	exercised
 axegrinder_giant	0	cast	exercised
+azorius_guildgate	0	ability:0	exercised
+azorius_guildgate	0	land	exercised
 azula_always_lies	0	cast	exercised
 azure_drake	0	cast	exercised
 ba_sing_se	0	ability:0	exercised
@@ -135,6 +137,8 @@ barkchannel_pathway_tidechannel_pathway	0	ability:0	exercised
 barkchannel_pathway_tidechannel_pathway	0	land	exercised
 barkchannel_pathway_tidechannel_pathway	1	ability:0	exercised
 barkchannel_pathway_tidechannel_pathway	1	land	exercised
+baron,_airship_kingdom	0	ability:0	exercised
+baron,_airship_kingdom	0	land	exercised
 barony_vampire	0	cast	exercised
 bartizan_bats	0	cast	exercised
 bashful_beastie	0	cast	exercised
@@ -207,6 +211,8 @@ boreal_druid	0	ability:0	exercised
 boreal_druid	0	cast	exercised
 boreal_elemental	0	cast	exercised
 boros_charm	0	cast	exercised
+boros_guildgate	0	ability:0	exercised
+boros_guildgate	0	land	exercised
 boros_recruit	0	cast	exercised
 boros_swiftblade	0	cast	exercised
 bot_bashing_time	0	cast	exercised
@@ -441,6 +447,8 @@ devout_monk	0	cast	exercised
 diabolic_edict	0	cast	exercised
 dimension_x	0	ability:0	exercised
 dimension_x	0	land	exercised
+dimir_guildgate	0	ability:0	exercised
+dimir_guildgate	0	land	exercised
 diregraf_ghoul	0	cast	exercised
 dirgur_island_dragon_skimming_strike	0	cast	exercised
 dirgur_island_dragon_skimming_strike	1	cast	exercised
@@ -638,6 +646,8 @@ frilled_sea_serpent	0	ability:0	exercised
 frilled_sea_serpent	0	cast	exercised
 frog-squirrels	0	cast	exercised
 front_porch_sentries	0	cast	exercised
+frontier_bivouac	0	ability:0	exercised
+frontier_bivouac	0	land	exercised
 frost_breath	0	cast	exercised
 frost_ogre	0	cast	exercised
 fugitive_wizard	0	cast	exercised
@@ -732,6 +742,8 @@ goblin_trailblazer	0	cast	exercised
 goblin_wizardry	0	cast	exercised
 godless_shrine	0	ability:0	exercised
 godless_shrine	0	land	exercised
+gohn,_town_of_ruin	0	ability:0	exercised
+gohn,_town_of_ruin	0	land	exercised
 gold-forged_sentinel	0	cast	exercised
 gold_myr	0	ability:0	exercised
 gold_myr	0	cast	exercised
@@ -742,10 +754,14 @@ golden_hind	0	ability:0	exercised
 golden_hind	0	cast	exercised
 goldvein_pick	0	ability:0	exercised
 goldvein_pick	0	cast	exercised
+golgari_guildgate	0	ability:0	exercised
+golgari_guildgate	0	land	exercised
 golgari_longlegs	0	cast	exercised
 goliath_beetle	0	cast	exercised
 goliath_sphinx	0	cast	exercised
 goliath_spider	0	cast	exercised
+gongaga,_reactor_town	0	ability:0	exercised
+gongaga,_reactor_town	0	land	exercised
 goobbue_gardener	0	ability:0	exercised
 goobbue_gardener	0	cast	exercised
 gore_swine	0	cast	exercised
@@ -778,7 +794,11 @@ grizzled_outrider	0	cast	exercised
 grizzly_bears	0	cast	exercised
 grow_from_the_ashes	0	cast	exercised
 growth_cycle	0	cast	exercised
+gruul_guildgate	0	ability:0	exercised
+gruul_guildgate	0	land	exercised
 gryff_vanguard	0	cast	exercised
+guadosalam,_farplane_gateway	0	ability:0	exercised
+guadosalam,_farplane_gateway	0	land	exercised
 guard_duty	0	cast	exercised
 guardian_lions	0	cast	exercised
 guardians_of_meletis	0	cast	exercised
@@ -904,6 +924,8 @@ innocuous_rat	0	cast	exercised
 insatiable_harpy	0	cast	exercised
 insatiable_skittermaw	0	cast	exercised
 insectoid_exterminator	0	cast	exercised
+insomnia,_crown_city	0	ability:0	exercised
+insomnia,_crown_city	0	land	exercised
 inspired_charge	0	cast	exercised
 inspiring_captain	0	cast	exercised
 inspiring_cleric	0	cast	exercised
@@ -922,6 +944,8 @@ ironroot_treefolk	0	cast	exercised
 isamaru,_hound_of_konda	0	cast	exercised
 island	0	ability:0	exercised
 island	0	land	exercised
+izzet_guildgate	0	ability:0	exercised
+izzet_guildgate	0	land	exercised
 jace_beleren	0	ability:0	exercised
 jace_beleren	0	ability:1	unsupported: nonmana costs need additional fixture resources
 jace_beleren	0	ability:2	unsupported: nonmana costs need additional fixture resources
@@ -1166,6 +1190,8 @@ murmuring_phantasm	0	cast	exercised
 muse_drake	0	cast	exercised
 mutagenic_growth	0	cast	exercised
 mutant_town_musicians	0	cast	exercised
+mystic_monastery	0	ability:0	exercised
+mystic_monastery	0	land	exercised
 mystical_tutor	0	cast	exercised
 naga_eternal	0	cast	exercised
 needlepeak_spider	0	cast	exercised
@@ -1197,6 +1223,8 @@ ninja_of_the_hand	0	ability:0	exercised
 ninja_of_the_hand	0	cast	exercised
 nip_gwyllion	0	cast	exercised
 no_one_left_behind	0	cast	exercised
+nomad_outpost	0	ability:0	exercised
+nomad_outpost	0	land	exercised
 noose_constrictor	0	ability:0	exercised
 noose_constrictor	0	cast	exercised
 norwood_archers	0	cast	exercised
@@ -1229,6 +1257,8 @@ omega_myr	0	cast	exercised
 onakke_ogre	0	cast	exercised
 ooze_spill	0	cast	unsupported: target group 0 needs a richer fixture
 opt	0	cast	exercised
+opulent_palace	0	ability:0	exercised
+opulent_palace	0	land	exercised
 orazca_frillback	0	cast	exercised
 orazca_raptor	0	cast	exercised
 orb_of_dreams	0	cast	exercised
@@ -1238,6 +1268,8 @@ ornery_dilophosaur	0	cast	exercised
 ornithopter	0	cast	exercised
 orochi_sustainer	0	ability:0	exercised
 orochi_sustainer	0	cast	exercised
+orzhov_guildgate	0	ability:0	exercised
+orzhov_guildgate	0	land	exercised
 osseous_exhale	0	cast	unsupported: target group 0 needs a richer fixture
 otter-penguin	0	cast	exercised
 outcaster_greenblade	0	cast	exercised
@@ -1348,6 +1380,8 @@ raging_poltergeist	0	cast	exercised
 raging_redcap	0	cast	exercised
 raise_dead	0	cast	exercised
 raise_the_alarm	0	cast	exercised
+rakdos_guildgate	0	ability:0	exercised
+rakdos_guildgate	0	land	exercised
 rakdos_ragemutt	0	cast	exercised
 rakdos_shred-freak	0	cast	exercised
 rakish_crew	0	cast	exercised
@@ -1465,6 +1499,8 @@ sagu_wildling_roost_seek	1	cast	exercised
 salt_road_packbeast	0	cast	exercised
 salvager_of_secrets	0	cast	exercised
 sandskitter_outrider	0	cast	exercised
+sandsteppe_citadel	0	ability:0	exercised
+sandsteppe_citadel	0	land	exercised
 sanguine_syphoner	0	cast	exercised
 sapling_nursery	0	ability:0	exercised
 sapling_nursery	0	cast	exercised
@@ -1502,6 +1538,8 @@ seeker_of_skybreak	0	ability:0	exercised
 seeker_of_skybreak	0	cast	exercised
 segovian_angel	0	cast	exercised
 seized_from_slumber	0	cast	exercised
+selesnya_guildgate	0	ability:0	exercised
+selesnya_guildgate	0	land	exercised
 sentinel_spider	0	cast	exercised
 sentinels_of_glen_elendra	0	cast	exercised
 seraph_of_dawn	0	cast	exercised
@@ -1515,6 +1553,8 @@ shadow_glider	0	cast	exercised
 shaman_of_spring	0	cast	exercised
 shanodin_dryads	0	cast	exercised
 sharae_of_numbing_depths	0	cast	exercised
+sharlayan,_nation_of_scholars	0	ability:0	exercised
+sharlayan,_nation_of_scholars	0	land	exercised
 shattered_acolyte	0	ability:0	exercised
 shattered_acolyte	0	cast	exercised
 shatterskull_giant	0	cast	exercised
@@ -1549,6 +1589,8 @@ silverback_ape	0	cast	exercised
 silverbeak_griffin	0	cast	exercised
 silverclaw_griffin	0	cast	exercised
 silvercoat_lion	0	cast	exercised
+simic_guildgate	0	ability:0	exercised
+simic_guildgate	0	land	exercised
 simic_sky_swallower	0	cast	exercised
 sisters_of_the_flame	0	ability:0	exercised
 sisters_of_the_flame	0	cast	exercised
@@ -1810,6 +1852,8 @@ traveling_philosopher	0	cast	exercised
 tree_monkey	0	cast	exercised
 tree_of_tales	0	ability:0	exercised
 tree_of_tales	0	land	exercised
+treno,_dark_city	0	ability:0	exercised
+treno,_dark_city	0	land	exercised
 tributary_vaulter	0	cast	exercised
 triton_shorethief	0	cast	exercised
 trokin_high_guard	0	cast	exercised
@@ -1874,6 +1918,8 @@ vastwood_gorger	0	cast	exercised
 vault_of_whispers	0	ability:0	exercised
 vault_of_whispers	0	land	exercised
 vault_skirge	0	cast	exercised
+vector,_imperial_capital	0	ability:0	exercised
+vector,_imperial_capital	0	land	exercised
 venerable_lammasu	0	cast	exercised
 venerable_monk	0	cast	exercised
 vengeful_tracker	0	cast	exercised
@@ -2001,6 +2047,8 @@ wind-scarred_crag	0	ability:0	exercised
 wind-scarred_crag	0	land	exercised
 wind_drake	0	cast	exercised
 wind_strider	0	cast	exercised
+windurst,_federation_center	0	ability:0	exercised
+windurst,_federation_center	0	land	exercised
 winged_coatl	0	cast	exercised
 winged_words	0	cast	exercised
 wingspan_stride	0	ability:0	exercised

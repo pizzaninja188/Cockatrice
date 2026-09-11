@@ -520,7 +520,11 @@ enum RulesParseError {
     Ambiguous(RecipeAmbiguity),
 }
 
-fn parse_rules_text(oracle_text: &str, is_spell: bool) -> Result<ParsedRules, RulesParseError> {
+fn parse_rules_text(
+    oracle_text: &str,
+    is_spell: bool,
+    source_is_land: bool,
+) -> Result<ParsedRules, RulesParseError> {
     let mut parsed = ParsedRules::default();
     let external_lines = external_oracle_lines(oracle_text);
     for (line_index, external_line) in external_lines.iter().enumerate() {
@@ -548,6 +552,7 @@ fn parse_rules_text(oracle_text: &str, is_spell: bool) -> Result<ParsedRules, Ru
             activated_ability_id: activated_id,
             static_ability_id: static_id,
             presentation,
+            source_is_land,
         };
         let matched = match_clause(clause, is_spell, &context)
             .map_err(RulesParseError::Ambiguous)?
@@ -1251,8 +1256,12 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
     let is_spell = types
         .iter()
         .any(|card_type| matches!(card_type.as_str(), "Instant" | "Sorcery"));
-    let mut rules = parse_rules_text(oracle_text, is_spell)
-        .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
+    let mut rules = parse_rules_text(
+        oracle_text,
+        is_spell,
+        types.iter().any(|card_type| card_type == "Land"),
+    )
+    .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
     add_intrinsic_land_mana_ability(&mut rules, &types, oracle_text)
         .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
 
@@ -1309,8 +1318,12 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     }
 
     let oracle_text = str_field(card, "oracle_text");
-    let mut rules = parse_rules_text(oracle_text, is_spell)
-        .map_err(|error| EvaluationError::rules_text(error, Skip::NonKeywordText))?;
+    let mut rules = parse_rules_text(
+        oracle_text,
+        is_spell,
+        card_types.iter().any(|card_type| card_type == "Land"),
+    )
+    .map_err(|error| EvaluationError::rules_text(error, Skip::NonKeywordText))?;
     if !is_creature && !is_spell && rules.recipe_labels.is_empty() {
         return Err(Skip::NotCreature.into());
     }
@@ -2749,12 +2762,103 @@ mod tests {
     #[test]
     fn shockland_recipe_rejects_near_misses() {
         for text in [
-            "This land enters tapped.",
             "This land enters tapped unless you control two or more other lands.",
             "As this land enters, you may pay 3 life. If you don't, it enters tapped.",
             "As this land enters, you may pay 2 life. If you don't, it enters tapped. When this land enters, draw a card.",
         ] {
             let card = normal_card("Near Miss Land", "", "Land — Swamp Mountain", text, None);
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_253_tapped_multicolor_land_recipes_emit_exact_typed_abilities() {
+        for (name, oracle_text, expected_options) in [
+            (
+                "Rakdos Guildgate",
+                "This land enters tapped.\n{T}: Add {B} or {R}.",
+                vec![(0, 0, 1, 0, 0), (0, 0, 0, 1, 0)],
+            ),
+            (
+                "Nomad Outpost",
+                "This land enters tapped.\n{T}: Add {R}, {W}, or {B}.",
+                vec![(0, 0, 0, 1, 0), (1, 0, 0, 0, 0), (0, 0, 1, 0, 0)],
+            ),
+        ] {
+            let card = normal_card(name, "", "Land — Gate", oracle_text, None);
+            let generated = evaluate_fresh(&card).expect("exact land recipes should qualify");
+            let raw = parse_generated(&generated.to_ron("fixture"));
+
+            assert_eq!(
+                generated.faces[0].recipe_labels,
+                ["unconditional tapped entry", "tap for multicolor mana"]
+            );
+            let [static_ability] = raw.static_abilities.as_slice() else {
+                panic!("{name} must have one static ability");
+            };
+            assert_eq!(static_ability.ability_id.as_str(), "static_01");
+            assert_eq!(
+                static_ability.presentation,
+                AbilityPresentation::OracleLines(vec![1])
+            );
+            assert_eq!(
+                static_ability.definition,
+                StaticAbilityDef::EntersTapped {
+                    affected: EntersTappedAffected::Self_,
+                    condition: None,
+                    unless_cost: None,
+                }
+            );
+
+            let [mana_ability] = raw.activated_abilities.as_slice() else {
+                panic!("{name} must have one activated ability");
+            };
+            assert_eq!(mana_ability.ability_id.as_str(), "activated_01");
+            assert_eq!(
+                mana_ability.presentation,
+                AbilityPresentation::OracleLines(vec![2])
+            );
+            assert_eq!(mana_ability.costs, [AbilityCost::Tap]);
+            let actual_options = mana_ability
+                .mana_options()
+                .expect("multicolor recipe emits mana options")
+                .iter()
+                .map(|mana| (mana.w, mana.u, mana.b, mana.r, mana.g))
+                .collect::<Vec<_>>();
+            assert_eq!(actual_options, expected_options, "{name}");
+        }
+    }
+
+    #[test]
+    fn issue_253_land_recipes_reject_nonlands_and_near_misses() {
+        let nonland = normal_card(
+            "Near Miss Relic",
+            "{2}",
+            "Artifact",
+            "This land enters tapped.",
+            None,
+        );
+        assert_eq!(
+            evaluate_fresh(&nonland),
+            Err(Skip::NonKeywordText.into()),
+            "the land wording must not qualify a nonland face"
+        );
+
+        for text in [
+            "This land enters tapped unless you control two or more other lands.",
+            "This land enters tapped. When it enters, draw a card.",
+            "{T}: Add {G}, {U}, {R}, or {W}.",
+            "{T}: Add {C} or {G}.",
+            "{T}: Add {G} or {G}.",
+            "{T}: Add {G} or {U}. Spend this mana only to cast creature spells.",
+            "{T}, Pay 1 life: Add {G} or {U}.",
+            "{T}: Add {G}{U}.",
+        ] {
+            let card = normal_card("Near Miss Land", "", "Land", text, None);
             assert_eq!(
                 evaluate_fresh(&card),
                 Err(Skip::NonKeywordText.into()),

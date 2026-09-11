@@ -59,6 +59,7 @@ pub(super) struct RecipeContext {
     pub(super) activated_ability_id: AbilityId,
     pub(super) static_ability_id: AbilityId,
     pub(super) presentation: AbilityPresentation,
+    pub(super) source_is_land: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -473,6 +474,54 @@ fn match_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<Recipe
     })
 }
 
+fn match_tap_for_multicolor_mana(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    if !context.source_is_land {
+        return None;
+    }
+    let body = text.strip_prefix("{T}: Add ")?.strip_suffix('.')?;
+    let symbols = if let Some((first_two, third)) = body.split_once(", or ") {
+        let (first, second) = first_two.split_once(", ")?;
+        vec![first, second, third]
+    } else {
+        let (first, second) = body.split_once(" or ")?;
+        vec![first, second]
+    };
+    let mut options = Vec::with_capacity(symbols.len());
+    for token in symbols {
+        let symbol = token.strip_prefix('{')?.strip_suffix('}')?;
+        let mut chars = symbol.chars();
+        let symbol = chars.next()?;
+        if chars.next().is_some() || symbol == 'C' {
+            return None;
+        }
+        let amount = parse_mana_amount(symbol)?;
+        if options.contains(&amount) {
+            return None;
+        }
+        options.push(amount);
+    }
+    if !matches!(options.len(), 2 | 3) {
+        return None;
+    }
+
+    Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Tap],
+        effect: vec![SpellEffectKind::ProduceMana {
+            options,
+            restriction: None,
+            conditional: None,
+        }],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: None,
+    }))
+}
+
 fn match_sacrifice_to_naturalize(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "{1}, Sacrifice this creature: Destroy target artifact or enchantment.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
@@ -608,6 +657,23 @@ fn match_shockland_entry_payment(text: &str, context: &RecipeContext) -> Option<
             })
         },
     )
+}
+
+fn match_unconditional_enters_tapped(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_land && text == "This land enters tapped.").then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::EntersTapped {
+                affected: EntersTappedAffected::Self_,
+                condition: None,
+                unless_cost: None,
+            },
+        })
+    })
 }
 
 macro_rules! calibrations {
@@ -865,6 +931,23 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("activated.mana.tap_two_or_three_colors"),
+        label: "tap for multicolor mana",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_tap_for_multicolor_mana,
+        calibration: calibrations!(
+            "Rakdos Guildgate" => "{T}: Add {B} or {R}.",
+            "Nomad Outpost" => "{T}: Add {R}, {W}, or {B}.";
+            "{T}: Add {G}, {U}, {R}, or {W}.",
+            "{T}: Add {C} or {G}.",
+            "{T}: Add {G} or {G}.",
+            "{T}: Add {G} and {U}.",
+            "{T}: Add {G} or {U}. Spend this mana only to cast creature spells.",
+            "{T}, Pay 1 life: Add {G} or {U}.",
+            "{T}: Add {G}{U}."
+        ),
+    },
+    Recipe {
         id: RecipeId("activated.sacrifice_self.destroy_artifact_or_enchantment"),
         label: "sacrifice-to-Naturalize",
         surface: RecipeSurface::ActivatedAbility,
@@ -933,6 +1016,20 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("static.enters_tapped.unconditional"),
+        label: "unconditional tapped entry",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_unconditional_enters_tapped,
+        calibration: calibrations!(
+            "Rakdos Guildgate" => "This land enters tapped.",
+            "Nomad Outpost" => "This land enters tapped.";
+            "This artifact enters tapped.",
+            "This land enters tapped unless you control two or more other lands.",
+            "This land enters the battlefield tapped.",
+            "This land enters tapped. When it enters, draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("static.enters_tapped.unless_pay_life_2"),
         label: "shockland entry payment",
         surface: RecipeSurface::StaticAbility,
@@ -940,7 +1037,7 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: calibrations!(
             "Blood Crypt" => "As this land enters, you may pay 2 life. If you don't, it enters tapped.",
             "Breeding Pool" => "As this land enters, you may pay 2 life. If you don't, it enters tapped.";
-            "This land enters tapped.",
+            "As this land enters, you may pay 2 life. It enters tapped.",
             "This land enters tapped unless you control two or more other lands.",
             "As this land enters, you may pay 3 life. If you don't, it enters tapped.",
             "As this land enters, you may pay 2 life. If you don't, it enters tapped. When this land enters, draw a card."
@@ -1004,6 +1101,7 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
         activated_ability_id: AbilityId::new("activated_01")?,
         static_ability_id: AbilityId::new("static_01")?,
         presentation: AbilityPresentation::OracleLines(vec![1]),
+        source_is_land: true,
     };
     let mut ids = std::collections::BTreeSet::new();
     for recipe in catalog {
@@ -1106,6 +1204,7 @@ mod tests {
             activated_ability_id: AbilityId::new("activated_01").unwrap(),
             static_ability_id: AbilityId::new("static_01").unwrap(),
             presentation: AbilityPresentation::OracleLines(vec![1]),
+            source_is_land: true,
         }
     }
 
@@ -1184,6 +1283,27 @@ mod tests {
             matched.id,
             RecipeId("static.enters_tapped.unless_pay_life_2")
         );
+    }
+
+    #[test]
+    fn issue_253_recipes_are_land_only_and_do_not_absorb_existing_mana_or_entry_forms() {
+        let land = context();
+        for clause in ["{T}: Add {G}.", "{T}: Add one mana of any color."] {
+            assert!(
+                match_tap_for_multicolor_mana(clause, &land).is_none(),
+                "{clause}"
+            );
+        }
+        assert!(match_unconditional_enters_tapped(
+            "As this land enters, you may pay 2 life. If you don't, it enters tapped.",
+            &land,
+        )
+        .is_none());
+
+        let mut nonland = context();
+        nonland.source_is_land = false;
+        assert!(match_tap_for_multicolor_mana("{T}: Add {G} or {U}.", &nonland).is_none());
+        assert!(match_unconditional_enters_tapped("This land enters tapped.", &nonland).is_none());
     }
 
     #[test]
