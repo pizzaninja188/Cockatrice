@@ -32,9 +32,9 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::{
     external_oracle_lines, slugify, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
-    ActivatedAbilityDef, ActivationTiming, Amount, BasicLandType, CardFaceId, CardRegistry, Color,
-    IdentifiedAbility, Keyword, ManaAmount, ManaCost, SpellEffectKind, TriggerCondition,
-    TriggeredAbilityDef,
+    ActivatedAbilityDef, ActivationTiming, Amount, BasicLandType, CardFaceId, CardRegistry,
+    CharacteristicDefiningAbility, Color, IdentifiedAbility, Keyword, ManaAmount, ManaCost,
+    SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 #[path = "gen_cards/candidate_report.rs"]
@@ -511,6 +511,7 @@ struct ParsedRules {
     activated_abilities: Vec<ActivatedAbilityDef>,
     triggered_abilities: Vec<TriggeredAbilityDef>,
     static_abilities: Vec<IdentifiedAbility<StaticAbilityDef>>,
+    characteristic_defining_abilities: Vec<IdentifiedAbility<CharacteristicDefiningAbility>>,
     recipe_labels: Vec<&'static str>,
 }
 
@@ -525,6 +526,7 @@ fn parse_rules_text(
     is_spell: bool,
     source_is_land: bool,
     source_is_creature: bool,
+    source_is_vehicle: bool,
 ) -> Result<ParsedRules, RulesParseError> {
     let mut parsed = ParsedRules::default();
     let external_lines = external_oracle_lines(oracle_text);
@@ -548,13 +550,20 @@ fn parse_rules_text(
         .map_err(|_| RulesParseError::Unsupported)?;
         let static_id = AbilityId::new(format!("static_{:02}", parsed.static_abilities.len() + 1))
             .map_err(|_| RulesParseError::Unsupported)?;
+        let characteristic_id = AbilityId::new(format!(
+            "characteristic_{:02}",
+            parsed.characteristic_defining_abilities.len() + 1
+        ))
+        .map_err(|_| RulesParseError::Unsupported)?;
         let context = RecipeContext {
             triggered_ability_id: triggered_id,
             activated_ability_id: activated_id,
             static_ability_id: static_id,
+            characteristic_ability_id: characteristic_id,
             presentation,
             source_is_land,
             source_is_creature,
+            source_is_vehicle,
         };
         let matched = match_clause(clause, is_spell, &context)
             .map_err(RulesParseError::Ambiguous)?
@@ -577,6 +586,9 @@ fn parse_rules_text(
             RecipeEmission::TriggeredAbility(ability) => parsed.triggered_abilities.push(ability),
             RecipeEmission::ActivatedAbility(ability) => parsed.activated_abilities.push(ability),
             RecipeEmission::StaticAbility(ability) => parsed.static_abilities.push(ability),
+            RecipeEmission::CharacteristicAbility(ability) => {
+                parsed.characteristic_defining_abilities.push(ability)
+            }
         }
         if counts_as_reported_recipe {
             parsed.recipe_labels.push(matched.label);
@@ -711,6 +723,7 @@ struct GenFace {
     power: Option<u32>,
     toughness: Option<u32>,
     color_indicator: Option<Vec<Color>>,
+    characteristic_defining_abilities: Vec<IdentifiedAbility<CharacteristicDefiningAbility>>,
     keywords: Vec<Keyword>,
     spell_effect: Vec<SpellEffectKind>,
     activated_abilities: Vec<ActivatedAbilityDef>,
@@ -762,6 +775,17 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
             .collect::<Vec<_>>()
             .join(", ");
         s.push_str(&format!("{indent}color_indicator: Some([{colors}]),\n"));
+    }
+    if !face.characteristic_defining_abilities.is_empty() {
+        s.push_str(&format!(
+            "{indent}characteristic_defining_abilities: [{}],\n",
+            face.characteristic_defining_abilities
+                .iter()
+                .map(|ability| ron::ser::to_string(ability)
+                    .expect("generated characteristic ability should serialize"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     if !face.keywords.is_empty() {
         let keywords = face
@@ -1243,6 +1267,7 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
         .ok_or(Skip::MalformedFaces)?;
     let (supertypes, card_types, subtypes) = parse_type_line(type_line);
     let is_creature = card_types.iter().any(|card_type| card_type == "Creature");
+    let is_vehicle = subtypes.iter().any(|subtype| subtype == "Vehicle");
     let mut types = card_types;
     types.extend(subtypes);
 
@@ -1263,6 +1288,7 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
         is_spell,
         types.iter().any(|card_type| card_type == "Land"),
         is_creature,
+        is_vehicle,
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
     add_intrinsic_land_mana_ability(&mut rules, &types, oracle_text)
@@ -1292,6 +1318,7 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
         power,
         toughness,
         color_indicator,
+        characteristic_defining_abilities: rules.characteristic_defining_abilities,
         keywords: rules.keywords,
         spell_effect: rules.spell_effect,
         activated_abilities: rules.activated_abilities,
@@ -1305,6 +1332,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     let type_line = str_field(card, "type_line");
     let (supertypes, card_types, subtypes) = parse_type_line(type_line);
     let is_creature = card_types.iter().any(|value| value == "Creature");
+    let is_vehicle = subtypes.iter().any(|value| value == "Vehicle");
     let is_spell = card_types
         .iter()
         .any(|value| matches!(value.as_str(), "Instant" | "Sorcery"));
@@ -1326,6 +1354,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
         is_spell,
         card_types.iter().any(|card_type| card_type == "Land"),
         is_creature,
+        is_vehicle,
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::NonKeywordText))?;
     if !is_creature && !is_spell && rules.recipe_labels.is_empty() {
@@ -1353,6 +1382,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
             power,
             toughness,
             color_indicator: None,
+            characteristic_defining_abilities: rules.characteristic_defining_abilities,
             keywords: rules.keywords,
             spell_effect: rules.spell_effect,
             activated_abilities: rules.activated_abilities,
@@ -2055,13 +2085,14 @@ mod tests {
     use std::io::{Cursor, Write};
     use tricerules_cards::card_def::RawCardDefinition;
     use tricerules_cards::primitives::{
-        CardTypeFilter, EffectSubject, EntersTappedAffected, EntryCost, PermanentTypeFilter,
-        PlayerRecipient, SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetFilter,
-        TargetKind,
+        CardTypeFilter, EffectSubject, EntersTappedAffected, EntryCost, ObjectContributionKind,
+        ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient, ResolutionCost,
+        SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
+        TargetKind, TargetingSourceFilter, TypeLineAddition,
     };
     use tricerules_cards::{
-        AbilityCost, Amount, CastTriggerPlayer, Color, Keyword, Layout, SpellEffectKind,
-        TriggerCondition,
+        AbilityCost, Amount, CastTriggerPlayer, CharacteristicDefiningAbility, Color, Keyword,
+        Layout, SpellEffectKind, TriggerCondition,
     };
 
     fn face(
@@ -2226,7 +2257,7 @@ mod tests {
             "Alpha Adept",
             "{1}{U}",
             "Creature — Wizard",
-            "Ward {2} (Whenever this becomes the target of a spell, counter it unless its controller pays {2}.)",
+            "Ward—Pay 2 life. (Whenever this becomes the target of a spell or ability an opponent controls, counter it unless that player pays 2 life.)",
             Some(("2", "2")),
         );
         first["oracle_id"] = json!("oracle-alpha");
@@ -2235,7 +2266,7 @@ mod tests {
 
         let mut reprint = first.clone();
         reprint["oracle_text"] = json!(
-            "  Ward   {2}   (Whenever this becomes the target of a spell, counter it unless its controller pays {2}.)  \r\n"
+            "  Ward—Pay   2   life.   (Whenever this becomes the target of a spell or ability an opponent controls, counter it unless that player pays 2 life.)  \r\n"
         );
         reprint["scryfall_uri"] = json!("https://scryfall.com/card/two/2/alpha-adept");
 
@@ -2243,7 +2274,7 @@ mod tests {
             "Beta Adept",
             "{1}{U}",
             "Creature — Wizard",
-            "Ward {2}",
+            "Ward—Pay 2 life.",
             Some(("2", "2")),
         );
         second["oracle_id"] = json!("oracle-beta");
@@ -2254,7 +2285,7 @@ mod tests {
             "Gamma Adept",
             "{1}{U}",
             "Creature — Wizard",
-            "Ward {3}",
+            "Ward—Pay 3 life.",
             Some(("2", "2")),
         );
         different["oracle_id"] = json!("oracle-gamma");
@@ -2275,7 +2306,7 @@ mod tests {
         let parsed: Value = serde_json::from_str(&report.json).unwrap();
         let clusters = parsed["clusters"].as_array().unwrap();
         assert_eq!(clusters.len(), 2);
-        assert_eq!(clusters[0]["signature"], "Ward {2}");
+        assert_eq!(clusters[0]["signature"], "Ward—Pay 2 life.");
         assert_eq!(clusters[0]["unique_card_count"], 2);
         assert_eq!(clusters[0]["occurrences"].as_array().unwrap().len(), 2);
         assert_eq!(clusters[0]["occurrences"][0]["oracle_id"], "oracle-alpha");
@@ -2283,9 +2314,9 @@ mod tests {
             clusters[0]["occurrences"][0]["scryfall_uri"],
             "https://scryfall.com/card/one/1/alpha-adept"
         );
-        assert_eq!(clusters[1]["signature"], "Ward {3}");
+        assert_eq!(clusters[1]["signature"], "Ward—Pay 3 life.");
         assert_eq!(clusters[1]["unique_card_count"], 1);
-        assert!(report.summary.contains("2 unique cards  Ward {2}"));
+        assert!(report.summary.contains("2 unique cards  Ward—Pay 2 life."));
 
         let repeated = candidate_report::build(
             vec![second, first, different, reprint],
@@ -2373,7 +2404,7 @@ mod tests {
                     "Alpha",
                     "{G}",
                     "Creature — Elf",
-                    "Ward {2}",
+                    "Ward—Pay 2 life.",
                     Some(("1", "1")),
                     &["G"],
                     None,
@@ -2398,7 +2429,7 @@ mod tests {
                     "Beta",
                     "{G}",
                     "Creature — Elf",
-                    "Ward {2}",
+                    "Ward—Pay 2 life.",
                     Some(("1", "1")),
                     &["G"],
                     None,
@@ -2584,6 +2615,120 @@ mod tests {
         assert_eq!(raw.activated_abilities.len(), 1);
         assert_eq!(raw.activated_abilities[0].costs, [AbilityCost::Tap]);
         assert!(raw.activated_abilities[0].mana_options().is_some());
+    }
+
+    #[test]
+    fn issue_257_exact_recipes_render_typed_card_definitions() {
+        let vehicle = normal_card(
+            "Cultivator's Caravan",
+            "{3}",
+            "Artifact — Vehicle",
+            "{T}: Add one mana of any color.\nCrew 3 (Tap any number of creatures you control with total power 3 or more: This Vehicle becomes an artifact creature until end of turn.)",
+            Some(("5", "5")),
+        );
+        let generated = evaluate_fresh(&vehicle).expect("ordinary Vehicle Crew must qualify");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["tap for any color", "Crew"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.activated_abilities.len(), 2);
+        assert_eq!(
+            raw.activated_abilities[1].costs,
+            [AbilityCost::TapPermanents {
+                constraint: ObjectPaymentConstraint::AggregateMinimum {
+                    minimum: 3,
+                    contribution: ObjectContributionKind::CurrentPower,
+                },
+                filter: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                },
+                exclude_source: true,
+            }]
+        );
+        assert_eq!(
+            raw.activated_abilities[1].effect,
+            [SpellEffectKind::AddTypes {
+                subject: EffectSubject::Source,
+                addition: TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Creature],
+                    creature_types: Vec::new(),
+                },
+            }]
+        );
+
+        let ward = normal_card(
+            "Spider-Rex, Daring Dino",
+            "{4}{G}{G}",
+            "Legendary Creature — Spider Dinosaur Hero",
+            "Reach, trample\nWard {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)",
+            Some(("6", "6")),
+        );
+        let raw = parse_generated(&evaluate_fresh(&ward).unwrap().to_ron("fixture"));
+        assert_eq!(
+            raw.triggered_abilities[0].trigger,
+            TriggerCondition::WheneverSelfBecomesTarget {
+                source: TargetingSourceFilter::SpellOrAbility,
+                source_controller: CastTriggerPlayer::Opponent,
+            }
+        );
+        assert_eq!(
+            raw.triggered_abilities[0].effect,
+            [SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
+                cost: ResolutionCost::Mana(ManaCost::parse("{2}").unwrap()),
+            }]
+        );
+
+        let changeling = normal_card(
+            "Prideful Feastling",
+            "{2}{W/B}",
+            "Creature — Shapeshifter",
+            "Changeling (This card is every creature type.)\nLifelink",
+            Some(("2", "3")),
+        );
+        let raw = parse_generated(&evaluate_fresh(&changeling).unwrap().to_ron("fixture"));
+        assert_eq!(raw.characteristic_defining_abilities.len(), 1);
+        assert_eq!(
+            raw.characteristic_defining_abilities[0].ability_id.as_str(),
+            "characteristic_01"
+        );
+        assert_eq!(
+            raw.characteristic_defining_abilities[0].definition,
+            CharacteristicDefiningAbility::Changeling
+        );
+
+        let uncounterable = normal_card(
+            "Gigantic Big Bear",
+            "{5}{G}{G}",
+            "Creature — Bear",
+            "This spell can't be countered.\nHexproof, haste",
+            Some(("10", "7")),
+        );
+        let raw = parse_generated(&evaluate_fresh(&uncounterable).unwrap().to_ron("fixture"));
+        assert_eq!(raw.static_abilities.len(), 1);
+        assert_eq!(
+            raw.static_abilities[0].definition,
+            StaticAbilityDef::SpellCannotBeCountered
+        );
+    }
+
+    #[test]
+    fn issue_257_crew_rejects_nonvehicles_and_invalid_thresholds() {
+        for (type_line, oracle_text) in [
+            ("Artifact", "Crew 3"),
+            ("Artifact — Vehicle", "Crew 0"),
+            ("Artifact — Vehicle", "Crew 03"),
+            ("Artifact — Vehicle", "Crew X"),
+        ] {
+            let card = normal_card("Near Miss", "{3}", type_line, oracle_text, None);
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "{type_line}: {oracle_text}"
+            );
+        }
     }
 
     #[test]

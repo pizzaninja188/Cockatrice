@@ -25,6 +25,8 @@ agent_maria_hill	0	cast	exercised
 agent_of_atlas	0	cast	exercised
 aggressive_negotiations	0	cast	exercised
 air_elemental	0	cast	exercised
+air_response_unit	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+air_response_unit	0	cast	exercised
 airbending_lesson	0	cast	exercised
 airship_engine_room	0	ability:0	exercised
 airship_engine_room	0	ability:1	exercised
@@ -325,6 +327,9 @@ chrome_companion	0	ability:0	exercised
 chrome_companion	0	cast	exercised
 chupacabra_echo	0	cast	exercised
 cinder_strike	0	cast	exercised
+clamorous_ironclad	0	ability:0	unsupported: nonmana costs need additional fixture resources
+clamorous_ironclad	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+clamorous_ironclad	0	cast	exercised
 claustrophobia	0	cast	exercised
 clearwater_pathway_murkwater_pathway	0	ability:0	exercised
 clearwater_pathway_murkwater_pathway	0	land	exercised
@@ -397,6 +402,9 @@ crystacean	0	cast	exercised
 cudgel_troll	0	ability:0	exercised
 cudgel_troll	0	cast	exercised
 cult_healer	0	cast	exercised
+cultivators_caravan	0	ability:0	exercised
+cultivators_caravan	0	ability:1	unsupported: nonmana costs need additional fixture resources
+cultivators_caravan	0	cast	exercised
 curio_vendor	0	cast	exercised
 curse_of_disturbance	0	cast	exercised
 curse_of_opulence	0	cast	exercised
@@ -443,6 +451,9 @@ demolition_field	0	ability:0	exercised
 demolition_field	0	ability:1	unsupported: target group 0 needs a richer fixture
 demolition_field	0	land	exercised
 demonic_tutor	0	cast	exercised
+dependable_quinjet	0	ability:0	exercised
+dependable_quinjet	0	ability:1	unsupported: nonmana costs need additional fixture resources
+dependable_quinjet	0	cast	exercised
 depressurize	0	cast	exercised
 deranged_whelp	0	cast	exercised
 derelict_attic_widows_walk	0	cast	exercised
@@ -708,6 +719,7 @@ giant_warthog	0	cast	exercised
 gift_of_paradise	0	cast	exercised
 gifted_aetherborn	0	cast	exercised
 gifts_ungiven	0	cast	exercised
+gigantic_big_bear	0	cast	exercised
 gigantosaurus	0	cast	exercised
 gilacorn	0	cast	exercised
 gilded_sentinel	0	cast	exercised
@@ -1121,6 +1133,8 @@ maned_serval	0	cast	exercised
 manhole_missile	0	cast	exercised
 manifest_dread	0	cast	exercised
 mantis_rider	0	cast	exercised
+marauding_brinefang	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+marauding_brinefang	0	cast	exercised
 marauding_sphinx	0	cast	exercised
 mardu_devotee	0	ability:0	exercised
 mardu_devotee	0	cast	exercised
@@ -1364,6 +1378,7 @@ prakhata_club_security	0	cast	exercised
 preordain	0	cast	exercised
 pretending_poxbearers	0	cast	exercised
 prey_upon	0	cast	exercised
+prideful_feastling	0	cast	exercised
 prideful_parent	0	cast	exercised
 pridemalkin	0	cast	exercised
 primal_huntbeast	0	cast	exercised
@@ -1641,6 +1656,9 @@ sky_ruin_drake	0	cast	exercised
 sky_spirit	0	cast	exercised
 sky_terror	0	cast	exercised
 skyblade_of_the_legion	0	cast	exercised
+skybox_ferry	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+skybox_ferry	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+skybox_ferry	0	cast	exercised
 skyhunter_patrol	0	cast	exercised
 skyhunter_prowler	0	cast	exercised
 skyhunter_skirmisher	0	cast	exercised
@@ -1697,6 +1715,7 @@ spell_snare	0	cast	unsupported: target group 0 needs a richer fixture
 spellgorger_weird	0	cast	exercised
 spicy_oatmeal_pizza	0	ability:0	exercised
 spicy_oatmeal_pizza	0	cast	exercised
+spider-rex,_daring_dino	0	cast	exercised
 spike_jester	0	cast	exercised
 spiked_baloth	0	cast	exercised
 spined_karok	0	cast	exercised

@@ -188,8 +188,15 @@ fn exact_recipe_matches_one_clause(
     is_spell: bool,
     source_is_land: bool,
     source_is_creature: bool,
+    source_is_vehicle: bool,
 ) -> bool {
-    let Ok(parsed) = parse_rules_text(clause, is_spell, source_is_land, source_is_creature) else {
+    let Ok(parsed) = parse_rules_text(
+        clause,
+        is_spell,
+        source_is_land,
+        source_is_creature,
+        source_is_vehicle,
+    ) else {
         return false;
     };
     !is_spell || !parsed.spell_effect.is_empty()
@@ -229,16 +236,22 @@ fn occurrence(
 fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOccurrence)> {
     let mut result = Vec::new();
     for face in source_faces(card) {
-        let (_, card_types, _) = parse_type_line(str_field(face.value, "type_line"));
+        let (_, card_types, subtypes) = parse_type_line(str_field(face.value, "type_line"));
         let is_spell = card_types
             .iter()
             .any(|card_type| matches!(card_type.as_str(), "Instant" | "Sorcery"));
         let source_is_land = card_types.iter().any(|card_type| card_type == "Land");
         let source_is_creature = card_types.iter().any(|card_type| card_type == "Creature");
+        let source_is_vehicle = subtypes.iter().any(|subtype| subtype == "Vehicle");
         let oracle_text = str_field(face.value, "oracle_text");
-        let face_matches =
-            parse_rules_text(oracle_text, is_spell, source_is_land, source_is_creature)
-                .is_ok_and(|parsed| !is_spell || !parsed.spell_effect.is_empty());
+        let face_matches = parse_rules_text(
+            oracle_text,
+            is_spell,
+            source_is_land,
+            source_is_creature,
+            source_is_vehicle,
+        )
+        .is_ok_and(|parsed| !is_spell || !parsed.spell_effect.is_empty());
         if face_matches {
             continue;
         }
@@ -253,6 +266,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
                     is_spell,
                     source_is_land,
                     source_is_creature,
+                    source_is_vehicle,
                 ))
                 .then_some((index, clause))
             })

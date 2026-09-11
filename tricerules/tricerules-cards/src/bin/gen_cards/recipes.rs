@@ -1,14 +1,15 @@
 use tricerules_cards::primitives::{
     CardTypeFilter, DiscardQuantity, EffectSubject, EntersTappedAffected, EntryCost, LifeAmount,
-    PermanentEventFilter, PermanentTypeFilter, PlayerRecipient, SearchDestination,
-    SearchZoneSelection, SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetFilter,
-    TargetKind, ZoneCardFilter,
+    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
+    PlayerRecipient, ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter,
+    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
-    ActivationTiming, Amount, BasicLandType, CastTriggerPlayer, IdentifiedAbility, Keyword,
-    LibraryPartitionKind, ManaAmount, ManaCost, SpellEffectKind, TriggerCondition,
-    TriggeredAbilityDef,
+    ActivationTiming, Amount, BasicLandType, CastTriggerPlayer, CharacteristicDefiningAbility,
+    IdentifiedAbility, Keyword, LibraryPartitionKind, ManaAmount, ManaCost, SpellEffectKind,
+    TriggerCondition, TriggeredAbilityDef,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,6 +24,10 @@ pub(super) enum RecipeSurface {
     /// [`Self::ActivatedAbility`].
     ZoneActivatedAbility,
     StaticAbility,
+    /// A static ability that functions on the source object while it is a spell, regardless of
+    /// whether the card will become a permanent after resolving.
+    SpellStaticAbility,
+    CharacteristicAbility,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -58,9 +63,11 @@ pub(super) struct RecipeContext {
     pub(super) triggered_ability_id: AbilityId,
     pub(super) activated_ability_id: AbilityId,
     pub(super) static_ability_id: AbilityId,
+    pub(super) characteristic_ability_id: AbilityId,
     pub(super) presentation: AbilityPresentation,
     pub(super) source_is_land: bool,
     pub(super) source_is_creature: bool,
+    pub(super) source_is_vehicle: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -70,6 +77,7 @@ pub(super) enum RecipeEmission {
     TriggeredAbility(TriggeredAbilityDef),
     ActivatedAbility(ActivatedAbilityDef),
     StaticAbility(IdentifiedAbility<StaticAbilityDef>),
+    CharacteristicAbility(IdentifiedAbility<CharacteristicDefiningAbility>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -487,6 +495,81 @@ fn match_prowess(text: &str, context: &RecipeContext) -> Option<RecipeEmission> 
     })
 }
 
+fn match_crew(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    if !context.source_is_vehicle {
+        return None;
+    }
+    let threshold_text = text.strip_prefix("Crew ")?;
+    let threshold = threshold_text.parse::<u32>().ok()?;
+    if threshold == 0 || threshold.to_string() != threshold_text {
+        return None;
+    }
+
+    Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::TapPermanents {
+            constraint: ObjectPaymentConstraint::AggregateMinimum {
+                minimum: threshold,
+                contribution: ObjectContributionKind::CurrentPower,
+            },
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            },
+            exclude_source: true,
+        }],
+        effect: vec![SpellEffectKind::AddTypes {
+            subject: EffectSubject::Source,
+            addition: TypeLineAddition {
+                card_types: vec![PermanentTypeFilter::Creature],
+                creature_types: Vec::new(),
+            },
+        }],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: None,
+    }))
+}
+
+fn match_mana_ward(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    let cost = exact_mana_cost(text.strip_prefix("Ward ")?)?;
+    Some(triggered_ability_with(
+        context,
+        TriggerCondition::WheneverSelfBecomesTarget {
+            source: TargetingSourceFilter::SpellOrAbility,
+            source_controller: CastTriggerPlayer::Opponent,
+        },
+        vec![SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
+            cost: ResolutionCost::Mana(cost),
+        }],
+    ))
+}
+
+fn match_changeling(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Changeling").then(|| {
+        RecipeEmission::CharacteristicAbility(IdentifiedAbility {
+            ability_id: context.characteristic_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: CharacteristicDefiningAbility::Changeling,
+        })
+    })
+}
+
+fn match_spell_cannot_be_countered(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "This spell can't be countered.").then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::SpellCannotBeCountered,
+        })
+    })
+}
+
 fn parse_mana_amount(symbol: char) -> Option<ManaAmount> {
     let mut amount = ManaAmount::default();
     match symbol {
@@ -802,7 +885,7 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: calibrations!(
             "Air Elemental" => "Flying",
             "Serra Angel" => "Flying, vigilance";
-            "Ward {2}",
+            "Ward—Pay 2 life.",
             "Flying and vigilance"
         ),
     },
@@ -1083,6 +1166,70 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("activated.crew.aggregate_power"),
+        label: "Crew",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_crew,
+        calibration: calibrations!(
+            "Skybox Ferry" => "Crew 2",
+            "Cultivator's Caravan" => "Crew 3";
+            "Crew 0",
+            "Crew 03",
+            "Crew X",
+            "Crew 3 only once each turn",
+            "Crew 3. Activate only as a sorcery.",
+            "Tap any number of creatures you control with total power 3 or more: This permanent becomes an artifact creature until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.ward.mana"),
+        label: "mana Ward",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_mana_ward,
+        calibration: calibrations!(
+            "Spider-Rex, Daring Dino" => "Ward {2}",
+            "Marauding Brinefang" => "Ward {3}";
+            "Ward—Discard a card.",
+            "Ward—Pay 3 life.",
+            "Ward—Sacrifice a permanent.",
+            "Ward {X}",
+            "Flying, ward {2}",
+            "Other creatures you control have ward {2}.",
+            "Ward {2}. Whenever this creature becomes the target of a spell, draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("characteristic.changeling"),
+        label: "Changeling",
+        surface: RecipeSurface::CharacteristicAbility,
+        matcher: match_changeling,
+        calibration: calibrations!(
+            "Prideful Feastling" => "Changeling",
+            "Chitinous Graspling" => "Changeling";
+            "Changeling 1",
+            "Creatures you control have changeling.",
+            "Target creature gains changeling until end of turn.",
+            "Create a 2/2 colorless Shapeshifter creature token with changeling.",
+            "Changeling. This creature gets +1/+1 for each creature type it has."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.spell.cannot_be_countered"),
+        label: "self uncounterability",
+        surface: RecipeSurface::SpellStaticAbility,
+        matcher: match_spell_cannot_be_countered,
+        calibration: calibrations!(
+            "Gigantic Big Bear" => "This spell can't be countered.",
+            "Carnage Tyrant" => "This spell can't be countered.";
+            "Spells you control can't be countered.",
+            "Creature spells you control can't be countered.",
+            "This ability can't be countered.",
+            "This spell can't be countered if mana from a Treasure was spent to cast it.",
+            "This spell can't be countered by blue spells or abilities.",
+            "Target spell can't be countered this turn."
+        ),
+    },
+    Recipe {
         id: RecipeId("activated.mana.tap_one"),
         label: "tap for one mana",
         surface: RecipeSurface::ActivatedAbility,
@@ -1250,7 +1397,9 @@ fn surface_applies(surface: RecipeSurface, is_spell: bool) -> bool {
     match surface {
         RecipeSurface::KeywordClause => true,
         RecipeSurface::SpellClause => is_spell,
-        RecipeSurface::ZoneActivatedAbility => true,
+        RecipeSurface::ZoneActivatedAbility
+        | RecipeSurface::SpellStaticAbility
+        | RecipeSurface::CharacteristicAbility => true,
         RecipeSurface::EtbAbility
         | RecipeSurface::TriggeredAbility
         | RecipeSurface::ActivatedAbility
@@ -1301,9 +1450,11 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
         triggered_ability_id: AbilityId::new("triggered_01")?,
         activated_ability_id: AbilityId::new("activated_01")?,
         static_ability_id: AbilityId::new("static_01")?,
+        characteristic_ability_id: AbilityId::new("characteristic_01")?,
         presentation: AbilityPresentation::OracleLines(vec![1]),
         source_is_land: true,
         source_is_creature: true,
+        source_is_vehicle: true,
     };
     let mut ids = std::collections::BTreeSet::new();
     for recipe in catalog {
@@ -1405,9 +1556,11 @@ mod tests {
             triggered_ability_id: AbilityId::new("triggered_01").unwrap(),
             activated_ability_id: AbilityId::new("activated_01").unwrap(),
             static_ability_id: AbilityId::new("static_01").unwrap(),
+            characteristic_ability_id: AbilityId::new("characteristic_01").unwrap(),
             presentation: AbilityPresentation::OracleLines(vec![1]),
             source_is_land: true,
             source_is_creature: true,
+            source_is_vehicle: true,
         }
     }
 
@@ -1642,5 +1795,123 @@ mod tests {
                 RecipeEmission::ActivatedAbility(_)
             ));
         }
+    }
+
+    #[test]
+    fn issue_257_clauses_have_distinct_stable_recipe_ids() {
+        for (clause, expected_id) in [
+            ("Crew 3", "activated.crew.aggregate_power"),
+            ("Ward {2}", "triggered.ward.mana"),
+            ("Changeling", "characteristic.changeling"),
+            (
+                "This spell can't be countered.",
+                "static.spell.cannot_be_countered",
+            ),
+        ] {
+            let matched = match_clause(clause, false, &context())
+                .expect("issue #257 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #257 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_257_crew_emits_generation_bound_aggregate_payment_and_animation() {
+        let matched = match_clause("Crew 4", false, &context())
+            .unwrap()
+            .expect("ordinary Crew must be supported");
+        let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+            panic!("Crew must emit an activated ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "activated_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(
+            ability.costs,
+            [AbilityCost::TapPermanents {
+                constraint: ObjectPaymentConstraint::AggregateMinimum {
+                    minimum: 4,
+                    contribution: ObjectContributionKind::CurrentPower,
+                },
+                filter: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                },
+                exclude_source: true,
+            }]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::AddTypes {
+                subject: EffectSubject::Source,
+                addition: TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Creature],
+                    creature_types: Vec::new(),
+                },
+            }]
+        );
+
+        let mut nonvehicle = context();
+        nonvehicle.source_is_vehicle = false;
+        assert!(match_crew("Crew 4", &nonvehicle).is_none());
+    }
+
+    #[test]
+    fn issue_257_mana_ward_emits_opponent_target_trigger_and_exact_cost() {
+        let matched = match_clause("Ward {2}{U}", false, &context())
+            .unwrap()
+            .expect("non-X mana Ward must be supported");
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Ward must emit a triggered ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "triggered_01");
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverSelfBecomesTarget {
+                source: TargetingSourceFilter::SpellOrAbility,
+                source_controller: CastTriggerPlayer::Opponent,
+            }
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::CounterTriggeringStackObjectUnlessPays {
+                cost: ResolutionCost::Mana(ManaCost::parse("{2}{U}").unwrap()),
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_257_changeling_uses_characteristic_surface_and_stable_identity() {
+        let matched = match_clause("Changeling", false, &context())
+            .unwrap()
+            .expect("Changeling must be supported");
+        let RecipeEmission::CharacteristicAbility(ability) = matched.emission else {
+            panic!("Changeling must emit a characteristic-defining ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "characteristic_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(
+            ability.definition,
+            CharacteristicDefiningAbility::Changeling
+        );
+    }
+
+    #[test]
+    fn issue_257_self_uncounterability_emits_stack_static_ability() {
+        let matched = match_clause("This spell can't be countered.", true, &context())
+            .unwrap()
+            .expect("self uncounterability must apply on instant and sorcery faces too");
+        let RecipeEmission::StaticAbility(ability) = matched.emission else {
+            panic!("self uncounterability must emit a static ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "static_01");
+        assert_eq!(ability.definition, StaticAbilityDef::SpellCannotBeCountered);
     }
 }
