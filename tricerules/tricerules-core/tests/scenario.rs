@@ -17,6 +17,8 @@ mod issue_242_heated_argument;
 mod issue_243_evils_thrall;
 #[path = "scenario/issue_248_prowess.rs"]
 mod issue_248_prowess;
+#[path = "scenario/issue_250_etb_explore.rs"]
+mod issue_250_etb_explore;
 
 #[path = "scenario/activation_restrictions.rs"]
 mod activation_restrictions;

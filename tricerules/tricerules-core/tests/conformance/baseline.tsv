@@ -277,6 +277,7 @@ caustic_exhale	0	cast	unsupported: required cast-cost group needs a specialized 
 cavalry_drillmaster	0	cast	exercised
 celestial_enforcer	0	ability:0	unsupported: nonmana costs need additional fixture resources
 celestial_enforcer	0	cast	exercised
+cenote_scout	0	cast	exercised
 centaur_courser	0	cast	exercised
 centaur_healer	0	cast	exercised
 cerodon_yearling	0	cast	exercised
@@ -958,6 +959,7 @@ kin-tree_nurturer	0	cast	exercised
 kindercatch	0	cast	exercised
 kindly_customer	0	cast	exercised
 king_cheetah	0	cast	exercised
+kinjallis_dawnrunner	0	cast	exercised
 kitesail_scout	0	cast	exercised
 kithkin_billyrider	0	cast	exercised
 knight_errant	0	cast	exercised
@@ -1226,6 +1228,7 @@ panther_warriors	0	cast	exercised
 pardic_wanderer	0	cast	exercised
 path_to_redemption	0	ability:0	exercised
 path_to_redemption	0	cast	exercised
+pathfinding_axejaw	0	cast	exercised
 peace_strider	0	cast	exercised
 pearled_unicorn	0	cast	exercised
 pegasus_charger	0	cast	exercised
@@ -1380,6 +1383,8 @@ riptide_turtle	0	cast	exercised
 risen_sanctuary	0	cast	exercised
 river_boa	0	ability:0	exercised
 river_boa	0	cast	exercised
+river_herald_guide	0	cast	exercised
+river_herald_scout	0	cast	exercised
 river_kaijin	0	cast	exercised
 riverglide_pathway_lavaglide_pathway	0	ability:0	exercised
 riverglide_pathway_lavaglide_pathway	0	land	exercised

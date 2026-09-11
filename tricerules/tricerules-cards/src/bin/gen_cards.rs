@@ -2631,6 +2631,66 @@ mod tests {
     }
 
     #[test]
+    fn etb_explore_recipe_emits_source_bound_trigger_without_targeting() {
+        let card = normal_card(
+            "River Herald Guide",
+            "{2}{G}",
+            "Creature — Merfolk Scout",
+            "Vigilance\nWhen this creature enters, it explores. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on this creature, then put the card back or put it into your graveyard.)",
+            Some(("3", "1")),
+        );
+
+        let generated = evaluate_fresh(&card).expect("exact ETB Explore recipe should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+
+        assert_eq!(generated.faces[0].recipe_labels, ["ETB self Explore"]);
+        assert_eq!(raw.keywords, [Keyword::Vigilance]);
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("ETB Explore emits one triggered ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "triggered_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Explore {
+                subject: EffectSubject::Source,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        assert!(!ability.may);
+    }
+
+    #[test]
+    fn etb_explore_recipe_rejects_near_misses() {
+        for text in [
+            "When this creature enters, target creature explores.",
+            "When this creature enters, it may explore.",
+            "When this creature enters, it explores twice.",
+            "Whenever this creature attacks, it explores.",
+            "Whenever this creature deals combat damage to a player, it explores.",
+            "Whenever another creature enters, it explores.",
+            "When this creature enters, it explores, then you gain 1 life.",
+        ] {
+            let card = normal_card(
+                "Near Miss Explorer",
+                "{1}{G}",
+                "Creature — Scout",
+                text,
+                Some(("2", "2")),
+            );
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
     fn shockland_recipe_emits_typed_entry_payment_and_subtype_mana() {
         let card = normal_card(
             "Blood Crypt",
@@ -2862,6 +2922,22 @@ mod tests {
                 "When this creature enters, each opponent discards a card.",
                 Some(("1", "1")),
                 "ETB opponent discard",
+            ),
+            (
+                "Cenote Scout",
+                "{G}",
+                "Creature — Merfolk Scout",
+                "When this creature enters, it explores.",
+                Some(("1", "1")),
+                "ETB self Explore",
+            ),
+            (
+                "Pathfinding Axejaw",
+                "{3}{G}",
+                "Creature — Dinosaur",
+                "When this creature enters, it explores.",
+                Some(("4", "3")),
+                "ETB self Explore",
             ),
             (
                 "Mistral Singer",

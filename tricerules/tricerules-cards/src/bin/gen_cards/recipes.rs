@@ -278,6 +278,17 @@ fn match_etb_opponent_discard(text: &str, context: &RecipeContext) -> Option<Rec
     })
 }
 
+fn match_etb_explore(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "When this creature enters, it explores.").then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::Explore {
+                subject: EffectSubject::Source,
+            },
+        )
+    })
+}
+
 fn match_prowess(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "Prowess").then(|| {
         RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
@@ -494,6 +505,23 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Virus Beetle" => "When this creature enters, each opponent discards a card.";
             "When this creature enters, target opponent discards a card.",
             "When this creature enters, each opponent discards two cards."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.explore.source"),
+        label: "ETB self Explore",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_explore,
+        calibration: calibrations!(
+            "Cenote Scout" => "When this creature enters, it explores.",
+            "Pathfinding Axejaw" => "When this creature enters, it explores.";
+            "When this creature enters, target creature explores.",
+            "When this creature enters, it may explore.",
+            "When this creature enters, it explores twice.",
+            "Whenever this creature attacks, it explores.",
+            "Whenever this creature deals combat damage to a player, it explores.",
+            "Whenever another creature enters, it explores.",
+            "When this creature enters, it explores, then you gain 1 life."
         ),
     },
     Recipe {
@@ -788,5 +816,31 @@ mod tests {
             matched.emission,
             RecipeEmission::TriggeredAbility(_)
         ));
+    }
+
+    #[test]
+    fn etb_explore_clause_emits_one_source_bound_trigger() {
+        let matched = match_clause("When this creature enters, it explores.", false, &context())
+            .expect("Explore clause must not be ambiguous")
+            .expect("Explore clause must be supported");
+
+        assert_eq!(matched.id, RecipeId("etb.explore.source"));
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Explore must emit a triggered ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "triggered_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Explore {
+                subject: EffectSubject::Source,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        assert!(!ability.may);
     }
 }
