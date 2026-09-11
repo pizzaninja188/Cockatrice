@@ -15,6 +15,8 @@ mod issue_238_ral_crackling_wit;
 mod issue_242_heated_argument;
 #[path = "scenario/issue_243_evils_thrall.rs"]
 mod issue_243_evils_thrall;
+#[path = "scenario/issue_248_prowess.rs"]
+mod issue_248_prowess;
 
 #[path = "scenario/activation_restrictions.rs"]
 mod activation_restrictions;

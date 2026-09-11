@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
-    DiscardQuantity, EffectSubject, EntersTappedAffected, EntryCost, PlayerRecipient,
-    StackSpellFilter, StaticAbilityDef, TargetFilter,
+    CardTypeFilter, DiscardQuantity, EffectSubject, EntersTappedAffected, EntryCost,
+    PlayerRecipient, SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
-    ActivationTiming, Amount, IdentifiedAbility, Keyword, ManaAmount, SpellEffectKind,
-    TriggerCondition, TriggeredAbilityDef,
+    ActivationTiming, Amount, CastTriggerPlayer, IdentifiedAbility, Keyword, ManaAmount,
+    SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,6 +13,7 @@ pub(super) enum RecipeSurface {
     KeywordClause,
     SpellClause,
     EtbAbility,
+    TriggeredAbility,
     ActivatedAbility,
     StaticAbility,
 }
@@ -277,6 +278,36 @@ fn match_etb_opponent_discard(text: &str, context: &RecipeContext) -> Option<Rec
     })
 }
 
+fn match_prowess(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Prowess").then(|| {
+        RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
+            ability_id: context.triggered_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            trigger: TriggerCondition::WheneverPlayerCastsSpell {
+                caster: CastTriggerPlayer::Controller,
+                filter: SpellCastFilter {
+                    card_type: Some(CardTypeFilter::Noncreature),
+                    ..SpellCastFilter::default()
+                },
+                ordinal: None,
+                ordinal_scope: Default::default(),
+            },
+            effect: vec![SpellEffectKind::PumpTarget {
+                power: 1,
+                toughness: 1,
+                scale: None,
+                subject: EffectSubject::Source,
+            }],
+            modal: None,
+            targeting: None,
+            may: false,
+            intervening_if: None,
+            max_triggers_per_turn: None,
+            triggers_only_once: false,
+        })
+    })
+}
+
 fn parse_mana_amount(symbol: char) -> Option<ManaAmount> {
     let mut amount = ManaAmount::default();
     match symbol {
@@ -466,6 +497,22 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.prowess"),
+        label: "prowess",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_prowess,
+        calibration: calibrations!(
+            "Mistral Singer" => "Prowess",
+            "Agent of Atlas" => "Prowess";
+            "Magecraft — Whenever you cast or copy an instant or sorcery spell, this creature gets +1/+1 until end of turn.",
+            "Whenever you cast an instant or sorcery spell, this creature gets +1/+1 until end of turn.",
+            "Whenever you cast a noncreature spell, draw a card.",
+            "Prowess 2",
+            "Prowess — Whenever you cast a noncreature spell, this creature gets +2/+2 until end of turn.",
+            "Prowess if you control an artifact."
+        ),
+    },
+    Recipe {
         id: RecipeId("activated.mana.tap_one"),
         label: "tap for one mana",
         surface: RecipeSurface::ActivatedAbility,
@@ -498,6 +545,7 @@ fn surface_applies(surface: RecipeSurface, is_spell: bool) -> bool {
         RecipeSurface::KeywordClause => true,
         RecipeSurface::SpellClause => is_spell,
         RecipeSurface::EtbAbility
+        | RecipeSurface::TriggeredAbility
         | RecipeSurface::ActivatedAbility
         | RecipeSurface::StaticAbility => !is_spell,
     }
@@ -727,5 +775,18 @@ mod tests {
             matched.id,
             RecipeId("static.enters_tapped.unless_pay_life_2")
         );
+    }
+
+    #[test]
+    fn prowess_clause_has_one_stable_triggered_recipe_id() {
+        let matched = match_clause("Prowess", false, &context())
+            .expect("prowess clause must not be ambiguous")
+            .expect("prowess clause must be supported");
+
+        assert_eq!(matched.id, RecipeId("triggered.prowess"));
+        assert!(matches!(
+            matched.emission,
+            RecipeEmission::TriggeredAbility(_)
+        ));
     }
 }

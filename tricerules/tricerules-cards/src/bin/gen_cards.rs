@@ -2034,11 +2034,12 @@ mod tests {
     use std::io::{Cursor, Write};
     use tricerules_cards::card_def::RawCardDefinition;
     use tricerules_cards::primitives::{
-        EffectSubject, EntersTappedAffected, EntryCost, PlayerRecipient, StackSpellFilter,
-        StaticAbilityDef, TargetFilter,
+        CardTypeFilter, EffectSubject, EntersTappedAffected, EntryCost, PlayerRecipient,
+        SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetFilter,
     };
     use tricerules_cards::{
-        AbilityCost, Amount, Color, Keyword, Layout, SpellEffectKind, TriggerCondition,
+        AbilityCost, Amount, CastTriggerPlayer, Color, Keyword, Layout, SpellEffectKind,
+        TriggerCondition,
     };
 
     fn face(
@@ -2564,6 +2565,72 @@ mod tests {
     }
 
     #[test]
+    fn prowess_recipe_emits_typed_cast_trigger_and_source_pump() {
+        let card = normal_card(
+            "Elementalist Adept",
+            "{1}{U}",
+            "Creature — Human Wizard",
+            "Flash (You may cast this spell any time you could cast an instant.)\nProwess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)",
+            Some(("2", "1")),
+        );
+
+        let generated = evaluate_fresh(&card).expect("exact prowess recipe should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+
+        assert_eq!(generated.faces[0].recipe_labels, ["prowess"]);
+        assert_eq!(raw.keywords, [Keyword::Flash]);
+        assert_eq!(raw.triggered_abilities.len(), 1);
+        assert_eq!(
+            raw.triggered_abilities[0].ability_id.as_str(),
+            "triggered_01"
+        );
+        assert_eq!(
+            raw.triggered_abilities[0].presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert!(matches!(
+            &raw.triggered_abilities[0].trigger,
+            TriggerCondition::WheneverPlayerCastsSpell {
+                caster: CastTriggerPlayer::Controller,
+                filter: SpellCastFilter {
+                    card_type: Some(CardTypeFilter::Noncreature),
+                    ..
+                },
+                ordinal: None,
+                ..
+            }
+        ));
+        assert_eq!(
+            raw.triggered_abilities[0].effect,
+            [SpellEffectKind::PumpTarget {
+                power: 1,
+                toughness: 1,
+                scale: None,
+                subject: EffectSubject::Source,
+            }]
+        );
+    }
+
+    #[test]
+    fn prowess_recipe_rejects_near_misses() {
+        for text in [
+            "Magecraft — Whenever you cast or copy an instant or sorcery spell, this creature gets +1/+1 until end of turn.",
+            "Whenever you cast an instant or sorcery spell, this creature gets +1/+1 until end of turn.",
+            "Whenever you cast a noncreature spell, draw a card.",
+            "Prowess 2",
+            "Prowess — Whenever you cast a noncreature spell, this creature gets +2/+2 until end of turn.",
+            "Prowess if you control an artifact.",
+        ] {
+            let card = normal_card("Near Miss Adept", "{1}{U}", "Creature — Human Wizard", text, Some(("2", "1")));
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
     fn shockland_recipe_emits_typed_entry_payment_and_subtype_mana() {
         let card = normal_card(
             "Blood Crypt",
@@ -2795,6 +2862,22 @@ mod tests {
                 "When this creature enters, each opponent discards a card.",
                 Some(("1", "1")),
                 "ETB opponent discard",
+            ),
+            (
+                "Mistral Singer",
+                "{2}{U}",
+                "Creature — Siren",
+                "Flying\nProwess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)",
+                Some(("2", "2")),
+                "prowess",
+            ),
+            (
+                "Agent of Atlas",
+                "{1}{W}",
+                "Creature — Human Spy Hero",
+                "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)",
+                Some(("2", "2")),
+                "prowess",
             ),
             (
                 "Llanowar Elves",
