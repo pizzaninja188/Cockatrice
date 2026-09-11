@@ -1,4 +1,5 @@
 a.i.m._bot	0	cast	exercised
+a.i.m._synthoids	0	cast	exercised
 aangs_journey	0	cast	exercised
 aardvark_sloth	0	cast	exercised
 abandon_attachments	0	cast	exercised
@@ -244,6 +245,7 @@ burn,_burn,_tree_and_fern	0	cast	exercised
 burning_curiosity	0	cast	exercised
 burst_lightning	0	cast	exercised
 bushwhack	0	cast	exercised
+buzz_bots	0	cast	exercised
 cabal_evangel	0	cast	exercised
 cackling_counterpart	0	cast	exercised
 cackling_fiend	0	cast	exercised
@@ -406,6 +408,7 @@ dawns_light_archer	0	cast	exercised
 dawnstrike_paladin	0	cast	exercised
 daybreak_chaplain	0	cast	exercised
 daybreak_charger	0	cast	exercised
+dazzling_angel	0	cast	exercised
 deadly_insect	0	cast	exercised
 deadly_recluse	0	cast	exercised
 deathgaze_cockatrice	0	cast	exercised
@@ -688,6 +691,7 @@ glaring_aegis	0	cast	exercised
 glass_golem	0	cast	exercised
 glassworks_shattered_yard	0	cast	exercised
 glassworks_shattered_yard	1	cast	exercised
+glidedive_duo	0	cast	exercised
 glider_kids	0	cast	exercised
 glimpse_the_core	0	cast	exercised
 gloom_pangolin	0	cast	exercised
@@ -752,6 +756,8 @@ gravpack_monoist	0	cast	exercised
 gray_ogre	0	cast	exercised
 grazing_whiptail	0	cast	exercised
 great-horn_krushok	0	cast	exercised
+great_forest_druid	0	ability:0	exercised
+great_forest_druid	0	cast	exercised
 great_furnace	0	ability:0	exercised
 great_furnace	0	land	exercised
 great_hart	0	cast	exercised
@@ -829,6 +835,7 @@ highspire_bell-ringer	0	cast	exercised
 highspire_mantis	0	cast	exercised
 hill_giant	0	cast	exercised
 hill_giant_herdgorger	0	cast	exercised
+hinterland_sanctifier	0	cast	exercised
 hippo-cows	0	cast	exercised
 hire_a_crew	0	cast	exercised
 hired_blade	0	cast	exercised
@@ -874,6 +881,7 @@ illvoi_light_jammer	0	ability:0	exercised
 illvoi_light_jammer	0	cast	exercised
 impale	0	cast	exercised
 imperial_outrider	0	cast	exercised
+imperious_inkmage	0	cast	exercised
 impossible_inferno	0	cast	exercised
 impractical_joke	0	cast	exercised
 incurable_ogre	0	cast	exercised
@@ -1010,6 +1018,7 @@ leopard-spotted_jiao	0	cast	exercised
 library_larcenist	0	cast	exercised
 library_of_leng	0	cast	exercised
 life_goes_on	0	cast	exercised
+lifecreed_duo	0	cast	exercised
 lightning_angel	0	cast	exercised
 lightning_bolt	0	cast	exercised
 lightning_elemental	0	cast	exercised
@@ -1194,6 +1203,8 @@ nyxborn_marauder	0	cast	exercised
 nyxborn_seaguard	0	cast	exercised
 oakenform	0	cast	exercised
 oakgnarl_warrior	0	cast	exercised
+oasis_gardener	0	ability:0	exercised
+oasis_gardener	0	cast	exercised
 obsidian_giant	0	cast	exercised
 octopus_form	0	cast	exercised
 ogre_berserker	0	cast	exercised
@@ -1220,6 +1231,7 @@ orochi_sustainer	0	cast	exercised
 osseous_exhale	0	cast	unsupported: target group 0 needs a richer fixture
 otter-penguin	0	cast	exercised
 outcaster_greenblade	0	cast	exercised
+outlaw_medic	0	cast	exercised
 overgrown_tomb	0	ability:0	exercised
 overgrown_tomb	0	land	exercised
 overrun	0	cast	exercised
@@ -1235,6 +1247,7 @@ peace_strider	0	cast	exercised
 pearled_unicorn	0	cast	exercised
 pegasus_charger	0	cast	exercised
 pegasus_courser	0	cast	exercised
+pelakka_wurm	0	cast	exercised
 pensive_minotaur	0	cast	exercised
 peregrine_griffin	0	cast	exercised
 perigee_beckoner	0	cast	exercised
@@ -1531,6 +1544,7 @@ skateboard	0	ability:0	exercised
 skateboard	0	cast	exercised
 skeletal_crocodile	0	cast	exercised
 skeletal_snake	0	cast	exercised
+skirmish_rhino	0	cast	exercised
 sky_ruin_drake	0	cast	exercised
 sky_spirit	0	cast	exercised
 sky_terror	0	cast	exercised
@@ -1560,6 +1574,7 @@ slumbering_keepguard	0	cast	exercised
 snapping_drake	0	cast	exercised
 snare_thopter	0	cast	exercised
 snarespinner	0	cast	exercised
+sneering_shadewriter	0	cast	exercised
 snow-covered_wastes	0	ability:0	exercised
 snow-covered_wastes	0	land	exercised
 soaring_drake	0	cast	exercised
@@ -1625,6 +1640,7 @@ steam_vents	0	ability:0	exercised
 steam_vents	0	land	exercised
 steeple_roc	0	cast	exercised
 steer_clear	0	cast	unsupported: target group 0 needs a richer fixture
+sterling_hound	0	cast	exercised
 steward_of_valeron	0	ability:0	exercised
 steward_of_valeron	0	cast	exercised
 stir_up_trouble	0	cast	unsupported: required cast-cost group needs a specialized fixture
@@ -1658,6 +1674,7 @@ sultai_devotee	0	ability:0	exercised
 sultai_devotee	0	cast	exercised
 summit_intimidator	0	cast	exercised
 summit_prowler	0	cast	exercised
+summit_sentinel	0	cast	exercised
 sun-blessed_peak	0	ability:0	exercised
 sun-blessed_peak	0	ability:1	exercised
 sun-blessed_peak	0	land	exercised
@@ -1740,6 +1757,8 @@ thraben_valiant	0	cast	exercised
 thrashing_brontodon	0	ability:0	exercised
 thrashing_brontodon	0	cast	exercised
 threaten	0	cast	exercised
+three_tree_rootweaver	0	ability:0	exercised
+three_tree_rootweaver	0	cast	exercised
 three_tree_scribe	0	cast	exercised
 thrill_of_possibility	0	cast	exercised
 thunder_salvo	0	cast	exercised
@@ -1835,6 +1854,7 @@ vampire_noble	0	cast	exercised
 vampire_of_the_dire_moon	0	cast	exercised
 vampire_revenant	0	cast	exercised
 vampire_soulcaller	0	cast	exercised
+vampire_spawn	0	cast	exercised
 vassal_soul	0	cast	exercised
 vastwood_gorger	0	cast	exercised
 vault_of_whispers	0	ability:0	exercised
@@ -1866,6 +1886,7 @@ vindictive_warden	0	ability:0	exercised
 vindictive_warden	0	cast	exercised
 vine_trellis	0	ability:0	exercised
 vine_trellis	0	cast	exercised
+virulent_emissary	0	cast	exercised
 virus_beetle	0	cast	exercised
 vitalize	0	cast	exercised
 viv_vision,_teen_synthezoid	0	ability:0	exercised
@@ -1986,6 +2007,7 @@ woodland_stream	0	ability:0	exercised
 woodland_stream	0	land	exercised
 woolly_thoctar	0	cast	exercised
 wrath_of_god	0	cast	exercised
+wreckage_wickerfolk	0	cast	exercised
 wrecking_crew	0	cast	exercised
 wu_infantry	0	cast	exercised
 wurmwall_sweeper	0	ability:0	exercised

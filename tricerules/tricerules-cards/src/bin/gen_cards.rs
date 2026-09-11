@@ -49,6 +49,10 @@ mod scaffold;
 #[cfg(test)]
 use recipes::{french_vanilla_keywords, keyword_ident};
 use recipes::{match_clause, validate_catalog, RecipeAmbiguity, RecipeContext, RecipeEmission};
+#[cfg(test)]
+use tricerules_cards::primitives::{LifeAmount, PermanentEventFilter};
+#[cfg(test)]
+use tricerules_cards::LibraryPartitionKind;
 
 /// MTG supertypes (CR 205.4). Everything else on the left of the em dash is a card type.
 const SUPERTYPES: &[&str] = &["Basic", "Legendary", "Snow", "World", "Ongoing", "Host"];
@@ -2760,6 +2764,179 @@ mod tests {
     }
 
     #[test]
+    fn issue_252_etb_surveil_two_emits_private_library_partition() {
+        let card = normal_card(
+            "A.I.M. Synthoids",
+            "{2}",
+            "Artifact Creature — Robot Villain",
+            "When this creature enters, surveil 2. (Look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)",
+            Some(("1", "3")),
+        );
+
+        let generated = evaluate_fresh(&card).expect("exact ETB surveil recipe should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+
+        assert_eq!(generated.faces[0].recipe_labels, ["ETB surveil 2"]);
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("ETB surveil emits one triggered ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "triggered_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::LibraryPartition {
+                count: 2,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_252_self_dies_draws_for_source_controller() {
+        let card = normal_card(
+            "Buzz Bots",
+            "{1}{U}",
+            "Artifact Creature — Robot Insect",
+            "Flying, vigilance\nWhen this creature dies, draw a card.",
+            Some(("1", "1")),
+        );
+
+        let generated = evaluate_fresh(&card).expect("exact dies-draw recipe should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+
+        assert_eq!(generated.faces[0].recipe_labels, ["self dies draw"]);
+        assert_eq!(raw.keywords, [Keyword::Flying, Keyword::Vigilance]);
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("dies-draw emits one triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfDies);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_252_etb_drain_preserves_each_opponent_then_controller_order() {
+        let card = normal_card(
+            "Vampire Spawn",
+            "{2}{B}",
+            "Creature — Vampire",
+            "When this creature enters, each opponent loses 2 life and you gain 2 life.",
+            Some(("2", "3")),
+        );
+
+        let generated = evaluate_fresh(&card).expect("exact ETB drain recipe should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+
+        assert_eq!(generated.faces[0].recipe_labels, ["ETB drain 2"]);
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("ETB drain emits one triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(2),
+                    who: PlayerRecipient::EachOpponent,
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn issue_252_other_controlled_creature_entry_excludes_source() {
+        let card = normal_card(
+            "Hinterland Sanctifier",
+            "{W}",
+            "Creature — Rabbit Cleric",
+            "Whenever another creature you control enters, you gain 1 life.",
+            Some(("1", "2")),
+        );
+
+        let generated = evaluate_fresh(&card).expect("exact creature-entry recipe should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["other controlled creature ETB gain 1"]
+        );
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("creature-entry recipe emits one triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: tricerules_cards::CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(
+                        tricerules_cards::primitives::PermanentTypeFilter::Creature
+                    ),
+                    exclude_source: true,
+                    ..PermanentEventFilter::default()
+                },
+                creature_filter: None,
+            }
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::GainLife {
+                amount: Amount::Fixed(1),
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_252_tap_any_color_emits_five_selectable_mana_options() {
+        let card = normal_card(
+            "Great Forest Druid",
+            "{1}{G}",
+            "Creature — Treefolk Druid",
+            "{T}: Add one mana of any color.",
+            Some(("0", "4")),
+        );
+
+        let generated = evaluate_fresh(&card).expect("exact five-color mana recipe should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+
+        assert_eq!(generated.faces[0].recipe_labels, ["tap for any color"]);
+        let [ability] = raw.activated_abilities.as_slice() else {
+            panic!("five-color mana recipe emits one activated ability");
+        };
+        assert_eq!(ability.costs, [AbilityCost::Tap]);
+        let options = ability
+            .mana_options()
+            .expect("ability should be a mana ability");
+        assert_eq!(options.len(), 5);
+        assert_eq!(
+            options
+                .iter()
+                .map(|mana| (mana.w, mana.u, mana.b, mana.r, mana.g, mana.c))
+                .collect::<Vec<_>>(),
+            [
+                (1, 0, 0, 0, 0, 0),
+                (0, 1, 0, 0, 0, 0),
+                (0, 0, 1, 0, 0, 0),
+                (0, 0, 0, 1, 0, 0),
+                (0, 0, 0, 0, 1, 0),
+            ]
+        );
+    }
+
+    #[test]
     fn sacrifice_to_naturalize_recipe_emits_atomic_cost_and_disjunctive_target() {
         let card = normal_card(
             "Cathar Commando",
@@ -3016,6 +3193,86 @@ mod tests {
                 "When this creature enters, it explores.",
                 Some(("4", "3")),
                 "ETB self Explore",
+            ),
+            (
+                "A.I.M. Synthoids",
+                "{2}",
+                "Artifact Creature — Robot Villain",
+                "When this creature enters, surveil 2.",
+                Some(("1", "3")),
+                "ETB surveil 2",
+            ),
+            (
+                "Imperious Inkmage",
+                "{1}{W}{B}",
+                "Creature — Orc Warlock",
+                "Vigilance\nWhen this creature enters, surveil 2.",
+                Some(("3", "3")),
+                "ETB surveil 2",
+            ),
+            (
+                "Buzz Bots",
+                "{1}{U}",
+                "Artifact Creature — Robot Insect",
+                "Flying, vigilance\nWhen this creature dies, draw a card.",
+                Some(("1", "1")),
+                "self dies draw",
+            ),
+            (
+                "Outlaw Medic",
+                "{1}{W}",
+                "Creature — Human Rogue",
+                "Lifelink\nWhen this creature dies, draw a card.",
+                Some(("1", "3")),
+                "self dies draw",
+            ),
+            (
+                "Glidedive Duo",
+                "{4}{B}",
+                "Creature — Bat Lizard",
+                "Flying\nWhen this creature enters, each opponent loses 2 life and you gain 2 life.",
+                Some(("3", "3")),
+                "ETB drain 2",
+            ),
+            (
+                "Vampire Spawn",
+                "{2}{B}",
+                "Creature — Vampire",
+                "When this creature enters, each opponent loses 2 life and you gain 2 life.",
+                Some(("2", "3")),
+                "ETB drain 2",
+            ),
+            (
+                "Dazzling Angel",
+                "{2}{W}",
+                "Creature — Angel",
+                "Flying\nWhenever another creature you control enters, you gain 1 life.",
+                Some(("2", "3")),
+                "other controlled creature ETB gain 1",
+            ),
+            (
+                "Hinterland Sanctifier",
+                "{W}",
+                "Creature — Rabbit Cleric",
+                "Whenever another creature you control enters, you gain 1 life.",
+                Some(("1", "2")),
+                "other controlled creature ETB gain 1",
+            ),
+            (
+                "Great Forest Druid",
+                "{1}{G}",
+                "Creature — Treefolk Druid",
+                "{T}: Add one mana of any color.",
+                Some(("0", "4")),
+                "tap for any color",
+            ),
+            (
+                "Oasis Gardener",
+                "{3}",
+                "Artifact Creature — Scarecrow",
+                "When this creature enters, you gain 2 life.\n{T}: Add one mana of any color.",
+                Some(("2", "2")),
+                "tap for any color",
             ),
             (
                 "Mistral Singer",

@@ -21,6 +21,8 @@ mod issue_248_prowess;
 mod issue_250_etb_explore;
 #[path = "scenario/issue_251_generated_naturalize.rs"]
 mod issue_251_generated_naturalize;
+#[path = "scenario/issue_252_generated_recipe_batch.rs"]
+mod issue_252_generated_recipe_batch;
 
 #[path = "scenario/activation_restrictions.rs"]
 mod activation_restrictions;

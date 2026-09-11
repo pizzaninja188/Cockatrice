@@ -1,12 +1,12 @@
 use tricerules_cards::primitives::{
-    CardTypeFilter, DiscardQuantity, EffectSubject, EntersTappedAffected, EntryCost,
-    PermanentTypeFilter, PlayerRecipient, SpellCastFilter, StackSpellFilter, StaticAbilityDef,
-    TargetFilter, TargetKind,
+    CardTypeFilter, DiscardQuantity, EffectSubject, EntersTappedAffected, EntryCost, LifeAmount,
+    PermanentEventFilter, PermanentTypeFilter, PlayerRecipient, SpellCastFilter, StackSpellFilter,
+    StaticAbilityDef, TargetFilter, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
-    ActivationTiming, Amount, CastTriggerPlayer, IdentifiedAbility, Keyword, ManaAmount, ManaCost,
-    SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    ActivationTiming, Amount, CastTriggerPlayer, IdentifiedAbility, Keyword, LibraryPartitionKind,
+    ManaAmount, ManaCost, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -239,11 +239,23 @@ fn match_spell_pump(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
 }
 
 fn triggered_ability(context: &RecipeContext, effect: SpellEffectKind) -> RecipeEmission {
+    triggered_ability_with(
+        context,
+        TriggerCondition::WhenSelfEntersBattlefield,
+        vec![effect],
+    )
+}
+
+fn triggered_ability_with(
+    context: &RecipeContext,
+    trigger: TriggerCondition,
+    effect: Vec<SpellEffectKind>,
+) -> RecipeEmission {
     RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
         ability_id: context.triggered_ability_id.clone(),
         presentation: context.presentation.clone(),
-        trigger: TriggerCondition::WhenSelfEntersBattlefield,
-        effect: vec![effect],
+        trigger,
+        effect,
         modal: None,
         targeting: None,
         may: false,
@@ -286,6 +298,76 @@ fn match_etb_explore(text: &str, context: &RecipeContext) -> Option<RecipeEmissi
             SpellEffectKind::Explore {
                 subject: EffectSubject::Source,
             },
+        )
+    })
+}
+
+fn match_etb_surveil_two(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "When this creature enters, surveil 2.").then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::LibraryPartition {
+                count: 2,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            },
+        )
+    })
+}
+
+fn match_self_dies_draw_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "When this creature dies, draw a card.").then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfDies,
+            vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }],
+        )
+    })
+}
+
+fn match_etb_drain_two(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "When this creature enters, each opponent loses 2 life and you gain 2 life.").then(
+        || {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![
+                    SpellEffectKind::LoseLife {
+                        amount: LifeAmount::Fixed(2),
+                        who: PlayerRecipient::EachOpponent,
+                    },
+                    SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(2),
+                    },
+                ],
+            )
+        },
+    )
+}
+
+fn match_other_controlled_creature_enters_gain_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Whenever another creature you control enters, you gain 1 life.").then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Creature),
+                    exclude_source: true,
+                    ..PermanentEventFilter::default()
+                },
+                creature_filter: None,
+            },
+            vec![SpellEffectKind::GainLife {
+                amount: Amount::Fixed(1),
+            }],
         )
     })
 }
@@ -357,6 +439,32 @@ fn match_tap_for_one_mana(text: &str, context: &RecipeContext) -> Option<RecipeE
         conditions: Vec::new(),
         activation_limit: None,
     }))
+}
+
+fn match_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "{T}: Add one mana of any color.").then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::Tap],
+            effect: vec![SpellEffectKind::ProduceMana {
+                options: ['W', 'U', 'B', 'R', 'G']
+                    .into_iter()
+                    .map(|symbol| {
+                        parse_mana_amount(symbol).expect("five-color recipe uses valid symbols")
+                    })
+                    .collect(),
+                restriction: None,
+                conditional: None,
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
 }
 
 fn match_sacrifice_to_naturalize(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
@@ -555,6 +663,66 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("etb.surveil.two"),
+        label: "ETB surveil 2",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_surveil_two,
+        calibration: calibrations!(
+            "A.I.M. Synthoids" => "When this creature enters, surveil 2.",
+            "Imperious Inkmage" => "When this creature enters, surveil 2.";
+            "When this creature enters, you may surveil 2.",
+            "When this creature enters, surveil 1.",
+            "When this creature enters, target player surveils 2.",
+            "When this creature enters, surveil 2, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("dies.draw.controller.one"),
+        label: "self dies draw",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_dies_draw_one,
+        calibration: calibrations!(
+            "Buzz Bots" => "When this creature dies, draw a card.",
+            "Outlaw Medic" => "When this creature dies, draw a card.";
+            "When this creature dies, you may draw a card.",
+            "When this creature dies, draw two cards.",
+            "When this creature leaves the battlefield, draw a card.",
+            "When this creature dies, target player draws a card.",
+            "When this creature dies, draw a card and lose 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.drain.each_opponent.two"),
+        label: "ETB drain 2",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_drain_two,
+        calibration: calibrations!(
+            "Glidedive Duo" => "When this creature enters, each opponent loses 2 life and you gain 2 life.",
+            "Vampire Spawn" => "When this creature enters, each opponent loses 2 life and you gain 2 life.";
+            "When this creature enters, target opponent loses 2 life and you gain 2 life.",
+            "When this creature enters, each opponent loses 1 life and you gain 1 life.",
+            "When this creature enters, each player loses 2 life and you gain 2 life.",
+            "When this creature enters, you gain 2 life and each opponent loses 2 life.",
+            "When this creature enters, each opponent loses 2 life and you gain 2 life, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.other_controlled_creature_etb.gain_life.one"),
+        label: "other controlled creature ETB gain 1",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_other_controlled_creature_enters_gain_one,
+        calibration: calibrations!(
+            "Dazzling Angel" => "Whenever another creature you control enters, you gain 1 life.",
+            "Hinterland Sanctifier" => "Whenever another creature you control enters, you gain 1 life.";
+            "Whenever a creature you control enters, you gain 1 life.",
+            "Whenever another creature you control enters, you may gain 1 life.",
+            "Whenever another creature you control enters, you gain 2 life.",
+            "Whenever another creature enters, you gain 1 life.",
+            "Whenever a creature an opponent controls enters, you gain 1 life.",
+            "Whenever another permanent you control enters, you gain 1 life."
+        ),
+    },
+    Recipe {
         id: RecipeId("triggered.prowess"),
         label: "prowess",
         surface: RecipeSurface::TriggeredAbility,
@@ -580,6 +748,22 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Elvish Mystic" => "{T}: Add {G}.";
             "{T}: Add {G}{G}.",
             "{T}, Pay 1 life: Add {G}."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana.tap_any_color"),
+        label: "tap for any color",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_tap_for_any_color,
+        calibration: calibrations!(
+            "Great Forest Druid" => "{T}: Add one mana of any color.",
+            "Oasis Gardener" => "{T}: Add one mana of any color.";
+            "{T}: Add one mana of any color or {C}.",
+            "{T}: Add one mana of any type.",
+            "{T}: Add two mana of any one color.",
+            "{T}, Pay 1 life: Add one mana of any color.",
+            "{T}: Add one mana of any color. Spend this mana only to cast creature spells.",
+            "{1}, {T}: Add one mana of any color."
         ),
     },
     Recipe {
