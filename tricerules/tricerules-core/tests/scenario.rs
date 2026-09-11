@@ -264,6 +264,8 @@ mod issue_234_ghost_vacuum;
 mod issue_235_soul_guide_lantern;
 #[path = "scenario/issue_237_token_copies.rs"]
 mod issue_237_token_copies;
+#[path = "scenario/issue_255_generated_lands.rs"]
+mod issue_255_generated_lands;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

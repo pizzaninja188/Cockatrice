@@ -551,6 +551,33 @@ fn match_sacrifice_to_naturalize(text: &str, context: &RecipeContext) -> Option<
     })
 }
 
+fn match_land_tap_sacrifice_draw_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_land && text == "{4}, {T}, Sacrifice this land: Draw a card.").then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![
+                AbilityCost::Mana(ManaCost::parse("{4}").expect("static recipe mana cost")),
+                AbilityCost::Tap,
+                AbilityCost::SacrificeSelf,
+            ],
+            effect: vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
 fn exact_mana_cost(text: &str) -> Option<ManaCost> {
     if text.is_empty() {
         return None;
@@ -968,6 +995,27 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("activated.land.tap_sacrifice.draw_one"),
+        label: "tap-sacrifice land draw",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_land_tap_sacrifice_draw_one,
+        calibration: calibrations!(
+            "Airship Engine Room" => "{4}, {T}, Sacrifice this land: Draw a card.",
+            "North Pole Gates" => "{4}, {T}, Sacrifice this land: Draw a card.";
+            "{3}, {T}, Sacrifice this land: Draw a card.",
+            "{5}, {T}, Sacrifice this land: Draw a card.",
+            "{4}, Sacrifice this land: Draw a card.",
+            "{4}, {T}: Draw a card.",
+            "{4}, {T}, Exile this land: Draw a card.",
+            "{4}, {T}, Return this land to its owner's hand: Draw a card.",
+            "{4}, {T}, Sacrifice this artifact: Draw a card.",
+            "{4}, {T}, Sacrifice this land: You may draw a card.",
+            "{4}, {T}, Sacrifice this land: Draw two cards.",
+            "{4}, {T}, Sacrifice this land: Draw a card. Activate only as a sorcery.",
+            "{4}, {T}, Sacrifice this land: Draw a card, then discard a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("activated.hand.cycling.draw"),
         label: "cycling draw",
         surface: RecipeSurface::ZoneActivatedAbility,
@@ -1337,6 +1385,56 @@ mod tests {
             matched.emission,
             RecipeEmission::ActivatedAbility(_)
         ));
+    }
+
+    #[test]
+    fn issue_255_land_draw_clause_has_one_stable_activated_recipe_id() {
+        let matched = match_clause(
+            "{4}, {T}, Sacrifice this land: Draw a card.",
+            false,
+            &context(),
+        )
+        .expect("tap-sacrifice land draw clause must not be ambiguous")
+        .expect("tap-sacrifice land draw clause must be supported");
+
+        assert_eq!(
+            matched.id,
+            RecipeId("activated.land.tap_sacrifice.draw_one")
+        );
+        let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+            panic!("tap-sacrifice land draw recipe must emit an activated ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "activated_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(
+            ability.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{4}").unwrap()),
+                AbilityCost::Tap,
+                AbilityCost::SacrificeSelf,
+            ]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        assert_eq!(ability.timing, ActivationTiming::Normal);
+
+        let mut nonland = context();
+        nonland.source_is_land = false;
+        assert!(match_land_tap_sacrifice_draw_one(
+            "{4}, {T}, Sacrifice this land: Draw a card.",
+            &nonland,
+        )
+        .is_none());
     }
 
     #[test]

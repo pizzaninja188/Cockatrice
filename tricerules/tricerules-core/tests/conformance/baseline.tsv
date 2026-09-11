@@ -26,6 +26,9 @@ agent_of_atlas	0	cast	exercised
 aggressive_negotiations	0	cast	exercised
 air_elemental	0	cast	exercised
 airbending_lesson	0	cast	exercised
+airship_engine_room	0	ability:0	exercised
+airship_engine_room	0	ability:1	exercised
+airship_engine_room	0	land	exercised
 ajanis_pridemate	0	cast	exercised
 ajanis_sunstriker	0	cast	exercised
 akki_lavarunner_tok-tok,_volcano_born	0	cast	exercised
@@ -195,6 +198,9 @@ bog_imp	0	cast	exercised
 boggart_brute	0	cast	exercised
 boggart_prankster	0	cast	exercised
 bogstomper	0	cast	exercised
+boiling_rock_prison	0	ability:0	exercised
+boiling_rock_prison	0	ability:1	exercised
+boiling_rock_prison	0	land	exercised
 bombur,_gentle_dreamer	0	cast	exercised
 bone_splinters	0	cast	exercised
 bonebreaker_giant	0	cast	exercised
@@ -619,6 +625,9 @@ flying_dolphin-fish	0	cast	exercised
 flying_men	0	cast	exercised
 focus_the_mind	0	cast	exercised
 fog	0	cast	exercised
+foggy_bottom_swamp	0	ability:0	exercised
+foggy_bottom_swamp	0	ability:1	exercised
+foggy_bottom_swamp	0	land	exercised
 foggy_swamp_hunters	0	cast	exercised
 foggy_swamp_vinebender	0	ability:0	exercised
 foggy_swamp_vinebender	0	cast	exercised
@@ -1022,6 +1031,9 @@ kraul_whipcracker	0	cast	exercised
 kree_commandos	0	cast	exercised
 krenkos_enforcer	0	cast	exercised
 krovikan_scoundrel	0	cast	exercised
+kyoshi_village	0	ability:0	exercised
+kyoshi_village	0	ability:1	exercised
+kyoshi_village	0	land	exercised
 kyoshi_warrior_guard	0	cast	exercised
 lagac_lizard	0	cast	exercised
 lakeside_shack	0	ability:0	exercised
@@ -1114,6 +1126,9 @@ mass_of_ghouls	0	cast	exercised
 meandering_river	0	ability:0	exercised
 meandering_river	0	land	exercised
 mechan_shieldmate	0	cast	exercised
+meditation_pools	0	ability:0	exercised
+meditation_pools	0	ability:1	exercised
+meditation_pools	0	land	exercised
 megrim	0	cast	exercised
 melded_moxite	0	ability:0	exercised
 melded_moxite	0	cast	exercised
@@ -1153,6 +1168,9 @@ mistmeadow_council	0	cast	exercised
 mistral_charger	0	cast	exercised
 mistral_singer	0	cast	exercised
 misty_mountains_raider	0	cast	exercised
+misty_palms_oasis	0	ability:0	exercised
+misty_palms_oasis	0	ability:1	exercised
+misty_palms_oasis	0	land	exercised
 moaning_spirit	0	cast	exercised
 moat_piranhas	0	cast	exercised
 mocking_sprite	0	cast	exercised
@@ -1227,6 +1245,9 @@ nomad_outpost	0	ability:0	exercised
 nomad_outpost	0	land	exercised
 noose_constrictor	0	ability:0	exercised
 noose_constrictor	0	cast	exercised
+north_pole_gates	0	ability:0	exercised
+north_pole_gates	0	ability:1	exercised
+north_pole_gates	0	land	exercised
 norwood_archers	0	cast	exercised
 norwood_ranger	0	cast	exercised
 nourish	0	cast	exercised
@@ -1253,6 +1274,9 @@ oin_the_brave	0	ability:0	exercised
 oin_the_brave	0	cast	exercised
 okos_accomplices	0	cast	exercised
 old_ghastbark	0	cast	exercised
+omashu_city	0	ability:0	exercised
+omashu_city	0	ability:1	exercised
+omashu_city	0	land	exercised
 omega_myr	0	cast	exercised
 onakke_ogre	0	cast	exercised
 ooze_spill	0	cast	unsupported: target group 0 needs a richer fixture
@@ -1544,6 +1568,9 @@ sentinel_spider	0	cast	exercised
 sentinels_of_glen_elendra	0	cast	exercised
 seraph_of_dawn	0	cast	exercised
 seraph_of_the_suns	0	cast	exercised
+serpents_pass	0	ability:0	exercised
+serpents_pass	0	ability:1	exercised
+serpents_pass	0	land	exercised
 serra_angel	0	cast	exercised
 serra_sphinx	0	cast	exercised
 serra_zealot	0	cast	exercised
