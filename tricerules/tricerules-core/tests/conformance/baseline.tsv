@@ -204,6 +204,8 @@ blood_glutton	0	cast	exercised
 blood_tithe	0	cast	exercised
 bloodcrazed_paladin	0	cast	exercised
 bloodthirsty_aerialist	0	cast	exercised
+blooming_marsh	0	ability:0	exercised
+blooming_marsh	0	land	exercised
 blossombind	0	cast	exercised
 blossoming_sands	0	ability:0	exercised
 blossoming_sands	0	land	exercised
@@ -235,6 +237,8 @@ boros_guildgate	0	land	exercised
 boros_recruit	0	cast	exercised
 boros_swiftblade	0	cast	exercised
 bot_bashing_time	0	cast	exercised
+botanical_sanctum	0	ability:0	exercised
+botanical_sanctum	0	land	exercised
 bottle_gnomes	0	ability:0	exercised
 bottle_gnomes	0	cast	exercised
 boulderborn_dragon	0	cast	exercised
@@ -374,6 +378,8 @@ commercial_district	0	land	exercised
 common_crook	0	cast	exercised
 commune_with_nature	0	cast	exercised
 compassionate_healer	0	cast	exercised
+concealed_courtyard	0	ability:0	exercised
+concealed_courtyard	0	land	exercised
 concentrate	0	cast	exercised
 concordia_pegasus	0	cast	exercised
 conduit_pylons	0	ability:0	exercised
@@ -462,6 +468,8 @@ daybreak_charger	0	cast	exercised
 dazzling_angel	0	cast	exercised
 deadly_insect	0	cast	exercised
 deadly_recluse	0	cast	exercised
+deathcap_glade	0	ability:0	exercised
+deathcap_glade	0	land	exercised
 deathgaze_cockatrice	0	cast	exercised
 decode_transmissions	0	cast	exercised
 deep_goblin_skulltaker	0	cast	exercised
@@ -522,6 +530,8 @@ dragonstorm_globe	0	cast	exercised
 drakewing_krasis	0	cast	exercised
 dream_beavers	0	cast	exercised
 dream_seizer	0	cast	exercised
+dreamroot_cascade	0	ability:0	exercised
+dreamroot_cascade	0	land	exercised
 dreg_reaver	0	cast	exercised
 drill_too_deep	0	cast	exercised
 dromoka_warrior	0	cast	exercised
@@ -591,6 +601,8 @@ esper_cormorants	0	cast	exercised
 esper_origins_summon:_esper_maduin	0	cast	exercised
 esper_origins_summon:_esper_maduin	1	cast	intentional: face unavailable from hand
 essence_scatter	0	cast	unsupported: target group 0 needs a richer fixture
+etched_cornfield	0	ability:0	exercised
+etched_cornfield	0	land	exercised
 evils_thrall	0	cast	exercised
 eviscerate	0	cast	exercised
 evolving_wilds	0	ability:0	exercised
@@ -1002,6 +1014,8 @@ inspired_charge	0	cast	exercised
 inspiring_captain	0	cast	exercised
 inspiring_cleric	0	cast	exercised
 inspiring_paladin	0	cast	exercised
+inspiring_vantage	0	ability:0	exercised
+inspiring_vantage	0	land	exercised
 instill_infection	0	cast	exercised
 into_the_fae_court	0	cast	exercised
 invasion_of_ulgrotha_grandmother_ravi_sengir	0	cast	exercised
@@ -1356,6 +1370,9 @@ omashu_city	0	ability:0	exercised
 omashu_city	0	ability:1	exercised
 omashu_city	0	land	exercised
 omega_myr	0	cast	exercised
+ominous_asylum	0	ability:0	exercised
+ominous_asylum	0	ability:1	exercised
+ominous_asylum	0	land	exercised
 onakke_ogre	0	cast	exercised
 ooze_spill	0	cast	unsupported: target group 0 needs a richer fixture
 opt	0	cast	exercised
@@ -1389,6 +1406,8 @@ path_to_redemption	0	cast	exercised
 pathfinding_axejaw	0	cast	exercised
 peace_strider	0	cast	exercised
 pearled_unicorn	0	cast	exercised
+peculiar_lighthouse	0	ability:0	exercised
+peculiar_lighthouse	0	land	exercised
 pegasus_charger	0	cast	exercised
 pegasus_courser	0	cast	exercised
 pelakka_wurm	0	cast	exercised
@@ -1502,6 +1521,8 @@ rampaging_ferocidon	0	cast	exercised
 rampaging_soulrager	0	cast	exercised
 raptor_companion	0	cast	exercised
 rattleback_apothecary	0	cast	exercised
+raucous_carnival	0	ability:0	exercised
+raucous_carnival	0	land	exercised
 raven_of_fell_omens	0	cast	exercised
 ravenous_lindwurm	0	cast	exercised
 ray_fillet,_man_ray	0	ability:0	unsupported: nonmana costs need additional fixture resources
@@ -1617,6 +1638,9 @@ sanitation_automaton	0	cast	exercised
 sapling_nursery	0	ability:0	exercised
 sapling_nursery	0	cast	exercised
 satyr_rambler	0	cast	exercised
+savage_mansion	0	ability:0	exercised
+savage_mansion	0	ability:1	exercised
+savage_mansion	0	land	exercised
 savai_sabertooth	0	cast	exercised
 savannah	0	ability:0	exercised
 savannah	0	land	exercised
@@ -1677,6 +1701,8 @@ sharlayan,_nation_of_scholars	0	ability:0	exercised
 sharlayan,_nation_of_scholars	0	land	exercised
 shattered_acolyte	0	ability:0	exercised
 shattered_acolyte	0	cast	exercised
+shattered_sanctum	0	ability:0	exercised
+shattered_sanctum	0	land	exercised
 shatterskull_giant	0	cast	exercised
 shatterskull_recruit	0	cast	exercised
 shatterstorm	0	cast	exercised
@@ -1713,6 +1739,9 @@ silvercoat_lion	0	cast	exercised
 simic_guildgate	0	ability:0	exercised
 simic_guildgate	0	land	exercised
 simic_sky_swallower	0	cast	exercised
+sinister_hideout	0	ability:0	exercised
+sinister_hideout	0	ability:1	exercised
+sinister_hideout	0	land	exercised
 sisters_of_the_flame	0	ability:0	exercised
 sisters_of_the_flame	0	cast	exercised
 skateboard	0	ability:0	exercised
@@ -1856,6 +1885,9 @@ submerged_boneyard	0	ability:0	exercised
 submerged_boneyard	0	land	exercised
 subterranean_cavern	0	ability:0	exercised
 subterranean_cavern	0	land	exercised
+suburban_sanctuary	0	ability:0	exercised
+suburban_sanctuary	0	ability:1	exercised
+suburban_sanctuary	0	land	exercised
 sulfuric_vortex	0	cast	exercised
 sultai_devotee	0	ability:0	exercised
 sultai_devotee	0	cast	exercised
@@ -1870,6 +1902,8 @@ sun_sentinel	0	cast	exercised
 sunblade_angel	0	cast	exercised
 sunderflock	0	cast	exercised
 sundial,_dawn_tyrant	0	cast	exercised
+sundown_pass	0	ability:0	exercised
+sundown_pass	0	land	exercised
 sungrace_pegasus	0	cast	exercised
 sunspire_griffin	0	cast	exercised
 suntail_hawk	0	cast	exercised
@@ -2059,6 +2093,9 @@ unending_whisper	0	cast	exercised
 unexpected_assistance	0	cast	exercised
 unholy_indenture	0	cast	exercised
 unholy_strength	0	cast	exercised
+university_campus	0	ability:0	exercised
+university_campus	0	ability:1	exercised
+university_campus	0	land	exercised
 unravel_the_aether	0	cast	exercised
 unsummon	0	cast	exercised
 updraft_elemental	0	cast	exercised

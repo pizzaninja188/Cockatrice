@@ -31,6 +31,8 @@ mod issue_253_generated_lands;
 mod issue_254_generated_utility_lands;
 #[path = "scenario/issue_257_generated_recipe_batch.rs"]
 mod issue_257_generated_recipe_batch;
+#[path = "scenario/issue_258_generated_conditional_lands.rs"]
+mod issue_258_generated_conditional_lands;
 
 #[path = "scenario/activation_restrictions.rs"]
 mod activation_restrictions;

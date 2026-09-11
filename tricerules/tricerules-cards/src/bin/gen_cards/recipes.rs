@@ -1,9 +1,11 @@
 use tricerules_cards::primitives::{
-    CardTypeFilter, DiscardQuantity, EffectSubject, EntersTappedAffected, EntryCost, LifeAmount,
+    BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, DiscardQuantity,
+    EffectSubject, EntersTappedAffected, EntryCost, GameCondition, LifeAmount,
     ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
-    PlayerRecipient, ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter,
-    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
-    TargetingDef, TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
+    PlayerLifeAggregate, PlayerRecipient, RelativePlayerSet, ResolutionCost, SearchDestination,
+    SearchZoneSelection, SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetController,
+    TargetFilter, TargetGroupDef, TargetKind, TargetingDef, TargetingSourceFilter,
+    TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
@@ -931,6 +933,34 @@ fn match_land_tap_sacrifice_draw_one(
     })
 }
 
+fn match_land_pay_four_tap_surveil_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_land && text == "{4}, {T}: Surveil 1.").then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![
+                AbilityCost::Mana(ManaCost::parse("{4}").expect("static recipe mana cost")),
+                AbilityCost::Tap,
+            ],
+            effect: vec![SpellEffectKind::LibraryPartition {
+                count: 1,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
 fn exact_mana_cost(text: &str) -> Option<ManaCost> {
     if text.is_empty() {
         return None;
@@ -1054,6 +1084,67 @@ fn match_unconditional_enters_tapped(
             },
         })
     })
+}
+
+fn land_count_entry_condition(min: Option<u32>, max: Option<u32>) -> GameCondition {
+    GameCondition::BattlefieldAggregate {
+        filter: BattlefieldPermanentFilter {
+            token: None,
+            any_of: None,
+            controllers: RelativePlayerSet::Controller,
+            card_type: Some(CardTypeFilter::Land),
+            color: None,
+            name: None,
+            required_subtypes: Vec::new(),
+            exclude_source: true,
+        },
+        aggregate: BattlefieldAggregate::Count,
+        min,
+        max,
+    }
+}
+
+fn conditional_tapped_entry(context: &RecipeContext, condition: GameCondition) -> RecipeEmission {
+    RecipeEmission::StaticAbility(IdentifiedAbility {
+        ability_id: context.static_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        definition: StaticAbilityDef::EntersTapped {
+            affected: EntersTappedAffected::Self_,
+            condition: Some(condition),
+            unless_cost: None,
+        },
+    })
+}
+
+fn match_fast_land_entry(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_land
+        && text == "This land enters tapped unless you control two or fewer other lands.")
+        .then(|| conditional_tapped_entry(context, land_count_entry_condition(Some(3), None)))
+}
+
+fn match_slow_land_entry(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_land
+        && text == "This land enters tapped unless you control two or more other lands.")
+        .then(|| conditional_tapped_entry(context, land_count_entry_condition(None, Some(1))))
+}
+
+fn match_player_life_threshold_entry(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_land
+        && text == "This land enters tapped unless a player has 13 or less life.")
+        .then(|| {
+            conditional_tapped_entry(
+                context,
+                GameCondition::PlayerLifeAggregate {
+                    players: RelativePlayerSet::All,
+                    aggregate: PlayerLifeAggregate::Minimum,
+                    min: Some(14),
+                    max: None,
+                },
+            )
+        })
 }
 
 macro_rules! calibrations {
@@ -1670,6 +1761,25 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("activated.land.pay_four_tap.surveil_one"),
+        label: "pay-four land Surveil 1",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_land_pay_four_tap_surveil_one,
+        calibration: calibrations!(
+            "Savage Mansion" => "{4}, {T}: Surveil 1.",
+            "University Campus" => "{4}, {T}: Surveil 1.";
+            "{3}, {T}: Surveil 1.",
+            "{5}, {T}: Surveil 1.",
+            "{4}: Surveil 1.",
+            "{4}, {T}, Pay 1 life: Surveil 1.",
+            "{4}, {T}: Surveil 2.",
+            "{4}, {T}: You may surveil 1.",
+            "{4}, {T}: Target player surveils 1.",
+            "{4}, {T}: Surveil 1, then draw a card.",
+            "{4}, {T}: Surveil 1. Activate only as a sorcery."
+        ),
+    },
+    Recipe {
         id: RecipeId("activated.hand.cycling.draw"),
         label: "cycling draw",
         surface: RecipeSurface::ZoneActivatedAbility,
@@ -1726,9 +1836,61 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Rakdos Guildgate" => "This land enters tapped.",
             "Nomad Outpost" => "This land enters tapped.";
             "This artifact enters tapped.",
-            "This land enters tapped unless you control two or more other lands.",
+            "This land enters tapped unless you control an Island.",
             "This land enters the battlefield tapped.",
             "This land enters tapped. When it enters, draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.enters_tapped.land_count.fast"),
+        label: "fast-land tapped entry",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_fast_land_entry,
+        calibration: calibrations!(
+            "Concealed Courtyard" => "This land enters tapped unless you control two or fewer other lands.",
+            "Inspiring Vantage" => "This land enters tapped unless you control two or fewer other lands.";
+            "This artifact enters tapped unless you control two or fewer other lands.",
+            "This land enters tapped unless you control one or fewer other lands.",
+            "This land enters tapped unless you control three or fewer other lands.",
+            "This land enters tapped unless you control two or fewer lands.",
+            "This land enters tapped unless you control two or fewer other basic lands.",
+            "This land enters tapped unless an opponent controls two or fewer other lands.",
+            "This land enters tapped unless you control two or fewer other lands. When it enters, draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.enters_tapped.land_count.slow"),
+        label: "slow-land tapped entry",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_slow_land_entry,
+        calibration: calibrations!(
+            "Sundown Pass" => "This land enters tapped unless you control two or more other lands.",
+            "Shattered Sanctum" => "This land enters tapped unless you control two or more other lands.";
+            "This artifact enters tapped unless you control two or more other lands.",
+            "This land enters tapped unless you control one or more other lands.",
+            "This land enters tapped unless you control three or more other lands.",
+            "This land enters tapped unless you control two or more lands.",
+            "This land enters tapped unless you control two or more other basic lands.",
+            "This land enters tapped unless an opponent controls two or more other lands.",
+            "This land enters tapped unless you control two or more other lands. When it enters, draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.enters_tapped.player_life.minimum_fourteen"),
+        label: "all-player life-threshold tapped entry",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_player_life_threshold_entry,
+        calibration: calibrations!(
+            "Raucous Carnival" => "This land enters tapped unless a player has 13 or less life.",
+            "Etched Cornfield" => "This land enters tapped unless a player has 13 or less life.";
+            "This artifact enters tapped unless a player has 13 or less life.",
+            "This land enters tapped unless you have 13 or less life.",
+            "This land enters tapped unless an opponent has 13 or less life.",
+            "This land enters tapped unless each player has 13 or less life.",
+            "This land enters tapped unless a player has 12 or less life.",
+            "This land enters tapped unless a player has 14 or less life.",
+            "This land enters tapped unless a player has 13 or more life.",
+            "This land enters tapped unless a player has 13 or less life. When it enters, draw a card."
         ),
     },
     Recipe {
@@ -1740,7 +1902,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Blood Crypt" => "As this land enters, you may pay 2 life. If you don't, it enters tapped.",
             "Breeding Pool" => "As this land enters, you may pay 2 life. If you don't, it enters tapped.";
             "As this land enters, you may pay 2 life. It enters tapped.",
-            "This land enters tapped unless you control two or more other lands.",
+            "This land enters tapped unless you control an Island.",
             "As this land enters, you may pay 3 life. If you don't, it enters tapped.",
             "As this land enters, you may pay 2 life. If you don't, it enters tapped. When this land enters, draw a card."
         ),
@@ -2199,6 +2361,116 @@ mod tests {
             &nonland,
         )
         .is_none());
+    }
+
+    #[test]
+    fn issue_258_land_clauses_emit_exact_typed_recipes() {
+        let cases = [
+            (
+                "{4}, {T}: Surveil 1.",
+                "activated.land.pay_four_tap.surveil_one",
+            ),
+            (
+                "This land enters tapped unless you control two or fewer other lands.",
+                "static.enters_tapped.land_count.fast",
+            ),
+            (
+                "This land enters tapped unless a player has 13 or less life.",
+                "static.enters_tapped.player_life.minimum_fourteen",
+            ),
+            (
+                "This land enters tapped unless you control two or more other lands.",
+                "static.enters_tapped.land_count.slow",
+            ),
+        ];
+
+        let emissions = cases.map(|(clause, expected_id)| {
+            let matched = match_clause(clause, false, &context())
+                .expect("issue #258 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #258 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+            matched.emission
+        });
+
+        let RecipeEmission::ActivatedAbility(surveil) = &emissions[0] else {
+            panic!("Surveil recipe must emit an activated ability");
+        };
+        assert_eq!(surveil.ability_id.as_str(), "activated_01");
+        assert_eq!(
+            surveil.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{4}").unwrap()),
+                AbilityCost::Tap,
+            ]
+        );
+        assert_eq!(
+            surveil.effect,
+            [SpellEffectKind::LibraryPartition {
+                count: 1,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }]
+        );
+        assert!(surveil.targeting.is_none());
+        assert_eq!(surveil.timing, ActivationTiming::Normal);
+
+        let expected_land_count = |min, max| StaticAbilityDef::EntersTapped {
+            affected: EntersTappedAffected::Self_,
+            condition: Some(GameCondition::BattlefieldAggregate {
+                filter: BattlefieldPermanentFilter {
+                    token: None,
+                    any_of: None,
+                    controllers: RelativePlayerSet::Controller,
+                    card_type: Some(CardTypeFilter::Land),
+                    color: None,
+                    name: None,
+                    required_subtypes: Vec::new(),
+                    exclude_source: true,
+                },
+                aggregate: BattlefieldAggregate::Count,
+                min,
+                max,
+            }),
+            unless_cost: None,
+        };
+        for (index, expected) in [
+            (1, expected_land_count(Some(3), None)),
+            (3, expected_land_count(None, Some(1))),
+        ] {
+            let RecipeEmission::StaticAbility(ability) = &emissions[index] else {
+                panic!("land-count recipe must emit a static ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "static_01");
+            assert_eq!(ability.definition, expected);
+        }
+
+        let RecipeEmission::StaticAbility(life) = &emissions[2] else {
+            panic!("life-threshold recipe must emit a static ability");
+        };
+        assert_eq!(life.ability_id.as_str(), "static_01");
+        assert_eq!(
+            life.definition,
+            StaticAbilityDef::EntersTapped {
+                affected: EntersTappedAffected::Self_,
+                condition: Some(GameCondition::PlayerLifeAggregate {
+                    players: RelativePlayerSet::All,
+                    aggregate: PlayerLifeAggregate::Minimum,
+                    min: Some(14),
+                    max: None,
+                }),
+                unless_cost: None,
+            }
+        );
+
+        let mut nonland = context();
+        nonland.source_is_land = false;
+        for (clause, _) in cases {
+            assert!(
+                match_clause(clause, false, &nonland).unwrap().is_none(),
+                "{clause}"
+            );
+        }
     }
 
     #[test]
