@@ -27,6 +27,8 @@ mod issue_251_generated_naturalize;
 mod issue_252_generated_recipe_batch;
 #[path = "scenario/issue_253_generated_lands.rs"]
 mod issue_253_generated_lands;
+#[path = "scenario/issue_254_generated_utility_lands.rs"]
+mod issue_254_generated_utility_lands;
 #[path = "scenario/issue_257_generated_recipe_batch.rs"]
 mod issue_257_generated_recipe_batch;
 

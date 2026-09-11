@@ -2,8 +2,8 @@ use tricerules_cards::primitives::{
     CardTypeFilter, DiscardQuantity, EffectSubject, EntersTappedAffected, EntryCost, LifeAmount,
     ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
     PlayerRecipient, ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter,
-    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
-    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
+    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
+    TargetingDef, TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
@@ -293,6 +293,77 @@ fn match_etb_draw(text: &str, context: &RecipeContext) -> Option<RecipeEmission>
 fn match_etb_gain_life(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     let effect = gain_life_effect(&capitalize(etb_instruction(text)?))?;
     Some(triggered_ability(context, effect))
+}
+
+fn match_land_etb_gain_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_land && text == "When this land enters, you gain 1 life.").then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(1),
+            },
+        )
+    })
+}
+
+fn match_land_etb_scry_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_land && text == "When this land enters, scry 1.").then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::Scry {
+                count: Amount::Fixed(1),
+            },
+        )
+    })
+}
+
+fn match_land_etb_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_land && text == "When this land enters, surveil 1.").then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::LibraryPartition {
+                count: 1,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            },
+        )
+    })
+}
+
+fn match_land_etb_damage_target_opponent_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_land
+        && text == "When this land enters, it deals 1 damage to target opponent.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::OpponentPlayer,
+                ..TargetFilter::default()
+            };
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability(
+                context,
+                SpellEffectKind::DamageTarget {
+                    amount: Amount::Fixed(1),
+                    target,
+                },
+            ) else {
+                unreachable!("triggered_ability always returns a triggered ability")
+            };
+            ability.targeting = Some(TargetingDef {
+                groups: vec![TargetGroupDef {
+                    min: 1,
+                    max: 1,
+                    prompt: "Choose target opponent".into(),
+                    effect_indices: vec![0],
+                    distinct_from: Vec::new(),
+                    same_graveyard: false,
+                    cast_cost_expansion: None,
+                }],
+            });
+            RecipeEmission::TriggeredAbility(ability)
+        })
 }
 
 fn match_etb_opponent_discard(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
@@ -617,6 +688,35 @@ fn match_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<Recipe
             cost_modifiers: Vec::new(),
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![AbilityCost::Tap],
+            effect: vec![SpellEffectKind::ProduceMana {
+                options: ['W', 'U', 'B', 'R', 'G']
+                    .into_iter()
+                    .map(|symbol| {
+                        parse_mana_amount(symbol).expect("five-color recipe uses valid symbols")
+                    })
+                    .collect(),
+                restriction: None,
+                conditional: None,
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+fn match_pay_one_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_land && text == "{1}, {T}: Add one mana of any color.").then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![
+                AbilityCost::Mana(ManaCost::parse("{1}").expect("static recipe mana cost")),
+                AbilityCost::Tap,
+            ],
             effect: vec![SpellEffectKind::ProduceMana {
                 options: ['W', 'U', 'B', 'R', 'G']
                     .into_iter()
@@ -986,6 +1086,68 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("etb.land.gain_life.one"),
+        label: "land ETB gain 1 life",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_land_etb_gain_one,
+        calibration: calibrations!(
+            "Scoured Barrens" => "When this land enters, you gain 1 life.",
+            "Stark Industries" => "When this land enters, you gain 1 life.";
+            "When this land enters, you may gain 1 life.",
+            "When this land enters, you gain 2 life.",
+            "When this land enters, you gain 1 life and draw a card.",
+            "When this artifact enters, you gain 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.land.scry.one"),
+        label: "land ETB scry 1",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_land_etb_scry_one,
+        calibration: calibrations!(
+            "Temple of Deceit" => "When this land enters, scry 1.",
+            "Crystal Grotto" => "When this land enters, scry 1.";
+            "When this land enters, you may scry 1.",
+            "When this land enters, scry 2.",
+            "When this land enters, target player scries 1.",
+            "When this land enters, scry 1, then draw a card.",
+            "When this artifact enters, scry 1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.land.surveil.one"),
+        label: "land ETB surveil 1",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_land_etb_surveil_one,
+        calibration: calibrations!(
+            "Undercity Sewers" => "When this land enters, surveil 1.",
+            "Conduit Pylons" => "When this land enters, surveil 1.";
+            "When this land enters, you may surveil 1.",
+            "When this land enters, surveil 2.",
+            "When this land enters, target player surveils 1.",
+            "When this land enters, surveil 1, then draw a card.",
+            "When this land enters, look at the top card of your library. You may put it into your graveyard.",
+            "When this artifact enters, surveil 1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.land.damage.target_opponent.one"),
+        label: "land ETB damage target opponent 1",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_land_etb_damage_target_opponent_one,
+        calibration: calibrations!(
+            "Lonely Arroyo" => "When this land enters, it deals 1 damage to target opponent.",
+            "Jagged Barrens" => "When this land enters, it deals 1 damage to target opponent.";
+            "When this land enters, it may deal 1 damage to target opponent.",
+            "When this land enters, it deals 2 damage to target opponent.",
+            "When this land enters, it deals 1 damage to target player.",
+            "When this land enters, it deals 1 damage to each opponent.",
+            "When this land enters, target opponent loses 1 life.",
+            "When this land enters, it deals 1 damage to target opponent and you gain 1 life.",
+            "When this artifact enters, it deals 1 damage to target opponent."
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.discard.each_opponent.one"),
         label: "ETB opponent discard",
         surface: RecipeSurface::EtbAbility,
@@ -1254,7 +1416,23 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{T}: Add two mana of any one color.",
             "{T}, Pay 1 life: Add one mana of any color.",
             "{T}: Add one mana of any color. Spend this mana only to cast creature spells.",
-            "{1}, {T}: Add one mana of any color."
+            "{2}, {T}: Add one mana of any color."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana.pay_one_tap_any_color"),
+        label: "pay one and tap for any color",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_pay_one_tap_for_any_color,
+        calibration: calibrations!(
+            "Crystal Grotto" => "{1}, {T}: Add one mana of any color.",
+            "Conduit Pylons" => "{1}, {T}: Add one mana of any color.";
+            "{1}: Add one mana of any color.",
+            "{2}, {T}: Add one mana of any color.",
+            "{1}, {T}: Add one mana of any type.",
+            "{1}, {T}: Add two mana of any one color.",
+            "{1}, {T}: Add one mana of any color. Spend this mana only to cast creature spells.",
+            "{1}, {T}, Pay 1 life: Add one mana of any color."
         ),
     },
     Recipe {
@@ -1660,6 +1838,108 @@ mod tests {
         nonland.source_is_land = false;
         assert!(match_tap_for_multicolor_mana("{T}: Add {G} or {U}.", &nonland).is_none());
         assert!(match_unconditional_enters_tapped("This land enters tapped.", &nonland).is_none());
+    }
+
+    #[test]
+    fn issue_254_utility_land_clauses_emit_exact_typed_recipes() {
+        let cases = [
+            (
+                "When this land enters, you gain 1 life.",
+                RecipeId("etb.land.gain_life.one"),
+            ),
+            (
+                "When this land enters, scry 1.",
+                RecipeId("etb.land.scry.one"),
+            ),
+            (
+                "When this land enters, surveil 1.",
+                RecipeId("etb.land.surveil.one"),
+            ),
+            (
+                "When this land enters, it deals 1 damage to target opponent.",
+                RecipeId("etb.land.damage.target_opponent.one"),
+            ),
+            (
+                "{1}, {T}: Add one mana of any color.",
+                RecipeId("activated.mana.pay_one_tap_any_color"),
+            ),
+        ];
+        for (clause, expected_id) in cases {
+            let matched = match_clause(clause, false, &context())
+                .expect("utility-land clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("utility-land clause must be supported: {clause}"));
+            assert_eq!(matched.id, expected_id, "{clause}");
+        }
+
+        let gain = match_clause("When this land enters, you gain 1 life.", false, &context())
+            .unwrap()
+            .unwrap();
+        let RecipeEmission::TriggeredAbility(gain) = gain.emission else {
+            panic!("land lifegain must emit a triggered ability");
+        };
+        assert_eq!(gain.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            gain.effect,
+            [SpellEffectKind::GainLife {
+                amount: Amount::Fixed(1)
+            }]
+        );
+
+        let damage = match_clause(
+            "When this land enters, it deals 1 damage to target opponent.",
+            false,
+            &context(),
+        )
+        .unwrap()
+        .unwrap();
+        let RecipeEmission::TriggeredAbility(damage) = damage.emission else {
+            panic!("land damage must emit a triggered ability");
+        };
+        assert_eq!(
+            damage.effect,
+            [SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(1),
+                target: TargetFilter {
+                    kind: TargetKind::OpponentPlayer,
+                    ..TargetFilter::default()
+                },
+            }]
+        );
+        let targeting = damage.targeting.expect("opponent damage must target");
+        assert_eq!(targeting.groups.len(), 1);
+        assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (1, 1));
+        assert_eq!(targeting.groups[0].effect_indices, [0]);
+
+        let mana = match_clause("{1}, {T}: Add one mana of any color.", false, &context())
+            .unwrap()
+            .unwrap();
+        let RecipeEmission::ActivatedAbility(mana) = mana.emission else {
+            panic!("paid five-color mana must emit an activated ability");
+        };
+        assert_eq!(
+            mana.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{1}").unwrap()),
+                AbilityCost::Tap,
+            ]
+        );
+        assert_eq!(mana.mana_options().unwrap().len(), 5);
+        assert!(
+            match_tap_for_any_color("{1}, {T}: Add one mana of any color.", &context(),).is_none()
+        );
+        assert!(
+            match_pay_one_tap_for_any_color("{T}: Add one mana of any color.", &context(),)
+                .is_none()
+        );
+
+        let mut nonland = context();
+        nonland.source_is_land = false;
+        for (clause, _) in cases {
+            assert!(
+                match_clause(clause, false, &nonland).unwrap().is_none(),
+                "{clause}"
+            );
+        }
     }
 
     #[test]

@@ -1,4 +1,6 @@
 a.i.m._bot	0	cast	exercised
+a.i.m._labs	0	ability:0	exercised
+a.i.m._labs	0	land	exercised
 a.i.m._synthoids	0	cast	exercised
 aangs_journey	0	cast	exercised
 aardvark_sloth	0	cast	exercised
@@ -7,6 +9,8 @@ abandoned_campground	0	ability:0	exercised
 abandoned_campground	0	land	exercised
 abbey_griffin	0	cast	exercised
 abnormal_endurance	0	cast	exercised
+abraded_bluffs	0	ability:0	exercised
+abraded_bluffs	0	land	exercised
 accursed_spirit	0	cast	exercised
 acolyte_of_xathrid	0	ability:0	exercised
 acolyte_of_xathrid	0	cast	exercised
@@ -93,6 +97,8 @@ armory_mice	0	cast	exercised
 arrogant_vampire	0	cast	exercised
 arrogant_wurm	0	cast	exercised
 ascended_lawmage	0	cast	exercised
+asgardian_citadel	0	ability:0	exercised
+asgardian_citadel	0	land	exercised
 ashcoat_bear	0	cast	exercised
 assault_griffin	0	cast	exercised
 assault_zeppelid	0	cast	exercised
@@ -110,6 +116,8 @@ aven_reedstalker	0	cast	exercised
 aven_sentry	0	cast	exercised
 aven_skirmisher	0	cast	exercised
 aven_wind_mage	0	cast	exercised
+avengers_hangar	0	ability:0	exercised
+avengers_hangar	0	land	exercised
 axebane_beast	0	cast	exercised
 axebane_stag	0	cast	exercised
 axegrinder_giant	0	cast	exercised
@@ -167,6 +175,8 @@ benthic_giant	0	cast	exercised
 bestial_menace	0	cast	exercised
 bifur,_melodic_rider	0	cast	exercised
 biosynthic_burst	0	cast	exercised
+birnin_zana_plaza	0	ability:0	exercised
+birnin_zana_plaza	0	land	exercised
 bishops_soldier	0	cast	exercised
 bitter_triumph	0	cast	unsupported: required cast-cost group needs a specialized fixture
 bitterbow_sharpshooters	0	cast	exercised
@@ -248,6 +258,8 @@ brightclimb_pathway_grimclimb_pathway	1	land	exercised
 brightwood_tracker	0	ability:0	exercised
 brightwood_tracker	0	cast	exercised
 brilliant_plan	0	cast	exercised
+bristling_backwoods	0	ability:0	exercised
+bristling_backwoods	0	land	exercised
 broadside_barrage	0	cast	exercised
 broken_wings	0	cast	exercised
 bronze_sable	0	cast	exercised
@@ -355,11 +367,15 @@ colossapede	0	cast	exercised
 colossodon_yearling	0	cast	exercised
 command_bridge	0	ability:0	exercised
 command_bridge	0	land	exercised
+commercial_district	0	land	exercised
 common_crook	0	cast	exercised
 commune_with_nature	0	cast	exercised
 compassionate_healer	0	cast	exercised
 concentrate	0	cast	exercised
 concordia_pegasus	0	cast	exercised
+conduit_pylons	0	ability:0	exercised
+conduit_pylons	0	ability:1	exercised
+conduit_pylons	0	land	exercised
 confiscate	0	cast	exercised
 conifer_strider	0	cast	exercised
 consulate_skygate	0	cast	exercised
@@ -387,6 +403,8 @@ crazed_goblin	0	cast	exercised
 crazed_skirge	0	cast	exercised
 creeping_peeper	0	ability:0	exercised
 creeping_peeper	0	cast	exercised
+creosote_heath	0	ability:0	exercised
+creosote_heath	0	land	exercised
 crippling_chill	0	cast	exercised
 crossroads_watcher	0	cast	exercised
 cruel_alliance	0	cast	exercised
@@ -399,6 +417,9 @@ crypt_feaster	0	cast	exercised
 crypt_lurker	0	cast	exercised
 cryptic_command	0	cast	exercised
 crystacean	0	cast	exercised
+crystal_grotto	0	ability:0	exercised
+crystal_grotto	0	ability:1	exercised
+crystal_grotto	0	land	exercised
 cudgel_troll	0	ability:0	exercised
 cudgel_troll	0	cast	exercised
 cult_healer	0	cast	exercised
@@ -531,6 +552,7 @@ eddymurk_crab	0	cast	exercised
 ekundu_griffin	0	cast	exercised
 elderfang_disciple	0	cast	exercised
 eldrazi_devastator	0	cast	exercised
+elegant_parlor	0	land	exercised
 elementalist_adept	0	cast	exercised
 elephant-rat	0	cast	exercised
 elfhame_wurm	0	cast	exercised
@@ -554,6 +576,8 @@ enormous_baloth	0	cast	exercised
 enterprising_scallywag	0	cast	exercised
 environmental_scientist	0	cast	exercised
 epf_point_squad	0	cast	exercised
+eroded_canyon	0	ability:0	exercised
+eroded_canyon	0	land	exercised
 erratic_apparition	0	cast	exercised
 erudite_wizard	0	cast	exercised
 escape_tunnel	0	ability:0	exercised
@@ -601,6 +625,8 @@ feral_krushok	0	cast	exercised
 feral_maaka	0	cast	exercised
 feral_shadow	0	cast	exercised
 ferocious_zheng	0	cast	exercised
+festering_gulch	0	ability:0	exercised
+festering_gulch	0	land	exercised
 field_creeper	0	cast	exercised
 fiery_hellhound	0	ability:0	exercised
 fiery_hellhound	0	cast	exercised
@@ -618,6 +644,8 @@ fire_nation_cadets	0	cast	exercised
 fire_nation_soldier	0	cast	exercised
 fire_prophecy	0	cast	exercised
 fireball	0	cast	exercised
+fisk_tower	0	ability:0	exercised
+fisk_tower	0	land	exercised
 fists_of_the_anvil	0	cast	exercised
 flame_javelin	0	cast	exercised
 flameborn_viron	0	cast	exercised
@@ -647,6 +675,8 @@ foggy_swamp_hunters	0	cast	exercised
 foggy_swamp_vinebender	0	ability:0	exercised
 foggy_swamp_vinebender	0	cast	exercised
 fomori_nomad	0	cast	exercised
+foot_headquarters	0	ability:0	exercised
+foot_headquarters	0	land	exercised
 foot_ninjas	0	cast	exercised
 foot_soldiers	0	cast	exercised
 force_of_savagery	0	cast	exercised
@@ -656,6 +686,8 @@ forensic_researcher	0	cast	exercised
 forest	0	ability:0	exercised
 forest	0	land	exercised
 forest_bear	0	cast	exercised
+forlorn_flats	0	ability:0	exercised
+forlorn_flats	0	land	exercised
 forsaken_sanctuary	0	ability:0	exercised
 forsaken_sanctuary	0	land	exercised
 fortified_rampart	0	cast	exercised
@@ -861,9 +893,12 @@ hearth_elemental_stoke_genius	1	cast	exercised
 hearthfire_hobgoblin	0	cast	exercised
 heated_argument	0	cast	exercised
 hecteyes	0	cast	exercised
+hedge_maze	0	land	exercised
 hedron_crawler	0	ability:0	exercised
 hedron_crawler	0	cast	exercised
 heirloom_auntie	0	cast	exercised
+hells_kitchen	0	ability:0	exercised
+hells_kitchen	0	land	exercised
 helpful_hunter	0	cast	exercised
 hengegate_pathway_mistgate_pathway	0	ability:0	exercised
 hengegate_pathway_mistgate_pathway	0	land	exercised
@@ -874,6 +909,9 @@ hercules,_prince_of_power	0	ability:0	exercised
 hercules,_prince_of_power	0	cast	exercised
 hermetic_study	0	cast	exercised
 hexplate_golem	0	cast	exercised
+hidden_grotto	0	ability:0	exercised
+hidden_grotto	0	ability:1	exercised
+hidden_grotto	0	land	exercised
 hidden_lair	0	ability:0	exercised
 hidden_lair	0	ability:1	exercised
 hidden_lair	0	land	exercised
@@ -929,6 +967,8 @@ icewrought_sentry	0	cast	exercised
 icy_manipulator	0	ability:0	exercised
 icy_manipulator	0	cast	exercised
 iguana_parrot	0	cast	exercised
+illegitimate_business	0	ability:0	exercised
+illegitimate_business	0	land	exercised
 illvoi_light_jammer	0	ability:0	exercised
 illvoi_light_jammer	0	cast	exercised
 impale	0	cast	exercised
@@ -979,6 +1019,8 @@ jace_beleren	0	cast	exercised
 jaces_ingenuity	0	cast	exercised
 jade-cast_sentinel	0	ability:0	exercised
 jade-cast_sentinel	0	cast	exercised
+jagged_barrens	0	ability:0	exercised
+jagged_barrens	0	land	exercised
 jagwasp_swarm	0	cast	exercised
 jasmine_boreal	0	cast	exercised
 jayemdae_tome	0	ability:0	exercised
@@ -1101,8 +1143,12 @@ llanowar_visionary	0	ability:0	exercised
 llanowar_visionary	0	cast	exercised
 loamdragger_giant	0	cast	exercised
 lone_missionary	0	cast	exercised
+lonely_arroyo	0	ability:0	exercised
+lonely_arroyo	0	land	exercised
 longbow_archer	0	cast	exercised
 looming_altisaur	0	cast	exercised
+los_diablos_missile_base	0	ability:0	exercised
+los_diablos_missile_base	0	land	exercised
 lost_days	0	cast	exercised
 loxodon_convert	0	cast	exercised
 loxodon_line_breaker	0	cast	exercised
@@ -1113,6 +1159,9 @@ lumbering_worldwagon	0	cast	exercised
 lumengrid_gargoyle	0	cast	exercised
 lumengrid_warden	0	cast	exercised
 luminous_rebuke	0	cast	exercised
+lush_oasis	0	ability:0	exercised
+lush_oasis	0	land	exercised
+lush_portico	0	land	exercised
 macabre_waltz	0	cast	exercised
 magebane_lizard	0	cast	exercised
 magnigoth_sentry	0	cast	exercised
@@ -1164,6 +1213,7 @@ merrow_skyswimmer	0	cast	exercised
 mesa_cavalier	0	cast	exercised
 mesa_unicorn	0	cast	exercised
 messenger_falcons	0	cast	exercised
+meticulous_archive	0	land	exercised
 meticulous_artisan	0	cast	exercised
 michelangelo,_mutant_bff	0	cast	exercised
 midnight_assassin	0	cast	exercised
@@ -1227,6 +1277,8 @@ murky_sewer	0	land	exercised
 murmuring_phantasm	0	cast	exercised
 muse_drake	0	cast	exercised
 mutagenic_growth	0	cast	exercised
+mutant_town	0	ability:0	exercised
+mutant_town	0	land	exercised
 mutant_town_musicians	0	cast	exercised
 mystic_monastery	0	ability:0	exercised
 mystic_monastery	0	land	exercised
@@ -1402,6 +1454,8 @@ purple_dragon_punks	0	ability:0	exercised
 purple_dragon_punks	0	cast	exercised
 putrid_pals	0	cast	exercised
 pygmy_razorback	0	cast	exercised
+pym_technologies	0	ability:0	exercised
+pym_technologies	0	land	exercised
 pyroclasm	0	cast	exercised
 pyromantic_pilgrim	0	cast	exercised
 python	0	cast	exercised
@@ -1523,6 +1577,9 @@ rubbleback_rhino	0	cast	exercised
 rugged_highlands	0	ability:0	exercised
 rugged_highlands	0	land	exercised
 ruination_wurm	0	cast	exercised
+rumble_arena	0	ability:0	exercised
+rumble_arena	0	ability:1	exercised
+rumble_arena	0	land	exercised
 rumbling_baloth	0	cast	exercised
 run_afoul	0	cast	exercised
 runeclaw_bear	0	cast	exercised
@@ -1572,6 +1629,8 @@ scion_of_ugin	0	cast	exercised
 scorch_spitter	0	cast	exercised
 scorching_dragonfire	0	cast	exercised
 scoria_elemental	0	cast	exercised
+scoured_barrens	0	ability:0	exercised
+scoured_barrens	0	land	exercised
 scroll_thief	0	cast	exercised
 scrounger_of_souls	0	cast	exercised
 scrubland	0	ability:0	exercised
@@ -1602,6 +1661,7 @@ serra_zealot	0	cast	exercised
 servant_of_the_stinger	0	cast	exercised
 sewn-eye_drake	0	cast	exercised
 shadow_glider	0	cast	exercised
+shadowy_backstreet	0	land	exercised
 shaman_of_spring	0	cast	exercised
 shanodin_dryads	0	cast	exercised
 sharae_of_numbing_depths	0	cast	exercised
@@ -1706,6 +1766,8 @@ soulbound_guardians	0	cast	exercised
 soulstone_sanctuary	0	ability:0	exercised
 soulstone_sanctuary	0	ability:1	exercised
 soulstone_sanctuary	0	land	exercised
+soured_springs	0	ability:0	exercised
+soured_springs	0	land	exercised
 sparktongue_dragon	0	cast	exercised
 spectral_rider	0	cast	exercised
 spectral_snatcher	0	ability:0	unsupported: ability not offered by generic battlefield fixture
@@ -1742,6 +1804,8 @@ stampeding_rhino	0	cast	exercised
 standing_troops	0	cast	exercised
 star_charter	0	cast	exercised
 starfighter_pilot	0	cast	exercised
+stark_industries	0	ability:0	exercised
+stark_industries	0	land	exercised
 starlit_angel	0	cast	exercised
 starport_security	0	ability:0	exercised
 starport_security	0	cast	exercised
@@ -1782,6 +1846,8 @@ streetbreaker_wurm	0	cast	exercised
 striped_bears	0	cast	exercised
 submerged_boneyard	0	ability:0	exercised
 submerged_boneyard	0	land	exercised
+subterranean_cavern	0	ability:0	exercised
+subterranean_cavern	0	land	exercised
 sulfuric_vortex	0	cast	exercised
 sultai_devotee	0	ability:0	exercised
 sultai_devotee	0	cast	exercised
@@ -1802,6 +1868,9 @@ suntail_hawk	0	cast	exercised
 surly_farrier	0	ability:0	exercised
 surly_farrier	0	cast	exercised
 surrak,_elusive_hunter	0	cast	exercised
+surveillance_room	0	ability:0	exercised
+surveillance_room	0	ability:1	exercised
+surveillance_room	0	land	exercised
 swab_goblin	0	cast	exercised
 swamp	0	ability:0	exercised
 swamp	0	land	exercised
@@ -1832,6 +1901,8 @@ tangle_spider	0	cast	exercised
 taoist_hermit	0	cast	exercised
 tasseled_dromedary	0	cast	exercised
 tatterkite	0	cast	exercised
+tcri_building	0	ability:0	exercised
+tcri_building	0	land	exercised
 teapot_slinger	0	cast	exercised
 teferis_protege	0	ability:0	exercised
 teferis_protege	0	cast	exercised
@@ -1839,6 +1910,26 @@ tempest_drake	0	cast	exercised
 tempest_hawk	0	cast	exercised
 temple_garden	0	ability:0	exercised
 temple_garden	0	land	exercised
+temple_of_abandon	0	ability:0	exercised
+temple_of_abandon	0	land	exercised
+temple_of_deceit	0	ability:0	exercised
+temple_of_deceit	0	land	exercised
+temple_of_enlightenment	0	ability:0	exercised
+temple_of_enlightenment	0	land	exercised
+temple_of_epiphany	0	ability:0	exercised
+temple_of_epiphany	0	land	exercised
+temple_of_malady	0	ability:0	exercised
+temple_of_malady	0	land	exercised
+temple_of_malice	0	ability:0	exercised
+temple_of_malice	0	land	exercised
+temple_of_mystery	0	ability:0	exercised
+temple_of_mystery	0	land	exercised
+temple_of_plenty	0	ability:0	exercised
+temple_of_plenty	0	land	exercised
+temple_of_silence	0	ability:0	exercised
+temple_of_silence	0	land	exercised
+temple_of_triumph	0	ability:0	exercised
+temple_of_triumph	0	land	exercised
 temporal_intervention	0	cast	exercised
 temur_devotee	0	ability:0	exercised
 temur_devotee	0	cast	exercised
@@ -1947,9 +2038,11 @@ uncharted_voyage	0	cast	exercised
 uncomfortable_chill	0	cast	exercised
 undead_minotaur	0	cast	exercised
 undead_servant	0	cast	exercised
+undercity_sewers	0	land	exercised
 underdark_basilisk	0	cast	exercised
 underfoot_underdogs	0	ability:0	exercised
 underfoot_underdogs	0	cast	exercised
+underground_mortuary	0	land	exercised
 underground_sea	0	ability:0	exercised
 underground_sea	0	land	exercised
 undergrowth_leopard	0	ability:0	exercised
