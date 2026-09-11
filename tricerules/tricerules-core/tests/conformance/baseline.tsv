@@ -272,6 +272,8 @@ cartouche_of_knowledge	0	cast	exercised
 carven_caryatid	0	cast	exercised
 catacomb_crocodile	0	cast	exercised
 catacomb_slug	0	cast	exercised
+cathar_commando	0	ability:0	exercised
+cathar_commando	0	cast	exercised
 cathedral_sanctifier	0	cast	exercised
 caustic_exhale	0	cast	unsupported: required cast-cost group needs a specialized fixture
 cavalry_drillmaster	0	cast	exercised
@@ -1488,6 +1490,8 @@ shadow_glider	0	cast	exercised
 shaman_of_spring	0	cast	exercised
 shanodin_dryads	0	cast	exercised
 sharae_of_numbing_depths	0	cast	exercised
+shattered_acolyte	0	ability:0	exercised
+shattered_acolyte	0	cast	exercised
 shatterskull_giant	0	cast	exercised
 shatterskull_recruit	0	cast	exercised
 shatterstorm	0	cast	exercised
@@ -1733,6 +1737,8 @@ those_who_serve	0	cast	exercised
 thoughtseize	0	cast	exercised
 thraben_purebloods	0	cast	exercised
 thraben_valiant	0	cast	exercised
+thrashing_brontodon	0	ability:0	exercised
+thrashing_brontodon	0	cast	exercised
 threaten	0	cast	exercised
 three_tree_scribe	0	cast	exercised
 thrill_of_possibility	0	cast	exercised
@@ -1812,6 +1818,8 @@ underfoot_underdogs	0	ability:0	exercised
 underfoot_underdogs	0	cast	exercised
 underground_sea	0	ability:0	exercised
 underground_sea	0	land	exercised
+undergrowth_leopard	0	ability:0	exercised
+undergrowth_leopard	0	cast	exercised
 unending_whisper	0	cast	exercised
 unexpected_assistance	0	cast	exercised
 unholy_indenture	0	cast	exercised
@@ -1873,6 +1881,8 @@ volcanic_island	0	ability:0	exercised
 volcanic_island	0	land	exercised
 volcanic_spite	0	cast	exercised
 volunteer_militia	0	cast	exercised
+voracious_varmint	0	ability:0	exercised
+voracious_varmint	0	cast	exercised
 vorstclaw	0	cast	exercised
 vow_to_erebor	0	cast	exercised
 vulpine_goliath	0	cast	exercised

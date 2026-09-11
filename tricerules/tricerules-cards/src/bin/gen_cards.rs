@@ -2034,8 +2034,9 @@ mod tests {
     use std::io::{Cursor, Write};
     use tricerules_cards::card_def::RawCardDefinition;
     use tricerules_cards::primitives::{
-        CardTypeFilter, EffectSubject, EntersTappedAffected, EntryCost, PlayerRecipient,
-        SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetFilter,
+        CardTypeFilter, EffectSubject, EntersTappedAffected, EntryCost, PermanentTypeFilter,
+        PlayerRecipient, SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetFilter,
+        TargetKind,
     };
     use tricerules_cards::{
         AbilityCost, Amount, CastTriggerPlayer, Color, Keyword, Layout, SpellEffectKind,
@@ -2759,6 +2760,83 @@ mod tests {
     }
 
     #[test]
+    fn sacrifice_to_naturalize_recipe_emits_atomic_cost_and_disjunctive_target() {
+        let card = normal_card(
+            "Cathar Commando",
+            "{1}{W}",
+            "Creature — Human Soldier",
+            "Flash\n{1}, Sacrifice this creature: Destroy target artifact or enchantment.",
+            Some(("3", "1")),
+        );
+
+        let generated =
+            evaluate_fresh(&card).expect("exact sacrifice-to-Naturalize recipe should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["sacrifice-to-Naturalize"]
+        );
+        assert_eq!(raw.keywords, [Keyword::Flash]);
+        let [ability] = raw.activated_abilities.as_slice() else {
+            panic!("recipe emits one activated ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "activated_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert!(matches!(
+            ability.costs.as_slice(),
+            [AbilityCost::Mana(cost), AbilityCost::SacrificeSelf] if cost.to_string() == "{1}"
+        ));
+        let [SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(target),
+        }] = ability.effect.as_slice()
+        else {
+            panic!("recipe destroys one chosen permanent");
+        };
+        assert_eq!(target.kind, TargetKind::AnyPermanent);
+        assert_eq!(
+            target.permanent_types,
+            [
+                PermanentTypeFilter::Artifact,
+                PermanentTypeFilter::Enchantment
+            ]
+        );
+        assert!(ability.targeting.is_none());
+    }
+
+    #[test]
+    fn sacrifice_to_naturalize_recipe_rejects_near_misses() {
+        for text in [
+            "{1}, {T}, Sacrifice this creature: Destroy target artifact or enchantment.",
+            "{1}, Pay 1 life, Sacrifice this creature: Destroy target artifact or enchantment.",
+            "{1}, Sacrifice another creature: Destroy target artifact or enchantment.",
+            "{1}, Exile this creature: Destroy target artifact or enchantment.",
+            "{1}, Sacrifice this artifact: Destroy target artifact or enchantment.",
+            "{1}, Sacrifice this creature: Destroy up to one target artifact or enchantment.",
+            "{1}, Sacrifice this creature: Destroy target artifact.",
+            "{1}, Sacrifice this creature: Destroy target enchantment.",
+            "{1}, Sacrifice this creature: Destroy target artifact or enchantment card in a graveyard.",
+            "{1}, Sacrifice this creature: Destroy target artifact or enchantment. Activate only as a sorcery.",
+        ] {
+            let card = normal_card(
+                "Near Miss Naturalizer",
+                "{1}{G}",
+                "Creature — Beast",
+                text,
+                Some(("2", "2")),
+            );
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
     fn recipes_fail_closed_on_near_misses_or_unconsumed_clauses() {
         for text in [
             "You may draw a card.",
@@ -2970,6 +3048,22 @@ mod tests {
                 "{T}: Add {G}.",
                 Some(("1", "1")),
                 "tap for one mana",
+            ),
+            (
+                "Cathar Commando",
+                "{1}{W}",
+                "Creature — Human Soldier",
+                "Flash\n{1}, Sacrifice this creature: Destroy target artifact or enchantment.",
+                Some(("3", "1")),
+                "sacrifice-to-Naturalize",
+            ),
+            (
+                "Thrashing Brontodon",
+                "{1}{G}{G}",
+                "Creature — Dinosaur",
+                "{1}, Sacrifice this creature: Destroy target artifact or enchantment.",
+                Some(("3", "4")),
+                "sacrifice-to-Naturalize",
             ),
             (
                 "Blood Crypt",

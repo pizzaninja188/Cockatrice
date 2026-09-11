@@ -1,10 +1,11 @@
 use tricerules_cards::primitives::{
     CardTypeFilter, DiscardQuantity, EffectSubject, EntersTappedAffected, EntryCost,
-    PlayerRecipient, SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetFilter,
+    PermanentTypeFilter, PlayerRecipient, SpellCastFilter, StackSpellFilter, StaticAbilityDef,
+    TargetFilter, TargetKind,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
-    ActivationTiming, Amount, CastTriggerPlayer, IdentifiedAbility, Keyword, ManaAmount,
+    ActivationTiming, Amount, CastTriggerPlayer, IdentifiedAbility, Keyword, ManaAmount, ManaCost,
     SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
@@ -358,6 +359,35 @@ fn match_tap_for_one_mana(text: &str, context: &RecipeContext) -> Option<RecipeE
     }))
 }
 
+fn match_sacrifice_to_naturalize(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "{1}, Sacrifice this creature: Destroy target artifact or enchantment.").then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![
+                AbilityCost::Mana(ManaCost::parse("{1}").expect("static recipe mana cost")),
+                AbilityCost::SacrificeSelf,
+            ],
+            effect: vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![
+                        PermanentTypeFilter::Artifact,
+                        PermanentTypeFilter::Enchantment,
+                    ],
+                    ..TargetFilter::default()
+                })),
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
 fn match_shockland_entry_payment(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "As this land enters, you may pay 2 life. If you don't, it enters tapped.").then(
         || {
@@ -550,6 +580,26 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Elvish Mystic" => "{T}: Add {G}.";
             "{T}: Add {G}{G}.",
             "{T}, Pay 1 life: Add {G}."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.sacrifice_self.destroy_artifact_or_enchantment"),
+        label: "sacrifice-to-Naturalize",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_sacrifice_to_naturalize,
+        calibration: calibrations!(
+            "Cathar Commando" => "{1}, Sacrifice this creature: Destroy target artifact or enchantment.",
+            "Thrashing Brontodon" => "{1}, Sacrifice this creature: Destroy target artifact or enchantment.";
+            "{1}, {T}, Sacrifice this creature: Destroy target artifact or enchantment.",
+            "{1}, Pay 1 life, Sacrifice this creature: Destroy target artifact or enchantment.",
+            "{1}, Sacrifice another creature: Destroy target artifact or enchantment.",
+            "{1}, Exile this creature: Destroy target artifact or enchantment.",
+            "{1}, Sacrifice this artifact: Destroy target artifact or enchantment.",
+            "{1}, Sacrifice this creature: Destroy up to one target artifact or enchantment.",
+            "{1}, Sacrifice this creature: Destroy target artifact.",
+            "{1}, Sacrifice this creature: Destroy target enchantment.",
+            "{1}, Sacrifice this creature: Destroy target artifact or enchantment card in a graveyard.",
+            "{1}, Sacrifice this creature: Destroy target artifact or enchantment. Activate only as a sorcery."
         ),
     },
     Recipe {
@@ -815,6 +865,26 @@ mod tests {
         assert!(matches!(
             matched.emission,
             RecipeEmission::TriggeredAbility(_)
+        ));
+    }
+
+    #[test]
+    fn sacrifice_to_naturalize_clause_has_one_stable_activated_recipe_id() {
+        let matched = match_clause(
+            "{1}, Sacrifice this creature: Destroy target artifact or enchantment.",
+            false,
+            &context(),
+        )
+        .expect("sacrifice-to-Naturalize clause must not be ambiguous")
+        .expect("sacrifice-to-Naturalize clause must be supported");
+
+        assert_eq!(
+            matched.id,
+            RecipeId("activated.sacrifice_self.destroy_artifact_or_enchantment")
+        );
+        assert!(matches!(
+            matched.emission,
+            RecipeEmission::ActivatedAbility(_)
         ));
     }
 
