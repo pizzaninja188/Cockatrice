@@ -3014,6 +3014,89 @@ mod tests {
     }
 
     #[test]
+    fn issue_249_cycling_recipes_emit_exact_hand_abilities() {
+        let cycling = normal_card(
+            "Lightshield Parry",
+            "{W}",
+            "Instant",
+            "Target creature gets +2/+2 until end of turn.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+            None,
+        );
+        let generated = evaluate_fresh(&cycling).expect("ordinary cycling should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [ability] = raw.activated_abilities.as_slice() else {
+            panic!("cycling emits one activated ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "activated_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert_eq!(ability.source_zone, AbilitySourceZone::Hand);
+        assert!(matches!(
+            ability.costs.as_slice(),
+            [AbilityCost::Mana(cost), AbilityCost::DiscardSelf] if cost.to_string() == "{2}"
+        ));
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+
+        for (name, mana_cost, type_line, clause, power_toughness, expected_cost, expected_filter) in [
+            (
+                "Topiary Panther",
+                "{4}{G}{G}",
+                "Creature — Plant Cat",
+                "Basic landcycling {1}{G}",
+                Some(("6", "5")),
+                "{1}{G}",
+                tricerules_cards::primitives::ZoneCardFilter {
+                    card_type: Some(tricerules_cards::primitives::CardTypeFilter::BasicLand),
+                    ..Default::default()
+                },
+            ),
+            (
+                "Bedhead Beastie",
+                "{4}{R}{R}",
+                "Creature — Beast",
+                "Mountaincycling {2}",
+                Some(("5", "6")),
+                "{2}",
+                tricerules_cards::primitives::ZoneCardFilter {
+                    required_subtypes: vec!["Mountain".into()],
+                    ..Default::default()
+                },
+            ),
+        ] {
+            let card = normal_card(name, mana_cost, type_line, clause, power_toughness);
+            let generated = evaluate_fresh(&card).expect("typecycling should qualify");
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            let [ability] = raw.activated_abilities.as_slice() else {
+                panic!("typecycling emits one activated ability");
+            };
+            assert_eq!(ability.source_zone, AbilitySourceZone::Hand);
+            assert!(matches!(
+                ability.costs.as_slice(),
+                [AbilityCost::Mana(cost), AbilityCost::DiscardSelf]
+                    if cost.to_string() == expected_cost
+            ));
+            assert!(matches!(
+                ability.effect.as_slice(),
+                [SpellEffectKind::SearchLibrary {
+                    filter: Some(filter),
+                    destination: tricerules_cards::primitives::SearchDestination::Hand,
+                    shuffle: true,
+                    reveal: true,
+                    ..
+                }] if filter == &expected_filter
+            ));
+        }
+    }
+
+    #[test]
     fn recipes_fail_closed_on_near_misses_or_unconsumed_clauses() {
         for text in [
             "You may draw a card.",
@@ -3321,6 +3404,54 @@ mod tests {
                 "{1}, Sacrifice this creature: Destroy target artifact or enchantment.",
                 Some(("3", "4")),
                 "sacrifice-to-Naturalize",
+            ),
+            (
+                "Lightshield Parry",
+                "{W}",
+                "Instant",
+                "Target creature gets +2/+2 until end of turn.\nCycling {2}",
+                None,
+                "cycling draw",
+            ),
+            (
+                "Migrating Ketradon",
+                "{4}{G}{G}",
+                "Creature — Dinosaur",
+                "Reach\nWhen this creature enters, you gain 4 life.\nCycling {2}",
+                Some(("6", "6")),
+                "cycling draw",
+            ),
+            (
+                "Ash Barrens",
+                "",
+                "Land",
+                "{T}: Add {C}.\nBasic landcycling {1}",
+                None,
+                "basic landcycling",
+            ),
+            (
+                "Topiary Panther",
+                "{4}{G}{G}",
+                "Creature — Plant Cat",
+                "Trample\nBasic landcycling {1}{G}",
+                Some(("6", "5")),
+                "basic landcycling",
+            ),
+            (
+                "Bedhead Beastie",
+                "{4}{R}{R}",
+                "Creature — Beast",
+                "Menace\nMountaincycling {2}",
+                Some(("5", "6")),
+                "basic land typecycling",
+            ),
+            (
+                "Saber-Tooth Moose-Lion",
+                "{4}{G}{G}",
+                "Creature — Elk Cat",
+                "Reach\nForestcycling {2}",
+                Some(("7", "7")),
+                "basic land typecycling",
             ),
             (
                 "Blood Crypt",

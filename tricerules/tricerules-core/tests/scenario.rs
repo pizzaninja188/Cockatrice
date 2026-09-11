@@ -17,6 +17,8 @@ mod issue_242_heated_argument;
 mod issue_243_evils_thrall;
 #[path = "scenario/issue_248_prowess.rs"]
 mod issue_248_prowess;
+#[path = "scenario/issue_249_generated_cycling.rs"]
+mod issue_249_generated_cycling;
 #[path = "scenario/issue_250_etb_explore.rs"]
 mod issue_250_etb_explore;
 #[path = "scenario/issue_251_generated_naturalize.rs"]

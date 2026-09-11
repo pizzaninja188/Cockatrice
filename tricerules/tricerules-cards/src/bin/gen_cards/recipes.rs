@@ -1,12 +1,14 @@
 use tricerules_cards::primitives::{
     CardTypeFilter, DiscardQuantity, EffectSubject, EntersTappedAffected, EntryCost, LifeAmount,
-    PermanentEventFilter, PermanentTypeFilter, PlayerRecipient, SpellCastFilter, StackSpellFilter,
-    StaticAbilityDef, TargetFilter, TargetKind,
+    PermanentEventFilter, PermanentTypeFilter, PlayerRecipient, SearchDestination,
+    SearchZoneSelection, SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetFilter,
+    TargetKind, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
-    ActivationTiming, Amount, CastTriggerPlayer, IdentifiedAbility, Keyword, LibraryPartitionKind,
-    ManaAmount, ManaCost, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    ActivationTiming, Amount, BasicLandType, CastTriggerPlayer, IdentifiedAbility, Keyword,
+    LibraryPartitionKind, ManaAmount, ManaCost, SpellEffectKind, TriggerCondition,
+    TriggeredAbilityDef,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,6 +18,10 @@ pub(super) enum RecipeSurface {
     EtbAbility,
     TriggeredAbility,
     ActivatedAbility,
+    /// An activated ability that functions from a nonbattlefield zone and may appear on any card
+    /// type. Cycling on Lightshield Parry demonstrates why this is broader than permanent-only
+    /// [`Self::ActivatedAbility`].
+    ZoneActivatedAbility,
     StaticAbility,
 }
 
@@ -496,6 +502,98 @@ fn match_sacrifice_to_naturalize(text: &str, context: &RecipeContext) -> Option<
     })
 }
 
+fn exact_mana_cost(text: &str) -> Option<ManaCost> {
+    if text.is_empty() {
+        return None;
+    }
+    let cost = ManaCost::parse(text).ok()?;
+    (!cost.has_x() && cost.to_string() == text).then_some(cost)
+}
+
+fn hand_discard_ability(
+    context: &RecipeContext,
+    mana_cost: ManaCost,
+    effect: SpellEffectKind,
+) -> RecipeEmission {
+    RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Hand,
+        costs: vec![AbilityCost::Mana(mana_cost), AbilityCost::DiscardSelf],
+        effect: vec![effect],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: None,
+    })
+}
+
+fn match_cycling_draw(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    let cost = exact_mana_cost(text.strip_prefix("Cycling ")?)?;
+    Some(hand_discard_ability(
+        context,
+        cost,
+        SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(1),
+        },
+    ))
+}
+
+fn typecycling_search(
+    context: &RecipeContext,
+    mana_cost: ManaCost,
+    filter: ZoneCardFilter,
+) -> RecipeEmission {
+    hand_discard_ability(
+        context,
+        mana_cost,
+        SpellEffectKind::SearchLibrary {
+            who: PlayerRecipient::Controller,
+            optional: false,
+            count: 1,
+            count_by_cast_cost: None,
+            filter: Some(filter),
+            slots: Vec::new(),
+            zones: SearchZoneSelection::default(),
+            destination: SearchDestination::Hand,
+            conditional_destination: None,
+            shuffle: true,
+            reveal: true,
+            result_id: None,
+        },
+    )
+}
+
+fn match_basic_landcycling(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    let cost = exact_mana_cost(text.strip_prefix("Basic landcycling ")?)?;
+    Some(typecycling_search(
+        context,
+        cost,
+        ZoneCardFilter {
+            card_type: Some(CardTypeFilter::BasicLand),
+            ..ZoneCardFilter::default()
+        },
+    ))
+}
+
+fn match_basic_land_typecycling(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    let (land_type, cost) = BasicLandType::ALL.into_iter().find_map(|land_type| {
+        let prefix = format!("{}cycling ", land_type.as_str());
+        let cost = exact_mana_cost(text.strip_prefix(&prefix)?)?;
+        Some((land_type, cost))
+    })?;
+    Some(typecycling_search(
+        context,
+        cost,
+        ZoneCardFilter {
+            required_subtypes: vec![land_type.as_str().to_string()],
+            ..ZoneCardFilter::default()
+        },
+    ))
+}
+
 fn match_shockland_entry_payment(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "As this land enters, you may pay 2 life. If you don't, it enters tapped.").then(
         || {
@@ -787,6 +885,54 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("activated.hand.cycling.draw"),
+        label: "cycling draw",
+        surface: RecipeSurface::ZoneActivatedAbility,
+        matcher: match_cycling_draw,
+        calibration: calibrations!(
+            "Lightshield Parry" => "Cycling {2}",
+            "Migrating Ketradon" => "Cycling {2}";
+            "Cycle {2}",
+            "Cycling {X}",
+            "Cycling {2}{S}",
+            "Cycling {2} — You may discard this card: Draw a card.",
+            "Cycling {2}. Activate only as a sorcery.",
+            "Cycling {2}. When you cycle this card, you gain 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.hand.typecycling.basic_land"),
+        label: "basic landcycling",
+        surface: RecipeSurface::ZoneActivatedAbility,
+        matcher: match_basic_landcycling,
+        calibration: calibrations!(
+            "Ash Barrens" => "Basic landcycling {1}",
+            "Topiary Panther" => "Basic landcycling {1}{G}";
+            "Basic landcycling {X}",
+            "Basic landcycling {2}{S}",
+            "Basic landcycling {2} — You may discard this card: Search your library.",
+            "Basic landcycling {2}. Put that card onto the battlefield instead.",
+            "Basic landcycling {2}. Activate only as a sorcery."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.hand.typecycling.basic_land_type"),
+        label: "basic land typecycling",
+        surface: RecipeSurface::ZoneActivatedAbility,
+        matcher: match_basic_land_typecycling,
+        calibration: calibrations!(
+            "Bedhead Beastie" => "Mountaincycling {2}",
+            "Saber-Tooth Moose-Lion" => "Forestcycling {2}";
+            "Wizardcycling {2}",
+            "Landcycling {2}",
+            "Plains Islandcycling {2}",
+            "Forestcycling {X}",
+            "Forestcycling {2}{S}",
+            "Forestcycling {2}. Put that card onto the battlefield instead.",
+            "Forestcycling {2}. Activate only as a sorcery."
+        ),
+    },
+    Recipe {
         id: RecipeId("static.enters_tapped.unless_pay_life_2"),
         label: "shockland entry payment",
         surface: RecipeSurface::StaticAbility,
@@ -806,6 +952,7 @@ fn surface_applies(surface: RecipeSurface, is_spell: bool) -> bool {
     match surface {
         RecipeSurface::KeywordClause => true,
         RecipeSurface::SpellClause => is_spell,
+        RecipeSurface::ZoneActivatedAbility => true,
         RecipeSurface::EtbAbility
         | RecipeSurface::TriggeredAbility
         | RecipeSurface::ActivatedAbility
@@ -1096,5 +1243,31 @@ mod tests {
         );
         assert!(ability.targeting.is_none());
         assert!(!ability.may);
+    }
+
+    #[test]
+    fn cycling_clauses_have_distinct_stable_zone_ability_recipe_ids() {
+        for (clause, is_spell, expected_id) in [
+            ("Cycling {2}", true, "activated.hand.cycling.draw"),
+            (
+                "Basic landcycling {1}{G}",
+                false,
+                "activated.hand.typecycling.basic_land",
+            ),
+            (
+                "Mountaincycling {2}",
+                false,
+                "activated.hand.typecycling.basic_land_type",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .expect("cycling clause must not be ambiguous")
+                .expect("cycling clause must be supported");
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+            assert!(matches!(
+                matched.emission,
+                RecipeEmission::ActivatedAbility(_)
+            ));
+        }
     }
 }
