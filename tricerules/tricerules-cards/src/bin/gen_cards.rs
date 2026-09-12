@@ -2911,7 +2911,7 @@ mod tests {
     #[test]
     fn shockland_recipe_rejects_near_misses() {
         for text in [
-            "This land enters tapped unless you control two or more other lands.",
+            "This land enters tapped unless you control an Island.",
             "As this land enters, you may pay 3 life. If you don't, it enters tapped.",
             "As this land enters, you may pay 2 life. If you don't, it enters tapped. When this land enters, draw a card.",
         ] {
@@ -2998,7 +2998,7 @@ mod tests {
         );
 
         for text in [
-            "This land enters tapped unless you control two or more other lands.",
+            "This land enters tapped unless you control an Island.",
             "This land enters tapped. When it enters, draw a card.",
             "{T}: Add {G}, {U}, {R}, or {W}.",
             "{T}: Add {C} or {G}.",

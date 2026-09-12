@@ -42,6 +42,7 @@ akki_lavarunner_tok-tok,_volcano_born	1	cast	intentional: face unavailable from 
 alabaster_host_sanctifier	0	cast	exercised
 alabaster_kirin	0	cast	exercised
 alaborn_grenadier	0	cast	exercised
+alanias_pathmaker	0	cast	exercised
 alert_shu_infantry	0	cast	exercised
 alley_strangler	0	cast	exercised
 alpha_myr	0	cast	exercised
@@ -167,6 +168,7 @@ bear_cub	0	cast	exercised
 beast-kin_ranger	0	cast	exercised
 bedhead_beastie	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 bedhead_beastie	0	cast	exercised
+bellowing_crier	0	cast	exercised
 beloved_chaplain	0	cast	exercised
 benalish_knight	0	cast	exercised
 benders_waterskin	0	ability:0	exercised
@@ -360,6 +362,8 @@ clockwork_percussionist	0	cast	exercised
 clone	0	cast	exercised
 cloud_crusader	0	cast	exercised
 cloud_manta	0	cast	exercised
+cloudbound_moogle	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+cloudbound_moogle	0	cast	exercised
 cloudcrown_oak	0	cast	exercised
 cloudkin_seer	0	cast	exercised
 cloudsculpt_technician	0	cast	exercised
@@ -414,6 +418,7 @@ creeping_peeper	0	ability:0	exercised
 creeping_peeper	0	cast	exercised
 creosote_heath	0	ability:0	exercised
 creosote_heath	0	land	exercised
+crimson_operative	0	cast	exercised
 crippling_chill	0	cast	exercised
 crossroads_watcher	0	cast	exercised
 cruel_alliance	0	cast	exercised
@@ -877,6 +882,7 @@ guadosalam,_farplane_gateway	0	land	exercised
 guard_duty	0	cast	exercised
 guardian_lions	0	cast	exercised
 guardians_of_meletis	0	cast	exercised
+gundabad_opportunist	0	cast	exercised
 gurmag_swiftwing	0	cast	exercised
 gutless_plunderer	0	cast	exercised
 gutter_skulk	0	cast	exercised
@@ -980,6 +986,7 @@ hyena_pack	0	cast	exercised
 hymn_to_tourach	0	cast	exercised
 iceridge_serpent	0	cast	exercised
 icetill_explorer	0	cast	exercised
+icewind_elemental	0	cast	exercised
 icewrought_sentry	0	cast	exercised
 icy_manipulator	0	ability:0	exercised
 icy_manipulator	0	cast	exercised
@@ -1020,12 +1027,14 @@ instill_infection	0	cast	exercised
 into_the_fae_court	0	cast	exercised
 invasion_of_ulgrotha_grandmother_ravi_sengir	0	cast	exercised
 invasion_of_ulgrotha_grandmother_ravi_sengir	1	cast	intentional: face unavailable from hand
+invasion_reinforcements	0	cast	exercised
 iroass_champion	0	cast	exercised
 iron_giant	0	cast	exercised
 iron_myr	0	ability:0	exercised
 iron_myr	0	cast	exercised
 iron_tusk_elephant	0	cast	exercised
 ironclad_krovod	0	cast	exercised
+ironpaw_aspirant	0	cast	exercised
 ironroot_treefolk	0	cast	exercised
 isamaru,_hound_of_konda	0	cast	exercised
 island	0	ability:0	exercised
@@ -1049,6 +1058,7 @@ jedits_dragoons	0	cast	exercised
 jennika,_bad_apple_big_sister	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 jennika,_bad_apple_big_sister	0	cast	exercised
 jennikas_technique	0	cast	exercised
+jeong_jeongs_deserters	0	cast	exercised
 jeskai_brushmaster	0	cast	exercised
 jeskai_devotee	0	ability:0	exercised
 jeskai_devotee	0	cast	exercised
@@ -1110,10 +1120,13 @@ kraul_whipcracker	0	cast	exercised
 kree_commandos	0	cast	exercised
 krenkos_enforcer	0	cast	exercised
 krovikan_scoundrel	0	cast	exercised
+kulrath_zealot	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+kulrath_zealot	0	cast	exercised
 kyoshi_village	0	ability:0	exercised
 kyoshi_village	0	ability:1	exercised
 kyoshi_village	0	land	exercised
 kyoshi_warrior_guard	0	cast	exercised
+kyoshi_warriors	0	cast	exercised
 lagac_lizard	0	cast	exercised
 lakeside_shack	0	ability:0	exercised
 lakeside_shack	0	land	exercised
@@ -1975,6 +1988,7 @@ temple_of_triumph	0	land	exercised
 temporal_intervention	0	cast	exercised
 temur_devotee	0	ability:0	exercised
 temur_devotee	0	cast	exercised
+temur_tawnyback	0	cast	exercised
 tend_the_sprigs	0	cast	exercised
 tenderize	0	cast	exercised
 tenement_crasher	0	cast	exercised
@@ -2042,6 +2056,7 @@ traveling_philosopher	0	cast	exercised
 tree_monkey	0	cast	exercised
 tree_of_tales	0	ability:0	exercised
 tree_of_tales	0	land	exercised
+treetop_freedom_fighters	0	cast	exercised
 treno,_dark_city	0	ability:0	exercised
 treno,_dark_city	0	land	exercised
 tributary_vaulter	0	cast	exercised

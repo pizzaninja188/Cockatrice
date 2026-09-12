@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
     BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, DiscardQuantity,
-    EffectSubject, EntersTappedAffected, EntryCost, GameCondition, LifeAmount,
+    DrawDiscardOrder, EffectSubject, EntersTappedAffected, EntryCost, GameCondition, LifeAmount,
     ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
     PlayerLifeAggregate, PlayerRecipient, RelativePlayerSet, ResolutionCost, SearchDestination,
     SearchZoneSelection, SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetController,
@@ -10,8 +10,8 @@ use tricerules_cards::primitives::{
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
     ActivationTiming, Amount, BasicLandType, CastTriggerPlayer, CharacteristicDefiningAbility,
-    IdentifiedAbility, Keyword, LibraryPartitionKind, ManaAmount, ManaCost, SpellEffectKind,
-    TriggerCondition, TriggeredAbilityDef,
+    CounterKind, IdentifiedAbility, Keyword, LibraryPartitionKind, ManaAmount, ManaCost,
+    SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -480,6 +480,84 @@ fn match_etb_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEm
             },
         )
     })
+}
+
+fn match_etb_exile_top_with_play_permission(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "When this creature enters, exile the top card of your library. Until the end of your next turn, you may play that card.")
+        .then(|| {
+            triggered_ability(
+                context,
+                SpellEffectKind::ExileTopWithPlayPermission {
+                    player: PlayerRecipient::Controller,
+                    count: 1,
+                    count_by_cast_cost: None,
+                },
+            )
+        })
+}
+
+fn match_etb_put_plus_one_counter_on_target_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == "When this creature enters, put a +1/+1 counter on target creature.")
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability(
+                context,
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                },
+            ) else {
+                unreachable!("triggered_ability always returns a triggered ability")
+            };
+            ability.targeting = Some(TargetingDef {
+                groups: vec![TargetGroupDef {
+                    min: 1,
+                    max: 1,
+                    prompt: "Choose target creature".into(),
+                    effect_indices: vec![0],
+                    distinct_from: Vec::new(),
+                    same_graveyard: false,
+                    cast_cost_expansion: None,
+                }],
+            });
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+fn match_etb_create_ally(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    match_creature_trigger_create_token(
+        text,
+        context,
+        "When this creature enters, create a 1/1 white Ally creature token.",
+        TriggerCondition::WhenSelfEntersBattlefield,
+        "ally_w_1_1",
+    )
+}
+
+fn match_etb_draw_discard_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == "When this creature enters, draw a card, then discard a card.")
+        .then(|| {
+            triggered_ability(
+                context,
+                SpellEffectKind::DrawDiscard {
+                    who: PlayerRecipient::Controller,
+                    draw_count: 1,
+                    discard_count: 1,
+                    order: DrawDiscardOrder::DrawThenDiscard,
+                    optional: false,
+                },
+            )
+        })
 }
 
 fn match_self_attacks_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
@@ -1446,6 +1524,78 @@ pub(super) static CATALOG: &[Recipe] = &[
             "When this creature enters, target player surveils 1.",
             "When this creature enters, surveil 1, then draw a card.",
             "Whenever another creature enters, surveil 1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.exile_top.play_permission.end_of_next_turn"),
+        label: "ETB exile top with play permission",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_exile_top_with_play_permission,
+        calibration: calibrations!(
+            "Gundabad Opportunist" => "When this creature enters, exile the top card of your library. Until the end of your next turn, you may play that card.",
+            "Alania's Pathmaker" => "When this creature enters, exile the top card of your library. Until the end of your next turn, you may play that card.";
+            "When this creature enters, you may exile the top card of your library. Until the end of your next turn, you may play that card.",
+            "When this creature enters, exile the top two cards of your library. Until the end of your next turn, you may play those cards.",
+            "When this creature enters, exile the top card of target player's library. Until the end of your next turn, you may play that card.",
+            "When this creature enters, exile the top card of your library face down. Until the end of your next turn, you may play that card.",
+            "When this creature enters, exile the top card of your library. Until end of turn, you may play that card.",
+            "When this creature enters, exile the top card of your library. Until the end of your next turn, you may cast that card.",
+            "Whenever another creature enters, exile the top card of your library. Until the end of your next turn, you may play that card.",
+            "When this creature enters, exile the top card of your library. Until the end of your next turn, you may play that card. Create a Treasure token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.put_counter.plus_one_plus_one.target_creature.one"),
+        label: "ETB put +1/+1 counter on target creature",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_put_plus_one_counter_on_target_creature,
+        calibration: calibrations!(
+            "Jeong Jeong's Deserters" => "When this creature enters, put a +1/+1 counter on target creature.",
+            "Ironpaw Aspirant" => "When this creature enters, put a +1/+1 counter on target creature.";
+            "When this creature enters, you may put a +1/+1 counter on target creature.",
+            "When this creature enters, put two +1/+1 counters on target creature.",
+            "When this creature enters, put a +1/+1 counter on this creature.",
+            "When this creature enters, put a +1/+1 counter on target creature you control.",
+            "When this creature enters, put a +1/+1 counter on target other creature.",
+            "When this creature enters, put a flying counter on target creature.",
+            "Whenever another creature enters, put a +1/+1 counter on target creature.",
+            "When this creature enters, put a +1/+1 counter on target creature, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.create_token.ally_w_1_1.one"),
+        label: "ETB create white 1/1 Ally",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_create_ally,
+        calibration: calibrations!(
+            "Invasion Reinforcements" => "When this creature enters, create a 1/1 white Ally creature token.",
+            "Treetop Freedom Fighters" => "When this creature enters, create a 1/1 white Ally creature token.";
+            "When this creature enters, you may create a 1/1 white Ally creature token.",
+            "When this creature enters, create two 1/1 white Ally creature tokens.",
+            "When this creature enters, create a 2/2 white Ally creature token.",
+            "When this creature enters, create a 1/1 red Ally creature token.",
+            "When this creature enters, create a 1/1 white Soldier creature token.",
+            "When this creature enters, create a tapped 1/1 white Ally creature token.",
+            "Whenever another creature enters, create a 1/1 white Ally creature token.",
+            "When this creature enters, create a 1/1 white Ally creature token, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.draw_discard.controller.one_one"),
+        label: "ETB draw then discard one",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_draw_discard_one,
+        calibration: calibrations!(
+            "Icewind Elemental" => "When this creature enters, draw a card, then discard a card.",
+            "Temur Tawnyback" => "When this creature enters, draw a card, then discard a card.";
+            "When this creature enters, you may draw a card, then discard a card.",
+            "When this creature enters, draw two cards, then discard a card.",
+            "When this creature enters, draw a card, then discard two cards.",
+            "When this creature enters, discard a card, then draw a card.",
+            "When this creature enters, target player draws a card, then discards a card.",
+            "Whenever another creature enters, draw a card, then discard a card.",
+            "When this creature enters, draw a card, then discard a card. If you discarded a land card this way, draw a card.",
+            "If you would draw a card as this creature enters, draw two cards instead, then discard a card."
         ),
     },
     Recipe {
@@ -2755,5 +2905,89 @@ mod tests {
         assert_eq!(targeting.groups.len(), 1);
         assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (1, 1));
         assert_eq!(targeting.groups[0].effect_indices, [0]);
+    }
+
+    #[test]
+    fn issue_259_creature_etb_clauses_emit_exact_typed_abilities() {
+        let cases = [
+            (
+                "When this creature enters, exile the top card of your library. Until the end of your next turn, you may play that card.",
+                "etb.exile_top.play_permission.end_of_next_turn",
+            ),
+            (
+                "When this creature enters, put a +1/+1 counter on target creature.",
+                "etb.put_counter.plus_one_plus_one.target_creature.one",
+            ),
+            (
+                "When this creature enters, create a 1/1 white Ally creature token.",
+                "etb.create_token.ally_w_1_1.one",
+            ),
+            (
+                "When this creature enters, draw a card, then discard a card.",
+                "etb.draw_discard.controller.one_one",
+            ),
+        ];
+
+        let abilities = cases.map(|(clause, expected_id)| {
+            let matched = match_clause(clause, false, &context())
+                .expect("issue #259 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #259 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("issue #259 recipe must emit a triggered ability: {clause}");
+            };
+            assert_eq!(ability.ability_id.as_str(), "triggered_01");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![1])
+            );
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert!(!ability.may);
+            ability
+        });
+
+        assert_eq!(
+            abilities[0].effect,
+            [SpellEffectKind::ExileTopWithPlayPermission {
+                player: PlayerRecipient::Controller,
+                count: 1,
+                count_by_cast_cost: None,
+            }]
+        );
+        assert_eq!(
+            abilities[1].effect,
+            [SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }]
+        );
+        let targeting = abilities[1]
+            .targeting
+            .as_ref()
+            .expect("counter trigger must publish its target group");
+        assert_eq!(targeting.groups.len(), 1);
+        assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (1, 1));
+        assert_eq!(targeting.groups[0].effect_indices, [0]);
+        assert_eq!(
+            abilities[2].effect,
+            [SpellEffectKind::CreateTokens {
+                token: "ally_w_1_1".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
+        );
+        assert_eq!(
+            abilities[3].effect,
+            [SpellEffectKind::DrawDiscard {
+                who: PlayerRecipient::Controller,
+                draw_count: 1,
+                discard_count: 1,
+                order: DrawDiscardOrder::DrawThenDiscard,
+                optional: false,
+            }]
+        );
     }
 }
