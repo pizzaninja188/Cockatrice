@@ -691,6 +691,9 @@ fn parse_rules_text(
                 return Err(RulesParseError::Unsupported);
             }
             RecipeEmission::TriggeredAbility(ability) => parsed.triggered_abilities.push(ability),
+            RecipeEmission::TriggeredAbilities(abilities) => {
+                parsed.triggered_abilities.extend(abilities)
+            }
             RecipeEmission::ActivatedAbility(ability) => parsed.activated_abilities.push(ability),
             RecipeEmission::StaticAbility(ability) => parsed.static_abilities.push(ability),
             RecipeEmission::CharacteristicAbility(ability) => {

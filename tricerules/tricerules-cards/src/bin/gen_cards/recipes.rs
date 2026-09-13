@@ -1,12 +1,12 @@
 use tricerules_cards::primitives::{
     ActivationLimit, BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter,
     CreatureScopeController, CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject,
-    EntersTappedAffected, EntryCost, GameCondition, LifeAmount, ObjectContributionKind,
-    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
-    PlayerRecipient, RelativePlayerSet, ResolutionCost, SearchDestination, SearchZoneSelection,
-    SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
-    TargetGroupDef, TargetKind, TargetObjectExclusion, TargetingDef, TargetingSourceFilter,
-    TypeLineAddition, ZoneCardFilter,
+    EntersTappedAffected, EntryCost, GameCondition, HandCardAction, LifeAmount,
+    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
+    PlayerLifeAggregate, PlayerRecipient, RelativePlayerSet, ResolutionCost, SearchDestination,
+    SearchZoneSelection, SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetController,
+    TargetFilter, TargetGroupDef, TargetKind, TargetObjectExclusion, TargetingDef,
+    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
@@ -93,6 +93,7 @@ pub(super) enum RecipeEmission {
     SpellEffect(SpellEffectKind),
     SpellEffects(Vec<SpellEffectKind>),
     TriggeredAbility(TriggeredAbilityDef),
+    TriggeredAbilities(Vec<TriggeredAbilityDef>),
     ActivatedAbility(ActivatedAbilityDef),
     StaticAbility(IdentifiedAbility<StaticAbilityDef>),
     CharacteristicAbility(IdentifiedAbility<CharacteristicDefiningAbility>),
@@ -747,6 +748,292 @@ fn triggered_ability_with(
 
 fn etb_instruction(text: &str) -> Option<&str> {
     text.strip_prefix("When this creature enters, ")
+}
+
+fn exact_targeting(min: u32, max: u32, prompt: &str, effect_indices: Vec<u32>) -> TargetingDef {
+    TargetingDef {
+        groups: vec![TargetGroupDef {
+            min,
+            max,
+            prompt: prompt.into(),
+            effect_indices,
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    }
+}
+
+fn targeted_trigger(
+    context: &RecipeContext,
+    effects: Vec<SpellEffectKind>,
+    min: u32,
+    max: u32,
+    prompt: &str,
+) -> RecipeEmission {
+    let effect_indices =
+        (0..u32::try_from(effects.len()).expect("effect count fits u32")).collect();
+    let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+        context,
+        TriggerCondition::WhenSelfEntersBattlefield,
+        effects,
+    ) else {
+        unreachable!("triggered_ability_with always returns a triggered ability")
+    };
+    ability.targeting = Some(exact_targeting(min, max, prompt, effect_indices));
+    RecipeEmission::TriggeredAbility(ability)
+}
+
+fn match_controller_gains_life_put_counter_on_source(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == "Whenever you gain life, put a +1/+1 counter on this creature.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPlayerGainsLife {
+                    player: CastTriggerPlayer::Controller,
+                },
+                vec![SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                }],
+            )
+        })
+}
+
+fn match_controller_gains_life_each_opponent_loses_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "Whenever you gain life, each opponent loses 1 life.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPlayerGainsLife {
+                    player: CastTriggerPlayer::Controller,
+                },
+                vec![SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(1),
+                    who: PlayerRecipient::EachOpponent,
+                }],
+            )
+        })
+}
+
+fn match_self_enters_or_dies_surveil_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature || text != "When this creature enters or dies, surveil 1." {
+        return None;
+    }
+    let effect = vec![SpellEffectKind::LibraryPartition {
+        count: 1,
+        top_min: 0,
+        top_max: None,
+        kind: LibraryPartitionKind::Surveil,
+    }];
+    let RecipeEmission::TriggeredAbility(enters) = triggered_ability_with(
+        context,
+        TriggerCondition::WhenSelfEntersBattlefield,
+        effect.clone(),
+    ) else {
+        unreachable!("triggered_ability_with always returns a triggered ability")
+    };
+    let suffix = context
+        .triggered_ability_id
+        .as_str()
+        .strip_prefix("triggered_")?
+        .parse::<u32>()
+        .ok()?;
+    let mut dies = enters.clone();
+    dies.ability_id = AbilityId::new(format!("triggered_{:02}", suffix + 1)).ok()?;
+    dies.trigger = TriggerCondition::WhenSelfDies;
+    Some(RecipeEmission::TriggeredAbilities(vec![enters, dies]))
+}
+
+fn match_etb_pump_opponent_creature_minus_two_zero(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "When this creature enters, target creature an opponent controls gets -2/-0 until end of turn.")
+        .then(|| {
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::PumpTarget {
+                    power: -2,
+                    toughness: 0,
+                    scale: None,
+                    subject: chosen_creature(TargetController::Opponent),
+                }],
+                1,
+                1,
+                "Choose target creature an opponent controls",
+            )
+        })
+}
+
+fn match_etb_target_opponent_discards_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == "When this creature enters, target opponent discards a card.")
+        .then(|| {
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::ChooseHandCards {
+                    action: HandCardAction::Discard,
+                    count: 1,
+                    target: TargetFilter {
+                        kind: TargetKind::OpponentPlayer,
+                        ..TargetFilter::default()
+                    },
+                    chooser: Default::default(),
+                    card_filter: None,
+                    optional: false,
+                    visibility: Default::default(),
+                }],
+                1,
+                1,
+                "Choose target opponent",
+            )
+        })
+}
+
+fn match_etb_create_clue(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && matches!(
+            text,
+            "When this creature enters, create a Clue token."
+                | "When this creature enters, investigate."
+        ))
+    .then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::CreateTokens {
+                token: "clue".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            },
+        )
+    })
+}
+
+fn match_aura_etb_draw_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == "When this Aura enters, draw a card.").then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            },
+        )
+    })
+}
+
+fn match_etb_create_printed_one_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let token = match text {
+        "When this creature enters, create a 1/1 white Soldier creature token." => "soldier_w_1_1",
+        "When this creature enters, create a 1/1 white and blue Merfolk creature token." => {
+            "merfolk_wu_1_1"
+        }
+        _ => return None,
+    };
+    Some(triggered_ability(
+        context,
+        SpellEffectKind::CreateTokens {
+            token: token.into(),
+            count: Amount::Fixed(1),
+            who: PlayerRecipient::Controller,
+            tapped: false,
+            sacrifice_timing: None,
+        },
+    ))
+}
+
+fn match_etb_damage_any_target_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == "When this creature enters, it deals 1 damage to any target.")
+        .then(|| {
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::DamageTarget {
+                    amount: Amount::Fixed(1),
+                    target: TargetFilter {
+                        kind: TargetKind::AnyTarget,
+                        ..TargetFilter::default()
+                    },
+                }],
+                1,
+                1,
+                "Choose any target",
+            )
+        })
+}
+
+fn match_etb_put_counter_on_other_controlled_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "When this creature enters, put a +1/+1 counter on another target creature you control.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                excluded_objects: vec![TargetObjectExclusion::Source],
+                ..TargetFilter::default()
+            };
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                }],
+                1,
+                1,
+                "Choose another target creature you control",
+            )
+        })
+}
+
+fn match_etb_return_other_creature_up_to_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "When this creature enters, return up to one other target creature to its owner's hand.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::Creature,
+                excluded_objects: vec![TargetObjectExclusion::Source],
+                ..TargetFilter::default()
+            };
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::ReturnToOwnersHand {
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                }],
+                0,
+                1,
+                "Choose up to one other target creature",
+            )
+        })
 }
 
 fn match_etb_draw(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
@@ -2653,6 +2940,160 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.controller_gains_life.put_counter.plus_one_plus_one.source.one"),
+        label: "controller gains life put a +1/+1 counter on source",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_controller_gains_life_put_counter_on_source,
+        calibration: calibrations!(
+            "Ajani's Pridemate" => "Whenever you gain life, put a +1/+1 counter on this creature.",
+            "Pest Mascot" => "Whenever you gain life, put a +1/+1 counter on this creature.";
+            "Whenever you gain 1 life, put a +1/+1 counter on this creature.",
+            "Whenever you gain life, put two +1/+1 counters on this creature.",
+            "Whenever an opponent gains life, put a +1/+1 counter on this creature.",
+            "Whenever you gain life, you may put a +1/+1 counter on this creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.controller_gains_life.each_opponent_loses_one"),
+        label: "controller gains life each opponent loses one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_controller_gains_life_each_opponent_loses_one,
+        calibration: calibrations!(
+            "Marauding Blight-Priest" => "Whenever you gain life, each opponent loses 1 life.",
+            "Cliffhaven Vampire" => "Whenever you gain life, each opponent loses 1 life.";
+            "Whenever you gain life, each opponent loses 2 life.",
+            "Whenever an opponent gains life, each opponent loses 1 life.",
+            "Whenever you gain life, target opponent loses 1 life.",
+            "Whenever you gain life, each opponent loses 1 life and you gain 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_enters_or_dies.surveil.one"),
+        label: "self enters or dies surveil one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_enters_or_dies_surveil_one,
+        calibration: calibrations!(
+            "Lys Alana Informant" => "When this creature enters or dies, surveil 1.",
+            "Thawbringer" => "When this creature enters or dies, surveil 1.";
+            "When this creature enters or dies, surveil 2.",
+            "Whenever this creature enters or dies, surveil 1.",
+            "When this creature enters or dies, you may surveil 1.",
+            "When another creature enters or dies, surveil 1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.pump.opponent_creature.minus_two_zero"),
+        label: "creature ETB opposing creature -2/-0",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_pump_opponent_creature_minus_two_zero,
+        calibration: calibrations!(
+            "Cogwork Wrestler" => "When this creature enters, target creature an opponent controls gets -2/-0 until end of turn.",
+            "Humbling Elder" => "When this creature enters, target creature an opponent controls gets -2/-0 until end of turn.";
+            "When this creature enters, target creature an opponent controls gets -1/-0 until end of turn.",
+            "When this creature enters, up to one target creature an opponent controls gets -2/-0 until end of turn.",
+            "When this creature enters, target creature gets -2/-0 until end of turn.",
+            "When this creature dies, target creature an opponent controls gets -2/-0 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.discard.target_opponent.one"),
+        label: "creature ETB target opponent discards one",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_target_opponent_discards_one,
+        calibration: calibrations!(
+            "Corrupt Court Official" => "When this creature enters, target opponent discards a card.",
+            "Ravenous Rats" => "When this creature enters, target opponent discards a card.";
+            "When this creature enters, target opponent discards two cards.",
+            "When this creature enters, you may have target opponent discard a card.",
+            "When this creature dies, target opponent discards a card.",
+            "When another creature enters, target opponent discards a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.create_token.clue.one"),
+        label: "creature ETB create one Clue",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_create_clue,
+        calibration: calibrations!(
+            "Forecasting Fortune Teller" => "When this creature enters, create a Clue token.",
+            "Novice Inspector" => "When this creature enters, investigate.";
+            "When this creature enters, create two Clue tokens.",
+            "When this creature enters, you may investigate.",
+            "When this creature enters, create a tapped Clue token.",
+            "Whenever another creature enters, investigate."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.aura.draw.one"),
+        label: "Aura ETB draw one",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_aura_etb_draw_one,
+        calibration: calibrations!(
+            "Feather of Flight" => "When this Aura enters, draw a card.",
+            "Lofty Dreams" => "When this Aura enters, draw a card.";
+            "When this Aura enters, draw two cards.",
+            "When this Aura enters, you may draw a card.",
+            "When this enchantment enters, draw a card.",
+            "When this Aura dies, draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.create_token.printed_one_one.one"),
+        label: "creature ETB create one reviewed printed 1/1 token",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_create_printed_one_one,
+        calibration: calibrations!(
+            "Resolute Reinforcements" => "When this creature enters, create a 1/1 white Soldier creature token.",
+            "Merrow Skyswimmer" => "When this creature enters, create a 1/1 white and blue Merfolk creature token.";
+            "When this creature enters, create two 1/1 white Soldier creature tokens.",
+            "When this creature enters, create a tapped 1/1 white Soldier creature token.",
+            "When this creature enters, create a 2/2 white Soldier creature token.",
+            "When another creature enters, create a 1/1 white Soldier creature token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.damage.any_target.one.source"),
+        label: "creature ETB source deals one damage to any target",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_damage_any_target_one,
+        calibration: calibrations!(
+            "Mongoose Lizard" => "When this creature enters, it deals 1 damage to any target.",
+            "Skeleton Archer" => "When this creature enters, it deals 1 damage to any target.";
+            "When this creature enters, it deals 2 damage to any target.",
+            "When this creature enters, it deals 1 damage to target opponent.",
+            "When this creature enters, you may have it deal 1 damage to any target.",
+            "When this creature dies, it deals 1 damage to any target."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.put_counter.plus_one_plus_one.other_creature_you_control.one"),
+        label: "creature ETB put a +1/+1 counter on another controlled creature",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_put_counter_on_other_controlled_creature,
+        calibration: calibrations!(
+            "Sterling Supplier" => "When this creature enters, put a +1/+1 counter on another target creature you control.",
+            "Keen-Eyed Raven" => "When this creature enters, put a +1/+1 counter on another target creature you control.";
+            "When this creature enters, put two +1/+1 counters on another target creature you control.",
+            "When this creature enters, put a +1/+1 counter on another target creature.",
+            "When this creature enters, put a +1/+1 counter on another target permanent you control.",
+            "When this creature dies, put a +1/+1 counter on another target creature you control."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.return_to_hand.other_creature.up_to_one"),
+        label: "creature ETB return up to one other creature",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_return_other_creature_up_to_one,
+        calibration: calibrations!(
+            "Rimekin Recluse" => "When this creature enters, return up to one other target creature to its owner's hand.",
+            "Matterbending Mage" => "When this creature enters, return up to one other target creature to its owner's hand.";
+            "When this creature enters, return up to two other target creatures to their owners' hands.",
+            "When this creature enters, return another target creature to its owner's hand.",
+            "When this creature enters, return up to one other target permanent to its owner's hand.",
+            "When this creature dies, return up to one other target creature to its owner's hand."
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.draw.fixed"),
         label: "ETB draw",
         surface: RecipeSurface::EtbAbility,
@@ -2791,7 +3232,7 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: calibrations!(
             "Burglar Rat" => "When this creature enters, each opponent discards a card.",
             "Virus Beetle" => "When this creature enters, each opponent discards a card.";
-            "When this creature enters, target opponent discards a card.",
+            "When this creature enters, one opponent discards a card.",
             "When this creature enters, each opponent discards two cards."
         ),
     },
@@ -2949,7 +3390,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "When this creature enters, create two 1/1 white Ally creature tokens.",
             "When this creature enters, create a 2/2 white Ally creature token.",
             "When this creature enters, create a 1/1 red Ally creature token.",
-            "When this creature enters, create a 1/1 white Soldier creature token.",
+            "When this creature enters, create a 1/1 white Warrior creature token.",
             "When this creature enters, create a tapped 1/1 white Ally creature token.",
             "Whenever another creature enters, create a 1/1 white Ally creature token.",
             "When this creature enters, create a 1/1 white Ally creature token, then draw a card."
@@ -3000,7 +3441,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "When this creature enters, you may create a Map token.",
             "When this creature enters, create two Map tokens.",
             "When this creature enters, create a tapped Map token.",
-            "When this creature enters, create a Clue token.",
+            "When this creature enters, create a Blood token.",
             "When this creature enters, create a Map token, then draw a card.",
             "Whenever another creature enters, create a Map token."
         ),
@@ -5058,6 +5499,99 @@ mod tests {
                 order: DrawDiscardOrder::DrawThenDiscard,
                 optional: false,
             }]
+        );
+    }
+
+    #[test]
+    fn issue_266_permanent_trigger_templates_have_stable_exact_recipe_ids() {
+        let cases = [
+            (
+                "Whenever you gain life, put a +1/+1 counter on this creature.",
+                "triggered.controller_gains_life.put_counter.plus_one_plus_one.source.one",
+            ),
+            (
+                "Whenever you gain life, each opponent loses 1 life.",
+                "triggered.controller_gains_life.each_opponent_loses_one",
+            ),
+            (
+                "When this creature enters or dies, surveil 1.",
+                "triggered.self_enters_or_dies.surveil.one",
+            ),
+            (
+                "When this creature enters, target creature an opponent controls gets -2/-0 until end of turn.",
+                "etb.pump.opponent_creature.minus_two_zero",
+            ),
+            (
+                "When this creature enters, target opponent discards a card.",
+                "etb.discard.target_opponent.one",
+            ),
+            (
+                "When this creature enters, create a Clue token.",
+                "etb.create_token.clue.one",
+            ),
+            (
+                "When this creature enters, investigate.",
+                "etb.create_token.clue.one",
+            ),
+            (
+                "When this Aura enters, draw a card.",
+                "etb.aura.draw.one",
+            ),
+            (
+                "When this creature enters, create a 1/1 white Soldier creature token.",
+                "etb.create_token.printed_one_one.one",
+            ),
+            (
+                "When this creature enters, create a 1/1 white and blue Merfolk creature token.",
+                "etb.create_token.printed_one_one.one",
+            ),
+            (
+                "When this creature enters, it deals 1 damage to any target.",
+                "etb.damage.any_target.one.source",
+            ),
+            (
+                "When this creature enters, put a +1/+1 counter on another target creature you control.",
+                "etb.put_counter.plus_one_plus_one.other_creature_you_control.one",
+            ),
+            (
+                "When this creature enters, return up to one other target creature to its owner's hand.",
+                "etb.return_to_hand.other_creature.up_to_one",
+            ),
+        ];
+
+        for (clause, expected_id) in cases {
+            let matched = match_clause(clause, false, &context())
+                .expect("issue #266 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #266 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_266_permanent_trigger_templates_require_the_printed_source_kind() {
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        for clause in [
+            "Whenever you gain life, put a +1/+1 counter on this creature.",
+            "Whenever you gain life, each opponent loses 1 life.",
+            "When this creature enters or dies, surveil 1.",
+            "When this creature enters, target creature an opponent controls gets -2/-0 until end of turn.",
+            "When this creature enters, target opponent discards a card.",
+            "When this creature enters, create a Clue token.",
+            "When this creature enters, investigate.",
+            "When this creature enters, create a 1/1 white Soldier creature token.",
+            "When this creature enters, it deals 1 damage to any target.",
+            "When this creature enters, put a +1/+1 counter on another target creature you control.",
+            "When this creature enters, return up to one other target creature to its owner's hand.",
+        ] {
+            assert_eq!(match_clause(clause, false, &noncreature), Ok(None), "{clause}");
+        }
+
+        let mut non_aura = context();
+        non_aura.source_is_aura = false;
+        assert_eq!(
+            match_clause("When this Aura enters, draw a card.", false, &non_aura),
+            Ok(None)
         );
     }
 

@@ -383,6 +383,7 @@ cloudkin_seer	0	cast	exercised
 cloudsculpt_technician	0	cast	exercised
 cobblebrute	0	cast	exercised
 coercion	0	cast	exercised
+cogwork_wrestler	0	cast	exercised
 cold-water_snapper	0	cast	exercised
 colorful_feiyi_sparrow	0	cast	exercised
 colorstorm_stallion	0	cast	exercised
@@ -414,6 +415,7 @@ copper_myr	0	cast	exercised
 coral_commando	0	cast	exercised
 coral_eel	0	cast	exercised
 coral_merfolk	0	cast	exercised
+corrupt_court_official	0	cast	exercised
 council_of_advisors	0	cast	exercised
 counsel_of_the_soratami	0	cast	exercised
 counterspell	0	cast	unsupported: target group 0 needs a richer fixture
@@ -660,6 +662,7 @@ fangren_hunter	0	cast	exercised
 fear_of_surveillance	0	cast	exercised
 fearless_halberdier	0	cast	exercised
 feat_of_resistance	0	cast	exercised
+feather_of_flight	0	cast	exercised
 featherbrained_filcher	0	cast	exercised
 feed_the_cauldron	0	cast	exercised
 feisty_spikeling	0	cast	exercised
@@ -732,6 +735,7 @@ foot_headquarters	0	land	exercised
 foot_ninjas	0	cast	exercised
 foot_soldiers	0	cast	exercised
 force_of_savagery	0	cast	exercised
+forecasting_fortune_teller	0	cast	exercised
 forensic_researcher	0	ability:0	exercised
 forensic_researcher	0	ability:1	unsupported: nonmana costs need additional fixture resources
 forensic_researcher	0	cast	exercised
@@ -1230,6 +1234,7 @@ llanowar_elves	0	cast	exercised
 llanowar_visionary	0	ability:0	exercised
 llanowar_visionary	0	cast	exercised
 loamdragger_giant	0	cast	exercised
+lofty_dreams	0	cast	exercised
 lone_missionary	0	cast	exercised
 lonely_arroyo	0	ability:0	exercised
 lonely_arroyo	0	land	exercised
@@ -1250,6 +1255,7 @@ luminous_rebuke	0	cast	exercised
 lush_oasis	0	ability:0	exercised
 lush_oasis	0	land	exercised
 lush_portico	0	land	exercised
+lys_alana_informant	0	cast	exercised
 macabre_waltz	0	cast	exercised
 magebane_lizard	0	cast	exercised
 magic_damper	0	cast	exercised
@@ -1271,6 +1277,7 @@ maned_serval	0	cast	exercised
 manhole_missile	0	cast	exercised
 manifest_dread	0	cast	exercised
 mantis_rider	0	cast	exercised
+marauding_blight-priest	0	cast	exercised
 marauding_brinefang	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 marauding_brinefang	0	cast	exercised
 marauding_sphinx	0	cast	exercised
@@ -1417,6 +1424,7 @@ north_pole_gates	0	land	exercised
 norwood_archers	0	cast	exercised
 norwood_ranger	0	cast	exercised
 nourish	0	cast	exercised
+novice_inspector	0	cast	exercised
 noxious_groodion	0	cast	exercised
 noxious_newt	0	ability:0	exercised
 noxious_newt	0	cast	exercised
@@ -1493,6 +1501,7 @@ pensive_minotaur	0	cast	exercised
 peregrine_griffin	0	cast	exercised
 perigee_beckoner	0	cast	exercised
 perish	0	cast	exercised
+pest_mascot	0	cast	exercised
 phantom_interference	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 phantom_monster	0	cast	exercised
 pharikas_chosen	0	cast	exercised
@@ -1635,6 +1644,7 @@ renegade_troops	0	cast	exercised
 reputable_merchant	0	cast	exercised
 requiting_hex	0	cast	exercised
 resistance_skywarden	0	cast	exercised
+resolute_reinforcements	0	cast	exercised
 restless_reef	0	ability:0	exercised
 restless_reef	0	ability:1	exercised
 restless_reef	0	land	exercised
@@ -1647,6 +1657,7 @@ ridgetop_raptor	0	cast	exercised
 rig_for_war	0	cast	exercised
 riling_dawnbreaker_signaling_roar	0	cast	exercised
 riling_dawnbreaker_signaling_roar	1	cast	exercised
+rimekin_recluse	0	cast	exercised
 riot_devils	0	cast	exercised
 rip-clan_crasher	0	cast	exercised
 ripscale_predator	0	cast	exercised
@@ -1701,6 +1712,7 @@ run_afoul	0	cast	exercised
 runeclaw_bear	0	cast	exercised
 russet_wolves	0	cast	exercised
 rustwing_falcon	0	cast	exercised
+s.h.i.e.l.d._deployment_drone	0	cast	exercised
 saber-tooth_moose-lion	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 saber-tooth_moose-lion	0	cast	exercised
 sabertooth_mauler	0	cast	exercised
@@ -1846,6 +1858,7 @@ skateboard	0	ability:0	exercised
 skateboard	0	cast	exercised
 skeletal_crocodile	0	cast	exercised
 skeletal_snake	0	cast	exercised
+skeleton_archer	0	cast	exercised
 skirmish_rhino	0	cast	exercised
 sky_ruin_drake	0	cast	exercised
 sky_spirit	0	cast	exercised
@@ -1956,6 +1969,7 @@ steam_vents	0	land	exercised
 steeple_roc	0	cast	exercised
 steer_clear	0	cast	unsupported: target group 0 needs a richer fixture
 sterling_hound	0	cast	exercised
+sterling_supplier	0	cast	exercised
 steward_of_valeron	0	ability:0	exercised
 steward_of_valeron	0	cast	exercised
 stickytongue_sentinel	0	cast	exercised
